@@ -2,24 +2,33 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 
 import { MemoryLedger } from "@jeswr/agent-audit";
-import { encodeEnvelope } from "@jeswr/agent-channels";
+import { encodeEnvelope, encodeEventContent } from "@jeswr/agent-channels";
 import { createDirectReader } from "@jeswr/agent-channels/direct";
+import { parseMatrixMessage } from "@jeswr/agent-channels/matrix";
 import { RecordingTokenProvider } from "@jeswr/agent-channels/testing";
 import { CredentialStore, noTransport } from "@jeswr/agent-credentials";
 import { CONFIG_ED25519, PILOT_PROFILE } from "@jeswr/agent-reference";
 import { craftSigned } from "@jeswr/agent-reference/scenarios/common";
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "fs/promises";
+import { mkdtemp, open, readdir, readFile, rm, stat, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { event } from "../../../packages/agent-channels/test/fixtures/matrix.js";
+import { readGateStatus } from "../src/gate.js";
 import * as daemon from "../src/index.js";
 import { createTestGate } from "../src/testing.js";
+
+vi.mock("fs/promises", async (original) => {
+  const fs = await original<typeof import("fs/promises")>();
+  return { ...fs, open: vi.fn(fs.open) };
+});
 
 let root: string;
 beforeEach(async () => {
   root = await mkdtemp(join(tmpdir(), "brief-41-"));
 });
 afterEach(async () => {
+  vi.mocked(open).mockReset();
   await rm(root, { recursive: true, force: true });
 });
 
@@ -85,6 +94,108 @@ it("rejects a card whose declared key thumbprint differs from its JWK", async ()
   expect(confirm).not.toHaveBeenCalled();
 });
 
+it("rejects a nested key subject that names the daemon's own actor", async () => {
+  const o = options();
+  const { peer, gate } = await createTestGate();
+  await gate.close();
+  await daemon.initGate(o);
+  const card = { ...peer.card, actorKey: { ...peer.card.actorKey, subject: o.agentWebId } };
+  const confirm = vi.fn(approve);
+  await expect(daemon.pinPeer({ directory: o.directory, card, confirm })).rejects.toThrow(
+    /subject/,
+  );
+  expect(confirm).not.toHaveBeenCalled();
+  expect((await readGateStatus(o.directory)).peers).toEqual([]);
+});
+
+it("atomically replaces trust.json and preserves the previously opened pins", async () => {
+  const o = options();
+  const { peer, gate } = await createTestGate();
+  await gate.close();
+  await daemon.initGate(o);
+  const path = join(o.directory, "trust.json");
+  const previous = await open(path, "r");
+  try {
+    const before = await readFile(path, "utf8");
+    expect(await daemon.pinPeer({ ...o, card: peer.card })).toBe(true);
+    expect(await previous.readFile("utf8")).toBe(before);
+    expect(await readFile(path, "utf8")).toContain(peer.actorKey.kid);
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
+  } finally {
+    await previous.close();
+  }
+});
+
+it.each([
+  { outcome: "checking", reason: "result-uncertain" },
+  { outcome: "refused", reason: "bad-signature" },
+])("preserves a $outcome verdict when a Matrix bridge retry hides its carrier", async ({
+  outcome,
+  reason,
+}) => {
+  const o = options();
+  await daemon.initGate(o);
+  const gate = await daemon.openGate(o);
+  try {
+    const native = event("$signed", {
+      msgtype: "m.text",
+      body: "Fixture",
+      ...encodeEventContent("a.b.c"),
+    });
+    const item = { id: native.event_id, raw: JSON.stringify(native) };
+    const first = parseMatrixMessage(item);
+    const retry = parseMatrixMessage({
+      ...item,
+      native: JSON.stringify({ bridge: "signal", event: native }),
+    });
+    expect(first.jsonLdBlocks).toHaveLength(1);
+    expect(retry.jsonLdBlocks).toBeUndefined();
+    expect(retry.rawSha256).toBe(first.rawSha256);
+    const stored = JSON.stringify({
+      outcome,
+      ...(outcome === "refused" ? { reason } : {}),
+      time: now().toISOString(),
+    });
+    const path = join(o.directory, `verdict-${first.rawSha256}.json`);
+    await writeFile(path, stored, { mode: 0o600 });
+    expect(
+      await gate.check({ binding: "matrix", account: "fixture", message: retry }),
+    ).toMatchObject({
+      outcome: "refused",
+      reason,
+    });
+    expect(await readFile(path, "utf8")).toBe(stored);
+  } finally {
+    await gate.close();
+  }
+});
+
+it("records an indeterminate check for a malformed verdict in the gate ledger", async () => {
+  const o = options();
+  await daemon.initGate(o);
+  const gate = await daemon.openGate(o);
+  const message = parseMatrixMessage({ id: "$one", raw: JSON.stringify(event()) });
+  try {
+    await writeFile(join(o.directory, `verdict-${message.rawSha256}.json`), "{", { mode: 0o600 });
+    expect(
+      await gate.check({
+        binding: "matrix",
+        account: "fixture",
+        message: { ...message, jsonLdBlocks: [encodeEnvelope("a.b.c")] },
+      }),
+    ).toMatchObject({ outcome: "refused", reason: "indeterminate" });
+    const lines = (await readFile(join(o.directory, "ledger.jsonl"), "utf8")).trimEnd().split("\n");
+    expect(JSON.parse(lines.at(-1) as string).record).toMatchObject({
+      type: "binding-rejection",
+      binding: "matrix",
+      reason: "indeterminate",
+      digest: `sha-256:${message.rawSha256}`,
+    });
+  } finally {
+    await gate.close();
+  }
+});
+
 it("keeps interrupted digests and refuses to open an altered ledger", async () => {
   const o = options();
   await daemon.initGate(o);
@@ -136,6 +247,102 @@ it("keeps interrupted digests and refuses to open an altered ledger", async () =
   await expect(daemon.openGate(o)).rejects.toThrow(/ledger/i);
 });
 
+async function signedInput(
+  o: ReturnType<typeof options>,
+  peer: Awaited<ReturnType<typeof createTestGate>>["peer"],
+) {
+  const { jws } = await craftSigned(peer, {
+    profile: PILOT_PROFILE,
+    configuration: CONFIG_ED25519,
+    id: "urn:uuid:00000000-0000-4000-8000-000000000043",
+    conversation: "urn:uuid:00000000-0000-4000-8000-100000000043",
+    kind: "describe",
+    from: { actor: peer.identity.actor },
+    to: { actor: o.agentWebId },
+    createdAt: now().toISOString(),
+    expiresAt: "2026-10-19T09:00:00Z",
+    body: {},
+  });
+  const direct = createDirectReader(
+    { inboxes: new Map(), accepted: new Map() },
+    new RecordingTokenProvider(),
+  );
+  return {
+    jws,
+    input: {
+      binding: "direct",
+      account: "fixture",
+      message: direct.ingest.parse({ id: "message", raw: encodeEnvelope(jws) }),
+    },
+  };
+}
+
+it("refuses retries after the final verdict directory sync fails", async () => {
+  const o = options();
+  const { peer, gate: memory } = await createTestGate();
+  await memory.close();
+  await daemon.initGate(o);
+  await daemon.pinPeer({ ...o, card: peer.card });
+  const { input } = await signedInput(o, peer);
+  const gate = await daemon.openGate(o);
+  const fs = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+  let directorySyncs = 0;
+  const failSync = vi.fn(async () => {
+    throw new Error("directory fsync failed");
+  });
+  vi.mocked(open).mockImplementation(async (path, flags, mode) => {
+    const handle = await fs.open(path, flags, mode);
+    if (path === o.directory && ++directorySyncs === 2) handle.sync = failSync;
+    return handle;
+  });
+  try {
+    expect(await gate.check(input)).toMatchObject({ outcome: "refused", reason: "indeterminate" });
+    expect(failSync).toHaveBeenCalledOnce();
+    expect(await gate.check(input)).toMatchObject({
+      outcome: "refused",
+      reason: "result-uncertain",
+    });
+  } finally {
+    await gate.close();
+  }
+  const reopened = await daemon.openGate(o);
+  try {
+    expect(await reopened.check(input)).toMatchObject({
+      outcome: "refused",
+      reason: "result-uncertain",
+    });
+  } finally {
+    await reopened.close();
+  }
+});
+
+it("holds a legacy cached admission that carries no positive admission evidence", async () => {
+  const o = options();
+  const { peer, gate: memory } = await createTestGate();
+  await memory.close();
+  await daemon.initGate(o);
+  const { input } = await signedInput(o, peer);
+  await writeFile(
+    join(o.directory, `verdict-${input.message.rawSha256}.json`),
+    JSON.stringify({
+      outcome: "admitted",
+      time: now().toISOString(),
+      messageId: "urn:test:legacy",
+      conversation: "urn:test:conversation",
+    }),
+    { mode: 0o600 },
+  );
+  const gate = await daemon.openGate(o);
+  try {
+    expect(await gate.check(input)).toMatchObject({
+      outcome: "refused",
+      reason: "result-uncertain",
+    });
+  } finally {
+    await gate.close();
+  }
+});
+
 it("pins the operator-reviewed peer and keeps the admitted verdict through restart", async () => {
   const o = options();
   const { peer, gate: memory } = await createTestGate();
@@ -156,27 +363,7 @@ it("pins the operator-reviewed peer and keeps the admitted verdict through resta
       },
     }),
   ).resolves.toBe(true);
-  const { jws } = await craftSigned(peer, {
-    profile: PILOT_PROFILE,
-    configuration: CONFIG_ED25519,
-    id: "urn:uuid:00000000-0000-4000-8000-000000000043",
-    conversation: "urn:uuid:00000000-0000-4000-8000-100000000043",
-    kind: "describe",
-    from: { actor: peer.identity.actor },
-    to: { actor: o.agentWebId },
-    createdAt: now().toISOString(),
-    expiresAt: "2026-10-19T09:00:00Z",
-    body: {},
-  });
-  const direct = createDirectReader(
-    { inboxes: new Map(), accepted: new Map() },
-    new RecordingTokenProvider(),
-  );
-  const input = {
-    binding: "direct",
-    account: "fixture",
-    message: direct.ingest.parse({ id: "message", raw: encodeEnvelope(jws) }),
-  };
+  const { input, jws } = await signedInput(o, peer);
   const first = await daemon.openGate(o);
   const verdict = await first.check(input);
   await first.close();

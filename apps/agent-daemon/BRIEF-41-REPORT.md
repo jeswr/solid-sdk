@@ -102,3 +102,42 @@ Every Vitest invocation used `--maxWorkers=2`.
 - Define and install an explicit operation for free-text replies.
 
 These are tracker filing notes. The tracker checkout is outside this worktree's write scope.
+
+## Review fixes (41b)
+
+| Finding | Change | Test that failed before the fix |
+| --- | --- | --- |
+| 1. Closing notice admission | `packages/agent-reference/src/runtime/agent.ts:5407` returns the admission refusal and reason before peer-close handling. Inbound results carry `admitted: true` only after a positive admission. `apps/agent-daemon/src/gate.ts:113` requires that signal. | `packages/agent-reference/test/inbound-closing.test.ts:8` observed an accepted disposition without the refusal reason. `apps/agent-daemon/test/gate.test.ts:72` observed a daemon admission for an accepted protocol result that lacked the admission signal. |
+| 2. Matrix retry | `apps/agent-daemon/src/gate.ts:155` reads the stored raw-digest verdict before handling the carrier. An interrupted or refused verdict takes precedence. | Both cases at `apps/agent-daemon/test/gate-setup.test.ts:129` observed an unstructured result after a bridge hint suppressed the carrier on retry. |
+| 3. MIME carrier size | `packages/agent-channels/src/email-mime.ts:140` reports the byte-cap failure. The MIME scan runs even when the legacy parser returns no carrier. `packages/agent-channels/src/email/mime.ts:191` lets that scan skip noncarrier bodies. A recovered signed carrier still goes through full MIME parity and reaches the gate. | `packages/agent-channels/test/email.test.ts:410` observed an unstructured observation for the sole oversized carrier. The recovered-carrier case at line 373 also observed `parity: none`. The plain mail compatibility case at line 387 failed during development when the strict MIME pass tried to decode all bodies. |
+| 4. Key subjects | `packages/agent-reference/src/setup.ts:214` constructs each pin from the card identity and its declared key fields. `apps/agent-daemon/src/gate-setup.ts:139` rejects conflicting nested subjects before confirmation. | `packages/agent-reference/test/introduction.test.ts:7` observed a peer key bound to the local actor. `apps/agent-daemon/test/gate-setup.test.ts:97` observed that the daemon accepted a card with its own actor as the nested key subject. |
+| 5. Account parity | `apps/agent-daemon/src/gate.ts:165` re-applies the current account's parity result before returning a cached admission. | `apps/agent-daemon/test/gate-channels.test.ts:264` observed an admission under a second account whose footer differed. |
+| 6. Atomic pins | `apps/agent-daemon/src/gate-setup.ts:173` uses the private atomic writer. It syncs the temporary file, renames it and syncs the directory. | `apps/agent-daemon/test/gate-setup.test.ts:111` observed that an already-open descriptor read the replacement pins. It now reads the original file contents. |
+| 7. Verdict durability | `apps/agent-daemon/src/gate.ts:62` keeps the synced checking marker in place while syncing the staged final verdict. It publishes the staged verdict with an atomic rename after the sync succeeds. | `apps/agent-daemon/test/gate-setup.test.ts:280` observed a cached admission on retry after the directory sync failed. It now checks refusal both immediately and after reopening. |
+| 8. Ledger on lookup error | `apps/agent-daemon/src/gate.ts:209` commits a body-free indeterminate rejection when the ledger is writable. | `apps/agent-daemon/test/gate-setup.test.ts:173` observed no new ledger event for malformed verdict JSON. |
+
+Existing admitted verdict files that predate explicit admission are reported as
+`result-uncertain`. The regression at `apps/agent-daemon/test/gate-setup.test.ts:319`
+first observed that an earlier admitted file bypassed this check. If a crash
+loses the final verdict's promotion, the earlier durable checking marker
+continues to refuse retries. A second account's parity refusal on a cached
+admission leaves that matching admission available to the original account.
+
+All commands used Node 24.22.3. Every Vitest run used `--maxWorkers=2`.
+
+| Check | Result |
+| --- | --- |
+| Reference library build with `npx --no-install tsc -p tsconfig.build.json && node scripts/copy-generated.mjs` | Passed. |
+| Reference focused tests for the closing result, Introduction Card and settlement source admission | 5 passed. |
+| Reference `test/oracle` alongside the focused tests, plus `test/traces.test.ts` separately | 8 passed in the combined run, including 3 oracle tests. All 15 trace tests passed. The manifest remains 283 / 278 / 0 / 5 and the committed manifest, traces and outlines match `fdbe7b471`. |
+| Daemon build followed by the offline suite with the lane 41a filters | 194 passed, 3 filtered. The unfiltered run hit the existing loopback, child-process and packaging fixture limits. Both binary help commands passed when run directly. |
+| Channels full suite | 933 passed, one existing skip and 10 origin tests blocked by `EPERM` on loopback bind. |
+| Channels offline suite excluding the origin fixture file | 892 passed, one existing skip. |
+| Channels MIME, golden-mail and Graph Mail send tests with coverage restricted to the two changed MIME files | 96 passed with 100% statements, branches, functions and lines. |
+| Daemon and channels build, typecheck and lint, plus reference typecheck | Passed. |
+| Root layer, RDF discipline, app duplication, codegen and lockfile transport checks | Passed. |
+
+The worktree remains uncommitted. The lane used the reference library-only
+build to preserve the committed artifacts. These fixes require no new tracker
+items. The explicit inbound admission signal resolves the earlier follow-up
+for adapters consuming the reference runtime's inbound result.

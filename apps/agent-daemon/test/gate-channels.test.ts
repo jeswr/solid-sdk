@@ -260,3 +260,36 @@ it.each(
   const result = await fixture.gate.check({ binding, account: account.id, message: await read() });
   expect(result).toMatchObject({ outcome: "unstructured" });
 });
+
+it("rechecks readable-copy parity for the same raw email on a second account", async () => {
+  const raw = email(validJws);
+  const first = inspectEmail(raw, mailConfig).message;
+  const second = inspectEmail(raw, {
+    ...mailConfig,
+    footer: "Different account footer.",
+    ownAccounts: new Set(),
+  }).message;
+  expect(second.rawSha256).toBe(first.rawSha256);
+  expect(second.warnings).toContain("human-parity-unverified");
+  const { gate } = await fixture.open();
+  try {
+    expect(
+      await gate.check({ binding: "email-mime", account: "first", message: first }),
+    ).toMatchObject({
+      outcome: "admitted",
+    });
+    expect(
+      await gate.check({ binding: "email-mime", account: "second", message: second }),
+    ).toMatchObject({
+      outcome: "refused",
+      reason: "human-parity-mismatch",
+    });
+    expect(
+      await gate.check({ binding: "email-mime", account: "first", message: first }),
+    ).toMatchObject({
+      outcome: "admitted",
+    });
+  } finally {
+    await gate.close();
+  }
+});

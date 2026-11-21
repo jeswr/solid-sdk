@@ -19,7 +19,7 @@ export interface MimeNode {
   readonly type: string;
   readonly params: Readonly<Record<string, string>>;
   readonly children?: readonly MimeNode[];
-  /** Decoded text of a leaf. */
+  /** Decoded text of a leaf, when requested by the scan. */
   readonly text?: string;
 }
 
@@ -168,6 +168,7 @@ function parseEntity(
   depth: number,
   count: { parts: number },
   limits: MimeLimits,
+  carriersOnly: boolean,
 ): MimeNode {
   if (depth > limits.maxDepth) throw new MimeError("MIME nesting too deep");
   if (++count.parts > limits.maxParts) throw new MimeError("too many MIME parts");
@@ -181,12 +182,14 @@ function parseEntity(
     if (!boundary || !/^[0-9A-Za-z'()+_,./:=? -]{1,70}$/.test(boundary))
       throw new MimeError("missing or invalid boundary");
     const children = splitMultipart(body, boundary).map((p) =>
-      parseEntity(p, depth + 1, count, limits),
+      parseEntity(p, depth + 1, count, limits, carriersOnly),
     );
     return { headers, type, params, children };
   }
   const cte = headers.filter(([n]) => n === "content-transfer-encoding");
   if (cte.length > 1) throw new MimeError("duplicate Content-Transfer-Encoding");
+  if (carriersOnly && type !== "text/html" && type !== "application/ld+json")
+    return { headers, type, params };
   // Remove the single line break that precedes a boundary delimiter.
   const leafBody = body.replace(/\r?\n$/, "");
   return { headers, type, params, text: decodeLeaf(leafBody, cte[0]?.[1], params.charset) };
@@ -196,12 +199,16 @@ function parseEntity(
 export function parseMime(
   raw: string | Uint8Array,
   limits: MimeLimits = DEFAULT_MIME_LIMITS,
+  { carriersOnly = false } = {},
 ): MimeResult {
   const bytes = typeof raw === "string" ? Buffer.from(raw, "utf8") : Buffer.from(raw);
   if (bytes.length > limits.maxBytes)
     return { ok: false, detail: `message exceeds ${limits.maxBytes} bytes` };
   try {
-    return { ok: true, root: parseEntity(bytes.toString("latin1"), 0, { parts: 0 }, limits) };
+    return {
+      ok: true,
+      root: parseEntity(bytes.toString("latin1"), 0, { parts: 0 }, limits, carriersOnly),
+    };
   } catch (error) {
     return { ok: false, detail: error instanceof MimeError ? error.message : "unparseable MIME" };
   }

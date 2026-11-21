@@ -2,7 +2,8 @@
 import { encodeEnvelope, readEnvelope } from "@jeswr/agent-channels";
 import { CONFIG_ED25519, PILOT_PROFILE } from "@jeswr/agent-reference";
 import { Cast, craftSigned, mandateOf } from "@jeswr/agent-reference/scenarios/common";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { createGate, type StoredVerdict } from "../src/gate.js";
 
 describe("W17 signed-message compatibility", () => {
   it("admits a reference-signed describe message recovered from the W17 carrier", async () => {
@@ -66,4 +67,47 @@ describe("W17 signed-message compatibility", () => {
       await runtime.close();
     }
   });
+});
+
+it("requires a positive inbound admission even when the protocol result is accepted", async () => {
+  let verdict: StoredVerdict | undefined;
+  const gate = createGate(
+    {
+      receive: async () => ({
+        disposition: "accepted",
+        messageId: "urn:test:message",
+        conversation: "urn:test:conversation",
+        outbound: [],
+        decisions: [],
+      }),
+      commitBindingEvent: vi.fn(),
+      close: vi.fn(),
+    },
+    {
+      get: async () => verdict,
+      put: async (_hex, next) => {
+        verdict = next;
+      },
+      digests: async () => [],
+    },
+    { entries: () => [] },
+    [],
+    () => new Date("2026-10-19T08:00:00Z"),
+  );
+  expect(
+    await gate.check({
+      binding: "direct",
+      account: "fixture",
+      message: {
+        channel: "direct",
+        textBody: "",
+        signals: {},
+        rawSha256: "a".repeat(64),
+        rawByteLength: 0,
+        rawMediaType: "application/json",
+        warnings: [],
+        jsonLdBlocks: [encodeEnvelope("a.b.c")],
+      },
+    }),
+  ).toMatchObject({ outcome: "refused", reason: "indeterminate" });
 });

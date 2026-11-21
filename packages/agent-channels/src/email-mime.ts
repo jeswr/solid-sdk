@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import {
+  BoundsError,
   canonicalJson,
   DEFAULT_LIMITS,
   digestBytes,
@@ -9,7 +10,7 @@ import {
 import { renderBodies } from "./email/bodies.js";
 import { headerValues, leaves, type MimeNode, parseMime, shapeOf } from "./email/mime.js";
 import type { EmailMessage } from "./email-message.js";
-import { decodeEnvelopeObject } from "./envelope.js";
+import { decodeEnvelopeObject, encodeEnvelope } from "./envelope.js";
 import { ChannelParseError } from "./errors.js";
 import { toBridgeMessage } from "./message.js";
 import { AGENT_FOOTER } from "./profiles.js";
@@ -147,7 +148,9 @@ function collectStructuredCopies(
         ...DEFAULT_LIMITS,
         maxStringLength: DEFAULT_LIMITS.maxEnvelopeBytes,
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof BoundsError && error.code === "too-large")
+        throw new ChannelParseError("structured copy exceeds local byte cap");
       if (requireComplete || block.includes("SignedMessage"))
         throw new ChannelParseError("malformed structured copy");
       continue;
@@ -180,12 +183,16 @@ function inspectEmailDetails(raw: string | Uint8Array, config: EmailConfig) {
   const message = toBridgeMessage(email);
   const copies = new Set<string>();
   collectStructuredCopies(email.jsonLdBlocks ?? [], copies);
+  const legacyFoundCarrier = copies.size > 0;
+  const scan = parseMime(raw, undefined, { carriersOnly: !legacyFoundCarrier });
+  if (!scan.ok) throw new ChannelParseError("incomplete structured-copy extraction");
+  collectStructuredCopies(mimeCarriers(scan.root), copies, true);
   if (copies.size === 0)
     return { message, root: undefined, proposal: undefined, parity: "none" as const };
-  const mime = parseMime(raw);
-  if (!mime.ok) throw new ChannelParseError("incomplete structured-copy extraction");
-  collectStructuredCopies(mimeCarriers(mime.root), copies, true);
   if (copies.size !== 1) throw new ChannelParseError("conflicting structured copies");
+  // A carrier discovered by the scan still needs the full MIME tree for parity.
+  const mime = legacyFoundCarrier ? scan : parseMime(raw);
+  if (!mime.ok) throw new ChannelParseError("incomplete structured-copy extraction");
   const proposal = decodeEmailProposal([...copies][0] as string);
   const match = parityMatches(mime.root, proposal, footer);
   const strict = new Set([...config.ownAccounts].map((a) => a.toLowerCase())).has(
@@ -195,6 +202,9 @@ function inspectEmailDetails(raw: string | Uint8Array, config: EmailConfig) {
   return {
     message: {
       ...message,
+      ...(!legacyFoundCarrier
+        ? { jsonLdBlocks: [...(message.jsonLdBlocks ?? []), encodeEnvelope(proposal.compactJws)] }
+        : {}),
       warnings: [
         ...message.warnings,
         "signature-unverified",

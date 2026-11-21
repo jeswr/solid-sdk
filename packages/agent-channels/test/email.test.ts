@@ -298,8 +298,9 @@ it("fails closed on conflicting/malformed carriers and leaves unrelated JSON-LD 
       ]),
     ),
   ).toThrow("conflicting");
+  const plain = 'Content-Type: application/ld+json\r\n\r\n{"@type":"Person"}';
   for (const blocks of [undefined, [], ["not json", "null", "1", '"string"', '{"@type":"Person"}']])
-    expect(inspectEmail(raw, withBlocks(blocks)).parity).toBe("none");
+    expect(inspectEmail(plain, withBlocks(blocks)).parity).toBe("none");
   expect(() => inspectEmail("x".repeat(MAX_EMAIL_BYTES + 1), config)).toThrow("byte cap");
   expect(() =>
     inspectEmail(raw, {
@@ -369,6 +370,64 @@ it.each([
   ).toThrow("conflicting structured copies");
 });
 
+it("forwards a signed MIME carrier that the legacy parser did not return", async () => {
+  const raw = (await wireFor()).bytes;
+  const options = {
+    ...config,
+    parseEmail: (input: string | Uint8Array) => ({ ...parseEmail(input), jsonLdBlocks: undefined }),
+  };
+  const parsed = inspectEmail(raw, options);
+  expect(parsed.parity).toBe("match");
+  expect(parsed.message.jsonLdBlocks).toContain(envelope(signed().compactJws));
+  expect(() => inspectEmail(raw.replace("charset=utf-8", "charset=iso-8859-1"), options)).toThrow(
+    "incomplete structured-copy extraction",
+  );
+});
+
+it("keeps plain email with binary attachments and a legacy text charset", () => {
+  const raw = [
+    'Content-Type: multipart/mixed; boundary="plain"',
+    "",
+    "--plain",
+    "Content-Type: text/plain; charset=iso-8859-1",
+    "Content-Transfer-Encoding: quoted-printable",
+    "",
+    "Caf=E9",
+    "--plain",
+    "Content-Type: application/octet-stream",
+    "Content-Transfer-Encoding: base64",
+    "",
+    "/w==",
+    "--plain--",
+    "",
+  ].join("\r\n");
+  expect(inspectEmail(raw, config)).toMatchObject({
+    parity: "none",
+    message: { textBody: "Café" },
+  });
+});
+
+it("refuses an oversized MIME part when it is the only signed copy", () => {
+  const carrier = envelope(signed().compactJws);
+  const oversized = `${" ".repeat(65536)}${carrier}`;
+  const raw = [
+    'Content-Type: multipart/mixed; boundary="only-copy"',
+    "",
+    "--only-copy",
+    "Content-Type: text/plain",
+    "",
+    "Readable copy",
+    "--only-copy",
+    "Content-Type: application/ld+json",
+    "",
+    oversized,
+    "--only-copy--",
+    "",
+  ].join("\r\n");
+  expect(parseEmail(raw).jsonLdBlocks).toBeUndefined();
+  expect(() => inspectEmail(raw, config)).toThrow("structured copy exceeds local byte cap");
+});
+
 it("checks oversized carriers that the legacy parser drops", async () => {
   const wire = await wireFor();
   const { html, carrier } = renderBodies(message, signed().compactJws, config.footer);
@@ -383,7 +442,7 @@ it("checks oversized carriers that the legacy parser drops", async () => {
     expect(parseEmail(raw).jsonLdBlocks).not.toContain(oversized);
     expect(Buffer.byteLength(raw)).toBeLessThan(MAX_EMAIL_BYTES);
     expect(() => inspectEmail(raw, { ...config, ownAccounts: new Set() })).toThrow(
-      "malformed structured copy",
+      "structured copy exceeds local byte cap",
     );
   }
 });

@@ -10,10 +10,10 @@ import {
   scopedUrn,
   TrustStore,
 } from "@jeswr/agent-reference";
-import { saveTrust } from "@jeswr/agent-reference/setup";
 import { lstat, mkdir, realpath } from "fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "path";
 import { readGate } from "./gate.js";
+import { writePrivate } from "./local.js";
 
 type Confirm = (prompt: string) => Promise<boolean>;
 
@@ -137,6 +137,13 @@ export async function pinPeer(o: {
     throw new Error("Invalid introduction notice");
   if (card.actor === current.identity.actor || card.party === current.identity.party)
     throw new Error("An introduction cannot replace the gate identity");
+  for (const [subject, key] of [
+    [card.actor, card.actorKey],
+    [card.party, card.partyKey],
+  ] as const) {
+    if ("subject" in key && key.subject !== subject)
+      throw new Error("Introduction key subject does not match its identity");
+  }
   const prior = await TrustStore.load(current.trust);
   // Validate both keys, including a party key which introduce() might already know.
   await TrustStore.load(introduce({ ...current.trust, keys: [] }, card));
@@ -163,6 +170,6 @@ export async function pinPeer(o: {
   const latest = await readGate(o.directory);
   if (JSON.stringify(latest.trust) !== JSON.stringify(current.trust))
     throw new Error("Trusted pins changed during confirmation");
-  saveTrust(dirname(current.dir), basename(current.dir), trust);
+  await writePrivate(current.dir, "trust.json", JSON.stringify(trust, null, 2));
   return true;
 }

@@ -12,7 +12,7 @@ import {
   type TrustStoreData,
   verifyLedger,
 } from "@jeswr/agent-reference";
-import { lstat, readdir } from "fs/promises";
+import { lstat, readdir, rename } from "fs/promises";
 import { basename, dirname, join, resolve } from "path";
 import { z } from "zod";
 import { readPrivate, writePrivate } from "./local.js";
@@ -40,6 +40,7 @@ const storedVerdict = z.discriminatedUnion("outcome", [
   z.strictObject({ outcome: z.literal("checking"), time }),
   z.strictObject({
     outcome: z.literal("admitted"),
+    verified: z.literal(true).optional(),
     messageId: z.string(),
     conversation: z.string(),
     time,
@@ -62,9 +63,26 @@ function fileVerdicts(directory: string): VerdictStore {
   return {
     async get(hex) {
       const text = await readPrivate(join(directory, `verdict-${hex}.json`));
-      return text === undefined ? undefined : storedVerdict.parse(JSON.parse(text));
+      if (text === undefined) return undefined;
+      const verdict = storedVerdict.parse(JSON.parse(text));
+      if (verdict.outcome !== "admitted") return verdict;
+      const { verified, ...decision } = verdict;
+      // Earlier versions could cache a protocol acceptance without inbound admission.
+      return verified ? decision : { outcome: "checking", time: verdict.time };
     },
-    put: (hex, verdict) => writePrivate(directory, `verdict-${hex}.json`, JSON.stringify(verdict)),
+    async put(hex, verdict) {
+      const name = `verdict-${hex}.json`;
+      if (verdict.outcome === "checking") {
+        await writePrivate(directory, name, JSON.stringify(verdict));
+        return;
+      }
+      const staged = `verdict-${hex}.pending`;
+      const record = verdict.outcome === "admitted" ? { ...verdict, verified: true } : verdict;
+      await writePrivate(directory, staged, JSON.stringify(record));
+      // Publish only after the file and its staged directory entry are durable. If a crash
+      // loses this rename, the previously synced checking marker still refuses the retry.
+      await rename(join(directory, staged), join(directory, name));
+    },
     async digests() {
       return (await readdir(directory)).flatMap((name) => filePattern.exec(name)?.[1] ?? []).sort();
     },
@@ -95,10 +113,8 @@ function refused(reason: string): Extract<Decision, { outcome: "refused" }> {
 function inboundDecision(step: StepResult): Decision {
   switch (step.disposition) {
     case "accepted":
-      // The runtime also reports "accepted" when it processed an inbound refusal
-      // or challenge. A reason in that result cannot grant access to suite models.
       if (step.reason) return refused(reasonCode.safeParse(step.reason).data ?? "indeterminate");
-      if (step.messageId && step.conversation)
+      if (step.admitted === true && step.messageId && step.conversation)
         return { outcome: "admitted", messageId: step.messageId, conversation: step.conversation };
       return refused("indeterminate");
     case "rejected":
@@ -126,52 +142,76 @@ export function createGate(
   async function check({ binding, message }: CheckInput): Promise<GateVerdict> {
     const hex = message.rawSha256;
     const digest = `sha-256:${hex}`;
+    const validDigest = /^[a-f0-9]{64}$/.test(hex);
     const event = (type: string, reason: string) =>
-      rt.commitBindingEvent({ type, binding, digest, reason });
+      rt.commitBindingEvent({ type, binding, ...(validDigest ? { digest } : {}), reason });
     const write = (decision: Decision | { outcome: "checking" }) =>
       verdicts.put(hex, { ...decision, time: now().toISOString() });
     try {
-      if (!/^[a-f0-9]{64}$/.test(hex)) {
-        await rt.commitBindingEvent({ type: "binding-rejection", binding, reason: "malformed" });
+      if (!validDigest) {
+        await event("binding-rejection", "malformed");
         return { ...refused("malformed"), digest };
-      }
-      const { copies, failure } = collectCarriers(message);
-      if (failure) {
-        await event("binding-rejection", failure);
-        await write(refused(failure));
-        return { ...refused(failure), digest };
-      }
-      const jws = copies.values().next().value;
-      if (jws === undefined) {
-        await event("channel-observation", "no-structured-content");
-        await write({ outcome: "unstructured" });
-        return { outcome: "unstructured", digest };
       }
       const previous = await verdicts.get(hex);
       if (previous?.outcome === "checking") {
         await event("binding-rejection", "result-uncertain");
         return { ...refused("result-uncertain"), digest };
       }
-      if (previous) {
+      if (previous?.outcome === "refused") {
+        await event("binding-rejection", previous.reason);
+        return { ...refused(previous.reason), digest };
+      }
+      const { copies, failure } = collectCarriers(message);
+      const jws = copies.values().next().value;
+      const parityMismatch = message.warnings.includes("human-parity-unverified");
+      if (!failure && jws !== undefined && previous?.outcome === "admitted") {
+        // Each account's parser compares the readable copy with that account's settings.
+        if (parityMismatch) {
+          await event("binding-rejection", "human-parity-mismatch");
+          return { ...refused("human-parity-mismatch"), digest };
+        }
         await event("channel-observation", "cached-verdict");
-        const { time: _time, ...decision } = previous;
-        return { ...decision, digest };
+        return {
+          outcome: "admitted",
+          messageId: previous.messageId,
+          conversation: previous.conversation,
+          digest,
+        };
+      }
+      if (!failure && jws === undefined && previous) {
+        await event("channel-observation", "no-structured-content");
+        return { outcome: "unstructured", digest };
       }
       await write({ outcome: "checking" });
-      const step = await rt.receive(
-        { format: "awp-jws-compact/0.1", jws },
-        {
-          binding,
-          checkEmailParity: () =>
-            message.warnings.includes("human-parity-unverified")
-              ? "The readable channel copy does not match the structured message."
-              : undefined,
-        },
-      );
-      const decision = inboundDecision(step);
+      let decision: Decision;
+      if (failure) {
+        await event("binding-rejection", failure);
+        decision = refused(failure);
+      } else if (jws === undefined) {
+        await event("channel-observation", "no-structured-content");
+        decision = { outcome: "unstructured" };
+      } else {
+        decision = inboundDecision(
+          await rt.receive(
+            { format: "awp-jws-compact/0.1", jws },
+            {
+              binding,
+              checkEmailParity: () =>
+                parityMismatch
+                  ? "The readable channel copy does not match the structured message."
+                  : undefined,
+            },
+          ),
+        );
+      }
       await write(decision);
       return { ...decision, digest };
     } catch {
+      try {
+        await event("binding-rejection", "indeterminate");
+      } catch {
+        // A broken ledger cannot turn an indeterminate check into an admission.
+      }
       return { ...refused("indeterminate"), digest };
     }
   }
