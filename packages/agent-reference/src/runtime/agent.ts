@@ -3368,10 +3368,10 @@ export class AgentRuntime {
     matchesRevision: (item: ContextItem, current: AdmittedFact) => boolean = (item, current) =>
       current.digest === item.digest &&
       current.admittingDelivery?.receipt === item.admittingDelivery?.receipt,
-  ): readonly (ContextItem & { statement: JsonObject })[] {
+  ): readonly (ContextItem & Required<Pick<ContextItem, "statement">>)[] {
     return this.gateMemory
       .context(this.options.gates?.taskId ?? "*")
-      .filter((item): item is ContextItem & { statement: JsonObject } => {
+      .filter((item): item is ContextItem & Required<Pick<ContextItem, "statement">> => {
         const current = this.gateMemory.facts.get(item.id);
         return (
           item.accepted === true && !!item.statement && !!current && matchesRevision(item, current)

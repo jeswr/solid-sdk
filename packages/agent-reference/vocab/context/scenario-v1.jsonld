@@ -1,0 +1,1822 @@
+{
+  "x-authored-by": "AUTHORED-BY Codex GPT-6.2 Sol",
+  "@context": {
+    "@version": 1.1,
+    "awps": "https://w3id.org/jeswr/awp/scenario#",
+    "awp": "https://w3id.org/jeswr/awp#",
+    "dpv": "https://w3id.org/dpv#",
+    "odrl": "http://www.w3.org/ns/odrl/2/",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "sdo": "https://schema.org/",
+    "sec": "https://w3id.org/security#",
+    "vc": "https://www.w3.org/2018/credentials#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "DomainProfile": {
+      "@id": "awps:DomainProfile",
+      "@context": {
+        "id": "awps:slug",
+        "parties": {
+          "@id": "awps:partyLabels",
+          "@type": "@json"
+        },
+        "sources": {
+          "@id": "awps:sourceAliases",
+          "@type": "@json"
+        },
+        "authorityChains": {
+          "@id": "awps:authorityChains",
+          "@context": {
+            "operations": {
+              "@id": "awps:operationIds",
+              "@container": "@list",
+              "@type": "@id"
+            },
+            "holders": "awps:holders",
+            "roots": {
+              "@id": "awps:roots",
+              "@container": "@list",
+              "@context": {
+                "issuer": {
+                  "@id": "vc:issuer",
+                  "@type": "@id"
+                },
+                "operations": {
+                  "@id": "awps:operationIds",
+                  "@container": "@list",
+                  "@type": "@id"
+                }
+              }
+            }
+          }
+        },
+        "purposes": {
+          "@id": "awps:purposes",
+          "@container": "@list",
+          "@context": {
+            "id": "@id"
+          }
+        }
+      }
+    },
+    "Scenario": {
+      "@id": "awps:Scenario",
+      "@context": {
+        "id": "awps:slug",
+        "assurance": {
+          "@id": "awps:scenarioAssurance",
+          "@type": "@json"
+        },
+        "trust": {
+          "@id": "awps:trust",
+          "@context": {
+            "introductions": {
+              "@id": "awps:introductions",
+              "@container": "@list"
+            },
+            "pins": {
+              "@id": "awps:pins",
+              "@container": "@list"
+            },
+            "ownLists": {
+              "@id": "awps:ownLists",
+              "@container": "@index",
+              "@index": "awps:key",
+              "@context": {
+                "party": {
+                  "@id": "awp:party",
+                  "@type": "@id"
+                },
+                "tasks": {
+                  "@id": "awps:tasks",
+                  "@container": "@list",
+                  "@type": "@id"
+                },
+                "purposes": {
+                  "@id": "awps:purposeIds",
+                  "@container": "@list",
+                  "@type": "@id"
+                },
+                "note": "awp:note"
+              }
+            },
+            "sources": {
+              "@id": "awps:sourceLists",
+              "@container": "@index",
+              "@index": "awps:key",
+              "@context": {
+                "id": "@id",
+                "validFrom": {
+                  "@id": "awp:effectiveFrom",
+                  "@type": "xsd:dateTime"
+                },
+                "validUntil": {
+                  "@id": "awp:effectiveUntil",
+                  "@type": "xsd:dateTime"
+                },
+                "framework": "awp:framework",
+                "subjects": {
+                  "@id": "awp:subjects",
+                  "@container": "@list",
+                  "@type": "@vocab",
+                  "@context": {
+                    "any": "awp:anySubject"
+                  }
+                }
+              }
+            },
+            "root": {
+              "@id": "awps:root",
+              "@context": {
+                "id": "@id",
+                "delegates": {
+                  "@id": "awps:delegates",
+                  "@container": "@list",
+                  "@context": {
+                    "id": "@id",
+                    "entries": {
+                      "@id": "awps:registerEntries",
+                      "@container": "@list",
+                      "@context": {
+                        "id": "@id",
+                        "party": {
+                          "@id": "awp:party",
+                          "@type": "@id"
+                        },
+                        "status": "awps:registerStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "answeredRegisters": {
+              "@id": "awps:answeredRegisters",
+              "@container": "@index",
+              "@index": "awps:key",
+              "@type": "@id"
+            }
+          }
+        },
+        "authorityChains": {
+          "@id": "awps:authorityChainPaths",
+          "@type": "@json"
+        }
+      }
+    },
+    "$ref": "awps:stepReference",
+    "acceptedCodes": {
+      "@id": "awps:acceptedCodes",
+      "@container": "@list"
+    },
+    "acceptedJoint": {
+      "@id": "awps:acceptedJoint",
+      "@container": "@list"
+    },
+    "acceptedLists": {
+      "@id": "awps:acceptedLists",
+      "@container": "@list",
+      "@type": "@id"
+    },
+    "acceptedProofs": {
+      "@id": "awps:acceptedProofs",
+      "@container": "@list"
+    },
+    "acceptedSnapshots": "awps:acceptedSnapshots",
+    "access": "awps:access",
+    "account": {
+      "@id": "awps:account",
+      "@type": "@id"
+    },
+    "action": "odrl:action",
+    "actionClaims": {
+      "@id": "awps:actionClaims",
+      "@container": "@list"
+    },
+    "actionField": "awps:actionField",
+    "actionKinds": {
+      "@id": "awps:actionKinds",
+      "@type": "@json"
+    },
+    "actions": {
+      "@id": "odrl:action",
+      "@container": "@list"
+    },
+    "activity": {
+      "@id": "awps:activity",
+      "@type": "@json"
+    },
+    "activityType": {
+      "@id": "awp:activityType",
+      "@type": "@id"
+    },
+    "actor": {
+      "@id": "awp:actor",
+      "@type": "@id"
+    },
+    "actsFor": "awps:actsFor",
+    "actual": {
+      "@id": "awps:actual",
+      "@type": "@json"
+    },
+    "adapter": "awps:adapter",
+    "added": {
+      "@id": "awps:added",
+      "@container": "@list"
+    },
+    "address": {
+      "@id": "awps:address",
+      "@type": "@id"
+    },
+    "agent": "awps:agent",
+    "agreement": {
+      "@id": "awps:agreement",
+      "@type": "@json"
+    },
+    "agreementCredentialFault": "awps:agreementCredentialFault",
+    "agreementDeadlineSeconds": "awps:agreementDeadlineSeconds",
+    "agreementDelivery": "awps:agreementDelivery",
+    "agreementPlan": {
+      "@id": "awps:agreementPlan",
+      "@type": "@json"
+    },
+    "agreements": {
+      "@id": "awps:agreements",
+      "@container": "@list",
+      "@context": {
+        "definition": {
+          "@id": "awps:agreementDefinition",
+          "@context": {
+            "id": "@id",
+            "parties": {
+              "@id": "awps:partyIds",
+              "@container": "@list",
+              "@type": "@id"
+            },
+            "terms": {
+              "@id": "awp:terms",
+              "@context": {
+                "clauses": {
+                  "@id": "awps:clauses",
+                  "@type": "@json"
+                }
+              }
+            },
+            "conditions": {
+              "@id": "awps:conditions",
+              "@container": "@list",
+              "@context": {
+                "equals": {
+                  "@id": "awps:claimEquals",
+                  "@type": "@json"
+                }
+              }
+            },
+            "reservations": {
+              "@id": "awps:reservations",
+              "@container": "@list",
+              "@context": {
+                "id": "@id"
+              }
+            },
+            "budget": "awps:budget"
+          }
+        }
+      }
+    },
+    "allegation": "awps:allegation",
+    "allowMissing": "awps:allowMissing",
+    "alterOriginal": "awps:alterOriginal",
+    "amount": "sdo:price",
+    "anchor": "awps:anchor",
+    "annualRule": {
+      "@id": "awps:annualRule",
+      "@type": "@id"
+    },
+    "answersFor": "awps:answersFor",
+    "answerThrough": {
+      "@id": "awps:answerThrough",
+      "@type": "@json"
+    },
+    "answerTtlMs": "awps:answerTtlMs",
+    "approximate": "awps:approximate",
+    "asOf": "awp:asOf",
+    "assessment": {
+      "@id": "awps:assessment",
+      "@type": "@id"
+    },
+    "assessments": {
+      "@id": "awps:assessments",
+      "@container": "@list",
+      "@context": {
+        "id": "@id"
+      }
+    },
+    "assessor": {
+      "@id": "awps:assessor",
+      "@type": "@id"
+    },
+    "asset": {
+      "@id": "awps:asset",
+      "@type": "@id"
+    },
+    "assurance": "awps:assurance",
+    "assurances": {
+      "@id": "awps:assurances",
+      "@container": "@list"
+    },
+    "at": {
+      "@id": "awp:at",
+      "@type": "xsd:dateTime"
+    },
+    "atStep": "awps:atStep",
+    "attachments": {
+      "@id": "awps:attachments",
+      "@container": "@list"
+    },
+    "attack": "awps:attack",
+    "attempt": {
+      "@id": "awps:attempt",
+      "@type": "@json"
+    },
+    "attestedDerivers": {
+      "@id": "awps:attestedDerivers",
+      "@container": "@list"
+    },
+    "audience": "awps:audience",
+    "authorityChains": {
+      "@id": "awps:authorityChains",
+      "@context": {
+        "operations": {
+          "@id": "awps:operationIds",
+          "@container": "@list",
+          "@type": "@id"
+        },
+        "holders": "awps:holders",
+        "roots": {
+          "@id": "awps:roots",
+          "@container": "@list",
+          "@context": {
+            "issuer": {
+              "@id": "vc:issuer",
+              "@type": "@id"
+            },
+            "operations": {
+              "@id": "awps:operationIds",
+              "@container": "@list",
+              "@type": "@id"
+            }
+          }
+        }
+      }
+    },
+    "authorityFault": "awps:authorityFault",
+    "authorityLinks": {
+      "@id": "awps:authorityLinks",
+      "@container": "@list",
+      "@context": {
+        "id": "@id",
+        "subject": "awps:subjectSlug",
+        "scope": {
+          "@id": "awps:scope",
+          "@context": {
+            "operations": {
+              "@id": "awps:operationIds",
+              "@container": "@list",
+              "@type": "@id"
+            },
+            "subjects": {
+              "@id": "awps:subjectIds",
+              "@container": "@list",
+              "@type": "@id"
+            },
+            "purposes": {
+              "@id": "awps:purposeIds",
+              "@container": "@list",
+              "@type": "@id"
+            }
+          }
+        },
+        "status": {
+          "@id": "awps:statusReference",
+          "@context": {
+            "id": "awps:entryId"
+          }
+        }
+      }
+    },
+    "authorizedFor": {
+      "@id": "awps:authorizedFor",
+      "@container": "@list",
+      "@type": "@id"
+    },
+    "balances": {
+      "@id": "awps:balances",
+      "@type": "@json"
+    },
+    "basis": {
+      "@id": "awps:basis",
+      "@type": "@json"
+    },
+    "binds": {
+      "@id": "awps:binds",
+      "@container": "@list"
+    },
+    "block": "awps:block",
+    "blocked": {
+      "@id": "awps:blocked",
+      "@container": "@list",
+      "@context": {
+        "path": "awps:pathSlug"
+      }
+    },
+    "body": {
+      "@id": "awp:body",
+      "@type": "@json"
+    },
+    "bounds": "awps:bounds",
+    "branches": {
+      "@id": "awps:branches",
+      "@container": "@list",
+      "@context": {
+        "id": "awps:slug",
+        "expect": "awps:expectedDecision"
+      }
+    },
+    "budget": "awps:budget",
+    "businessOnly": "awps:businessOnly",
+    "carriage": {
+      "@id": "awps:carriage",
+      "@context": {
+        "at": "awps:atStepSlug",
+        "parties": {
+          "@id": "awps:partySlugs",
+          "@container": "@list"
+        }
+      }
+    },
+    "case": {
+      "@id": "awps:case",
+      "@type": "@id"
+    },
+    "catalogueAssurance": "awps:catalogueAssurance",
+    "catalogueExpected": "awps:catalogueExpected",
+    "cataloguePath": {
+      "@id": "awps:cataloguePath",
+      "@context": {
+        "index": "awps:catalogueIndex"
+      }
+    },
+    "category": "awps:category",
+    "certifier": {
+      "@id": "awps:certifier",
+      "@type": "@id"
+    },
+    "challenge": "awps:challenge",
+    "change": {
+      "@id": "awps:change",
+      "@type": "@json"
+    },
+    "check": "awps:check",
+    "claims": {
+      "@id": "awps:claims",
+      "@container": "@list"
+    },
+    "claimType": "awp:claimType",
+    "claimTypes": {
+      "@id": "awps:claimTypes",
+      "@container": "@list"
+    },
+    "closes": {
+      "@id": "awps:closes",
+      "@container": "@list"
+    },
+    "codeMappings": {
+      "@id": "awps:codeMappings",
+      "@context": {
+        "routes": {
+          "@id": "awps:routes",
+          "@container": "@list"
+        },
+        "receivers": {
+          "@id": "awps:receivers",
+          "@container": "@list",
+          "@type": "@id"
+        }
+      }
+    },
+    "cohort": "awps:cohort",
+    "completeness": "awps:completeness",
+    "computeOnly": {
+      "@id": "awps:computeOnly",
+      "@container": "@list"
+    },
+    "configuration": "awps:configurationSlug",
+    "configurations": {
+      "@id": "awps:configurations",
+      "@container": "@list",
+      "@context": {
+        "id": "awps:slug"
+      }
+    },
+    "content": {
+      "@id": "awps:content",
+      "@container": "@list",
+      "@context": {
+        "id": "@id",
+        "bytes": {
+          "@id": "awps:bytes",
+          "@type": "@json"
+        }
+      }
+    },
+    "contents": {
+      "@id": "awps:contents",
+      "@type": "@json"
+    },
+    "continues": "awps:continues",
+    "contributors": {
+      "@id": "awps:contributors",
+      "@container": "@list"
+    },
+    "controllers": {
+      "@id": "sec:controller",
+      "@type": "@json"
+    },
+    "conversation": {
+      "@id": "awps:conversation",
+      "@type": "@json"
+    },
+    "coordinator": {
+      "@id": "awps:coordinator",
+      "@type": "@id"
+    },
+    "corroboration": {
+      "@id": "awps:corroboration",
+      "@context": {
+        "sources": "awps:sourceCount"
+      }
+    },
+    "credential": {
+      "@id": "awps:credential",
+      "@type": "@json"
+    },
+    "credentialQuadBounds": {
+      "@id": "awps:credentialQuadBounds",
+      "@container": "@list"
+    },
+    "currency": "sdo:priceCurrency",
+    "dataset": {
+      "@id": "awps:dataset",
+      "@type": "@id"
+    },
+    "datasets": {
+      "@id": "awps:datasets",
+      "@container": "@list",
+      "@context": {
+        "id": "@id",
+        "rows": {
+          "@id": "awps:rows",
+          "@container": "@list",
+          "@context": {
+            "claims": {
+              "@id": "awps:rowClaims",
+              "@container": "@list",
+              "@type": "@json"
+            }
+          }
+        }
+      }
+    },
+    "decider": {
+      "@id": "awps:decider"
+    },
+    "decision": "awps:decision",
+    "decisions": {
+      "@id": "awps:decisions",
+      "@container": "@list",
+      "@type": "@id"
+    },
+    "decisionsForPerson": {
+      "@id": "awps:decisionsForPerson",
+      "@container": "@list"
+    },
+    "definition": "awps:definition",
+    "depth": "awps:depth",
+    "derivedEvidence": {
+      "@id": "awps:derivedEvidence",
+      "@type": "@json"
+    },
+    "deriver": {
+      "@id": "awps:deriver",
+      "@type": "@id"
+    },
+    "digests": {
+      "@id": "awps:digests",
+      "@container": "@list"
+    },
+    "discardInputsAfter": "awps:discardInputsAfter",
+    "discharge": "awps:discharge",
+    "discover": "awps:discover",
+    "documentFaults": {
+      "@id": "awps:documentFaults",
+      "@container": "@list"
+    },
+    "documents": {
+      "@id": "awps:documents",
+      "@container": "@list",
+      "@context": {
+        "id": "@id"
+      }
+    },
+    "dueDate": {
+      "@id": "awps:dueDate",
+      "@type": "xsd:dateTime"
+    },
+    "earliestCreated": "awps:earliestCreated",
+    "email": {
+      "@id": "awps:email",
+      "@context": {
+        "from": "sdo:email",
+        "pins": {
+          "@id": "awps:emailPins",
+          "@container": "@list"
+        },
+        "endpoint": "sdo:email"
+      }
+    },
+    "entity": {
+      "@id": "awps:entity",
+      "@type": "@id"
+    },
+    "escrow": "awps:escrow",
+    "event": "awps:event",
+    "evidence": {
+      "@id": "awps:evidence",
+      "@container": "@list"
+    },
+    "evidenceFaults": {
+      "@id": "awps:evidenceFaults",
+      "@container": "@list"
+    },
+    "exchange": {
+      "@id": "awps:exchange",
+      "@type": "@json"
+    },
+    "expect": {
+      "@id": "awps:expect",
+      "@container": "@list"
+    },
+    "expected": {
+      "@id": "awps:expected",
+      "@type": "@json"
+    },
+    "expired": "awps:expired",
+    "expiresAt": {
+      "@id": "awp:expiresAt",
+      "@type": "xsd:dateTime"
+    },
+    "extends": "awps:extends",
+    "fault": "awps:fault",
+    "federation": {
+      "@id": "awps:federation",
+      "@context": {
+        "subject": "awps:subjectSlug"
+      }
+    },
+    "field": "awps:field",
+    "final": "awps:final",
+    "finisher": "awps:finisher",
+    "fork": "awps:fork",
+    "forum": "awps:forum",
+    "freshness": "awps:freshness",
+    "from": "awps:from",
+    "fromList": {
+      "@id": "awps:fromList",
+      "@type": "@id"
+    },
+    "gateFault": {
+      "@id": "awps:gateFault",
+      "@context": {
+        "at": "awps:atStepSlug"
+      }
+    },
+    "grant": "awps:grant",
+    "grants": {
+      "@id": "awps:grants",
+      "@container": "@list",
+      "@context": {
+        "id": "awps:slug"
+      }
+    },
+    "handlerImplementations": {
+      "@id": "awps:handlerImplementations",
+      "@container": "@index",
+      "@index": "awps:key"
+    },
+    "handlers": {
+      "@id": "awps:handlers",
+      "@container": "@list"
+    },
+    "holder": "awps:holder",
+    "holderBinding": "awps:holderBinding",
+    "holderSet": {
+      "@id": "awps:holderSet",
+      "@type": "@id"
+    },
+    "host": "awps:host",
+    "identifier": {
+      "@id": "sdo:identifier",
+      "@type": "@id"
+    },
+    "identifiers": {
+      "@id": "awps:identifiers",
+      "@container": "@list",
+      "@type": "@id"
+    },
+    "identity": {
+      "@id": "awps:identity",
+      "@type": "@id"
+    },
+    "identityNames": {
+      "@id": "awps:identityNames",
+      "@type": "@json"
+    },
+    "independent": "awps:independent",
+    "index": "awps:index",
+    "inject": {
+      "@id": "awps:inject",
+      "@container": "@list"
+    },
+    "input": {
+      "@id": "awp:input",
+      "@type": "@json"
+    },
+    "inputs": {
+      "@id": "awps:inputs",
+      "@container": "@list"
+    },
+    "inputsFrom": {
+      "@id": "awps:inputsFrom",
+      "@container": "@list"
+    },
+    "intent": {
+      "@id": "awps:intent",
+      "@type": "@json"
+    },
+    "interval": {
+      "@id": "awps:interval",
+      "@context": {
+        "from": {
+          "@id": "awps:intervalStart",
+          "@type": "@json"
+        }
+      }
+    },
+    "invoice": {
+      "@id": "awps:invoice",
+      "@type": "@id"
+    },
+    "issuer": "awps:issuer",
+    "item": {
+      "@id": "awps:item",
+      "@type": "@id"
+    },
+    "items": {
+      "@id": "awps:items",
+      "@container": "@list",
+      "@type": "@id"
+    },
+    "jointSession": {
+      "@id": "awps:jointSession",
+      "@context": {
+        "inputs": {
+          "@id": "awps:jointInputs",
+          "@type": "@json"
+        },
+        "threshold": {
+          "@id": "awps:threshold",
+          "@context": {
+            "operator": "awps:comparison",
+            "value": "awps:thresholdValue"
+          }
+        }
+      }
+    },
+    "judgedAgent": "awps:judgedAgent",
+    "jws": {
+      "@id": "awps:jws",
+      "@type": "@json"
+    },
+    "keep": {
+      "@id": "awps:keep",
+      "@container": "@list"
+    },
+    "kind": "awps:kind",
+    "label": "rdfs:label",
+    "labels": {
+      "@id": "awps:labels",
+      "@type": "@json"
+    },
+    "level": {
+      "@id": "awps:level",
+      "@type": "@id"
+    },
+    "levels": {
+      "@id": "awps:levels",
+      "@container": "@list"
+    },
+    "limits": "awps:limits",
+    "mailbox": "awps:mailbox",
+    "mailboxes": {
+      "@id": "awps:mailboxes",
+      "@container": "@list"
+    },
+    "mandates": {
+      "@id": "awps:mandates",
+      "@container": "@list",
+      "@context": {
+        "autonomous": {
+          "@id": "awps:nativeAutonomousRules",
+          "@type": "@json"
+        },
+        "withApproval": {
+          "@id": "awps:nativeApprovalRules",
+          "@type": "@json"
+        },
+        "prohibitions": {
+          "@id": "awps:nativeProhibitions",
+          "@type": "@json"
+        },
+        "standingRules": {
+          "@id": "awps:nativeStandingRules",
+          "@type": "@json"
+        },
+        "limits": {
+          "@id": "awps:limits",
+          "@context": {
+            "commitments": {
+              "@id": "awps:commitments",
+              "@container": "@id"
+            }
+          }
+        },
+        "duties": {
+          "@id": "awps:duties",
+          "@container": "@list",
+          "@context": {
+            "parties": {
+              "@id": "awps:partyIds",
+              "@container": "@list",
+              "@type": "@id"
+            },
+            "by": {
+              "@id": "awps:by",
+              "@type": "xsd:dateTime"
+            }
+          }
+        }
+      }
+    },
+    "mandateStatusFault": {
+      "@id": "awps:mandateStatusFault",
+      "@context": {
+        "at": "awps:atStepSlug",
+        "purpose": "awps:mandateStatus"
+      }
+    },
+    "mappingTables": {
+      "@id": "awps:mappingTables",
+      "@container": "@list",
+      "@context": {
+        "value": {
+          "@id": "awps:mappingTable",
+          "@context": {
+            "id": "@id",
+            "issuer": {
+              "@id": "vc:issuer",
+              "@type": "@id"
+            },
+            "entries": {
+              "@id": "awps:mappings",
+              "@container": "@list"
+            },
+            "status": {
+              "@id": "awps:statusReference",
+              "@context": {
+                "id": "awps:entryId"
+              }
+            }
+          }
+        }
+      }
+    },
+    "maxAgeDays": "awps:maxAgeDays",
+    "maxAgeSeconds": "awps:maxAgeSeconds",
+    "maxAmount": "awps:maxAmount",
+    "maxLoanIncomeRatio": "awps:maxLoanIncomeRatio",
+    "maxPresentationBytes": "awps:maxPresentationBytes",
+    "maxResultSize": "awps:maxResultSize",
+    "maxRetentionDays": "awps:maxRetentionDays",
+    "maxStatusAgeSeconds": "awps:maxStatusAgeSeconds",
+    "mayDelegate": "awps:mayDelegate",
+    "mediaType": "sdo:encodingFormat",
+    "method": "awp:method",
+    "methods": {
+      "@id": "awps:methods",
+      "@container": "@list"
+    },
+    "metric": {
+      "@id": "awps:metric",
+      "@type": "@id"
+    },
+    "milliseconds": "awps:milliseconds",
+    "minimum": "awps:minimum",
+    "minimumContributors": "awps:minimumContributors",
+    "minimumGroup": "awps:minimumGroup",
+    "minimumPeople": "awps:minimumPeople",
+    "modelReadings": {
+      "@id": "awps:modelReadings",
+      "@container": "@list"
+    },
+    "name": "rdfs:label",
+    "negotiatedMeaning": {
+      "@id": "awps:negotiatedMeaning",
+      "@context": {
+        "definition": "awps:definitionText",
+        "platform": "awps:platform"
+      }
+    },
+    "notAfter": "awps:notAfter",
+    "notBefore": "awps:notBefore",
+    "note": "awps:note",
+    "notificationRecipients": {
+      "@id": "awps:notificationRecipients",
+      "@container": "@index",
+      "@index": "awps:key",
+      "@context": {
+        "party": {
+          "@id": "awp:party",
+          "@type": "@id"
+        }
+      }
+    },
+    "objectionRole": "awps:objectionRole",
+    "observation": {
+      "@id": "awps:observation",
+      "@type": "@json"
+    },
+    "observed": {
+      "@id": "awps:observed",
+      "@type": "@json"
+    },
+    "observer": "awps:observer",
+    "observers": {
+      "@id": "awps:observers",
+      "@container": "@list",
+      "@type": "@id"
+    },
+    "on": "awps:on",
+    "onlyUnder": "awps:onlyUnder",
+    "onUnknown": "awps:onUnknown",
+    "openingProfile": "awps:openingProfile",
+    "operation": {
+      "@id": "awp:operation",
+      "@type": "@id"
+    },
+    "operations": {
+      "@id": "awps:operations",
+      "@container": "@list",
+      "@context": {
+        "id": "@id",
+        "models": {
+          "@id": "awps:models",
+          "@container": "@list",
+          "@context": {
+            "id": "@id"
+          }
+        },
+        "requiredApproval": {
+          "@id": "awps:structuredRequiredApproval"
+        }
+      }
+    },
+    "operator": {
+      "@id": "awp:operator",
+      "@type": "@id"
+    },
+    "organization": {
+      "@id": "awps:organization",
+      "@type": "@id"
+    },
+    "organizationCredentials": {
+      "@id": "awps:organizationCredentials",
+      "@container": "@list",
+      "@context": {
+        "status": {
+          "@id": "awps:statusReference",
+          "@context": {
+            "id": "awps:entryId"
+          }
+        }
+      }
+    },
+    "organizations": {
+      "@id": "awps:organizations",
+      "@context": {
+        "requiredRoles": {
+          "@id": "awps:requiredRoles",
+          "@type": "@json"
+        }
+      }
+    },
+    "origin": {
+      "@id": "awps:origin",
+      "@context": {
+        "message": {
+          "@id": "awps:originMessage",
+          "@type": "@json"
+        }
+      }
+    },
+    "originalDigest": {
+      "@id": "awps:originalDigest",
+      "@type": "@json"
+    },
+    "originals": "awps:originals",
+    "originHosted": {
+      "@id": "awps:originHosted",
+      "@context": {
+        "register": "awps:registerSlug"
+      }
+    },
+    "outboundAtStep": "awps:outboundAtStep",
+    "outcome": "awps:outcome",
+    "outline": {
+      "@id": "awps:outline",
+      "@container": "@list"
+    },
+    "output": {
+      "@id": "awp:output",
+      "@type": "@json"
+    },
+    "parameters": {
+      "@id": "awp:parameters",
+      "@type": "@json"
+    },
+    "params": {
+      "@id": "awps:params",
+      "@type": "@json"
+    },
+    "parent": {
+      "@id": "awps:parent",
+      "@type": "@id"
+    },
+    "part": "awps:part",
+    "parties": {
+      "@id": "awps:parties",
+      "@container": "@list",
+      "@context": {
+        "id": "awps:slug",
+        "configurations": {
+          "@id": "awps:partyConfigurations",
+          "@container": "@list"
+        }
+      }
+    },
+    "party": "awps:party",
+    "path": {
+      "@id": "awps:path",
+      "@container": "@list"
+    },
+    "pattern": "awps:pattern",
+    "payee": {
+      "@id": "awps:payee",
+      "@type": "@id"
+    },
+    "payload": {
+      "@id": "awps:payload",
+      "@type": "@json"
+    },
+    "paymentProviders": {
+      "@id": "awps:paymentProviders",
+      "@container": "@list",
+      "@context": {
+        "accounts": {
+          "@id": "awps:accounts",
+          "@container": "@list",
+          "@context": {
+            "id": "@id",
+            "party": {
+              "@id": "awp:party",
+              "@type": "@id"
+            }
+          }
+        }
+      }
+    },
+    "peer": "awps:peer",
+    "period": {
+      "@id": "awps:period",
+      "@context": {
+        "start": "awps:periodStart",
+        "end": "awps:periodEnd"
+      }
+    },
+    "person": {
+      "@id": "awps:person",
+      "@type": "@id"
+    },
+    "personDecisions": {
+      "@id": "awps:personDecisions",
+      "@container": "@list"
+    },
+    "personMayRelyOn": {
+      "@id": "awps:personMayRelyOn",
+      "@container": "@list"
+    },
+    "persons": {
+      "@id": "awps:persons",
+      "@container": "@list",
+      "@type": "@id"
+    },
+    "platform": "awps:platform",
+    "pointerFault": "awps:pointerFault",
+    "policy": "awps:policy",
+    "precedence": "awps:precedence",
+    "presenter": {
+      "@id": "awps:presenter",
+      "@type": "@id"
+    },
+    "profile": "awps:profileSlug",
+    "profileChange": {
+      "@id": "awps:profileChange",
+      "@type": "@json"
+    },
+    "proofBinds": {
+      "@id": "awp:proofBinds",
+      "@container": "@list"
+    },
+    "proofCredentials": {
+      "@id": "awps:proofCredentials",
+      "@container": "@list"
+    },
+    "proofOwners": {
+      "@id": "awps:proofOwners",
+      "@container": "@list"
+    },
+    "proofQuery": "awps:proofQuery",
+    "proposer": "awps:proposer",
+    "protocol": {
+      "@id": "awps:queryProtocol",
+      "@context": {
+        "cohort": {
+          "@id": "awps:cohort",
+          "@context": {
+            "field": "awps:field",
+            "equals": "awps:cohortEquals"
+          }
+        }
+      }
+    },
+    "provider": {
+      "@id": "awps:provider",
+      "@type": "@id"
+    },
+    "publication": "awps:publication",
+    "purpose": {
+      "@id": "dpv:hasPurpose",
+      "@type": "@id"
+    },
+    "purposes": {
+      "@id": "awps:purposeIds",
+      "@type": "@id",
+      "@container": "@list"
+    },
+    "quadsPerCredential": "awps:quadsPerCredential",
+    "qualityCertificate": {
+      "@id": "awps:qualityCertificate",
+      "@context": {
+        "policy": {
+          "@id": "awps:certificationPolicy",
+          "@type": "@id"
+        }
+      }
+    },
+    "queryGrants": {
+      "@id": "awps:queryGrants",
+      "@container": "@list",
+      "@context": {
+        "id": "awps:slug",
+        "value": {
+          "@id": "awps:queryGrant",
+          "@context": {
+            "id": "@id",
+            "protocol": {
+              "@id": "awps:queryProtocol",
+              "@context": {
+                "cohort": {
+                  "@id": "awps:cohort",
+                  "@context": {
+                    "field": "awps:field",
+                    "equals": "awps:cohortEquals"
+                  }
+                }
+              },
+              "@container": "@list"
+            }
+          }
+        }
+      }
+    },
+    "queryProofOptions": {
+      "@id": "awps:queryProofOptions",
+      "@container": "@id",
+      "@context": {
+        "credentials": "awps:credentialCount",
+        "issuers": {
+          "@id": "awps:issuers",
+          "@container": "@list"
+        }
+      }
+    },
+    "reader": "awps:reader",
+    "readings": {
+      "@id": "awps:readings",
+      "@container": "@list"
+    },
+    "reason": "awps:reason",
+    "receivers": {
+      "@id": "awps:receivers",
+      "@container": "@list",
+      "@type": "@id"
+    },
+    "recipient": {
+      "@id": "awp:recipient",
+      "@type": "@id"
+    },
+    "recordBacked": "awps:recordBacked",
+    "recordedAssurance": "awps:recordedAssurance",
+    "records": {
+      "@id": "awps:records",
+      "@container": "@list"
+    },
+    "redeemers": {
+      "@id": "awps:redeemers",
+      "@container": "@list",
+      "@type": "@id"
+    },
+    "ref": {
+      "@id": "awps:ref",
+      "@type": "@id"
+    },
+    "reference": {
+      "@id": "awps:reference",
+      "@type": "@json"
+    },
+    "referenceAction": "awps:referenceAction",
+    "references": {
+      "@id": "awps:references",
+      "@type": "@json"
+    },
+    "register": {
+      "@id": "awps:register",
+      "@type": "@id"
+    },
+    "registrar": {
+      "@id": "awps:registrar",
+      "@type": "@id"
+    },
+    "registry": {
+      "@id": "awps:registry",
+      "@type": "@id"
+    },
+    "registryMeaning": "awps:registryMeaning",
+    "relatedQueryCap": "awps:relatedQueryCap",
+    "relation": "awps:relation",
+    "relianceCorroboration": {
+      "@id": "awps:relianceCorroboration",
+      "@context": {
+        "bank": {
+          "@id": "awps:bank",
+          "@type": "@id"
+        },
+        "payroll": {
+          "@id": "awps:payroll",
+          "@type": "@id"
+        },
+        "receivers": {
+          "@id": "awps:receivers",
+          "@type": "@id",
+          "@container": "@list"
+        }
+      }
+    },
+    "replacedBy": "awps:replacedBy",
+    "replaces": {
+      "@id": "awps:replaces",
+      "@container": "@list"
+    },
+    "replies": {
+      "@id": "awps:replies",
+      "@container": "@list"
+    },
+    "reply": {
+      "@id": "awps:reply",
+      "@type": "@json"
+    },
+    "representationOperations": {
+      "@id": "awps:representationOperations",
+      "@container": "@list",
+      "@type": "@id"
+    },
+    "reputation": {
+      "@id": "awps:reputation",
+      "@context": {
+        "index": "awps:indexSlug",
+        "ratings": {
+          "@id": "awps:ratings",
+          "@container": "@list"
+        }
+      }
+    },
+    "request": {
+      "@id": "awps:request"
+    },
+    "requestedList": {
+      "@id": "awps:requestedList",
+      "@type": "@id"
+    },
+    "requester": {
+      "@id": "awps:requester",
+      "@type": "@json"
+    },
+    "required": {
+      "@id": "awps:required",
+      "@container": "@list",
+      "@type": "@id"
+    },
+    "requiredMethods": {
+      "@id": "awps:requiredMethods",
+      "@container": "@list"
+    },
+    "requires": "awps:requires",
+    "requiresRepresentation": "awps:requiresRepresentation",
+    "resign": "awps:resign",
+    "resources": {
+      "@id": "awps:resources",
+      "@container": "@list"
+    },
+    "respondent": "awps:respondent",
+    "responseSeconds": "awps:responseSeconds",
+    "result": "awps:result",
+    "role": "awps:role",
+    "roleClaim": "awps:roleClaim",
+    "roles": {
+      "@id": "awps:roles",
+      "@container": "@list"
+    },
+    "roleSource": {
+      "@id": "awps:roleSource",
+      "@type": "@id"
+    },
+    "roleStatement": "awps:roleStatement",
+    "roots": {
+      "@id": "awps:roots",
+      "@container": "@list"
+    },
+    "route": "awps:route",
+    "routes": {
+      "@id": "awps:routes",
+      "@container": "@list"
+    },
+    "rowsPerTable": "awps:rowsPerTable",
+    "rule": {
+      "@id": "awp:rule",
+      "@type": "@id"
+    },
+    "rules": {
+      "@id": "awps:rules",
+      "@container": "@list",
+      "@context": {
+        "id": "@id",
+        "output": "awps:outputClaim"
+      }
+    },
+    "runs": "awps:runs",
+    "schema": "awps:fileSchema",
+    "scope": "awps:scope",
+    "score": "awps:score",
+    "script": {
+      "@id": "awps:script",
+      "@container": "@list",
+      "@context": {
+        "id": "awps:slug",
+        "type": "@type",
+        "request": {
+          "@id": "awps:request"
+        },
+        "operator": "awps:comparison",
+        "grant": "awps:grant",
+        "mailbox": "awps:mailbox",
+        "models": {
+          "@id": "awps:models",
+          "@container": "@list",
+          "@context": {
+            "id": "@id"
+          }
+        },
+        "conversation": "awps:ConversationStep",
+        "segment": "awps:segment",
+        "segmentEnd": "awps:segmentEnd",
+        "part": {
+          "@id": "awps:contentPart",
+          "@type": "@id"
+        },
+        "evidence": {
+          "@id": "awps:evidence",
+          "@container": "@list"
+        },
+        "admit": "awps:AdmitStep",
+        "admit-derived": "awps:AdmitDerivedStep",
+        "advance": "awps:AdvanceStep",
+        "agreement-present": "awps:AgreementPresentStep",
+        "agreement-request": {
+          "@id": "awps:AgreementRequestStep",
+          "@context": {
+            "operation": "awps:agreementCommand"
+          }
+        },
+        "answer-price": {
+          "@id": "awps:AnswerPriceStep",
+          "@context": {
+            "statement": {
+              "@id": "awp:statement",
+              "@type": "@id"
+            }
+          }
+        },
+        "approve": "awps:ApproveStep",
+        "assert": "awps:AssertStep",
+        "assess": "awps:AssessStep",
+        "dataset-query": "awps:DatasetQueryStep",
+        "derive": "awps:DeriveStep",
+        "duties": "awps:DutiesStep",
+        "effect": "awps:EffectStep",
+        "email-inbox": "awps:EmailInboxStep",
+        "email-receive": "awps:EmailReceiveStep",
+        "email-send": "awps:EmailSendStep",
+        "facts": "awps:FactsStep",
+        "forum-answer": {
+          "@id": "awps:ForumAnswerStep",
+          "@context": {
+            "segment": {
+              "@id": "awps:recordSegment",
+              "@type": "@json"
+            }
+          }
+        },
+        "forum-audit": "awps:ForumAuditStep",
+        "forum-claim": {
+          "@id": "awps:ForumClaimStep",
+          "@context": {
+            "segment": {
+              "@id": "awps:recordSegment",
+              "@type": "@json"
+            }
+          }
+        },
+        "forum-decision": "awps:ForumDecisionStep",
+        "general-duties": "awps:GeneralDutiesStep",
+        "host-fetch": "awps:HostFetchStep",
+        "host-publish": "awps:HostPublishStep",
+        "instruct": "awps:InstructStep",
+        "invoke-agreement": "awps:InvokeAgreementStep",
+        "issue": "awps:IssueStep",
+        "joint-action": "awps:JointActionStep",
+        "joint-send": {
+          "@id": "awps:JointSendStep",
+          "@context": {
+            "operation": "awps:jointCommand"
+          }
+        },
+        "message": "awps:MessageStep",
+        "mint": "awps:MintStep",
+        "notifications": "awps:NotificationsStep",
+        "offgate-copy": "awps:OffgateCopyStep",
+        "organisation-approve": "awps:OrganisationApproveStep",
+        "payment-invoice": "awps:PaymentInvoiceStep",
+        "pending": "awps:PendingStep",
+        "pod-store": "awps:PodStoreStep",
+        "proof-request": {
+          "@id": "awps:ProofRequestStep",
+          "@context": {
+            "request": {
+              "@id": "awps:proofRequest",
+              "@type": "@json"
+            }
+          }
+        },
+        "prove": {
+          "@id": "awps:ProveStep",
+          "@context": {
+            "request": {
+              "@id": "awps:proofRequest",
+              "@type": "@json"
+            }
+          }
+        },
+        "read-content": "awps:ReadContentStep",
+        "read-reference": "awps:ReadReferenceStep",
+        "reading": "awps:ReadingStep",
+        "receipt": "awps:ReceiptStep",
+        "receive": "awps:ReceiveStep",
+        "record": "awps:RecordStep",
+        "record-anchor": "awps:RecordAnchorStep",
+        "record-audit": "awps:RecordAuditStep",
+        "record-segment": "awps:RecordSegmentStep",
+        "reference-read": "awps:ReferenceReadStep",
+        "request-structured": "awps:RequestStructuredStep",
+        "retry-challenge": "awps:RetryChallengeStep",
+        "revoke-mandate": "awps:RevokeMandateStep",
+        "show-mandate": "awps:ShowMandateStep",
+        "start": "awps:StartStep",
+        "store-assess": "awps:StoreAssessStep",
+        "store-request": {
+          "@id": "awps:StoreRequestStep",
+          "@context": {
+            "request": {
+              "@id": "awps:storeRequest",
+              "@type": "@json"
+            }
+          }
+        },
+        "term-deliberation": "awps:TermDeliberationStep",
+        "trust-decision": "awps:TrustDecisionStep",
+        "underwriting-handover": "awps:UnderwritingHandoverStep",
+        "withdraw-access": "awps:WithdrawAccessStep"
+      }
+    },
+    "segment": "awps:segment",
+    "selectiveCredentials": {
+      "@id": "awps:selectiveCredentials",
+      "@container": "@list",
+      "@context": {
+        "id": "awps:slug"
+      }
+    },
+    "service": "awps:service",
+    "settlementFault": "awps:settlementFault",
+    "signer": "awps:signer",
+    "singleUse": {
+      "@id": "awps:singleUse",
+      "@container": "@list",
+      "@context": {
+        "operation": "awps:singleUseOperation"
+      }
+    },
+    "singleUseRegisters": {
+      "@id": "awps:singleUseRegisters",
+      "@container": "@list",
+      "@context": {
+        "items": {
+          "@id": "awps:registerItems",
+          "@container": "@list",
+          "@context": {
+            "id": "@id",
+            "escrow": {
+              "@id": "awps:escrow",
+              "@context": {
+                "parties": {
+                  "@id": "awps:partyIds",
+                  "@container": "@list",
+                  "@type": "@id"
+                },
+                "conditions": {
+                  "@id": "awps:conditions",
+                  "@container": "@list",
+                  "@context": {
+                    "issuer": {
+                      "@id": "vc:issuer",
+                      "@type": "@id"
+                    },
+                    "equals": {
+                      "@id": "awps:claimEquals",
+                      "@type": "@json"
+                    },
+                    "completeFor": "awps:completeFor"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "acceptances": {
+          "@id": "awps:acceptances",
+          "@container": "@list"
+        }
+      }
+    },
+    "solid": {
+      "@id": "awps:solid",
+      "@context": {
+        "at": "awps:atStepSlug"
+      }
+    },
+    "source": {
+      "@id": "awp:source",
+      "@type": "@id"
+    },
+    "sources": {
+      "@id": "awps:sources",
+      "@container": "@list",
+      "@type": "@id"
+    },
+    "standIns": {
+      "@id": "awps:standIns",
+      "@container": "@list"
+    },
+    "state": "awps:state",
+    "statedConfidence": {
+      "@id": "awps:statedConfidence",
+      "@context": {
+        "rules": {
+          "@id": "awps:confidenceRules",
+          "@container": "@list",
+          "@context": {
+            "methods": {
+              "@id": "awps:methodIds",
+              "@container": "@list",
+              "@type": "@id"
+            },
+            "metric": {
+              "@id": "awps:metric",
+              "@type": "@id"
+            }
+          }
+        }
+      }
+    },
+    "statement": "awps:statement",
+    "statements": {
+      "@id": "awps:statements",
+      "@container": "@list",
+      "@context": {
+        "id": "awps:slug"
+      }
+    },
+    "statistic": "awps:statistic",
+    "status": {
+      "@id": "awps:status",
+      "@type": "@json"
+    },
+    "statusClaims": {
+      "@id": "awps:statusClaims",
+      "@container": "@list"
+    },
+    "step": "awps:step",
+    "stopAfter": "awps:stopAfter",
+    "store": "awps:store",
+    "storeAssessments": {
+      "@id": "awps:storeAssessments",
+      "@container": "@list",
+      "@context": {
+        "id": "@id"
+      }
+    },
+    "stores": {
+      "@id": "awps:stores",
+      "@container": "@list",
+      "@context": {
+        "id": "awps:slug",
+        "roles": {
+          "@id": "awps:roles",
+          "@container": "@list",
+          "@context": {
+            "agent": {
+              "@id": "awp:actor",
+              "@type": "@id"
+            }
+          }
+        }
+      }
+    },
+    "stress": {
+      "@id": "awps:stress",
+      "@container": "@list"
+    },
+    "stripSignature": "awps:stripSignature",
+    "structuredOnly": "awps:structuredOnly",
+    "structuredReply": {
+      "@id": "awps:structuredReply",
+      "@type": "@id"
+    },
+    "subject": {
+      "@id": "awp:subject",
+      "@type": "@id"
+    },
+    "suites": {
+      "@id": "awps:suites",
+      "@type": "@json"
+    },
+    "superior": "awps:superior",
+    "table": {
+      "@id": "awps:table",
+      "@type": "@id"
+    },
+    "tableRowBounds": {
+      "@id": "awps:tableRowBounds",
+      "@container": "@list"
+    },
+    "tamper": "awps:tamper",
+    "target": "awps:injectionTarget",
+    "taskId": {
+      "@id": "awps:taskId",
+      "@type": "@id"
+    },
+    "template": "awps:template",
+    "term": {
+      "@id": "awps:term",
+      "@type": "@id"
+    },
+    "terminal": {
+      "@id": "awps:terminal",
+      "@type": "@json"
+    },
+    "terms": {
+      "@id": "awps:statementTerms",
+      "@type": "@json"
+    },
+    "termsAcceptance": {
+      "@id": "awps:termsAcceptance",
+      "@container": "@id",
+      "@context": {
+        "purposes": {
+          "@id": "awps:purposeIds",
+          "@container": "@list",
+          "@type": "@id"
+        }
+      }
+    },
+    "termsDigest": "awp:termsDigest",
+    "text": "sdo:text",
+    "title": "awps:title",
+    "to": "awps:to",
+    "tolerance": "awps:tolerance",
+    "toList": {
+      "@id": "awps:toList",
+      "@type": "@id"
+    },
+    "traceId": "awps:traceId",
+    "traceSteps": {
+      "@id": "awps:traceSteps",
+      "@type": "@json"
+    },
+    "trust": "awps:trust",
+    "trustedIndex": {
+      "@id": "awps:trustedIndex",
+      "@context": {
+        "index": "awps:indexSlug"
+      }
+    },
+    "typ": "awps:typ",
+    "type": "awps:fixtureType",
+    "useBy": {
+      "@id": "awps:useBy",
+      "@container": "@list",
+      "@type": "@id"
+    },
+    "useCase": "awps:useCase",
+    "validFrom": {
+      "@id": "vc:validFrom",
+      "@type": "xsd:dateTime"
+    },
+    "validityTime": "awps:validityTime",
+    "validUntil": {
+      "@id": "vc:validUntil",
+      "@type": "xsd:dateTime"
+    },
+    "value": {
+      "@id": "awps:value",
+      "@type": "@json"
+    },
+    "values": {
+      "@id": "awps:values",
+      "@container": "@list"
+    },
+    "verdict": "awps:verdict",
+    "version": "awp:version",
+    "vocabulary": {
+      "@id": "awps:vocabulary",
+      "@container": "@index",
+      "@index": "awps:key"
+    },
+    "what": "awps:what",
+    "withinSeconds": "awps:withinSeconds",
+    "witness": "awps:witness",
+    "world": {
+      "@id": "awps:world",
+      "@type": "@json"
+    },
+    "x-authored-by": "awps:authoredBy"
+  }
+}

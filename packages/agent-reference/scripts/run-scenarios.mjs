@@ -68,7 +68,6 @@ for (const file of readdirSync(join(root, "scenarios"))
   const id = file.slice(0, -5);
   if (selected && selected !== id) continue;
   const { profile, scenario } = loadCase(root, id);
-  const original = JSON.parse(readFileSync(join(root, "scenarios", file), "utf8"));
   for await (const path of pathsFor(profile, scenario)) {
     assertPublishable(path);
     if (
@@ -157,6 +156,8 @@ for (const file of readdirSync(join(root, "scenarios"))
     });
   }
   if (record && (!selectedConfiguration || selectedConfiguration === "baseline")) {
+    // Update expectations on the authoring object, preserving its 0.2 envelope and omissions.
+    const original = JSON.parse(readFileSync(join(root, "scenarios", file), "utf8"));
     original.expect = scenario.expect;
     for (const branch of original.branches)
       branch.outline = scenario.branches.find((b) => b.id === branch.id).outline;

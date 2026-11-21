@@ -16,6 +16,7 @@ import { loadCase, validateReferences } from "../src/engine/load.js";
 import { patch, resolveTemplate, runScenario } from "../src/engine/run.js";
 import { domainProfileSchema, scenarioSchema } from "../src/engine/schema.js";
 import { outlineOf } from "../src/trace/types.js";
+import { SCENARIO_CONTEXT } from "../src/wire/store-contexts.js";
 import {
   aggregatePaths,
   missingAggregate,
@@ -206,19 +207,29 @@ describe("data contracts", () => {
     expect(() => resolveTemplate({ ["$ref"]: "world.__proto__" }, { world: {} })).toThrow();
     expect(() => patch({}, JSON.parse('{"__proto__":{"polluted":true}}'))).toThrow("unsafe patch");
   });
-  it("publishes JSON Schemas from the exact validators used on load", () => {
-    for (const [name, validator] of [
-      ["domain-profile", domainProfileSchema],
-      ["agent-scenario", scenarioSchema],
+  it("publishes the runtime JSON Schemas with the 0.2 fixture envelope", () => {
+    for (const [name, schemaName, validator] of [
+      ["domain-profile", "agent-profile", domainProfileSchema],
+      ["agent-scenario", "agent-scenario", scenarioSchema],
     ] as const) {
       const published = JSON.parse(
         readFileSync(join(root, "schemas", `${name}.schema.json`), "utf8"),
       );
+      const runtime = z.toJSONSchema(validator, { target: "draft-2020-12" });
+      const schemaProperty = runtime.properties?.schema;
+      if (typeof schemaProperty !== "object") throw new Error(`${name} lacks a schema property`);
       expect(published).toEqual({
-        ...z.toJSONSchema(validator, { target: "draft-2020-12" }),
+        ...runtime,
+        properties: {
+          ...runtime.properties,
+          schema: { ...schemaProperty, const: `${schemaName}/0.2` },
+          "@context": { type: "string", const: SCENARIO_CONTEXT },
+        },
+        required: [...(runtime.required ?? []), "@context"],
         "x-authored-by": "Codex GPT-6",
-        ["$id"]: `urn:agent-reference:schema:${name}:0.1`,
+        ["$id"]: `urn:agent-reference:schema:${name}:0.2`,
       });
+      expect(validator.shape.schema.value).toBe(`${schemaName}/0.1`);
     }
   });
   it("commits matching outlines for every runnable data path", async () => {

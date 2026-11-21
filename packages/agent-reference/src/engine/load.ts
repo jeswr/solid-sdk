@@ -1,9 +1,13 @@
 // AUTHORED-BY Codex GPT-6
+import { parseRdf } from "@jeswr/fetch-rdf";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { readFileSync } from "fs";
+import jsonld from "jsonld";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
 import { validateRules } from "../derive/rules.js";
+import { checkDocumentTerms } from "../wire/contexts.js";
+import { SCENARIO_CONTEXT, scenarioContext, scenarioJsonLdLoader } from "../wire/store-contexts.js";
 import { gateFaultPlacementProblem } from "./faulty-gate.js";
 import {
   type DomainProfile,
@@ -12,14 +16,86 @@ import {
   scenarioSchema,
 } from "./schema.js";
 
+function readFixture(path: string): Record<string, unknown> {
+  const document: unknown = JSON.parse(readFileSync(path, "utf8"));
+  if (!document || typeof document !== "object" || Array.isArray(document))
+    throw new Error(`${path}: invalid fixture envelope`);
+  return document as Record<string, unknown>;
+}
+
+function loadFixture(path: string, kind: "profile" | "scenario") {
+  const document = readFixture(path);
+  if (document.schema === `agent-${kind}/0.2` && document["@context"] === SCENARIO_CONTEXT) {
+    delete document["@context"];
+    document.schema = `agent-${kind}/0.1`;
+  } else if (document.schema !== `agent-${kind}/0.1` || "@context" in document) {
+    throw new Error(`${path}: invalid agent-${kind} schema or @context`);
+  }
+  return document;
+}
+
 export function loadProfile(path: string): DomainProfile {
-  const profile = domainProfileSchema.parse(JSON.parse(readFileSync(path, "utf8")));
+  const profile = domainProfileSchema.parse(loadFixture(path, "profile"));
   validateRules(profile.rules.filter((r) => "template" in r));
   return profile;
 }
 export function loadScenario(path: string): Scenario {
-  return scenarioSchema.parse(JSON.parse(readFileSync(path, "utf8")));
+  return scenarioSchema.parse(loadFixture(path, "scenario"));
 }
+
+function typeTrustEntries(trust: Scenario["trust"]): void {
+  Object.assign(trust, { "@type": "awp:TrustStore" });
+  for (const entries of Object.values(trust.ownLists))
+    for (const entry of entries) Object.assign(entry, { "@type": "awp:OwnListEntry" });
+  for (const rules of Object.values(trust.sources))
+    for (const rule of rules) Object.assign(rule, { "@type": "awp:SourceAuthorityRule" });
+  if (!trust.root) return;
+  Object.assign(trust.root, { "@type": "awp:TrustRoot" });
+  for (const register of trust.root.delegates) {
+    Object.assign(register, { "@type": "awp:Register" });
+    for (const entry of register.entries) Object.assign(entry, { "@type": "awp:RegisterEntry" });
+  }
+}
+
+/** Read a 0.2 authoring file as RDF using only the bundled fixture contexts. */
+export async function readCaseGraph(path: string) {
+  try {
+    const document = readFixture(path);
+    const profile = document.schema === "agent-profile/0.2";
+    if (
+      (!profile && document.schema !== "agent-scenario/0.2") ||
+      document["@context"] !== SCENARIO_CONTEXT
+    )
+      throw new Error("invalid fixture JSON-LD envelope");
+    if (
+      typeof document.id !== "string" ||
+      !/^[a-z0-9][a-z0-9-]*$/.test(document.id) ||
+      "@id" in document ||
+      "@type" in document
+    )
+      throw new Error("invalid fixture root");
+    const root = `urn:${profile ? "profile" : "scenario"}:${document.id}`;
+    document["@id"] = root;
+    document["@type"] = profile ? "DomainProfile" : "Scenario";
+    checkDocumentTerms(document, { allowJson: true, resolveContext: scenarioContext });
+    if (!profile) {
+      // Check the trust shape before adding RDF types to the authored nodes.
+      scenarioSchema.shape.trust.parse(document.trust);
+      typeTrustEntries(document.trust as Scenario["trust"]);
+    }
+    // The streaming parser drops entries from property-indexed arrays of objects.
+    // Expand with the same offline JSON-LD processor used by the message reader.
+    const quads = await jsonld.toRDF(document as import("jsonld").NodeObject, {
+      format: "application/n-quads",
+      documentLoader: scenarioJsonLdLoader,
+    });
+    const dataset = await parseRdf(quads as unknown as string, "application/n-quads");
+    return { dataset, root };
+  } catch (error) {
+    throw new Error(`${path}: ${(error as Error).message}`, { cause: error });
+  }
+}
+
 export function loadCase(
   directory: string,
   id: string,
