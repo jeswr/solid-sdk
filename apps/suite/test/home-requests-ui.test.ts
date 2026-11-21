@@ -311,6 +311,35 @@ it("without expiring access, disables the chips with a note and sends no expiry"
   );
 });
 
+it("words the toast from the recorded choices when another tab approved first", async () => {
+  mocks.caps = { accessRequests: true, grantExpiry: true };
+  // This sheet sends Activity and Vitals until revoked; the other tab recorded Activity with an
+  // end date, and that is what was applied.
+  mocks.decide.mockResolvedValueOnce({
+    status: "approved",
+    receiptUrl: `${ROOT}r`,
+    notified: true,
+    expiryEnforced: false,
+    recorded: {
+      dataTypes: [ACTIVITY_CLASS],
+      grantedTypes: [ACTIVITY_CLASS],
+      role: "editor",
+      expiresAt: new Date("2027-01-01T00:00:00Z"),
+    },
+  });
+  await review();
+  await click(
+    [...dialog().querySelectorAll<HTMLElement>('[role="radio"]')].find(
+      (item) => item.textContent === "Until revoked",
+    ) as HTMLElement,
+  );
+  await click(button(dialog(), "Share"));
+  expect(mocks.decide.mock.calls[0]?.[1]).not.toHaveProperty("expiresAt");
+  expect(mocks.toast.success).toHaveBeenCalledWith(
+    `MaraCoach can now see your Activity. ${EXPIRY_NOT_ENFORCED}`,
+  );
+});
+
 it("asks before denying: Keep reviewing returns, Deny decides once", async () => {
   mocks.decide.mockResolvedValue({
     status: "denied",
@@ -457,6 +486,27 @@ it("offers Finish approving (no choices) when an earlier approval is still finis
     `You finished approving MaraCoach's request. We couldn't tell MaraCoach; they'll see it next time they check. ${EXPIRY_NOT_ENFORCED}`,
   );
   expect(onDone).toHaveBeenCalledWith("approved");
+});
+
+it("names what a finished approval recorded when the SDK reports it", async () => {
+  mocks.decide.mockRejectedValueOnce(
+    new Error(
+      "An earlier approval of this request is still finishing with different choices; finish it first",
+    ),
+  );
+  mocks.decide.mockResolvedValueOnce({
+    status: "approved",
+    receiptUrl: `${ROOT}r`,
+    notified: true,
+    expiryEnforced: false,
+    recorded: { dataTypes: [SLEEP], grantedTypes: [SLEEP], role: "viewer" },
+  });
+  await review();
+  await click(button(dialog(), "Share"));
+  await click(button(dialog(), "Finish approving"));
+  expect(mocks.decide.mock.calls[1]?.[1]).toEqual({ approve: true });
+  // Recorded until revoked: no expiry note.
+  expect(mocks.toast.success).toHaveBeenCalledWith("MaraCoach can now see your Vitals.");
 });
 
 it("after closing and reopening, a pin from the first sheet's choices hides the new ones", async () => {
