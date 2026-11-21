@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
+import { createFakeTwoWayAdapter } from "./core/sync/fake-platform.js";
 import { FILE_ADAPTERS, fileAdapterById } from "./file-adapters.js";
 import {
   ADAPTERS,
   adapterById,
   allCatalogEntries,
+  catalogEntry,
   isLive,
   statusOf,
   TIER_B,
@@ -13,6 +15,13 @@ import {
 } from "./registry.js";
 
 describe("integrations registry", () => {
+  it("exposes two-way capabilities only for adapters implementing the extension", () => {
+    expect(catalogEntry(createFakeTwoWayAdapter().adapter).twoWay).toEqual({
+      writeBackContainers: ["items/"],
+      requiredWriteScopes: ["fake:write"],
+    });
+    for (const entry of allCatalogEntries()) expect(entry.twoWay).toBeUndefined();
+  });
   it("exposes exactly 33 catalog entries with unique, URL-safe ids", () => {
     const entries = allCatalogEntries();
     expect(entries).toHaveLength(33);
