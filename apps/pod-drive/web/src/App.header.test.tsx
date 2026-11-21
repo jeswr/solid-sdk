@@ -1,83 +1,95 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
-//
-// Header behaviour for the extension duplicate-chrome fix (bead suite-tracker-lpo):
-//   - extension ABSENT  → the full <AccountMenu/> (avatar + display name + WebID + Sign out).
-//   - extension PRESENT → the duplicated profile display is dropped, BUT a Sign-out control is
-//     kept so a logged-in user (the app still owns its OWN session until it consumes the
-//     extension's identity) is NEVER stranded without a logout affordance.
-// The second case is the roborev finding's requested "logged-in test for extension-present
-// logout behaviour".
+// AUTHORED-BY GPT-6.1 Sol
+import type { Profile } from "@jeswr/app-session";
+import { SessionProvider } from "@jeswr/app-session/react";
+import { deferred, fakePodAuth, identity, POD_ROOT, WEB_ID } from "@jeswr/app-session/testing";
 import { ThemeProvider } from "@jeswr/app-shell";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-// A mutable toggle the mocked hook returns, flipped per test.
-let extensionPresent = false;
-const logout = vi.fn();
-
-// The extension-presence hook now lives in @jeswr/app-shell (useSolidExtensionPresent).
-// Keep the real app-shell chrome components; override only the presence hook per test.
-vi.mock("@jeswr/app-shell", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@jeswr/app-shell")>()),
-  useSolidExtensionPresent: () => extensionPresent,
-}));
-
-vi.mock("@jeswr/app-session/react", async (original) => ({
-  ...(await original<typeof import("@jeswr/app-session/react")>()),
-  useSession: () => ({
-    webId: "https://alice.example/profile/card#me",
-    session: {
-      podRoot: "https://alice.example/",
-      podRootIsFallback: false,
-      displayName: "Alice Drive",
-      avatarUrl: undefined,
-    },
-    logout,
-    ready: true,
-    fetch: globalThis.fetch,
-    restoringSession: false,
-  }),
-}));
-
-// Stub the pod-drive file browser so the header test doesn't drive a live pod fetch.
-vi.mock("@jeswr/pod-drive/ui", () => ({
-  FileBrowser: () => <div data-testid="file-browser" />,
-}));
-
 import { App } from "./App";
 
-function renderApp() {
-  return render(
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>,
+vi.mock("@jeswr/pod-drive/ui", () => ({ FileBrowser: () => <div data-testid="browser" /> }));
+// Keep the gate's host-renderer contract observable without Lit's node export limitations.
+vi.mock("@jeswr/solid-elements/react", () => ({
+  Loading: ({ label }: { label: string }) => <span role="status">{label}</span>,
+}));
+
+const profile: Profile = {
+  webId: WEB_ID,
+  name: "Alice Example",
+  storages: [POD_ROOT],
+  oidcIssuers: [identity.issuer],
+};
+function renderApp(fake = fakePodAuth(), readProfile = async () => profile) {
+  const view = render(
+    <SessionProvider
+      appName="Pod Drive"
+      getPodAuth={() => Promise.resolve(fake.auth)}
+      auth={fake.auth}
+      readProfile={readProfile}
+    >
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
+    </SessionProvider>,
   );
+  return { ...view, ...fake };
 }
 
 afterEach(() => {
-  extensionPresent = false;
-  logout.mockReset();
+  document.documentElement.removeAttribute("data-solid-extension");
+  delete (window as unknown as { solid?: unknown }).solid;
 });
 
-describe("App header — extension duplicate-chrome fix", () => {
-  it("extension ABSENT: renders the full AccountMenu", () => {
-    extensionPresent = false;
-    renderApp();
+describe("App session gate and account control", () => {
+  it("renders the account menu when the extension is absent", async () => {
+    const fake = fakePodAuth();
+    fake.auth.restore.mockResolvedValue(identity);
+    renderApp(fake);
+    await screen.findByTestId("browser");
     expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
-    // No lone Sign-out button — sign-out lives inside the AccountMenu dropdown.
-    expect(screen.queryByRole("button", { name: /^sign out$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
   });
 
-  it("extension PRESENT: hides the AccountMenu but keeps a working Sign-out (no stranded logout)", () => {
-    extensionPresent = true;
-    renderApp();
-    // The duplicated profile menu is gone…
-    expect(screen.queryByRole("button", { name: "Account menu" })).not.toBeInTheDocument();
-    // …but a Sign-out control remains and calls the app's own logout.
-    const signOut = screen.getByRole("button", { name: /^sign out$/i });
-    fireEvent.click(signOut);
-    expect(logout).toHaveBeenCalledTimes(1);
-    // The rest of the header chrome (not duplicated by the extension) stays.
+  it("keeps working sign-out when the extension owns the account menu", async () => {
+    document.documentElement.setAttribute("data-solid-extension", "1");
+    const fake = fakePodAuth();
+    fake.auth.restore.mockResolvedValue(identity);
+    renderApp(fake);
+    await screen.findByTestId("browser");
+    expect(screen.queryByRole("button", { name: "Account menu" })).toBeNull();
     expect(screen.getByRole("button", { name: /feedback/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(fake.auth.logout).toHaveBeenCalledTimes(1);
+    await screen.findByRole("heading", { name: "Sign in" });
+    expect(screen.queryByTestId("browser")).toBeNull();
+  });
+
+  it("uses the host loading renderer while restoring identity and reading its profile", async () => {
+    const fake = fakePodAuth();
+    const restore = deferred<typeof identity | null>();
+    const readProfile = deferred<Profile>();
+    fake.auth.restore.mockReturnValue(restore.promise);
+    const view = renderApp(fake, () => readProfile.promise);
+    expect(await screen.findByRole("status")).toHaveTextContent("Restoring your session…");
+    expect(screen.queryByTestId("browser")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Sign in" })).toBeNull();
+    expect(
+      view.container.querySelector(
+        "main.login-screen[aria-busy=true] > section.login-card > h1 + p.login-sub",
+      ),
+    ).toContainElement(screen.getByRole("status"));
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Pod Drive");
+    await act(async () => restore.resolve(identity));
+    expect(screen.getByRole("status")).toHaveTextContent("Loading your account…");
+    await act(async () => readProfile.resolve(profile));
+    expect(await screen.findByTestId("browser")).toBeInTheDocument();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("shows the configured login when restore finds no session", async () => {
+    renderApp();
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.queryByTestId("browser")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });
