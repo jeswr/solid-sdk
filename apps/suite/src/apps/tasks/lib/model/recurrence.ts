@@ -25,6 +25,8 @@ export interface RecurrenceRule {
   frequency: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
   interval?: number | undefined;
   byDay?: Weekday[] | undefined;
+  /** Monthly ordinal weekday: 1..5 or -1 (last), stored as sched:bySetPos. */
+  bySetPos?: number | undefined;
   byMonthDay?: number | undefined;
   count?: number | undefined;
   until?: Date | string | undefined;
@@ -38,11 +40,22 @@ export function validateRule(rule: RecurrenceRule): void {
     throw new TypeError("Count and until are mutually exclusive.");
   if (
     rule.byDay &&
-    (rule.frequency !== "WEEKLY" ||
+    (!["WEEKLY", "MONTHLY"].includes(rule.frequency) ||
       !rule.byDay.length ||
       rule.byDay.some((day) => !weekdays.includes(day)))
   )
-    throw new TypeError("byDay requires weekly weekdays.");
+    throw new TypeError("byDay requires weekly or monthly weekdays.");
+  if (
+    (rule.bySetPos !== undefined &&
+      (rule.frequency !== "MONTHLY" ||
+        rule.byDay?.length !== 1 ||
+        rule.byMonthDay !== undefined ||
+        ![-1, 1, 2, 3, 4, 5].includes(rule.bySetPos))) ||
+    (rule.frequency === "MONTHLY" && rule.byDay && rule.bySetPos === undefined)
+  )
+    throw new TypeError(
+      "Monthly ordinal rules require one weekday and an ordinal from 1 to 5 or -1.",
+    );
   if (
     rule.byMonthDay !== undefined &&
     (rule.frequency !== "MONTHLY" ||
@@ -72,6 +85,7 @@ export function readRecurrence(task: Node): RecurrenceRule | undefined {
     interval: value.number(`${SCHED}interval`),
     count: value.number(`${SCHED}count`),
     byMonthDay: value.number(`${SCHEMA}byMonthDay`),
+    bySetPos: value.number(`${SCHED}bySetPos`),
     byDay: days.length ? days : undefined,
     until:
       until === undefined ? undefined : /^\d{4}-\d{2}-\d{2}$/.test(until) ? until : new Date(until),
@@ -91,6 +105,7 @@ export function writeRecurrence(task: Node, rule: RecurrenceRule | undefined): v
     `${SCHED}until`,
     `${SCHEMA}byMonthDay`,
     `${SCHEMA}byDay`,
+    `${SCHED}bySetPos`,
   ];
   for (const previous of old) clearSchedulingNode(previous, fields, `${SCHED}RecurrenceRule`);
   if (!value || !rule) return;
@@ -101,6 +116,7 @@ export function writeRecurrence(task: Node, rule: RecurrenceRule | undefined): v
   value.setNumber(`${SCHED}interval`, rule.interval, true);
   value.setNumber(`${SCHED}count`, rule.count, true);
   value.setNumber(`${SCHEMA}byMonthDay`, rule.byMonthDay, true);
+  value.setNumber(`${SCHED}bySetPos`, rule.bySetPos, true);
   for (const day of rule.byDay ?? []) value.iris(`${SCHEMA}byDay`).add(`${SCHEMA}${day}`);
   if (typeof rule.until === "string") value.setTyped(`${SCHED}until`, rule.until, `${NS.XSD}date`);
   else value.setDate(`${SCHED}until`, rule.until);
@@ -155,8 +171,21 @@ function* occurrences(rule: RecurrenceRule, due: Date, allDay = false): Generato
       candidate.setUTCFullYear(
         anchor.getUTCFullYear(),
         month,
-        rule.byMonthDay ?? anchor.getUTCDate(),
+        rule.bySetPos === undefined ? (rule.byMonthDay ?? anchor.getUTCDate()) : 1,
       );
+      if (rule.bySetPos !== undefined) {
+        const weekday = (weekdays.indexOf((rule.byDay as Weekday[])[0] as Weekday) + 1) % 7;
+        if (rule.bySetPos === -1) {
+          candidate.setUTCMonth(candidate.getUTCMonth() + 1, 0);
+          candidate.setUTCDate(
+            candidate.getUTCDate() - ((candidate.getUTCDay() - weekday + 7) % 7),
+          );
+        } else {
+          candidate.setUTCDate(
+            1 + ((weekday - candidate.getUTCDay() + 7) % 7) + 7 * (rule.bySetPos - 1),
+          );
+        }
+      }
       candidates = candidate.getUTCMonth() === month % 12 ? [candidate] : [];
     } else {
       candidate.setUTCFullYear(anchor.getUTCFullYear() + period * interval);
@@ -220,7 +249,9 @@ export function toRRule(rule: RecurrenceRule): string {
   validateRule(rule);
   const fields = [`FREQ=${rule.frequency}`, `INTERVAL=${rule.interval ?? 1}`];
   if (rule.byDay)
-    fields.push(`BYDAY=${rule.byDay.map((day) => day.slice(0, 2).toUpperCase()).join(",")}`);
+    fields.push(
+      `BYDAY=${rule.byDay.map((day) => `${rule.bySetPos ?? ""}${day.slice(0, 2).toUpperCase()}`).join(",")}`,
+    );
   if (rule.byMonthDay !== undefined) fields.push(`BYMONTHDAY=${rule.byMonthDay}`);
   if (rule.count !== undefined) fields.push(`COUNT=${rule.count}`);
   if (rule.until !== undefined)
@@ -244,7 +275,13 @@ export function humanise(rule: RecurrenceRule, due: Date, timeZone?: string): st
       text = "Every weekday";
     else text += ` on ${rule.byDay.map((day) => day.slice(0, 3)).join(", ")}`;
   }
-  if (rule.frequency === "MONTHLY") {
+  if (rule.frequency === "MONTHLY" && rule.bySetPos !== undefined) {
+    const ordinal =
+      rule.bySetPos === -1
+        ? "last"
+        : `${rule.bySetPos}${["", "st", "nd", "rd", "th", "th"][rule.bySetPos]}`;
+    text += ` on the ${ordinal} ${(rule.byDay as Weekday[])[0]}`;
+  } else if (rule.frequency === "MONTHLY") {
     const day =
       rule.byMonthDay ?? Number(due.toLocaleString("en-GB", { day: "numeric", timeZone }));
     const suffix =

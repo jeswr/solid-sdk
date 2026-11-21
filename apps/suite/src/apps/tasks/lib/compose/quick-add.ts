@@ -193,6 +193,7 @@ export function parseQuickAdd(text: string, ctx: ComposeContext): ComposeResult 
       frequency: parsed.recurrence.freq,
       interval: parsed.recurrence.interval,
       ...(parsed.recurrence.byDay ? { byDay: parsed.recurrence.byDay } : {}),
+      ...(parsed.recurrence.bySetPos !== undefined ? { bySetPos: parsed.recurrence.bySetPos } : {}),
       ...(parsed.recurrence.byMonthDay ? { byMonthDay: parsed.recurrence.byMonthDay[0] } : {}),
     };
   }

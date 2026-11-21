@@ -79,7 +79,6 @@ describe("detail recurrence adapter", () => {
     });
   });
   it.each<EditorRule>([
-    { freq: "MONTHLY", interval: 1, byDay: ["Friday"], bySetPos: 3 },
     { freq: "MONTHLY", interval: 1, byMonthDay: [-1] },
     { freq: "MONTHLY", interval: 1, byMonthDay: [1, 15] },
     { freq: "YEARLY", interval: 1, byMonth: [10, 11] },

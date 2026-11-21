@@ -257,7 +257,7 @@ describe("ambiguity and literal text", () => {
     "Walk every 32nd",
     "Walk every 0th",
     "Walk every 11st",
-    "Walk every 3rd Friday",
+    "Walk every 6th Friday",
     "Review 30 February 2027",
     "Review from Monday to Friday",
   ])("preserves %j", (input) => {
