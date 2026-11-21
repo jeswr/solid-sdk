@@ -16,7 +16,12 @@ create-only writes are unsupported because Slug is only a hint; refuse before mu
 packages in this package. The legacy fetch configuration remains supported.
 
 Register tools through createPodToolRegistry/registerPodTools. Each entry owns its
-name, Zod schema (the SDK emits JSON Schema), handler and readOnly flag. Keep the
+name, Zod schema (the SDK emits JSON Schema), handler, readOnly flag and `annotations`
+(ToolHints). readOnly gates whether the handler runs on a read-only server; annotations are
+what hosts see. Never advertise readOnlyHint: true for a tool that can write anything,
+including an audit entry (use AUDITED_READ_HINTS). destructiveHint is true whenever a call
+can overwrite existing data, including replacing an ACL with an owner-only one. Extend the table in
+test/annotations.test.ts when adding a tool. Keep the
 solid_* aliases for v0.2, with the same schema, result and write enforcement as their
 pod_list/pod_read/pod_write/search names. No new tools belong to MCP-01.
 Shared-context tools (decisions/0004) live in context-tools.ts and register beside the pod

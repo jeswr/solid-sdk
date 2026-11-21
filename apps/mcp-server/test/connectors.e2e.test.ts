@@ -601,9 +601,14 @@ describe("ChatGPT developer-mode connector / app", () => {
       "memory_forget",
       "chat_save",
     ]);
-    for (const name of writes) expect(tools.some((tool) => tool.name === name)).toBe(true);
+    // Personal reads may append a private audit entry, so they are not read-only either.
+    const auditedReads = new Set(["memory_recall", "address_get", "health_query"]);
+    for (const name of [...writes, ...auditedReads])
+      expect(tools.some((tool) => tool.name === name)).toBe(true);
     for (const tool of tools)
-      expect(tool.annotations?.readOnlyHint, tool.name).toBe(!writes.has(tool.name));
+      expect(tool.annotations?.readOnlyHint, tool.name).toBe(
+        !writes.has(tool.name) && !auditedReads.has(tool.name),
+      );
     const chat = conversation("chatgpt");
     const saved = await json(client, "chat_save", chat);
     // Generic notes are deliberately outside protected PKG memory. A filename match

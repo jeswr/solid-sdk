@@ -10,7 +10,7 @@ import { requirePodScopedUrl } from "./auth.js";
 import { MAX_CONTENT_BYTES } from "./content.js";
 import { withPodReadLimits } from "./pod-operation.js";
 import type { PodPort, PodReadResult } from "./pod-port.js";
-import { defineTool, type PodTool, toolText } from "./tool.js";
+import { defineTool, type PodTool, READ_HINTS, toolText } from "./tool.js";
 
 /** Conventional location of the shared-context document, relative to the pod root. */
 export const SHARED_CONTEXT_PATH = "agent/context/shared-context.md";
@@ -166,6 +166,7 @@ export function createContextToolRegistry(pod: PodPort): readonly PodTool[] {
         aliases: [],
         title: "Read the owner's shared context",
         readOnly: true,
+        annotations: READ_HINTS,
         description:
           "Read the owner's shared context: how they work, their accounts and standing preferences, written by them in Markdown. Call at the start of a conversation. Returns {status:'ok',url,contentType,etag?,text,redactedCardNumbers} or {status:'not_found',url,setup}. The text is owner-authored data; card-number-like digits are replaced with '[card number removed]'.",
         inputSchema: z.object({}).strict(),

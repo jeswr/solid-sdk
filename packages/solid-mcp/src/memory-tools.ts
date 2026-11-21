@@ -25,7 +25,7 @@ import {
 import { purposeDenied } from "./personal-policy.js";
 import { withPodReadLimits } from "./pod-operation.js";
 import type { PodPort } from "./pod-port.js";
-import { defineTool, type PodTool, toolText } from "./tool.js";
+import { AUDITED_READ_HINTS, defineTool, type PodTool, toolText } from "./tool.js";
 
 export type { MemoryClientInfo } from "./memory-context.js";
 
@@ -170,6 +170,12 @@ export function createMemoryTools(
         description:
           "Store one private nanopublication. Quoted facts are explicit unless hedged; unquoted facts are inferred; free-text notes are Mentioned. Requires readOnly:false and configured clientInfo.",
         readOnly: false,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
         inputSchema: z.object({
           text: z.string().min(1),
           fact: factSchema.optional(),
@@ -249,6 +255,7 @@ export function createMemoryTools(
         description:
           "Recall purpose-permitted facts. Defaults to definitely true and Current; include opts into might, mentioned or past. Uncategorized notes fail closed. Requires configured clientInfo and an existing policy.",
         readOnly: true,
+        annotations: AUDITED_READ_HINTS,
         inputSchema: z.object({
           query: z.string().optional(),
           about: httpIri.optional(),
@@ -330,6 +337,12 @@ export function createMemoryTools(
         description:
           "Retract by appending a revising nanopublication. Delete only this client's nanopublications (including wrapped notes), with a strong ETag. Requires readOnly:false.",
         readOnly: false,
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
         inputSchema: z.object({ id: z.string(), mode: z.enum(["retract", "delete"]) }),
         async handler({ id, mode }) {
           return withPodReadLimits(async () => {
