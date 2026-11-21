@@ -74,6 +74,11 @@ export async function jsonLdLoader(iri: string) {
 
 type Definition = string | Record<string, unknown>;
 type Context = Map<string, Definition>;
+type ContextResolver = (iri: string) => Record<string, unknown>;
+interface FixtureTermOptions {
+  readonly allowJson: true;
+  readonly resolveContext: ContextResolver;
+}
 const keywords = new Set([
   "@context",
   "@id",
@@ -94,14 +99,17 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function applyContext(active: Context, value: unknown): Context {
+function applyContext(
+  active: Context,
+  value: unknown,
+  resolve: ContextResolver = (iri) => bundled.get(iri) ?? bundledContext(iri),
+): Context {
   let next = new Map(active);
   if (Array.isArray(value)) {
-    for (const entry of value) next = applyContext(next, entry);
+    for (const entry of value) next = applyContext(next, entry, resolve);
     return next;
   }
-  if (typeof value === "string")
-    return applyContext(next, (bundled.get(value) ?? bundledContext(value))["@context"]);
+  if (typeof value === "string") return applyContext(next, resolve(value)["@context"], resolve);
   if (!isObject(value)) throw new DocumentError("context-not-accepted");
   for (const [term, definition] of Object.entries(value)) {
     if (term.startsWith("@")) continue;
@@ -129,28 +137,40 @@ function checkContexts(value: unknown): void {
   for (const [key, item] of Object.entries(value)) if (key !== "@context") checkContexts(item);
 }
 
-function checkKeys(value: unknown, inherited: Context): void {
+function checkKeys(value: unknown, inherited: Context, fixture?: FixtureTermOptions): void {
   if (Array.isArray(value)) {
-    for (const item of value) checkKeys(item, inherited);
+    for (const item of value) checkKeys(item, inherited, fixture);
     return;
   }
   if (!isObject(value)) return;
-  let active = "@context" in value ? applyContext(inherited, value["@context"]) : inherited;
+  const context = value["@context"];
+  if (fixture && "@context" in value) {
+    const contexts = Array.isArray(context) ? context : [context];
+    if (!contexts.length || contexts.some((entry) => typeof entry !== "string"))
+      throw new DocumentError("context-not-accepted");
+  }
+  let active =
+    "@context" in value ? applyContext(inherited, context, fixture?.resolveContext) : inherited;
   // JSON-LD applies type-scoped contexts before processing properties, independently of key order.
   const types = Object.entries(value)
     .filter(([key]) => key === "@type" || active.get(key) === "@type")
     .flatMap(([, item]) => (Array.isArray(item) ? item : [item]));
   for (const type of types.filter((item): item is string => typeof item === "string").sort()) {
-    if (!active.has(type) && !isSafeAbsoluteIri(type)) throw new DocumentError("undefined-term");
+    if (!active.has(type) && !isSafeAbsoluteIri(type))
+      throw new DocumentError(fixture ? `undefined-term: ${type}` : "undefined-term");
     const definition = active.get(type);
     if (isObject(definition) && definition["@context"] !== undefined)
-      active = applyContext(active, definition["@context"]);
+      active = applyContext(active, definition["@context"], fixture?.resolveContext);
   }
   for (const [key, item] of Object.entries(value)) {
     if (key === "@context") continue;
     if (key === "@direction") throw new DocumentError("unsupported-direction");
-    if (!keywords.has(key) && !active.has(key)) throw new DocumentError("undefined-term");
+    if (!keywords.has(key) && !active.has(key))
+      throw new DocumentError(fixture ? `undefined-term: ${key}` : "undefined-term");
     const definition = active.get(key);
+    const field = isObject(definition) ? definition : undefined;
+    // Only pinned fixture terms can treat a value as opaque JSON.
+    if (fixture?.allowJson && field?.["@type"] === "@json") continue;
     if (item === null) throw new DocumentError("unrepresentable-null");
     const values = Array.isArray(item) ? item : [item];
     const iriField =
@@ -160,31 +180,46 @@ function checkKeys(value: unknown, inherited: Context): void {
     if (iriField)
       for (const token of values) {
         if (typeof token === "string" && !token.startsWith("_:") && !isSafeAbsoluteIri(token))
-          throw new DocumentError("invalid-iri");
+          throw new DocumentError(fixture ? `invalid-iri: ${key}=${token}` : "invalid-iri");
       }
     if (isObject(definition) && definition["@type"] === "http://www.w3.org/2001/XMLSchema#decimal")
       for (const token of values) {
         if (typeof token !== "string" && !(isObject(token) && typeof token["@value"] === "string"))
           throw new DocumentError("decimal-must-be-string");
       }
-    const scope = isObject(definition) ? definition["@context"] : undefined;
-    const child = scope === undefined ? active : applyContext(active, scope);
+    const scope = field?.["@context"];
+    const child =
+      scope === undefined ? active : applyContext(active, scope, fixture?.resolveContext);
     // Unmapped enumeration values can also disappear during expansion.
     if (isObject(definition) && definition["@type"] === "@vocab") {
       for (const token of Array.isArray(item) ? item : [item]) {
-        if (typeof token === "string" && !child.has(token))
+        if (
+          typeof token === "string" &&
+          !child.has(token) &&
+          !(fixture && isSafeAbsoluteIri(token))
+        )
           throw new DocumentError("undefined-term");
       }
     }
     if (key === "@type" && item === "@json") throw new DocumentError("undefined-term");
-    checkKeys(item, child);
+    const container = field?.["@container"];
+    if (fixture && isObject(item) && (container === "@id" || container === "@index")) {
+      for (const [mapKey, mapValue] of Object.entries(item)) {
+        if (container === "@id" && !isSafeAbsoluteIri(mapKey))
+          throw new DocumentError("invalid-iri");
+        checkKeys(mapValue, child, fixture);
+      }
+    } else checkKeys(item, child, fixture);
   }
 }
 
 /** Context and key admission always runs before signature verification or RDF conversion. */
-export function checkDocumentTerms(document: unknown): asserts document is Record<string, unknown> {
+export function checkDocumentTerms(
+  document: unknown,
+  fixture?: FixtureTermOptions,
+): asserts document is Record<string, unknown> {
   if (!isObject(document)) throw new DocumentError("document-must-be-an-object");
-  checkContexts(document);
+  if (!fixture) checkContexts(document);
   if (!("@context" in document)) throw new DocumentError("context-not-accepted");
-  checkKeys(document, new Map());
+  checkKeys(document, new Map(), fixture);
 }

@@ -24,11 +24,12 @@ export function snapshot(root) {
   for (const row of manifest.paths) {
     // The pre-RDF oracle covers the default configuration and predates the ZK proof methods.
     if (row.status === "blocked" || row.configuration) continue;
-    const scenario = JSON.parse(
+    // Only the branch changes and required methods matter here, independently of the envelope.
+    const { branches, requiredMethods } = JSON.parse(
       readFileSync(new URL(`scenarios/${row.scenario}.json`, root), "utf8"),
     );
-    const branch = scenario.branches.find((branch) => branch.id === row.path);
-    const methods = branch?.change.requiredMethods ?? scenario.requiredMethods ?? [];
+    const branch = branches.find((branch) => branch.id === row.path);
+    const methods = branch?.change.requiredMethods ?? requiredMethods ?? [];
     if (methods.some((method) => method !== "sparq-aggregate/1")) continue;
     oracle[`${row.scenario}/${row.path}`] = decisionsOf(
       JSON.parse(readFileSync(new URL(`traces/${row.trace}`, root), "utf8")),

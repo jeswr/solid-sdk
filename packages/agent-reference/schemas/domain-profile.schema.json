@@ -93,7 +93,7 @@
     },
     "schema": {
       "type": "string",
-      "const": "agent-profile/0.1"
+      "const": "agent-profile/0.2"
     },
     "codeMappings": {
       "type": "object",
@@ -1696,6 +1696,10 @@
         ],
         "additionalProperties": false
       }
+    },
+    "@context": {
+      "type": "string",
+      "const": "https://w3id.org/jeswr/awp/context/scenario/v1"
     }
   },
   "required": [
@@ -1725,7 +1729,8 @@
     "actionClaims",
     "vocabulary",
     "identifiers",
-    "operations"
+    "operations",
+    "@context"
   ],
   "additionalProperties": false,
   "$defs": {
@@ -1762,5 +1767,5 @@
     }
   },
   "x-authored-by": "Codex GPT-6",
-  "$id": "urn:agent-reference:schema:domain-profile:0.1"
+  "$id": "urn:agent-reference:schema:domain-profile:0.2"
 }

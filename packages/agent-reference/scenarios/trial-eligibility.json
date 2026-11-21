@@ -1,6 +1,7 @@
 {
+  "@context": "https://w3id.org/jeswr/awp/context/scenario/v1",
   "x-authored-by": "Codex GPT-6",
-  "schema": "agent-scenario/0.1",
+  "schema": "agent-scenario/0.2",
   "id": "trial-eligibility",
   "useCase": "trial-eligibility",
   "title": "Proving eligibility for a clinical trial",
