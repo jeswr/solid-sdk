@@ -13,8 +13,37 @@ import {
 export const STORE_CONTEXT = "https://w3id.org/jeswr/awp/context/store/v1";
 export const STORE_CONTEXT_SHA256 =
   "89cd3147ed2ff3a784eb13d1e6e831711e1546f56c091cbbc85bc803a37792d4";
+export const SCENARIO_CONTEXT = "https://w3id.org/jeswr/awp/context/scenario/v1";
+export const SCENARIO_CONTEXT_SHA256 =
+  "0a095d1e86357ff134a0bb62187668951a7487efaaf8ecba71deaea91c6d9290";
 
 let storeContext: Record<string, unknown> | undefined;
+let scenario: Record<string, unknown> | undefined;
+
+export function scenarioContext(iri: string): Record<string, unknown> {
+  if (iri === SCENARIO_CONTEXT) {
+    scenario ??= readPinnedContext(
+      readFileSync(new URL("../../vocab/context/scenario-v1.jsonld", import.meta.url), "utf8"),
+      SCENARIO_CONTEXT_SHA256,
+    );
+    return structuredClone(scenario);
+  }
+  if (iri === ODRL_CONTEXT || iri === VC_CONTEXT) return bundledContext(iri);
+  throw new DocumentError("context-not-accepted");
+}
+
+export const scenarioDocumentLoader: DocumentLoader = {
+  async load(iri) {
+    return scenarioContext(iri);
+  },
+};
+
+export async function scenarioJsonLdLoader(iri: string) {
+  return {
+    documentUrl: iri,
+    document: (await scenarioDocumentLoader.load(iri)) as import("jsonld").NodeObject,
+  };
+}
 
 export const storeDocumentLoader: DocumentLoader = {
   async load(iri) {

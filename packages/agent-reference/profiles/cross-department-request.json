@@ -1,6 +1,7 @@
 {
+  "@context": "https://w3id.org/jeswr/awp/context/scenario/v1",
   "x-authored-by": "Codex GPT-6",
-  "schema": "agent-profile/0.1",
+  "schema": "agent-profile/0.2",
   "id": "cross-department-request",
   "parties": {
     "owner": "The finance department",

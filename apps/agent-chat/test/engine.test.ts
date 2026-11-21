@@ -9,15 +9,175 @@ import {
   signRecord,
   verifyRecord,
 } from "@jeswr/agent-consent";
+import { CompactSign, compactVerify, importJWK } from "jose";
 import { describe, expect, it, vi } from "vitest";
 import type { SampleTool } from "../src/engine/core.js";
 import { Engine, StoppedError } from "../src/engine/engine.js";
-import { Parties } from "../src/engine/parties.js";
+import { Parties, type PartyKey } from "../src/engine/parties.js";
 import { Session } from "../src/engine/session.js";
 import type { ChatMessage } from "../src/engine/types.js";
 import { PRODUCTS } from "../src/engine/world.js";
 
 const NOW = new Date("2026-11-13T12:00:00.000Z");
+
+function fixturePartyKey(parties: Parties, id: string): PartyKey {
+  const key = (parties as unknown as { keys: ReadonlyMap<string, PartyKey> }).keys.get(id);
+  if (!key) throw new Error(`missing test key for ${id}`);
+  return key;
+}
+
+function signPartyFixture(parties: Parties, sender: string, payload: Record<string, unknown>) {
+  const key = fixturePartyKey(parties, sender);
+  return new CompactSign(new TextEncoder().encode(JSON.stringify(payload)))
+    .setProtectedHeader({ alg: "ES256", kid: sender, typ: "application/verifiable-message+json" })
+    .sign(key.privateKey);
+}
+
+describe("counterparty message admission", () => {
+  const sender = "store:stride";
+  const audience = "agent:errand";
+
+  async function parties(now = () => NOW): Promise<Parties> {
+    const engine = new Engine({ now });
+    await engine.ready;
+    return (engine as unknown as { parties: Parties }).parties;
+  }
+
+  function signedFixture(receiver: Parties, overrides: Record<string, unknown>, from = sender) {
+    return signPartyFixture(receiver, from, {
+      id: "fixture-message",
+      from,
+      audience,
+      createdAt: NOW.toISOString(),
+      expiresAt: "2026-11-13T12:01:00.000Z",
+      price: 1200,
+      ...overrides,
+    });
+  }
+
+  it.each([
+    ["expired", { createdAt: "2026-11-13T11:59:00.000Z", expiresAt: NOW.toISOString() }],
+    ["not-yet-valid", { createdAt: "2026-11-13T12:00:00.001Z" }],
+    ["wrong-audience", { audience: "agent:elsewhere" }],
+    ["malformed", { createdAt: "invalid" }],
+    ["malformed", { createdAt: "2026-02-29T12:00:00-05:00" }],
+    ["malformed", { expiresAt: "2026-11-31T12:00:00.000Z" }],
+    ["malformed", { expiresAt: undefined }],
+    ["malformed", { id: undefined }],
+  ])("refuses a signed message with reason %s (%j)", async (reason, overrides) => {
+    const receiver = await parties();
+    const jws = await signedFixture(receiver, overrides);
+    const fitness = vi.fn(() => undefined);
+    expect(await receiver.receive(jws, sender, fitness)).toEqual({ ok: false, reason });
+    expect(fitness).not.toHaveBeenCalled();
+  });
+
+  it("admits timestamps with offsets and checks freshness against their instants", async () => {
+    let now = new Date(NOW.getTime() + 100);
+    const receiver = await parties(() => now);
+    const jws = await signedFixture(receiver, {
+      createdAt: "2026-11-13T07:00:00-05:00",
+      expiresAt: "2026-11-13T13:00:00.1001+01:00",
+    });
+    expect(await receiver.receive(jws, sender)).toMatchObject({ ok: true });
+    now = new Date(NOW.getTime() + 101);
+    expect(await receiver.receive(jws, sender)).toEqual({ ok: false, reason: "expired" });
+  });
+
+  it("refuses the same message id across deliveries, including changed signed content", async () => {
+    const receiver = await parties();
+    const jws = await signedFixture(receiver, {});
+    expect(await receiver.receive(jws, sender)).toMatchObject({ payload: { price: 1200 } });
+    const changed = await signedFixture(receiver, { price: 1250 });
+    const fitness = vi.fn(() => undefined);
+    expect(await receiver.receive(jws, sender, fitness)).toEqual({
+      ok: false,
+      reason: "replay-conflict",
+    });
+    expect(await receiver.receive(changed, sender, fitness)).toEqual({
+      ok: false,
+      reason: "replay-conflict",
+    });
+    expect(fitness).not.toHaveBeenCalled();
+  });
+
+  it("admits a receipt for the matching order after refusing it for a different order", async () => {
+    const receiver = await parties();
+    const jws = await signedFixture(receiver, { order: "SC-20431" });
+    const forOrder = (order: string) => (receipt: { order: string }) =>
+      receipt.order === order ? undefined : "receipt does not match this order";
+    expect(await receiver.receive(jws, sender, forOrder("SC-20444"))).toEqual({
+      ok: false,
+      reason: "fitness-failed",
+    });
+    expect(await receiver.receive(jws, sender, forOrder("SC-20431"))).toMatchObject({
+      ok: true,
+      payload: { order: "SC-20431" },
+    });
+    expect(await receiver.receive(jws, sender, forOrder("SC-20431"))).toEqual({
+      ok: false,
+      reason: "replay-conflict",
+    });
+  });
+
+  it("tracks the same message id independently for two pinned senders", async () => {
+    const receiver = await parties();
+    const messages = await Promise.all(
+      [sender, "store:peak"].map(async (from) => ({
+        from,
+        jws: await signedFixture(receiver, {}, from),
+      })),
+    );
+    for (const { from, jws } of messages) {
+      expect(await receiver.receive(jws, from)).toMatchObject({
+        ok: true,
+        payload: { from, id: "fixture-message" },
+      });
+    }
+    for (const { from, jws } of messages) {
+      expect(await receiver.receive(jws, from)).toEqual({ ok: false, reason: "replay-conflict" });
+    }
+  });
+
+  it("reports pass only for the checks that ran", async () => {
+    const receiver = await parties();
+    const jws = await signedFixture(receiver, {});
+    const result = await receiver.receive(jws, sender);
+    expect(result).toMatchObject({
+      checks: [
+        expect.objectContaining({ check: "integrity", result: "pass" }),
+        expect.objectContaining({ check: "source", result: "pass" }),
+      ],
+    });
+
+    const checked = await signedFixture(receiver, { id: "checked-message" });
+    const fitness = vi.fn(() => undefined);
+    expect(await receiver.receive(checked, sender, fitness)).toMatchObject({
+      checks: expect.arrayContaining([
+        expect.objectContaining({ check: "fitness", result: "pass" }),
+      ]),
+    });
+    expect(fitness).toHaveBeenCalledOnce();
+  });
+
+  it("signs fresh ids, the intended audience and a window from the engine clock", async () => {
+    let now = NOW;
+    const receiver = await parties(() => now);
+    const first = await receiver.sign(sender, { price: 1200 });
+    const second = await receiver.sign(sender, { price: 1200 });
+    now = new Date(NOW.getTime() + 1);
+    for (const jws of [first, second]) {
+      expect(await receiver.receive(jws, sender)).toMatchObject({
+        payload: {
+          id: expect.stringMatching(/\S/),
+          audience,
+          createdAt: NOW.toISOString(),
+          expiresAt: "2026-11-13T12:15:00.000Z",
+        },
+      });
+    }
+  });
+});
 
 /** Answers each approval with the next scripted answer, recording what was asked. */
 function harness(answers: ((r: ApprovalRequest) => PrincipalResponse)[], now = () => NOW) {
@@ -786,8 +946,19 @@ describe("second adversarial review", () => {
     expect(messages().filter((m) => m.type === "receipt")).toHaveLength(2);
     const entry = activityAtCommit[0];
     expect(entry?.receiptJws).toBeTypeOf("string");
-    const receipt = await internals.parties.receive(entry?.receiptJws as string, "store:stride");
-    expect(receipt?.payload).toMatchObject({
+    // Verify the stored evidence without delivering the same message to the engine again.
+    const key = fixturePartyKey(internals.parties, "store:stride");
+    const receipt = await compactVerify(
+      entry?.receiptJws as string,
+      await importJWK(key.publicJwk, "ES256"),
+      { algorithms: ["ES256"] },
+    );
+    expect(receipt.protectedHeader).toMatchObject({
+      kid: "store:stride",
+      typ: "application/verifiable-message+json",
+    });
+    expect(JSON.parse(new TextDecoder().decode(receipt.payload))).toMatchObject({
+      from: "store:stride",
       order: internals.ledger[1]?.id,
       actionDigest: entry?.digest,
       total: 1200,
@@ -928,6 +1099,61 @@ describe("review security regressions", () => {
     }
     expect(asked.map((r) => r.kind)).toEqual(["disclosure", "step-up", "step-up"]);
     expect(messages().some((m) => m.type === "offer")).toBe(false);
+  });
+
+  it.each([
+    ["expired", { expiresAt: NOW.toISOString() }],
+    ["wrong audience", { audience: "agent:elsewhere" }],
+  ])("pauses the mortgage application when the signed bank reply is refused (%s)", async (_reason, overrides) => {
+    const { session, asked, messages } = harness([once, face]);
+    const engine = session.engine;
+    await engine.ready;
+    const original = Parties.prototype.sign;
+    const spy = vi.spyOn(Parties.prototype, "sign").mockImplementation(function (
+      this: Parties,
+      from,
+      payload,
+    ) {
+      if (from !== "org:harbour" || payload.statement !== "balance")
+        return original.call(this, from, payload);
+      return signPartyFixture(this, from, {
+        ...payload,
+        from,
+        id: "bank-balance",
+        audience: "agent:errand",
+        createdAt: new Date(NOW.getTime() - 60_000).toISOString(),
+        expiresAt: new Date(NOW.getTime() + 60_000).toISOString(),
+        ...overrides,
+      });
+    });
+    try {
+      await expect(engine.mortgageApply(engine.getState().activeChat)).resolves.toBe("blocked");
+      expect(
+        spy.mock.calls.some(([, payload]) => payload.decision === "decision-in-principle"),
+      ).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(asked.map((r) => r.kind)).toEqual(["disclosure", "step-up"]);
+    expect(messages().some((m) => m.type === "offer")).toBe(false);
+    expect(messages()).toContainEqual(
+      expect.objectContaining({
+        type: "text",
+        role: "agent",
+        text: expect.stringContaining("Harbour Bank's reply did not check out"),
+      }),
+    );
+    const progress = messages().find((m) => m.type === "progress" && m.title === "Applying");
+    expect(progress?.type === "progress" && progress.steps.map((step) => step.state)).toEqual([
+      "done",
+      "done",
+      "stopped",
+      "pending",
+      "pending",
+    ]);
+    expect(
+      engine.getState().activity.some((entry) => entry.summary.startsWith("Decision in principle")),
+    ).toBe(false);
   });
 
   it.each([

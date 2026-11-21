@@ -1,6 +1,7 @@
 {
+  "@context": "https://w3id.org/jeswr/awp/context/scenario/v1",
   "x-authored-by": "Codex GPT-6",
-  "schema": "agent-scenario/0.1",
+  "schema": "agent-scenario/0.2",
   "id": "pay-an-invoice",
   "title": "Paying a supplier's invoice",
   "profile": "pay-an-invoice",
