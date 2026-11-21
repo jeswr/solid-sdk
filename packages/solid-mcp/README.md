@@ -453,6 +453,29 @@ All four tools use `@jeswr/solid-chat-interop`'s reusable `ChatWriter` and requi
   conversation as a Markdown transcript to paste into another account. Titles and
   text are redacted again on export, and each message sits in its own code fence.
 
+Save and export share `solid-chat-interop`'s [redaction rules](../solid-chat-interop/README.md#redaction):
+strip unsafe Unicode format characters while retaining admitted emoji sequences, and
+check title → message and message → message boundaries with separator-free 512-code-unit
+windows. Covered value pieces become `[REDACTED]` while surrounding code stays. The
+conservative join can include the next field's first word after a token-ending field.
+Existing per-field markers keep their spelling during boundary replacement, so
+appending a turn preserves an already detected message's content-derived ID.
+A trailing `@` in the next field can prove a URL password wholly in the previous
+field only while that field still ends in userinfo. Authorities already containing
+userinfo cannot absorb a later `@mention`. Undelimited host:port-looking suffixes
+redact conservatively when a later field supplies `@`, including numeric password
+continuations and ambiguous @mentions; delimited host:port URLs stay intact.
+Completed quoted assignments keep their quotes at field boundaries, preserving
+their content-derived IDs when a turn is appended. Orphan private-key END lines redact their own
+field prefix only. Recognized BEGIN headers, including PGP PRIVATE KEY BLOCK, carry
+redaction through entire later fields until their first END or the conversation end,
+covering long or truncated bodies. Variation selectors are removed except FE0E/FE0F
+on emoji bases/modifiers or in complete keycaps.
+Windows stop at complete code points; lone surrogates and malformed subdivision
+tags are removed. Checks cover adjacent pairs only: credentials requiring three
+fields or context beyond 512 code units remain outside this policy, except bodies
+following a recognized PEM BEGIN. Split delimiters themselves retain the window bound.
+
 Every new MCP save records channel `mcp`, the first writer creation time and, when
 supplied, account provenance through typed PROV/FOAF/DCMI accessors. `account` is an
 owner-chosen label: 1–64 UTF-16 code units after NFC + trim, with no control/format

@@ -178,7 +178,7 @@ describe("capture with real ChatWriter and client credentials", () => {
     const result = await storedConversation("claude");
     expect(result.messages.map((m) => m.text)).toEqual([
       "Please inspect. [REDACTED TOKEN]",
-      "I will inspect it.",
+      "[REDACTED] will inspect it.",
       "Read",
       "The project looks good.",
     ]);

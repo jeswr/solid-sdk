@@ -8,7 +8,7 @@ import {
 } from "@jeswr/solid-chat-interop";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { createHash } from "crypto";
-import { redactSecrets } from "./redact.js";
+import { redactConversation } from "./redact.js";
 
 /** Redacted canonical conversation and local-only project locations used for opt-out checks. */
 export interface CapturedSession {
@@ -138,7 +138,7 @@ function append(
   seen.add(key);
   // Identity must survive removal of earlier rows. Capture persists sequence assignments
   // separately before queueing so ChatWriter can also retain timestamp-tie order.
-  messages.push({ id: key, role, text: redactSecrets(text), createdAt });
+  messages.push({ id: key, role, text, createdAt });
 }
 
 /** Parse Claude Code JSONL: user/assistant text and tool names, without arguments/results/thinking. */
@@ -168,7 +168,7 @@ export function parseClaudeTranscript(
         append(result.conversation.messages, seen, [key, index], "tool", block.name, createdAt);
     });
   });
-  return result;
+  return { ...result, conversation: redactConversation(result.conversation) };
 }
 
 /** Parse Codex rollout response_item rows; event_msg mirrors, reasoning and tool outputs are dropped. */
@@ -237,5 +237,5 @@ export function parseCodexTranscript(
         createdAt,
       );
   });
-  return result;
+  return { ...result, conversation: redactConversation(result.conversation) };
 }

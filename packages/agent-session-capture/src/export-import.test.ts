@@ -298,7 +298,7 @@ describe("explicit imports with real ChatWriter and DPoP", () => {
         chat_messages: Array.from({ length: 101 }, (_, index) => ({
           uuid: String(index),
           sender: "human",
-          text: "Fixture turn",
+          text: index === 99 ? "AKIA0000" : index === 100 ? "000000000000" : "Fixture turn",
         })),
       }),
     );
@@ -307,6 +307,8 @@ describe("explicit imports with real ChatWriter and DPoP", () => {
       .mockResolvedValue({ url: "https://pod.example/", saved: 0, skipped: 0 });
     expect(await runExportImport(["claude-export", source], options)).toBe(0);
     expect(save.mock.calls.map(([chat]) => chat.messages.length)).toEqual([100, 1]);
+    expect(save.mock.calls[0]?.[0].messages[99]?.text).toBe("[REDACTED]");
+    expect(save.mock.calls[1]?.[0].messages[0]?.text).toBe("[REDACTED]");
   });
   it("uses default config boundaries and guarded DNS transport with explicit loopback only", async () => {
     await writeFile(source, chat(message()));

@@ -408,8 +408,9 @@ describe("MCP chat tools over the scoped fetch port", () => {
           arguments: { provider: "claude", conversationId: input.conversationId },
         }),
       );
+      // With no separator, the title's token also covers the next field's first word.
       expect(got.title).toBe("Key [REDACTED TOKEN]");
-      expect(got.messages[0].text).toBe("My key is [REDACTED TOKEN]");
+      expect(got.messages[0].text).toBe("[REDACTED] key is [REDACTED TOKEN]");
       const exported = json(
         await client.callTool({
           name: "chat_export",
@@ -418,8 +419,48 @@ describe("MCP chat tools over the scoped fetch port", () => {
       );
       expect(exported.url).toBe(`${ROOT}private/chats/claude/session-1/`);
       expect(exported.markdown).toContain("# Key \\[REDACTED TOKEN\\]");
-      expect(exported.markdown).toContain("```\nMy key is [REDACTED TOKEN]\n```");
+      expect(exported.markdown).toContain("```\n[REDACTED] key is [REDACTED TOKEN]\n```");
       expect(exported.markdown).not.toContain(token);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it("keeps ID-less chat_save messages unique when a later turn is appended", async () => {
+    const pod = fakePod();
+    const client = await connect({
+      fetch: pod.fetch,
+      podRoot: ROOT,
+      webId: OWNER,
+      readOnly: false,
+    });
+    const first = { role: "user", text: "Here's my key sk-abc", createdAt: DAY1 };
+    const args = { ...input, title: "t", messages: [first] };
+    const get = () =>
+      client.callTool({
+        name: "chat_get",
+        arguments: { provider: "claude", conversationId: input.conversationId },
+      });
+    try {
+      expect(json(await client.callTool({ name: "chat_save", arguments: args }))).toMatchObject({
+        saved: 1,
+      });
+      const before = json(await get()).messages[0];
+      expect(before.text).toBe("Here's my key [REDACTED TOKEN]");
+      expect(
+        json(
+          await client.callTool({
+            name: "chat_save",
+            arguments: {
+              ...args,
+              messages: [first, { role: "assistant", text: "Thanks", createdAt: DAY2 }],
+            },
+          }),
+        ),
+      ).toMatchObject({ saved: 1, skipped: 1 });
+      const after = json(await get());
+      expect(after.messages).toHaveLength(2);
+      expect(after.messages[0]).toEqual(before);
     } finally {
       await client.close();
     }
