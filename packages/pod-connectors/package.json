@@ -186,6 +186,14 @@
       "types": "./dist/google-photos/adapter.d.ts",
       "default": "./dist/google-photos/adapter.js"
     },
+    "./adapters/google-health": {
+      "types": "./dist/google-health/adapter.d.ts",
+      "default": "./dist/google-health/adapter.js"
+    },
+    "./google-health/*": {
+      "types": "./dist/google-health/*.d.ts",
+      "default": "./dist/google-health/*.js"
+    },
     "./google-photos/*": {
       "types": "./dist/google-photos/*.d.ts",
       "default": "./dist/google-photos/*.js"
