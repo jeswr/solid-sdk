@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 import { type DatasetCore, parseRdfSync, type Quad } from "@jeswr/fetch-rdf";
-import { Writer } from "n3";
+import { type Store, Writer } from "n3";
 import { IndexedStore } from "../model/indexed-store.js";
 
 // Match the read and write budgets so an oversized block fails before append.
@@ -28,7 +29,7 @@ function assertNamedQuads(dataset: Iterable<Quad>): void {
 }
 
 /** Synchronous deterministic N-Quads. Sort the serialized UTF-8 lines bytewise. */
-export function writeNQuads(dataset: DatasetCore): string {
+export function writeNQuads(dataset: DatasetCore, maxBytes = STORE_QUAD_BYTES): string {
   assertNamedQuads(dataset);
   const writer = new Writer({ format: "N-Quads" });
   const lines: Buffer[] = [];
@@ -36,23 +37,41 @@ export function writeNQuads(dataset: DatasetCore): string {
   for (const { subject, predicate, object, graph } of dataset) {
     const line = Buffer.from(writer.quadToString(subject, predicate, object, graph));
     bytes += line.length;
-    if (bytes > STORE_QUAD_BYTES) throw new RangeError("Store RDF exceeds its byte limit");
+    if (bytes > maxBytes) throw new RangeError("Store RDF exceeds its byte limit");
     lines.push(line);
   }
   return Buffer.concat(lines.sort(Buffer.compare), bytes).toString("utf8");
 }
 
-export function readNQuads(text: string, maxBytes = STORE_QUAD_BYTES): IndexedStore {
+export function readNQuads(text: string): IndexedStore {
   const parsed = parseRdfSync(text, {
     format: "application/n-quads",
-    maxBytes,
+    maxBytes: STORE_QUAD_BYTES,
     maxTermLength: STORE_QUAD_BYTES,
   });
   assertNamedQuads(parsed);
   return new IndexedStore([...parsed]);
 }
 
-/** Parse an entry from the memo’s own JSON.stringify output, matching legacy state semantics. */
+/** Local snapshots and trust stores scale with file size rather than message limits. */
+export function readLocalStoreRdf(
+  text: string,
+  format: "application/n-quads" | "text/turtle",
+): Store {
+  const bytes = Math.max(1, Buffer.byteLength(text));
+  const parsed = parseRdfSync(text, {
+    format,
+    maxBytes: bytes,
+    maxQuads: bytes,
+    maxTermLength: bytes,
+    // Turtle prefixes and shorthand can repeat terms without repeating their bytes.
+    maxTotalTermLength: Number.MAX_SAFE_INTEGER,
+  });
+  assertNamedQuads(parsed);
+  return parsed;
+}
+
+/** Read a JSON-compatible native store value or the lexical form of an rdf:JSON literal. */
 export function decodeSnapshotEntry(text: string): unknown {
   return JSON.parse(text);
 }

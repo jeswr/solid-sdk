@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 import type { Term } from "@jeswr/fetch-rdf";
-import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import {
+  IRI_TO_ACTION,
   IRI_TO_LEFT_OPERAND,
   IRI_TO_OPERATOR,
   type OdrlAction,
@@ -31,8 +31,11 @@ import {
   inGraph,
   link,
   RDF_TYPE,
+  readStoreText,
   StoreNode,
+  storeIdentifier,
   storeModel,
+  storeText,
 } from "./common.js";
 
 const ODRL_ACTION = ODRL + "action";
@@ -44,7 +47,7 @@ const ODRL_OPERATOR = ODRL + "operator";
 const ODRL_PERMISSION = ODRL + "permission";
 const ODRL_PROHIBITION = ODRL + "prohibition";
 const ODRL_UID = ODRL + "uid";
-const PAY = AWP + "pay";
+const PAY = `${AWP}pay` as const;
 const FIELDS = AWP + "policyFields";
 const PROFILE = AWP + "policyProfile";
 const RIGHT = AWP + "policyRightOperand";
@@ -71,56 +74,75 @@ export type NativePolicy = Omit<OdrlPolicy, "permissions" | "prohibitions" | "ob
 };
 
 const lowerAction = (action: NativeAction): OdrlAction =>
-  action === "pay" ? (PAY as OdrlAction) : action;
+  action === "pay" ? PAY : Object.hasOwn(IRI_TO_ACTION, action) ? IRI_TO_ACTION[action]! : action;
 const predicates = [
   ["permissions", ODRL_PERMISSION],
   ["prohibitions", ODRL_PROHIBITION],
   ["obligations", ODRL_OBLIGATION],
 ] as const;
 
-/** The public ODRL writer accepts HTTP(S) and URNs for these fields. Store
- * projections may also carry clean absolute IRIs from other schemes, such as DIDs. */
-function storeOnlyIri(iri: string): boolean {
-  return !/^(https?|urn):/i.test(iri) && isSafeAbsoluteIri(iri);
+function writeIdentifier(node: StoreNode, predicate: string, value: string | undefined): void {
+  if (value !== undefined) node.put(predicate, storeIdentifier(value));
 }
 
-function standardIri(iri: string | undefined): string | undefined {
-  return iri !== undefined && storeOnlyIri(iri) ? undefined : iri;
+function readIdentifier(node: StoreNode, predicate: string): string | undefined {
+  const term = node.term(predicate);
+  if (term !== undefined) return term.termType === "NamedNode" ? term.value : readStoreText(term);
 }
 
-function restoreIri(node: StoreNode, predicate: string, iri: string | undefined): void {
-  if (iri !== undefined && storeOnlyIri(iri)) node.put(ODRL + predicate, namedNode(iri));
+function policySubject(id: string): string {
+  const term = storeIdentifier(id);
+  return term.termType === "NamedNode" ? id : scopedId("urn:awp:policy", JSON.stringify(id));
 }
 
-function standardPolicy(policy: NativePolicy): OdrlPolicy {
-  const subjects = new Set([policy.id]);
+type RuleOccurrence = { native: NativeRule | NativeDuty; position: number };
+function standardPolicy(
+  policy: NativePolicy,
+  rootId: string,
+  occurrences: Map<OdrlDuty, RuleOccurrence>,
+): OdrlPolicy {
+  const subjects = new Set([rootId]);
   let occurrence = 0;
-  const lower = <T extends NativeDuty>(rule: T): Omit<T, "action"> & { action: OdrlAction } => {
-    let id = rule.id;
-    // Repeated native rule IDs still refer to distinct native list occurrences.
+  function lowerId(id: string | undefined): string | undefined {
     if (id !== undefined) {
-      while (subjects.has(id)) id = scopedId(policy.id, `rule-occurrence:${occurrence++}`);
+      if (storeIdentifier(id).termType !== "NamedNode") id = undefined;
+      while (id === undefined || subjects.has(id))
+        id = scopedId(rootId, `rule-occurrence:${occurrence++}`);
       subjects.add(id);
     }
-    return { ...rule, id, action: lowerAction(rule.action), target: standardIri(rule.target) };
+    return id;
+  }
+  // The local store writes parties, profiles and targets itself. Its lexical
+  // values have already been admitted by the runtime.
+  const lowerDuty = (native: NativeDuty, position: number): OdrlDuty => {
+    const duty = {
+      id: lowerId(native.id),
+      action: lowerAction(native.action),
+      constraints: native.constraints,
+    };
+    occurrences.set(duty, { native, position });
+    return duty;
   };
-  const lowerRule = ({ duties, ...rule }: NativeRule): OdrlRule => ({
-    ...lower(rule),
-    assigner: standardIri(rule.assigner),
-    assignee: standardIri(rule.assignee),
-    ...(duties && { duties: duties.map(lower) }),
-  });
+  const lowerRule = (native: NativeRule, position: number): OdrlRule => {
+    const rule = {
+      id: lowerId(native.id),
+      action: lowerAction(native.action),
+      type: native.type,
+      constraints: native.constraints,
+      duties: native.duties?.map(lowerDuty),
+    };
+    occurrences.set(rule, { native, position });
+    return rule;
+  };
   return {
     ...policy,
-    assigner: standardIri(policy.assigner),
-    assignee: standardIri(policy.assignee),
-    profile:
-      typeof policy.profile === "string"
-        ? standardIri(policy.profile)
-        : policy.profile?.filter((iri) => !storeOnlyIri(iri)),
+    id: rootId,
+    assigner: undefined,
+    assignee: undefined,
+    profile: undefined,
     permissions: policy.permissions?.map(lowerRule),
     prohibitions: policy.prohibitions?.map(lowerRule),
-    obligations: policy.obligations?.map(lower),
+    obligations: policy.obligations?.map(lowerDuty),
   };
 }
 
@@ -174,70 +196,91 @@ function ordered(node: StoreNode, predicate: string) {
     throw new TypeError("Invalid ODRL order");
   return ordered.map(({ node }) => node);
 }
-function augmentRules(
-  nodes: StoreNode[],
-  rules: readonly (NativeRule | NativeDuty)[],
-  policy?: NativePolicy,
+function augmentRule(
+  node: StoreNode,
+  { native: rule, position }: RuleOccurrence,
+  policy: NativePolicy,
 ) {
-  if (nodes.length !== rules.length) throw new TypeError("Ambiguous ODRL rule identities");
-  for (const [index, rule] of rules.entries()) {
-    const node = nodes[index]!;
-    putPosition(node, index);
-    writeFields(node, rule);
-    restoreIri(node, "target", rule.target);
-    if (rule.id !== undefined && rule.id !== node.id) node.put(NATIVE_ID, namedNode(rule.id));
-    if (rule.action.startsWith(ODRL) || rule.action === PAY)
-      node.put(NATIVE_ACTION, literal(rule.action));
-    if ("type" in rule) {
-      restoreIri(node, "assigner", rule.assigner ?? policy?.assigner);
-      restoreIri(node, "assignee", rule.assignee ?? policy?.assignee);
-      node.put(RULE_KIND, literal(rule.type));
-      if (rule.approvals !== undefined) node.putValue(APPROVALS, rule.approvals);
-      if (rule.limit !== undefined) node.putValue(LIMIT, rule.limit);
-      if (rule.duties?.length) augmentRules(children(node, ODRL_DUTY), rule.duties);
-    }
-    const constraints = children(node, ODRL_CONSTRAINT);
-    for (const [position, c] of (rule.constraints ?? []).entries()) {
-      const child = constraints[position]!;
-      putPosition(child, position);
-      // ODRL graph values are unordered-set terms. Preserve operand order, presence
-      // and type spelling independently of the evaluator's inferred RDF datatype.
-      child.putValue(RIGHT, c.rightOperand as Json);
-      if (c.datatype !== undefined) child.put(DATATYPE, literal(c.datatype));
-    }
+  putPosition(node, position);
+  writeFields(node, rule);
+  writeIdentifier(node, ODRL + "target", rule.target);
+  if (rule.id !== node.id) writeIdentifier(node, NATIVE_ID, rule.id);
+  if (
+    rule.action.startsWith(ODRL) ||
+    rule.action === PAY ||
+    Object.hasOwn(IRI_TO_ACTION, rule.action)
+  )
+    node.put(NATIVE_ACTION, storeText(rule.action));
+  if ("type" in rule) {
+    writeIdentifier(node, ODRL + "assigner", rule.assigner ?? policy.assigner);
+    writeIdentifier(node, ODRL + "assignee", rule.assignee ?? policy.assignee);
+    node.put(RULE_KIND, literal(rule.type));
+    if (rule.approvals !== undefined) node.putValue(APPROVALS, rule.approvals);
+    if (rule.limit !== undefined) node.putValue(LIMIT, rule.limit);
+  }
+  const constraints = children(node, ODRL_CONSTRAINT);
+  for (const [position, c] of (rule.constraints ?? []).entries()) {
+    const child = constraints[position]!;
+    putPosition(child, position);
+    // ODRL graph values are unordered-set terms. Preserve operand order, presence
+    // and type spelling independently of the evaluator's inferred RDF datatype.
+    child.putValue(RIGHT, c.rightOperand as Json);
+    if (c.datatype !== undefined) child.put(DATATYPE, literal(c.datatype));
   }
 }
 
 export function policyDataset(policy: NativePolicy, location?: "memory"): IndexedStore {
+  const rootId = policySubject(policy.id);
+  const occurrences = new Map<OdrlDuty, RuleOccurrence>();
+  const ruleNodes: Array<{ occurrence: RuleOccurrence; id: string; isBlank: boolean }> = [];
+  const quads = policyToRdf(standardPolicy(policy, rootId, occurrences), {
+    onRuleNode(rule, id, isBlank) {
+      ruleNodes.push({ occurrence: occurrences.get(rule)!, id, isBlank });
+    },
+  });
   const blanks = new Map<string, string>();
+  const used = new Set(ruleNodes.filter(({ isBlank }) => !isBlank).map(({ id }) => id));
+  used.add(rootId);
+  let blankIndex = 0;
   const replace = (term: Term): Term => {
     if (term.termType !== "BlankNode") return term;
-    if (!blanks.has(term.value)) blanks.set(term.value, scopedId(policy.id, "odrl:" + blanks.size));
-    return namedNode(blanks.get(term.value)!);
+    let id = blanks.get(term.value);
+    if (id === undefined) {
+      do {
+        id = scopedId(rootId, "odrl:" + blankIndex++);
+      } while (used.has(id));
+      blanks.set(term.value, id);
+    }
+    return namedNode(id);
   };
   const graph = new IndexedStore();
-  for (const { subject, predicate, object } of policyToRdf(standardPolicy(policy)))
+  for (const { subject, predicate, object } of quads)
     graph.addQuad(quad(replace(subject) as never, predicate, replace(object) as never));
-  const root = view(policy.id, graph);
+  const root = view(rootId, graph);
   root.types.add(ODRL + "Policy");
   writeFields(root, policy);
-  restoreIri(root, "assigner", policy.assigner);
-  restoreIri(root, "assignee", policy.assignee);
-  if (typeof policy.profile === "string") restoreIri(root, "profile", policy.profile);
+  if (rootId !== policy.id) root.put(NATIVE_ID, storeText(policy.id));
+  writeIdentifier(root, ODRL + "assigner", policy.assigner);
+  writeIdentifier(root, ODRL + "assignee", policy.assignee);
+  if (typeof policy.profile === "string") writeIdentifier(root, ODRL + "profile", policy.profile);
   else if (policy.profile !== undefined) {
     root.putValue(PROFILE, policy.profile as Json);
-    for (const iri of policy.profile) if (storeOnlyIri(iri)) root.add(ODRL + "profile", iri);
+    for (const iri of policy.profile) {
+      if (storeIdentifier(iri).termType === "NamedNode") root.add(ODRL + "profile", iri);
+    }
   }
-  for (const [field, predicate] of predicates)
-    augmentRules(children(root, predicate), policy[field] ?? [], policy);
-  if (location !== "memory") return inGraph(graph, policy.id);
+  for (const { occurrence, id, isBlank } of ruleNodes)
+    augmentRule(view(isBlank ? blanks.get(id)! : id, graph), occurrence, policy);
+  if (location !== "memory") return inGraph(graph, rootId);
 
   // Several memory grants can share a native UID with different targets. The
   // projection subject also names its graph, while odrl:uid retains the native ID.
-  const occurrence = namedNode(scopedId(policy.id, "policy:" + digestBytes(writeNQuads(graph))));
+  const occurrence = namedNode(
+    scopedId(rootId, "policy:" + digestBytes(writeNQuads(graph, Infinity))),
+  );
   return new IndexedStore(
     [...graph].map(({ subject, predicate, object }) =>
-      quad(subject.value === policy.id ? occurrence : subject, predicate, object, occurrence),
+      quad(subject.value === rootId ? occurrence : subject, predicate, object, occurrence),
     ),
   );
 }
@@ -269,7 +312,10 @@ function decodeRule(node: StoreNode, projected: OdrlRule | OdrlDuty): NativeRule
   });
   return selectFields(node, {
     ...projected,
-    id: node.term(NATIVE_ID)?.value ?? projected.id,
+    id: readIdentifier(node, NATIVE_ID) ?? projected.id,
+    target: readIdentifier(node, ODRL + "target"),
+    assigner: readIdentifier(node, ODRL + "assigner"),
+    assignee: readIdentifier(node, ODRL + "assignee"),
     action,
     type: node.term(RULE_KIND)?.value,
     constraints,
@@ -280,15 +326,19 @@ function decodeRule(node: StoreNode, projected: OdrlRule | OdrlDuty): NativeRule
 }
 export function policyFromStore(dataset: Store, id: string): NativePolicy {
   const local = graphContents(dataset, id);
-  const projected = policyFromRdf(local, { allowedActionIris: [PAY] });
+  const projected = policyFromRdf(local, {
+    allowedActionIris: local.getObjects(null, ODRL_ACTION, null).map((term) => term.value),
+  });
   if (!projected || projected.id !== id) throw new TypeError("Expected a store ODRL policy");
   const root = view(id, local);
   const nativeId = root.term(ODRL_UID);
   if (nativeId?.termType !== "NamedNode") throw new TypeError("Expected a native ODRL UID");
   const native: Record<string, unknown> = {
     ...projected,
-    id: nativeId.value,
-    profile: root.valueAt(PROFILE) ?? projected.profile,
+    id: readIdentifier(root, NATIVE_ID) ?? nativeId.value,
+    assigner: readIdentifier(root, ODRL + "assigner"),
+    assignee: readIdentifier(root, ODRL + "assignee"),
+    profile: root.valueAt(PROFILE) ?? readIdentifier(root, ODRL + "profile"),
   };
   for (const [field, predicate] of predicates) {
     const rules = new Map(projected[field]?.map((rule) => [rule.id, rule]));
@@ -299,7 +349,7 @@ export function policyFromStore(dataset: Store, id: string): NativePolicy {
     });
   }
   const decoded = selectFields(root, native) as unknown as NativePolicy;
-  const location = decoded.id === id ? undefined : "memory";
+  const location = policySubject(decoded.id) === id ? undefined : "memory";
   assertSameGraph(local, graphContents(policyDataset(decoded, location), id));
   return decoded;
 }
@@ -352,8 +402,8 @@ export function mandateDataset(loaded: LoadedMandate): IndexedStore {
   ) as StoreNode;
   root.put(CREDENTIAL, namedNode(credential.id));
   root.put(CREDENTIAL_DIGEST, literal(digestBytes(credential.originalJws)));
-  root.put(AUTONOMOUS, namedNode(mandate.autonomous.id));
-  root.put(WITH_APPROVAL, namedNode(mandate.withApproval.id));
+  root.put(AUTONOMOUS, namedNode(policySubject(mandate.autonomous.id)));
+  root.put(WITH_APPROVAL, namedNode(policySubject(mandate.withApproval.id)));
   result.addQuads([...inGraph(local, MANDATE_GRAPH)]);
   result.addQuads([...policyDataset(mandate.autonomous)]);
   result.addQuads([...policyDataset(mandate.withApproval)]);

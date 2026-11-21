@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Local provisioning: keys, owner-signed mandate and representation statement, public
  * introduction cards, and the reviewed step that pins a peer's card.
@@ -17,7 +18,6 @@
  * Separate directories for the same OS user are a filesystem boundary only — not hardware
  * custody or OS-level isolation. No location is discovered: the operator names it each time.
  */
-import { parseRdfSync } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { randomUUID } from "crypto";
@@ -48,10 +48,10 @@ import {
 import { type OwnerMandate, signMandate } from "./mechanisms/mandate.js";
 import { type RepresentationStatement, signStatement, TYP } from "./mechanisms/statements.js";
 import type { PinnedKey, SourceAuthorityRule, TrustStoreData } from "./mechanisms/trust.js";
-import { IndexedStore } from "./model/indexed-store.js";
 import { trustFromRdf, trustTurtleGraph } from "./model/store/trust.js";
 import { AWP, PROV, SCHEMA } from "./profile/vocabulary.js";
 import { fsyncDir } from "./store/state.js";
+import { readLocalStoreRdf } from "./wire/store-quads.js";
 
 export interface IntroductionCard {
   readonly type: "AwpIntroductionCard";
@@ -483,11 +483,7 @@ export async function readTrustFile(dir: string): Promise<TrustStoreData> {
   const turtle = join(dir, "trust.ttl");
   if (!hasTrustFile(turtle)) return JSON.parse(readFileSync(join(dir, "trust.json"), "utf8"));
   try {
-    const parsed = parseRdfSync(readFileSync(turtle, "utf8"), {
-      format: "text/turtle",
-      maxBytes: 16 * 1024 * 1024,
-    });
-    return trustFromRdf(new IndexedStore([...parsed]));
+    return trustFromRdf(readLocalStoreRdf(readFileSync(turtle, "utf8"), "text/turtle"));
   } catch (cause) {
     throw new Error("trust store Turtle is malformed", { cause });
   }

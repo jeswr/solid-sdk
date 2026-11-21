@@ -317,23 +317,29 @@ ledger in memory and builds record graphs only when a consumer requests them.
 
 `FileStateStore` keeps the configured filename and writes version 2 N-Quads.
 The default graph declares the snapshot and its sections. Each section graph
-retains native entry order, with ODRL item policies in graphs named by policy IRI.
+retains native entry order, with ODRL item policies in named graphs.
 On the next successful save, a version 1 JSON snapshot becomes version 2.
 An older reader fails when it tries to parse the version 2 file as JSON.
 An empty, malformed, or incomplete RDF snapshot prevents startup.
 
 File saves compare each entry's JSON text with the previous save and reuse its
 N-Quads block when unchanged. Positions can change independently of payloads.
-The file and containing directory are synced around the atomic replacement.
-Snapshots allow 96 MiB of N-Quads, with the durable named-value limits used by
-the ledger applied to each entry. `AWP_STORE_RDF=1` enables save-time round-trip
-assertions in the memory store for tests.
+The save verifies the outgoing RDF with the snapshot reader and compares the
+decoded state before the atomic replacement. The file and containing directory
+are synced around the replacement. Snapshots use RDF JSON literals for open
+values that exceed the named-value projection limits or contain unpaired
+surrogates. Local snapshot read budgets scale with the file size so existing
+admitted data can migrate without applying the ledger's limits.
+`AWP_STORE_RDF=1` enables save-time round-trip assertions in the memory store
+for tests.
 
 Provisioned trust is written to `trust.ttl`. `readTrustFile` chooses Turtle when
 present and uses legacy `trust.json` otherwise. A malformed Turtle file stops
 startup even when JSON exists alongside it. `writeTrustFile` atomically updates
 the selected format in mode 0600. The daemon uses it under its peer-pin lease.
 The existing trust verifier checks the resulting keys and delegations.
+Turtle preserves identifiers and timestamp spellings admitted by the verifier,
+using literals when a named node or XSD date-time cannot carry the original.
 `saveAgent` and `saveTrust` return promises so callers can wait for durable writes.
 
 The mandate store projection reuses the loaded credential and preserves ODRL

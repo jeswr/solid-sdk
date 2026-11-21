@@ -1,12 +1,12 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 import type { Term } from "@jeswr/fetch-rdf";
 import { DataFactory, type Store } from "n3";
-import { assertJsonBounds } from "../../core/limits.js";
 import type { Agreement, Json } from "../../core/types.js";
 import { entities } from "../../generated/model.js";
 import { AWP } from "../../profile/vocabulary.js";
 import type { RuntimeState } from "../../store/state.js";
-import { decodeSnapshotEntry, readNQuads, writeNQuads } from "../../wire/store-quads.js";
+import { decodeSnapshotEntry, readLocalStoreRdf, writeNQuads } from "../../wire/store-quads.js";
 import { makeNode } from "../core-node.js";
 import { IndexedStore } from "../indexed-store.js";
 import { AgreementNode } from "../message-nodes.js";
@@ -16,13 +16,15 @@ import {
   exact,
   field,
   graphContents,
+  hasUnpairedSurrogate,
   inGraph,
   link,
+  readStoreText,
   StoreNode,
   storeModel,
+  storeText,
 } from "./common.js";
 import { readMemoryFact, readPolicy, writeMemoryFact, writePolicy } from "./memory.js";
-import { STORE_LIMITS } from "./record.js";
 
 const ROOT = "urn:awp:state";
 const SECTION = AWP + "section";
@@ -91,6 +93,10 @@ const optionalSections: ReadonlySet<Section> = new Set(["descriptionAddresses", 
 const typed = (section: Section): string | undefined =>
   typedSections[section as keyof typeof typedSections];
 const sectionIri = (section: Section) => ROOT + ":" + section;
+const entryId = (section: string, key: string) =>
+  hasUnpairedSurrogate(key)
+    ? scopedId(scopedId(section, "escaped-entry-key"), JSON.stringify(key))
+    : scopedId(section, key);
 const text = (term: string, optional = false) => field("text", term, optional);
 const iri = (term: string, optional = false) => field("iri", term, optional);
 const time = (term: string) => field("time", term);
@@ -357,11 +363,74 @@ type EntryMemo = {
   readonly policies: ReadonlyMap<string, string>;
 };
 
-const SNAPSHOT_MAX_BYTES = 96 * 1024 * 1024;
+function encodeEntry(section: Section, key: string, id: string, raw: Json) {
+  const local = new IndexedStore();
+  const policies = new IndexedStore();
+  const entry = new StoreNode(id, local, "StateEntry");
+  entry.types.add(AWP + (typed(section) ? "TypedStateEntry" : "StateEntry"));
+  entry.put(ENTRY_KEY, storeText(key));
+  writePayload(section, raw, id, local, policies);
+  return {
+    bytes: writeNQuads(inGraph(local, sectionIri(section)), Infinity),
+    policies: new Map(
+      policies
+        .getGraphs(null, null, null)
+        .map((graph) => [
+          graph.value,
+          writeNQuads(new IndexedStore(policies.getQuads(null, null, null, graph)), Infinity),
+        ]),
+    ),
+  };
+}
+
+type VerifiedEntry = {
+  readonly value: Json;
+  readonly subjects: ReadonlySet<string>;
+  readonly links: ReadonlySet<string>;
+};
+
+function verifyEntry(section: Section, key: string, row: EntryMemo): VerifiedEntry {
+  const dataset = readLocalStoreRdf(
+    row.bytes + [...row.policies.values()].join(""),
+    "application/n-quads",
+  );
+  const local = graphContents(dataset, sectionIri(section));
+  const value = readPayload(
+    section,
+    new StoreNode(row.id, local, "StateEntry"),
+    readPolicy(dataset),
+  );
+  const canonical = encodeEntry(section, key, row.id, value);
+  if (
+    canonical.bytes !== row.bytes ||
+    canonical.policies.size !== row.policies.size ||
+    [...canonical.policies].some(([id, bytes]) => row.policies.get(id) !== bytes)
+  )
+    throw new TypeError(`Noncanonical snapshot entry in ${section}`);
+  const subjects = new Set<string>();
+  const links = new Set<string>();
+  for (const { subject, object } of local) {
+    subjects.add(subject.value);
+    if (object.termType === "NamedNode") links.add(object.value);
+  }
+  return { value, subjects, links };
+}
+
+function sectionValue(section: Section, pairs: ReadonlyArray<readonly [string, Json]>): unknown {
+  if (singleSections.has(section)) {
+    if (pairs.length !== 1 || pairs[0]?.[0] !== "")
+      throw new TypeError("Invalid singleton section");
+    return pairs[0][1];
+  }
+  if (arraySections.has(section)) return pairs.map(([, value]) => value);
+  return Object.fromEntries(pairs);
+}
 
 /** Cache per entry, with positions separate from the payload. Cache only the most recent save. */
 export class SnapshotMemo {
   private entries = new Map<Section, Map<string, EntryMemo>>();
+  private output?: { bytes: string; layout: string };
+  private readonly verified = new WeakMap<EntryMemo, VerifiedEntry>();
   private readonly root = writeNQuads(header());
   private readonly present = new Map(
     sections.map((section) => [section, sectionHeader(section, true)]),
@@ -379,6 +448,7 @@ export class SnapshotMemo {
       throw new TypeError("Unsupported native snapshot section or version");
     const next = new Map<Section, Map<string, EntryMemo>>();
     const chunks = [this.root];
+    const layout = [this.root];
     const policies = new Map<string, string>();
     let encoded = 0;
     for (const section of sections) {
@@ -387,6 +457,7 @@ export class SnapshotMemo {
         const absent = this.absent.get(section);
         if (!absent) throw new TypeError(`Missing snapshot section ${section}`);
         chunks.push(absent);
+        layout.push(absent);
         continue;
       }
       if (
@@ -395,11 +466,18 @@ export class SnapshotMemo {
         Array.isArray(value) !== arraySections.has(section)
       )
         throw new TypeError(`Invalid snapshot section ${section}`);
-      chunks.push(this.present.get(section)!);
+      const heading = this.present.get(section)!;
+      chunks.push(heading);
+      layout.push(heading);
       const current = new Map<string, EntryMemo>();
       const prior = this.entries.get(section);
       next.set(section, current);
       const input = singleSections.has(section) ? [["", value] as const] : Object.entries(value);
+      if (
+        Array.isArray(value) &&
+        (input.length !== value.length || input.some(([key], index) => key !== String(index)))
+      )
+        throw new TypeError(`Sparse snapshot array in ${section}`);
       let position = 0;
       for (const [key, value] of input) {
         const native = JSON.stringify(value);
@@ -408,7 +486,7 @@ export class SnapshotMemo {
           continue;
         }
         const cached = prior?.get(key);
-        const id = cached?.id ?? scopedId(sectionIri(section), key);
+        const id = cached?.id ?? entryId(sectionIri(section), key);
         const location =
           cached?.position === position ? cached.location : positionBlock(section, id, position);
         let row: EntryMemo;
@@ -416,27 +494,12 @@ export class SnapshotMemo {
           row = cached.location === location ? cached : { ...cached, position, location };
         } else {
           const raw = decodeSnapshotEntry(native) as Json;
-          assertJsonBounds(raw, STORE_LIMITS);
-          const local = new IndexedStore();
-          const policyDataset = new IndexedStore();
-          const entry = new StoreNode(id, local, "StateEntry");
-          entry.types.add(AWP + (typed(section) ? "TypedStateEntry" : "StateEntry"));
-          entry.put(ENTRY_KEY, literal(key));
-          writePayload(section, raw, id, local, policyDataset);
           row = {
             native,
             id,
             position,
             location,
-            bytes: writeNQuads(inGraph(local, sectionIri(section))),
-            policies: new Map(
-              policyDataset
-                .getGraphs(null, null, null)
-                .map((graph) => [
-                  graph.value,
-                  writeNQuads(new IndexedStore(policyDataset.getQuads(null, null, null, graph))),
-                ]),
-            ),
+            ...encodeEntry(section, key, id, raw),
           };
           encoded++;
         }
@@ -448,21 +511,74 @@ export class SnapshotMemo {
         }
         current.set(key, row);
         chunks.push(row.location, row.bytes);
+        layout.push(row.location);
         position++;
       }
     }
     for (const id of [...policies.keys()].sort()) chunks.push(policies.get(id)!);
     const bytes = chunks.join("");
-    if (Buffer.byteLength(bytes) > SNAPSHOT_MAX_BYTES)
-      throw new RangeError("State snapshot exceeds its byte limit");
     this.entries = next;
+    this.output = { bytes, layout: layout.join("") };
     this.encodedEntries = encoded;
     return bytes;
   }
+
+  /** Decode the assembled output, reusing validation only for identical entry bytes. */
+  decode(bytes: string): RuntimeState {
+    if (bytes !== this.output?.bytes) return readStateSnapshot(bytes);
+    const layout = readLocalStoreRdf(this.output.layout, "application/n-quads");
+    readSnapshotHeader(layout);
+    let size = sections.length + 2;
+    const result: Partial<Record<keyof RuntimeState, unknown>> = { version: 1 };
+    for (const section of sections) {
+      const id = sectionIri(section);
+      const root = new StoreNode(id, graphContents(layout, id), "StateSection");
+      const linked = ordered(root, ENTRY);
+      const entries = this.entries.get(section);
+      if (
+        sectionPresent(root, section) !== (entries !== undefined) ||
+        linked.length !== (entries?.size ?? 0)
+      )
+        throw new TypeError(`Invalid snapshot layout in ${section}`);
+      size += 2 + linked.length * 2;
+      if (!entries) continue;
+
+      const subjects = new Map<string, VerifiedEntry>();
+      const pairs: Array<readonly [string, Json]> = [];
+      const checked: VerifiedEntry[] = [];
+      for (const [key, row] of entries) {
+        const link = linked[pairs.length]?.node;
+        if (link?.id !== row.id || link.term(POSITION)?.value !== String(row.position))
+          throw new TypeError(`Invalid snapshot entry order in ${section}`);
+        let entry = this.verified.get(row);
+        if (!entry) {
+          entry = verifyEntry(section, key, row);
+          this.verified.set(row, entry);
+        }
+        checked.push(entry);
+        pairs.push([key, entry.value]);
+        for (const subject of entry.subjects) {
+          if (subjects.has(subject) || subject === id) return readStateSnapshot(bytes);
+          subjects.set(subject, entry);
+        }
+      }
+      // A named link can acquire a meaning from another entry in the same
+      // section graph. Resolve such links against the complete snapshot.
+      for (const entry of checked) {
+        for (const link of entry.links) {
+          const owner = subjects.get(link);
+          if (link === id || (owner && owner !== entry)) return readStateSnapshot(bytes);
+        }
+      }
+      result[section] = sectionValue(section, pairs);
+    }
+    if (layout.size !== size) throw new TypeError("Unexpected quads in snapshot layout");
+    return result as unknown as RuntimeState;
+  }
 }
 
-export function stateDataset(state: RuntimeState): IndexedStore {
-  return readNQuads(new SnapshotMemo().write(state), SNAPSHOT_MAX_BYTES);
+export function stateDataset(state: RuntimeState): Store {
+  return readLocalStoreRdf(new SnapshotMemo().write(state), "application/n-quads");
 }
 
 export class UnsupportedSnapshotVersion extends Error {}
@@ -472,7 +588,7 @@ export function stateFromRdf(dataset: Store): RuntimeState {
   return decoded;
 }
 
-function decodeState(dataset: Store): RuntimeState {
+function readSnapshotHeader(dataset: Store): void {
   const root = new StoreNode(
     ROOT,
     new IndexedStore(dataset.getQuads(null, null, null, DataFactory.defaultGraph())),
@@ -493,52 +609,53 @@ function decodeState(dataset: Store): RuntimeState {
     sections.some((section) => !declared.has(sectionIri(section)))
   )
     throw new TypeError("Missing or unknown snapshot section header");
+}
 
+function sectionPresent(node: StoreNode, section: Section): boolean {
+  const present = node.term(PRESENT);
+  if (
+    present?.termType !== "Literal" ||
+    present.datatype.value !== XSD + "boolean" ||
+    !node.types.has(AWP + (typed(section) ? "TypedStateSection" : "StateSection"))
+  )
+    throw new TypeError("Invalid snapshot section header");
+  if (present.value === "true") return true;
+  if (present.value === "false" && optionalSections.has(section)) return false;
+  throw new TypeError("Invalid snapshot section presence");
+}
+
+function decodeState(dataset: Store): RuntimeState {
+  readSnapshotHeader(dataset);
   const policy = readPolicy(dataset);
   const result: Partial<Record<keyof RuntimeState, unknown>> = { version: 1 };
   for (const section of sections) {
     const id = sectionIri(section);
     const node = new StoreNode(id, graphContents(dataset, id), "StateSection");
-    const present = node.term(PRESENT);
-    if (
-      present?.termType !== "Literal" ||
-      present.datatype.value !== XSD + "boolean" ||
-      !node.types.has(AWP + (typed(section) ? "TypedStateSection" : "StateSection"))
-    )
-      throw new TypeError("Invalid snapshot section header");
+    const present = sectionPresent(node, section);
     const entries = ordered(node, ENTRY);
-    if (present.value === "false" && optionalSections.has(section) && entries.length === 0)
+    if (!present) {
+      if (entries.length !== 0)
+        throw new TypeError("Unexpected entries in absent snapshot section");
       continue;
-    if (present.value !== "true") throw new TypeError("Invalid snapshot section presence");
+    }
     const pairs = entries.map(({ node, position }) => {
-      const key = node.term(ENTRY_KEY);
-      if (
-        key?.termType !== "Literal" ||
-        key.datatype.value !== XSD + "string" ||
-        scopedId(id, key.value) !== node.id ||
-        (arraySections.has(section) && key.value !== String(position))
-      )
+      const term = node.term(ENTRY_KEY);
+      if (term === undefined) throw new TypeError("Missing snapshot entry key");
+      const key = readStoreText(term);
+      if (entryId(id, key) !== node.id || (arraySections.has(section) && key !== String(position)))
         throw new TypeError("Invalid snapshot entry key");
-      return [key.value, readPayload(section, node, policy)] as const;
+      return [key, readPayload(section, node, policy)] as const;
     });
     if (new Set(pairs.map(([key]) => key)).size !== pairs.length)
       throw new TypeError("Duplicate snapshot key");
-    if (singleSections.has(section)) {
-      if (pairs.length !== 1 || pairs[0]?.[0] !== "")
-        throw new TypeError("Invalid singleton section");
-      result[section] = pairs[0][1];
-    } else if (arraySections.has(section)) {
-      result[section] = pairs.map(([, value]) => value);
-    } else {
-      result[section] = Object.fromEntries(pairs);
-    }
+    result[section] = sectionValue(section, pairs);
   }
   return result as unknown as RuntimeState;
 }
 
 export function readStateSnapshot(text: string): RuntimeState {
   try {
-    return stateFromRdf(readNQuads(text, SNAPSHOT_MAX_BYTES));
+    return stateFromRdf(readLocalStoreRdf(text, "application/n-quads"));
   } catch (cause) {
     if (cause instanceof UnsupportedSnapshotVersion) throw cause;
     throw new Error("state snapshot is malformed", { cause });
@@ -547,5 +664,5 @@ export function readStateSnapshot(text: string): RuntimeState {
 
 /** The memory check decodes its own encoder output; the file reader also verifies the full graph. */
 export function decodeSnapshotForRoundTrip(text: string): RuntimeState {
-  return decodeState(readNQuads(text, SNAPSHOT_MAX_BYTES));
+  return decodeState(readLocalStoreRdf(text, "application/n-quads"));
 }

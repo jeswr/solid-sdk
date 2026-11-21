@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 import { DataFactory, type Store } from "n3";
 import type { Json } from "../../core/types.js";
 import type { AdmittedFact, ItemTerms } from "../../gates/common.js";
@@ -110,8 +111,7 @@ function readTerms(
   policy: PolicyReader,
   ancestors = new Set<string>(),
 ): ItemTerms {
-  if (ancestors.has(id) || ancestors.size >= 32)
-    throw new TypeError("Cyclic or overdeep inherited item terms");
+  if (ancestors.has(id)) throw new TypeError("Cyclic inherited item terms");
   const branch = new Set(ancestors).add(id);
   const node = new StoreNode<Omit<ItemTerms, "policy" | "inherited">>(id, local, "ItemTerms");
   const policyId = named(node, policyLink);

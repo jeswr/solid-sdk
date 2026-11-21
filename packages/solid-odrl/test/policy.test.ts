@@ -7,6 +7,7 @@
 
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, it } from "vitest";
+import { evaluate } from "../src/evaluate.js";
 import {
   OdrlSerializationError,
   parsePolicy,
@@ -21,6 +22,21 @@ import { ACL, ODRL } from "../src/vocab.js";
 const OWNER = "https://alice.example/profile/card#me";
 const AGENT = "https://bob.example/profile/card#me";
 const RESOURCE = "https://alice.example/notes/private.ttl";
+
+it.each([
+  ["read", `${ODRL}read`],
+  ["append", `${ACL}Append`],
+] as const)("refuses the full IRI spelling of %s before it can change a decision", (action, iri) => {
+  const policy: OdrlPolicy = {
+    id: "urn:example:policy",
+    permissions: [{ type: "permission", action }],
+    prohibitions: [{ type: "prohibition", action: iri }],
+  };
+  expect(evaluate(policy, { action }).decision).toBe("permit");
+  expect(() => policyToRdf(policy)).toThrow(/use the short action name/i);
+  expect(() => policyToJsonLd(policy)).toThrow(/use the short action name/i);
+  expect(() => policyToTurtle(policy)).toThrow(/use the short action name/i);
+});
 
 const RICH_POLICY: OdrlPolicy = {
   id: "https://alice.example/policies/p1",

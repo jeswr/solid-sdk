@@ -844,3 +844,47 @@ The full workspace gate was attempted in the disposable copy. It stopped at
 that copy. The agent-reference build was limited to compiling and copying
 generated modules in the worktree. The trace check ran in its own disposable
 copy, and the checked-in trace, outline and manifest files retain their bytes.
+
+## Phase 2 review fixes (40o)
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Baseline `776a9d253`. Node 24.22.3 and pnpm 10.4.1. The 24 initial
+regressions failed on the review baseline. Five additional regressions for
+JSON node count, string length, surrogate entry keys, deeply inherited
+terms and collisions between entry graphs also failed against the baseline encoder.
+
+| Finding | Fix and regression |
+| --- | --- |
+| Rules and duties attach to the wrong RDF node | The ODRL writer reports each lowered object's subject. The store resolves the reported IRI or skolemized blank-node identity before attaching position, field presence, approvals and limits. Tests cover the assigner, profile and duty-target collisions in both projection modes, plus the persisted precedence hold. [Policy codec](src/model/store/policy.ts) · [Policy regressions](test/policy-rdf.test.ts) · [File regressions](test/state-file-format.test.ts) |
+| A save can replace a readable file with bad data | The save decodes the outgoing layout and entry blocks, checks the canonical encoding and compares the result with the legacy JSON projection of the input. Validation is reused for byte-identical entries. A link or shared subject across entries triggers the full reader to verify the combined graph. Tests check that malformed RDF, an encoder exception, a different decoded state and a cross-entry link preserve the last readable file. [File save](src/store/state.ts) · [File regressions](test/state-file-format.test.ts) |
+| Legacy state can contain values outside the RDF projection | The local policy projection carries RDF-safe identifiers such as `urn:x:1` and preserves a non-IRI policy ID as a literal on a deterministically named node. Snapshot keys and open values retain lone surrogates in RDF JSON literals. Values larger or deeper than the named-value projection also use compact RDF JSON literals. Snapshot sections have no separate structural or fixed file-size cap because that would reject data already admitted by the runtime. The ledger's limits and gate admission still apply at their existing boundaries. [Store fields](src/model/store/common.ts) · [File regressions](test/state-file-format.test.ts) |
+| Standard action IRIs change the evaluation outcome on round trip | The public writers require short names for actions from the standard table. The store retains full native spelling in its local supplement. The regressions exercise `odrl:read` and `acl:Append` alongside a short-name permission. [ODRL regression](../solid-odrl/test/policy.test.ts) · [Policy regressions](test/policy-rdf.test.ts) |
+| The Turtle trust writer rejects native trust fields | Safe identifiers and XSD date-times keep their RDF forms. Accepted local identifiers and timestamp spellings use literals where needed. The tests load the original data through the trust verifier, write Turtle, validate the graph and reopen it through the verifier. [Trust codec](src/model/store/trust.ts) · [Trust regressions](test/trust-rdf.test.ts) |
+| Sparse section arrays can produce unreadable files | The encoder rejects a sparse section before writing. The regression checks both the direct encoder and the durable save and verifies the original bytes. [Snapshot codec](src/model/store/state.ts) · [File regressions](test/state-file-format.test.ts) |
+
+A populated v2 snapshot from the baseline encoder reopened with the same
+native state. The v1 migration tests also reopen the resulting v2 files.
+The durable SHACL shapes declare the trust and entry-key literal forms,
+and the package generator refreshed the input locks and admission report.
+
+| Check | Result |
+| --- | --- |
+| solid-odrl | 941 tests passed across 14 files. API report generation and verification passed. |
+| rdf-engine | All 224 tests passed with coverage enabled after routing the WASM-copy subprocess stdout through a file descriptor. The ordinary run passed 223 tests and hit `spawnSync EPERM` on that subprocess. |
+| Agent-reference Phase 2 and codec guards | 54 tests passed across eight files, including codegen drift. |
+| Agent-reference restart and regression suites | All 277 tests passed across 24 files on the final combined run, including Phase 2. The first run timed out in Pod mirror and overlapped regeneration during the drift check. |
+| Daemon and personal-agent restart suites | All 138 daemon tests and 44 personal-agent tests passed on the final codec. The personal-agent run included mortgage, custody, actions, CLI, health, industrial and the 220-message prepared-cache test. |
+| Typecheck and lint | Typecheck passed for agent-reference, solid-odrl, rdf-engine, agent-daemon and the seven direct consumers. Changed-file Biome, targeted package lint and root lint passed. Existing lint warnings remain. |
+| RDF pipeline and traces | Zero RDF pipeline failures and 216 existing allowances. The trace check matched the five live data paths in both default and RDF-verified memory modes, with 278 runs, zero disagreements and five blocked entries. |
+| Direct solid-odrl consumers | Agent authz verifier 141, agent mandate 858, pkg-memory 809, pod-access 1,183, access-manager 181 and issues 720 passed. The app suites used a disposable workspace with offline lockfile installs. |
+
+The initial full personal-agent run reported 513 passed, 84 failed and four
+skipped, with two unhandled loopback errors. The 77 failures from the 40n
+sandbox run recurred. The seven additional failures were test timeouts,
+all of which passed within the existing timeouts in the final targeted run
+after save verification began reusing validated entry blocks.
+
+The full workspace gate was blocked in the disposable copy by missing
+`@capacitor/core` for suite-native. Retrying with a full offline install
+stopped on the uncached, lockfile-pinned federation-registry tarball.

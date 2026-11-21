@@ -9,8 +9,8 @@
     "major": 0
   },
   "inputs": {
-    "ontology.ttl": "5afa870ffab58c198b0bc32c4fb7cbc1a8a2bd83cf846c7cd6190e771fb3c365",
-    "shapes.shacl.ttl": "b9e2516f63c78a26a45d5e4d41f6ee36962c5c69577208ec5c9dae121f8fc4b5",
+    "ontology.ttl": "aaa9a12d228d100924480a7c48112a46783f85a7556329e21c444a0eae58e64b",
+    "shapes.shacl.ttl": "ed8f5cf345ed4c9d294552d2909ecb0ce2fbbec4837296d448d06cf5030174da",
     "codegen.config.json": "da6c4b9830d1bd7b50e533ab96342daf9c25cdf75d6842225c8383033d684423"
   },
   "outputs": {

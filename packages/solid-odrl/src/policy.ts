@@ -281,6 +281,11 @@ function requirePolicyIri(value: string | undefined, field: string): string | un
 /** Resolve a standard name or retain an absolute profile action unchanged. */
 export function actionIri(action: OdrlAction): string {
   if (Object.hasOwn(ACTION_IRI, action)) return ACTION_IRI[action as keyof typeof ACTION_IRI];
+  if (Object.hasOwn(IRI_TO_ACTION, action)) {
+    throw new OdrlSerializationError(
+      `Use the short action name "${IRI_TO_ACTION[action]}" for a standard action.`,
+    );
+  }
   if (absoluteAction(action)) return action;
   throw new OdrlSerializationError(
     "An action must be a standard ODRL name or a clean absolute IRI",
@@ -292,11 +297,22 @@ function absoluteAction(value: string): value is `${string}:${string}` {
 }
 
 /** Write a duty node under `parent` via `predicate`. */
-function writeDuty(b: GraphBuilder, parent: NodeRef, predicate: string, duty: OdrlDuty): void {
+function writeDuty(
+  b: GraphBuilder,
+  parent: NodeRef,
+  predicate: string,
+  duty: OdrlDuty,
+  onRuleNode?: PolicyWriteOptions["onRuleNode"],
+): void {
   // duty.id is a SUBJECT id that may legitimately be a non-http absolute IRI
   // (urn:/uuid:) — it is made breakout-proof at the GraphBuilder chokepoint
   // (escapeIri), so it is NOT dropped here.
   const node = b.linkChild(parent, predicate, duty.id);
+  onRuleNode?.(
+    duty,
+    node.kind === "blank" ? node.value : escapeIri(node.value),
+    node.kind === "blank",
+  );
   b.addIri(node, ODRL_ACTION, actionIri(duty.action));
   const dutyTarget = requirePolicyIri(duty.target, "duty.target");
   if (dutyTarget !== undefined) {
@@ -312,23 +328,29 @@ function writeRule(
   b: GraphBuilder,
   policy: NodeRef,
   rule: OdrlRule,
-  inheritedAssigner?: string,
-  inheritedAssignee?: string,
+  type: "permission" | "prohibition",
+  parties: Pick<OdrlPolicy, "assigner" | "assignee">,
+  onRuleNode?: PolicyWriteOptions["onRuleNode"],
 ): void {
-  const predicate = rule.type === "prohibition" ? ODRL_PROHIBITION : ODRL_PERMISSION;
+  const predicate = type === "prohibition" ? ODRL_PROHIBITION : ODRL_PERMISSION;
   // rule.id is a SUBJECT id that may legitimately be a non-http absolute IRI
   // (urn:/uuid:) — made breakout-proof at the GraphBuilder chokepoint, not dropped.
   const node = b.linkChild(policy, predicate, rule.id);
+  onRuleNode?.(
+    rule,
+    node.kind === "blank" ? node.value : escapeIri(node.value),
+    node.kind === "blank",
+  );
   b.addIri(node, ODRL_ACTION, actionIri(rule.action));
   const target = requirePolicyIri(rule.target, "rule.target");
   if (target !== undefined) {
     b.addIri(node, ODRL_TARGET, target);
   }
-  const assignee = requirePolicyIri(rule.assignee ?? inheritedAssignee, "rule.assignee");
+  const assignee = requirePolicyIri(rule.assignee ?? parties.assignee, "rule.assignee");
   if (assignee !== undefined) {
     b.addIri(node, ODRL_ASSIGNEE, assignee);
   }
-  const assigner = requirePolicyIri(rule.assigner ?? inheritedAssigner, "rule.assigner");
+  const assigner = requirePolicyIri(rule.assigner ?? parties.assigner, "rule.assigner");
   if (assigner !== undefined) {
     b.addIri(node, ODRL_ASSIGNER, assigner);
   }
@@ -336,18 +358,23 @@ function writeRule(
     writeConstraint(b, node, c);
   }
   // Duties only condition a permission (ODRL `odrl:duty`).
-  if (rule.type === "permission") {
+  if (type === "permission") {
     for (const duty of rule.duties ?? []) {
-      writeDuty(b, node, ODRL_DUTY, duty);
+      writeDuty(b, node, ODRL_DUTY, duty, onRuleNode);
     }
   }
+}
+
+export interface PolicyWriteOptions {
+  /** Observe each input rule and duty's IRI or document-local blank node label. */
+  readonly onRuleNode?: (rule: OdrlRule | OdrlDuty, value: string, isBlank: boolean) => void;
 }
 
 /**
  * Lower a structured {@link OdrlPolicy} to RDF quads (an `odrl:Policy` graph)
  * through the typed wrapper write path.
  */
-export function policyToRdf(policy: OdrlPolicy): Quad[] {
+export function policyToRdf(policy: OdrlPolicy, options?: PolicyWriteOptions): Quad[] {
   // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   const b = new GraphBuilder();
   // policy.id is the SUBJECT and its own uid — it may legitimately be a non-http
@@ -378,13 +405,13 @@ export function policyToRdf(policy: OdrlPolicy): Quad[] {
     b.addIri(subject, legacyOdrlIri(ODRLD_DELEGATED_UNDER), policy.delegatedUnder);
   }
   for (const rule of policy.permissions ?? []) {
-    writeRule(b, subject, { ...rule, type: "permission" }, policy.assigner, policy.assignee);
+    writeRule(b, subject, rule, "permission", policy, options?.onRuleNode);
   }
   for (const rule of policy.prohibitions ?? []) {
-    writeRule(b, subject, { ...rule, type: "prohibition" }, policy.assigner, policy.assignee);
+    writeRule(b, subject, rule, "prohibition", policy, options?.onRuleNode);
   }
   for (const duty of policy.obligations ?? []) {
-    writeDuty(b, subject, ODRL_OBLIGATION, duty);
+    writeDuty(b, subject, ODRL_OBLIGATION, duty, options?.onRuleNode);
   }
   return b.quads();
 }

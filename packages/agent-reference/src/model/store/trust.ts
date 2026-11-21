@@ -1,15 +1,18 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 import { DataFactory, type Store } from "n3";
 import type { TrustStoreData } from "../../mechanisms/trust.js";
 import { AWP } from "../../profile/vocabulary.js";
 import { makeNode } from "../core-node.js";
 import { IndexedStore } from "../indexed-store.js";
+import { scopedId } from "../named-values.js";
 import {
   assertSameGraph,
   enumeration,
   exact,
   field,
   graphContents,
+  hasUnpairedSurrogate,
   inGraph,
   link,
   RDF_TYPE,
@@ -20,6 +23,8 @@ import {
 
 const string = (term: string, optional = false) => field("text", term, optional);
 const iri = (term: string, optional = false) => field("iri", term, optional);
+const identifier = (term: string, optional = false) => ({ ...iri(term, optional), lexical: true });
+const instant = (term: string) => ({ ...field("time", term, true), lexical: true });
 const list = (term: string, optional = false) => field("strings", term, optional);
 const keyFields = {
   kid: string("kid"),
@@ -35,35 +40,35 @@ storeModel("JsonWebKey", {
 });
 storeModel("PinnedKey", {
   role: enumeration("keyRole", "key-role", ["actor", "party", "issuer"]),
-  subject: iri("keySubject"),
-  party: iri("party", true),
+  subject: identifier("keySubject"),
+  party: identifier("party", true),
   endpoints: list("endpoint", true),
   note: string("note", true),
   ...keyFields,
 });
 storeModel("SourceAuthorityRule", {
-  id: iri("recordIdentifier"),
+  id: identifier("recordIdentifier"),
   version: string("version"),
-  source: iri("source"),
+  source: identifier("source"),
   claimTypes: list("claimType"),
   subjects: field("value", "subjects"),
-  validFrom: field("time", "effectiveFrom", true),
-  validUntil: field("time", "effectiveUntil", true),
+  validFrom: instant("effectiveFrom"),
+  validUntil: instant("effectiveUntil"),
   framework: field("value", "framework", true),
 });
 storeModel("TrustRecordPublicKey", keyFields, "PinnedRecordKey");
 storeModel("RecordKeyDelegation", {
-  identity: iri("identity"),
+  identity: identifier("identity"),
   key: link("node", "recordPublicKey", "TrustRecordPublicKey"),
   delegation: exact("delegation", "delegationDigest"),
 });
 storeModel("TrustController", {
-  identity: iri("identity"),
-  controller: iri(SEC + "controller"),
+  identity: identifier("identity"),
+  controller: identifier(SEC + "controller"),
 });
 storeModel("TrustStore", {
   version: field("integer", "storeVersion"),
-  owner: iri("owner"),
+  owner: identifier("owner"),
   keys: link("nodes", "pinnedKey", "PinnedKey"),
   sourceAuthority: link("nodes", "sourceAuthorityRule", "SourceAuthorityRule"),
   controllers: link("nodes", "trustController", "TrustController", true),
@@ -80,6 +85,7 @@ type StoredTrust = Omit<TrustStoreData, "sourceAuthority" | "controllers"> & {
 const anySubject = AWP + "anySubject";
 
 function graphName(owner: string): string {
+  if (hasUnpairedSurrogate(owner)) return scopedId("urn:awp:trust", JSON.stringify(owner));
   return "urn:awp:trust:" + encodeURIComponent(owner);
 }
 

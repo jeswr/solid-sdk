@@ -1,8 +1,11 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { parseRdfSync } from "@jeswr/fetch-rdf";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import ShaclValidator from "rdf-validate-shacl";
 import { afterEach, expect, it } from "vitest";
 import { digestOf } from "../src/core/canonical.js";
 import { generateSigningKey } from "../src/mechanisms/jws.js";
@@ -92,6 +95,40 @@ it("round-trips an ordered trust graph and passes it to the original trust verif
   expect(
     checked.recordKeyAllowed(input.recordKeys![0]!.key.kid, "test", "2026-05-01T00:00:00Z"),
   ).toBe(true);
+});
+
+it.each([
+  "minute precision",
+  "non-IRI key subject",
+  "lone surrogate",
+] as const)("round-trips TrustStore data with %s through Turtle", async (kind) => {
+  root = mkdtempSync(join(tmpdir(), "awp-trust-test-"));
+  const input = await trust();
+  const data: TrustStoreData = {
+    ...input,
+    keys: input.keys.map((key) =>
+      key.role === "actor"
+        ? {
+            ...key,
+            ...(kind === "non-IRI key subject" && { subject: "abc", party: "" }),
+            ...(kind === "lone surrogate" && { note: "peer\ud800" }),
+          }
+        : key,
+    ),
+    sourceAuthority: input.sourceAuthority.map((rule) =>
+      kind === "minute precision" ? { ...rule, validFrom: "2026-01-01T00:00Z" } : rule,
+    ),
+  };
+  const expected = (await TrustStore.load(data)).data;
+  await writeTrustFile(root, expected, "turtle");
+  const graph = parseRdfSync(readFileSync(join(root, "trust.ttl"), "utf8"));
+  const shapes = parseRdfSync(
+    readFileSync(new URL("../vocab/answerable-stores.shacl.ttl", import.meta.url), "utf8"),
+  );
+  expect((await new ShaclValidator(shapes as never).validate(graph as never)).conforms).toBe(true);
+  const decoded = await readTrustFile(root);
+  expect(decoded).toEqual(expected);
+  expect((await TrustStore.load(decoded)).data).toEqual(expected);
 });
 
 it("prefers Turtle and refuses malformed Turtle even when JSON is available", async () => {

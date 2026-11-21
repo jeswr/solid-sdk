@@ -32,6 +32,7 @@ import {
   renameSync,
   rmSync,
   unlinkSync,
+  writeFileSync,
   writeSync,
   // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 } from "fs";
@@ -39,7 +40,8 @@ import {
 import { hostname } from "os";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { dirname } from "path";
-import { digestOf } from "../core/canonical.js";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { isDeepStrictEqual } from "util";
 import type { ConversationState } from "../core/conversation.js";
 import type {
   ActionIntent,
@@ -57,6 +59,7 @@ import {
   SnapshotMemo,
 } from "../model/store/state.js";
 import type { TransmissionRecord } from "../runtime/transmission.js";
+import { decodeSnapshotEntry } from "../wire/store-quads.js";
 
 export interface SeenEntry {
   readonly digest: string;
@@ -327,6 +330,19 @@ export interface StateStore {
   close(): void;
 }
 
+function assertSameSnapshot(expected: RuntimeState, actual: RuntimeState): void {
+  if (!isDeepStrictEqual(actual, expected)) throw new Error("state changed during RDF round trip");
+  for (const section of Object.keys(expected) as (keyof RuntimeState)[]) {
+    const value = expected[section];
+    if (
+      value &&
+      typeof value === "object" &&
+      !isDeepStrictEqual(Object.keys(value), Object.keys(actual[section]!))
+    )
+      throw new Error(`state section key order changed in ${section}`);
+  }
+}
+
 export class MemoryStateStore implements StateStore {
   private snapshot = JSON.stringify(emptyState());
 
@@ -338,20 +354,7 @@ export class MemoryStateStore implements StateStore {
         save.call(this, state);
         const expected = this.load();
         const actual = decodeSnapshotForRoundTrip(memo.write(expected));
-        if (digestOf(actual) !== digestOf(expected))
-          throw new Error("State snapshot changed during RDF round trip");
-        for (const section of Object.keys(expected) as (keyof RuntimeState)[]) {
-          const left = expected[section];
-          const right = actual[section];
-          if (
-            left &&
-            right &&
-            typeof left === "object" &&
-            typeof right === "object" &&
-            JSON.stringify(Object.keys(left)) !== JSON.stringify(Object.keys(right))
-          )
-            throw new Error(`State section key order changed in ${section}`);
-        }
+        assertSameSnapshot(expected, actual);
       };
     }
   }
@@ -434,7 +437,7 @@ export function fsyncDir(dir: string): void {
 export function writeFileDurable(path: string, content: string, flags: string): void {
   const fd = openSync(path, flags, 0o600);
   try {
-    writeSync(fd, content);
+    writeFileSync(fd, content, "utf8");
     fsyncSync(fd);
   } finally {
     closeSync(fd);
@@ -554,11 +557,23 @@ export class FileStateStore implements StateStore {
   save(state: RuntimeState): void {
     if (!this.token) throw new Error("state store is closed");
     const tmp = `${this.path}.tmp-${this.token}`;
-    this.memo ??= new SnapshotMemo();
-    const bytes = this.memo.write(state);
-    writeFileDurable(tmp, bytes, "w");
-    renameSync(tmp, this.path);
-    fsyncDir(dirname(this.path));
+    let bytes: string;
+    try {
+      this.memo ??= new SnapshotMemo();
+      bytes = this.memo.write(state);
+      const expected = normaliseState(decodeSnapshotEntry(JSON.stringify(state)));
+      assertSameSnapshot(expected, this.memo.decode(bytes));
+    } catch (cause) {
+      const detail = cause instanceof Error ? `: ${cause.message}` : "";
+      throw new Error(`cannot save state snapshot${detail}`, { cause });
+    }
+    try {
+      writeFileDurable(tmp, bytes, "w");
+      renameSync(tmp, this.path);
+      fsyncDir(dirname(this.path));
+    } finally {
+      rmSync(tmp, { force: true });
+    }
   }
 
   close(): void {

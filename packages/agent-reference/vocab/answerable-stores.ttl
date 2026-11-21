@@ -1,4 +1,5 @@
 # AUTHORED-BY Codex GPT-6.2 Sol
+# AUTHORED-BY Codex GPT-6
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix sec: <https://w3id.org/security#> .
 @prefix awp: <https://w3id.org/jeswr/awp#> .
@@ -604,7 +605,7 @@ awp:stateEntry a rdf:Property; rdfs:label "state entry";
 
 awp:entryKey a rdf:Property; rdfs:label "entry key";
     rdfs:comment "Records the entry key in a durable store projection.";
-    rdfs:domain rdfs:Resource; rdfs:range xsd:string .
+    rdfs:domain rdfs:Resource; rdfs:range rdfs:Literal .
 
 awp:entryValue a rdf:Property; rdfs:label "entry value";
     rdfs:comment "Records the entry value in a durable store projection.";
@@ -620,7 +621,7 @@ awp:admittedPurpose a rdf:Property; rdfs:label "admitted purpose";
 
 awp:effectiveUntil a rdf:Property; rdfs:label "effective until";
     rdfs:comment "Records the effective until in a durable store projection.";
-    rdfs:domain rdfs:Resource; rdfs:range xsd:dateTime .
+    rdfs:domain rdfs:Resource; rdfs:range rdfs:Literal .
 
 awp:stateMandateVersion a rdf:Property; rdfs:label "state mandate version";
     rdfs:comment "Records the state mandate version in a durable store projection.";
@@ -672,7 +673,7 @@ awp:endpoint a rdf:Property; rdfs:label "endpoint";
 
 awp:note a rdf:Property; rdfs:label "note";
     rdfs:comment "Records the note in a durable store projection.";
-    rdfs:domain rdfs:Resource; rdfs:range xsd:string .
+    rdfs:domain rdfs:Resource; rdfs:range rdfs:Literal .
 
 awp:alg a rdf:Property; rdfs:label "alg";
     rdfs:comment "Records the alg in a durable store projection.";
@@ -709,7 +710,7 @@ awp:subjects a rdf:Property; rdfs:label "subjects";
 
 awp:effectiveFrom a rdf:Property; rdfs:label "effective from";
     rdfs:comment "Records the effective from in a durable store projection.";
-    rdfs:domain awp:SourceAuthorityRule; rdfs:range xsd:dateTime .
+    rdfs:domain awp:SourceAuthorityRule; rdfs:range rdfs:Literal .
 
 awp:framework a rdf:Property; rdfs:label "framework";
     rdfs:comment "Records the framework in a durable store projection.";
@@ -725,7 +726,7 @@ awp:recordPublicKey a rdf:Property; rdfs:label "record public key";
 
 awp:delegation a rdf:Property; rdfs:label "delegation";
     rdfs:comment "Records the delegation in a durable store projection.";
-    rdfs:domain awp:RecordKeyDelegation; rdfs:range xsd:string .
+    rdfs:domain awp:RecordKeyDelegation; rdfs:range rdfs:Literal .
 
 awp:delegationDigest a rdf:Property; rdfs:label "delegation digest";
     rdfs:comment "Records the delegation digest in a durable store projection.";

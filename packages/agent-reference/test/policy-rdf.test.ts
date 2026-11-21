@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
-import { ACTION_IRI, ODRL, policyFromRdf } from "@jeswr/solid-odrl";
-import { expect, it } from "vitest";
+import { ACTION_IRI, evaluate, ODRL, policyFromRdf } from "@jeswr/solid-odrl";
+import { describe, expect, it } from "vitest";
 import { digestOf } from "../src/core/canonical.js";
 import { DEFAULT_LIMITS } from "../src/core/limits.js";
 import { loadCase } from "../src/engine/load.js";
@@ -12,6 +12,7 @@ import { readPolicy, writePolicy } from "../src/model/store/memory.js";
 import {
   mandateDataset,
   mandateFromStore,
+  type NativePolicy,
   policyDataset,
   policyFromStore,
 } from "../src/model/store/policy.js";
@@ -160,4 +161,73 @@ it("projects exact DID parties and targets while restoring native inheritance", 
     input.assigner,
   ]);
   expect(policyFromStore(graph, input.id)).toEqual(input);
+});
+
+describe.each(["memory", "mandate"] as const)("%s policy projection", (mode) => {
+  function roundTrip(input: NativePolicy) {
+    const dataset = new IndexedStore();
+    if (mode === "memory") {
+      const id = writePolicy(dataset)(input);
+      return readPolicy(readNQuads(writeNQuads(dataset)))(id);
+    }
+    return policyFromStore(readNQuads(writeNQuads(policyDataset(input))), input.id);
+  }
+
+  it.each([
+    "assigner",
+    "profile",
+  ] as const)("binds rules by IRI when a %s names a later rule", (field) => {
+    const input: NativePolicy = {
+      id: "urn:example:policy",
+      [field]: "urn:rule:records:second",
+      permissions: [
+        {
+          id: "urn:rule:records:first",
+          type: "permission",
+          action: "read",
+          approvals: { count: 1, roles: ["owner"], distinctFromRequester: true },
+        },
+        {
+          id: "urn:rule:records:second",
+          type: "permission",
+          action: "pay",
+          limit: { perAction: 3, perPeriod: 7, period: "calendar-month", currency: "GBP" },
+          constraints: [],
+        },
+        { type: "permission", action: "use" },
+      ],
+    };
+    expect(roundTrip(input)).toEqual(input);
+  });
+
+  it("binds duties by IRI when a target names a later duty", () => {
+    const input = {
+      id: "urn:example:policy",
+      permissions: [
+        {
+          type: "permission",
+          action: "read",
+          target: "urn:duty:second",
+          duties: [
+            { action: "attribute", target: "urn:example:creator" },
+            { action: "delete", id: "urn:duty:second", constraints: [] },
+          ],
+        },
+      ],
+    } as const;
+    expect(roundTrip(input)).toEqual(input);
+  });
+
+  it("retains the native spelling and evaluation of a standard ACL action IRI", () => {
+    const input = {
+      id: "urn:example:policy",
+      permissions: [{ type: "permission", action: "append" }],
+      prohibitions: [{ type: "prohibition", action: ACTION_IRI.append as `${string}:${string}` }],
+    } as const;
+    const request = { action: "append" } as const;
+    expect(evaluate(input, request).decision).toBe("permit");
+    const decoded = roundTrip(input);
+    expect(evaluate(decoded as Parameters<typeof evaluate>[0], request).decision).toBe("permit");
+    expect(decoded).toEqual(input);
+  });
 });

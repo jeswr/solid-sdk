@@ -76,6 +76,7 @@ export {
   IRI_TO_OPERATOR,
   OdrlSerializationError,
   type PolicyReadOptions,
+  type PolicyWriteOptions,
   parsePolicy,
   policyFromRdf,
   policyToJsonLd,

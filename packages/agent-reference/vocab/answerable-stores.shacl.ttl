@@ -1,4 +1,5 @@
 # AUTHORED-BY Codex GPT-6.2 Sol
+# AUTHORED-BY Codex GPT-6
 @prefix sec: <https://w3id.org/security#> .
 @prefix awp: <https://w3id.org/jeswr/awp#> .
 @prefix prov: <http://www.w3.org/ns/prov#> .
@@ -209,7 +210,7 @@ awp:StateSectionShape a sh:NodeShape;
 awp:StateEntryShape a sh:NodeShape;
     sh:targetClass awp:StateEntry;
     sh:name "StateEntry";
-    sh:property [ sh:path awp:entryKey; sh:name "entryKey"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:entryKey; sh:name "entryKey"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
     sh:property [ sh:path schema:position; sh:name "position"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:integer ];
     sh:property [ sh:path awp:entryValue; sh:name "entryValue"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:nodeKind sh:Literal ] ) ] .
 
@@ -222,7 +223,7 @@ awp:TypedStateSectionShape a sh:NodeShape;
 awp:TypedStateEntryShape a sh:NodeShape;
     sh:targetClass awp:TypedStateEntry;
     sh:name "TypedStateEntry";
-    sh:property [ sh:path awp:entryKey; sh:name "entryKey"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:entryKey; sh:name "entryKey"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
     sh:property [ sh:path schema:position; sh:name "position"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:integer ];
     sh:property [ sh:path awp:entryValue; sh:name "entryValue"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ] .
 
@@ -253,7 +254,7 @@ awp:TrustStoreShape a sh:NodeShape;
     sh:targetClass awp:TrustStore;
     sh:name "TrustStore";
     sh:property [ sh:path awp:storeVersion; sh:name "storeVersion"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:integer ];
-    sh:property [ sh:path awp:owner; sh:name "owner"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:owner; sh:name "owner"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
     sh:property [ sh:path awp:pinnedKey; sh:name "pinnedKey"; sh:node awp:PinnedKeyShape ];
     sh:property [ sh:path awp:sourceAuthorityRule; sh:name "sourceAuthorityRule"; sh:node awp:StoreSourceAuthorityRuleShape ];
     sh:property [ sh:path awp:trustController; sh:name "trustController"; sh:node awp:TrustControllerShape ];
@@ -263,10 +264,10 @@ awp:PinnedKeyShape a sh:NodeShape;
     sh:targetClass awp:PinnedKey;
     sh:name "PinnedKey";
     sh:property [ sh:path awp:keyRole; sh:name "keyRole"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
-    sh:property [ sh:path awp:keySubject; sh:name "keySubject"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
-    sh:property [ sh:path awp:party; sh:name "party"; sh:maxCount 1; sh:nodeKind sh:IRI ];
-    sh:property [ sh:path awp:endpoint; sh:name "endpoint"; sh:maxCount 1; sh:node awp:StoreOrderedValuesShape ];
-    sh:property [ sh:path awp:note; sh:name "note"; sh:maxCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:keySubject; sh:name "keySubject"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:party; sh:name "party"; sh:maxCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:endpoint; sh:name "endpoint"; sh:maxCount 1; sh:or ( [ sh:node awp:StoreOrderedValuesShape ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:note; sh:name "note"; sh:maxCount 1; sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
     sh:property [ sh:path awp:kid; sh:name "kid"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
     sh:property [ sh:path awp:alg; sh:name "alg"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
     sh:property [ sh:path awp:publicKey; sh:name "publicKey"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreJsonWebKeyShape ] .
@@ -282,13 +283,13 @@ awp:StoreJsonWebKeyShape a sh:NodeShape;
 awp:StoreSourceAuthorityRuleShape a sh:NodeShape;
     sh:targetClass awp:SourceAuthorityRule;
     sh:name "SourceAuthorityRule";
-    sh:property [ sh:path awp:recordIdentifier; sh:name "id"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
-    sh:property [ sh:path awp:version; sh:name "version"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
-    sh:property [ sh:path awp:source; sh:name "source"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
-    sh:property [ sh:path awp:claimType; sh:name "claimType"; sh:maxCount 1; sh:minCount 1; sh:node awp:StoreOrderedValuesShape ];
-    sh:property [ sh:path awp:subjects; sh:name "subjects"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
-    sh:property [ sh:path awp:effectiveFrom; sh:name "effectiveFrom"; sh:maxCount 1; sh:datatype xsd:dateTime ];
-    sh:property [ sh:path awp:effectiveUntil; sh:name "effectiveUntil"; sh:maxCount 1; sh:datatype xsd:dateTime ];
+    sh:property [ sh:path awp:recordIdentifier; sh:name "id"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:version; sh:name "version"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:source; sh:name "source"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:claimType; sh:name "claimType"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:node awp:StoreOrderedValuesShape ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:subjects; sh:name "subjects"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path awp:effectiveFrom; sh:name "effectiveFrom"; sh:maxCount 1; sh:or ( [ sh:datatype xsd:dateTime ] [ sh:datatype xsd:string ] ) ];
+    sh:property [ sh:path awp:effectiveUntil; sh:name "effectiveUntil"; sh:maxCount 1; sh:or ( [ sh:datatype xsd:dateTime ] [ sh:datatype xsd:string ] ) ];
     sh:property [ sh:path awp:framework; sh:name "framework"; sh:maxCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:nodeKind sh:Literal ] ) ] .
 
 awp:PinnedRecordKeyShape a sh:NodeShape;
@@ -301,16 +302,16 @@ awp:PinnedRecordKeyShape a sh:NodeShape;
 awp:RecordKeyDelegationShape a sh:NodeShape;
     sh:targetClass awp:RecordKeyDelegation;
     sh:name "RecordKeyDelegation";
-    sh:property [ sh:path awp:identity; sh:name "identity"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:identity; sh:name "identity"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
     sh:property [ sh:path awp:recordPublicKey; sh:name "recordPublicKey"; sh:maxCount 1; sh:minCount 1; sh:node awp:PinnedRecordKeyShape ];
-    sh:property [ sh:path awp:delegation; sh:name "delegation"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ];
+    sh:property [ sh:path awp:delegation; sh:name "delegation"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
     sh:property [ sh:path awp:delegationDigest; sh:name "delegationDigest"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:string ] .
 
 awp:TrustControllerShape a sh:NodeShape;
     sh:targetClass awp:TrustController;
     sh:name "TrustController";
-    sh:property [ sh:path awp:identity; sh:name "identity"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
-    sh:property [ sh:path sec:controller; sh:name "controller"; sh:maxCount 1; sh:minCount 1; sh:nodeKind sh:IRI ];
+    sh:property [ sh:path awp:identity; sh:name "identity"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
+    sh:property [ sh:path sec:controller; sh:name "controller"; sh:maxCount 1; sh:minCount 1; sh:or ( [ sh:nodeKind sh:IRI ] [ sh:datatype xsd:string ] [ sh:datatype rdf:JSON ] ) ];
     sh:property [ sh:path schema:position; sh:name "position"; sh:maxCount 1; sh:minCount 1; sh:datatype xsd:integer ] .
 
 awp:TrustHoldShape a sh:NodeShape;

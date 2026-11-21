@@ -362,13 +362,18 @@ export interface PolicyReadOptions {
 export function policyToJsonLd(policy: OdrlPolicy): Record<string, unknown>;
 
 // @public
-export function policyToRdf(policy: OdrlPolicy): Quad[];
+export function policyToRdf(policy: OdrlPolicy, options?: PolicyWriteOptions): Quad[];
 
 // @public
 export function policyToTurtle(policy: OdrlPolicy, format?: string): Promise<string>;
 
 // @public
 export type PolicyType = "Set" | "Offer" | "Agreement";
+
+// @public (undocumented)
+export interface PolicyWriteOptions {
+    readonly onRuleNode?: (rule: OdrlRule | OdrlDuty, value: string, isBlank: boolean) => void;
+}
 
 // @public
 export const PROV: "http://www.w3.org/ns/prov#";
