@@ -28,6 +28,7 @@ import { formatDuration } from "../lib/library";
 import { albumHref, artistHref } from "../lib/navigation";
 import { useMusic } from "../state/music-context";
 import { usePlayer } from "../state/player-context";
+import { AddMusicFiles } from "./add-files";
 import { PlayTrack } from "./player";
 import { AddToPlaylist } from "./playlist-dialogs";
 
@@ -206,12 +207,8 @@ export function TrackList({
     return (
       <EmptyState
         title="No songs here yet"
-        body="Explore your library or import the Spotify sample from Tracks."
-        primaryAction={
-          <Button asChild>
-            <Link href="/music/tracks">Browse tracks</Link>
-          </Button>
-        }
+        body="Add your music files to fill this collection."
+        primaryAction={<AddMusicFiles />}
       />
     );
   return (
