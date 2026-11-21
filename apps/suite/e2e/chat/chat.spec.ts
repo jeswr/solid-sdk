@@ -4,6 +4,7 @@ import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
 
 const BOB = "https://bob.example.org/profile/card#me";
 test.use({ locale: "en" });
@@ -26,6 +27,9 @@ test.beforeEach(async ({ page }) => {
     });
   });
   await page.unroute("**/__chat-test-reset");
+  await seedDemoSession(page);
+  await page.goto("/chat");
+  await expect(page.getByRole("heading", { name: "Chat", level: 1, exact: true })).toBeVisible();
   // Observe clipboard writes without requiring a platform clipboard in CI.
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
@@ -56,12 +60,13 @@ async function capture(page: Page, info: TestInfo, view: string) {
 }
 async function newConversation(page: Page) {
   if ((page.viewportSize()?.width ?? 1280) < 1024)
-    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+    await page.getByRole("button", { name: "Toggle sidebar", exact: true }).click();
   const navigation =
     (page.viewportSize()?.width ?? 1280) < 1024
-      ? page.getByRole("dialog", { name: "Navigation", exact: true })
+      ? page.getByRole("dialog", { name: "Chat navigation", exact: true })
       : page.getByRole("navigation", { name: "Conversations", exact: true });
   await navigation.getByRole("link", { name: "New room", exact: true }).click();
+  if ((page.viewportSize()?.width ?? 1280) < 1024) await expect(navigation).toBeHidden();
   await expect(page.getByRole("dialog", { name: "New conversation", exact: true })).toBeVisible();
 }
 async function createRoom(page: Page, name = "Book club") {
@@ -69,7 +74,7 @@ async function createRoom(page: Page, name = "Book club") {
   await page.getByRole("textbox", { name: "Room name", exact: true }).fill(name);
   await page.getByRole("button", { name: "Create room", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "New conversation", exact: true })).toBeHidden();
-  await expect(page.getByRole("heading", { name, level: 1, exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name, level: 2, exact: true })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeEnabled();
 }
 async function send(page: Page, text: string) {
@@ -102,24 +107,32 @@ test("searches messages and follows a highlighted result to the focused room mes
   await send(page, "Garden plans for Saturday");
   await send(page, "Bring a picnic blanket");
   if ((page.viewportSize()?.width ?? 1280) < 1024)
-    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+    await page.getByRole("button", { name: "Toggle sidebar", exact: true }).click();
   const navigation =
     (page.viewportSize()?.width ?? 1280) < 1024
-      ? page.getByRole("dialog", { name: "Navigation", exact: true })
+      ? page.getByRole("dialog", { name: "Chat navigation", exact: true })
       : page.getByRole("navigation", { name: "Conversations", exact: true });
   const search = navigation.getByRole("searchbox", { name: "Search messages", exact: true });
   await search.fill("garden");
   await search.press("Enter");
   await expect(page).toHaveURL(/\/chat\/search\?q=garden$/);
-  await expect(page.getByRole("heading", { name: "Search", level: 1, exact: true })).toBeVisible();
+  const pageSearch = page.getByRole("searchbox", {
+    name: "Search messages in joined rooms",
+    exact: true,
+  });
+  if ((page.viewportSize()?.width ?? 1280) < 1024) {
+    await expect(page.getByRole("dialog", { name: "Chat navigation", exact: true })).toBeHidden();
+    // The closing drawer returns focus to its toggle, which races the search page's own
+    // autofocus; settle focus on the page field so the toggle's tooltip can't linger.
+    await pageSearch.focus();
+  }
+  await expect(page.getByRole("heading", { name: "Search", level: 2, exact: true })).toBeVisible();
   const results = page.getByRole("list", { name: "Search results", exact: true });
   await expect(results.getByRole("link")).toHaveCount(1);
   await expect(results.locator("mark")).toHaveText("Garden");
   await expect(page.getByRole("main").getByRole("status")).toContainText("1 message in 1 room");
   await expect(page.getByRole("main").getByRole("status")).not.toContainText("days");
-  await expect(
-    page.getByRole("searchbox", { name: "Search messages in joined rooms", exact: true }),
-  ).toHaveValue("garden");
+  await expect(pageSearch).toHaveValue("garden");
   await accessible(page);
   await capture(page, info, "search");
   await results.getByRole("link").click();
@@ -132,7 +145,7 @@ test("searches messages and follows a highlighted result to the focused room mes
   badHint.searchParams.set("message", "bad%message");
   await page.goto(badHint.href);
   await expect(
-    page.getByRole("heading", { name: "Search room", level: 1, exact: true }),
+    page.getByRole("heading", { name: "Search room", level: 2, exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeVisible();
 });
@@ -227,6 +240,15 @@ test("create, append, edit, tombstone, turn into task, live sync and keyboard na
   await expect(page.getByRole("heading", { name: "Members", exact: true })).toBeVisible();
   await capture(page, info, "details");
   await page.getByRole("button", { name: "Close details", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Conversation details", exact: true }),
+  ).toBeHidden();
+  await log.focus();
+  await page.keyboard.press("]");
+  await expect(
+    page.getByRole("heading", { name: "Conversation details", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close details", exact: true }).click();
   await page.reload();
   await expect(page.getByRole("article").filter({ hasText: "First edited" })).toBeVisible();
 });
@@ -243,7 +265,7 @@ test("creates and reopens a DM and copies an invitation", async ({ page }) => {
   await page.getByRole("button", { name: "Open conversation", exact: true }).click();
   await expect(page).toHaveURL(link as string);
   const dmUrl = page.url();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+  await expect(page.locator(".chat-room-heading").getByRole("heading", { level: 2 })).toHaveText(
     "bob.example.org/profile/card#me",
   );
   await newConversation(page);
@@ -278,4 +300,50 @@ test("keeps offline sends queued and supports multiline text and the edit shortc
   await composer.press("Shift+Enter");
   await composer.press("L");
   await expect(composer).toHaveValue("Line one\nL");
+});
+
+test("slash reaches search with a collapsed desktop sidebar or a closed narrow drawer", async ({
+  page,
+}) => {
+  const main = page.getByRole("main");
+  if ((page.viewportSize()?.width ?? 1280) >= 1024) {
+    await main.focus();
+    await page.keyboard.press("[");
+    await expect(page.locator(".suite-sidebar-slot")).toBeHidden();
+  }
+  await main.focus();
+  await page.keyboard.press("/");
+  await expect(page).toHaveURL(/\/chat\/search$/);
+  const search = page.getByRole("searchbox", {
+    name: "Search messages in joined rooms",
+    exact: true,
+  });
+  await expect(search).toBeVisible();
+  await main.focus();
+  await page.keyboard.press("/");
+  await expect(search).toBeFocused();
+});
+
+test("closes the narrow drawer after selecting a room and returns details focus to its only toggle", async ({
+  page,
+}) => {
+  await createRoom(page, "Drawer room");
+  if ((page.viewportSize()?.width ?? 1280) < 1024) {
+    // Visiting the search page leaves the existing room available in navigation.
+    await page.goto("/chat/search");
+    await page.getByRole("button", { name: "Toggle sidebar", exact: true }).click();
+    const drawer = page.getByRole("dialog", { name: "Chat navigation", exact: true });
+    await drawer.getByRole("link", { name: "Drawer room", exact: true }).click();
+    await expect(drawer).toBeHidden();
+    await expect(page.locator(".chat-room-heading")).toContainText("Drawer room");
+  }
+  await expect(page.getByRole("button", { name: "Show details", exact: true })).toHaveCount(0);
+  const toggle = page.getByRole("button", { name: "Toggle details pane", exact: true });
+  await expect(toggle).toHaveCount(1);
+  await toggle.click();
+  await expect(
+    page.getByRole("heading", { name: "Conversation details", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close details", exact: true }).click();
+  await expect(toggle).toBeFocused();
 });

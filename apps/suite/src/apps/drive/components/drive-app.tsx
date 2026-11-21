@@ -9,11 +9,11 @@
  * toasts and Drive-scope keyboard shortcuts (04-drive §8).
  */
 
-import { Button, IconButton, Toaster, toast } from "@jeswr/suite-ui";
+import { Button, IconButton, toast } from "@jeswr/suite-ui";
 import { Info } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
-import { AppFrame, AppHeading, AppSessionGuard } from "@/shell/app-frame";
+import { AppFrame, AppHeading } from "@/shell/app-frame";
+import { AppSession } from "@/shell/app-session";
 import { measureUsage, purgeExpired, trashFolderOf } from "../lib/operations/operations";
 import { DriveFocusBoundary } from "../state/app-focus";
 import { DriveProvider, DriveRootDiscoveryError, useDrive } from "../state/drive-context";
@@ -169,56 +169,21 @@ function DriveChrome({ children }: { children: ReactNode }) {
   );
 }
 
-function SessionGate({ children }: { children: ReactNode }) {
-  const state = usePodSessionState();
-  if (state.status === "signed-out") {
-    return (
-      <div className="drv-boot" role="status">
-        <AppHeading>Sign in to open your Drive</AppHeading>
-        <p>Sign-in is not available in this preview build.</p>
-      </div>
-    );
-  }
-  if (state.status === "loading") {
-    return (
-      <div className="drv-boot" role="status">
-        Opening your Drive…
-      </div>
-    );
-  }
-  if (state.status === "error") {
-    return (
-      <div className="drv-boot" role="alert">
-        <AppHeading>Can't open your Drive</AppHeading>
-        <p>
-          {state.mode === "extension"
-            ? "This browser couldn't open your pod through the Solid extension."
-            : "This browser couldn't open the demo pod's storage."}
-        </p>
-      </div>
-    );
-  }
-  return (
-    <DriveProvider
-      key={JSON.stringify([state.session.mode, state.session.webId, state.session.storageUrl])}
-      session={state.session}
-    >
-      <DriveUiProvider>
-        <DriveChrome>{children}</DriveChrome>
-      </DriveUiProvider>
-    </DriveProvider>
-  );
-}
-
 export function DriveApp({ children }: { children: ReactNode }) {
   return (
-    <AppSessionGuard>
-      <PodSessionProvider>
-        <DriveFocusBoundary>
-          <SessionGate>{children}</SessionGate>
-          <Toaster position="bottom-center" />
-        </DriveFocusBoundary>
-      </PodSessionProvider>
-    </AppSessionGuard>
+    <AppSession
+      name="Drive"
+      className="drv-boot"
+      boundary={DriveFocusBoundary}
+      signedOut={<p>Sign-in is not available in this preview build.</p>}
+    >
+      {(session) => (
+        <DriveProvider session={session}>
+          <DriveUiProvider>
+            <DriveChrome>{children}</DriveChrome>
+          </DriveUiProvider>
+        </DriveProvider>
+      )}
+    </AppSession>
   );
 }

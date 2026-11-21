@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useState } from "react";
+import { isShortcutLayerTarget } from "../lib/shortcuts";
 import {
   CommandPalette,
   type PaletteCreateAction,
@@ -59,6 +60,7 @@ export function GlobalShortcuts({
   };
   useShortcut({
     id: "global.search",
+    when: () => !isShortcutLayerTarget(document.activeElement),
     keys: "/",
     label: "Focus global search",
     group: "Global",
