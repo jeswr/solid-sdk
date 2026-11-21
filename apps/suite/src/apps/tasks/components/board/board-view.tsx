@@ -32,6 +32,7 @@ import { useTasks } from "../../state/tasks-context";
 import { AddTaskRow } from "../add-task-row";
 import { AssigneeAvatar } from "../assignee-avatar";
 import { useTaskDrag } from "../dnd/use-task-drag";
+import { useIssueAccess } from "../issues/use-issue-access";
 import { LabelChip } from "../label-chip";
 import { LabelFilterBar } from "../label-filter-bar";
 import { MoveMenuItems } from "../move-menu";
@@ -55,7 +56,9 @@ function BoardCard({
   const now = useNow();
   const pathname = usePathname();
   const params = useSearchParams();
-  const pending = !tasks.tasks[task.projectUrl]?.items.find((item) => item.url === task.url)?.etag;
+  const { readOnly } = useIssueAccess(task);
+  const pending =
+    readOnly || !tasks.tasks[task.projectUrl]?.items.find((item) => item.url === task.url)?.etag;
   const completing = useCompleting(task);
   const drag = useTaskDrag(
     task,

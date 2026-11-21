@@ -35,6 +35,7 @@ export default defineConfig({
         "src/apps/tasks/state/preferences-reducer.ts",
         "src/apps/tasks/lib/detail/**/*.ts",
         "src/apps/tasks/lib/views/**/*.ts",
+        "src/apps/tasks/lib/issues/**/*.ts",
         "src/apps/tasks/lib/format/**/*.ts",
         "src/apps/calendar/lib/model/**/*.ts",
         "src/apps/calendar/state/*.{ts,tsx}",

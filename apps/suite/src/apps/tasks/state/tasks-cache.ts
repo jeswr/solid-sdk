@@ -3,6 +3,7 @@
 import { isomorphic } from "rdf-isomorphic";
 import { missingLabels } from "../lib/compose/planning";
 import { projectMoveData } from "../lib/detail/task-data";
+import { isIssuesProject } from "../lib/issues/model";
 import { ModelError, ProjectMembersSyncError } from "../lib/model/errors";
 import type { TaskMove } from "../lib/model/move";
 import { DataFactory, isSharedTrackerUrl, NS, requireProjectFolder } from "../lib/model/rdf";
@@ -983,6 +984,10 @@ export class TasksCache {
       this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
     );
     if (!source) return Promise.resolve(undefined);
+    if (isIssuesProject(source)) {
+      this.onFailure(new Error("Issues cannot be moved between projects."), () => {});
+      return Promise.resolve(undefined);
+    }
     if (source.url === target.url) return Promise.resolve(item);
     const id = crypto.randomUUID();
     const url = `${target.tracker.stateStore}${id}.ttl`;
