@@ -6,9 +6,10 @@ import { DataFactory } from "n3";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { scopedId } from "../src/model/named-values.js";
+import type { JsonObject } from "../src/core/types.js";
+import { NamedValuesNode, scopedId } from "../src/model/named-values.js";
 import { graphContents, inGraph, StoreNode } from "../src/model/store/common.js";
-import { SnapshotMemo, stateDataset } from "../src/model/store/state.js";
+import { SnapshotMemo } from "../src/model/store/state.js";
 import { AWP } from "../src/profile/vocabulary.js";
 import {
   emptyState,
@@ -51,6 +52,45 @@ it("reads a legacy snapshot and writes deterministic version 2 RDF on the next s
   expect(Object.keys(store.load().domain)).toEqual(["z", "a"]);
   store.save(state);
   expect(readFileSync(path, "utf8")).toBe(bytes);
+});
+
+it.each([
+  ["domain", "entryValue"],
+  ["precedenceHolds", "statement"],
+] as const)("quickly refuses shared named values in %s", (section, predicate) => {
+  const state = emptyState();
+  const depth = 18;
+  const value = Array.from({ length: depth }).reduce<JsonObject>(
+    (child) => ({ l: child, r: null }),
+    {},
+  );
+  if (section === "domain") {
+    state.domain.entry = value;
+  } else {
+    const fact = Object.values(completeFixture().precedenceHolds)[0]!;
+    const { original: _original, ...hold } = fact;
+    state.precedenceHolds[fact.id] = { ...hold, statement: value };
+  }
+  store.save(state);
+  expect(store.load()).toEqual(state);
+
+  const graph = `urn:awp:state:${section}`;
+  const dataset = readLocalStoreRdf(readFileSync(path, "utf8"), "application/n-quads");
+  const local = graphContents(dataset, graph);
+  const [root] = local.getObjects(null, AWP + predicate, null);
+  let node = new NamedValuesNode(root!, local);
+  for (let level = 0; level < depth; level++) {
+    const [left, right] = node.entries;
+    right!.domainValue = left!.domainValue;
+    node = new NamedValuesNode(left!.domainValue, local);
+  }
+  dataset.deleteMatches(undefined, undefined, undefined, DataFactory.namedNode(graph));
+  dataset.addQuads([...inGraph(local, graph)]);
+  writeFileSync(path, writeNQuads(dataset));
+
+  const start = performance.now();
+  expect(() => store.load()).toThrow(/invalid scoped named value/i);
+  expect(performance.now() - start).toBeLessThan(500);
 });
 
 it("migrates the compiled legacy mortgage fixture without changing its data", () => {
@@ -321,36 +361,35 @@ it.each([
   expect(performance.now() - start).toBeLessThan(500);
 });
 
-it("shares the inherited-reference budget across sections and cached entries", () => {
-  const fixture = completeFixture();
-  const [key, fact] = Object.entries(fixture.precedenceHolds)[0]!;
-  const [item] = Object.values(fixture.contextItems)[0]!;
-  const terms = (count: number) => ({
+it("saves and reloads three precedence holds with 3,000 inherited references each", () => {
+  const fact = Object.values(completeFixture().precedenceHolds)[0]!;
+  const terms = {
     policy: fact.terms!.policy,
-    inherited: Array.from({ length: count }, () => ({ target: "urn:example:asset", terms: null })),
-  });
+    inherited: Array.from({ length: 3_000 }, (_, index) => ({
+      target: `urn:example:asset:${index}`,
+      terms: null,
+    })),
+  };
   const state = emptyState();
-  state.contextItems.scope = [{ ...item!, terms: terms(2) }];
+  for (let index = 0; index < 3; index++) {
+    const id = `urn:example:hold:${index}`;
+    state.precedenceHolds[id] = { ...fact, id, terms };
+  }
   store.save(state);
-  const before = readFileSync(path);
-  expect(store.load()).toEqual(state);
+  expect(readRuntimeStateFile(path)).toEqual(state);
 
-  state.precedenceHolds[key] = { ...fact, terms: terms(8_191) };
+  const before = readFileSync(path);
+  const id = "urn:example:hold:over-limit";
+  state.precedenceHolds[id] = {
+    ...fact,
+    id,
+    terms: { ...terms, inherited: Array(8_193).fill(terms.inherited[0]) },
+  };
   expect(() => store.save(state)).toThrow(
     /inherited item terms exceed the expanded reference limit/i,
   );
   expect(readFileSync(path)).toEqual(before);
-
-  // Both sections are independently writable. Combine them to exercise the
-  // snapshot reader directly, before its final digest and graph checks.
-  const overLimit = stateDataset({ ...emptyState(), precedenceHolds: state.precedenceHolds });
-  const dataset = readLocalStoreRdf(before.toString(), "application/n-quads");
-  const graph = DataFactory.namedNode("urn:awp:state:precedenceHolds");
-  dataset.deleteMatches(undefined, undefined, undefined, graph);
-  dataset.addQuads(overLimit.getQuads(null, null, null, graph));
-  writeFileSync(path, writeNQuads(dataset));
-  expect(() => store.load()).toThrow(/inherited item terms exceed the expanded reference limit/i);
-});
+}, 120_000);
 
 it("rejects a local snapshot beyond the byte budget before buffering it", () => {
   writeFileSync(path, JSON.stringify(emptyState()));

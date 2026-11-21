@@ -1373,3 +1373,69 @@ production dependency packaging. The remaining 39 failed to bind to
   - Release of startup leases after factory failure or cancellation.
   - Synchronous receiver failures and response size bounds.
   - Shared in-flight limit for pipelined requests.
+
+## Review round 7 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+- The named-value reader checks the IDs the writer assigns to collection
+  entries, nested objects and lists, and nulls. The snapshot reader also checks
+  the root value ID for each field. Stored policy fields use the original
+  subject kept in `odrl:uid` because the writer renames the policy subject
+  after assigning the value IDs.
+- The 8,192-reference limit applies to each memory item or precedence hold.
+  The reader still checks the IDs of inherited references and keeps the file
+  limits of 256 MiB and one million quads. The regression test saves and reloads
+  three holds with 3,000 references each, then verifies that an oversized hold
+  is refused and the previous file is preserved.
+- The sharing tests require rejection in under 500 ms. They cover an
+  18-level shared-sibling probe in both a domain entry and a typed statement,
+  and shared inherited terms at the root and deeper in the tree. Separate
+  round-trip tests cover empty and nested objects and lists, repeated values,
+  nulls, booleans, literals, IRIs, and exact finite numbers.
+
+Four Node 24 runs of 50 RDF-verified memory saves took 625, 542, 438, and
+400 ms. The median was 490 ms against the 1 s target. Each run used the
+populated state fixture, changed one nested value per save, and added 25
+entries. The library compile and generated-file copy passed. The trace check
+passed across five scenario paths with 278 manifest runs, zero disagreements,
+and five blocked paths.
+
+All 164 tests passed across the 11 store, ledger, named-value, policy, and
+message model test files. The reference package typecheck passed. The RDF
+pipeline check reported zero failures and 216 existing allowances.
+
+Daemon typecheck passed. The full daemon run passed 297 tests and reported 42
+failures. The packaged CLI help and exports, launchd plist validation, and
+production dependency packaging passed on rerun with subprocess output
+captured in temporary files. The remaining 39 cases hit `listen EPERM` on
+`127.0.0.1`.
+
+- `demos/d2-spending-limits.test.ts` — hostile email and A2A proposals with
+  executor-gated transfers and cumulative spending.
+- `test/css.test.ts` — in-memory CSS pod and direct binding through signed halt.
+- `test/cloud.test.ts` — 37 cases
+  - Private persistent state and explicit Key Vault model keys.
+  - Refusal of `imessage`, `signal`, `whatsapp`, `mcp`, and `unknown` bindings
+    (five cases).
+  - Required A2A receiver and missing binding.
+  - Bounded A2A and probes, preserved authorization bytes, and suppressed
+    provider errors.
+  - Signed message admission on `/a2a` (compact) and `/answerable` (compact
+    and document) (three cases).
+  - Empty 503 on decision commit failure on both routes (two cases).
+  - Direct HTTP route, media types, and byte limit before the gate call.
+  - HTTP 200 for admission and refusal at the A2A byte limit with the default
+    and explicit receivers (two cases).
+  - Closing unfinished oversized chunked uploads on both routes at 415, 413,
+    and the two 417 cases per route (eight cases).
+  - Replying and freeing the slot when final bytes arrive with EOF for
+    fixed-length and chunked uploads on both routes (four cases).
+  - Replying after the client half-closes on both routes (two cases).
+  - Shared upload slots and reclamation on disconnect.
+  - Listener abort, daemon drain, and credential close order.
+  - Composition close on daemon and listener startup failures.
+  - Retaining the file lease through inbound cancellation and drain.
+  - Releasing startup leases after factory failure or cancellation.
+  - Synchronous receiver failures and response size bounds.
+  - Shared in-flight limit for pipelined requests.

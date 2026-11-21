@@ -191,11 +191,13 @@ export class StoreNode<T = unknown> extends CoreNode<T> {
     putStoredDigests(value, id, this.dataset);
   }
 
-  valueAt(predicate: string): Json | undefined {
+  valueAt(predicate: string, ownerId = this.id): Json | undefined {
     const term = this.one(predicate);
     if (term?.termType === "Literal" && term.datatype.value === RDF_JSON && !term.language)
       return decodeSnapshotEntry(term.value) as Json;
-    return term === undefined ? undefined : readValue(term, this.dataset);
+    return term === undefined
+      ? undefined
+      : readValue(term, this.dataset, scopedId(ownerId, predicate));
   }
 
   override setField(name: string, value: unknown): void {
@@ -250,8 +252,11 @@ export class StoreNode<T = unknown> extends CoreNode<T> {
     ) {
       if (descriptor.protocolOpen) {
         const term = this.term(descriptor.term);
-        if (term?.termType !== "Literal" || term.datatype.value !== RDF_JSON)
+        if (term?.termType !== "Literal" || term.datatype.value !== RDF_JSON) {
+          if (term && (term.termType !== "NamedNode" || term.value !== scopedId(this.id, name)))
+            throw new TypeError("Invalid scoped named value");
           return super.getField(name);
+        }
       }
       const value = this.valueAt(descriptor.term);
       if (value === undefined && descriptor.optional) return undefined;

@@ -132,10 +132,15 @@ export class NamedValuesNode extends RdfNode {
   toValue(seen = new Set<string>(), depth = 0): JsonObject | Json[] {
     if (seen.has(this.id) || depth > 32) throw new TypeError("Cyclic or overdeep named values");
     seen.add(this.id);
-    const pairs = this.entries.map((entry) => {
+    const pairs = this.entries.map((entry, index) => {
+      if (entry.termType !== "NamedNode" || entry.id !== scopedId(this.id, "entry:" + index))
+        throw new TypeError("Invalid scoped named-value entry");
       if (entry.propertyID !== parameterIri(entry.name))
         throw new TypeError("Parameter name/IRI mismatch");
-      return [entry.name, readValue(entry.domainValue, entry.dataset, seen, depth + 1)] as const;
+      return [
+        entry.name,
+        readValue(entry.domainValue, entry.dataset, scopedId(entry.id, "value"), seen, depth + 1),
+      ] as const;
     });
     seen.delete(this.id);
     if (!this.isObject) {
@@ -215,7 +220,13 @@ export function decimalLexical(value: number): string {
         : digits.slice(0, point) + "." + digits.slice(point))
   );
 }
-export function readValue(term: Term, dataset: Store, seen = new Set<string>(), depth = 0): Json {
+export function readValue(
+  term: Term,
+  dataset: Store,
+  expectedId?: string,
+  seen = new Set<string>(),
+  depth = 0,
+): Json {
   term = attachmentTerm(dataset, term);
   if (term.termType === "Literal") {
     if (term.language) throw new TypeError("Language literal has no legacy scalar representation");
@@ -239,10 +250,14 @@ export function readValue(term: Term, dataset: Store, seen = new Set<string>(), 
   }
   if (term.termType !== "NamedNode") throw new TypeError("Expected a named domain value");
   const node = new NamedValuesNode(term, dataset);
-  if (node.types.has(AWP + "NullValue")) return null;
-  if (node.types.has(AWP + "NamedValueCollection") || node.types.has(SCHEMA + "ItemList"))
-    return node.toValue(seen, depth);
-  return term.value;
+  const types = node.types;
+  const isNull = types.has(AWP + "NullValue");
+  if (!isNull && !types.has(AWP + "NamedValueCollection") && !types.has(SCHEMA + "ItemList"))
+    return term.value;
+  // A structured value belongs to exactly one position in its parent's tree.
+  if (expectedId !== undefined && node.id !== expectedId)
+    throw new TypeError(seen.has(node.id) ? "Cyclic named values" : "Invalid scoped named value");
+  return isNull ? null : node.toValue(seen, depth);
 }
 function missing(field: string): never {
   throw new TypeError(`Missing named value ${field}`);

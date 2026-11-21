@@ -122,12 +122,8 @@ function ownedTermsId(node: StoreNode): string | undefined {
   return id;
 }
 
-export class InheritedTermsBudget {
+class InheritedTermsBudget {
   private remaining = MAX_INHERITED_REFERENCES;
-
-  get used(): number {
-    return MAX_INHERITED_REFERENCES - this.remaining;
-  }
 
   consume(count: number): void {
     this.remaining -= count;
@@ -216,14 +212,13 @@ export function writeMemoryFact(
   id: string,
   local: Store,
   policy: PolicyWriter,
-  budget: InheritedTermsBudget,
 ): void {
   const { terms, dataUseGrant, ...fields } = value;
   const node = makeNode(name, fields, id, local) as StoreNode;
   if (terms) {
     const termsId = scopedId(id, "terms");
     node.put(termsLink, namedNode(termsId));
-    writeTerms(termsId, local, terms, policy, budget);
+    writeTerms(termsId, local, terms, policy, new InheritedTermsBudget());
   }
   if (dataUseGrant) {
     const grantId = policy(dataUseGrant);
@@ -235,13 +230,12 @@ export function writeMemoryFact(
 export function readMemoryFact<T extends AdmittedFact>(
   node: StoreNode<T>,
   policy: PolicyReader,
-  budget: InheritedTermsBudget,
 ): T {
   const terms = ownedTermsId(node);
   const grant = named(node, grantLink);
   return {
     ...node.read(),
-    ...(terms && { terms: readTerms(terms, node.dataset, policy, budget) }),
+    ...(terms && { terms: readTerms(terms, node.dataset, policy, new InheritedTermsBudget()) }),
     ...(grant && { dataUseGrant: policy(grant) }),
   } as T;
 }

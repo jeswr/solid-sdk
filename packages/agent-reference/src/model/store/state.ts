@@ -34,13 +34,7 @@ import {
   storeModel,
   storeText,
 } from "./common.js";
-import {
-  InheritedTermsBudget,
-  readMemoryFact,
-  readPolicy,
-  writeMemoryFact,
-  writePolicy,
-} from "./memory.js";
+import { readMemoryFact, readPolicy, writeMemoryFact, writePolicy } from "./memory.js";
 
 const ROOT = "urn:awp:state";
 const SECTION = AWP + "section";
@@ -282,14 +276,7 @@ function readGenerated(name: GeneratedName, id: string, local: Store): Json {
   ) as Json;
 }
 
-function writePayload(
-  section: Section,
-  raw: Json,
-  id: string,
-  local: Store,
-  policies: Store,
-  budget: InheritedTermsBudget,
-) {
+function writePayload(section: Section, raw: Json, id: string, local: Store, policies: Store) {
   const name = typed(section);
   const envelope = new StoreNode(id, local, "StateEntry");
   if (!name) {
@@ -317,12 +304,12 @@ function writePayload(
     const policy = writePolicy(policies);
     for (const [position, item] of raw.entries()) {
       const child = scopedId(body, "item:" + position);
-      writeMemoryFact(item as never, "MemoryItem", child, local, policy, budget);
+      writeMemoryFact(item as never, "MemoryItem", child, local, policy);
       new StoreNode(child, local, "MemoryItem").position = position;
       scope.add(ITEM, child);
     }
   } else if (name === "PrecedenceHold") {
-    writeMemoryFact(raw as never, name, body, local, writePolicy(policies), budget);
+    writeMemoryFact(raw as never, name, body, local, writePolicy(policies));
   } else if (Object.hasOwn(generated, name)) {
     writeGenerated(name as GeneratedName, raw, body, local);
   } else {
@@ -339,7 +326,6 @@ function readPayload(
   section: Section,
   envelope: StoreNode,
   policy: ReturnType<typeof readPolicy>,
-  budget: InheritedTermsBudget,
 ): Json {
   const name = typed(section);
   if (!name) {
@@ -363,14 +349,13 @@ function readPayload(
     return ordered(node, ITEM).map(({ node: item, position }) => {
       if (item.id !== scopedId(node.id, "item:" + position))
         throw new TypeError("Invalid scoped memory item");
-      return readMemoryFact(item, policy, budget);
+      return readMemoryFact(item, policy);
     }) as unknown as Json;
   }
   if (name === "PrecedenceHold")
     return readMemoryFact(
       new StoreNode<import("../../gates/common.js").AdmittedFact>(term, local, name),
       policy,
-      budget,
     ) as unknown as Json;
   if (Object.hasOwn(generated, name)) return readGenerated(name as GeneratedName, node.id, local);
   const data = node.read() as { value: Json; items: Json };
@@ -469,7 +454,6 @@ type EntryPayload = {
   readonly id: string;
   readonly bytes: string;
   readonly policies: ReadonlyMap<string, string>;
-  readonly inheritedReferences: number;
   authored?: readonly Quad[];
 };
 
@@ -479,27 +463,18 @@ type EntryMemo = {
   readonly location: LayoutBlock;
 };
 
-function encodeEntry(
-  section: Section,
-  key: string,
-  id: string,
-  raw: Json,
-  budget: InheritedTermsBudget,
-  retainQuads = false,
-) {
+function encodeEntry(section: Section, key: string, id: string, raw: Json, retainQuads = false) {
   const local = new IndexedStore();
   const policies = new IndexedStore();
   const entry = new StoreNode(id, local, "StateEntry");
   entry.types.add(AWP + (typed(section) ? "TypedStateEntry" : "StateEntry"));
   entry.put(ENTRY_KEY, storeText(key));
-  const usedBefore = budget.used;
-  writePayload(section, raw, id, local, policies, budget);
+  writePayload(section, raw, id, local, policies);
   const graph = inGraph(local, sectionIri(section));
   const authored = retainQuads ? [...graph, ...policies] : undefined;
   return {
     bytes: writeNQuads(graph, Infinity),
     authored,
-    inheritedReferences: budget.used - usedBefore,
     policies: new Map(
       policies
         .getGraphs(null, null, null)
@@ -525,15 +500,11 @@ function verifyEntry(section: Section, key: string, row: EntryPayload): Verified
     "application/n-quads",
   );
   const local = graphContents(dataset, sectionIri(section));
-  const budget = new InheritedTermsBudget();
   const value = readPayload(
     section,
     new StoreNode(row.id, local, "StateEntry"),
     readPolicy(dataset),
-    budget,
   );
-  if (budget.used !== row.inheritedReferences)
-    throw new TypeError(`Inconsistent inherited item reference count in ${section}`);
   if (row.authored && JSON.stringify(value) === row.native) {
     // Exact JSON includes nested field order. The same input would produce the
     // same canonical graph, so verify the RDF bytes against the original quads.
@@ -541,7 +512,7 @@ function verifyEntry(section: Section, key: string, row: EntryPayload): Verified
       throw new TypeError(`Inconsistent snapshot entry in ${section}`);
   } else {
     // Typed wrappers can change property order. Recheck their canonical form.
-    const canonical = encodeEntry(section, key, row.id, value, new InheritedTermsBudget());
+    const canonical = encodeEntry(section, key, row.id, value);
     if (
       canonical.bytes !== row.bytes ||
       canonical.policies.size !== row.policies.size ||
@@ -602,7 +573,6 @@ export class SnapshotMemo {
     const next = new Map<Section, Map<string, EntryMemo>>();
     const chunks: string[] = [];
     const policies = new Map<string, string>();
-    const budget = new InheritedTermsBudget();
     let encoded = 0;
     for (const section of sections) {
       const value = state[section];
@@ -646,11 +616,9 @@ export class SnapshotMemo {
           payload = {
             native,
             id,
-            ...encodeEntry(section, key, id, raw, budget, this.retainQuads),
+            ...encodeEntry(section, key, id, raw, this.retainQuads),
           };
           encoded++;
-        } else {
-          budget.consume(payload.inheritedReferences);
         }
         for (const [id, bytes] of payload.policies) {
           const previous = policies.get(id);
@@ -799,7 +767,6 @@ function sectionPresent(node: StoreNode, section: Section): boolean {
 
 function decodeState(dataset: Store): RuntimeState {
   const policy = readPolicy(dataset);
-  const budget = new InheritedTermsBudget();
   const result: Partial<Record<keyof RuntimeState, unknown>> = { version: 1 };
   for (const section of sections) {
     const id = sectionIri(section);
@@ -817,7 +784,7 @@ function decodeState(dataset: Store): RuntimeState {
       const key = readStoreText(term);
       if (entryId(id, key) !== node.id || (arraySections.has(section) && key !== String(position)))
         throw new TypeError("Invalid snapshot entry key");
-      return [key, readPayload(section, node, policy, budget)] as const;
+      return [key, readPayload(section, node, policy)] as const;
     });
     if (new Set(pairs.map(([key]) => key)).size !== pairs.length)
       throw new TypeError("Duplicate snapshot key");

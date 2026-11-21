@@ -157,8 +157,12 @@ function writeFields(node: StoreNode, value: object) {
     Object.keys(value).filter((key) => (value as Record<string, unknown>)[key] !== undefined),
   );
 }
-function selectFields(node: StoreNode, known: Record<string, unknown>): JsonObject {
-  const fields = node.valueAt(FIELDS);
+function selectFields(
+  node: StoreNode,
+  known: Record<string, unknown>,
+  ownerId = node.id,
+): JsonObject {
+  const fields = node.valueAt(FIELDS, ownerId);
   if (
     !Array.isArray(fields) ||
     new Set(fields).size !== fields.length ||
@@ -333,12 +337,14 @@ export function policyFromStore(dataset: Store, id: string): NativePolicy {
   const root = view(id, local);
   const nativeId = root.term(ODRL_UID);
   if (nativeId?.termType !== "NamedNode") throw new TypeError("Expected a native ODRL UID");
+  // The memory projection renames the policy subject after writing its values.
+  // Its value IDs still use the original subject, which is retained as odrl:uid.
   const native: Record<string, unknown> = {
     ...projected,
     id: readIdentifier(root, NATIVE_ID) ?? nativeId.value,
     assigner: readIdentifier(root, ODRL + "assigner"),
     assignee: readIdentifier(root, ODRL + "assignee"),
-    profile: root.valueAt(PROFILE) ?? readIdentifier(root, ODRL + "profile"),
+    profile: root.valueAt(PROFILE, nativeId.value) ?? readIdentifier(root, ODRL + "profile"),
   };
   for (const [field, predicate] of predicates) {
     const rules = new Map(projected[field]?.map((rule) => [rule.id, rule]));
@@ -348,7 +354,7 @@ export function policyFromStore(dataset: Store, id: string): NativePolicy {
       return decodeRule(node, rule);
     });
   }
-  const decoded = selectFields(root, native) as unknown as NativePolicy;
+  const decoded = selectFields(root, native, nativeId.value) as unknown as NativePolicy;
   const location = policySubject(decoded.id) === id ? undefined : "memory";
   assertSameGraph(local, graphContents(policyDataset(decoded, location), id));
   return decoded;
