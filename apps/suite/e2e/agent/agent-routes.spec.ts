@@ -33,7 +33,7 @@ for (const [route, heading, item] of routes) {
     await expect(page.getByText(item).filter({ visible: true }).first()).toBeVisible();
     await expect(page).toHaveTitle(/Agent/);
     if (route === "approvals/send-reply") {
-      await expect(page.locator("pre")).toHaveText(
+      await expect(page.locator("pre").filter({ hasText: "Subject:" })).toHaveText(
         "Subject: Re: Project catch-up\nTo: My own account\n\nThanks for the invitation. Tomorrow at 14:00 works for me.\n\n— Alice",
       );
       await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeEnabled();

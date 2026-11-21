@@ -78,6 +78,9 @@
   min-width: 0;
   background: var(--surface);
 }
+.agent-app .agent-preview-footer {
+  color: var(--foreground-muted);
+}
 .agent-app .agent-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
