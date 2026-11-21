@@ -73,6 +73,9 @@ it("requires a positive inbound admission even when the protocol result is accep
   let verdict: StoredVerdict | undefined;
   const gate = createGate(
     {
+      identity: { actor: "urn:actor:fixture", party: "urn:party:fixture" },
+      recordHead: vi.fn(),
+      witnessRecordHead: vi.fn(),
       receive: async () => ({
         disposition: "accepted",
         messageId: "urn:test:message",
@@ -82,6 +85,7 @@ it("requires a positive inbound admission even when the protocol result is accep
       }),
       commitBindingEvent: vi.fn(),
       admittedFacts: () => [],
+      publicKeys: () => [],
       close: vi.fn(),
     },
     {

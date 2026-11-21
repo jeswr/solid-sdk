@@ -206,13 +206,12 @@ const gate = createInboundGate({
   outbound: { handlers, plan },
 });
 // Configure every send half used by bindings with verify: gate.verifyOwn.
-const prepareEntry = createOutboxProjector({
-  bindings,
-  accounts: outboundAccountsByBinding,
-  sign: gate.release,
-});
-
-const project = async (proposal: ActionProposal) => {
+const project: DaemonOptions["project"] = async (proposal, sign) => {
+  const prepareEntry = createOutboxProjector({
+    bindings,
+    accounts: outboundAccountsByBinding,
+    sign,
+  });
   const entry = await prepareEntry(proposal);
   await persistOutboxEntry(entry); // Host's idempotent executor store write.
   return entry;
@@ -220,7 +219,9 @@ const project = async (proposal: ActionProposal) => {
 // Supply gate and project to createDaemon or composeDaemon.
 ```
 
-`project` replaces the former `proposalWritten` option. Persist and return the exact
+The projector can use the daemon's `sign` callback or be configured with
+`sign: gate.release`. Both pass through the leased gate and write the linked
+decision before returning the release for rendering. Persist and return the exact
 entry the executor reads. The projector replaces the model draft preview with a
 description drawn solely from signed message fields and binds the resulting
 preview, account, wire and intent to the approval digest. The daemon verifies
@@ -234,8 +235,31 @@ An interrupted release without a completed receipt requires a new proposal.
 The reference mandate controls release and sealing. The executor independently
 checks the VC mandate, HALT, approval and limits before delivery. **Known
 deviation** for outbound check 5. The executor decides approval and limits after
-the gate seals the message and records those verdicts in agent-audit. Phase 4
-links that evidence to the reference ledger.
+the gate seals the message and records those verdicts in agent-audit. The
+`gate-decision` links the gate outcome to its reference ledger head.
+
+### Verify the linked audit ledgers
+
+Every completed check and release leaves a body-free decision in the reference
+ledger. The gate stages completed decisions so it can recover across a crash
+between the verdict or release receipt and the reference state checkpoint.
+Startup verifies the suite's retained decision links and pruning checkpoints
+against the recovered gate ledger. Startup and account processing reconcile
+missing suite decisions from that verified progress before new model calls or
+sends. A retry of a decision uses the same audit ID, derived from the reference
+sequence and hash.
+The heartbeat and shutdown seal each changed suite head with an EdDSA receipt.
+The suite writes the local anchor before the gate persists its witness. If a
+crash interrupts that sequence, startup checks the signature and witnesses the
+anchor's exact head before dispatch. Startup rejects WebIDs that would put a
+signed receipt over the 4 KiB limit.
+
+Run `awp audit --ledger <events.jsonl>` against the local audit file with the paired
+gate configured. The offline command checks both chains, looks up decision links,
+verifies retained anchor signatures and requires a matching witness for each
+retained anchor. It requires both the latest witnessed head and its anchor in
+the suite ledger. A valid retention checkpoint can cover older witnesses.
+Truncation of the unwitnessed tail after the latest witness cannot be detected.
 
 ## Runtime memory
 

@@ -15,6 +15,10 @@ export const AS = "https://www.w3.org/ns/activitystreams#";
 export const SEC = "https://w3id.org/security#";
 /** Every minted term and its normative local definition. */
 export const TERM_DEFINITIONS = {
+  anchoredSeq: "Sequence of the audit entry sealed by a record anchor.",
+  anchoredHash: "Hash of the audit entry sealed by a record anchor.",
+  gateSeq: "Sequence of the reference ledger head recorded with a gate decision.",
+  gateHash: "Hash of the reference ledger head recorded with a gate decision.",
   Account:
     "A channel account descriptor; its channelHandle value is a salted hash, never a raw handle.",
   Acknowledgement: "Migrated M1 lifecycle or intent term Acknowledgement.",

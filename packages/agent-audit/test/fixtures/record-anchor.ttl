@@ -1,0 +1,16 @@
+# AUTHORED-BY Codex GPT-6.2 Sol
+@prefix agent: <https://jeswr.org/ns/agent#>.
+@prefix prov: <http://www.w3.org/ns/prov#>.
+
+<https://pod.example/agent/audit/2.ttl> a prov:Activity;
+    prov:generated <https://pod.example/agent/audit/2.ttl#entry>, <urn:event:2>;
+    agent:seq 2;
+    prov:startedAtTime "2026-10-26T12:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    agent:ledgerHash "sha-256:cd54ffbe1cd7e19eea03423fbd101347026ddb20465bd104cf06c86d9ef8a4ed";
+    agent:prevHash "sha-256:2e8577ef1879e60e78f3a5a403590e0cd688a2a631411198e63d38de559a41ef";
+    agent:record "{\"agent\":\"https://pod.example/agent#me\",\"hash\":\"sha-256:2e8577ef1879e60e78f3a5a403590e0cd688a2a631411198e63d38de559a41ef\",\"id\":\"urn:event:2\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6ImFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEiLCJ0eXAiOiJhd3AtcmVjb3JkLWFuY2hvcitqd3MifQ.eyJ0eXBlIjoiUmVjb3JkQW5jaG9yUmVjZWlwdCIsImFjdG9yIjoiaHR0cHM6Ly9wb2QuZXhhbXBsZS9hZ2VudCNtZSIsInBhcnR5IjoiaHR0cHM6Ly9wb2QuZXhhbXBsZS9wcm9maWxlI21lIiwic3ViamVjdCI6Imh0dHBzOi8vcG9kLmV4YW1wbGUvYWdlbnQjbWUiLCJzdWJqZWN0UGFydHkiOiJodHRwczovL3BvZC5leGFtcGxlL3Byb2ZpbGUjbWUiLCJzZXEiOjEsImhhc2giOiJzaGEtMjU2OjJlODU3N2VmMTg3OWU2MGU3OGYzYTVhNDAzNTkwZTBjZDY4OGEyYTYzMTQxMTE5OGU2M2QzOGRlNTU5YTQxZWYiLCJhdCI6IjIwMjYtMTAtMjZUMTI6MDA6MDAuMDAwWiJ9.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"owner\":\"https://pod.example/profile#me\",\"seq\":1,\"type\":\"record-anchor\"}"^^<http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON>;
+    prov:wasAssociatedWith <https://pod.example/agent#me>;
+    agent:anchoredSeq 1;
+    agent:anchoredHash "sha-256:2e8577ef1879e60e78f3a5a403590e0cd688a2a631411198e63d38de559a41ef".
+<https://pod.example/agent/audit/2.ttl#entry> a prov:Entity;
+    prov:wasAttributedTo <https://pod.example/profile#me>.

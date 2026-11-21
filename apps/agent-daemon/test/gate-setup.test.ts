@@ -1,18 +1,21 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 
-import { MemoryLedger } from "@jeswr/agent-audit";
+import { FileLedger as AuditFileLedger, MemoryLedger } from "@jeswr/agent-audit";
+import { type LedgerEntry, seal } from "@jeswr/agent-audit/verify";
 import { encodeEnvelope, encodeEventContent } from "@jeswr/agent-channels";
 import { createDirectReader } from "@jeswr/agent-channels/direct";
 import { parseMatrixMessage } from "@jeswr/agent-channels/matrix";
 import { RecordingTokenProvider } from "@jeswr/agent-channels/testing";
 import { CredentialStore, noTransport } from "@jeswr/agent-credentials";
+import { digestBytes } from "@jeswr/agent-model";
 import { CONFIG_ED25519, PILOT_PROFILE } from "@jeswr/agent-reference";
 import { craftSigned } from "@jeswr/agent-reference/scenarios/common";
 import { readLedgerSegment } from "@jeswr/agent-reference/store/ledger";
 import { mkdtemp, open, readdir, readFile, rm, stat, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { event } from "../../../packages/agent-channels/test/fixtures/matrix.js";
 import { readGateStatus } from "../src/gate.js";
@@ -237,12 +240,22 @@ it("records an indeterminate check for a malformed verdict in the gate ledger", 
         message: { ...message, jsonLdBlocks: [encodeEnvelope("a.b.c")] },
       }),
     ).toMatchObject({ outcome: "refused", reason: "indeterminate" });
-    const entries = readLedgerSegment(join(o.directory, "ledger.jsonl"));
-    expect(entries.at(-1)?.record).toMatchObject({
-      type: "binding-rejection",
-      binding: "matrix",
+    const records = readLedgerSegment(join(o.directory, "ledger.jsonl")).map(
+      (entry) => entry.record,
+    );
+    expect(records).toContainEqual(
+      expect.objectContaining({
+        type: "binding-rejection",
+        binding: "matrix",
+        reason: "indeterminate",
+        digest: `sha-256:${message.rawSha256}`,
+      }),
+    );
+    expect(records.at(-1)).toMatchObject({
+      type: "suite-gate-decision",
+      outcome: "refuse",
       reason: "indeterminate",
-      digest: `sha-256:${message.rawSha256}`,
+      messageDigest: `sha-256:${message.rawSha256}`,
     });
   } finally {
     await gate.close();
@@ -400,7 +413,8 @@ it.each([
   }
   let failed = false;
   vi.mocked(open).mockImplementation(async (path, flags, mode) => {
-    if (failed && flags === "wx") throw new Error("cannot create another temporary file");
+    if (failed && flags === "wx" && typeof path === "string" && dirname(path) === o.directory)
+      throw new Error("cannot create another verdict temporary file");
     const handle = await fs.open(path, flags, mode);
     if (path === o.directory) {
       const record = JSON.parse(await fs.readFile(join(o.directory, `${base}.json`), "utf8"));
@@ -722,4 +736,213 @@ it("runs gate commands offline and takes the process lease only after confirmati
     verdicts: { admitted: 0, unstructured: 0, refused: 0 },
   });
   expect(composition).not.toHaveBeenCalled();
+});
+
+function localAudit(path: string, ledger: AuditFileLedger, print: (line: string) => void) {
+  const host = daemon.createCliHost({
+    gate: { stateDirectory: root, agentWebId, ownerWebId },
+    daemon: async () => {
+      throw new Error("Local audit does not start the daemon");
+    },
+    local: daemon.createLocalState(root),
+    ledger,
+    launchCommand: ["/node", "run"],
+    accounts: async () => [],
+    openLoginUrl: vi.fn(),
+    credentials: { store: new CredentialStore({ dir: root }), transport: noTransport, now },
+  });
+  return () =>
+    daemon.runCli(["audit", "--ledger", path], host, {
+      print,
+      signal: new AbortController().signal,
+      confirm: vi.fn(),
+    });
+}
+
+it("audits linked decisions, verifies the anchor, and detects an altered or truncated ledger", async () => {
+  const o = options();
+  await daemon.initGate(o);
+  const gate = await daemon.openGate(o);
+  const auditPath = join(root, "events.jsonl");
+  let ledger: AuditFileLedger;
+  let terminal: LedgerEntry;
+  try {
+    const digest = digestBytes("synthetic delivery");
+    await gate.recordParseRefusal({
+      binding: "direct",
+      account: "fixture",
+      reason: "malformed",
+      digest,
+    });
+    const gateHead = gate.head();
+    ledger = new AuditFileLedger(auditPath);
+    const identity = { agent: agentWebId, owner: ownerWebId };
+    const first = ledger.append(
+      {
+        ...identity,
+        id: "urn:decision:1",
+        type: "gate-decision",
+        direction: "in",
+        outcome: "refuse",
+        reason: "malformed",
+        messageDigest: digest,
+        configuration: CONFIG_ED25519,
+        gateSeq: gateHead.seq,
+        gateHash: gateHead.hash,
+      },
+      now().toISOString(),
+    );
+    ledger.append(
+      {
+        ...identity,
+        type: "record-anchor",
+        id: "urn:anchor:1",
+        seq: first.seq,
+        hash: first.hash,
+        jws: await gate.anchor({ seq: first.seq, hash: first.hash }),
+      },
+      now().toISOString(),
+    );
+    terminal = ledger.append(
+      { ...identity, type: "control", id: "urn:control:1" },
+      now().toISOString(),
+    );
+  } finally {
+    await gate.close();
+  }
+  const print = vi.fn();
+  const audit = localAudit(auditPath, ledger, print);
+  expect(await audit()).toBe(0);
+  expect(print).toHaveBeenCalledWith("PASS");
+  expect(print).toHaveBeenCalledWith(expect.stringContaining("unwitnessed tail"));
+  const original = await readFile(auditPath, "utf8");
+  const [first, anchor] = ledger.entries();
+  if (!first || anchor?.record.type !== "record-anchor") throw new Error("Fixture anchor missing");
+  print.mockClear();
+  await writeFile(auditPath, original.replace('"reason":"malformed"', '"reason":"bad-signature"'));
+  expect(await audit()).toBe(1);
+  expect(print).toHaveBeenCalledWith(expect.stringContaining("integrity"));
+  print.mockClear();
+  const jws = anchor.record.jws.replace(/\.[^.]+$/, `.${"a".repeat(86)}`);
+  const forged = seal(anchor.seq, anchor.at, first.hash, { ...anchor.record, jws });
+  const changedTail = seal(terminal.seq, terminal.at, forged.hash, terminal.record);
+  await writeFile(
+    auditPath,
+    `${[first, forged, changedTail].map((e) => JSON.stringify(e)).join("\n")}\n`,
+  );
+  expect(await audit()).toBe(1);
+  expect(print).toHaveBeenCalledWith(expect.stringContaining("invalid anchor signature"));
+
+  print.mockClear();
+  await writeFile(auditPath, `${JSON.stringify(first)}\n`);
+  expect(await audit()).toBe(1);
+  expect(print).toHaveBeenCalledWith(expect.stringContaining("witness anchor missing"));
+
+  const reopened = await daemon.openGate(o);
+  try {
+    const anchored = (jws: string) =>
+      seal(terminal.seq + 1, terminal.at, terminal.hash, {
+        ...anchor.record,
+        id: "urn:anchor:orphan",
+        seq: terminal.seq,
+        hash: terminal.hash,
+        jws,
+      });
+    await expect(
+      reopened.anchor({ seq: terminal.seq, hash: terminal.hash }, async (jws) => {
+        await writeFile(auditPath, `${original}${JSON.stringify(anchored(jws))}\n`);
+        throw new Error("crashed before witnessing");
+      }),
+    ).rejects.toThrow("crashed before witnessing");
+    print.mockClear();
+    expect(await audit()).toBe(1);
+    expect(print).toHaveBeenCalledWith(
+      expect.stringContaining("anchor has no matching gate witness"),
+    );
+    await reopened.anchor({ seq: terminal.seq, hash: terminal.hash });
+  } finally {
+    await reopened.close();
+  }
+  print.mockClear();
+  await writeFile(auditPath, `${original.trimEnd().split("\n").slice(0, -1).join("\n")}\n`);
+  expect(await audit()).toBe(1);
+  expect(print).toHaveBeenCalledWith(expect.stringContaining("witnessed head"));
+});
+
+it("excludes a witness fsynced beyond the saved gate checkpoint from offline audit", async () => {
+  const o = options();
+  await daemon.initGate(o);
+  const gate = await daemon.openGate(o);
+  const statePath = join(o.directory, "state.json");
+  const gatePath = join(o.directory, "ledger.jsonl");
+  const auditPath = join(root, "events.jsonl");
+  const ledger = new AuditFileLedger(auditPath);
+  const identity = { agent: agentWebId, owner: ownerWebId };
+  const at = now().toISOString();
+  const { seq, hash } = ledger.append({ ...identity, type: "control", id: "urn:control:head" }, at);
+  let saved: Buffer;
+  try {
+    await gate.recordParseRefusal({
+      binding: "direct",
+      account: "fixture",
+      reason: "malformed",
+      digest: digestBytes("fixture"),
+    });
+    saved = await readFile(statePath);
+    const jws = await gate.anchor({ seq, hash });
+    ledger.append(
+      { ...identity, type: "record-anchor", id: "urn:anchor:unsaved", seq, hash, jws },
+      at,
+    );
+  } finally {
+    await gate.close();
+  }
+  const print = vi.fn();
+  const audit = localAudit(auditPath, ledger, print);
+  expect(await audit()).toBe(0);
+  // Recreate the crash between the reference ledger fsync and state save.
+  await writeFile(statePath, saved);
+  const suffix = await readFile(gatePath);
+  const paths = await readdir(o.directory);
+  print.mockClear();
+  expect(await audit()).toBe(1);
+  expect(print).toHaveBeenCalledWith(
+    expect.stringContaining("anchor has no matching gate witness"),
+  );
+  expect(await readFile(gatePath)).toEqual(suffix);
+  expect(await readFile(statePath)).toEqual(saved);
+  expect(await readdir(o.directory)).toEqual(paths);
+  const reopened = await daemon.openGate(o);
+  try {
+    expect(reopened.evidence().witnessedHeads).toEqual([]);
+  } finally {
+    await reopened.close();
+  }
+});
+
+it("refuses Unicode identities that would persist an oversized witness", async () => {
+  const agentWebId = `https://agent.example/${"界".repeat(420)}#id`;
+  const ownerWebId = `https://owner.example/${"界".repeat(420)}#id`;
+  const o = { ...options(), agentWebId, ownerWebId };
+  await daemon.initGate(o);
+  await expect(daemon.openGate(o)).rejects.toThrow("Record anchor exceeds size bound");
+  expect((await readGateStatus(o.directory)).ledger.entries).toBe(0);
+});
+
+it("rejects an oversized signed anchor before the runtime persists its witness", async () => {
+  const { gate, ledger } = await createTestGate(now, {
+    actor: `https://agent.example/${"界".repeat(420)}#id`,
+    party: `https://owner.example/${"界".repeat(420)}#id`,
+  });
+  try {
+    const before = ledger.entries();
+    const publish = vi.fn();
+    await expect(gate.anchor({ seq: 1, hash: digestBytes("fixture") }, publish)).rejects.toThrow(
+      "Record anchor exceeds size bound",
+    );
+    expect(publish).not.toHaveBeenCalled();
+    expect(ledger.entries()).toEqual(before);
+  } finally {
+    await gate.close();
+  }
 });

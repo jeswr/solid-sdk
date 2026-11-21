@@ -144,3 +144,25 @@ export function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Missing test fixture value");
   return value;
 }
+
+/** A structural witness fixture. Actual EdDSA signatures are exercised by the daemon auditor. */
+export function witnessFixture(
+  { agent, owner }: { agent: string; owner: string },
+  { seq, hash }: { seq: number; hash: string },
+): string {
+  const header = { alg: "EdDSA", kid: "a".repeat(43), typ: "awp-record-anchor+jws" };
+  const payload = {
+    type: "RecordAnchorReceipt",
+    actor: agent,
+    party: owner,
+    subject: agent,
+    subjectParty: owner,
+    seq,
+    hash,
+    at: AT,
+  };
+  return [header, payload]
+    .map((part) => Buffer.from(JSON.stringify(part)).toString("base64url"))
+    .concat("a".repeat(86))
+    .join(".");
+}

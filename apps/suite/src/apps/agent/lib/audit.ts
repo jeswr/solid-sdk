@@ -29,6 +29,11 @@ export {
   verifyRange,
 } from "@jeswr/agent-audit/verify";
 
+export const GATE_AUDIT_LABELS = {
+  "gate-decision": "Checked a message",
+  "record-anchor": "Record sealed",
+} satisfies Partial<Record<AuditEntry["record"]["type"], string>>;
+
 /** Single-valued, kind-checked wrapper accessors for the daemon's PROV projection. */
 class AuditNode extends TermWrapper {
   values(predicate: string) {
