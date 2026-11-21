@@ -124,7 +124,6 @@ export class Engine {
   private readonly approvalRecords = new Map<string, string>();
   private readonly attestations = new Map<string, string>();
   private readonly ledger: SpendRecord[] = [];
-  private readonly usedReceipts = new Set<string>();
   private readonly history = new Map<string, { purchases: number; shares: number }>();
   private readonly declined = new Map<string, number>();
   private resolver: Resolver | undefined;
@@ -161,14 +160,17 @@ export class Engine {
 
   private async init(): Promise<void> {
     this.key = await createDeviceKey();
-    this.parties = await Parties.create([
-      ...STORES.map((s) => ({ id: s.id, name: s.name })),
-      MORTGAGE.index,
-      ...MORTGAGE.lenders.map((l) => ({ id: l.id, name: l.name })),
-      MORTGAGE.bank,
-      MORTGAGE.payroll,
-      { id: "org:idp", name: MORTGAGE.idp },
-    ]);
+    this.parties = await Parties.create(
+      [
+        ...STORES.map((s) => ({ id: s.id, name: s.name })),
+        MORTGAGE.index,
+        ...MORTGAGE.lenders.map((l) => ({ id: l.id, name: l.name })),
+        MORTGAGE.bank,
+        MORTGAGE.payroll,
+        { id: "org:idp", name: MORTGAGE.idp },
+      ],
+      this.clock,
+    );
     this.set({ deviceKid: this.key.kid });
   }
 
@@ -254,13 +256,14 @@ export class Engine {
     return this.waitFor(run, () => this.parties.sign(from, payload));
   }
 
-  private receive<T extends Record<string, unknown>>(
+  private async receive<T extends Record<string, unknown>>(
     run: RunToken,
     jws: string,
     expected: string,
     fitness?: (payload: T) => string | undefined,
   ) {
-    return this.waitFor(run, () => this.parties.receive<T>(jws, expected, fitness));
+    const result = await this.waitFor(run, () => this.parties.receive<T>(jws, expected, fitness));
+    return result.ok ? result : undefined;
   }
 
   private chat(chatId: string): Chat {
@@ -1138,10 +1141,9 @@ export class Engine {
       x.order === orderRef &&
       x.actionDigest === digest &&
       x.total === a.total.minor &&
-      x.currency === a.total.currency &&
-      !this.usedReceipts.has(receiptJws)
+      x.currency === a.total.currency
         ? undefined
-        : "receipt does not match this order or has already been used",
+        : "receipt does not match this order",
     );
     if (!receipt) {
       await this.say(
@@ -1161,7 +1163,6 @@ export class Engine {
     )
       return this.completePurchase(chatId, a, summary, run);
     // Commit the effect and its evidence together, before any cancellable presentation work.
-    this.usedReceipts.add(receiptJws);
     this.ledger.push({
       id: orderRef,
       ...(ruleId ? { ruleId } : {}),
@@ -1576,7 +1577,7 @@ export class Engine {
         { label: "Valid until", value: "Dec 13, 2026" },
       ],
       binding: offer.payload.binding,
-      sourceLine: `Signed by ${lender.name}. Checked against the sector register.`,
+      sourceLine: `Signed with the key pinned for ${lender.name}.`,
       recordId,
     });
     await this.say(

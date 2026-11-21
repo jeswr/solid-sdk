@@ -1,10 +1,8 @@
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The other side of every exchange: stores, lenders, banks and the identity provider, each
- * with its own signing key. Their messages arrive as signed JWS, and the agent's inbound
- * gate checks them before anything in them is used: integrity (the signature verifies),
- * source (the key is the one pinned for that party), authority (the party may say this),
- * terms, and fitness (fresh enough for the task).
+ * with its own signing key. The inbound gate checks each message against the sender's pinned
+ * key, the receiver's identity and clock, and the ids already seen in this session.
  */
 import type { CheckLine } from "@jeswr/agent-consent";
 import { CompactSign, compactVerify, exportJWK, generateKeyPair, importJWK, type JWK } from "jose";
@@ -17,22 +15,46 @@ export interface PartyKey {
 }
 
 export interface Verified<T> {
+  readonly ok: true;
   readonly payload: T;
   readonly checks: readonly CheckLine[];
 }
 
+type RefusalReason =
+  | "unknown-key"
+  | "bad-signature"
+  | "malformed"
+  | "sender-key-mismatch"
+  | "wrong-audience"
+  | "not-yet-valid"
+  | "expired"
+  | "replay-conflict"
+  | "fitness-failed";
+
+type Received<T> = Verified<T> | { readonly ok: false; readonly reason: RefusalReason };
+
 const TYP = "application/verifiable-message+json";
+const AUDIENCE = "agent:errand";
+const MESSAGE_LIFETIME_MS = 15 * 60_000;
 
 export class Parties {
-  private constructor(private readonly keys: ReadonlyMap<string, PartyKey>) {}
+  private readonly seenIds = new Set<string>();
 
-  static async create(parties: readonly { id: string; name: string }[]): Promise<Parties> {
+  private constructor(
+    private readonly keys: ReadonlyMap<string, PartyKey>,
+    private readonly now: () => Date,
+  ) {}
+
+  static async create(
+    parties: readonly { id: string; name: string }[],
+    now: () => Date = () => new Date(),
+  ): Promise<Parties> {
     const keys = new Map<string, PartyKey>();
     for (const p of parties) {
       const { privateKey, publicKey } = await generateKeyPair("ES256");
       keys.set(p.id, { ...p, privateKey, publicJwk: await exportJWK(publicKey) });
     }
-    return new Parties(keys);
+    return new Parties(keys, now);
   }
 
   name(id: string): string {
@@ -43,70 +65,93 @@ export class Parties {
   async sign(from: string, payload: Record<string, unknown>): Promise<string> {
     const key = this.keys.get(from);
     if (!key) throw new Error(`no key for ${from}`);
-    return new CompactSign(new TextEncoder().encode(JSON.stringify({ ...payload, from })))
+    const now = this.now();
+    const message = {
+      ...payload,
+      from,
+      id: crypto.randomUUID(),
+      audience: AUDIENCE,
+      createdAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + MESSAGE_LIFETIME_MS).toISOString(),
+    };
+    return new CompactSign(new TextEncoder().encode(JSON.stringify(message)))
       .setProtectedHeader({ alg: "ES256", kid: from, typ: TYP })
       .sign(key.privateKey);
   }
 
   /**
-   * The inbound gate. Returns the payload only when integrity and source hold; `fitness` decides
-   * fitness for the task. Untrusted free text in the payload is never treated as instruction.
+   * Return the payload only after integrity, source and any supplied fitness rule pass.
    */
   async receive<T extends Record<string, unknown>>(
     jws: string,
     expected: string,
-    fitness: (payload: T) => string | undefined = () => undefined,
-  ): Promise<Verified<T> | undefined> {
+    fitness?: (payload: T) => string | undefined,
+  ): Promise<Received<T>> {
     const pinned = this.keys.get(expected);
-    if (!pinned) return undefined;
+    if (!pinned) return { ok: false, reason: "unknown-key" };
+    let verified: Awaited<ReturnType<typeof compactVerify>>;
     try {
-      const { payload, protectedHeader } = await compactVerify(
-        jws,
-        await importJWK(pinned.publicJwk, "ES256"),
-        { algorithms: ["ES256"] },
-      );
-      if (protectedHeader.kid !== expected || protectedHeader.typ !== TYP) return undefined;
-      const value = JSON.parse(new TextDecoder().decode(payload)) as T;
-      if (value.from !== expected) return undefined;
-      const unfit = fitness(value);
-      if (unfit) return undefined;
-      return {
-        payload: value,
-        checks: [
-          {
-            check: "integrity",
-            result: "pass",
-            plain: "The signature verifies; nothing was changed.",
-            code: "intact",
-          },
-          {
-            check: "source",
-            result: "pass",
-            plain: `Signed with the key pinned for ${pinned.name}.`,
-            code: "source-accepted",
-          },
-          {
-            check: "authority",
-            result: "pass",
-            plain: `${pinned.name} may make this statement.`,
-            code: "authority-valid",
-          },
-          {
-            check: "terms",
-            result: "pass",
-            plain: "Its terms are ones you accept.",
-            code: "terms-acceptable",
-          },
-          {
-            check: "fitness",
-            result: "pass",
-            plain: "Fresh and complete enough for this task.",
-            code: "fit-for-use",
-          },
-        ],
-      };
+      verified = await compactVerify(jws, await importJWK(pinned.publicJwk, "ES256"), {
+        algorithms: ["ES256"],
+      });
     } catch {
-      return undefined;
+      return { ok: false, reason: "bad-signature" };
     }
+    const { payload, protectedHeader } = verified;
+    if (protectedHeader.typ !== TYP) return { ok: false, reason: "malformed" };
+    if (protectedHeader.kid !== expected) return { ok: false, reason: "sender-key-mismatch" };
+
+    let value: unknown;
+    try {
+      value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(payload));
+    } catch {
+      return { ok: false, reason: "malformed" };
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return { ok: false, reason: "malformed" };
+    const { from, id, audience, createdAt, expiresAt } = value as Record<string, unknown>;
+    if (from !== expected) return { ok: false, reason: "sender-key-mismatch" };
+    if (audience !== AUDIENCE) return { ok: false, reason: "wrong-audience" };
+    if (typeof id !== "string" || !id.trim()) return { ok: false, reason: "malformed" };
+    const created = typeof createdAt === "string" ? Date.parse(createdAt) : NaN;
+    const expires = typeof expiresAt === "string" ? Date.parse(expiresAt) : NaN;
+    const now = this.now().getTime();
+    if (!Number.isFinite(created) || !Number.isFinite(expires) || !Number.isFinite(now))
+      return { ok: false, reason: "malformed" };
+    if (created > now) return { ok: false, reason: "not-yet-valid" };
+    if (expires <= now) return { ok: false, reason: "expired" };
+    if (this.seenIds.has(id)) return { ok: false, reason: "replay-conflict" };
+    this.seenIds.add(id);
+
+    const checks: CheckLine[] = [
+      {
+        check: "integrity",
+        result: "pass",
+        plain:
+          "The signature verifies. The message is current, addressed to this agent and new to this session.",
+        code: "intact",
+      },
+      {
+        check: "source",
+        result: "pass",
+        plain: `Signed with the key pinned for ${pinned.name}.`,
+        code: "source-accepted",
+      },
+    ];
+    const message = value as T;
+    if (fitness) {
+      try {
+        if (fitness(message)) return { ok: false, reason: "fitness-failed" };
+      } catch {
+        return { ok: false, reason: "fitness-failed" };
+      }
+      checks.push({
+        check: "fitness",
+        result: "pass",
+        plain: "The message passed the check for this task.",
+        code: "fit-for-use",
+      });
+    }
+    return { ok: true, payload: message, checks };
   }
 }

@@ -9,15 +9,120 @@ import {
   signRecord,
   verifyRecord,
 } from "@jeswr/agent-consent";
+import { CompactSign, compactVerify, importJWK } from "jose";
 import { describe, expect, it, vi } from "vitest";
 import type { SampleTool } from "../src/engine/core.js";
 import { Engine, StoppedError } from "../src/engine/engine.js";
-import { Parties } from "../src/engine/parties.js";
+import { Parties, type PartyKey } from "../src/engine/parties.js";
 import { Session } from "../src/engine/session.js";
 import type { ChatMessage } from "../src/engine/types.js";
 import { PRODUCTS } from "../src/engine/world.js";
 
 const NOW = new Date("2026-11-13T12:00:00.000Z");
+
+function fixturePartyKey(parties: Parties, id: string): PartyKey {
+  const key = (parties as unknown as { keys: ReadonlyMap<string, PartyKey> }).keys.get(id);
+  if (!key) throw new Error(`missing test key for ${id}`);
+  return key;
+}
+
+describe("counterparty message admission", () => {
+  const sender = "store:stride";
+  const audience = "agent:errand";
+
+  async function parties(now = () => NOW): Promise<Parties> {
+    const engine = new Engine({ now });
+    await engine.ready;
+    return (engine as unknown as { parties: Parties }).parties;
+  }
+
+  async function signedFixture(receiver: Parties, overrides: Record<string, unknown>) {
+    const key = fixturePartyKey(receiver, sender);
+    const payload = {
+      id: "fixture-message",
+      from: sender,
+      audience,
+      createdAt: NOW.toISOString(),
+      expiresAt: "2026-11-13T12:01:00.000Z",
+      price: 1200,
+      ...overrides,
+    };
+    return new CompactSign(new TextEncoder().encode(JSON.stringify(payload)))
+      .setProtectedHeader({ alg: "ES256", kid: sender, typ: "application/verifiable-message+json" })
+      .sign(key.privateKey);
+  }
+
+  it.each([
+    ["expired", { createdAt: "2026-11-13T11:59:00.000Z", expiresAt: NOW.toISOString() }],
+    ["not-yet-valid", { createdAt: "2026-11-13T12:00:00.001Z" }],
+    ["wrong-audience", { audience: "agent:elsewhere" }],
+    ["malformed", { createdAt: "invalid" }],
+    ["malformed", { expiresAt: undefined }],
+    ["malformed", { id: undefined }],
+  ])("refuses a signed message with reason %s (%j)", async (reason, overrides) => {
+    const receiver = await parties();
+    const jws = await signedFixture(receiver, overrides);
+    const fitness = vi.fn(() => undefined);
+    expect(await receiver.receive(jws, sender, fitness)).toEqual({ ok: false, reason });
+    expect(fitness).not.toHaveBeenCalled();
+  });
+
+  it("refuses the same message id across deliveries, including changed signed content", async () => {
+    const receiver = await parties();
+    const jws = await signedFixture(receiver, {});
+    expect(await receiver.receive(jws, sender)).toMatchObject({ payload: { price: 1200 } });
+    const changed = await signedFixture(receiver, { price: 1250 });
+    const fitness = vi.fn(() => undefined);
+    expect(await receiver.receive(jws, sender, fitness)).toEqual({
+      ok: false,
+      reason: "replay-conflict",
+    });
+    expect(await receiver.receive(changed, sender, fitness)).toEqual({
+      ok: false,
+      reason: "replay-conflict",
+    });
+    expect(fitness).not.toHaveBeenCalled();
+  });
+
+  it("reports pass only for the checks that ran", async () => {
+    const receiver = await parties();
+    const jws = await signedFixture(receiver, {});
+    const result = await receiver.receive(jws, sender);
+    expect(result).toMatchObject({
+      checks: [
+        expect.objectContaining({ check: "integrity", result: "pass" }),
+        expect.objectContaining({ check: "source", result: "pass" }),
+      ],
+    });
+
+    const checked = await signedFixture(receiver, { id: "checked-message" });
+    const fitness = vi.fn(() => undefined);
+    expect(await receiver.receive(checked, sender, fitness)).toMatchObject({
+      checks: expect.arrayContaining([
+        expect.objectContaining({ check: "fitness", result: "pass" }),
+      ]),
+    });
+    expect(fitness).toHaveBeenCalledOnce();
+  });
+
+  it("signs fresh ids, the intended audience and a window from the engine clock", async () => {
+    let now = NOW;
+    const receiver = await parties(() => now);
+    const first = await receiver.sign(sender, { price: 1200 });
+    const second = await receiver.sign(sender, { price: 1200 });
+    now = new Date(NOW.getTime() + 1);
+    for (const jws of [first, second]) {
+      expect(await receiver.receive(jws, sender)).toMatchObject({
+        payload: {
+          id: expect.stringMatching(/\S/),
+          audience,
+          createdAt: NOW.toISOString(),
+          expiresAt: "2026-11-13T12:15:00.000Z",
+        },
+      });
+    }
+  });
+});
 
 /** Answers each approval with the next scripted answer, recording what was asked. */
 function harness(answers: ((r: ApprovalRequest) => PrincipalResponse)[], now = () => NOW) {
@@ -786,8 +891,19 @@ describe("second adversarial review", () => {
     expect(messages().filter((m) => m.type === "receipt")).toHaveLength(2);
     const entry = activityAtCommit[0];
     expect(entry?.receiptJws).toBeTypeOf("string");
-    const receipt = await internals.parties.receive(entry?.receiptJws as string, "store:stride");
-    expect(receipt?.payload).toMatchObject({
+    // Verify the stored evidence without delivering the same message to the engine again.
+    const key = fixturePartyKey(internals.parties, "store:stride");
+    const receipt = await compactVerify(
+      entry?.receiptJws as string,
+      await importJWK(key.publicJwk, "ES256"),
+      { algorithms: ["ES256"] },
+    );
+    expect(receipt.protectedHeader).toMatchObject({
+      kid: "store:stride",
+      typ: "application/verifiable-message+json",
+    });
+    expect(JSON.parse(new TextDecoder().decode(receipt.payload))).toMatchObject({
+      from: "store:stride",
       order: internals.ledger[1]?.id,
       actionDigest: entry?.digest,
       total: 1200,
