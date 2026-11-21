@@ -13,7 +13,7 @@ import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { ResourceWriteError } from "./errors";
 import { isDirectChild } from "./layout";
-import { deleteRdf, readRdf, writeRdf } from "./rdf-io";
+import { createRdfChild, deleteRdf, readRdf, writeRdf } from "./rdf-io";
 import { DCT, OA, PD, RDF_TYPE } from "./vocab";
 
 export interface CommentAnchor {
@@ -221,8 +221,9 @@ export class DocumentCommentStore {
     now: Date,
   ) {
     if (!text.trim()) throw new Error("Enter a comment.");
+    const slug = `${crypto.randomUUID()}.ttl`;
     const comment: DocumentComment = {
-      url: `${this.container}${crypto.randomUUID()}.ttl`,
+      url: `${this.container}${slug}`,
       etag: null,
       text: text.trim(),
       creator,
@@ -234,9 +235,18 @@ export class DocumentCommentStore {
     };
     const dataset = new Store();
     new Annotation(comment.url, dataset, DataFactory).write(comment);
-    const { etag } = await writeRdf(comment.url, dataset, {
-      fetchImpl: this.http,
-      createOnly: true,
+    // POST needs only Append on the comments container; commenters cannot PUT-create.
+    // A missing container (the first comment) is created by PUT, which needs Write.
+    const create = () => createRdfChild(this.container, slug, dataset, this.http);
+    const { etag } = await create().catch(async (error: unknown) => {
+      if (!(error instanceof ResourceWriteError && error.status === 404)) throw error;
+      await writeRdf(this.container, new Store(), { fetchImpl: this.http, createOnly: true }).catch(
+        (failure: unknown) => {
+          // Another client created it first.
+          if (!(failure instanceof ResourceWriteError && failure.status === 412)) throw failure;
+        },
+      );
+      return create();
     });
     return { ...comment, etag };
   }
