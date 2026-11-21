@@ -22,6 +22,30 @@ afterEach(() => {
 });
 
 describe("authenticated session vault", () => {
+  it.each([
+    "get",
+    "compareAndSwap",
+  ] as const)("retries transient retirement %s outages", async (method) => {
+    const store = new MemoryVaultStore();
+    const vault = createSessionVault({ key: KEY, store });
+    await vault.put("id", secret);
+    const outage = new Error("temporary outage");
+    vi.spyOn(store, method).mockRejectedValueOnce(outage).mockRejectedValueOnce(outage);
+    await vault.delete("id");
+    expect(await store.get("id")).toBe("deleted");
+  });
+  it("bounds deletion contention", async () => {
+    const store = new MemoryVaultStore();
+    const vault = createSessionVault({ key: KEY, store });
+    await vault.put("id", secret);
+    let attempts = 0;
+    const swap = vi.spyOn(store, "compareAndSwap").mockImplementation(async () => {
+      if (++attempts > 8) throw new Error("unbounded deletion");
+      return false;
+    });
+    await expect(vault.delete("id")).rejects.toThrow("Vault retirement failed");
+    expect(swap).toHaveBeenCalledTimes(8);
+  });
   it("requires a canonical 256-bit key, including env configuration", async () => {
     vi.stubEnv("MCP_VAULT_KEY", undefined);
     for (const key of [undefined, "", "invalid", Buffer.alloc(31).toString("base64"), `${KEY}\n`])
@@ -94,7 +118,10 @@ describe("authenticated session vault", () => {
     expect(await vault.compareAndSwap("id", undefined, secret)).toBe(false);
     vi.spyOn(store, "get").mockRejectedValue(new Error("offline"));
     await expect(vault.get("id")).rejects.toThrow("offline");
-    await expect(vault.delete("id")).rejects.toThrow("offline");
+    await expect(vault.delete("id")).rejects.toMatchObject({
+      message: "Vault retirement failed",
+      cause: { message: "offline" },
+    });
   });
   it("retries retirement across credential updates and concurrent retirement", async () => {
     for (const competingRetirement of [false, true]) {

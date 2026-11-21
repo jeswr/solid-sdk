@@ -29,7 +29,11 @@ const post = (path: string, cookie: string, fields: Record<string, string>, orig
     body: new URLSearchParams(fields),
   });
 
-async function fixture(upstreamFetch?: typeof fetch, allowedOrigins: readonly string[] = []) {
+async function fixture(
+  upstreamFetch?: typeof fetch,
+  allowedOrigins: readonly string[] = [],
+  metadataFetch?: typeof fetch,
+) {
   let now = Math.floor(Date.now() / 1000);
   const vault = createSessionVault({
     key: Buffer.alloc(32, 8).toString("base64"),
@@ -59,6 +63,7 @@ async function fixture(upstreamFetch?: typeof fetch, allowedOrigins: readonly st
     podSessions: sessions,
     now: () => now,
     upstreamFetch,
+    metadataFetch,
     allowedOrigins,
   };
   const app = await createApp(options);
@@ -94,8 +99,8 @@ async function fixture(upstreamFetch?: typeof fetch, allowedOrigins: readonly st
       response,
     };
   }
-  async function consent() {
-    const login = await start();
+  async function consent(changes: Record<string, string> = {}) {
+    const login = await start(changes);
     expect(
       (
         await app(
@@ -133,13 +138,101 @@ async function fixture(upstreamFetch?: typeof fetch, allowedOrigins: readonly st
     sessions,
     options,
     clientId,
-    advance: () => {
-      now += 601;
+    advance: (seconds = 601) => {
+      now += seconds;
     },
   };
 }
 
 describe("OAuth composition", () => {
+  it("preserves the browser deadline through login, consent and consumption", async () => {
+    const f = await fixture();
+    const cas = vi.spyOn(f.options.vault, "compareAndSwap");
+    const retire = vi.spyOn(f.options.vault, "delete");
+    const login = await f.start();
+    f.advance(120);
+    await f.app(
+      post("/auth/login", login.cookie, { csrf: login.csrf, webid: "https://pod.example/" }),
+    );
+    const response = await f.app(
+      request("/auth/callback?code=pod-code&state=upstream-state", {
+        headers: { cookie: login.cookie },
+      }),
+    );
+    const html = await response.text();
+    await f.app(post("/auth/consent", login.cookie, { csrf: csrf(html), decision: "deny" }));
+    const calls = cas.mock.calls.filter(([key]) => key.startsWith("browser:"));
+    expect(calls[0]?.[3]).toBe(600);
+    for (const call of calls.slice(1)) expect(call[3]).toBe(480);
+    expect(retire.mock.calls.find(([key]) => key.startsWith("browser:"))?.[1]).toBe(480);
+  });
+
+  it("marks phishing DCR names unverified and shows the exact selected redirect and host", async () => {
+    const f = await fixture();
+    const redirect = 'https://evil.example:8443/cb?x=<img>&q="quoted"';
+    const registration = await f.app(
+      request("/auth/register", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_name: "Claude",
+          redirect_uris: ["https://safe.example/cb", redirect],
+        }),
+      }),
+    );
+    const client = await registration.json();
+    const consent = await f.consent({ client_id: client.client_id, redirect_uri: redirect });
+    expect(consent.html).toContain("<bdi>Claude</bdi> (unverified (self-declared))");
+    expect(consent.html).toContain("Redirect host: <strong><bdi>evil.example:8443</bdi></strong>");
+    expect(consent.html).toContain(
+      "https://evil.example:8443/cb?x=&lt;img&gt;&amp;q=&quot;quoted&quot;",
+    );
+    expect(consent.html).not.toContain("safe.example");
+    expect(consent.html).not.toContain("<img>");
+  });
+
+  it("identifies a metadata-document client by its URL host and escapes its self-declared name", async () => {
+    const id = "https://identity.example:8443/client.json";
+    const f = await fixture(undefined, [], async () =>
+      Response.json({
+        client_id: id,
+        client_name: "<b>Claude</b>",
+        redirect_uris: ["http://127.0.0.1:4321/callback"],
+      }),
+    );
+    const consent = await f.consent({ client_id: id });
+    expect(consent.html).toContain("Client: <strong><bdi>identity.example:8443</bdi></strong>");
+    expect(consent.html).toContain("&lt;b&gt;Claude&lt;/b&gt;");
+    expect(consent.html).toContain("Redirect host: <strong><bdi>127.0.0.1:4321</bdi></strong>");
+    expect(consent.html).toContain(id);
+    expect(consent.html).not.toContain("<b>Claude</b>");
+  });
+
+  it("shows IDN identity and redirect hosts in punycode with isolated untrusted fields", async () => {
+    const id = "https://bücher.example/client.json";
+    const redirect = "https://éxample.example/callback";
+    const f = await fixture(undefined, [], async () =>
+      Response.json({ client_id: id, client_name: "Book app", redirect_uris: [redirect] }),
+    );
+    const consent = await f.consent({ client_id: id, redirect_uri: redirect });
+    expect(consent.html).toContain("Client: <strong><bdi>xn--bcher-kva.example</bdi></strong>");
+    expect(consent.html).toContain(
+      "Redirect host: <strong><bdi>xn--xample-9ua.example</bdi></strong>",
+    );
+    expect(consent.html).toContain(`<bdi>${redirect}</bdi>`);
+    expect(consent.html).toContain("<bdi>Book app</bdi>");
+    expect(consent.html).toContain("<bdi>https://pod.example/profile/card#me</bdi>");
+    expect(consent.html).toContain("<bdi>mcp</bdi>");
+  });
+
+  it("gives abandoned browser records a bounded TTL", async () => {
+    const f = await fixture();
+    const cas = vi.spyOn(f.options.vault, "compareAndSwap");
+    await f.start();
+    const call = cas.mock.calls.find(([id]) => id.startsWith("browser:"));
+    expect(call?.[3]).toBe(600);
+  });
+
   it.each(
     publicOAuthRoutes,
   )("allows browser preflight and responses on %s", async (path, method) => {
