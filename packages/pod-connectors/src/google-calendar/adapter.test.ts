@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { DataFactory, Writer } from "n3";
 import { describe, expect, it } from "vitest";
+import { RunBudget } from "../core/budget.js";
 import { demoImport, fixtureFetch, TEST_POD_ROOT } from "../core/testing.js";
 import type { NormalisedDoc } from "../core/types.js";
 import { CalendarEvent, CLASSES } from "../core/vocab.js";
@@ -70,6 +71,7 @@ describe("google-calendar adapter contract", () => {
   it("matches the sorted Turtle mapping snapshot, including recurrence and date datatypes", async () => {
     let doc: NormalisedDoc | undefined;
     await googleCalendarAdapter.import({
+      budget: new RunBudget("fixture"),
       api: fixtureFetch("google-calendar", googleCalendarAdapter.fixtures()),
       resolve: (slug) => `${ROOT}${slug}`,
       read: async () => undefined,

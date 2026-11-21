@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { RunBudget } from "./budget.js";
 import { IntegrationSyncError, RateLimitedError } from "./errors.js";
 import { fixtureFetch, getJson, postJson } from "./fixture-fetch.js";
+import { budgetedFetch } from "./source-budget.js";
 import type { FixtureRoute } from "./types.js";
 
 const ROUTES: FixtureRoute[] = [
@@ -99,15 +100,14 @@ describe("getJson / postJson error mapping", () => {
 
   it("charges streamed bytes to the shared budget and cancels when it is exceeded", async () => {
     const budget = new RunBudget("demo", { maxRequests: 10, maxItems: 10, maxBytes: 8 });
-    await expect(
-      getJson(
-        "demo",
-        async () => new Response("[1,2]"),
-        "https://api.test/items",
-        undefined,
-        budget,
-      ),
-    ).resolves.toEqual([1, 2]);
+    const source = budgetedFetch(
+      async () => new Response("[1,2]"),
+      "demo",
+      budget,
+      new AbortController().signal,
+    );
+    await expect(getJson("demo", source.api, "https://api.test/items")).resolves.toEqual([1, 2]);
+    source.close();
     let cancelled = false;
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -118,7 +118,12 @@ describe("getJson / postJson error mapping", () => {
       },
     });
     await expect(
-      getJson("demo", async () => new Response(body), "https://api.test/items", undefined, budget),
+      getJson(
+        "demo",
+        budgetedFetch(async () => new Response(body), "demo", budget, new AbortController().signal)
+          .api,
+        "https://api.test/items",
+      ),
     ).rejects.toThrow("data budget");
     expect(cancelled).toBe(true);
   });

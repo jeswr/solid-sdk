@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6
 
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
+import { runImport } from "@jeswr/pod-connectors";
 import { spotifyAdapter } from "@jeswr/pod-connectors/adapters/spotify";
-import { fixtureFetch } from "@jeswr/pod-connectors/core/fixture-fetch";
 import { createDocument, provision } from "../lib/data/library";
 import { Store } from "../lib/model";
 
@@ -14,24 +14,27 @@ export async function importSpotifyFixture(
   await provision(fetch, storage);
   const scoped = createPodScopedFetch(storage, { fetch });
   const resolve = (slug: string) => new URL(`integrations/spotify/${slug}`, storage).href;
-  await spotifyAdapter.import({
-    api: fixtureFetch("spotify", spotifyAdapter.fixtures()),
-    resolve,
-    read: async () => undefined,
-    write: async (doc) => {
-      const url = resolve(doc.slug);
-      const response = await scoped(url, { method: "HEAD" });
-      if (response.status === 404)
-        await createDocument(fetch, storage, url, new Store([...doc.dataset]));
-      else if (!response.ok) throw new Error("Could not read a previous Spotify import");
-      return { url, category: doc.category, forClass: doc.forClass };
+  await runImport({
+    adapter: spotifyAdapter,
+    mode: "demo",
+    podWriter: {
+      resolve,
+      read: async () => undefined,
+      write: async (doc) => {
+        const url = resolve(doc.slug);
+        const response = await scoped(url, { method: "HEAD" });
+        if (response.status === 404)
+          await createDocument(fetch, storage, url, new Store([...doc.dataset]));
+        else if (!response.ok) throw new Error("Could not read a previous Spotify import");
+        return { url, category: doc.category, forClass: doc.forClass };
+      },
+      writeBinary: async () => {
+        throw new Error("Unexpected binary in Spotify fixture");
+      },
+      remove: async () => {
+        throw new Error("Unexpected deletion in Spotify fixture");
+      },
+      registerType: async () => ({ indexUrl: "" }),
     },
-    writeBinary: async () => {
-      throw new Error("Unexpected binary in Spotify fixture");
-    },
-    remove: async () => {
-      throw new Error("Unexpected deletion in Spotify fixture");
-    },
-    progress: () => {},
   });
 }

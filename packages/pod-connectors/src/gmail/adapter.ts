@@ -10,9 +10,10 @@
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
 import { createGoogleOAuthConfig, GOOGLE_SCOPES } from "../adapters/google/oauth.js";
-import { ResponseTooLargeError } from "../core/budget.js";
+import { ResponseTooLargeError, RunBudgetExceededError } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
+import { SourceTimeoutError } from "../core/source-timeout.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { accountRoot, messageSlug, SYSTEM_FOLDERS } from "../mail/paths.js";
 import { MAIL_CLASSES, MailMessage } from "../mail/vocab.js";
@@ -32,6 +33,7 @@ import {
   type GmailProfile,
   type GmailThread,
 } from "./fixtures.js";
+import { FullSyncJournal } from "./full-sync.js";
 
 const ID = "gmail";
 /** Gmail's own per-message cap; larger raw payloads are skipped, never buffered. */
@@ -68,10 +70,12 @@ export const gmailAdapter: IntegrationAdapter = {
   fixtures: () => GMAIL_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = ctx.budget;
     ctx.progress({ label: "Connecting to your mailbox…", done: 0 });
-    const profile = await getJson<GmailProfile>(ID, ctx.api, `${GMAIL_API}/profile`);
+    const profile = await getJson<GmailProfile>(ID, ctx.api, `${GMAIL_API}/profile`, undefined);
     if (typeof profile?.emailAddress !== "string" || typeof profile.historyId !== "string")
       throw new IntegrationSyncError(ID, "Gmail returned an incomplete mailbox profile.");
+    budget.items(1);
     const account = profile.emailAddress;
     const labels = await labelFolders(ctx);
     const mail = createMailWriter(ctx, account);
@@ -88,22 +92,23 @@ export const gmailAdapter: IntegrationAdapter = {
     }
     // The profile historyId is read before listing, so changes during the list replay next time.
     if (cursor === undefined) {
-      await sync.full();
-      cursor = profile.historyId;
+      cursor = await sync.full(profile.historyId);
     }
     ctx.progress({ label: "Updating folders and conversations…", done: sync.done });
     const known = new Map<string, MailFolder>();
     for (const key of SYSTEM_FOLDERS) known.set(key, { key, title: key });
     for (const folder of labels.values()) known.set(folder.key, folder);
-    await mail.flush([...known.values()]);
+    await sync.finish([...known.values()]);
     ctx.progress({ label: "Done", done: sync.done, total: sync.done });
-    return { cursor, skipped: sync.skipped || undefined };
+    // The journal outlives this call: the runner clears it only after reporting the cursor.
+    return { cursor, skipped: sync.skipped || undefined, commit: sync.commit };
   },
 };
 
 /** Label id → folder. System folders are keyed by name, user labels by their stable id. */
 async function labelFolders(ctx: ImportContext): Promise<Map<string, MailFolder>> {
-  const list = await getJson<GmailLabelList>(ID, ctx.api, `${GMAIL_API}/labels`);
+  const list = await getJson<GmailLabelList>(ID, ctx.api, `${GMAIL_API}/labels`, undefined);
+  ctx.budget.items(list?.labels?.length ?? 0);
   const folders = new Map<string, MailFolder>();
   for (const label of list?.labels ?? []) {
     if (!label || !validId(label.id)) continue;
@@ -124,6 +129,7 @@ class Sync {
   done = 0;
   skipped = 0;
   private readonly seen = new Set<string>();
+  private journal?: FullSyncJournal;
   /** Per-run metadata cache, including threads with no usable Message-ID headers. */
   private readonly parents = new Map<string, ReadonlyMap<string, string>>();
   constructor(
@@ -134,22 +140,88 @@ class Sync {
   ) {}
 
   /** Lists every message (Spam and Trash included) and removes stored ones no longer listed. */
-  async full(): Promise<void> {
-    let pageToken: string | undefined;
-    do {
-      const params = new URLSearchParams({ maxResults: "100", includeSpamTrash: "true" });
-      if (pageToken) params.set("pageToken", pageToken);
-      const page = await getJson<GmailMessageList>(
-        ID,
-        this.ctx.api,
-        `${GMAIL_API}/messages?${params}`,
-      );
-      for (const ref of page?.messages ?? []) await this.store(ref?.id);
-      pageToken = page?.nextPageToken || undefined;
-    } while (pageToken);
+  async full(historyId: string): Promise<string> {
+    const journal = await FullSyncJournal.load(this.ctx, accountRoot(this.account), historyId);
+    this.journal = journal;
+    const resumed = new Set(journal.completed);
+    for (const slug of journal.seen) this.seen.add(slug);
+    let restarted = false;
+    let unsaved = false;
+    try {
+      for (;;) {
+        const params = new URLSearchParams({ maxResults: "100", includeSpamTrash: "true" });
+        if (journal.pageToken) params.set("pageToken", journal.pageToken);
+        let page: GmailMessageList;
+        try {
+          page = await getJson<GmailMessageList>(
+            ID,
+            this.ctx.api,
+            `${GMAIL_API}/messages?${params}`,
+          );
+        } catch (error) {
+          if (
+            !(error instanceof IntegrationSyncError) ||
+            error.status !== 400 ||
+            !journal.pageToken ||
+            restarted
+          )
+            throw error;
+          // Tokens expire and deletions can shift pages. Rebuild the reconciliation manifest
+          // from a fresh listing, but keep completed IDs so their payloads need not be fetched.
+          restarted = true;
+          journal.restart();
+          this.seen.clear();
+          await journal.save();
+          continue;
+        }
+        for (const row of page?.messages ?? []) {
+          const id = row?.id;
+          const slug = validId(id) ? messageSlug(this.account, `gmail-${id}`) : undefined;
+          if (slug && journal.completed.has(slug)) {
+            // A row charged by an earlier run is exempt once; later occurrences in this run count.
+            if (!resumed.delete(slug)) this.ctx.budget.items(1);
+            journal.remember(slug);
+            this.seen.add(slug);
+            continue;
+          }
+          // A completed ID was charged on its original run. New and malformed rows still
+          // count before filtering, and incomplete payloads are retried even if RDF exists.
+          this.ctx.budget.items(1);
+          if (slug) journal.remember(slug);
+          if ((await this.store(id)) && slug) {
+            journal.complete(slug);
+            unsaved = true;
+          }
+        }
+        journal.pageToken = page?.nextPageToken || undefined;
+        // After the last page too, when it completed payloads: a failure or cancel during
+        // the sweep or the final membership flush then resumes without refetching them.
+        if (journal.pageToken || unsaved) {
+          await this.mail.flush();
+          await journal.save();
+          unsaved = false;
+        }
+        if (!journal.pageToken) break;
+      }
+    } catch (error) {
+      if (
+        error instanceof RunBudgetExceededError &&
+        (!this.ctx.signal?.aborted || this.ctx.signal.reason === error)
+      ) {
+        // Commit memberships before journalling completed messages. A partial raw/body
+        // failure never marks its ID complete, so the next run retries all its bytes.
+        try {
+          await this.mail.flush();
+          await journal.save();
+        } catch {
+          /* Preserve the original budget failure if storage also fails. */
+        }
+      }
+      throw error;
+    }
     const container = `${accountRoot(this.account)}messages/`;
     const listing = await this.ctx.read(container);
-    if (!listing) return;
+    if (!listing) return journal.historyId;
     const base = this.ctx.resolve(container);
     for (const child of new Container(base, listing, DataFactory).contains) {
       if (!child.value.startsWith(base)) continue;
@@ -167,7 +239,20 @@ class Sync {
       )
         await this.mail.removeMessage(slug);
     }
+    return journal.historyId;
   }
+
+  async finish(known: readonly MailFolder[]): Promise<void> {
+    await this.mail.flush(known);
+  }
+
+  /**
+   * Runner-invoked once the run has reported its cursor. Keeping the journal until then means
+   * a run that fails after the sweep (a Pod error or a cancel) resumes from completed IDs.
+   */
+  readonly commit = async (): Promise<void> => {
+    await this.journal?.clear();
+  };
 
   /** Replays history pages from `start`; returns the mailbox historyId to persist. */
   async history(start: string): Promise<string> {
@@ -184,8 +269,17 @@ class Sync {
         ID,
         this.ctx.api,
         `${GMAIL_API}/history?${params}`,
+        undefined,
       );
+      this.ctx.budget.items(page?.history?.length ?? 0);
       for (const record of page?.history ?? []) {
+        for (const group of [
+          record?.messagesDeleted,
+          record?.messagesAdded,
+          record?.labelsAdded,
+          record?.labelsRemoved,
+        ])
+          this.ctx.budget.items(group?.length ?? 0);
         for (const { message } of record?.messagesDeleted ?? []) {
           if (!validId(message?.id)) continue;
           changed.delete(message.id);
@@ -199,14 +293,18 @@ class Sync {
       pageToken = page?.nextPageToken || undefined;
     } while (pageToken);
     for (const id of deleted) await this.remove(id);
-    for (const id of changed) await this.store(id);
+    for (const id of changed) {
+      this.ctx.budget.items(1);
+      await this.store(id);
+    }
     return latest;
   }
 
-  private async store(id: unknown): Promise<void> {
+  /** False when the message must be retried by a resumed run (a source timeout). */
+  private async store(id: unknown): Promise<boolean> {
     if (!validId(id)) {
       this.skipped++;
-      return;
+      return true;
     }
     let message: GmailMessage;
     try {
@@ -215,22 +313,28 @@ class Sync {
         this.ctx.api,
         `${GMAIL_API}/messages/${id}?format=raw`,
         undefined,
-        undefined,
         MAX_MESSAGE_JSON_BYTES,
       );
     } catch (error) {
       // Deleted between listing and fetching: a deletion, not a failure.
-      if (error instanceof IntegrationSyncError && error.status === 404) return this.remove(id);
-      if (error instanceof ResponseTooLargeError) {
-        // Over the message cap: keep any stored copy (not swept) and skip it.
+      if (error instanceof IntegrationSyncError && error.status === 404) {
+        await this.remove(id);
+        return true;
+      }
+      // Over the message cap, or a stalled response: keep any stored copy (not swept) and
+      // skip it, counted in `skipped`. A timed-out message is not journalled as complete.
+      if (error instanceof ResponseTooLargeError || error instanceof SourceTimeoutError) {
         this.seen.add(messageSlug(this.account, `gmail-${id}`));
         this.skipped++;
-        return;
+        return !(error instanceof SourceTimeoutError);
       }
       throw error;
     }
     const labelIds = Array.isArray(message?.labelIds) ? message.labelIds : [];
-    if (labelIds.includes("SPAM")) return this.remove(id);
+    if (labelIds.includes("SPAM")) {
+      await this.remove(id);
+      return true;
+    }
     const source = webUrl(id);
     // Anything kept from here on is not swept by a full sync, even if it cannot be re-read.
     this.seen.add(messageSlug(this.account, `gmail-${id}`));
@@ -240,12 +344,12 @@ class Sync {
       message.raw.length > (MAX_RAW_BYTES * 4) / 3 + 4
     ) {
       this.skipped++;
-      return;
+      return true;
     }
     const raw = decodeBase64Url(message.raw);
     if (!raw) {
       this.skipped++;
-      return;
+      return true;
     }
     const folders = labelIds.flatMap((label) => this.labels.get(label) ?? []);
     if (!labelIds.some((label) => ["INBOX", "SENT", "DRAFT", "TRASH"].includes(label)))
@@ -267,11 +371,12 @@ class Sync {
       // One malformed message must not block the mailbox.
       if (!(error instanceof MailParseError)) throw error;
       this.skipped++;
-      return;
+      return true;
     }
     this.done++;
     if (this.done % 25 === 0)
       this.ctx.progress({ label: `Saved ${this.done} messages…`, done: this.done });
+    return true;
   }
 
   private async remove(id: string): Promise<void> {
@@ -286,7 +391,9 @@ class Sync {
         ID,
         this.ctx.api,
         `${GMAIL_API}/threads/${threadId}?${params}`,
+        undefined,
       );
+      this.ctx.budget.items(metadata?.messages?.length ?? 0);
       const found = new Map<string, string>();
       if (metadata?.id === threadId && Array.isArray(metadata.messages))
         for (const member of metadata.messages) {

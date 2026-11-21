@@ -2,6 +2,7 @@
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, Store, Writer } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { RunBudget } from "../core/budget.js";
 import { IntegrationSyncError, RateLimitedError } from "../core/errors.js";
 import { fixtureFetch } from "../core/fixture-fetch.js";
 import { runImport } from "../core/import-runner.js";
@@ -57,6 +58,7 @@ async function imported(
 function context(api: typeof fetch): ImportContext {
   return {
     api,
+    budget: new RunBudget("spotify"),
     resolve: (slug) => `${ROOT}${slug}`,
     read: async () => undefined,
     write: async (doc) => ({ ...doc, url: `${ROOT}${doc.slug}` }),
@@ -692,7 +694,7 @@ describe("Spotify API failures", () => {
       .fn<typeof fetch>()
       .mockResolvedValueOnce(json({}, 429, { "retry-after": retryAfter }))
       .mockResolvedValueOnce(json({ items: [] }));
-    const promise = spotifyJson(api, `${API}/me/tracks`);
+    const promise = spotifyJson(api, `${API}/me/tracks`, new RunBudget("spotify"));
     await vi.advanceTimersByTimeAsync(1999);
     expect(api).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(1);
@@ -702,9 +704,9 @@ describe("Spotify API failures", () => {
   it("bounds retries and surfaces malformed Retry-After", async () => {
     vi.useFakeTimers();
     const api = vi.fn<typeof fetch>(async () => json({}, 429, { "retry-after": "0" }));
-    const outcome = expect(spotifyJson(api, `${API}/me/tracks`)).rejects.toBeInstanceOf(
-      RateLimitedError,
-    );
+    const outcome = expect(
+      spotifyJson(api, `${API}/me/tracks`, new RunBudget("spotify")),
+    ).rejects.toBeInstanceOf(RateLimitedError);
     await vi.runAllTimersAsync();
     await outcome;
     expect(api).toHaveBeenCalledTimes(4);
@@ -713,6 +715,7 @@ describe("Spotify API failures", () => {
         spotifyJson(
           async () => json({}, 429, header ? { "retry-after": header } : {}),
           `${API}/me/tracks`,
+          new RunBudget("spotify"),
         ),
       ).rejects.toBeInstanceOf(RateLimitedError);
   });
@@ -720,7 +723,12 @@ describe("Spotify API failures", () => {
     vi.useFakeTimers();
     const controller = new AbortController();
     const api = vi.fn<typeof fetch>(async () => json({}, 429, { "retry-after": "3600" }));
-    const pending = spotifyJson(api, `${API}/me/tracks`, undefined, controller.signal);
+    const pending = spotifyJson(
+      api,
+      `${API}/me/tracks`,
+      new RunBudget("spotify"),
+      controller.signal,
+    );
     pending.catch(() => {});
     await vi.waitFor(() => expect(vi.getTimerCount()).toBe(1));
     controller.abort(new Error("cancelled"));
@@ -734,7 +742,7 @@ describe("Spotify API failures", () => {
       return json({}, 429, { "retry-after": "3600" });
     });
     await expect(
-      spotifyJson(api, `${API}/me/tracks`, undefined, controller.signal),
+      spotifyJson(api, `${API}/me/tracks`, new RunBudget("spotify"), controller.signal),
     ).rejects.toThrow("cancelled");
     expect(api).toHaveBeenCalledTimes(1);
   });
@@ -746,7 +754,7 @@ describe("Spotify API failures", () => {
       .fn<typeof fetch>()
       .mockResolvedValueOnce(json({}, 429, { "retry-after": "1" }))
       .mockResolvedValueOnce(json({ items: [] }));
-    const promise = spotifyJson(api, `${API}/me/tracks`, undefined, signal);
+    const promise = spotifyJson(api, `${API}/me/tracks`, new RunBudget("spotify"), signal);
     await vi.advanceTimersByTimeAsync(1000);
     expect(await promise).toEqual({ items: [] });
     expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
@@ -772,7 +780,9 @@ describe("Spotify API failures", () => {
   });
   it.each([401, 403, 500, 503])("surfaces %s without unbounded retries", async (status) => {
     const api = vi.fn<typeof fetch>(async () => json({}, status));
-    await expect(spotifyJson(api, `${API}/me/tracks`)).rejects.toMatchObject({ status });
+    await expect(
+      spotifyJson(api, `${API}/me/tracks`, new RunBudget("spotify")),
+    ).rejects.toMatchObject({ status });
     expect(api).toHaveBeenCalledTimes(1);
   });
   it.each([
@@ -804,3 +814,17 @@ async function sortedTurtle(dataset: DatasetCore): Promise<string> {
   // N-Triples is a Turtle subset; canonical order makes mapping diffs stable.
   return `${lines.trim().split("\n").sort().join("\n")}\n`;
 }
+
+it("caps a hostile Retry-After at the remaining wall-clock budget", async () => {
+  vi.useFakeTimers();
+  const budget = new RunBudget("spotify", { maxDurationMs: 10 });
+  const api = vi.fn<typeof fetch>(async () => json({}, 429, { "retry-after": "2147483" }));
+  const pending = spotifyJson(api, `${API}/me/tracks`, budget);
+  const failure = expect(pending).rejects.toMatchObject({
+    name: "RunBudgetExceededError",
+    resource: "duration",
+  });
+  await vi.advanceTimersByTimeAsync(10);
+  await failure;
+  expect(api).toHaveBeenCalledOnce();
+});

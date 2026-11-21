@@ -35,6 +35,7 @@ import { DataFactory, Store } from "n3";
 import { parseCsv } from "../core/csv.js";
 import { isoDurationFromSeconds } from "../core/duration.js";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
+import { fileText } from "../core/file-stream.js";
 import { extractBlocks, firstTagText } from "../core/mini-xml.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
@@ -64,7 +65,8 @@ export const garminFileAdapter: FileImportAdapter = {
 
   async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
     ctx.progress({ label: "Reading your Garmin export…", done: 0, total: 2 });
-    const text = await file.text();
+    let text = "";
+    for await (const chunk of fileText(file)) text += chunk;
 
     const exercises = new Store();
     const journeys = new Store();

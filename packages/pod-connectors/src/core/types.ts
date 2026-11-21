@@ -8,6 +8,7 @@
  * import runner.
  */
 import type { DatasetCore } from "@rdfjs/types";
+import type { RunBudget, RunLimits } from "./budget.js";
 
 /** Catalog tiers (docs/integrations-catalog.md). Only Tier A ships adapters. */
 export type IntegrationTier = "A" | "B" | "C";
@@ -161,6 +162,10 @@ export interface ImportProgress {
 
 /** What the runner hands an adapter's `import()`. */
 export interface ImportContext {
+  /** Runner-owned shared source budget; adapters charge every returned record with items(). */
+  readonly budget: RunBudget;
+  /** Effective limits; factory and host settings are merged per key using the stricter value. */
+  readonly limits?: Partial<RunLimits>;
   /**
    * Fetch against the **source platform**: token-injected when live,
    * fixture-backed in demo mode and contract tests. Adapters must do all API
@@ -191,9 +196,11 @@ export interface ImportContext {
   /** Incremental cursor from the previous import of this adapter, if any. */
   readonly cursor?: string;
   /**
-   * Cancels the run. The runner already refuses further `api`, `read`, `write`, `writeBinary`,
-   * `remove` and `progress` calls once it aborts; adapters pass it on to stop in-flight waits
-   * (for example on a rate-limit delay). A cancelled run records no activity, so documents it
+   * Combines caller cancellation and the source run deadline. Both stop source requests and
+   * in-flight waits (for example on a rate-limit delay). Caller cancellation also refuses
+   * subsequent Pod reads/writes/removals and progress; deadline expiry permits saving completed
+   * data and private journals before failing without advancing the successful checkpoint.
+   * A caller-cancelled run records no activity, so documents it
    * already wrote name an activity absent from `_provenance.ttl` (see `RunImportOptions.signal`).
    */
   readonly signal?: AbortSignal;
@@ -219,6 +226,13 @@ export interface ImportOutcome {
    * the UI. Omitted (undefined) when nothing was skipped.
    */
   readonly skipped?: number;
+  /**
+   * Discards private resume state (a full-sync journal) that `cursor` supersedes. The runner
+   * calls it once, after the run has recorded provenance and reported its successful state,
+   * while the run still holds the connector. Best-effort: a failure or a caller cancellation
+   * leaves that state in place, so it must be safe to resume from it again.
+   */
+  readonly commit?: () => Promise<void>;
 }
 
 /** One recorded fixture route for the typed fake fetch.
@@ -255,6 +269,8 @@ export interface ConnectorStateOptions {
 }
 
 export interface IntegrationAdapter {
+  /** Optional factory bounds, snapshotted and tightened by host run limits. */
+  readonly limits?: Partial<RunLimits>;
   readonly vocabMap?: VocabMap;
   readonly metadata: IntegrationMetadata;
   /** Present iff `authKind === "oauth-pkce"`. */

@@ -57,6 +57,76 @@ existing adapter assertions. `createMemoryPod` remains available for HTTP fault 
 against fetch, Solid HTTP and strict memory backends. Use ./testing for consumers. Run lint,
 build, typecheck and test, then the workspace gates before completing a change.
 
+The runner owns one shared-core `RunBudget` per import (20,000 requests, 2,000,000 records,
+512 MiB JSON/inspected response bytes and `maxDurationMs: 1_800_000` by default). It wraps
+`ctx.api` so every request is charged and every consumed response chunk is metered. Do not
+create budgets or charge requests/bytes at adapter call sites. Use `ctx.budget.items(n)` for
+all source rows before filtering, deduplication, buffering or mapping, including malformed
+and deleted entries. Gmail counts list rows once, nested history changes and thread members.
+Factory `adapter.limits` and host `runImport({ limits })` merge per key with the smaller
+defined value; undefined cannot erase a bound. Keep direct adapter tests supplied with a
+budget, and use the runner for transport enforcement tests.
+
+Every source request receives the combined run deadline and caller cancellation. Headers
+have a 60-second timeout; bodies have a 60-second per-chunk idle timeout and a finite absolute
+allowance of 60 seconds plus one second per 256 KiB of the reader cap or smaller valid declared
+length. `readBytes` supplies that cap to the source wrapper, including Gmail raw and Drive
+content. Source deadline expiry permits Pod checkpoint writes; once `adapter.import`
+resolves the deadline no longer fails the run (no post-adapter `checkTime()`; `ctx.progress`
+throws only on caller cancel), so registration and provenance report the cursor. Explicit
+caller cancellation still stops all Pod ports. Preserve effective
+Request/init signals, including Drive's per-download controller. Fetches and reader waits
+must reject even if a custom transport ignores its signal. Cap Spotify Retry-After waits to
+`budget.remainingMs`. `RunBudget.request()` and all other charges check the deadline; exhausted
+budgets stay exhausted. Keep independent per-response/per-file caps. `getJson`/`postJson` only
+map HTTP errors and call the shared capped reader. Never let a cancellation failure replace
+a status, byte-limit or deadline error. Drive uses these same JSON/binary body helpers.
+
+Gmail continuing pages and full-sync budget failures (including duration) flush completed
+memberships then save a private account-local journal with page token, completed IDs, initial
+history id and seen-message manifest. Skip completed IDs; never resume by row offset or
+assume a message RDF write alone means its bytes and memberships succeeded. An HTTP 400 for
+a saved token restarts the listing once, rebuilding seen IDs and retaining completed IDs.
+Do not refetch completed raw payloads or double-charge list/raw messages. Save the journal
+after the last page when it completed IDs, and clear it only through `ImportOutcome.commit`,
+which the runner calls after provenance and `onState` (best-effort, holding the connector
+claim); never delete it inside `import`. Raw-message `SourceTimeoutError` is skipped and
+counted like `ResponseTooLargeError`, but is not journalled as complete: it is retried only
+when an interrupted full sync resumes (documented limitation; no Gmail retry list yet). Return its original history id so
+mutations during partial runs replay next time. Bound retained reconciliation identifiers
+across retries (2,000,000 identifiers / 16 MiB UTF-8 text). Never save a journal the Pod
+reader would refuse: `JOURNAL_PERSIST_LIMITS` bounds the over-estimated serialised size and
+quad count, and a journal past it stops writing (keeping the last saved checkpoint). A
+resumed completed ID is exempt from item accounting once per run; repeats are charged.
+Spotify's 401 refresh is shared on its own controller: each waiter's signal cancels only its
+wait, and the refresh aborts when every cancellable waiter has left. Test consecutive request-, item-, byte- and
+duration-capped runs, incomplete message retries and final removal of vanished mail.
+
+Successful Drive media/export copies consume the independent per-file cap rather than the
+run byte budget, because content is committed per file. The central wrapper exempts only
+successful Drive representation endpoints; JSON and inspected error bodies remain metered.
+Downloads still consume requests and deadlines. Only a source response timeout becomes
+`contentSkipped: "timeout"`; run budget failures and caller cancellation must propagate.
+Timed-out file ids persist in `drive/_content-retry.ttl` with attempt counts; incremental runs
+re-read and retry those their change list omits, dropping a file after `MAX_RETRY_ATTEMPTS`
+(3). Retries are best-effort after the committed change set: stop when `remainingMs` is
+within min(60 s, half the effective `maxDurationMs`) or on a caught `RunBudgetExceededError`
+(the one place it is caught) and carry unreached entries; count any other per-file error as
+an attempt. Return the cursor; only caller cancellation (a run-signal reason that is not a
+budget error) propagates. Drop invalid or excess entries on load.
+Preserve unchanged-representation reuse and
+test that request-capped retries make progress with content larger than the run JSON allowance.
+
+`RunBudgetExceededError` extends `IntegrationSyncError`, reports `resource`/`limit` (including
+`duration`) and explains that partial data may have been saved while the successful checkpoint
+is unchanged. Never catch it as a successful truncated snapshot. Validate and snapshot limits.
+Keep the README audit current. Measure fixture request/byte totals and independently count
+source rows for every adapter; require failures at N-1/M-1/B-1 and success at N/M/B. This must
+detect missing item charges on the last endpoint. Cover stalled headers, bodies and trickles
+per adapter, endless pagination and checkpoint retention with fixture-only fakes. Ordinary
+uploads retain their 64 MiB actual byte / 100,000-row caps; Garmin uses `fileText`. Takeout
+retains its streaming caps.
+
 CON-13 takes every jeswr namespace base from `@jeswr/suite-vocab` (`NS`); assemble local
 term names in the existing vocab modules. Keep standard namespace spellings exact,
 especially mail's `http://schema.org/`. Confine `canonicalizeJeswrDataset` to import-session
@@ -121,7 +191,8 @@ vocabulary (`http://schema.org/`, matching apps/suite's mail model) stay identic
 `[A-Za-z0-9_-]{1,256}` and skip invalid ones. File/mbox imports keep Message-ID document ids with
 collision fallback and References/In-Reply-To ancestry. Gmail history deletions resolve slugs
 directly; full syncs list the account's `messages/` container and sweep unseen Gmail message RDF
-documents. There is no Gmail source index. Keep Spam/Trash in the full source listing.
+documents. There is no permanent Gmail source index; interrupted full syncs use the temporary journal
+described above. Keep Spam/Trash in the full source listing.
 Resolve In-Reply-To through the writer's run-local Message-ID map, then the optional
 `MailItem.resolveParent(messageId)` hook. Gmail resolves from validated thread metadata via
 `ctx.api`/`getJson`, cached once per thread per run. Omit unresolved parent links for explicit
@@ -179,8 +250,8 @@ Google Contacts (CON-05) writes the SolidOS vCard address book under `contacts/`
 keep vCard as the write model (V10). Register only the address-book class for `contacts/`.
 Encode email addresses for RFC 6068 with `encodeURIComponent` on either side of the final `@`.
 Buffer every People API page and require the final sync token before applying writes or
-deletions. Use one shared `RunBudget` across all pages and retries, counting every request
-and buffered person. Read 400 error details through the shared byte-capped `readJson` too.
+deletions. Use the runner-owned `RunBudget` across all pages and retries, counting every
+buffered person. Read 400 error details through the shared byte-capped `readJson` too.
 An expired token (410, or 400 with the documented `EXPIRED_SYNC_TOKEN` error
 detail) discards partial increments and retries a full snapshot once. Retain unchanged
 members on increments, remove source deletions with `ctx.remove`, and rewrite `people.ttl`
@@ -199,10 +270,10 @@ keep checksum/copy-state glue in suite-vocab's `NS.POD_DRIVE`
 Capture the start token before full listing, stage every changes page before applying it,
 and only fall back once on changes-feed HTTP 404/410. Reconcile absent files after a valid
 full listing; malformed envelopes, missing arrays, or invalid pagination tokens must fail
-before pruning or checkpoint advancement. Use one shared RunBudget for every source request
-and page's item count, passing it to `readJson` for every JSON response so cumulative response
-bytes are bounded too. Retain the budget across an expired-cursor fallback. Owned binaries require
-a known size under the cap; supported Google Workspace exports have capped PDF/text responses. Read with a byte
+before pruning or checkpoint advancement. Use the runner-owned RunBudget for every source
+request and page's item count; transport accounting bounds cumulative JSON response bytes,
+including an expired-cursor fallback. Owned binaries require a known size under the cap;
+supported Google Workspace exports have capped PDF/text responses. Read with a byte
 cap and cancel oversized responses. Stage create-only `content-<v>[.pdf|.txt]` representations,
 where `<v>` is 24 SHA-256 hex characters of checksum, else modified time, else downloaded bytes
 (the first representation for exports). Without source version fields, download on every import. Commit
