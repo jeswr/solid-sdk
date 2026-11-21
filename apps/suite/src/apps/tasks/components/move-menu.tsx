@@ -11,6 +11,8 @@ import {
   toast,
 } from "@jeswr/suite-ui";
 import { usePathname } from "next/navigation";
+import { encodeRef } from "@/lib/refs";
+import { boardLanes, inLane, LABEL_LANE_MESSAGE, laneFor } from "../lib/board/swimlanes";
 import { dropMessage, failedMessage, projectNames, sectionToast } from "../lib/dnd/announce";
 import {
   effectiveParent,
@@ -63,9 +65,10 @@ export function useTaskMoves(task: TaskView, flat = false) {
   const pathname = usePathname();
   const { preferences } = useTasksPreferences();
   // A list sorted by due date, priority or name offers no manual reordering.
-  const manual = (preferences.sort[pathname] ?? "manual") === "manual";
+  const manual = flat || (preferences.sort[pathname] ?? "manual") === "manual";
   const all = tasks.views.filter((view) => view.projectUrl === task.projectUrl);
-  const options: PlanOptions = { all, manual, flat };
+  const groupRowsBy = flat ? preferences.boardGrouping[encodeRef(task.projectUrl)] : undefined;
+  const options: PlanOptions = { all, manual, flat, groupRowsBy };
   const views = visibleTasks(all, preferences.showCompletedInProject);
   const plan = (make: Planner) => make(task, views, options);
   /** Announces the outcome once the write settles; Retry plans again from fresh state. */
@@ -77,7 +80,12 @@ export function useTaskMoves(task: TaskView, flat = false) {
     const message = dropMessage(task, first, views, names, manual, flat);
     const showCompleted = preferences.showCompletedInProject;
     const replan = replanner(tasks.cache, task.url, (fresh, project) =>
-      make(fresh, visibleTasks(project, showCompleted), { all: project, manual, flat }),
+      make(fresh, visibleTasks(project, showCompleted), {
+        all: project,
+        manual,
+        flat,
+        groupRowsBy,
+      }),
     );
     const retried = announceRetries(tasks.cache, {
       task,
@@ -117,15 +125,68 @@ export function MoveMenuItems({
 }) {
   const tasks = useTasks();
   const moves = useTaskMoves(task, flat);
+  const focus = useTaskListFocus();
   const project = tasks.projects.find((item) => item.url === task.projectUrl);
   const up = moves.plan(moveUp);
   const down = moves.plan(moveDown);
   const parents = nesting ? nestCandidates(task, moves.views, moves.options.all) : [];
   const parent = nesting ? effectiveParent(task, moves.views) : undefined;
   const section = (parent ?? task).sectionId;
+  const grouping = moves.options.groupRowsBy ?? "none";
+  const lanes =
+    grouping === "none"
+      ? []
+      : boardLanes(moves.views, grouping, project?.tracker.labels, project?.tracker.groupMembers);
   return (
     <>
       <DropdownMenuSeparator />
+      {grouping !== "none" && (
+        <DropdownMenuSub
+          onOpenChange={(open) => {
+            if (open && grouping === "label") focus?.announce(LABEL_LANE_MESSAGE);
+          }}
+        >
+          <DropdownMenuSubTrigger disabled={disabled}>Move to row…</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent aria-label="Move to row">
+            <DropdownMenuRadioGroup
+              value={laneFor(task, grouping).value}
+              onValueChange={(value) => {
+                const lane = { group: grouping, value };
+                if (grouping === "label" && !inLane(task, lane)) {
+                  focus?.announce(LABEL_LANE_MESSAGE);
+                  return;
+                }
+                void moves.run((fresh, views, options) =>
+                  planDrop(
+                    fresh,
+                    {
+                      kind: "section",
+                      projectUrl: fresh.projectUrl,
+                      sectionId: fresh.sectionId,
+                      at: "end",
+                      lane,
+                    },
+                    views,
+                    options,
+                  ),
+                );
+              }}
+            >
+              {lanes.map((row) => (
+                <DropdownMenuRadioItem
+                  key={row.lane?.value}
+                  value={row.lane?.value ?? ""}
+                  disabled={
+                    grouping === "label" && row.lane !== undefined && !inLane(task, row.lane)
+                  }
+                >
+                  {row.name}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+      )}
       {reorder && moves.manual && (
         <>
           <DropdownMenuItem

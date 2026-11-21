@@ -5,6 +5,7 @@ import type { DropPlan } from "../lib/dnd/types";
 import type { StoredTask } from "../lib/model/store";
 import type { TaskItem } from "../lib/model/task";
 import type { TaskView } from "../lib/views/types";
+import { type PriorityLevel, priorityValue } from "../lib/views/types";
 import { rescheduleToDay } from "../lib/views/upcoming";
 import type { TasksCache } from "./tasks-cache";
 
@@ -153,6 +154,9 @@ export async function applyDropPlan(
         if (plan.sectionId) task.types.add(plan.sectionId);
       }
       if (plan.parentChanged) task.parent = plan.parentId;
+      if (plan.lane?.group === "priority")
+        task.priority = priorityValue(Number(plan.lane.value) as PriorityLevel);
+      if (plan.lane?.group === "assignee") task.assignee = plan.lane.value || undefined;
       task.rank = plan.position;
     },
   });

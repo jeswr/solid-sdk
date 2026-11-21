@@ -92,6 +92,171 @@ const settle = () =>
   });
 
 describe("project board", () => {
+  it("edits a positive WIP limit from the section menu and renders an accessible warning above the limit", async () => {
+    vi.stubGlobal("HTMLFormElement", window.HTMLFormElement);
+    const { inbox, pod } = await project([], ["Doing"]);
+    const section = inbox.tracker.sections[0];
+    if (!section) throw new Error("Missing section");
+    await cache.createTask(inbox, { title: "First", sectionId: section.id });
+    await cache.createTask(inbox, { title: "Second", sectionId: section.id });
+    const { host } = await mount(h(BoardView, { projectUrl: inbox.url }));
+    const trigger = host.querySelector<HTMLElement>('[aria-label="Section actions for Doing"]');
+    if (!trigger) throw new Error("Missing section menu");
+    await key(trigger, "Enter");
+    await click(byText('[role="menuitem"]', "Set WIP limit…"));
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+    const input = dialog?.querySelector<HTMLInputElement>('input[type="number"]');
+    if (!dialog || !input) throw new Error("Missing limit input");
+    const set = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
+    const type = (value: string) =>
+      act(() => {
+        set?.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    await type("0");
+    expect((byText("button", "Save", dialog) as HTMLButtonElement).disabled).toBe(true);
+    await type("1.5");
+    expect((byText("button", "Save", dialog) as HTMLButtonElement).disabled).toBe(true);
+    await type("2");
+    pod.requests.length = 0;
+    await act(() =>
+      dialog
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    await settle();
+    expect(pod.mutations()[0]?.headers.get("If-Match")).toBeTruthy();
+    await act(() => vi.waitFor(() => expect(document.activeElement).toBe(trigger)));
+    expect(host.querySelector(".tsk-count")?.textContent).toBe("2 / 2");
+    expect(host.querySelector("[data-over-wip]")).toBeNull();
+    const current = cache.getSnapshot().projects[0] as StoredProject;
+    await act(() =>
+      cache.updateProject(current, (tracker) => tracker.setSectionWipLimit(section.id, 1)),
+    );
+    const warning = host.querySelector("[data-over-wip]");
+    expect(host.querySelector(".tsk-count")?.textContent).toBe("2 / 1");
+    expect(
+      document.getElementById(warning?.getAttribute("aria-describedby") ?? "")?.textContent,
+    ).toBe("Over WIP limit");
+    await key(trigger, "Enter");
+    await click(byText('[role="menuitem"]', "Remove WIP limit"));
+    await settle();
+    expect(host.querySelector(".tsk-count")?.textContent).toBe("2");
+    expect(host.querySelector("[data-over-wip]")).toBeNull();
+  });
+
+  it("persists horizontal lanes and moves a task to a priority row from the keyboard menu", async () => {
+    const { inbox, store, pod } = await project(["Task"], ["Doing", "Done"]);
+    const { host } = await mount(h(BoardView, { projectUrl: inbox.url }));
+    const select = host.querySelector("select");
+    if (!select) throw new Error("Missing grouping control");
+    await act(() => {
+      select.value = "priority";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(JSON.parse(localStorage.getItem(PREFS) ?? "{}").boardGrouping).toEqual({
+      [encodeRef(inbox.url)]: "priority",
+    });
+    expect(
+      [...host.querySelectorAll(".tsk-swimlane > h2")].map((heading) => heading.textContent),
+    ).toEqual(["P1", "P2", "P3", "P4"]);
+    for (const lane of host.querySelectorAll(".tsk-swimlane"))
+      expect(lane.querySelectorAll(".tsk-board-column")).toHaveLength(3);
+    for (const column of host.querySelectorAll(".tsk-swimlane .tsk-board-column"))
+      expect(column.getAttribute("aria-label")).toBeTruthy();
+    expect(host.querySelector('.tsk-swimlane[aria-label="P4"] .tsk-card-title')?.textContent).toBe(
+      "Task",
+    );
+    const trigger = host.querySelector<HTMLElement>("[aria-label=\"Actions for 'Task'\"]");
+    if (!trigger) throw new Error("Missing task menu");
+    await act(() => trigger.focus());
+    await key(trigger, "Enter");
+    await key(byText('[role="menuitem"]', "Move to row…"), "ArrowRight");
+    await act(() =>
+      vi.waitFor(() => expect(document.querySelector('[role="menuitemradio"]')).toBeTruthy()),
+    );
+    pod.requests.length = 0;
+    await key(byText('[role="menuitemradio"]', "P1"), "Enter");
+    await settle();
+    expect((await store.readTask(viewOf("Task").url)).task.priority).toBe("high");
+    expect(pod.mutations()).toHaveLength(1);
+    expect(pod.mutations()[0]?.headers.has("If-Match")).toBe(true);
+    expect(host.querySelector('.tsk-swimlane[aria-label="P1"] .tsk-card-title')?.textContent).toBe(
+      "Task",
+    );
+    const movedTrigger = host.querySelector<HTMLElement>(
+      '.tsk-swimlane[aria-label="P1"] button[aria-label="Actions for \'Task\'"]',
+    );
+    expect(trigger.isConnected).toBe(false);
+    expect(movedTrigger).toBeTruthy();
+    await act(() => vi.waitFor(() => expect(document.activeElement).toBe(movedTrigger)));
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(status(host)).toContain("P1");
+  });
+
+  it("groups by first label and explains why keyboard moves between label rows are disabled", async () => {
+    const { inbox } = await project(["Task"]);
+    await cache.updateProject(inbox, (tracker) => {
+      tracker.defineCategory("Label", "Red");
+      tracker.defineCategory("Label", "Blue");
+    });
+    localStorage.setItem(
+      PREFS,
+      JSON.stringify({ boardGrouping: { [encodeRef(inbox.url)]: "label" } }),
+    );
+    const { host } = await mount(h(BoardView, { projectUrl: inbox.url }));
+    expect(
+      host.querySelector('.tsk-swimlane[aria-label="No label"] .tsk-card-title')?.textContent,
+    ).toBe("Task");
+    await key(
+      host.querySelector<HTMLElement>("[aria-label=\"Actions for 'Task'\"]") as HTMLElement,
+      "Enter",
+    );
+    await key(byText('[role="menuitem"]', "Move to row…"), "ArrowRight");
+    await act(() =>
+      vi.waitFor(() => expect(document.querySelector('[role="menuitemradio"]')).toBeTruthy()),
+    );
+    expect(byText('[role="menuitemradio"]', "Red").getAttribute("aria-disabled")).toBe("true");
+    expect(status(host)).toContain("Tasks cannot be moved between Label rows");
+  });
+
+  it("assigns and unassigns a card using the keyboard row menu", async () => {
+    const { inbox, store } = await project(["Task"]);
+    const bob = "https://bob.test/profile#me";
+    await cache.updateProject(inbox, (tracker) => tracker.setGroupMembers([bob]));
+    localStorage.setItem(
+      PREFS,
+      JSON.stringify({ boardGrouping: { [encodeRef(inbox.url)]: "assignee" } }),
+    );
+    const { host } = await mount(h(BoardView, { projectUrl: inbox.url }));
+    for (const name of [bob, "Unassigned"]) {
+      const trigger = host.querySelector<HTMLElement>("[aria-label=\"Actions for 'Task'\"]");
+      if (!trigger) throw new Error("Missing task menu");
+      await act(() => trigger.focus());
+      await key(trigger, "Enter");
+      await key(byText('[role="menuitem"]', "Move to row…"), "ArrowRight");
+      await act(() =>
+        vi.waitFor(() => expect(document.querySelector('[role="menuitemradio"]')).toBeTruthy()),
+      );
+      await key(byText('[role="menuitemradio"]', name), "Enter");
+      await settle();
+      expect((await store.readTask(viewOf("Task").url)).task.assignee).toBe(
+        name === bob ? bob : undefined,
+      );
+      expect(
+        host.querySelector(`.tsk-swimlane[aria-label="${name}"] .tsk-card-title`)?.textContent,
+      ).toBe("Task");
+      const movedTrigger = host.querySelector<HTMLElement>(
+        `.tsk-swimlane[aria-label="${name}"] button[aria-label="Actions for 'Task'"]`,
+      );
+      expect(trigger.isConnected).toBe(false);
+      expect(movedTrigger).toBeTruthy();
+      await act(() => vi.waitFor(() => expect(document.activeElement).toBe(movedTrigger)));
+      expect(document.querySelector('[role="menu"]')).toBeNull();
+      expect(status(host)).toContain(name);
+    }
+  });
+
   it("orders children among flat cards and keeps their parent when moved from the menu", async () => {
     const { inbox, store, pod } = await project(["Root", "Other"]);
     const root = viewOf("Root");
