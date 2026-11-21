@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { Worker } from "node:worker_threads";
 import { describe, expect, it } from "vitest";
@@ -75,7 +76,7 @@ describe("public export boundary", () => {
       assert.ok(entries.length > 0);
       const roles = await load("@jeswr/pod-access/roles");
       assert.deepEqual(Object.keys(roles).sort(),
-        ["addGrant", "grantsWithRoles", "isRoleError", "modesToRole", "movePreservingAccess", "readGrants", "removeGrant", "rolesToModes", "setGrants"].sort());
+        ["addGrant", "grantsWithRoles", "isRoleError", "makeOwnerOnly", "modesToRole", "movePreservingAccess", "readGrants", "removeGrant", "rolesToModes", "setGrants"].sort());
       assert.equal(roles.modesToRole(["read"], "resource"), "viewer");
       for (const entry of entries) {
         assert.equal("RdfNode" in entry, false);

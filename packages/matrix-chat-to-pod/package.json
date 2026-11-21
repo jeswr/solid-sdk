@@ -55,7 +55,8 @@
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-chat-interop": "workspace:*",
-    "n3": "^2.0.3"
+    "n3": "^2.0.3",
+    "@jeswr/pod-access": "workspace:*"
   },
   "peerDependencies": {
     "@rdfjs/types": "^2.0.1"
@@ -70,5 +71,6 @@
   },
   "engines": {
     "node": ">=24"
-  }
+  },
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol"
 }
