@@ -421,6 +421,261 @@ in these fixtures.
   `actions/providers.test.ts` and `actions/providers/credentials.test.ts`.
   A standalone Node child with piped stdio exited without echoing its input.
 
+## Phase 3 (40h)
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+The Phase 3 fixture changes are in place. Acceptance is partly done because the
+existing engine schema equality test requires the published files to use the
+0.1 runtime schemas verbatim, including the `$id` version. Section 4 requires
+those same published files to use the 0.2 schema literal and pinned context.
+The 0.2 exports and the unchanged engine schemas and test assertion are all
+present. Resolving the conflicting acceptance requirements needs a brief
+decision. [engine.test.ts:209](test/engine.test.ts#L209)
+
+The original branch tip `6215d3321` and the Phase 3 worktree both produce the same
+three RDF-pipeline diagnostics in `AgentRuntime.admittedStatementItems`. The
+guard retains 217 explicit allowances.
+[agent.ts:3367](src/runtime/agent.ts#L3367)
+
+The engine corpus count is also blocked in this offline worktree. Its adapter
+block assertions pass, then the test compares the 163 available baseline paths
+to all 168 runnable baseline manifest rows. Exactly five of those rows require
+the unavailable `sparq-zk-result/5` adapter.
+[engine.test.ts:99](test/engine.test.ts#L99)
+
+### Changes
+
+| Files | Change |
+| --- | --- |
+| [load.ts:19](src/engine/load.ts#L19) | Validate the fixture envelope, normalise 0.2 to 0.1 on the engine path and preserve the legacy 0.1 path. |
+| [load.ts:61](src/engine/load.ts#L61) | Read the 0.2 fixture as RDF with its class, slug and root IRI. The graph also types trust entries with the classes specified in §3.5. |
+| [contexts.ts:102](src/wire/contexts.ts#L102) · [contexts.ts:140](src/wire/contexts.ts#L140) · [contexts.ts:217](src/wire/contexts.ts#L217) | Give the fixture walker a bundled resolver, JSON-literal handling and indexed-map traversal. The same wire entry point calls the walker with its original defaults. |
+| [store-contexts.ts:16](src/wire/store-contexts.ts#L16) | Pin the scenario context by SHA-256. The fixture resolver serves the scenario, ODRL and VC contexts. |
+| [scenario-v1.jsonld:1](vocab/context/scenario-v1.jsonld#L1) · [scenario.ttl:1](vocab/scenario.ttl#L1) · [scenario-v1.README.md:1](vocab/context/scenario-v1.README.md#L1) | Map fixture keys to RDF, define the scenario vocabulary and document JSON-literal and slug-reference scopes. |
+| [migrate-fixtures-jsonld.mjs:25](scripts/migrate-fixtures-jsonld.mjs#L25) · [fixture-digests.json:1](test/fixtures/fixture-digests.json#L1) | Capture the 145 original engine-object digests. Migrate and check the envelope with text edits only. |
+| [profiles:2](profiles/mortgage.json#L2) · [scenarios:2](scenarios/mortgage-main.json#L2) | Migrate all 71 profiles and 74 scenarios. Each file gains a first `@context` key and the 0.2 schema literal. |
+| [check-fixtures-jsonld.mjs:11](scripts/check-fixtures-jsonld.mjs#L11) | Check terms and parse every fixture with the graph reader, asserting the fixture IRI matches the filename. |
+| [run-scenarios.mjs:160](scripts/run-scenarios.mjs#L160) · [oracle-snapshot.mjs:28](scripts/oracle-snapshot.mjs#L28) | Use the loaded engine case in ordinary runs. The expectation writer preserves the authored envelope and the snapshot reader selects the branch and method fields it uses. The reader search found no other direct engine-fixture readers requiring edits. |
+| [export-schemas.mjs:11](scripts/export-schemas.mjs#L11) · [domain-profile.schema.json:1](schemas/domain-profile.schema.json#L1) · [agent-scenario.schema.json:1](schemas/agent-scenario.schema.json#L1) | Export the two file schemas with a required pinned context and 0.2 literals and schema IDs. |
+| [package.json:31](package.json#L31) · [README.md:66](README.md#L66) | Export and document the new vocabulary, context, context README and graph reader. |
+
+### Failing-first tests
+
+The initial focused run failed all 27 new cases. The loader cases failed against
+the 0.1-only parser, the RDF cases failed without `readCaseGraph`, and the
+vocabulary case failed without a scenario context. The migration case also hit
+`spawnSync EPERM` in the Vitest sandbox. Its in-process version failed on the
+snapshot-only command before the migration check was implemented. No existing
+test assertion was edited.
+
+| Test | Coverage |
+| --- | --- |
+| [fixtures-jsonld.test.ts:26](test/fixtures-jsonld.test.ts#L26) | Migration and digest check, corpus-wide RDF roots and term admission, IRI and property indexes, native mandate JSON, mortgage-main script and branch list order, context pin and loader allow-list, ontology declarations and the JSON-literal ratchet. |
+| [load-envelope.test.ts:39](test/load-envelope.test.ts#L39) | Equivalent 0.1 and 0.2 engine objects for both file kinds and every refused envelope. |
+| [load-envelope.test.ts:63](test/load-envelope.test.ts#L63) | Undefined terms at the root, a nested step and a property-indexed entry. Nested unknown contexts and attempts to use the fixture JSON-literal option through `readDocument` are refused. |
+
+### Vocabulary and design details
+
+The new terms are the `awps:` declarations in
+[scenario.ttl](vocab/scenario.ttl), one declaration per class or property.
+They include `Scenario`, `DomainProfile`, `ScriptStep` and its instruction
+classes, the file envelope and slug/index properties, and the properties for
+fixture data, instructions, alternatives, expectations and faults. Phase 3
+adds ontology declarations and JSON-LD mappings. It adds zero generated or
+hand-held TypeScript model classes.
+
+The context reuses Answerable actor, operator, party, subject, rule, operation,
+method, version, terms, terms digest, content and activity properties. It uses
+DPV `hasPurpose`, ODRL `action`, VC `issuer`, `validFrom` and `validUntil`,
+Security `controller`, RDFS `label`, Schema.org `email`, `encodingFormat`,
+`identifier`, `price`, `priceCurrency` and `text`, and standard RDF and XSD
+list and literal terms. Phase 3 can run ahead of Phase 2, so its trust-class
+and trust-property IRIs follow the names specified in §3.5 ahead of their
+store declarations. [scenario-v1.jsonld:4](vocab/context/scenario-v1.jsonld#L4)
+
+The JSON-literal ratchet is the 60-term table in the
+[context README:20](vocab/context/scenario-v1.README.md#L20). Native mandate rule
+arrays use the §4 fallback. Their shapes contain local action names, plural
+constraints and native extensions that the bundled ODRL context cannot express
+as authored. They remain JSON literals in the RDF view.
+
+The streaming JSON-LD parser produced one own-list entry for the eight authored
+entries in `mortgage-main` in a direct comparison. The fixture reader uses
+the existing message conversion approach. The standard JSON-LD processor
+resolves the bundled contexts and emits N-Quads, which `@jeswr/fetch-rdf` parses.
+The trust graph test checks the authored multiplicity and key of every own-list
+entry. All of this work is in `readCaseGraph`; ordinary loads check the envelope
+by string comparison.
+
+### Verification and speed
+
+| Command | Result |
+| --- | --- |
+| `node scripts/migrate-fixtures-jsonld.mjs --snapshot` | Captured 145 digests before the other changes. |
+| `npx tsc -p tsconfig.build.json && node scripts/copy-generated.mjs` | Compile-only passed on Node 24. |
+| `node scripts/migrate-fixtures-jsonld.mjs` and `--check` | Migrated 145 files. The second migration changed zero. All 145 engine digests match. Reversing the two envelope edits recovers every original file byte-for-byte. |
+| `pnpm run schemas` and `node scripts/export-schemas.mjs --check` | Passed. |
+| `node scripts/check-fixtures-jsonld.mjs` | Parsed all 145 fixtures with zero failures. |
+| `pnpm --filter @jeswr/agent-reference run typecheck` and `run lint` | Both passed. The package lint reported 647 warnings and 614 informational diagnostics. |
+| `pnpm --filter @jeswr/agent-reference run check:rdf-pipeline` | Exit 1. The same three existing `json-signature` diagnostics at lines 3367, 3371 and 3374 reproduced on archived HEAD. |
+| `pnpm run check:codegen` | Passed for eight generated projects. |
+| `node scripts/check-no-trace-change.mjs` | Addendum A1 passed. The two runs reproduced five selected traces and both reported 278 runs, zero disagreements and five blocked paths. |
+| `recordedJoint` for all six recorded paths | Verified hashes for `cohort-count`, `platform-income` and `salary-benchmark`. |
+| `pnpm --filter @jeswr/agent-reference exec vitest run --maxWorkers=2` with the ten files below | 82 passed and two failed, both in `test/engine.test.ts`. |
+| `git diff --check` and protected-path comparisons against HEAD | Passed. Manifest totals are 283 paths, 278 runs, zero disagreements and five blocked paths. The manifest, oracle, trace and outline bytes, message context, message reader and engine schemas match HEAD. |
+
+The focused Vitest command used these file arguments. Both oracle files passed,
+including all 163 baseline oracle paths. All 27 new tests passed.
+
+```text
+test/fixtures-jsonld.test.ts test/load-envelope.test.ts test/wire.test.ts
+test/context-pins.test.ts test/store-vocabulary.test.ts test/oracle.test.ts
+test/oracle-snapshot.test.ts test/engine.test.ts test/seam-scenarios.test.ts
+test/needed-claims-scenarios.test.ts
+```
+
+Speed line for `node scripts/profile-journey.mjs --iterations=3 --main-only` on
+this worktree, medians before to after in ms. Baseline **8,625 → 8,451** (−2.02%).
+Data Integrity **9,343 → 8,319** (−10.96%). The first after-run overlapped an
+RDF parser probe and medians were 9,741 / 10,228 ms. The isolated repeat used the
+same code. The local pre-change medians already exceeded Addendum A7's historical
+7,399 / 8,015 ms figures. The isolated post-change medians are 14.22% / 3.79%
+above those historical figures.
+
+### Beads to file
+
+| Label | Bead text |
+| --- | --- |
+| `surface:packages/fetch-rdf` | Preserve all member nodes and index keys of JSON-LD property-indexed arrays in the streaming parser. Compare the mortgage-main own-list map against standard JSON-LD expansion and test nested lists alongside it. |
+| `surface:packages/agent-reference` | Resolve the three pre-existing RDF guard findings in `AgentRuntime.admittedStatementItems` without growing the JSON-signature allow-list or changing statement admission. |
+| `needs:jesse` | Resolve the conflict between the required 0.2 file exports and the unchanged engine test's 0.1 equality assertion. Decide whether the assertion may compare against the authoring schema while continuing to verify that the runtime schema stays at 0.1. |
+| `needs:jesse` | Decide whether to link fixture slug references, replace opaque maps with nodes, support RDF framing back to fixture files, or adopt a `.jsonld` suffix. |
+| `needs:jesse` | Decide whether outlines, the run manifest, exported schemas or settlement views need another representation. Keep the established published artifact compatibility in that decision. |
+
+The remaining Phase 1 follow-up texts listed above still apply.
+
+All fixture objects, trace artifacts and oracle decisions matched. The unchanged
+schema equality assertion, offline optional adapter and pre-existing RDF guard
+diagnostics prevent an all-green acceptance run. The trace-check copies, archived
+guard copies and temporary test fixtures were removed.
+
+## Phase 3 acceptance fixes (40i)
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+- The one changed existing assertion is the published-schema equality check. It
+  computes the expected schema from each runtime validator and applies the 0.2
+  schema literal and `$id` plus the required pinned `@context`. It compares the
+  full published schema to that result. A separate assertion checks both runtime
+  schema literals at 0.1. [engine.test.ts:210](test/engine.test.ts#L210)
+- `admittedStatementItems` narrows the existing `ContextItem.statement` type
+  to a required property. This resolves all three signature findings with the
+  same admission predicates and returned records. The guard reports zero
+  failures and retains its 217 existing allowances. [agent.ts:3367](src/runtime/agent.ts#L3367)
+- Package lint runs `check:rdf-pipeline` after Biome, including when invoked
+  through Turbo. [package.json:60](package.json#L60)
+
+| Check | Result |
+| --- | --- |
+| `pnpm exec tsc -p tsconfig.build.json` and `node scripts/copy-generated.mjs` | Compile-only passed on Node 24.22.3. |
+| `pnpm run typecheck` | Passed. |
+| `pnpm run lint` and `node scripts/check-rdf-pipeline.mjs` | Passed. Biome reported 647 warnings and 614 informational diagnostics. Both RDF guard invocations reported zero failures. |
+| Workspace `pnpm run check:codegen` | Passed for eight generated projects. |
+| `node scripts/export-schemas.mjs --check` | Passed. |
+| `node scripts/check-fixtures-jsonld.mjs` and `node scripts/migrate-fixtures-jsonld.mjs --check` | Checked 145 RDF fixture reads and 145 matching engine digests. |
+| `pnpm exec vitest run --maxWorkers=2` with the ten Phase 3 files listed above | All 84 tests passed with `.sparq` present, including all 11 engine tests. |
+| `pnpm exec vitest run --maxWorkers=2 test/engine.test.ts` with `.sparq` moved aside | Ten passed. The existing corpus count failed at 163 of 168 runnable paths because five require `sparq-zk-result/5`. Restored `.sparq` after the run. |
+| `node scripts/check-no-trace-change.mjs` | Passed after compilation. The two scenario runs reproduced five selected traces and preserved the outlines and manifest, with 278 runs, zero disagreements and five blocked paths. |
+
+## Phase 3 graph read speed (40l)
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The isolated scenarios test fell from **30.89 s to 6.28 s** on Node 24.22.3.
+Vitest's total duration, including imports, fell from 34.99 s to 10.40 s.
+The slowest fixture read fell from **2,697 ms to 659 ms**. Five files
+exceeded 1 s before the change and every file finished below 1 s afterward.
+
+A temporary probe measured each file in the compiled reader, timing JSON-LD
+expansion, context processing within expansion, and the subsequent N-Quads
+parse. Context time includes recursive scoped context processing once.
+The total also includes fixture admission and writing N-Quads.
+
+| Corpus | Files | Total (s) | Expansion (s) | Of which context processing (s) | N-Quads parse (s) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Scenarios | 74 | 32.990 → 6.289 | 29.983 → 3.610 | 22.095 → 2.381 | 2.121 → 1.751 |
+| Profiles | 71 | 1.292 → 0.615 | 0.999 → 0.333 | 0.784 → 0.258 | 0.119 → 0.110 |
+
+| Slowest files before the change | Total (ms) | Expansion (ms) | Of which context processing (ms) | N-Quads parse (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| `scenarios/cohort-count.json` | 2,697 → 659 | 2,144 → 290 | 1,563 → 160 | 437 → 267 |
+| `scenarios/salary-benchmark.json` | 2,574 → 402 | 2,392 → 249 | 1,740 → 129 | 131 → 111 |
+| `scenarios/platform-income.json` | 2,178 → 220 | 2,024 → 123 | 1,476 → 79 | 128 → 73 |
+| `scenarios/change-of-address.json` | 1,938 → 384 | 1,821 → 202 | 1,098 → 127 | 99 → 129 |
+| `scenarios/mortgage-main.json` | 1,676 → 403 | 1,415 → 161 | 1,004 → 96 | 170 → 160 |
+
+jsonld deep-cloned the active term map, including the large nested definitions
+inherited from the Scenario type scope, each time it applied or reverted a scoped
+context. A probe that shared resolved URLs alone kept the same processed-context
+miss counts and left the large files above 1 s. The fixture resolver now copies
+the term map and reuses its immutable entries. It uses jsonld 9's internal
+resolver and retains its context metadata and reversion behavior. Context
+processing calls and cache misses remained at 18,548 and 16,828 respectively
+for the scenarios. [Fixture resolver](src/engine/fixture-context-resolver.ts)
+
+The optimized resolver is local to fixture reads and uses the existing pinned
+loader. Documents with non-string context values use the default resolver,
+including when those values appear inside opaque JSON. All 145 fixtures matched
+their baseline N-Quads SHA-256, root IRI, and dataset size. The timed scenarios
+test used its original assertions and 60 s timeout.
+
+Ten additional inputs matched the baseline reader's acceptance and graph output
+or error, including nested contexts and context values inside opaque JSON.
+
+| Check | Result |
+| --- | --- |
+| `pnpm exec tsc -p tsconfig.build.json` and `node scripts/copy-generated.mjs` | Compile-only passed. |
+| `pnpm run typecheck` | Passed. |
+| `pnpm run lint` | Passed with the existing 647 Biome warnings and 614 informational diagnostics. The RDF pipeline reported zero failures and 217 existing allowances. |
+| `node scripts/check-fixtures-jsonld.mjs` and `node scripts/migrate-fixtures-jsonld.mjs --check` | All 145 fixture graphs and all 145 engine-object digests passed. |
+| Focused Vitest with `--maxWorkers=2` | 68 tests passed across `fixtures-jsonld`, `load-envelope`, `whole-message-fixtures`, `wire`, `wire-proof-graphs`, and `context-pins`. |
+| `node scripts/check-no-trace-change.mjs` | Both runs preserved the traces, outlines, and manifest rows. Each reported 278 runs, zero disagreements, and five blocked paths. |
+
+## Phase 3 review fixes (40m)
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+### Changes and failing-first tests
+
+| Finding | Change | Regression |
+| --- | --- | --- |
+| Trust rule mapping | Source rules emit `awp:anySubject` directly and express explicit subjects as RDF lists. Trust claim types emit repeated `awp:claimType` literals. Updated the scenario context pin and documented the mapping. [scenario-v1.jsonld:117](vocab/context/scenario-v1.jsonld#L117), [scenario-v1.jsonld:145](vocab/context/scenario-v1.jsonld#L145), [load.ts:48](src/engine/load.ts#L48), [store-contexts.ts:17](src/wire/store-contexts.ts#L17), [scenario-v1.README.md:12](vocab/context/scenario-v1.README.md#L12) | The mortgage rule returned a blank list node for the wildcard before the fix. The test now checks the wildcard IRI, repeated claim type literals, and an explicit subject list. [fixtures-jsonld.test.ts:148](test/fixtures-jsonld.test.ts#L148) |
+| IRI-valued fields | The graph projection links profile action claims through `odrl:action`. The corpus scan also found literal source IRIs in derivation rules, including scenario scripts and query grants, and literal adapter IRIs in effect steps. Those fields retain support for local names. The adapter vocabulary now describes both forms. [load.ts:73](src/engine/load.ts#L73), [scenario.ttl:83](vocab/scenario.ttl#L83), [scenario-v1.README.md:20](vocab/context/scenario-v1.README.md#L20) | The recycled-content join failed because its action was a literal. The profile and scenario corpus checks also failed on derivation sources and adapters. The tests distinguish semantic links from textual labels, email addresses, digests, and qualified local references. [fixtures-jsonld.test.ts:79](test/fixtures-jsonld.test.ts#L79), [fixtures-jsonld.test.ts:184](test/fixtures-jsonld.test.ts#L184) |
+| Optional jsonld internals | The graph reader imports the optimized resolver on demand and caches the outcome. If the private module is unavailable, the same pinned loader runs with jsonld's default resolver. [fixture-context-resolver.ts:25](src/engine/fixture-context-resolver.ts#L25), [load.ts:132](src/engine/load.ts#L132) | Simulating an unexported resolver originally prevented package import. The test now verifies that the root and native loader work before the first resolver attempt and compares the exact N-Quads from both resolvers. [fixtures-jsonld.test.ts:257](test/fixtures-jsonld.test.ts#L257) |
+| Order-sensitive fixture digests | The snapshot hashes the loaded object's JSON serialization, including JavaScript property enumeration order. This detects keyed-list patch reorderings and conservatively detects other object member reorderings. Recomputed the 145 entries from the pre-migration fixtures in local `origin/main` after verifying every legacy object against the previous canonical snapshot. All migrated fixtures match those ordered digests. [migrate-fixtures-jsonld.mjs:25](scripts/migrate-fixtures-jsonld.mjs#L25), [fixture-digests.json:3](test/fixtures/fixture-digests.json#L3) | Swapping two keyed step additions changed their append order while the original digest stayed equal. The test checks the engine patch order and requires distinct digests. [fixtures-jsonld.test.ts:33](test/fixtures-jsonld.test.ts#L33) |
+| Runtime schema drift | The existing export test now asserts directly that both runtime validator shapes lack `@context`, then checks the published envelope delta. [engine.test.ts:219](test/engine.test.ts#L219) | Temporarily declaring an optional runtime `@context` triggered the new assertion. The validator sources were restored before verification. |
+
+### Verification
+
+The isolated scenarios corpus test passed in **7.56 s** on the final run and
+**8.23 s** on the first passing run. Vitest reported **12.39 s** and **13.39 s**
+respectively including transformation and module import. Phase 40l measured
+**6.28 s** for the test before the corpus IRI assertion. Both 40m runs used
+`pnpm exec vitest run --maxWorkers=2 --reporter=verbose test/fixtures-jsonld.test.ts -t 'checks every scenarios document'`.
+
+| Check | Result |
+| --- | --- |
+| `pnpm exec tsc -p tsconfig.build.json && node scripts/copy-generated.mjs` | Compile-only passed on Node 24.22.3. |
+| `pnpm run typecheck`, `pnpm run lint`, and `node scripts/check-rdf-pipeline.mjs` | Passed. Biome reported 647 warnings and 614 informational diagnostics, matching 40l. The RDF guard reported zero failures and 217 existing allowances. |
+| Workspace `pnpm run check:codegen` | Passed for eight generated projects. |
+| `node scripts/export-schemas.mjs --check`, `node scripts/migrate-fixtures-jsonld.mjs --check`, and `node scripts/check-fixtures-jsonld.mjs` | Passed. The 145 engine digests match and all 145 fixture graphs parse. |
+| Node loader probe with the internal resolver path blocked | Both resolvers produced the same N-Quads SHA-256 for all 145 fixture graphs. |
+| `node scripts/check-no-trace-change.mjs` | The two runs reproduced five paths and preserved the traces, outlines, and manifest rows. The manifest still records 283 paths, 278 runs, zero disagreements, and five blocked paths. |
+| `recordedJoint` | Verified all six recorded trace hashes across `cohort-count`, `platform-income`, and `salary-benchmark`. |
+| The ten 40i Vitest files with `--maxWorkers=2` | All 88 tests passed in 618.31 s, including both oracle files and the full engine suite with `.sparq` present. Phase 40i established that five runnable paths require that adapter. |
+| `git diff --check` and protected-path comparison against `d257ed2da` | Fixture files, runtime schema source, message context and reader, oracle data, manifest, traces, and outlines match the reviewed head. |
+
 ## Phase 2 (40j)
 
 Stopped before implementation at `6741268ed` on

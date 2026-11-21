@@ -28,6 +28,9 @@
     "./vocab/answerable-stores.ttl": "./vocab/answerable-stores.ttl",
     "./vocab/answerable-stores.shacl.ttl": "./vocab/answerable-stores.shacl.ttl",
     "./vocab/context/store-v1.jsonld": "./vocab/context/store-v1.jsonld",
+    "./vocab/scenario.ttl": "./vocab/scenario.ttl",
+    "./vocab/context/scenario-v1.jsonld": "./vocab/context/scenario-v1.jsonld",
+    "./vocab/context/scenario-v1.README.md": "./vocab/context/scenario-v1.README.md",
     "./vocab/*": "./vocab/*",
     "./wire": {
       "types": "./dist/wire/index.d.ts",
@@ -54,7 +57,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs && node scripts/export-schemas.mjs --check && node scripts/generate-traces.mjs && node scripts/run-scenarios.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "biome check src test scripts eval/e0/run.mjs eval/e0/vitest.config.ts",
+    "lint": "biome check src test scripts eval/e0/run.mjs eval/e0/vitest.config.ts && pnpm run check:rdf-pipeline",
     "test": "vitest run && vitest run --config eval/e0/vitest.config.ts",
     "scenarios": "node scripts/run-scenarios.mjs",
     "schemas": "node scripts/export-schemas.mjs",

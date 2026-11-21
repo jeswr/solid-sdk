@@ -63,9 +63,17 @@ Experimental. Synthetic parties and data only; both sides of every exchange run 
 
 <!-- AUTHORED-BY Codex GPT-6 -->
 
-The data engine loads `profiles/<id>.json` (`agent-profile/0.1`) and
-`scenarios/<id>.json` (`agent-scenario/0.1`). Their JSON Schemas are in `schemas/`;
-the runtime validators and published schemas come from the same Zod definitions.
+The data engine loads JSON-LD profiles (`agent-profile/0.2`) and scenarios
+(`agent-scenario/0.2`) from `profiles/<id>.json` and `scenarios/<id>.json`. Both
+use the pinned [scenario context](vocab/context/scenario-v1.README.md). The engine
+checks the envelope before applying the existing runtime validators. Legacy 0.1 files
+without a context still load. The published JSON Schemas in `schemas/` add the 0.2
+envelope to the same Zod definitions.
+
+`readCaseGraph(path)` from `@jeswr/agent-reference/engine/load` reads the RDF graph
+separately with the bundled contexts. Run `node scripts/check-fixtures-jsonld.mjs` to
+check the authoring terms and `node scripts/migrate-fixtures-jsonld.mjs --check` to
+verify the engine-object digests.
 Data imports include the `.json` suffix, for example
 `@jeswr/agent-reference/scenarios/probing-counterparty.json` and
 `@jeswr/agent-reference/profiles/mortgage.json`. The data export patterns are

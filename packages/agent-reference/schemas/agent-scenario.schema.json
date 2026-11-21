@@ -5076,7 +5076,7 @@
     },
     "schema": {
       "type": "string",
-      "const": "agent-scenario/0.1"
+      "const": "agent-scenario/0.2"
     },
     "id": {
       "type": "string",
@@ -12933,6 +12933,10 @@
         ],
         "additionalProperties": false
       }
+    },
+    "@context": {
+      "type": "string",
+      "const": "https://w3id.org/jeswr/awp/context/scenario/v1"
     }
   },
   "required": [
@@ -12976,7 +12980,8 @@
     "stress",
     "suites",
     "assurance",
-    "blocked"
+    "blocked",
+    "@context"
   ],
   "additionalProperties": false,
   "$defs": {
@@ -13106,5 +13111,5 @@
     }
   },
   "x-authored-by": "Codex GPT-6",
-  "$id": "urn:agent-reference:schema:agent-scenario:0.1"
+  "$id": "urn:agent-reference:schema:agent-scenario:0.2"
 }
