@@ -1,0 +1,22 @@
+{
+  "$comment": "AUTHORED-BY Codex (GPT-6.1 Sol)",
+  "shapesBase": "https://jeswr.org/ns/pod-type-index/shapes#",
+  "prefixes": {},
+  "entities": [
+    {
+      "targetClass": "http://www.w3.org/ns/solid/terms#TypeIndex",
+      "name": "TypeIndex",
+      "subject": { "convention": "self" }
+    },
+    {
+      "targetClass": "http://www.w3.org/ns/solid/terms#TypeRegistration",
+      "name": "TypeRegistration",
+      "subject": { "convention": "self" }
+    },
+    {
+      "targetClass": "http://xmlns.com/foaf/0.1/Agent",
+      "name": "Profile",
+      "subject": { "convention": "self" }
+    }
+  ]
+}

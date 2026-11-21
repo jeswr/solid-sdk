@@ -1,0 +1,32 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Package read profile; there is no federation sector for the Solid Type Index.
+# This is a tolerant discovery projection, not the normative registration validator:
+# - forClass/instance/instanceContainer and profile pointers are optional IRI sets.
+#   Missing and malformed members must not hide valid siblings; multiple classes and
+#   locations remain discoverable. Mutations enforce exactly one location, and removal
+#   rejects ambiguous raw cardinalities in solid.ts. Closed admission has no sh:xone.
+# - No HTTP pattern or scheme normalization: classes may be urn: IRIs, and lexical
+#   location identities must survive exact removal. Storage scope, credentials, URL
+#   normalization and container policy remain in the facade, for reads and writes.
+# - TypeIndex has no registration link: registrations are independent subjects, not
+#   a connected composite tree. The facade enumerates them and parses each entity.
+# - Generated wrappers accept only named subjects. Blank-node registrations retain
+#   the minimal typed Resource view in rdf.ts, including exact annotation-safe removal.
+# - Profile access uses the generated Agent wrapper without requiring/asserting its
+#   target class: existing profile/preferences subjects need not have rdf:type.
+# - ListedDocument/UnlistedDocument are additional type markers, not generated entities.
+#   Direct default-graph type membership and named-graph exclusion stay in the facade.
+@prefix solid: <http://www.w3.org/ns/solid/terms#> .
+@prefix pim: <http://www.w3.org/ns/pim/space#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+[] a sh:NodeShape ; sh:targetClass solid:TypeIndex .
+[] a sh:NodeShape ; sh:targetClass solid:TypeRegistration ;
+    sh:property [ sh:path solid:forClass ; sh:name "forClass" ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path solid:instance ; sh:name "instance" ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path solid:instanceContainer ; sh:name "instanceContainer" ; sh:nodeKind sh:IRI ] .
+[] a sh:NodeShape ; sh:targetClass foaf:Agent ;
+    sh:property [ sh:path solid:publicTypeIndex ; sh:name "publicTypeIndex" ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path solid:privateTypeIndex ; sh:name "privateTypeIndex" ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path pim:preferencesFile ; sh:name "preferencesFile" ; sh:nodeKind sh:IRI ] .

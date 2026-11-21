@@ -1,0 +1,42 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Minimal generation input, reusing the existing Solid and PIM vocabulary IRIs.
+@prefix solid: <http://www.w3.org/ns/solid/terms#> .
+@prefix pim: <http://www.w3.org/ns/pim/space#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+solid:TypeIndex a owl:Class ;
+    rdfs:label "Type index"@en ;
+    rdfs:comment "A document containing independently-subjected type registrations."@en .
+solid:TypeRegistration a owl:Class ;
+    rdfs:label "Type registration"@en ;
+    rdfs:comment "An entry advertising instances of an RDF class."@en .
+foaf:Agent a owl:Class ;
+    rdfs:label "Agent"@en ;
+    rdfs:comment "The profile subject whose index and preferences pointers are read or updated."@en .
+
+solid:forClass a owl:ObjectProperty ;
+    rdfs:label "for class"@en ;
+    rdfs:comment "The RDF class indexed by a registration."@en ;
+    rdfs:domain solid:TypeRegistration ; rdfs:range rdfs:Class .
+solid:instance a owl:ObjectProperty ;
+    rdfs:label "instance"@en ;
+    rdfs:comment "A resource advertised by a registration."@en ;
+    rdfs:domain solid:TypeRegistration ; rdfs:range rdfs:Resource .
+solid:instanceContainer a owl:ObjectProperty ;
+    rdfs:label "instance container"@en ;
+    rdfs:comment "A container whose members instantiate the registered class."@en ;
+    rdfs:domain solid:TypeRegistration ; rdfs:range rdfs:Resource .
+solid:publicTypeIndex a owl:ObjectProperty ;
+    rdfs:label "public type index"@en ;
+    rdfs:comment "An agent's public type index pointer in its profile."@en ;
+    rdfs:domain foaf:Agent ; rdfs:range solid:TypeIndex .
+solid:privateTypeIndex a owl:ObjectProperty ;
+    rdfs:label "private type index"@en ;
+    rdfs:comment "An agent's private type index pointer in preferences or a legacy profile."@en ;
+    rdfs:domain foaf:Agent ; rdfs:range solid:TypeIndex .
+pim:preferencesFile a owl:ObjectProperty ;
+    rdfs:label "preferences file"@en ;
+    rdfs:comment "An agent's preferences document pointer."@en ;
+    rdfs:domain foaf:Agent ; rdfs:range rdfs:Resource .

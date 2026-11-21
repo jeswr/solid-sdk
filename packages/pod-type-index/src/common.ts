@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import { type StorageClient, StorageError, type StorageErrorCode } from "@jeswr/storage-client";
 import { canonicalize, LEGACY_NAMESPACES } from "@jeswr/suite-vocab";
 import type { RegistrationOptions, TypeLocation } from "./types.js";
@@ -71,6 +73,12 @@ export function registration(
     throw new TypeError("Provide exactly one instance or container");
   }
   const target = requireScoped(storage, (location.instance ?? location.container) as string);
+  if (
+    storage.protocol === "solid" &&
+    (!isSafeAbsoluteIri(canonical) || !isSafeAbsoluteIri(target))
+  ) {
+    throw error("scope", storage.root);
+  }
   if (
     location.container !== undefined &&
     storage.protocol === "solid" &&

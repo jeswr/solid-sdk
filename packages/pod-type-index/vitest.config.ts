@@ -5,7 +5,9 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: false,
-    include: ["src/**/*.test.ts"],
+    // The drift test launches a second Node process; bound contention in workspace gates.
+    maxWorkers: 2,
+    include: ["src/**/*.test.ts", "test/**/*.test.ts"],
     coverage: {
       enabled: true,
       provider: "v8",
