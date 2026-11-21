@@ -154,13 +154,6 @@ describe('persisted dispatch destinations', () => {
         Object.assign(r, { request: null });
       },
     ],
-    [
-      'invalid operation',
-      'write',
-      (r) => {
-        Object.assign(r.item, { op: 'patch' });
-      },
-    ],
   ];
   it.each(
     changes,
@@ -190,6 +183,36 @@ describe('persisted dispatch destinations', () => {
     await outbox.replay(client.client);
     await outbox.retry();
     expect(outbox.pending()[0]?.status).toBe('failed');
+    expect(delegate).not.toHaveBeenCalled();
+    noStorage(client);
+  });
+
+  it('withholds an edited invalid operation from pending() and never delivers it', async () => {
+    const original = box();
+    const client = storage();
+    withOutbox(client.client, original);
+    await original.enqueue({ op: 'write', url, body: 'bytes', ...options, guard: { tag } });
+    await edit((r) => {
+      Object.assign(r.item, { op: 'patch' });
+    });
+    original.close();
+    const outbox = box();
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    await outbox.ready;
+    // An item without a valid op cannot be shown as an OutboxItem; hydration fails it.
+    expect(outbox.pending()).toEqual([]);
+    let persisted: Stored | undefined;
+    await edit((r) => {
+      persisted = structuredClone(r);
+    });
+    expect(persisted?.item).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('invalid stored item'),
+    });
+    await outbox.replay(client.client);
+    await outbox.retry();
+    expect(outbox.pending()).toEqual([]);
     expect(delegate).not.toHaveBeenCalled();
     noStorage(client);
   });

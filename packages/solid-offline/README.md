@@ -240,10 +240,22 @@ non-finite numbers, sparse arrays, accessors, class instances and cycles are rej
 Guards are snapshotted at enqueue, with validated assertions serialized once into a canonical
 JSON string for IndexedDB. Hydration reads only the stored envelope's `tag` and
 `assertions` fields, without enumerating its keys, and ignores any other stored key.
-It checks the assertion string's UTF-8 byte length against 16 KiB before `JSON.parse`,
+As defence in depth it rejects a stored tag longer than 64 characters before the tag pattern
+runs (the anchored pattern would already stop by the 65th character), and checks
+the assertion string's UTF-8 byte length against 16 KiB before `JSON.parse`,
 then applies the same depth, value-count and byte validation to the parsed value. Legacy object-valued assertions fail closed; no guarded records have shipped.
 Invalid stored guards become failed items and cannot be sent, including through retry.
-`pending()` exposes only the read-only `guard.tag`, never assertions.
+`pending()` exposes only the read-only `guard.tag`, never assertions, and omits a stored tag
+that fails tag validation (that record is already failed). `pending()` and `conflicts()` copy
+only the documented `OutboxItem` and `ConflictRecord` fields, by name, so other stored keys are
+neither enumerated nor exposed. An optional field whose stored value has an unexpected type
+(such as an object `label`) is omitted rather than returned by reference. Required fields
+(`id`, `op`, `url`, `status`, and `size`/`createdAt` as finite non-negative numbers) are never
+omitted: hydration marks an item with an invalid required field failed (`invalid stored item`),
+so replay, retry and `resolve(id, 'mine' | 'both')` never send it (`'theirs'` still discards
+it). An unknown `status` becomes `failed` and the item stays
+listed; an item with any other invalid required field is withheld from `pending()`. A stored
+conflict with any invalid field, or whose item is invalid, is withheld from `conflicts()`.
 
 `registerGuardPolicy(tag, matches: GuardPolicy)` binds a trusted requirement to operations
 described only by `{ op, url, container? }`. On hydration and immediately before delivery,

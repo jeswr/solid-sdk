@@ -45,6 +45,53 @@ function enqueue(outbox: Outbox, operation: Partial<OutboxOperation> = {}) {
 interface TestStoredItem {
   guard: { tag: string; assertions?: unknown };
   item: { guard: { tag: string; assertions?: unknown }; status: string };
+  conflict?: Record<string, unknown>;
+}
+/**
+ * Hydrate a new outbox while IndexedDB returns records rebuilt by `wrap`, whose
+ * `watch` Proxies record every ownKeys (enumeration) call. Proxies cannot be
+ * structured-cloned, so use this only where hydration persists nothing.
+ */
+async function hydrateWatched(
+  wrap: (record: TestStoredItem, watch: <T extends object>(target: T, name: string) => T) => object,
+) {
+  const enumerated: string[] = [];
+  let wrapped = 0;
+  const watch = <T extends object>(target: T, name: string): T =>
+    new Proxy(target, {
+      ownKeys(inner) {
+        enumerated.push(name);
+        return Reflect.ownKeys(inner);
+      },
+    });
+  const getAll = IDBObjectStore.prototype.getAll;
+  const spy = vi.spyOn(IDBObjectStore.prototype, 'getAll').mockImplementation(function (
+    this: IDBObjectStore,
+    ...args: Parameters<IDBObjectStore['getAll']>
+  ) {
+    const request = getAll.apply(this, args);
+    const result = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(request), 'result');
+    Object.defineProperty(request, 'result', {
+      get() {
+        const records = result?.get?.call(request) as TestStoredItem[];
+        return records.map((record) => {
+          wrapped++;
+          return wrap(record, watch);
+        });
+      },
+      set(value: unknown) {
+        result?.set?.call(request, value);
+      },
+    });
+    return request;
+  });
+  try {
+    const outbox = box();
+    await outbox.ready;
+    return { outbox, enumerated, wrapped };
+  } finally {
+    spy.mockRestore();
+  }
 }
 async function stored(change: (record: TestStoredItem) => void) {
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -843,50 +890,17 @@ describe('guard validation', () => {
     expect(JSON.stringify(outbox.pending())).not.toContain(secret);
   });
 
-  it('never enumerates stored guard envelopes during hydration', async () => {
+  it('never enumerates stored guard envelopes or items during hydration or pending()', async () => {
     const original = box();
     await enqueue(original);
     original.close();
-    const enumerated: string[] = [];
-    const watch = (target: object, name: string) =>
-      new Proxy(target, {
-        ownKeys(inner) {
-          enumerated.push(name);
-          return Reflect.ownKeys(inner);
-        },
-      });
-    // Proxies cannot be structured-cloned, so only hydration (which persists nothing
-    // for bound records) sees them; delivery is covered by the extra-keys test below.
-    const getAll = IDBObjectStore.prototype.getAll;
-    const spy = vi.spyOn(IDBObjectStore.prototype, 'getAll').mockImplementation(function (
-      this: IDBObjectStore,
-      ...args: Parameters<IDBObjectStore['getAll']>
-    ) {
-      const request = getAll.apply(this, args);
-      const result = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(request), 'result');
-      Object.defineProperty(request, 'result', {
-        get() {
-          const records = result?.get?.call(request) as TestStoredItem[];
-          return records.map((record) => ({
-            ...record,
-            guard: watch(record.guard, 'guard'),
-            item: { ...record.item, guard: watch(record.item.guard, 'item.guard') },
-          }));
-        },
-        set(value: unknown) {
-          result?.set?.call(request, value);
-        },
-      });
-      return request;
-    });
-    try {
-      const outbox = box();
-      await outbox.ready;
-      expect(spy).toHaveBeenCalled();
-      expect(outbox.pending()).toMatchObject([{ guard: { tag }, blocked: 'no-delegate' }]);
-    } finally {
-      spy.mockRestore();
-    }
+    const { outbox, enumerated, wrapped } = await hydrateWatched((record, watch) => ({
+      ...record,
+      guard: watch(record.guard, 'guard'),
+      item: watch({ ...record.item, guard: watch(record.item.guard, 'item.guard') }, 'item'),
+    }));
+    expect(wrapped).toBeGreaterThan(0);
+    expect(outbox.pending()).toMatchObject([{ guard: { tag }, blocked: 'no-delegate' }]);
     expect(enumerated).toEqual([]);
   });
 
@@ -899,6 +913,7 @@ describe('guard validation', () => {
     await stored((record) => {
       Object.assign(record.guard, extras);
       Object.assign(record.item.guard, extras);
+      Object.assign(record.item, extras);
     });
     original.close();
     const ownKeys = vi.spyOn(Reflect, 'ownKeys');
@@ -910,6 +925,7 @@ describe('guard validation', () => {
     outbox.registerDelegate(tag, delegate);
     await outbox.ready;
     expect(outbox.pending()[0]?.guard).toEqual({ tag });
+    expect(JSON.stringify(outbox.pending())).not.toContain('private-extra');
     expect(
       ownKeys.mock.calls.some(
         ([target]) => typeof target === 'object' && target !== null && 'extra0' in target,
@@ -920,6 +936,164 @@ describe('guard validation', () => {
     await outbox.replay(client.client);
     expect(delegate).toHaveBeenCalledTimes(1);
     expect(outbox.pending()).toEqual([]);
+  });
+
+  it('keeps the public item fields and their order for valid records', async () => {
+    const outbox = box();
+    await enqueue(outbox, { label: 'Upload' });
+    const fields = [
+      'id',
+      'op',
+      'url',
+      'container',
+      'name',
+      'contentType',
+      'label',
+      'size',
+      'createdAt',
+      'status',
+    ];
+    expect(Object.keys(outbox.pending()[0] as object)).toEqual([...fields, 'guard', 'blocked']);
+    outbox.registerDelegate(tag, vi.fn<ReplayDelegate>().mockRejectedValue(new Error('boom')));
+    await outbox.replay(storage().client);
+    expect(Object.keys(outbox.pending()[0] as object)).toEqual([...fields, 'error', 'guard']);
+    expect(outbox.pending()[0]).toMatchObject({ label: 'Upload', status: 'failed', error: 'boom' });
+    outbox.close();
+    const reopened = box();
+    await reopened.ready;
+    expect(Object.keys(reopened.pending()[0] as object)).toEqual([...fields, 'error', 'guard']);
+  });
+
+  it.each([
+    'INVALID',
+    `a${'b'.repeat(64)}`,
+    42,
+  ])('does not surface an invalid stored tag in pending(): %s', async (invalid) => {
+    const original = box();
+    await enqueue(original);
+    await stored((record) => {
+      Object.assign(record.guard, { tag: invalid });
+    });
+    original.close();
+    const outbox = box();
+    await outbox.ready;
+    expect(outbox.pending()).toMatchObject([
+      { status: 'failed', error: expect.stringContaining('invalid stored guard') },
+    ]);
+    expect(outbox.pending()[0]).not.toHaveProperty('guard');
+    // A number could occur in the random id or timestamp; strings here cannot.
+    if (typeof invalid === 'string')
+      expect(JSON.stringify(outbox.pending())).not.toContain(invalid);
+  });
+
+  it('omits stored item values of an unexpected type instead of returning them', async () => {
+    const original = box();
+    await enqueue(original, { label: 'Upload' });
+    const secret = { private: 'private-object' };
+    await stored((record) => {
+      Object.assign(record.item, { label: secret, contentType: 42, error: ['private-array'] });
+    });
+    original.close();
+    const outbox = box();
+    await outbox.ready;
+    const [item] = outbox.pending();
+    expect(item).not.toHaveProperty('label');
+    expect(item).not.toHaveProperty('contentType');
+    expect(item).not.toHaveProperty('error');
+    expect(item).toMatchObject({ op: 'write', url, status: 'waiting', guard: { tag } });
+    expect(JSON.stringify(outbox.pending())).not.toContain('private-');
+  });
+
+  it.each([
+    ['id', { private: 'private-object' }],
+    ['op', 'patch'],
+    ['url', 42],
+    ['size', Number.NaN],
+    ['size', -1],
+    ['createdAt', Number.POSITIVE_INFINITY],
+    ['createdAt', undefined],
+  ])('fails a stored item whose %s is %s and withholds it from pending()', async (key, value) => {
+    const original = box();
+    await enqueue(original);
+    await stored((record) => {
+      Object.assign(record.item, { [key]: value });
+    });
+    original.close();
+    const outbox = box();
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    await outbox.ready;
+    expect(outbox.pending()).toEqual([]);
+    let status: unknown;
+    await stored((record) => {
+      status = record.item.status;
+    });
+    expect(status).toBe('failed');
+    const client = storage();
+    await outbox.replay(client.client);
+    await outbox.retry();
+    expect(outbox.pending()).toEqual([]);
+    expect(delegate).not.toHaveBeenCalled();
+    expectNoDelivery(client);
+  });
+
+  it('fails a stored item with an unknown status on hydration instead of skipping it', async () => {
+    const original = box();
+    await enqueue(original);
+    await stored((record) => {
+      record.item.status = 'bogus';
+    });
+    original.close();
+    const outbox = box();
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    await outbox.ready;
+    expect(outbox.pending()).toMatchObject([
+      { status: 'failed', error: '[solid-offline] invalid stored item', guard: { tag } },
+    ]);
+    const client = storage();
+    await outbox.replay(client.client);
+    expect(delegate).not.toHaveBeenCalled();
+    const reopened = box();
+    await reopened.ready;
+    expect(reopened.pending()).toMatchObject([{ status: 'failed' }]);
+  });
+
+  it('accepts 64-character tags and rejects longer ones', async () => {
+    const longest = `a${'b'.repeat(63)}`;
+    await expect(enqueue(box(), { guard: { tag: longest } })).resolves.toMatchObject({
+      guard: { tag: longest },
+    });
+    await expect(enqueue(box(), { guard: { tag: `${longest}c` } })).rejects.toThrow('guard tag');
+  });
+
+  it('rejects an oversized stored tag by length before matching its pattern', async () => {
+    const original = box();
+    await enqueue(original);
+    const huge = 'a'.repeat(1_000_000);
+    await stored((record) => {
+      record.guard.tag = huge;
+      record.item.guard.tag = huge;
+    });
+    original.close();
+    const test = vi.spyOn(RegExp.prototype, 'test');
+    const outbox = box();
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    await outbox.ready;
+    const matched = test.mock.calls.some(([input]) => input === huge);
+    test.mockRestore();
+    expect(matched).toBe(false);
+    expect(outbox.pending()).toMatchObject([
+      { status: 'failed', error: expect.stringContaining('invalid guard tag') },
+    ]);
+    expect(outbox.pending()[0]).not.toHaveProperty('guard');
+    const client = storage();
+    await outbox.replay(client.client);
+    await outbox.retry();
+    expect(outbox.pending()[0]?.status).toBe('failed');
+    expect(delegate).not.toHaveBeenCalled();
+    expectNoDelivery(client);
   });
 
   it.each([
@@ -979,6 +1153,25 @@ describe('guard validation', () => {
     (record: TestStoredItem) => {
       Object.assign(record, { guard: new Map([['tag', tag]]) });
     },
+    (record: TestStoredItem) => {
+      Object.assign(record.guard, { tag: 42 });
+    },
+    (record: TestStoredItem) => {
+      Object.assign(record.item.guard, { tag: [tag] });
+    },
+    (record: TestStoredItem) => {
+      record.guard.tag = `a${'b'.repeat(64)}`;
+      record.item.guard.tag = record.guard.tag;
+    },
+    (record: TestStoredItem) => {
+      Object.assign(record.guard, { assertions: 42 });
+    },
+    (record: TestStoredItem) => {
+      Object.assign(record.guard, { assertions: null });
+    },
+    (record: TestStoredItem) => {
+      Object.assign(record, { guard: JSON.stringify(guard) });
+    },
   ])('quarantines tampered persisted guards during hydration and retry: %s', async (tamper) => {
     const original = box();
     await enqueue(original);
@@ -1019,6 +1212,126 @@ async function guardedConflict(outbox: Outbox, op: OutboxOperation['op'] = 'writ
   return { delegate, unregister, client, conflictId };
 }
 describe('guarded conflicts', () => {
+  const conflictFields = ['id', 'itemId', 'url', 'kind', 'localEtag', 'remoteEtag', 'contentType'];
+
+  it('never enumerates stored conflicts and keeps their public fields and order', async () => {
+    const original = box();
+    await guardedConflict(original);
+    const expected = original.conflicts();
+    expect(Object.keys(expected[0] as object)).toEqual(conflictFields);
+    original.close();
+    const { outbox, enumerated, wrapped } = await hydrateWatched((record, watch) => ({
+      ...record,
+      conflict: watch(record.conflict as object, 'conflict'),
+    }));
+    expect(wrapped).toBeGreaterThan(0);
+    expect(outbox.conflicts()).toEqual(expected);
+    expect(Object.keys(outbox.conflicts()[0] as object)).toEqual(conflictFields);
+    expect(outbox.pending()[0]?.status).toBe('conflict');
+    expect(enumerated).toEqual([]);
+  });
+
+  it('copies stored conflicts by field, without enumerating or exposing extra keys', async () => {
+    const original = box();
+    await guardedConflict(original);
+    const expected = original.conflicts();
+    original.close();
+    const extras = Object.fromEntries(
+      Array.from({ length: 20_000 }, (_, i) => [`extra${i}`, 'private-extra']),
+    );
+    await stored((record) => {
+      Object.assign(record.conflict as object, extras);
+    });
+    const outbox = box();
+    await outbox.ready;
+    expect(outbox.conflicts()).toEqual(expected);
+    expect(Object.keys(outbox.conflicts()[0] as object)).toEqual(conflictFields);
+    expect(JSON.stringify(outbox.conflicts())).not.toContain('private-');
+  });
+
+  it.each([
+    ['id', 42],
+    ['kind', 'other'],
+    ['remoteEtag', { private: 'private-object' }],
+    ['localEtag', undefined],
+    ['contentType', null],
+  ])('withholds a stored conflict whose %s is invalid', async (key, value) => {
+    const original = box();
+    await guardedConflict(original);
+    original.close();
+    await stored((record) => {
+      Object.assign(record.conflict as object, { [key]: value });
+    });
+    const outbox = box();
+    await outbox.ready;
+    expect(outbox.conflicts()).toEqual([]);
+    expect(outbox.pending()).toMatchObject([{ status: 'conflict' }]);
+  });
+
+  async function invalidItemConflict() {
+    const original = box();
+    const { conflictId } = await guardedConflict(original);
+    original.close();
+    await stored((record) => {
+      Object.assign(record.item, { size: -1 });
+    });
+    const outbox = box();
+    const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
+    outbox.registerDelegate(tag, delegate);
+    await outbox.ready;
+    const client = storage();
+    client.head.mockResolvedValue({ etag: '"latest"' } as Awaited<
+      ReturnType<StorageClient['head']>
+    >);
+    // Binds the client; replay skips the conflicted item.
+    await outbox.replay(client.client);
+    return { outbox, delegate, client, conflictId };
+  }
+
+  it.each([
+    'mine',
+    'both',
+  ] as const)('never resolves %s for a conflict whose stored item is invalid', async (strategy) => {
+    const { outbox, delegate, client, conflictId } = await invalidItemConflict();
+    expect(outbox.pending()).toEqual([]);
+    expect(outbox.conflicts()).toEqual([]);
+    await expect(outbox.resolve(conflictId, strategy)).rejects.toThrow('invalid stored item');
+    let item: TestStoredItem['item'] | undefined;
+    await stored((record) => {
+      item = structuredClone(record.item);
+    });
+    expect(item).toMatchObject({ status: 'failed', error: '[solid-offline] invalid stored item' });
+    await outbox.retry();
+    expect(delegate).not.toHaveBeenCalled();
+    expect(client.head).not.toHaveBeenCalled();
+    expectNoDelivery(client);
+  });
+
+  it('discards a conflict whose stored item is invalid with theirs, delivering nothing', async () => {
+    const { outbox, delegate, client, conflictId } = await invalidItemConflict();
+    await outbox.resolve(conflictId, 'theirs');
+    const reopened = box();
+    await reopened.ready;
+    expect(reopened.pending()).toEqual([]);
+    expect(reopened.conflicts()).toEqual([]);
+    expect(await reopened.localBody(conflictId)).toBeNull();
+    expect(delegate).not.toHaveBeenCalled();
+    expectNoDelivery(client);
+  });
+
+  it('withholds a stored conflict that is not an object', async () => {
+    const original = box();
+    await guardedConflict(original);
+    original.close();
+    await stored((record) => {
+      Object.assign(record, { conflict: 'private-string' });
+    });
+    const outbox = box();
+    await outbox.ready;
+    expect(outbox.conflicts()).toEqual([]);
+    expect(outbox.pending()).toMatchObject([{ status: 'conflict' }]);
+  });
+
   it.each([
     'write',
     'create',
