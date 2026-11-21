@@ -14,7 +14,7 @@ import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import type { OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, EMAIL_MIME } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
-import type { AccountRef, TokenProvider, Wire } from "../types.js";
+import type { AccountRef, ProposalContext, TokenProvider, Wire } from "../types.js";
 import type { GmailTenant } from "./errors.js";
 import { gmailRest, messageId, rawMessage, record, responseBody } from "./rest.js";
 
@@ -39,7 +39,7 @@ export function createGmailSend(options: GmailSendOptions): NonNullable<ChannelB
   const parseEmail = options.parseEmail;
   const footer = options.footer ?? AGENT_FOOTER;
   const rest = gmailRest(options.transport, options.tenant);
-  async function checked(wire: Wire) {
+  async function checked(wire: Wire, context: ProposalContext | undefined) {
     const snapshot = renderer.assertWire(wire);
     // Strict parity here always: a local outbound entry may never be lenient.
     const parsed = inspectEmail(snapshot.bytes, {
@@ -50,7 +50,7 @@ export function createGmailSend(options: GmailSendOptions): NonNullable<ChannelB
     });
     if (
       !parsed.proposal ||
-      (await renderer.render(parsed.proposal, EMAIL_MIME)).bytes !== snapshot.bytes
+      (await renderer.render(parsed.proposal, EMAIL_MIME, context)).bytes !== snapshot.bytes
     )
       throw new ChannelParseError("email wire differs from signed proposal");
     return { snapshot, proposal: parsed.proposal };
@@ -63,7 +63,7 @@ export function createGmailSend(options: GmailSendOptions): NonNullable<ChannelB
         if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
         if (accountId(io.account) !== account.id)
           throw new ProviderRejectedError("Gmail account differs from configured sender");
-        const { snapshot, proposal } = await checked(wire);
+        const { snapshot, proposal } = await checked(wire, io.expected);
         const response = await rest(
           "/messages/send",
           account,
@@ -97,9 +97,9 @@ export function createGmailSend(options: GmailSendOptions): NonNullable<ChannelB
         return { outcome: "accepted", providerRef: id };
       });
     },
-    async lookup(wire) {
+    async lookup(wire, context) {
       try {
-        const { snapshot, proposal } = await checked(wire);
+        const { snapshot, proposal } = await checked(wire, context);
         const q = `rfc822msgid:${emailMessageIdFor(proposal.message.id)} in:anywhere`;
         const params = new URLSearchParams({ q, maxResults: "10" });
         const body = await responseBody(

@@ -92,6 +92,7 @@ import {
   evaluateIntent,
   type LoadedMandate,
   loadMandate,
+  mandateWindowFailure,
   verifyApproval,
 } from "../mechanisms/mandate.js";
 import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
@@ -1278,6 +1279,13 @@ export class AgentRuntime {
       revoked: this.mandate ? this.isRevoked(this.mandate) : false,
       ...(this.mandateFailure ? { failure: this.mandateFailure } : {}),
     };
+  }
+
+  /** Digest of the verified, currently valid and unrevoked owner mandate. */
+  activeMandateDigest(): string | undefined {
+    const mandate = this.mandate;
+    if (mandate && !this.isRevoked(mandate) && !mandateWindowFailure(mandate.mandate, this.now()))
+      return mandate.digest;
   }
 
   private isRevoked(m: LoadedMandate): boolean {
@@ -6082,14 +6090,39 @@ export class AgentRuntime {
     return { disposition: "accepted" as const, outbound };
   }
 
-  /** A scripted or model core can propose a follow-up only through this executor. */
-  sendMessage(conversation: Iri, plan: OutboundPlan): Promise<StepResult> {
+  /**
+   * A scripted or model core can propose a follow-up only through this executor.
+   * Compact JWS is for the existing W17 carrier on an explicitly authorised follow-up.
+   */
+  sendMessage(
+    conversation: Iri,
+    plan: OutboundPlan,
+    options?: { readonly compactJws?: boolean },
+  ): Promise<StepResult> {
     return this.exclusive(async () => {
-      const outbound = await this.performPlanMessage(conversation, plan);
+      const findPending = () =>
+        Object.values(this.state.pending).find((p) => p.conversation === conversation);
+      // The compact carrier is used for explicit host releases. Do not emit a second
+      // message in a conversation whose earlier action is held for the principal.
+      if (options?.compactJws) {
+        const peer = this.state.conversations[conversation]?.peer;
+        if (
+          !plan.intent?.recipient ||
+          plan.intent.recipient !== peer?.party ||
+          plan.intent.conversation !== conversation
+        )
+          return this.result("rejected", { reason: "not-authorised", outbound: [] });
+      }
+      const held = options?.compactJws && findPending();
+      if (held)
+        return this.result("pending-approval", {
+          conversation,
+          outbound: [],
+          pendingApproval: { actionDigest: held.actionDigest, intent: held.intent },
+        });
+      const outbound = await this.performPlanMessage(conversation, plan, options?.compactJws);
       this.persist();
-      const pending = Object.values(this.state.pending).find(
-        (p) => p.conversation === conversation,
-      );
+      const pending = findPending();
       return this.result(pending ? "pending-approval" : "local", {
         conversation,
         outbound,
@@ -6103,6 +6136,7 @@ export class AgentRuntime {
   private async performPlanMessage(
     conversationId: Iri,
     m: OutboundPlan,
+    compactJws?: boolean,
   ): Promise<OutboundMessage[]> {
     if (m.intent) {
       const decision = this.authorise(m.intent, false, m.evidence);
@@ -6123,6 +6157,7 @@ export class AgentRuntime {
     }
     return [
       await this.emit(conversationId, m.kind, m.body as never, {
+        ...(compactJws && { compactJws }),
         evidence: m.evidence ?? [],
         ...(m.intent ? { intent: m.intent } : {}),
       }),
@@ -8505,6 +8540,7 @@ export class AgentRuntime {
       resume?: AnyMessage;
       resumePacket?: MessagePacket;
       approved?: boolean;
+      compactJws?: boolean;
     },
   ): Promise<OutboundMessage> {
     const proposedTerms =
@@ -9078,9 +9114,17 @@ export class AgentRuntime {
         this.result("rejected", { reason: "record-unavailable", outbound: [] }),
       );
     const signing = cfg.integrity;
+    if (opts.compactJws && (anonymousRequester || suite !== "jws"))
+      throw new MessageReleaseError(
+        this.result("rejected", { reason: "unsupported-configuration", outbound: [] }),
+      );
     let announceReference: (() => void) | undefined;
     let recordApprovalConsumption: (() => void) | undefined;
     const prepareRelease = async (pointers?: ReadonlyMap<string, EvidenceItem>) => {
+      if (opts.compactJws && pointers)
+        throw new MessageReleaseError(
+          this.result("rejected", { reason: "unsupported-configuration", outbound: [] }),
+        );
       if (pointers) {
         let count = 0;
         const evidence = (message.evidence ?? []).map((item) => {
@@ -9105,6 +9149,17 @@ export class AgentRuntime {
             ...approvalBindingRecord,
             messageDigest: await documentDigest(prepared.document, suite),
           };
+      }
+      let compact: WireMessage | undefined;
+      if (opts.compactJws) {
+        const key = this.keysByAlg.get(signing.alg);
+        if (!key) throw new Error(`no actor key for ${signing.alg}`);
+        const jws = await signCompact(key, TYP.message, message);
+        if (Buffer.byteLength(jws) > this.limits.maxEnvelopeBytes)
+          throw new MessageReleaseError(
+            this.result("rejected", { reason: "bounds-exceeded", outbound: [] }),
+          );
+        compact = { format: "awp-jws-compact/0.1", jws };
       }
       if (!pointers && opts.intent?.purpose)
         this.setDomain(`_purpose:${conv.id}`, opts.intent.purpose, conv.id);
@@ -9140,7 +9195,9 @@ export class AgentRuntime {
         else this.saveConversation(next.state);
       }
       let wire: WireMessage;
-      if (anonymousRequester) {
+      if (compact) {
+        wire = compact;
+      } else if (anonymousRequester) {
         if (!cfg.unsignedRequestKinds.includes(kind))
           throw new Error(`internal: anonymous requester cannot send ${kind}`);
         wire = {

@@ -1,6 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { ProviderRejectedError, SendNotDispatchedError } from "@jeswr/agent-channels/provider/send";
+import {
+  type ProposalContext,
+  ProviderRejectedError,
+  SendNotDispatchedError,
+} from "@jeswr/agent-channels/provider/send";
 import { AGENT, evaluateIntent, type Mandate, type Policy } from "@jeswr/agent-mandate";
 import type { ControlStatement } from "@jeswr/agent-model";
 import {
@@ -271,13 +275,15 @@ export function createExecutor(options: ExecutorOptions) {
     // Canonical data snapshot rejects getters, hidden fields and cyclic hostile proposals.
     let entry: OutboxEntry;
     let binding: SendBinding;
+    let expected: ProposalContext;
     try {
       entry = JSON.parse(canonicalJson(loaded)) as OutboxEntry;
       const candidate = o.bindings[entry.proposal.intent.binding];
       if (!candidate || candidate.id !== entry.proposal.intent.binding)
         throw new Error("Invalid binding");
       binding = candidate;
-      const rendered = await binding.send.render(entry.renderable, binding.carriage);
+      expected = { proposalId: id, conversation: entry.proposal.intent.conversation };
+      const rendered = await binding.send.render(entry.renderable, binding.carriage, expected);
       if (
         !podRecordSchema.safeParse(entry.proposal).success ||
         entry.proposal.id !== id ||
@@ -292,6 +298,7 @@ export function createExecutor(options: ExecutorOptions) {
             renderable: entry.renderable,
             intent: entry.proposal.intent,
             account: entry.account,
+            expected,
           })
         ).ok !== true
       )
@@ -421,7 +428,8 @@ export function createExecutor(options: ExecutorOptions) {
     if (previous && unresolved) {
       let found: unknown;
       try {
-        if (binding.send.lookup) found = await bounded(binding.send.lookup(entry.wire), timeout);
+        if (binding.send.lookup)
+          found = await bounded(binding.send.lookup(entry.wire, expected), timeout);
       } catch {
         /* unknown */
       }
@@ -599,6 +607,7 @@ export function createExecutor(options: ExecutorOptions) {
       return binding.send.transmit(entry.wire, {
         account: entry.account,
         tokens,
+        expected: { proposalId: id, conversation: entry.proposal.intent.conversation },
         assertAuthority,
         dryRun: false,
       });

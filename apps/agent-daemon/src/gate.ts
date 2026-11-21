@@ -4,13 +4,16 @@ import {
   type BridgeMessage,
   type ChannelParseRefusalReason,
   DIRECT,
+  type ProposalContext,
   readEnvelope,
 } from "@jeswr/agent-channels";
-import { digestBytes } from "@jeswr/agent-model";
+import type { ProposalRelease } from "@jeswr/agent-executor";
+import { type ActionProposal, digestBytes } from "@jeswr/agent-model";
 import {
   AgentRuntime,
   type AgentRuntimeOptions,
   CONFIG_ED25519,
+  DEFAULT_LIMITS,
   FileLedger,
   FileStateStore,
   readAgent,
@@ -20,10 +23,14 @@ import {
   verifyLedger,
 } from "@jeswr/agent-reference";
 import { randomUUID } from "crypto";
-import { lstat, readdir, rename, unlink } from "fs/promises";
+import { constants } from "fs";
+import { lstat, open, readdir, rename, unlink } from "fs/promises";
 import { basename, dirname, join, resolve } from "path";
 import { z } from "zod";
 import { readPrivate, syncDirectory, writePrivate } from "./local.js";
+import { createOutboundGate, type OutboundMapping } from "./outbound.js";
+
+export type { OutboundMapping } from "./outbound.js";
 
 export type GateOutcome = "admitted" | "unstructured" | "refused";
 export interface GateVerdict {
@@ -49,6 +56,7 @@ type ParseRefusalInput = { binding: string; account: string } & ParseRefusal;
 type GateOptions = {
   directory: string;
   now?: () => Date;
+  outbound?: OutboundMapping;
   /** Trusted host configuration for operations that admit evidence into a named task. */
   admission?: Pick<NonNullable<AgentRuntimeOptions["gates"]>, "reliance"> & {
     taskId: string;
@@ -182,6 +190,7 @@ export function createGate(
   peers: readonly { subject: string; thumbprint: string }[],
   now: () => Date,
   admittedReceipts = new Set<string>(),
+  outbound?: Awaited<ReturnType<typeof createOutboundGate>>,
 ) {
   let pending: Promise<unknown> = Promise.resolve();
   let closed = false;
@@ -274,15 +283,24 @@ export function createGate(
       return { ...refused("indeterminate"), digest };
     }
   }
-  function enqueue(input: CheckInput | ParseRefusalInput): Promise<GateVerdict> {
-    if (closed) return Promise.reject(new Error("Inbound gate is closed"));
-    const result = pending.then(() => check(input));
+  function enqueue<T>(work: () => T | Promise<T>): Promise<T> {
+    if (closed) return Promise.reject(new Error("Agent gate is closed"));
+    const result = pending.then(work);
     pending = result.catch(() => undefined);
     return result;
   }
   return {
-    check: (input: CheckInput) => enqueue(input),
-    recordParseRefusal: (input: ParseRefusalInput) => enqueue(input),
+    check: (input: CheckInput) => enqueue(() => check(input)),
+    recordParseRefusal: (input: ParseRefusalInput) => enqueue(() => check(input)),
+    release: (proposal: ActionProposal) =>
+      enqueue<ProposalRelease>(
+        () => outbound?.release(proposal) ?? { ok: false, reason: "unsupported-operation" },
+      ),
+    verifyOwn: (compactJws: string, expected: ProposalContext | undefined) =>
+      enqueue(() => {
+        if (!outbound) throw new Error("Outbound gate is not configured");
+        return outbound.verifyOwn(compactJws, expected);
+      }),
     facts() {
       if (closed) throw new Error("Inbound gate is closed");
       return rt
@@ -359,8 +377,40 @@ export async function openGate(options: GateOptions): Promise<Gate> {
 
 async function openStoredGate(
   stored: Awaited<ReturnType<typeof readGate>>,
-  { now = () => new Date(), admission }: GateOptions,
+  options: GateOptions,
 ): Promise<Gate> {
+  const { now = () => new Date(), admission, outbound } = options;
+  const { runtime, ledger } = await openRuntime(stored, options);
+  try {
+    const verdicts = fileVerdicts(stored.dir);
+    const admittedReceipts = new Set<string>();
+    if (admission) {
+      for (const hex of await verdicts.digests()) {
+        const verdict = await verdicts.get(hex);
+        if (verdict?.outcome === "admitted" && verdict.admissionReceipt)
+          admittedReceipts.add(verdict.admissionReceipt);
+      }
+    }
+    const outboundGate = outbound && (await createOutboundGate(runtime, stored.dir, outbound));
+    return createGate(
+      runtime,
+      verdicts,
+      ledger,
+      pinnedPeers(stored.trust),
+      now,
+      admittedReceipts,
+      outboundGate,
+    );
+  } catch (error) {
+    runtime.close();
+    throw error;
+  }
+}
+
+async function openRuntime(
+  stored: Awaited<ReturnType<typeof readGate>>,
+  { now = () => new Date(), admission, outbound }: GateOptions,
+) {
   const trust = await TrustStore.load(stored.trust);
   const store = new FileStateStore(join(stored.dir, "state.json"));
   try {
@@ -374,30 +424,63 @@ async function openStoredGate(
       mandateJws: stored.mandateJws,
       representationJws: stored.representationJws,
       accepted: [CONFIG_ED25519],
-      handlers: admission?.handlers ?? [],
+      handlers: [...new Set([...(admission?.handlers ?? []), ...(outbound?.handlers ?? [])])],
       ...(admission && { gates: { taskId: admission.taskId, reliance: admission.reliance } }),
       store,
       ledger,
       now,
     });
-    const verdicts = fileVerdicts(stored.dir);
-    const admittedReceipts = new Set<string>();
-    if (admission) {
-      for (const hex of await verdicts.digests()) {
-        const verdict = await verdicts.get(hex);
-        if (verdict?.outcome === "admitted" && verdict.admissionReceipt)
-          admittedReceipts.add(verdict.admissionReceipt);
-      }
-    }
-    return createGate(runtime, verdicts, ledger, pinnedPeers(stored.trust), now, admittedReceipts);
+    return { runtime, ledger };
   } catch (error) {
     store.close();
     throw error;
   }
 }
 
+/** The operator holds the daemon process lease while replacing an owner-signed mandate. */
+export async function installGateMandate(options: {
+  directory: string;
+  path: string;
+  now?: () => Date;
+  identity?: GateIdentity;
+}): Promise<void> {
+  const file = await open(
+    options.path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
+  let jws: string;
+  try {
+    const stat = await file.stat();
+    if (!stat.isFile() || stat.size > DEFAULT_LIMITS.maxEnvelopeBytes)
+      throw new Error("Invalid gate mandate file");
+    const bytes = Buffer.alloc(DEFAULT_LIMITS.maxEnvelopeBytes + 1);
+    const { bytesRead } = await file.read(bytes);
+    if (bytesRead !== stat.size) throw new Error("Gate mandate file changed while reading");
+    jws = bytes.subarray(0, bytesRead).toString("utf8").trim();
+  } finally {
+    await file.close();
+  }
+  const stored = await readGate(options.directory);
+  if (
+    options.identity &&
+    (stored.identity.actor !== options.identity.actor ||
+      stored.identity.party !== options.identity.party)
+  )
+    throw new Error("Gate identity does not match daemon configuration");
+  const { runtime } = await openRuntime(stored, options);
+  try {
+    await runtime.reloadMandate(jws);
+    if (!runtime.activeMandateDigest()) throw new Error("Gate mandate was refused");
+    await writePrivate(stored.dir, "mandate.jws", jws);
+  } finally {
+    runtime.close();
+  }
+}
+
 /** The daemon opens the durable gate under its existing process lease. */
-export function createInboundGate(options: GateOptions): InboundGatePort & Pick<Gate, "facts"> {
+export function createInboundGate(
+  options: GateOptions,
+): InboundGatePort & Pick<Gate, "facts" | "release" | "verifyOwn"> {
   let active: Gate | undefined;
   return {
     async check() {
@@ -406,6 +489,14 @@ export function createInboundGate(options: GateOptions): InboundGatePort & Pick<
     facts() {
       if (!active) throw new Error("Inbound gate requires an active daemon lease");
       return active.facts();
+    },
+    async release(proposal) {
+      if (!active) throw new Error("Outbound gate requires an active daemon lease");
+      return active.release(proposal);
+    },
+    async verifyOwn(compactJws, expected) {
+      if (!active) throw new Error("Outbound gate requires an active daemon lease");
+      return active.verifyOwn(compactJws, expected);
     },
     async open(identity) {
       const stored = await readGate(options.directory);

@@ -160,7 +160,7 @@ it("fences the real executor's suspended send grant on a halt discovered by the 
       entries: () => ledger.entries(),
       sync: async () => undefined,
     },
-    proposalWritten: vi.fn(),
+    project: vi.fn(),
     gateway: { reader: { extract: vi.fn() }, proposer: { propose: vi.fn() } },
     memory: createTestMemory(),
     proposerContext: {

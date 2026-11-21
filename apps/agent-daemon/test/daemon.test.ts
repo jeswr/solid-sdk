@@ -21,6 +21,7 @@ import {
   type ApprovalContext,
   createExecutor,
   type OutboxEntry,
+  ProposalRefusedError,
   proposalApprovalTerms,
   proposalTermsDigest,
 } from "@jeswr/agent-executor";
@@ -189,7 +190,7 @@ function harness() {
       entries: () => ledger.entries(),
       sync: async () => undefined,
     },
-    proposalWritten: async (proposal) => {
+    project: async (proposal) => {
       const renderable: OutboxEntry["renderable"] = {
         compactJws: "fixture.signed.carrier",
         message: {
@@ -432,13 +433,13 @@ it.each([
   };
   if (cached) await h.state.proposalResults.put(key, result);
   else vi.mocked(h.options.gateway.proposer.propose).mockResolvedValue(result);
-  const project = vi.fn(h.options.proposalWritten);
-  const proposalWritten: DaemonOptions["proposalWritten"] = async (proposal) => {
+  const projectOutbox = vi.fn(h.options.project);
+  const project: DaemonOptions["project"] = async (proposal) => {
     expect(proposal.id).toBe(expectedId);
     expect((await h.state.proposalResults.get(key))?.proposals[0]?.id).toBe(expectedId);
-    return project(proposal);
+    return projectOutbox(proposal);
   };
-  const options = { ...h.options, proposalWritten };
+  const options = { ...h.options, project };
   await createDaemon(options).once();
   await createDaemon(options).once();
   expect(h.options.gateway.proposer.propose).toHaveBeenCalledTimes(cached ? 0 : 1);
@@ -478,10 +479,10 @@ async function legacyRun(
   };
   // The trusted outbox is idempotent by proposal ID, as the executor's store is.
   const outbox = new Map<string, OutboxEntry>();
-  const project = vi.fn<DaemonOptions["proposalWritten"]>(async (proposal) => {
+  const project = vi.fn<DaemonOptions["project"]>(async (proposal) => {
     const existing = outbox.get(proposal.id);
     if (existing) return existing;
-    const entry = await h.options.proposalWritten(proposal);
+    const entry = await h.options.project(proposal);
     outbox.set(proposal.id, entry);
     return entry;
   });
@@ -539,7 +540,7 @@ async function legacyRun(
     key,
     outbox,
     project,
-    options: { ...h.options, proposalWritten: project },
+    options: { ...h.options, project },
   };
 }
 const proposalResources = (h: ReturnType<typeof harness>) =>
@@ -642,7 +643,7 @@ it.each([
         })),
       };
     });
-    const project = vi.fn(h.options.proposalWritten);
+    const project = vi.fn(h.options.project);
     const write = h.workspace.proposal.bind(h.workspace);
     if (stage === "proposal-write")
       vi.spyOn(h.workspace, "proposal")
@@ -663,9 +664,7 @@ it.each([
         return entry;
       };
     }
-    await expect(
-      createDaemon({ ...h.options, ...local, proposalWritten: project }).once(),
-    ).rejects.toThrow();
+    await expect(createDaemon({ ...h.options, ...local, project }).once()).rejects.toThrow();
     expect(await local.checkpoints.get("fixture")).toBeUndefined();
     expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
     const before = [...h.pod.resources].filter(
@@ -675,7 +674,7 @@ it.each([
     await createDaemon({
       ...h.options,
       ...createLocalState(directory),
-      proposalWritten: project,
+      project,
     }).once();
     expect(propose).toHaveBeenCalledOnce();
     expect(await local.checkpoints.get("fixture")).toBe("one");
@@ -725,7 +724,7 @@ it("fails closed before any proposal effects when result persistence fails", asy
 });
 it("persists finalized trusted proposals before publishing them and reuses them after restart", async () => {
   const h = harness();
-  const project = vi.fn(h.options.proposalWritten);
+  const project = vi.fn(h.options.project);
   const cache = vi.spyOn(h.state.proposalResults, "put");
   const write = h.workspace.proposal.bind(h.workspace);
   vi.spyOn(h.workspace, "proposal").mockImplementation(async (proposal) => {
@@ -739,7 +738,7 @@ it("persists finalized trusted proposals before publishing them and reuses them 
     await write(proposal);
   });
   vi.spyOn(h.state.checkpoints, "put").mockRejectedValueOnce(new Error("cursor unavailable"));
-  const options = { ...h.options, proposalWritten: project };
+  const options = { ...h.options, project };
   await expect(createDaemon(options).once()).rejects.toThrow("cursor unavailable");
   const published = [...h.pod.resources].filter(
     ([url]) => url.includes("/proposals/") && url.endsWith(".ttl"),
@@ -797,11 +796,11 @@ it("refuses changed trusted terms when replaying existing proposal evidence", as
   const h = harness();
   vi.spyOn(h.state.checkpoints, "put").mockRejectedValueOnce(new Error("cursor unavailable"));
   await expect(createDaemon(h.options).once()).rejects.toThrow("cursor unavailable");
-  const entry = await h.options.proposalWritten(exampleRecords["action-proposal"]);
+  const entry = await h.options.project(exampleRecords["action-proposal"]);
   await expect(
     createDaemon({
       ...h.options,
-      proposalWritten: async (proposal) => {
+      project: async (proposal) => {
         const changed = { ...entry, proposal, wireDigest: digestBytes("different wire") };
         changed.proposal.intent.termsDigest = proposalTermsDigest(changed);
         return changed;
@@ -817,8 +816,8 @@ it("refuses an outbox entry for a different proposal before audit or cursor comm
   await expect(
     createDaemon({
       ...h.options,
-      proposalWritten: async (proposal) => ({
-        ...(await h.options.proposalWritten(proposal)),
+      project: async (proposal) => ({
+        ...(await h.options.project(proposal)),
         proposal: { ...proposal, id: "urn:proposal:different" },
       }),
     }).once(),
@@ -833,8 +832,8 @@ it("refuses an outbox entry whose finalized approval digest does not match its t
   await expect(
     createDaemon({
       ...h.options,
-      proposalWritten: async (proposal) => {
-        const entry = await h.options.proposalWritten(proposal);
+      project: async (proposal) => {
+        const entry = await h.options.project(proposal);
         entry.proposal.intent.termsDigest = digestOf("model-supplied digest");
         return entry;
       },
@@ -903,7 +902,7 @@ it("executes and audits daemon proposal evidence using the same signed approval"
   });
   const options = {
     ...h.options,
-    proposalWritten: project,
+    project,
     audit: {
       append: (record: Parameters<typeof h.options.audit.append>[0], time: string) =>
         writer.append(record, time),
@@ -2565,4 +2564,32 @@ it.each([
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+it("caches and audits a gate refusal without publishing or trying the proposal again", async () => {
+  const h = harness();
+  const project = vi.fn<DaemonOptions["project"]>(async () => {
+    throw new ProposalRefusedError("unsupported-operation");
+  });
+  const daemon = createDaemon({ ...h.options, project });
+  await daemon.once();
+  await daemon.once();
+  expect(project).toHaveBeenCalledOnce();
+  expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
+  const source = h.workspace.messageUrl(h.workspace.url("inbox/direct/fixture/"), "seed");
+  const key = digestOf({ account: "fixture", source, digest: h.message.rawSha256 });
+  const proposal = project.mock.calls[0]?.[0];
+  if (!proposal) throw new Error("Expected a projected proposal");
+  expect((await h.state.proposalResults.get(key))?.refused).toEqual([
+    { id: proposal.id, reason: "unsupported-operation" },
+  ]);
+  expect(h.pod.resources.has(proposal.id)).toBe(false);
+  const refusals = h.ledger
+    .entries()
+    .filter(({ record }) => record.type === "decision" && record.status === "refused");
+  expect(refusals).toHaveLength(1);
+  expect(refusals[0]?.record).toMatchObject({
+    proposal: proposal.id,
+    reason: "unsupported-operation",
+  });
 });

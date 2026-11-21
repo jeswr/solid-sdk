@@ -18,7 +18,14 @@ import type { MatrixCrypto } from "../matrix/crypto.js";
 import type { OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, MATRIX_CONTENT } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
-import type { AccountRef, RenderableProposal, TokenProvider, Wire } from "../types.js";
+import type {
+  AccountRef,
+  EnvelopeVerifier,
+  ProposalContext,
+  RenderableProposal,
+  TokenProvider,
+  Wire,
+} from "../types.js";
 import {
   bridgeChannel,
   detectMatrixBridge,
@@ -39,7 +46,7 @@ export interface MatrixSendOptions {
   readonly transport?: OriginFetchOptions;
   readonly footer?: string;
   /** Local signature verifier, including sender key and intended audience. */
-  readonly verify: (compactJws: string) => Promise<unknown>;
+  readonly verify: EnvelopeVerifier;
   /** Executor verifies the CURRENT mandate, halt/limits and owner approval for this wire/account. */
   readonly verifyApproval: (wire: Wire, account: AccountRef) => Promise<boolean>;
   /** Persisted provider event ID from the executor's outbox, when known. Never guess absence. */
@@ -77,12 +84,16 @@ export function createMatrixSend(options: MatrixSendOptions): NonNullable<Channe
     )
       throw new ChannelParseError("Matrix message is expired or not yet valid");
   }
-  async function render(proposal: RenderableProposal, carriage: CarriageProfile): Promise<Wire> {
+  async function render(
+    proposal: RenderableProposal,
+    carriage: CarriageProfile,
+    context?: ProposalContext,
+  ): Promise<Wire> {
     const compactJws = proposal.compactJws;
     const decoded = decodeEmailProposal(compactJws);
     assertJsonBounds(proposal.message);
     const proposed = canonicalJson(proposal.message);
-    const payload = await verify(compactJws);
+    const payload = await verify(compactJws, context);
     assertJsonBounds(payload);
     const checked = validateMessage(payload);
     if (
@@ -134,25 +145,26 @@ export function createMatrixSend(options: MatrixSendOptions): NonNullable<Channe
       throw new ChannelParseError("invalid Matrix wire");
     return Object.freeze(wire);
   }
-  async function checked(wire: Wire) {
+  async function checked(wire: Wire, context: ProposalContext | undefined) {
     const snapshot = assertWire(wire);
     const data = json(snapshot.bytes, MATRIX_CONTENT.maxBytes);
     const carriage = carriageFor(identifier(data.roomId, "!"));
     const proposal = decodeEmailProposal(
       carriage === MATRIX_CONTENT ? decodeEventContent(data.content) : (data.compactJws as string),
     );
-    if ((await render(proposal, carriage)).bytes !== snapshot.bytes)
+    if ((await render(proposal, carriage, context)).bytes !== snapshot.bytes)
       throw new ChannelParseError("Matrix wire differs from signed proposal");
     return { snapshot, proposal, roomId: data.roomId as string, content: record(data.content) };
   }
   return {
     render,
-    async validate(wire, proposal) {
+    async validate(wire, proposal, context) {
       try {
         const snapshot = assertWire(wire);
         const expected = await render(
           proposal,
           carriageFor(identifier(json(snapshot.bytes, MATRIX_CONTENT.maxBytes).roomId, "!")),
+          context,
         );
         current(decodeEmailProposal(proposal.compactJws).message);
         return snapshot.bytes === expected.bytes
@@ -167,7 +179,7 @@ export function createMatrixSend(options: MatrixSendOptions): NonNullable<Channe
         if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
         if (accountId(io.account) !== account.id)
           throw new ProviderRejectedError("Matrix sender account mismatch");
-        const { snapshot, proposal, roomId, content } = await checked(wire);
+        const { snapshot, proposal, roomId, content } = await checked(wire, io.expected);
         current(proposal.message);
         // This task specifies m.room.message sends. Refuse encrypted rooms rather than downgrade them.
         const responseState = await rest(
@@ -245,9 +257,9 @@ export function createMatrixSend(options: MatrixSendOptions): NonNullable<Channe
         }
       });
     },
-    async lookup(wire) {
+    async lookup(wire, context) {
       try {
-        const { proposal, roomId, content } = await checked(wire);
+        const { proposal, roomId, content } = await checked(wire, context);
         const id = await eventIdFor?.(proposal.message.id, account);
         if (id === undefined)
           return { outcome: "unknown", detail: "Matrix provider event ID unavailable" };

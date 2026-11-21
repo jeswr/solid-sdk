@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { AuditRecord, LedgerEntry } from "@jeswr/agent-audit";
 import type { Bounds, ChannelBinding, Cursor } from "@jeswr/agent-channels";
-import type { createExecutor, OutboxEntry } from "@jeswr/agent-executor";
+import type { createExecutor, createOutboxProjector } from "@jeswr/agent-executor";
 import type { ActionProposal } from "@jeswr/agent-model";
 import type { Gateway, ModelCall, ProposerContext } from "@jeswr/agent-model-gateway";
 import type { Interpreter } from "@jeswr/agentic-legacy-bridge";
@@ -25,6 +25,7 @@ export interface Checkpoints {
 export interface ProposalResult {
   readonly proposals: readonly ActionProposal[];
   readonly calls: readonly ModelCall[];
+  readonly refused?: readonly { id: string; reason: string }[];
 }
 /** Private, durable results keyed by account, source URL and inbound content digest. */
 export interface ProposalResults {
@@ -55,7 +56,7 @@ export interface DaemonOptions {
    * Return the exact executor entry with intent.termsDigest set to proposalTermsDigest(entry).
    * The daemon durably caches that finalized proposal before publishing it or its audit evidence.
    */
-  readonly proposalWritten: (proposal: ActionProposal) => Promise<OutboxEntry>;
+  readonly project: ReturnType<typeof createOutboxProjector>;
   readonly audit: {
     append(record: AuditRecord, at: string): Promise<unknown>;
     /** Read the same durable ledger used by append, including failed mirror writes. */
