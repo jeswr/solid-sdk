@@ -141,6 +141,19 @@ it.each(records)("round-trips and shape-validates $type", async (record) => {
   ).toBe(true);
 });
 
+it("falls back to a shape-valid untyped record when the payload timestamp is invalid", async () => {
+  const entry = new MemoryLedger().append({ type: "approval", at: "invalid" }, at);
+  const graph = recordGraphIri(entry.hash);
+  const dataset = recordEntryDataset(entry);
+  const [payload] = dataset.getObjects(graph, `${awp}record`, graph);
+  if (!payload) throw new Error("Missing record payload");
+  expect(dataset.getObjects(payload, rdfType, graph)).toEqual([namedNode(`${awp}UntypedRecord`)]);
+  expect(recordEntryFrom(readNQuads(writeNQuads(dataset)), graph)).toEqual(entry);
+  expect((await (await shapes()).validate(storeProjection(dataset, graph) as never)).conforms).toBe(
+    true,
+  );
+});
+
 it("round-trips committed and legacy withheld entries without exposing payload terms", async () => {
   for (const committed of [true, false]) {
     const ledger = new MemoryLedger();

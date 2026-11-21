@@ -25,6 +25,7 @@ const storeJsonWrites = new Map([
   ["src/store/state.ts/FileStateStore.recoverIfStale", 1],
   ["src/store/state.ts/FileStateStore.save", 1],
   ["src/store/ledger.ts/writeLegacyLine", 1],
+  ["src/store/ledger.ts/writeLegacyRecovery", 1],
 ]);
 const storeJsonReaders = new Set([
   "src/store/state.ts/readLock",

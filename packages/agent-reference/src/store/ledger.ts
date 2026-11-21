@@ -167,6 +167,10 @@ function writeLegacyLine(path: string, entry: LedgerEntry): void {
   appendFileSync(path, `${JSON.stringify(entry)}\n`, { encoding: "utf8" });
 }
 
+function writeLegacyRecovery(path: string, entries: readonly LedgerEntry[]): void {
+  writeFileDurable(path, entries.map((entry) => `${JSON.stringify(entry)}\n`).join(""), "wx");
+}
+
 function writeRecordBlock(path: string, entry: LedgerEntry): void {
   const lines = writeNQuads(recordEntryDataset(entry)).split("\n");
   const index = lines.findIndex((line) => ENTRY_BOUNDARY.test(line));
@@ -179,7 +183,9 @@ function writeRecordBlock(path: string, entry: LedgerEntry): void {
 function readSegment(path: string) {
   const text = existsSync(path) ? readFileSync(path, "utf8") : "";
   const first = text.trimStart()[0];
-  const format: SegmentFormat | undefined = first === "{" ? "jsonl" : first ? "nquads" : undefined;
+  // Store RDF begins with a named subject (or a comment). Legacy JSON can begin with a scalar.
+  const format: SegmentFormat | undefined =
+    first === "<" || first === "#" ? "nquads" : first ? "jsonl" : undefined;
   const rows: { entry: LedgerEntry; end: number }[] = [];
   let end = 0;
   let start = 0;
@@ -254,24 +260,21 @@ export class FileLedger implements EvidenceLedger {
 
   recoverUncommittedSuffix(head: LedgerHead): void {
     const paths = [...this.segments(), this.path];
-    const prefix: LedgerEntry[] = [];
-    let suffixStarted = false;
     const segments = paths.map((path) => {
       const segment = readSegment(path);
-      const kept = [];
-      for (const row of segment.rows) {
-        if (row.entry.seq > head.seq) {
-          suffixStarted = true;
-        } else {
-          if (suffixStarted)
-            throw new Error("Cannot resume the evidence ledger at an invalid saved head");
-          kept.push(row);
-          prefix.push(row.entry);
-        }
-      }
+      const kept = segment.rows.filter(({ entry }) => entry.seq <= head.seq);
       return { path, ...segment, kept };
     });
-    if (!verifyLedgerAtHead(prefix, head).ok)
+    const prefix = segments.flatMap(({ kept }) => kept.map(({ entry }) => entry));
+    const lastKept = segments.findLastIndex(({ kept }) => kept.length > 0);
+    // RDF is recovered by byte prefix, and only the last retained segment can be shortened.
+    const interleaved =
+      segments.some(({ format }) => format === "nquads") &&
+      segments.some(({ format, kept, rows }, index) => {
+        if (index < lastKept) return rows.some(({ entry }) => entry.seq > head.seq);
+        return format === "nquads" && kept.length > 0 && kept.at(-1) !== rows[kept.length - 1];
+      });
+    if (interleaved || !verifyLedgerAtHead(prefix, head).ok)
       throw new Error("Cannot resume the evidence ledger at an invalid saved head");
     // Drop the newest segments first. Every intermediate state retains the saved head.
     this.currentCount = 0;
@@ -283,10 +286,15 @@ export class FileLedger implements EvidenceLedger {
         fsyncDir(dirname(this.path));
         continue;
       }
-      if (kept.length !== rows.length) {
+      if (format === "jsonl" || kept.length !== rows.length) {
         const tmp = `${this.path}.recovery-tmp`;
         rmSync(tmp, { force: true });
-        writeFileDurable(tmp, text.slice(0, tail.end), "wx");
+        if (format === "jsonl")
+          writeLegacyRecovery(
+            tmp,
+            kept.map(({ entry }) => entry),
+          );
+        else writeFileDurable(tmp, text.slice(0, tail.end), "wx");
         renameSync(tmp, path);
         fsyncDir(dirname(this.path));
       }

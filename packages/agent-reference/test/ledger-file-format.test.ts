@@ -77,6 +77,50 @@ it("recovers a saved prefix across both formats and preserves the prefix bytes",
     expect(verifyLedgerAtHead(ledger.entries(), ledger.head()).ok).toBe(true);
   }));
 
+it.each(["before", "between"])("drops a non-entry JSONL line %s retained entries", (position) =>
+  temp((path) => {
+    const ledger = new FileLedger(path, { segmentFormat: "jsonl" });
+    const first = ledger.append({ type: "event", value: 1 }, now);
+    const second = ledger.append({ type: "event", value: 2 }, now);
+    const saved = ledger.head();
+    const uncommitted = ledger.append({ type: "event", value: 3 }, now);
+    const lines = [first, second, uncommitted].map((entry) => JSON.stringify(entry));
+    lines.splice(position === "before" ? 0 : 1, 0, "false");
+    writeFileSync(path, lines.join("\n") + "\n");
+
+    const reopened = new FileLedger(path);
+    reopened.recoverUncommittedSuffix(saved);
+    expect(reopened.entries()).toEqual([first, second]);
+    expect(verifyLedgerAtHead(reopened.entries(), saved).ok).toBe(true);
+  }));
+
+it("restores the JSONL final newline at the saved head before appending", () =>
+  temp((path) => {
+    const legacy = new FileLedger(path, { segmentFormat: "jsonl" });
+    const first = legacy.append({ type: "event", value: 1 }, now);
+    const saved = legacy.head();
+    const complete = readFileSync(path, "utf8");
+    writeFileSync(path, complete.slice(0, -1));
+
+    const reopened = new FileLedger(path);
+    reopened.recoverUncommittedSuffix(saved);
+    expect(readFileSync(path, "utf8")).toBe(complete);
+    const second = reopened.append({ type: "event", value: 2 }, now);
+    expect(readLedgerSegment(path)).toEqual([first, second]);
+    expect(verifyLedgerAtHead(readLedgerSegment(path), reopened.head()).ok).toBe(true);
+  }));
+
+it.each(["jsonl", "nquads"] as const)("round-trips a record type containing NUL in %s", (format) =>
+  temp((path) => {
+    const ledger = new FileLedger(path, { segmentFormat: format });
+    const record = { type: "custom\u0000event" };
+    const entry = ledger.append(record, now);
+    const reopened = new FileLedger(path);
+    expect(reopened.entries()).toEqual([entry]);
+    expect(reopened.entries()[0]?.record).toEqual(record);
+    expect(verifyLedgerAtHead(reopened.entries(), ledger.head()).ok).toBe(true);
+  }));
+
 it("rejects malformed and truncated final blocks", () =>
   temp((path) => {
     const ledger = new FileLedger(path);
@@ -99,15 +143,34 @@ it("refuses an incomplete terminator, a malformed quad and a foreign graph", () 
     expect(() => readLedgerSegment(path)).toThrow("another graph");
   }));
 
-it("refuses recovery when uncommitted entries are interleaved with the saved prefix", () =>
+it("recovers JSONL by filtering sequence numbers and rewriting the retained rows", () =>
   temp((path) => {
     const ledger = new FileLedger(path, { segmentFormat: "jsonl" });
     const first = ledger.append({ type: "event" }, now);
     const second = ledger.append({ type: "event" }, now);
     const saved = ledger.head();
+    const retained = readFileSync(path, "utf8");
     const uncommitted = ledger.append({ type: "event" }, now);
-    const corrupted =
-      [first, uncommitted, second].map((entry) => JSON.stringify(entry)).join("\n") + "\n";
+    writeFileSync(
+      path,
+      [first, uncommitted, second].map((entry) => ` ${JSON.stringify(entry)}\r\n`).join(""),
+    );
+    ledger.recoverUncommittedSuffix(saved);
+    expect(readFileSync(path, "utf8")).toBe(retained);
+    expect(verifyLedgerAtHead(ledger.entries(), saved).ok).toBe(true);
+  }));
+
+it("refuses N-Quads recovery when the saved entries are not a byte prefix", () =>
+  temp((path) => {
+    const ledger = new FileLedger(path);
+    ledger.append({ type: "event" }, now);
+    const firstBlock = readFileSync(path, "utf8");
+    ledger.append({ type: "event" }, now);
+    const saved = ledger.head();
+    const retained = readFileSync(path, "utf8");
+    ledger.append({ type: "event" }, now);
+    const suffix = readFileSync(path, "utf8").slice(retained.length);
+    const corrupted = firstBlock + suffix + retained.slice(firstBlock.length);
     writeFileSync(path, corrupted);
     expect(() => ledger.recoverUncommittedSuffix(saved)).toThrow("invalid saved head");
     expect(readFileSync(path, "utf8")).toBe(corrupted);

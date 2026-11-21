@@ -263,3 +263,36 @@ and a direct loopback bind probe returned `EPERM`. The focused `energy.test.ts` 
 `purpose-store.test.ts` suites passed all 11 tests. An offline `PurposeBoundStore` fixture
 decoded its N-Quads segment and confirmed rechecks of `permit`, `deny` after grant expiry,
 and `deny` after reopening. The one-file Biome check and `git diff --check` passed.
+
+## Review fixes (40d)
+
+| Finding | Fix and regression coverage |
+| --- | --- |
+| Non-entry JSONL lines in the recovered prefix | Restored the `162ce4edf` filter `entry.seq <= head.seq` before verifying the saved head. Format detection also recognises JSONL when a scalar precedes the first entry. Both positions for a `false` line failed in the pre-fix run. [Format detection](src/store/ledger.ts#L183) · [Recovery](src/store/ledger.ts#L261) · [Regression](test/ledger-file-format.test.ts#L80) |
+| Record type altered by the generated setter | Chose the exact untyped RDF round trip. The header writes the native type as an RDF string literal, so its value agrees with the untyped payload and the original seal. The NUL fixture failed on RDF reopen before the fix and passed in the legacy format. [Header](src/model/store/record.ts#L463) · [Regression](test/ledger-file-format.test.ts#L113) |
+| Missing final JSONL newline | Restored the baseline durable rewrite of the last retained JSONL segment, including a newline after every retained entry. The assertion on restored bytes failed before the fix. The test then appends, reopens the segment and verifies the chain. The RDF guard allows exactly one JSON write in the recovery writer. [Recovery writer](src/store/ledger.ts#L170) · [Guard](scripts/check-rdf-pipeline.mjs#L28) · [Regression](test/ledger-file-format.test.ts#L97) |
+| Invalid typed payload timestamp | Validate the payload's `xsd:dateTime` lexical form during typed projection. The invalid timestamp selected `ApprovalRecord` in the pre-fix run. The regression checks that `UntypedRecord` conforms to the published shape and decodes to the exact original entry. [Timestamp validation](src/model/store/record.ts#L346) · [Regression](test/record-rdf.test.ts#L144) |
+
+The recovery tests also exercise the baseline JSONL behaviour with interleaved
+uncommitted rows and extra whitespace, and confirm that N-Quads recovery requires
+a contiguous byte prefix. The sealing and verification functions match `162ce4edf`.
+The failing-first run recorded five failures across the four review findings in
+`/tmp/p92-40d-red.log`.
+
+### Verification
+
+Node 24.22.3 and pnpm 10.4.1. Every Vitest run used `--maxWorkers=2`.
+
+| Check | Result |
+| --- | --- |
+| `tsc -p tsconfig.build.json` and `node scripts/copy-generated.mjs` in agent-reference | Compile-only passed. |
+| Focused store-vocabulary, store-quads, record-rdf, ledger-file-format, rdf-pipeline, codegen, email, forum, durable-capabilities and pod-mirror tests | All 98 passed, including byte-for-byte codegen drift. |
+| `test/oracle.test.ts` and `test/oracle-snapshot.test.ts` | All three passed. The live aggregate adapter was used, and all 163 oracle paths matched. |
+| `test/record-corpus.test.ts` | Passed. The sample verified 40,840 entries from 469 ledgers across 87 paths and matched the untyped ratchet. |
+| `pnpm run check:codegen` and `pnpm --filter @jeswr/agent-reference run check:rdf-pipeline` | Eight generated projects passed. The RDF guard reported zero failures and 217 explicit allowances. |
+| `node scripts/check-no-trace-change.mjs` | The first copy ran out of disk space. The unmodified command passed on retry after space became available. Both scenarios reproduced their five selected traces, and the outputs retained 278 runs, zero disagreements and five blocked paths. |
+| `pnpm --filter @jeswr/agent-reference --filter @jeswr/personal-agent run typecheck` and `run lint` | Both packages passed. Agent-reference lint reported 647 warnings and 597 informational diagnostics. |
+| `src/pilot/mortgage-durable.test.ts` and `src/pilot/policy-config.test.ts` in personal-agent | Mortgage-durable passed all three tests. Policy-config passed three and could not run six because the sandbox refused to spawn the executable SPARQ stand-in (`EPERM`), as in 40b. |
+| `git diff --check` and protected-path comparison with `162ce4edf` | Passed. The oracle snapshot, trace and outline files, run manifest, and message context pins retain their bytes. |
+
+The combined reference run passed all 102 tests across 13 files in 756 seconds.

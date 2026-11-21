@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 import type { Term } from "@jeswr/fetch-rdf";
-import { isSafeAbsoluteIri, readLiteral } from "@jeswr/model-runtime";
+import { isSafeAbsoluteIri, readLiteral, tryRead } from "@jeswr/model-runtime";
 import { RequiredAs, TermFrom } from "@rdfjs/wrapper";
 import { DataFactory, type Store } from "n3";
 import { digestBytes, digestOf } from "../../core/canonical.js";
@@ -343,6 +343,12 @@ class RecordPayloadNode extends CoreNode<LedgerEntry["record"]> {
       this.setStrings(descriptor.term, value);
     } else if (value !== undefined && descriptor?.kind === "value") {
       this.setValue(descriptor.term, value as Json);
+    } else if (descriptor?.kind === "time" && typeof value === "string") {
+      const time = literal(value, namedNode(XSD + "dateTime"));
+      // Validate the datatype while preserving the spelling committed by the seal.
+      if (tryRead(() => readLiteral(time)) === undefined)
+        throw new TypeError(`Invalid record timestamp at ${descriptor.term}`);
+      setTerm(this, descriptor.term, time);
     } else {
       super.setField(name, value);
     }
@@ -454,6 +460,13 @@ class RecordHeaderNode extends RdfNode {
   get payload(): string | undefined {
     return this.iri(RECORD);
   }
+  get recordType(): string | undefined {
+    return this.text(RECORD_TYPE);
+  }
+  set recordType(value: string) {
+    // The native discriminator is part of the seal and must bypass text sanitization.
+    setTerm(this, RECORD_TYPE, literal(value));
+  }
 }
 
 export function recordGraphIri(hash: string): string {
@@ -516,8 +529,8 @@ export function recordEntryDataset(entry: LedgerEntry): IndexedStore {
   const dataset = new IndexedStore();
   const root = header(entry, dataset);
   const wrapper = new entities.RecordEntry.Wrapper(root.id, dataset, DataFactory);
-  wrapper.recordType = entry.record.type;
   const payload = recordPayload(entry.record, scopedId(root.id, "record"));
+  root.recordType = entry.record.type;
   for (const quad of payload.dataset) dataset.addQuad(quad);
   wrapper.record = payload.id;
   return namedEntry(dataset, root.id);
@@ -556,9 +569,8 @@ export function recordEntryFrom(dataset: Store, graph: string): LedgerRangeEntry
     throw new TypeError("Malformed record entry header");
   let record: LedgerRangeEntry["record"] = null;
   if (!withheld) {
-    const { recordType } = new entities.RecordEntry.Wrapper(graph, local, DataFactory);
-    const id = root.payload;
-    if (recordType === undefined || id !== scopedId(graph, "record"))
+    const { recordType, payload: id } = root;
+    if (recordType === undefined || id === undefined || id !== scopedId(graph, "record"))
       throw new TypeError("Missing record payload");
     const type = new RdfNode(id, local).types.has(UNTYPED) ? "untyped" : recordType;
     const payload = new RecordPayloadNode(id, local, "store/" + type);
