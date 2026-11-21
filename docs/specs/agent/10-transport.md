@@ -83,7 +83,8 @@ Tokens used to reach the tool server are channel credentials under TR-7.
 ### `email`
 
 The signed message is a structured MIME part of an ordinary email. The email body is the
-readable copy under TR-3. Receivers MUST refuse mail with no structured part
+readable copy under TR-3. The footer defined by the baseline is part of the readable copy and
+is covered by the same parity check (BL-12). Receivers MUST refuse mail with no structured part
 (`no-structured-content`) when a signed message is required. Mailbox control is evidence of
 mailbox control and nothing more. Forwarding, shared mailboxes and reassigned addresses are
 ordinary events and MUST NOT change any verdict.

@@ -11,9 +11,16 @@ import { CoreNode } from "../src/model/core-node.js";
 import { EvidenceItemNode } from "../src/model/evidence-item.js";
 import { MessageNode } from "../src/model/message-nodes.js";
 import { StatementQualityNode } from "../src/model/quality.js";
-import { CONFIG_ED25519, CONFIG_PUBLIC } from "../src/profile/configurations.js";
+import {
+  CONFIG_ED25519,
+  CONFIG_PUBLIC,
+  CONFIG_TRANSPORT_EMAIL,
+} from "../src/profile/configurations.js";
 import { PILOT_PROFILE } from "../src/profile/vocabulary.js";
 import { testKey } from "../src/reference/keys.js";
+import { AgentRuntime } from "../src/runtime/agent.js";
+import { MemoryLedger } from "../src/store/ledger.js";
+import { MemoryStateStore } from "../src/store/state.js";
 import { writeAttachmentDocument } from "../src/wire/attachments.js";
 import { sign } from "../src/wire/authenticity.js";
 import { signCompact } from "../src/wire/jws-compact.js";
@@ -66,15 +73,17 @@ it.each([
   });
 });
 
-it("admits live wrappers, checks original projections, and explicitly resolves prior credentials", async () => {
+async function credentialFixture() {
   const actor = await testKey("22d/graph-actor"),
-    source = await testKey("22d/graph-source");
+    source = await testKey("22d/graph-source"),
+    peer = await testKey("38e/graph-peer");
   const trust = await TrustStore.load({
     version: 1,
     owner: "urn:test:receiver",
     sourceAuthority: [],
     keys: [
       { ...actor, role: "actor", subject: "urn:test:sender" },
+      { ...peer, role: "actor", subject: "urn:test:peer" },
       { ...source, role: "issuer", subject: "urn:test:source" },
     ].map(({ kid, alg, publicJwk, role, subject }) => ({
       kid,
@@ -82,8 +91,98 @@ it("admits live wrappers, checks original projections, and explicitly resolves p
       publicJwk,
       role: role as "actor" | "issuer",
       subject,
+      ...(role === "actor" ? { party: "urn:test:principal" } : {}),
     })),
   });
+  const jws = await signCompact(source, "awp-statement+jws", {
+    issuer: "urn:test:source",
+    claimType: "count",
+    subject: "urn:test:sender",
+    count: 1,
+  });
+  const packet = async (node: MessageNode, key = actor) => {
+    const prepared = await writeAttachmentDocument(node);
+    return {
+      format: "awp-jsonld/0.1" as const,
+      jsonld: JSON.stringify(
+        await sign(prepared.document, {
+          suite: "jws",
+          key,
+          verificationMethod: "urn:awp:key:" + key.kid,
+          created: at,
+        }),
+      ),
+      attachments: prepared.attachments,
+    };
+  };
+  return { trust, jws, packet, peer };
+}
+
+it("a profile-refused opener leaves the conversation available to a different pinned peer", async () => {
+  const { trust, jws, packet, peer } = await credentialFixture();
+  const receiver = await testKey("38e/graph-receiver");
+  const store = new MemoryStateStore();
+  const open = (store: MemoryStateStore) =>
+    AgentRuntime.create({
+      identity: { actor: "urn:test:receiver" },
+      actorKeys: [receiver],
+      accepted: [CONFIG_ED25519],
+      handlers: [],
+      trust,
+      store,
+      ledger: new MemoryLedger(),
+      now: () => new Date(at),
+      newId: () => "urn:test:description-response",
+    });
+  const opener = {
+    profile: PILOT_PROFILE,
+    configuration: CONFIG_ED25519,
+    id: "urn:test:valid-opener",
+    conversation: "urn:test:shared-conversation",
+    kind: "describe",
+    from: { actor: "urn:test:peer" },
+    to: { actor: "urn:test:receiver" },
+    createdAt: at,
+    expiresAt: "2026-11-13T10:00:00.000Z",
+    body: {},
+  } as const;
+  const refused = MessageNode.toNode({
+    ...opener,
+    id: "urn:test:profile-refused-opener",
+    profile: "urn:test:unsupported-profile",
+    from: { actor: "urn:test:sender" },
+    evidence: [{ role: "credential", format: "jws-compact", value: jws }],
+  });
+  const valid = await packet(MessageNode.toNode(opener), peer);
+  const control = await open(new MemoryStateStore());
+  const expected = await control.receive(valid);
+  expect(expected).toMatchObject({ disposition: "accepted", phase: "described" });
+
+  const runtime = await open(store);
+  await runtime.compact();
+  const before = store.load();
+  expect(await runtime.receive(await packet(refused))).toMatchObject({
+    reason: "unsupported-profile",
+  });
+  const afterRefusal = store.load();
+  const actual = await runtime.receive(valid);
+  expect(actual).toMatchObject({ disposition: expected.disposition, phase: expected.phase });
+  expect(actual.outbound.map((out) => out.message)).toEqual(
+    expected.outbound.map((out) => out.message),
+  );
+  expect(afterRefusal).toEqual(before);
+
+  const admittedState = store.load();
+  const conflicting = MessageNode.toNode({ ...opener, profile: "urn:test:unsupported-profile" });
+  expect(await runtime.receive(await packet(conflicting, peer))).toMatchObject({
+    disposition: "rejected",
+    reason: "replay-conflict",
+  });
+  expect(store.load()).toEqual(admittedState);
+});
+
+it("admits live wrappers, checks original projections, and explicitly resolves prior credentials", async () => {
+  const { trust, jws, packet } = await credentialFixture();
   const records: unknown[] = [];
   const gate = new InboundGate({
     identity: { actor: "urn:test:receiver" },
@@ -94,12 +193,6 @@ it("admits live wrappers, checks original projections, and explicitly resolves p
     gate: {},
     memory: new GateMemory(),
     agreementTerms: () => undefined,
-  });
-  const jws = await signCompact(source, "awp-statement+jws", {
-    issuer: "urn:test:source",
-    claimType: "count",
-    subject: "urn:test:sender",
-    count: 1,
   });
   const make = (id: string) =>
     MessageNode.toNode({
@@ -118,27 +211,13 @@ it("admits live wrappers, checks original projections, and explicitly resolves p
         basis: { kind: "public" },
       },
     });
-  const packet = async (node: MessageNode) => {
-    const prepared = await writeAttachmentDocument(node);
-    return {
-      format: "awp-jsonld/0.1" as const,
-      jsonld: JSON.stringify(
-        await sign(prepared.document, {
-          suite: "jws",
-          key: actor,
-          verificationMethod: "urn:awp:key:" + actor.kid,
-          created: at,
-        }),
-      ),
-      attachments: prepared.attachments,
-    };
-  };
   const first = make("first");
   first.evidence = [{ role: "credential", format: "jws-compact", value: jws }];
   const signed = await packet(first);
   const accepted = await gate.verifyIntegrity(signed, {}, () => false);
   expect(accepted.ok).toBe(true);
   if (!accepted.ok) throw new Error(accepted.detail);
+  gate.stageCredentials(accepted.message)();
   expect(records).toContainEqual(
     expect.objectContaining({
       type: "verification",
@@ -221,4 +300,137 @@ it("admits live wrappers, checks original projections, and explicitly resolves p
     reason: "evidence-invalid",
     detail: "original-credential-projection-mismatch",
   });
+});
+
+it("leaves credential references unresolved after a refused message and restores older admissions", async () => {
+  const { trust, jws, packet } = await credentialFixture();
+  const receiver = await testKey("38d/graph-receiver");
+  const store = new MemoryStateStore();
+  const ledger = new MemoryLedger();
+  const open = (
+    state = new MemoryStateStore(),
+    evidenceLedger = state === store ? ledger : new MemoryLedger(),
+  ) =>
+    AgentRuntime.create({
+      identity: { actor: "urn:test:receiver" },
+      actorKeys: [receiver],
+      accepted: [CONFIG_ED25519],
+      handlers: [],
+      trust,
+      store: state,
+      ledger: evidenceLedger,
+      now: () => new Date(at),
+    });
+  const describe = (
+    id: string,
+    {
+      to = "urn:test:receiver",
+      profile = PILOT_PROFILE,
+      configuration = CONFIG_ED25519,
+    }: { to?: string; profile?: string; configuration?: string } = {},
+  ) =>
+    MessageNode.toNode({
+      profile,
+      configuration,
+      id: `urn:test:${id}`,
+      conversation: `urn:test:conversation:${id}`,
+      kind: "describe",
+      from: { actor: "urn:test:sender", onBehalfOf: "urn:test:principal" },
+      to: { actor: to },
+      createdAt: at,
+      expiresAt: "2026-11-13T10:00:00.000Z",
+      body: {},
+    });
+  const carrying = describe("carrying");
+  carrying.evidence = [{ role: "credential", format: "jws-compact", value: jws }];
+  const carryingWire = await packet(carrying);
+  const citing = describe("citing");
+  citing.evidence = [
+    EvidenceItemNode.byDigest(
+      { role: "credential", format: "jws-compact", digest: digestBytes(jws) },
+      "urn:test:previous",
+      citing.dataset,
+    ),
+  ];
+  const citingWire = await packet(citing);
+  const control = await open();
+  const baseline = await control.receive(citingWire);
+  expect(baseline).toMatchObject({
+    disposition: "rejected",
+    reason: "evidence-invalid",
+    detail: "prior-credential-missing-or-digest-mismatch",
+  });
+  const runtime = await open(store);
+  expect(
+    await runtime.receive(carryingWire, {
+      binding: "email-mime/0.1",
+      checkEmailParity: () => "the footer differs",
+    }),
+  ).toMatchObject({ disposition: "rejected", reason: "human-parity-mismatch" });
+  expect(await runtime.receive(citingWire)).toEqual(baseline);
+  const misaddressed = describe("misaddressed", { to: "urn:test:other-receiver" });
+  misaddressed.evidence = [{ role: "credential", format: "jws-compact", value: jws }];
+  expect(await runtime.receive(await packet(misaddressed))).toMatchObject({
+    disposition: "rejected",
+    reason: "wrong-audience",
+  });
+  expect(await runtime.receive(citingWire)).toEqual(baseline);
+  const unsupported = describe("unsupported", { profile: "urn:test:unsupported-profile" });
+  unsupported.evidence = [{ role: "credential", format: "jws-compact", value: jws }];
+  expect(await runtime.receive(await packet(unsupported))).toMatchObject({
+    reason: "unsupported-profile",
+  });
+  expect(await runtime.receive(citingWire)).toEqual(baseline);
+  const unaccepted = describe("unaccepted", { configuration: CONFIG_TRANSPORT_EMAIL });
+  unaccepted.evidence = [{ role: "credential", format: "jws-compact", value: jws }];
+  expect(
+    await runtime.receive(await packet(unaccepted), { binding: "email-mime/0.1" }),
+  ).toMatchObject({
+    disposition: "accepted",
+    reason: "unsupported-configuration",
+  });
+  // Older snapshots may say transport accepted even when the inbound gate refused.
+  const refusedState = store.load();
+  const refusedRecord = refusedState.recordMessages[unaccepted.id];
+  if (!refusedRecord) throw new Error("Missing refused message record");
+  delete refusedRecord.credentialsAdmitted;
+  store.save(refusedState);
+  const resumed = await open(store);
+  expect(await resumed.receive(citingWire)).toEqual(baseline);
+  const admitted = await resumed.receive(carryingWire);
+  expect(admitted.disposition, `${admitted.reason}: ${admitted.detail}`).toBe("accepted");
+  const oldState = store.load();
+  const restarted = await open(store);
+  for (const rt of [resumed, restarted])
+    expect(await rt.receive(citingWire)).toMatchObject({ disposition: "accepted" });
+
+  // Reopen a pre-marker snapshot captured after the first admitted packet.
+  const oldRecord = oldState.recordMessages[carrying.id];
+  if (!oldRecord) throw new Error("Missing admitted message record");
+  delete oldRecord.credentialsAdmitted;
+  store.save(oldState);
+  expect(await (await open(store)).receive(citingWire)).toMatchObject({ disposition: "accepted" });
+
+  const entries = ledger.entries();
+  const messageIndex = entries.findIndex(
+    ({ record }) => record.type === "message-in" && record.id === carrying.id,
+  );
+  const decisionIndex = entries.findIndex(
+    ({ record }, index) =>
+      index > messageIndex && record.type === "gate-decision" && record.gate === "inbound-gate",
+  );
+  expect(messageIndex).toBeGreaterThanOrEqual(0);
+  expect(decisionIndex).toBeGreaterThan(messageIndex);
+  for (const missing of [messageIndex, decisionIndex]) {
+    const retained = new MemoryLedger();
+    for (const [index, entry] of entries.entries()) {
+      if (index !== missing) retained.append(entry.record, entry.at);
+    }
+    store.save(oldState);
+    expect(await (await open(store, retained)).receive(citingWire)).toMatchObject({
+      disposition: "rejected",
+      reason: "record-unavailable",
+      detail: "A retained legacy credential has no matching recorded admission.",
+    });
+  }
 });

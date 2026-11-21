@@ -2268,7 +2268,7 @@
       }
     },
     "configuration": "transport-email",
-    "events": 572
+    "events": 582
   },
   {
     "file": "mortgage-main--email-readable-copy-differs--transport-email.json",
@@ -2318,7 +2318,7 @@
       }
     },
     "configuration": "transport-email",
-    "events": 208
+    "events": 211
   },
   {
     "file": "mortgage-main--transport-a2a.json",

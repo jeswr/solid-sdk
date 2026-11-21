@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // SVG drawing for the reference architecture: one agent, a service box, and the stage.
 // The same code draws the Explore stage and the Architecture view. Classic script.
 (function () {
@@ -84,8 +85,7 @@
   function agent(o) {
     var x = o.x || 0;
     var y = o.y || 0;
-    var k = o.scale || 1;
-    var s = '<g class="agent' + (o.acting ? ' acting' : '') + '" transform="translate(' + x + ' ' + y + ')' + (k !== 1 ? ' scale(' + k + ')' : '') + '"' + (o.anchors ? ' data-anchor="' + o.anchors + '.agent"' : '') + '>';
+    var s = '<g class="agent' + (o.acting ? ' acting' : '') + '" transform="translate(' + x + ' ' + y + ')"' + (o.anchors ? ' data-anchor="' + o.anchors + '.agent"' : '') + '>';
     // Title.
     s += text(0, 15, o.name, 'h-agent');
     s += text(0, 31, o.role || '', 'sub');
@@ -141,7 +141,7 @@
       }
     });
     s += '</g>';
-    return { svg: s, inPort: { x: x, y: y + midY * k }, outPort: { x: x + W * k, y: y + midY * k } };
+    return { svg: s, inPort: { x: x, y: y + midY }, outPort: { x: x + W, y: y + midY } };
   }
 
   // A service that is not an agent: a simple box.
@@ -153,8 +153,7 @@
     var bx = (W - bw) / 2;
     var by = G.gTop + (G.gH - bh) / 2;
     var lit = !!o.active;
-    var k = o.scale || 1;
-    var s = '<g class="agent service' + (lit ? ' acting' : '') + '" transform="translate(' + x + ' ' + y + ')' + (k !== 1 ? ' scale(' + k + ')' : '') + '">';
+    var s = '<g class="agent service' + (lit ? ' acting' : '') + '" transform="translate(' + x + ' ' + y + ')">';
     s += text(0, 15, o.name, 'h-agent') + text(0, 31, o.role || '', 'sub');
     if (o.badge) {
       var bwid = o.badge.length * 6.6 + 20;
@@ -166,20 +165,18 @@
     s += '<path d="M' + (bx - 16) + ' ' + midY + ' H' + (bx - 1) + '" class="flow port" marker-end="url(#ax-arrow)"/>';
     s += '<path d="M' + (bx + bw) + ' ' + midY + ' H' + (bx + bw + 15) + '" class="flow port" marker-end="url(#ax-arrow)"/>';
     s += '</g>';
-    return { svg: s, inPort: { x: x + bx * k, y: y + midY * k }, outPort: { x: x + (bx + bw) * k, y: y + midY * k } };
+    return { svg: s, inPort: { x: x + bx, y: y + midY }, outPort: { x: x + bx + bw, y: y + midY } };
   }
 
   var DEFS = '<defs><marker id="ax-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrowhead"/></marker>' +
     '<marker id="ax-arrow-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrowhead accent"/></marker></defs>';
 
-  // The Explore stage. o = { left, right, layout: 'wide'|'tall', lane: {suite, lit}, message: {from, to, kind, active} }
+  // The Explore stage has room for the message label and the moving packet beside the lane.
   function stage(o) {
-    var tall = o.layout === 'tall';
-    var k = (o.right && o.right.scale) || 1;
-    var midY = G.gTop + G.gH / 2;
+    var tall = o.right && o.layout === 'tall';
     var posL = { x: 0, y: 0 };
-    var posR = tall ? { x: (W - W * k) / 2, y: HX + 64 } : { x: W + 70, y: midY * (1 - k) };
-    var laneY = HX + 26;
+    var posR = tall ? { x: 0, y: HX + 90 } : { x: W + 56, y: 0 };
+    var laneY = HX + 30;
     function draw(p, pos) {
       if (!p) return null;
       var opts = Object.assign({}, p, pos);
@@ -187,14 +184,14 @@
     }
     var L = draw(o.left, posL);
     var R = draw(o.right, posR);
-    var vw = tall ? W + 56 : W + 70 + W * k + 56;
-    var vh = tall ? HX + 64 + HX * k + 8 : HX + 56;
-    var s = '<svg class="stage-svg" viewBox="-28 -4 ' + vw + ' ' + vh + '" role="img" aria-label="' + esc(o.label || 'Two agents and the message between them') + '">' + DEFS;
+    var vw = R && !tall ? 2 * W + 112 : W + 56;
+    var vh = tall ? posR.y + HX + 8 : laneY + 62;
+    var s = '<svg class="stage-svg' + (R ? '' : ' single') + '" viewBox="-28 -4 ' + vw + ' ' + vh + '" role="img" aria-label="' + esc(o.label || 'Two agents and the message between them') + '">' + DEFS;
     // Transport lane.
     var laneW = vw - 12;
     s += '<g class="lane' + (o.lane && o.lane.lit ? ' lit' : '') + '"' + ' data-anchor="stage.transport">';
     s += '<line x1="-22" x2="' + (laneW - 22) + '" y1="' + laneY + '" y2="' + laneY + '" class="lane-line"/>';
-    s += '<text x="' + (laneW - 22) + '" y="' + (laneY + (tall ? -8 : 18)) + '" class="sub" text-anchor="end">' + esc('Transport: ' + ((o.lane && o.lane.name) || '') + '. Never trusted.') + '</text>';
+    s += '<text x="' + (laneW - 22) + '" y="' + (laneY + (o.message ? 51 : 22)) + '" class="sub" text-anchor="end">' + esc('Transport: ' + ((o.lane && o.lane.name) || '') + '. Never trusted.') + '</text>';
     s += '</g>';
     if (L) s += L.svg;
     if (R) s += R.svg;
@@ -212,8 +209,8 @@
         s += '<path id="ax-msg-path" d="' + d + '" class="msg-path' + (active ? ' active' : '') + '" marker-end="url(#' + (active ? 'ax-arrow-accent' : 'ax-arrow') + ')"/>';
         var lx = (a.x + 22 + b.x - 22) / 2;
         var label = o.message.label || '';
-        var lw = label.length * 6.6 + 18;
-        s += '<g class="msg-label' + (active ? ' active' : '') + '">' + rect(lx - lw / 2, laneY - 11, lw, 22, 'msg-label-bg', 11) + text(lx, laneY + 4, label, 'msg-label-text', 'middle') + '</g>';
+        var lw = label.length * 8 + 18;
+        s += '<g class="msg-label' + (active ? ' active' : '') + '">' + rect(lx - lw / 2, laneY + 12, lw, 22, 'msg-label-bg', 11) + text(lx, laneY + 27, label, 'msg-label-text', 'middle') + '</g>';
         if (active) s += '<g id="ax-packet" class="packet"><rect x="-11" y="-8" width="22" height="16" rx="3" class="packet-body"/><path d="M-11 -8 L0 1 L11 -8" class="packet-flap"/></g>';
       }
     }

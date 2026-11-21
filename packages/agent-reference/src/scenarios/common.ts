@@ -219,6 +219,7 @@ export class Cast {
       AgentRuntimeOptions,
       | "gates"
       | "core"
+      | "conformance"
       | "disclosureChecks"
       | "sourceKey"
       | "organizationMandateJws"

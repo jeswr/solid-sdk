@@ -180,6 +180,7 @@ export class InboundGate {
   private activePaymentDocument: unknown;
   private readonly verifiedStatements = new WeakMap<Claim, VerifiedStatement>();
   private readonly credentialBytes = new Map<string, string>();
+  private readonly unavailableLegacyCredentials = new Set<string>();
   private observeVerified(claim: Claim, item: EvidenceItem): void {
     if (!this.deps.gate.sink?.observePayloads) return;
     this.verifiedStatements.set(claim, {
@@ -190,20 +191,32 @@ export class InboundGate {
     });
   }
 
-  rememberCredentials(message: AnyMessage): void {
+  /** Capture the carried bytes before dispatch, and publish them only after admission. */
+  stageCredentials(message: AnyMessage): (admission?: "admission-unavailable") => void {
     if (message instanceof MessageNode)
       bindCredentialResolver(message.dataset, (digest) => this.credentialBytes.get(digest));
+    const credentials: [string, string][] = [];
     for (const item of message.evidence ?? []) {
       try {
+        if (item instanceof EvidenceItemNode && !item.credential) continue;
         const value = item.value;
-        const digest = credentialDigest(value);
-        if (!this.credentialBytes.has(digest) && this.credentialBytes.size >= 4096)
-          this.credentialBytes.delete(this.credentialBytes.keys().next().value!);
-        this.credentialBytes.set(digest, value);
+        credentials.push([credentialDigest(value), value]);
       } catch {
         /* Missing prior digests fail at integrity, never fetch. */
       }
     }
+    return (admission) => {
+      for (const [digest, value] of credentials) {
+        if (admission === "admission-unavailable") {
+          if (!this.credentialBytes.has(digest)) this.unavailableLegacyCredentials.add(digest);
+          continue;
+        }
+        this.unavailableLegacyCredentials.delete(digest);
+        if (!this.credentialBytes.has(digest) && this.credentialBytes.size >= 4096)
+          this.credentialBytes.delete(this.credentialBytes.keys().next().value!);
+        this.credentialBytes.set(digest, value);
+      }
+    };
   }
   /** A published mapping version cannot change within this agent's lifetime (SM-1). */
   private readonly mappingVersions = new Map<string, string>();
@@ -556,12 +569,17 @@ export class InboundGate {
         try {
           void item.value;
         } catch {
+          const digest = item.credentialDigest;
+          if (digest && this.unavailableLegacyCredentials.has(digest))
+            return fail(
+              "record-unavailable",
+              "A retained legacy credential has no matching recorded admission.",
+            );
           return fail("evidence-invalid", "prior-credential-missing-or-digest-mismatch");
         }
         if (item.credential && !item.credential.projectionMatches(item.format))
           return fail("evidence-invalid", "original-credential-projection-mismatch");
       }
-      this.rememberCredentials(msg);
     }
     for (const item of msg.evidence ?? [])
       if (item.format === "selective-disclosure+jws") {
@@ -2444,6 +2462,10 @@ export class Admission {
 
   get decided(): boolean {
     return this.outcome !== undefined;
+  }
+
+  get admitted(): boolean {
+    return this.outcome === "admit";
   }
 
   private organizations(): OrganizationChecks | undefined {

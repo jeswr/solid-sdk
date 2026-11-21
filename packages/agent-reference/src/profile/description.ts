@@ -32,17 +32,20 @@ export interface OperationDescription {
   readonly limitations?: readonly string[];
 }
 
-export interface ConformanceClaim {
-  readonly claim: string;
-  readonly level:
-    | "representation-test"
-    | "self-test-real-crypto"
-    | "integration-fixture"
-    | "live-local-service"
-    | "live-provider-round-trip"
-    | "independent-interop";
-  readonly evidence: string;
-}
+export const conformanceClaimSchema = z.object({
+  claim: z.string().trim().min(1),
+  level: z.enum([
+    "representation-test",
+    "self-test-real-crypto",
+    "integration-fixture",
+    "live-local-service",
+    "live-provider-round-trip",
+    "independent-interop",
+  ]),
+  evidence: z.string().trim().min(1),
+});
+
+export type ConformanceClaim = Readonly<z.infer<typeof conformanceClaimSchema>>;
 
 export interface ImplementationDescription {
   readonly type: "ImplementationDescription";

@@ -36,9 +36,9 @@ print(json.dumps(dict(original=original, omitted=omitted, packed=t)))
   return JSON.parse(stdout);
 }
 
-function browser(fetch) {
+function browser(fetch, data) {
   const index = { key: 'fixture--baseline', schema: 'agent-trace/0.1', scenario: { id: 'fixture' }, configuration: { id: 'baseline' }, generated: {}, traceUrl: 'data/traces/fixture--baseline.json', summary: {} };
-  const window = { AGENT_EXPLORER_DATA: { model, traces: [index] }, AXTraceData: traceData };
+  const window = { AGENT_EXPLORER_DATA: data || { model, traces: [index] }, AXTraceData: traceData };
   window.self = window.top = window;
   const context = vm.createContext({ window, fetch, location: { hash: '#/start' }, history: {}, Map });
   vm.runInContext(util, context);
@@ -132,6 +132,8 @@ test('overview views render from the index without fetching event data', () => {
   }
   assert.match(output.architecture, /seq=2/);
   assert.match(output.tests, /7<small>events, 3 checks/);
+  assert.match(output.layers, new RegExp('<h1>' + model.layers.length + ' layers, one suite each</h1>'));
+  assert.match(output.layers, /id="layer-settlement"[^]*?Part of commitments, chosen at the point of payment/);
   vm.runInContext(readFileSync(root + 'js/usecases.js', 'utf8'), context);
   for (const tab of ['catalogue', 'struggles', 'coverage']) {
     const container = { innerHTML: '' };
@@ -141,13 +143,18 @@ test('overview views render from the index without fetching event data', () => {
   assert.equal(index.events, undefined);
 });
 
-test('bundler rejects oversized traces, unsafe keys and duplicate keys before replacing output', async (t) => {
+function bundleFixture(t) {
   const dir = mkdtempSync(join(tmpdir(), 'explorer-bundle-test-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   for (const name of ['scripts', 'js', 'data', 'traces']) mkdirSync(join(dir, name));
   for (const name of ['scripts/bundle-data.mjs', 'scripts/site-files.mjs', 'js/trace-data.js', 'data/model.json']) {
     copyFileSync(root + name, join(dir, name));
   }
+  return dir;
+}
+
+test('bundler rejects oversized traces, unsafe keys and duplicate keys before replacing output', async (t) => {
+  const dir = bundleFixture(t);
   const trace = { schema: 'agent-trace/0.1', scenario: { id: 'test' }, configuration: { id: 'baseline' }, events: [{ seq: 1, step: 1, kind: 'record' }] };
   const input = join(dir, 'traces/a.json');
   const output = join(dir, 'data/bundle.js');
@@ -173,19 +180,25 @@ function exploreDOM(setup) {
   const nodes = new Map();
   function node(key) {
     if (!nodes.has(key)) nodes.set(key, {
-      innerHTML: '', style: { setProperty() {} }, classList: { toggle() {} },
-      addEventListener() {}, closest() { return node('parent'); },
+      innerHTML: '', style: { setProperty() {} }, classList: { add() {}, remove() {}, toggle() {} },
+      setAttribute() {}, querySelector: (selector) => selector === '.phone' ? node(selector) : null,
+      querySelectorAll: () => [], addEventListener(type, listener) { this[type] = listener; },
+      closest() { return node('parent'); },
     });
     return nodes.get(key);
   }
   const buttons = [node('back'), node('next'), node('play')];
   const container = {
-    innerHTML: '', querySelector: node,
+    innerHTML: '', querySelector: (selector) => {
+      if (selector === '.tick.cur' || selector.startsWith('.tick[data-i=') || selector.startsWith('.scrub-step[data-run=')) return null;
+      if (selector === '.scrub-track') return node('#scrub').innerHTML ? node(selector) : null;
+      return node(selector);
+    },
     querySelectorAll: (selector) => selector === '.timeline button' ? buttons : [],
   };
   Object.assign(setup.window, { innerWidth: 1200, addEventListener() {} });
   Object.assign(setup.context, {
-    document: { dispatchEvent() {} },
+    document: { body: node('body'), dispatchEvent() {} },
     CustomEvent: function () {},
     cancelAnimationFrame() {},
   });
@@ -221,4 +234,115 @@ test('Explore reports a plain loading error and permits an explicit retry', asyn
   await E.apply({ scenario: 'fixture' });
   assert.equal(calls, 2);
   E.unmount();
+});
+
+test('Home shows the model layer count and seeks the current walkthrough chapters', () => {
+  const setup = browser(() => { throw new Error('unexpected fetch'); });
+  setup.AX.views = [{ id: 'layers' }];
+  vm.runInContext(readFileSync(root + 'js/home.js', 'utf8'), setup.context);
+  const video = { play() { this.played = true; } };
+  const chapter = { dataset: { at: '334' }, addEventListener(type, fn) { this[type] = fn; } };
+  const page = {
+    innerHTML: '', querySelector: (selector) => selector === 'video' ? video : null,
+    querySelectorAll: () => [chapter],
+  };
+  setup.AX.render.home(page);
+  assert.match(page.innerHTML, new RegExp('The ' + model.layers.length + ' questions'));
+  assert.match(page.innerHTML, /poster="media\/answerable-walkthrough-poster\.jpg"/);
+  assert.match(page.innerHTML, /src="media\/answerable-walkthrough\.vtt"/);
+  assert.match(page.innerHTML, /A walkthrough of the design and this site, recorded against the current runs\. The voice is a synthetic stand-in\./);
+  const chapters = Array.from(page.innerHTML.matchAll(/data-at="(\d+)"><span class="t">([^<]+)<\/span>([^<]+)<\/button>/g), (match) => match.slice(1));
+  assert.deepEqual(chapters, [
+    ['0', '0:00', 'Agents that act for us'], ['12', '0:12', 'The goals'],
+    ['36', '0:36', 'Two gates around a black box'], ['61', '1:01', 'The message and its layers'],
+    ['88', '1:28', 'The explorer'], ['117', '1:57', 'Who is on the other end'],
+    ['132', '2:12', 'A bank asks for more'], ['158', '2:38', 'Asking Sam'],
+    ['186', '3:06', 'RDF at every gate'], ['201', '3:21', 'Payment is a contract'],
+    ['243', '4:03', 'Swap a layer'], ['256', '4:16', 'When things go wrong'],
+    ['278', '4:38', 'Seventy use cases'], ['305', '5:05', 'Requirements and specifications'],
+    ['322', '5:22', 'Starting from email'], ['334', '5:34', 'Try it'],
+  ]);
+  chapter.click();
+  assert.equal(video.currentTime, 334);
+  assert.equal(video.played, true);
+});
+
+test('Explore uses one step count, shows recorded branch decisions and keeps the raw trace', async (t) => {
+  const dir = bundleFixture(t);
+  const keys = ['mortgage-main--baseline', 'mortgage-core--baseline', 'mortgage-over-ask--baseline',
+    'mortgage-injected-fee--baseline', 'mortgage-main--fee-payee-differs--baseline'];
+  for (const key of keys) copyFileSync(root + 'traces/' + key + '.json', join(dir, 'traces', key + '.json'));
+  await promisify(execFile)(process.execPath, [join(dir, 'scripts/bundle-data.mjs')]);
+  const bundle = { window: {} };
+  vm.runInNewContext(readFileSync(join(dir, 'data/bundle.js'), 'utf8'), bundle);
+  const digest = 'sha-256:' + 'a'.repeat(64);
+  const setup = browser(async (url) => ({
+    ok: true,
+    json: async () => {
+      const doc = traceData.restore(JSON.parse(readFileSync(join(dir, url), 'utf8')));
+      if (doc.scenario.id === 'mortgage-main') {
+        doc.events.find((e) => e.seq === 81).packet.attachments.push({ bytes: null, bytesOmitted: true, digest, byteLength: 4096 });
+      }
+      return doc;
+    },
+  }), bundle.window.AGENT_EXPLORER_DATA);
+  for (const name of ['diagram', 'phone']) vm.runInContext(readFileSync(root + 'js/' + name + '.js', 'utf8'), setup.context);
+  const { E, container, node } = exploreDOM(setup);
+  node('.stage').clientWidth = 738;
+  await E.mount(container, { scenario: 'mortgage-main', step: 29, level: 'steps' });
+  assert.match(node('#pos').innerHTML, /^<strong>Step 28 of 36<\/strong>/);
+  assert.match(node('#inspector').innerHTML, /Step 28 of 36/);
+  const scrub = node('#scrub').innerHTML;
+  const labels = Array.from(scrub.matchAll(/class="scrub-label"[^>]+>(\d+)<\/button>/g), (match) => Number(match[1]));
+  assert.deepEqual(labels, Array.from({ length: 36 }, (_, i) => i + 1));
+  assert.match(setup.AX.lastExploreHash, /step=29/);
+  assert.match(scrub, /Sam is asked, and the agent shares the evidence/);
+
+  await E.apply({ scenario: 'mortgage-main', seq: 81, level: 'checks' });
+  const stage = node('#stage-figure').innerHTML;
+  assert.match(stage, /viewBox="-28 -4 1112 522"/);
+  assert.match(stage, /North Bank’s agent/);
+  assert.match(stage, /North Bank \(fictional\)/);
+  assert.doesNotMatch(stage, /scale\(/);
+  assert.match(node('#parties').innerHTML, /Harbour Bank’s agent/);
+  assert.match(node('#caption').textContent, /North Bank’s agent sends/);
+  assert.match(stage, /y="472"[^>]*class="msg-label-bg"/);
+  assert.match(stage, /id="ax-packet"[^]*?<rect x="-11" y="-8"/);
+
+  const inspector = node('#inspector');
+  assert.match(inspector.innerHTML, /<pre class="json rdf-doc">\{\n {2}&quot;id&quot;/);
+  assert.doesNotMatch(inspector.innerHTML, /&quot;@context&quot;/);
+  assert.ok(inspector.innerHTML.includes('<code>' + digest + '</code>'));
+  inspector.click({ target: { closest: (selector) => selector === '[data-rdf-context]' ? {} : null } });
+  assert.match(inspector.innerHTML, /<pre class="json rdf-doc">\{\n {2}&quot;@context&quot;/);
+  assert.equal(typeof E.state.trace.events.find((e) => e.seq === 81).packet.jsonld, 'string');
+
+  node('.stage').clientWidth = 360;
+  E.rerender();
+  assert.match(node('#stage-figure').innerHTML, /viewBox="-28 -4 556 958"/);
+  assert.doesNotMatch(node('#stage-figure').innerHTML, /scale\(/);
+  for (const [scenario, step, title] of [
+    ['mortgage-over-ask', 11, 'The gate stops the evidence from being shared because Sam’s mandate does not allow it.'],
+    ['mortgage-injected-fee', 13, 'The gate stops the injected fee because Sam’s mandate does not allow it.'],
+    ['mortgage-main--fee-payee-differs', 29, 'Stop. The payment recipient must be the party named by the agreement&#39;s compensation duty.'],
+  ]) {
+    await E.apply({ scenario, step, level: 'steps' });
+    assert.ok(node('#inspector').innerHTML.includes('<h2>' + title + '</h2>'));
+    assert.ok(node('#scrub').innerHTML.includes(title));
+    assert.ok(node('#phone-host').innerHTML.includes(title.replace(/\.$/, '')));
+  }
+  E.unmount();
+});
+
+test('the static page and hosted fragment put UTF-8 before the title', async (t) => {
+  const dir = bundleFixture(t);
+  for (const name of ['index.html', 'styles.css', 'scripts/build-artifact.mjs']) copyFileSync(root + name, join(dir, name));
+  writeFileSync(join(dir, 'data/bundle.js'), '');
+  mkdirSync(join(dir, 'data/traces'));
+  const out = join(dir, 'artifact');
+  await promisify(execFile)(process.execPath, [join(dir, 'scripts/build-artifact.mjs'), out]);
+  for (const file of [join(dir, 'index.html'), join(out, 'index.html')]) {
+    const head = readFileSync(file, 'utf8').slice(0, 200);
+    assert.match(head, /<meta charset="utf-8">\s*<title>Answerable Agent Explorer<\/title>/);
+  }
 });

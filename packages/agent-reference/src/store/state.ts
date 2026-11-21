@@ -166,7 +166,14 @@ export interface RuntimeState {
   pendingPodGrants: Record<string, import("../standins/pod-access.js").PodGrantAttempt>;
   recordMessages: Record<
     string,
-    { direction: "in" | "out"; conversation: string; digest: string; jws: string }
+    {
+      direction: "in" | "out";
+      conversation: string;
+      digest: string;
+      jws: string;
+      /** Inbound credential bytes are eligible for reuse only after completed admission. */
+      credentialsAdmitted?: boolean;
+    }
   >;
   precedenceHolds: Record<string, import("../gates/common.js").AdmittedFact>;
   readonly version: 1;
@@ -196,6 +203,8 @@ export interface RuntimeState {
   transmissions: Record<Iri, TransmissionRecord>;
   contextItems: Record<Iri, ContextItem[]>;
   knownIdentifiers: Record<Iri, string[]>;
+  /** Current and former local Agent-Description addresses, excluded from knownIdentifiers. */
+  descriptionAddresses?: string[];
   generatedConversations: Record<Iri, true>;
   /** Single-use approvals remain remembered after their permitted release. */
   usedApprovals: Record<Iri, true>;

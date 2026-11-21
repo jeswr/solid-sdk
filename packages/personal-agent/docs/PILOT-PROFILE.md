@@ -245,8 +245,20 @@ Five mutations of these guards were each killed
 Outbound MIME is exactly
 `multipart/mixed(multipart/alternative(text/plain,text/html),application/ld+json)`.
 
-- Inbound parity is strict: plain and HTML must equal the rendering of the signed payload.
-  `--lenient-parity` records `unverified`, never `match`.
+- Inbound admission verifies the signature before checking readable-copy parity. In strict
+  mode, plain and HTML must equal the rendering of the signed payload, including the footer.
+  CRLF and LF are equivalent. Extra blank lines fail parity.
+  `--lenient-parity` records `unverified`, never `match`, when the rendering differs.
+- The signed message determines the footer. The named variant requires the sender's own
+  description with a conformance claim in that message. Other messages with a represented
+  principal use the neutral footer. The footer link has the same address in every message.
+- Sends include `Agent-Description` when the local agent has a configured HTTPS description URL
+  of up to 200 characters. Set `descriptionUrl` in the agent's identity or pass
+  `--description-url` to `init`. With no URL configured, the sender omits the header.
+  The pilot records the address as an unverified hint in `EmailObservation`.
+  Discovery uses signed messages and refuses a selection that differs from the discovery
+  configuration. New sends check the configured address. Gmail recovery checks the provider
+  copy against the reviewed MIME, including the header's presence or absence at review time.
 - Outbound `Message-ID` is derived from the signed message id, and `X-AWP-Message` must equal
   that id.
 

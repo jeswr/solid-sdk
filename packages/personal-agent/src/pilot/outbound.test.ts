@@ -4,6 +4,7 @@
  * inbound strict parity covers every human-visible part. The transport is a local
  * capturing stub — nothing is sent anywhere.
  */
+import { footerText } from "@jeswr/agent-reference/bindings/email-footer";
 import { describe, expect, it } from "vitest";
 import { buildEmail, parseInboundEmail, renderHuman } from "./bindings/email.js";
 import { GmailProviderAdapter, type GmailTransport } from "./bindings/gmail.js";
@@ -157,6 +158,17 @@ describe("finding 1 — the provider adapter revalidates the exact outbound byte
     ).toMatch(/source account/);
     expect(
       await refused(
+        withRaw(
+          item,
+          raw.replace(
+            "MIME-Version:",
+            "Agent-Description: https://unrelated.example/description\r\nMIME-Version:",
+          ),
+        ),
+      ),
+    ).toMatch(/Agent-Description differs/);
+    expect(
+      await refused(
         withRaw(item, raw.replace(`To: ${BOB.email}`, "To: attacker@evil.example"), true),
       ),
     ).toMatch(/differs from the reviewed MIME/);
@@ -267,14 +279,14 @@ describe("finding 7 — strict parity covers every human-visible part", () => {
     const lenient = await parseInboundEmail(extra, { strictParity: false });
     expect(lenient.ok && lenient.parity).toBe("unverified");
     // Round trip of a freshly built message remains exact.
-    const again = buildEmail({
+    const again = await buildEmail({
       out: start.outbound[0] as OutboundMessage,
       from: ALICE.email as string,
       to: BOB.email as string,
       date: clock.now(),
     });
-    expect(decodePart(again.raw, "text/plain")).toBe(
-      renderHuman((start.outbound[0] as OutboundMessage).message),
-    );
+    const { message } = start.outbound[0] as OutboundMessage;
+    const footer = footerText({ agent: ALICE.actor, principal: ALICE.party, variant: "neutral" });
+    expect(decodePart(again.raw, "text/plain")).toBe(`${renderHuman(message)}\n\n${footer}`);
   });
 });

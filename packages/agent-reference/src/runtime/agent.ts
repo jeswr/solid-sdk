@@ -20,6 +20,7 @@ import { AsyncLocalStorage } from "async_hooks";
 import { randomBytes } from "crypto";
 import type { JWK } from "jose";
 import { emailEnvelopeSchema, emailPinSchema } from "../bindings/email.js";
+import { isAgentDescriptionAddress } from "../bindings/email-mime.js";
 import {
   canonicalJson,
   derivedUrn,
@@ -231,6 +232,7 @@ export interface AgentIdentity {
   readonly actor: Iri;
   readonly party?: Iri;
   readonly operator?: Iri;
+  readonly descriptionUrl?: string;
 }
 
 export interface AgentRuntimeOptions {
@@ -309,6 +311,12 @@ export interface OutboundMessage {
   readonly message: AnyMessage;
 }
 
+interface ReceiveMetadata {
+  readonly binding?: string;
+  /** Trusted email adapter hook, run only after integrity succeeds and before dispatch. */
+  readonly checkEmailParity?: (message: AnyMessage) => string | undefined;
+}
+
 export type Disposition = "accepted" | "duplicate" | "rejected" | "pending-approval" | "local";
 
 export interface StepResult {
@@ -362,7 +370,7 @@ const DEFAULT_EFFECT_TIMEOUT_MS = 30_000;
 /** Outcome of a serial transmission phase: done, look up first, or send (outside the lock). */
 type TransmitStep =
   | { readonly result: TransmitResult }
-  | { readonly lookup: true }
+  | { readonly lookup: number }
   | { readonly send: number; readonly resend: boolean };
 
 /** Thrown by `exclusive` when a handler/adapter calls back into its own runtime. */
@@ -441,6 +449,7 @@ export class AgentRuntime {
   private readonly inside = new AsyncLocalStorage<true>();
   /** Provider sends from this process that timed out but have not settled (not cancelled). */
   private readonly inFlight = new Set<Iri>();
+  private readonly descriptionRegistryChanged: boolean;
   private closed = false;
   private readonly inbound: InboundGate;
   private readonly outbound: OutboundGate;
@@ -655,6 +664,25 @@ export class AgentRuntime {
       throw new Error(
         "personMayRelyOn cannot support payment or unrestricted personal-data disclosure",
       );
+    const priorAddresses = this.state.descriptionAddresses;
+    const descriptionAddresses = new Set(priorAddresses);
+    if (this.identity.descriptionUrl !== undefined)
+      descriptionAddresses.add(this.identity.descriptionUrl);
+    this.state.descriptionAddresses = [...descriptionAddresses];
+    let removed = false;
+    for (const [scope, identifiers] of Object.entries(this.state.knownIdentifiers)) {
+      // Older snapshots have no provenance for the global HTTPS entries. Rebuild those
+      // from the configured anchors and retained context below.
+      const legacyGlobal = priorAddresses === undefined && scope === "*";
+      const retained = identifiers.filter(
+        (id) => !descriptionAddresses.has(id) && !(legacyGlobal && isAgentDescriptionAddress(id)),
+      );
+      if (retained.length === identifiers.length) continue;
+      this.state.knownIdentifiers[scope] = retained;
+      removed = true;
+    }
+    this.descriptionRegistryChanged =
+      removed || descriptionAddresses.size > (priorAddresses?.length ?? 0);
     const memory = new GateMemory(
       this.state.contextItems,
       this.state.knownIdentifiers,
@@ -662,10 +690,15 @@ export class AgentRuntime {
       this.state.relianceHolds,
       this.state.relianceBindings,
       this.state.precedenceHolds,
+      descriptionAddresses,
     );
     this.gateMemory = memory;
     memory.rememberIdentifiers("*", {
-      identity: this.identity,
+      identity: {
+        actor: this.identity.actor,
+        party: this.identity.party,
+        operator: this.identity.operator,
+      },
       trust: this.trust.data,
       descriptions: options.handlers.map((h) => h.description),
       core: options.core,
@@ -1044,7 +1077,7 @@ export class AgentRuntime {
     for (const entry of Object.values(rt.state.outbox))
       if (isMessagePacket(entry.wire)) {
         const message = await inspectMessagePacket(entry.wire);
-        if (message) rt.inbound.rememberCredentials(message);
+        if (message) rt.inbound.stageCredentials(message)();
       }
     for (const agreement of Object.values(rt.state.agreements)) {
       if (!agreement.terms.compensation) continue;
@@ -1054,16 +1087,62 @@ export class AgentRuntime {
         /* Without its admitted RDF offer this record cannot authorize a payment. */
       }
     }
+    let legacyDecisions: ReturnType<AgentRuntime["legacyCredentialDecisions"]> | undefined;
     for (const [id, record] of Object.entries(rt.state.recordMessages)) {
       const read = await verifyRecordedMessage(record.jws, rt.trust);
-      if (read) {
-        rt.retainedMessageViews.set(id, read.message);
-        rt.inbound.rememberCredentials(read.message);
+      if (!read) continue;
+      rt.retainedMessageViews.set(id, read.message);
+      const remember = rt.inbound.stageCredentials(read.message);
+      if (record.direction === "out" || record.credentialsAdmitted) {
+        remember();
+      } else if (record.credentialsAdmitted === undefined) {
+        legacyDecisions ??= rt.legacyCredentialDecisions();
+        const decision = legacyDecisions.get(id);
+        if (decision?.digest !== record.digest) {
+          remember("admission-unavailable");
+        } else if (decision.admitted) {
+          record.credentialsAdmitted = true;
+          remember();
+        }
       }
     }
     if (rt.ledgerAuditTrusted || !rt.ledger.recoverUncommittedSuffix) rt.notificationDuties();
-    if (rt.ledger.requiresTrustedCheckpoint && rt.ledgerAuditTrusted) rt.persist();
+    if (rt.ledger.requiresTrustedCheckpoint ? rt.ledgerAuditTrusted : rt.descriptionRegistryChanged)
+      rt.persist();
     return rt;
+  }
+
+  /**
+   * Older snapshots keep the admission verdict in the ledger. A seen entry can also
+   * be marked accepted when dispatch issued a refusal notice, so use the gate verdict.
+   */
+  private legacyCredentialDecisions() {
+    const decisions = new Map<string, { digest: string; admitted: boolean }>();
+    let message: { id: string; digest: string } | undefined;
+    for (const { record } of this.auditEntries()) {
+      if (
+        record.type === "message-in" &&
+        typeof record.id === "string" &&
+        typeof record.digest === "string"
+      ) {
+        message = { id: record.id, digest: record.digest };
+      } else if (
+        record.type === "gate-decision" &&
+        record.gate === "inbound-gate" &&
+        record.agent === this.identity.actor &&
+        message
+      ) {
+        const seen = this.state.seen[message.id];
+        decisions.set(message.id, {
+          digest: message.digest,
+          admitted:
+            record.outcome === "admit" &&
+            (!seen || (seen.disposition === "accepted" && seen.digest === message.digest)),
+        });
+        message = undefined;
+      }
+    }
+    return decisions;
   }
 
   /**
@@ -1235,6 +1314,16 @@ export class AgentRuntime {
       conformance: this.options.conformance ?? [],
       ...(extensions ? { extensions } : {}),
     });
+  }
+
+  /** The configured description address is advertised as an unverified email hint. */
+  emailDescriptionAddress(): string | undefined {
+    const address = this.identity.descriptionUrl;
+    return typeof address === "string" &&
+      address.length <= 200 &&
+      isAgentDescriptionAddress(address)
+      ? address
+      : undefined;
   }
 
   /**
@@ -1591,6 +1680,7 @@ export class AgentRuntime {
       jws: string | WireMessage,
     ): Promise<{ ok: boolean; audienceActor?: Iri; messageId?: Iri; detail: string }>;
     endpointsFor(actor: Iri): readonly string[];
+    emailDescriptionAddress(): string | undefined;
     transmit(req: TransmitRequest, io: TransmissionIo): Promise<TransmitResult>;
     checkTransmission(req: TransmitRequest): Promise<{ ok: true } | TransmitResult>;
   } {
@@ -1643,6 +1733,7 @@ export class AgentRuntime {
           : { ok: false, detail: "message has no audience actor" };
       },
       endpointsFor: (actor) => this.trust.actorEndpoints(actor),
+      emailDescriptionAddress: () => this.emailDescriptionAddress(),
       transmit: (req, io) => this.transmit(req, io),
       checkTransmission: (req) => this.checkTransmission(req),
     };
@@ -1655,6 +1746,12 @@ export class AgentRuntime {
   checkTransmission(req: TransmitRequest): Promise<{ ok: true } | TransmitResult> {
     return this.exclusive(async () => {
       const rec = this.state.transmissions[req.messageId];
+      if (rec && this.transmissionPayloadDiffers(rec, req))
+        return {
+          status: "refused",
+          reason: "wire-mismatch",
+          detail: "a different payload is already recorded for this message",
+        };
       if (rec?.status === "sent")
         return {
           status: "duplicate",
@@ -4550,7 +4647,7 @@ export class AgentRuntime {
   // ---------------------------------------------------------------- inbound
 
   /** Process one inbound wire message. Never throws on hostile input. */
-  receive(wire: unknown, meta: { binding?: string } = {}): Promise<StepResult> {
+  receive(wire: unknown, meta: ReceiveMetadata = {}): Promise<StepResult> {
     return this.exclusive(() =>
       receiveCarriage(
         wire,
@@ -4563,7 +4660,7 @@ export class AgentRuntime {
     );
   }
 
-  private async receiveGuarded(wire: unknown, meta: { binding?: string }): Promise<StepResult> {
+  private async receiveGuarded(wire: unknown, meta: ReceiveMetadata): Promise<StepResult> {
     try {
       return await this.receiveInner(wire, meta);
     } catch (error) {
@@ -4595,7 +4692,7 @@ export class AgentRuntime {
     throw new RejectError(reason, detail);
   }
 
-  private async receiveInner(wire: unknown, meta: { binding?: string }): Promise<StepResult> {
+  private async receiveInner(wire: unknown, meta: ReceiveMetadata): Promise<StepResult> {
     const at = this.now();
     try {
       this.carriage = isMessagePacket(wire)
@@ -4619,6 +4716,18 @@ export class AgentRuntime {
       this.reject(checked.reason, checked.detail, checked.extra ?? {});
     }
     const msg = checked.message;
+    if (meta.checkEmailParity) {
+      if (!checked.signedBy) {
+        const detail = "Signed structured content is required for agent mail.";
+        admission.failIntegrity("no-structured-content", detail);
+        this.reject("no-structured-content", detail);
+      }
+      const problem = meta.checkEmailParity(msg);
+      if (problem !== undefined) {
+        admission.failIntegrity("human-parity-mismatch", problem);
+        this.reject("human-parity-mismatch", problem);
+      }
+    }
     const msgDigest = digestOf(msg);
     const documentConfig = configurationById(msg.configuration);
     const admittedDocumentDigest = isMessagePacket(wire)
@@ -4630,19 +4739,26 @@ export class AgentRuntime {
             : "jws",
         )
       : undefined;
-    this.current = { id: msg.id, ...(checked.signedBy ? { kid: checked.signedBy.kid } : {}) };
-
-    // Replay / idempotency.
-    this.pruneSeen(Date.parse(at));
+    // Check for a live replay entry before refusing the profile or mutating replay state.
+    const now = Date.parse(at);
     const seen = this.state.seen[msg.id];
-    if (seen) {
-      if (
-        seen.digest !== msgDigest ||
-        (seen.documentDigest && seen.documentDigest !== admittedDocumentDigest)
-      ) {
-        admission.failIntegrity("replay-conflict", "message id reused with different content");
-        this.reject("replay-conflict", "message id reused with different content");
-      }
+    const liveReplay = seen && Date.parse(seen.expiresAt) + this.limits.maxClockSkewMs >= now;
+    if (
+      liveReplay &&
+      (seen.digest !== msgDigest ||
+        (seen.documentDigest && seen.documentDigest !== admittedDocumentDigest))
+    ) {
+      admission.failIntegrity("replay-conflict", "message id reused with different content");
+      this.reject("replay-conflict", "message id reused with different content");
+    }
+    if (msg.profile !== PILOT_PROFILE && !this.isUnsupportedClosingNotice(msg)) {
+      const detail = `${msg.profile} / ${msg.configuration} not accepted`;
+      admission.failIntegrity("unsupported-profile", detail);
+      this.reject("unsupported-profile", detail);
+    }
+    this.current = { id: msg.id, ...(checked.signedBy ? { kid: checked.signedBy.kid } : {}) };
+    this.pruneSeen(now);
+    if (liveReplay) {
       const responses = seen.responses
         .map((id) => this.state.outbox[id])
         .filter((e): e is OutboxEntry => Boolean(e))
@@ -4765,6 +4881,9 @@ export class AgentRuntime {
       }
     }
     this.gateMemory.rememberIdentifiers(msg.conversation, msg);
+    const rememberCredentials = isMessagePacket(wire)
+      ? this.inbound.stageCredentials(msg)
+      : undefined;
     this.state.seen[msg.id] = {
       digest: msgDigest,
       ...(admittedDocumentDigest ? { documentDigest: admittedDocumentDigest } : {}),
@@ -4795,9 +4914,15 @@ export class AgentRuntime {
         conversation: msg.conversation,
         digest: msgDigest,
         jws: isMessagePacket(wire) ? encodeMessageProof(wire) : (wire as { jws: string }).jws,
+        credentialsAdmitted: false,
       };
     this.retainedMessageViews.set(msg.id, msg);
     const outbound = await this.dispatch(msg);
+    const record = this.state.recordMessages[msg.id];
+    const cacheCredentials =
+      admission.admitted && outbound.disposition === "accepted" && outbound.reason === undefined;
+    if (cacheCredentials && rememberCredentials && record)
+      this.state.recordMessages[msg.id] = { ...record, credentialsAdmitted: true };
     const conv = this.state.conversations[msg.conversation];
     const recorded = this.state.seen[msg.id]?.responses ?? [];
     this.state.seen[msg.id] = {
@@ -4809,6 +4934,7 @@ export class AgentRuntime {
       conversation: msg.conversation,
     };
     this.persist();
+    if (cacheCredentials) rememberCredentials?.();
     return this.result(outbound.disposition, {
       messageId: msg.id,
       kind: msg.kind,
@@ -4835,21 +4961,11 @@ export class AgentRuntime {
     let conv = this.state.conversations[msg.conversation];
     let created = false;
 
-    // Profile and configuration acceptance. One exception: a peer that does not accept our
-    // configuration can only answer under one of its own. Such an authenticated notice may
-    // close a conversation WE opened (it can only stop us, never cause an action).
-    const closingNotice =
-      Boolean(conv) &&
-      conv?.role === "initiator" &&
-      msg.kind === "unsupported" &&
-      (msg.body.reason === "unsupported-configuration" ||
-        msg.body.reason === "unsupported-profile");
     if (
-      !closingNotice &&
-      (msg.profile !== PILOT_PROFILE || !this.options.accepted.includes(msg.configuration))
+      !this.options.accepted.includes(msg.configuration) &&
+      !this.isUnsupportedClosingNotice(msg)
     ) {
-      const reason: ReasonCode =
-        msg.profile !== PILOT_PROFILE ? "unsupported-profile" : "unsupported-configuration";
+      const reason = "unsupported-configuration";
       if (!conv && opening && msg.from.actor && this.acceptedAnyway(msg)) {
         this.admission?.refuse(reason, "configuration not accepted");
         const created = this.createResponder(msg);
@@ -4963,6 +5079,16 @@ export class AgentRuntime {
       case "receipt":
         return this.onReceipt(conv, msg);
     }
+  }
+
+  /** An authenticated unsupported notice can only close a conversation we opened. */
+  private isUnsupportedClosingNotice(msg: AnyMessage): boolean {
+    return (
+      msg.kind === "unsupported" &&
+      (msg.body.reason === "unsupported-configuration" ||
+        msg.body.reason === "unsupported-profile") &&
+      this.state.conversations[msg.conversation]?.role === "initiator"
+    );
   }
 
   /** An unsupported opening message from a pinned actor still earns an explicit answer. */
@@ -7282,9 +7408,10 @@ export class AgentRuntime {
       return s;
     });
     if ("lookup" in step) {
+      const attempt = step.lookup;
       const found = await this.lookupOutside(io);
       step = await this.exclusive(async () => {
-        const s = this.transmitAfterLookup(req, io, found);
+        const s = this.transmitAfterLookup(req, io, attempt, found);
         this.persist();
         return s;
       });
@@ -7302,11 +7429,13 @@ export class AgentRuntime {
   ): TransmissionRecord {
     const prior = this.state.transmissions[req.messageId];
     const at = this.now();
+    const mimeDigest = status === "attempting" ? req.mimeDigest : prior?.mimeDigest;
     const rec: TransmissionRecord = {
       messageId: req.messageId,
       binding: req.binding,
       externalId: req.externalId,
       wireDigest: req.wireDigest,
+      ...(mimeDigest === undefined ? {} : { mimeDigest }),
       attempts: prior?.attempts ?? 0,
       createdAt: prior?.createdAt ?? at,
       ...(prior?.providerRef ? { providerRef: prior.providerRef } : {}),
@@ -7394,15 +7523,21 @@ export class AgentRuntime {
     return { status: "refused", reason, detail };
   }
 
+  private transmissionPayloadDiffers(rec: TransmissionRecord, req: TransmitRequest): boolean {
+    return (
+      rec.binding !== req.binding ||
+      rec.externalId !== req.externalId ||
+      rec.wireDigest !== req.wireDigest ||
+      (rec.status !== "not-sent" &&
+        rec.mimeDigest !== undefined &&
+        rec.mimeDigest !== req.mimeDigest)
+    );
+  }
+
   /** Phase 1 (serial): what to do with this request now. */
   private transmitStart(req: TransmitRequest, io: TransmissionIo): TransmitStep {
     const rec = this.state.transmissions[req.messageId];
-    if (
-      rec &&
-      (rec.binding !== req.binding ||
-        rec.externalId !== req.externalId ||
-        rec.wireDigest !== req.wireDigest)
-    ) {
+    if (rec && this.transmissionPayloadDiffers(rec, req)) {
       return {
         result: this.refuseTransmission(
           req,
@@ -7444,7 +7579,7 @@ export class AgentRuntime {
         this.noteTransmission(req, "uncertain", { detail: `unresolved: ${detail}` });
         return { result: { status: "uncertain", detail } };
       }
-      return { lookup: true };
+      return { lookup: rec.attempts };
     }
     return this.transmitAttempt(req, io, false);
   }
@@ -7468,6 +7603,7 @@ export class AgentRuntime {
   private transmitAfterLookup(
     req: TransmitRequest,
     io: TransmissionIo,
+    attempt: number,
     lookup: ProviderLookupResult,
   ): TransmitStep {
     const rec = this.state.transmissions[req.messageId];
@@ -7476,6 +7612,18 @@ export class AgentRuntime {
         result: {
           status: "duplicate",
           ...(rec.providerRef ? { providerRef: rec.providerRef } : {}),
+        },
+      };
+    // A definitive rejection can close the attempt while this lookup is outstanding.
+    if (!rec || rec.attempts !== attempt)
+      return {
+        result: { status: "uncertain", detail: "the attempt changed during provider lookup" },
+      };
+    if (rec.status === "not-sent")
+      return {
+        result: {
+          status: "not-sent",
+          detail: rec.detail ?? "the attempt ended during provider lookup",
         },
       };
     let found = lookup;
@@ -7508,18 +7656,11 @@ export class AgentRuntime {
    * unresolved: refusing a resend is not evidence that the earlier request was not delivered.
    */
   private transmitAttempt(req: TransmitRequest, io: TransmissionIo, resend: boolean): TransmitStep {
-    const refusal = this.transmissionRefusal(req);
+    if (io.sendRefusal !== undefined)
+      return { result: this.refuseTransmission(req, "wire-mismatch", io.sendRefusal) };
+    const refusal = this.transmissionRefusal(req, io.maxAttempts);
     if (refusal) return { result: this.refuseTransmission(req, refusal[0], refusal[1]) };
     const attempts = this.state.transmissions[req.messageId]?.attempts ?? 0;
-    const max = io.maxAttempts ?? MAX_TRANSMISSION_ATTEMPTS;
-    if (attempts >= max)
-      return {
-        result: this.refuseTransmission(
-          req,
-          "attempt-limit",
-          `${attempts} provider attempts already made`,
-        ),
-      };
     // Write-ahead: the attempt is durable before the provider sees anything.
     this.noteTransmission(req, "attempting", {
       attempts: attempts + 1,
@@ -7591,7 +7732,10 @@ export class AgentRuntime {
   }
 
   /** Why a (re)transmission must not happen now, or undefined if it may. */
-  private transmissionRefusal(req: TransmitRequest): [TransmissionRefusal, string] | undefined {
+  private transmissionRefusal(
+    req: TransmitRequest,
+    maxAttempts = MAX_TRANSMISSION_ATTEMPTS,
+  ): [TransmissionRefusal, string] | undefined {
     const entry = this.state.outbox[req.messageId];
     if (!entry) return ["unknown-message", "not a message in this agent's outbox"];
     if (wireDigest(entry.wire) !== req.wireDigest)
@@ -7601,12 +7745,17 @@ export class AgentRuntime {
       return ["expired", `message expired at ${message.expiresAt}`];
     const condition = this.conditionFailure(entry);
     if (condition) return ["condition-failed", condition];
-    if (!entry.intent) return undefined; // declared metadata rule: authentic + unexpired
-    const decision = this.authorise(entry.intent, true, message.evidence);
-    if (decision.outcome === "permit") return undefined;
-    if (decision.outcome === "approval-required")
-      return ["approval-required", "the action needs a current owner approval"];
-    return ["not-authorised", `${decision.outcome}: ${decision.reason}`];
+    if (entry.intent) {
+      const decision = this.authorise(entry.intent, true, message.evidence);
+      if (decision.outcome === "approval-required")
+        return ["approval-required", "the action needs a current owner approval"];
+      if (decision.outcome !== "permit")
+        return ["not-authorised", `${decision.outcome}: ${decision.reason}`];
+    }
+    const attempts = this.state.transmissions[req.messageId]?.attempts ?? 0;
+    if (attempts >= maxAttempts)
+      return ["attempt-limit", `${attempts} provider attempts already made`];
+    return undefined;
   }
 
   /**
@@ -8420,7 +8569,8 @@ export class AgentRuntime {
       }
       vocabulary[`${path}.grant`] = { type: "term", values: [reference.grant] };
       vocabulary[`${path}.ref`] = { type: "identifier" };
-      known.identifiers.add(reference.ref);
+      if (!this.gateMemory.descriptionAddresses.has(reference.ref))
+        known.identifiers.add(reference.ref);
       reference.claimTypes.forEach((claimType, index) => {
         vocabulary[`${path}.claimTypes.${index}`] = {
           type: "code",

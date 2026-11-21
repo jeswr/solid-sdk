@@ -1,457 +1,393 @@
 WEBVTT
 
 1
-00:00:00.350 --> 00:00:02.765
+00:00:00.350 --> 00:00:02.702
 Software agents are starting to act for us.
 
 2
-00:00:02.765 --> 00:00:06.639
-They compare mortgages, share our data, and agree things in our name.
+00:00:02.702 --> 00:00:06.422
+They ask a bank for a mortgage, share our data, and pay in our name.
 
 3
-00:00:06.639 --> 00:00:14.613
-This is Answerable: a design for an agent that can be held to account, the specifications behind it, and a working agent you can step through.
+00:00:06.422 --> 00:00:12.494
+This is Answerable: a design for an agent that can be held to account, and a site where you can watch one work.
 
 4
-00:00:15.462 --> 00:00:17.506
-The starting point is uncomfortable.
+00:00:13.345 --> 00:00:14.576
+Start on the home page.
 
 5
-00:00:17.506 --> 00:00:21.822
-Today's models can be talked into things, and no filter reliably stops that.
+00:00:14.576 --> 00:00:18.001
+It says what Answerable is for, and it carries this walkthrough.
 
 6
-00:00:21.822 --> 00:00:24.945
-So the checks that matter cannot live inside the model.
+00:00:18.852 --> 00:00:20.418
+Then it sets out four goals.
 
 7
-00:00:25.795 --> 00:00:26.957
-Here is the design.
+00:00:20.418 --> 00:00:21.537
+Check what comes in.
 
 8
-00:00:26.957 --> 00:00:30.626
-The agent acts for a principal: a person or an organization.
+00:00:21.537 --> 00:00:22.712
+Decide what goes out.
 
 9
-00:00:30.626 --> 00:00:33.744
-In the middle is the core, the model and its tools.
+00:00:22.712 --> 00:00:23.495
+Keep a record.
 
 10
-00:00:33.744 --> 00:00:35.395
-We treat it as a black box.
+00:00:23.495 --> 00:00:26.796
+And work with what exists, starting from email and the web.
 
 11
-00:00:35.395 --> 00:00:38.208
-It holds no keys, and it cannot send anything.
+00:00:27.646 --> 00:00:31.056
+The site is a way to look inside a working reference agent.
 
 12
-00:00:38.208 --> 00:00:39.431
-It can only propose.
+00:00:31.056 --> 00:00:34.697
+Every run on it is real, and everyone in the runs is fictional.
 
 13
-00:00:40.281 --> 00:00:41.586
-Around it sit two gates.
+00:00:34.697 --> 00:00:36.430
+Below is a guide to each view.
 
 14
-00:00:41.586 --> 00:00:43.542
-They are ordinary code, not a model.
+00:00:37.282 --> 00:00:39.872
+The design is two gates around a black box.
 
 15
-00:00:43.542 --> 00:00:47.563
-The inbound gate checks everything that comes in, before the core sees it.
+00:00:39.872 --> 00:00:43.065
+The core, usually a model, can be talked into things.
 
 16
-00:00:47.563 --> 00:00:51.801
-The outbound gate checks everything the core proposes, before anything leaves.
+00:00:43.065 --> 00:00:45.354
+So it holds no keys and sends nothing.
 
 17
-00:00:52.652 --> 00:00:58.085
-Underneath are four stores: the policies, the memory, a trust store, and a record of every decision.
+00:00:45.354 --> 00:00:46.378
+It only proposes.
 
 18
-00:00:58.936 --> 00:01:01.986
-What travels between agents is a verifiable message.
+00:00:47.228 --> 00:00:48.545
+Ordinary code decides.
 
 19
-00:01:01.986 --> 00:01:05.094
-It might go by web call, by email, or through a tool.
+00:00:48.545 --> 00:00:52.255
+The inbound gate runs five checks on everything that comes in.
 
 20
-00:01:05.094 --> 00:01:08.026
-However it travels, the carriage is never trusted.
+00:00:52.255 --> 00:00:55.786
+The outbound gate runs six on everything the core proposes.
 
 21
-00:01:08.877 --> 00:01:10.428
-Inside is a signed bundle.
+00:00:55.786 --> 00:01:01.292
+Underneath are four stores: policies, memory, a trust store, and a record of every decision.
 
 22
-00:01:10.428 --> 00:01:11.144
-Who sent it.
+00:01:02.143 --> 00:01:05.069
+What travels between agents is a verifiable message.
 
 23
-00:01:11.144 --> 00:01:12.516
-Their authority to act.
+00:01:05.069 --> 00:01:06.757
+The carriage is never trusted.
 
 24
-00:01:12.516 --> 00:01:13.232
-The content.
+00:01:06.757 --> 00:01:13.903
+Everything inside is signed: who sent it, their authority, the content, the evidence, the terms of use, and where it came from.
 
 25
-00:01:13.232 --> 00:01:14.604
-The evidence behind it.
+00:01:14.754 --> 00:01:21.521
+The specification is a family of eleven layers, each one a question, with interchangeable answers called suites.
 
 26
-00:01:14.604 --> 00:01:15.976
-The terms for using it.
-
-27
-00:01:15.976 --> 00:01:18.542
-And where it came from, and how good it is.
-
-28
-00:01:19.392 --> 00:01:23.708
-No single standard covers all of that, so the specification is a family.
-
-29
-00:01:23.708 --> 00:01:25.806
-Eleven layers, each one a question.
-
-30
-00:01:25.806 --> 00:01:27.545
-How does a message get there?
-
-31
-00:01:27.545 --> 00:01:29.583
-Who gave this agent its authority?
-
-32
-00:01:29.583 --> 00:01:31.382
-How far can this be relied on?
-
-33
-00:01:32.232 --> 00:01:34.448
-Each layer has interchangeable suites.
-
-34
-00:01:34.448 --> 00:01:36.898
+00:01:21.521 --> 00:01:24.058
 One suite per layer makes a configuration.
 
-35
-00:01:36.898 --> 00:01:44.248
-The filled ones are the baseline: the configuration every agent is asked to support, so that any two have something in common.
+27
+00:01:24.058 --> 00:01:26.898
+A suite marked "runs" has a real run behind it.
 
-36
-00:01:45.099 --> 00:01:46.366
-This is the explorer.
+28
+00:01:28.704 --> 00:01:29.641
+This is Explore.
 
-37
-00:01:46.366 --> 00:01:49.385
-It replays a recorded run, one decision at a time.
+29
+00:01:29.641 --> 00:01:32.394
+It replays a recorded run, one check at a time.
 
-38
-00:01:49.385 --> 00:01:51.136
-On the left is what Sam sees.
+30
+00:01:32.394 --> 00:01:35.030
+In the middle are the agents and their gates.
 
-39
-00:01:51.136 --> 00:01:53.128
-In the middle are the two agents.
-
-40
-00:01:53.128 --> 00:01:55.966
+31
+00:01:35.030 --> 00:01:37.783
 On the right is the detail of the current step.
 
+32
+00:01:37.783 --> 00:01:41.239
+Along the top is the configuration, one selector per layer.
+
+33
+00:01:41.239 --> 00:01:43.464
+And the badge says this is a real run.
+
+34
+00:01:44.315 --> 00:01:47.024
+On the left is Sam's phone: what the person sees.
+
+35
+00:01:47.024 --> 00:01:54.544
+Sam has signed a mandate, and this screen lists what the agent may do on its own, what it must ask about first, and the spending limits.
+
+36
+00:01:54.544 --> 00:01:57.419
+Then Sam asks for a mortgage in principle on a flat.
+
+37
+00:01:58.269 --> 00:02:00.808
+The core proposes searching a product index.
+
+38
+00:02:00.808 --> 00:02:05.021
+Before anything goes out, the outbound gate asks who is on the other end.
+
+39
+00:02:05.021 --> 00:02:11.541
+It finds the index on Sam's own list, accepted for product search only, and the lookup is kept with the decision.
+
+40
+00:02:12.399 --> 00:02:16.058
+To show the deposit, the agent asks Sam's bank for a statement.
+
 41
-00:01:56.814 --> 00:01:59.494
-The badge at the top says what you are watching.
-
-42
-00:01:59.494 --> 00:02:01.504
-This one is a real run of the agent.
-
-43
-00:02:01.504 --> 00:02:04.128
-Sam asks for a mortgage in principle on a flat.
-
-44
-00:02:04.128 --> 00:02:09.432
-Sam has already signed a mandate, which says what the agent may do, and when it must ask first.
-
-45
-00:02:10.283 --> 00:02:14.525
-Before anything goes to North Bank, the outbound gate asks who North Bank is.
-
-46
-00:02:14.525 --> 00:02:16.398
-Sam's own short list has no entry.
-
-47
-00:02:16.398 --> 00:02:23.120
-So the gate asks a national trust root, which points to the sector register, which says North Bank is authorized for this.
-
-48
-00:02:23.120 --> 00:02:27.968
-It works like looking up a name on the internet, and the path is kept with the decision.
-
-49
-00:02:28.818 --> 00:02:33.163
-The bank asks for evidence, and the core proposes sharing two statements.
-
-50
-00:02:33.163 --> 00:02:36.555
-The outbound gate takes the proposal one check at a time.
-
-51
-00:02:36.555 --> 00:02:37.864
-The mandate covers it.
-
-52
-00:02:37.864 --> 00:02:39.233
-The recipient is known.
-
-53
-00:02:39.233 --> 00:02:41.078
-The terms go out with the data.
-
-54
-00:02:41.078 --> 00:02:44.648
-Then limits and approval: the mandate says to ask Sam first.
-
-55
-00:02:45.499 --> 00:02:47.119
-So the agent stops and asks.
-
-56
-00:02:47.119 --> 00:02:52.442
-The question Sam sees is written by the gate, from the rule and the facts, not by the model.
-
-57
-00:02:52.442 --> 00:02:56.261
-Sam approves, the check passes, and only then does the message go.
-
-58
-00:02:57.110 --> 00:02:59.150
-The real agent runs that core today.
-
-59
-00:02:59.150 --> 00:03:04.419
-The full journey has more parties in it, and this next part is still a mock-up of the design.
-
-60
-00:03:04.419 --> 00:03:05.496
-The banner says so.
-
-61
-00:03:06.346 --> 00:03:08.466
-First the agent looks for products.
-
-62
-00:03:08.466 --> 00:03:12.343
-It asks a public index, and even here the disclosure check runs.
-
-63
-00:03:12.343 --> 00:03:15.130
-The question carries a loan band and a region.
-
-64
-00:03:15.130 --> 00:03:16.220
-Nothing about Sam.
-
-65
-00:03:17.070 --> 00:03:20.907
-To show the deposit, the agent asks Sam's own bank for a statement.
-
-66
-00:03:20.907 --> 00:03:22.339
+00:02:16.058 --> 00:02:17.510
 Now watch the other side.
 
+42
+00:02:17.510 --> 00:02:23.085
+The bank's inbound gate checks the authority, and for a balance it wants a certified face check.
+
+43
+00:02:23.085 --> 00:02:25.815
+The request is held, and a challenge goes back.
+
+44
+00:02:26.665 --> 00:02:31.206
+Sam's phone shows the request: confirm it is you, who is asking, and what for.
+
+45
+00:02:31.206 --> 00:02:32.719
+Sam approves with Face ID.
+
+46
+00:02:32.719 --> 00:02:38.425
+That screen is labelled illustrative, because the run records Sam's signed answer, not the prompt.
+
+47
+00:02:39.276 --> 00:02:43.704
+The lender asks for evidence, and the core proposes sharing two statements.
+
+48
+00:02:43.704 --> 00:02:45.889
+The outbound gate goes down its list.
+
+49
+00:02:45.889 --> 00:02:47.188
+The mandate covers it.
+
+50
+00:02:47.188 --> 00:02:48.723
+The recipient is accepted.
+
+51
+00:02:48.723 --> 00:02:50.199
+Only what is needed goes.
+
+52
+00:02:50.199 --> 00:02:52.029
+The terms on the data allow it.
+
+53
+00:02:52.029 --> 00:02:55.572
+Then limits and approval: the mandate says to ask Sam first.
+
+54
+00:02:56.422 --> 00:03:00.248
+The approval sheet says what is shared, with whom, and on what terms.
+
+55
+00:03:00.248 --> 00:03:06.070
+Sam approves, the answer is signed on the phone for this exact action, and only then does the message go.
+
+56
+00:03:06.922 --> 00:03:08.247
+Here is that message.
+
+57
+00:03:08.247 --> 00:03:12.982
+At every gate the data is RDF: linked data, with its meaning made explicit.
+
+58
+00:03:12.982 --> 00:03:17.590
+The inspector shows the packet as JSON-LD, or, with one click, as Turtle.
+
+59
+00:03:17.590 --> 00:03:20.746
+Below it, each layer of the message can be opened.
+
+60
+00:03:21.734 --> 00:03:24.815
+Next the agent arranges a valuation, which has a fee.
+
+61
+00:03:24.815 --> 00:03:26.734
+Payment is treated as a contract.
+
+62
+00:03:26.734 --> 00:03:28.362
+First the service is agreed.
+
+63
+00:03:28.362 --> 00:03:34.118
+Sam approves the valuer's offer of four hundred and fifty dollars, inside the limit in the mandate.
+
+64
+00:03:34.968 --> 00:03:43.133
+Then the invoice comes in, and the gate checks the payment against that agreement: the same amount, the same payee, within the mandate's limits.
+
+65
+00:03:43.133 --> 00:03:45.911
+Sam approves the exact order, again with Face ID.
+
+66
+00:03:45.911 --> 00:03:48.576
+Then the gate builds the payment order, in RDF.
+
 67
-00:03:22.339 --> 00:03:27.551
-The bank's inbound gate checks the mandate, and finds it was approved with a password only.
+00:03:49.426 --> 00:03:54.192
+At the point of payment, the stage carries a selector: how the payment is settled.
 
 68
-00:03:27.551 --> 00:03:29.555
-For a balance, the bank wants more.
+00:03:54.192 --> 00:03:56.110
+The baseline describes it in RDF.
 
 69
-00:03:29.555 --> 00:03:30.987
-Nothing reaches its core.
+00:03:56.110 --> 00:04:00.877
+Choose another payment protocol, and the explorer loads the real run that used it.
 
 70
-00:03:30.987 --> 00:03:32.247
-A challenge goes back.
+00:04:00.877 --> 00:04:03.202
+The same checks run whichever is chosen.
 
 71
-00:03:33.097 --> 00:03:35.989
-Sam does a face check with an identity provider.
+00:04:04.053 --> 00:04:05.696
+Every selector works this way.
 
 72
-00:03:35.989 --> 00:03:39.784
-The agent asks again, and this time the authority check passes.
+00:04:05.696 --> 00:04:11.227
+Change the transport from a web call to email, and you are watching the run that was made over email.
 
 73
-00:03:40.635 --> 00:03:44.795
-The statement comes back signed, and Sam's inbound gate takes its turn.
+00:04:11.227 --> 00:04:15.717
+Each option you can pick is a real run of the engine, and the badge still says so.
 
 74
-00:03:44.795 --> 00:03:45.557
-Is it intact?
-
-75
-00:03:45.557 --> 00:03:48.136
-Is this bank the right source for a balance?
-
-76
-00:03:48.136 --> 00:03:49.542
-What terms came with it?
-
-77
-00:03:49.542 --> 00:03:55.812
-Those terms stay attached in memory: mortgage assessment only, no onward sharing, delete after ninety days.
-
-78
-00:03:56.662 --> 00:04:00.354
-The last inbound check is fitness: how far to rely on something.
-
-79
-00:04:00.354 --> 00:04:03.354
-Memory already holds Sam's own note of their income.
-
-80
-00:04:03.354 --> 00:04:06.008
-The payroll provider gives a different figure.
-
-81
-00:04:06.008 --> 00:04:09.412
-Payroll outranks a self-report, so the payroll figure wins.
-
-82
-00:04:09.412 --> 00:04:11.604
-The note is kept, marked as outranked.
-
-83
-00:04:12.454 --> 00:04:13.620
-Now the application.
-
-84
-00:04:13.620 --> 00:04:17.290
-The core prepares it, and the outbound gate goes down its list.
-
-85
-00:04:17.290 --> 00:04:20.728
-Disclosure: the income figure and the balance summary only.
-
-86
-00:04:20.728 --> 00:04:25.855
-Data terms: both statements allow this use, and their terms travel with the application.
-
-87
-00:04:26.704 --> 00:04:30.297
-And here is the message itself, in the layers you saw earlier.
-
-88
-00:04:30.297 --> 00:04:31.746
-Every part can be opened.
-
-89
-00:04:32.596 --> 00:04:35.263
-Because the layers are separate, you can swap one.
-
-90
-00:04:35.263 --> 00:04:40.012
-Change the transport from a web call to email, and the same checks run in the same order.
-
-91
-00:04:40.012 --> 00:04:41.399
-Only the carriage changes.
-
-92
-00:04:42.248 --> 00:04:44.995
+00:04:16.569 --> 00:04:19.377
 The design matters most when something goes wrong.
 
-93
-00:04:44.995 --> 00:04:48.071
-In this real run, we make the core misbehave on purpose.
+75
+00:04:19.377 --> 00:04:25.218
+In this run the core is fooled by text in a message, and proposes paying four hundred and fifty dollars.
 
-94
-00:04:48.071 --> 00:04:53.126
-After a message from the lender, it proposes paying a valuer four hundred and fifty dollars.
-
-95
-00:04:53.126 --> 00:04:57.411
+76
+00:04:25.218 --> 00:04:29.598
 The outbound gate finds nothing in Sam's mandate that allows it, and stops it.
 
-96
-00:04:57.411 --> 00:04:58.235
+77
+00:04:29.598 --> 00:04:30.441
 Nothing leaves.
 
-97
-00:04:59.084 --> 00:05:02.336
+78
+00:04:31.291 --> 00:04:34.562
 And here the lender asks for more than the mandate covers.
 
-98
-00:05:02.336 --> 00:05:03.009
+79
+00:04:34.562 --> 00:04:35.239
 Same result.
 
-99
-00:05:03.009 --> 00:05:05.980
+80
+00:04:35.239 --> 00:04:38.227
 The gate stops it, and the agent tells the lender no.
 
-100
-00:05:06.831 --> 00:05:09.117
+81
+00:04:39.079 --> 00:04:40.635
+The mortgage is one example.
+
+82
+00:04:40.635 --> 00:04:48.247
+The catalogue holds seventy situations in fifteen sectors, and says plainly where the design fits, where it strains, and where it breaks.
+
+83
+00:04:49.096 --> 00:04:54.188
+Each has a main path, and the things that go wrong: two hundred and eighty-three paths in all.
+
+84
+00:04:54.188 --> 00:04:59.821
+Two hundred and seventy-eight are real runs, and each gave the outcome that was written down beforehand.
+
+85
+00:04:59.821 --> 00:05:00.905
+Five cannot run yet.
+
+86
+00:05:00.905 --> 00:05:04.696
+They wait on a proof package, and each is listed with what is missing.
+
+87
+00:05:05.547 --> 00:05:07.773
 Every check traces back to a requirement.
 
-101
-00:05:09.117 --> 00:05:13.858
-This view takes the OWASP list of risks for agents, and shows the answer to each one.
+88
+00:05:07.773 --> 00:05:12.171
+This view takes ten published risks for agents, and shows the answer to each one.
 
-102
-00:05:14.707 --> 00:05:16.485
+89
+00:05:14.434 --> 00:05:16.105
 The specifications are here too.
 
-103
-00:05:16.485 --> 00:05:22.152
-Eighteen documents, every requirement numbered, so a step in a run can point to the clause it applied.
+90
+00:05:16.105 --> 00:05:21.538
+They are drafts, with every requirement numbered, so a step in a run can point to the clause it applied.
 
-104
-00:05:23.000 --> 00:05:27.355
-And the roadmap shows what is done, what is being built, and what comes next.
-
-105
-00:05:27.355 --> 00:05:30.918
-One thing to be plain about: both sides here run the same code.
-
-106
-00:05:30.918 --> 00:05:34.990
-Showing that independent implementations work together is still to come.
-
-107
-00:05:35.841 --> 00:05:38.895
+91
+00:05:22.485 --> 00:05:25.711
 Most people will not adopt a new protocol in one step.
 
-108
-00:05:38.895 --> 00:05:40.196
-They can receive email.
+92
+00:05:25.711 --> 00:05:29.535
+So an agent's email carries a short footer that says what it is.
 
-109
-00:05:40.196 --> 00:05:46.812
-So there is an entry configuration that works over ordinary email, with a short footer that says what the message is.
-
-110
-00:05:47.663 --> 00:05:49.665
+93
+00:05:29.535 --> 00:05:31.626
 Someone with no agent just replies.
 
-111
-00:05:49.665 --> 00:05:54.925
-Someone with an agent can check it, and the two move up to the baseline one layer at a time.
+94
+00:05:31.626 --> 00:05:33.717
+Someone with an agent can check it.
 
-112
-00:05:55.776 --> 00:06:00.730
-That is Answerable: the reference design, the specifications, and an agent that runs them.
+95
+00:05:34.566 --> 00:05:35.627
+That is Answerable.
 
-113
-00:06:00.730 --> 00:06:02.106
+96
+00:05:35.627 --> 00:05:41.157
+To be plain about it: both sides of every run use the same code, and the specifications are drafts.
+
+97
+00:05:41.157 --> 00:05:42.553
 Every view can be linked.
 
-114
-00:06:02.106 --> 00:06:03.482
+98
+00:05:42.553 --> 00:05:43.950
 Step through it yourself.

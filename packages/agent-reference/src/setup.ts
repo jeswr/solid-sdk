@@ -51,6 +51,7 @@ export interface Identity {
   readonly actor: Iri;
   readonly operator?: Iri;
   readonly email?: string;
+  readonly descriptionUrl?: string;
 }
 
 export interface ProvisionedAgent {

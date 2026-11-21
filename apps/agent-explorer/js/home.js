@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // The home page: what Answerable is for, what this site shows, and the narrated walkthrough.
 // Classic script.
 (function () {
@@ -9,12 +10,12 @@
 
   // Chapters of the walkthrough video (seconds, title). Kept beside the captions in media/.
   var CHAPTERS = [
-    [0, 'Agents that act for us'], [25, 'The reference design'], [58, 'The verifiable message'],
-    [79, 'A family of specifications'], [104, 'The explorer'], [129, 'Who is on the other end'],
-    [148, 'Asking Sam'], [176, 'The full journey'], [196, 'A bank asks for more'],
-    [220, 'What comes in'], [252, 'What goes out'], [272, 'Swap a layer'],
-    [281, 'When things go wrong'], [306, 'Requirements and specifications'],
-    [335, 'Starting from email'], [355, 'Try it'],
+    [0, 'Agents that act for us'], [12, 'The goals'], [36, 'Two gates around a black box'],
+    [61, 'The message and its layers'], [88, 'The explorer'], [117, 'Who is on the other end'],
+    [132, 'A bank asks for more'], [158, 'Asking Sam'], [186, 'RDF at every gate'],
+    [201, 'Payment is a contract'], [243, 'Swap a layer'], [256, 'When things go wrong'],
+    [278, 'Seventy use cases'], [305, 'Requirements and specifications'],
+    [322, 'Starting from email'], [334, 'Try it'],
   ];
 
   function clock(s) { return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
@@ -30,11 +31,11 @@
     { view: 'explore', title: 'Explore', text: 'Step through a real run, check by check. Swap one layer, such as how the agents pay or prove who they are, and see what changes.' },
     { view: 'architecture', title: 'Architecture', text: 'The parts of an agent: the core that thinks, and the two gates that decide what comes in and what goes out.' },
     { view: 'message', title: 'Message', text: 'What a verifiable message carries, layer by layer, and what a receiver can check in it.' },
-    { view: 'layers', title: 'Layers', text: 'The ten questions two agents must agree on, and the choices for each.' },
+    { view: 'layers', title: 'Layers', text: 'The ' + AX.orderedLayers.length + ' questions two agents must agree on, and the choices for each.' },
     { view: 'usecases', title: 'Use cases', text: 'Seventy situations, from a mortgage to a hostile counterparty, and how the design copes with each.' },
     { view: 'specs', title: 'Specs', text: 'The draft specifications, with numbered clauses you can cite.' },
     { view: 'tests', title: 'Evaluation', text: 'How the design is being tested, and what the tests show so far.' },
-    { view: 'start', title: 'Get an agent', text: 'What the footer on an agent\'s email means, and the routes to an agent of your own.' },
+    { view: 'get-an-agent', title: 'Get an agent', text: 'Two routes to an agent of your own, and what is ready today.' },
   ];
 
   R.home = function (root) {
@@ -49,7 +50,7 @@
     h += '<video controls preload="metadata" playsinline poster="media/answerable-walkthrough-poster.jpg" src="media/answerable-walkthrough.mp4">';
     h += '<track kind="captions" srclang="en" label="English" src="media/answerable-walkthrough.vtt" default>';
     h += '</video>';
-    h += '<figcaption>A six-minute walkthrough of the design and this site. The voice is a synthetic stand-in, and some screens show earlier runs.</figcaption>';
+    h += '<figcaption>A walkthrough of the design and this site, recorded against the current runs. The voice is a synthetic stand-in.</figcaption>';
     h += '</figure>';
     h += '<details class="home-chapters"><summary>Chapters</summary><ol>' + CHAPTERS.map(function (c) {
       return '<li><button type="button" class="linkish" data-at="' + c[0] + '"><span class="t">' + clock(c[0]) + '</span>' + esc(c[1]) + '</button></li>';
@@ -93,10 +94,7 @@
     // The public site hosts the Errand app at app/ when it was built with it; elsewhere the
     // link stays hidden.
     var appLink = root.querySelector('#home-app');
-    if (appLink && window.fetch && /^https?:$/.test(location.protocol)) {
-      fetch('app/index.html').then(function (r) { return r.ok ? r.text() : ''; })
-        .then(function (text) { if (/<title>Errand<\/title>/.test(text)) appLink.hidden = false; }).catch(function () {});
-    }
+    if (appLink) AX.probeErrandApp().then(function (available) { if (available) appLink.hidden = false; });
     var tb = root.querySelector('#home-tour');
     if (tb) tb.addEventListener('click', function () { AX.tour.start(); });
   };

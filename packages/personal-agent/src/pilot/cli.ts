@@ -91,7 +91,7 @@ import { FileStateStore } from "./store/state.js";
 const USAGE = `awp-pilot <command> [options]
 
 Setup (synthetic keys; nothing leaves this machine):
-  init      --name N --party IRI --actor IRI [--operator IRI] [--email ADDR] [--alg EdDSA|ES256]
+  init      --name N --party IRI --actor IRI [--operator IRI] [--email ADDR] [--description-url HTTPS_URL] [--alg EdDSA|ES256]
             [--known-party IRI]... [--known-contact ADDR]... [--timezone TZ] [--validity-days 30]
             [--policy-engine sparq|solid-odrl] [--sparq-bin PATH]
                                               SPARQ is the default policy module: init probes and
@@ -369,6 +369,7 @@ export async function openAgent(
         actor: identity.actor,
         party: identity.party,
         ...(identity.operator ? { operator: identity.operator } : {}),
+        ...(identity.descriptionUrl ? { descriptionUrl: identity.descriptionUrl } : {}),
       },
       actorKeys: [stored.actorKey],
       trust: await TrustStore.load(stored.trust),
@@ -575,6 +576,7 @@ export async function main(
       actor: { type: "string" },
       operator: { type: "string" },
       email: { type: "string" },
+      "description-url": { type: "string" },
       alg: { type: "string" },
       "known-party": { type: "string", multiple: true },
       "known-contact": { type: "string", multiple: true },
@@ -637,6 +639,7 @@ export async function main(
     case "init": {
       const alg = (opt(o, "alg") ?? "EdDSA") as KeyAlg;
       if (alg !== "EdDSA" && alg !== "ES256") throw new Error("--alg must be EdDSA or ES256");
+      const descriptionUrl = opt(o, "description-url");
       const known = (o["known-party"] as string[] | undefined) ?? [];
       const validity = Number.parseInt(opt(o, "validity-days") ?? "30", 10);
       const role = roleById(opt(o, "role"));
@@ -652,6 +655,7 @@ export async function main(
               ...(opt(o, "operator") ? { operator: opt(o, "operator") as string } : {}),
             }),
         ...(opt(o, "email") ? { email: opt(o, "email") as string } : {}),
+        ...(descriptionUrl ? { descriptionUrl } : {}),
       };
       // The policy module is chosen and probed BEFORE anything is written (SPARQ by default).
       const policyRecord = choosePolicyEngine({

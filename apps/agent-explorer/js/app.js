@@ -19,13 +19,14 @@
     { id: 'requirements', label: 'Requirements', when: function () { return !!AX.model.requirements; } },
     { id: 'specs', label: 'Specs' },
     { id: 'tests', label: 'Evaluation' },
-    { id: 'start', label: 'Get an agent' },
+    { id: 'start', label: 'About the footer', nav: false },
+    { id: 'get-an-agent', label: 'Get an agent' },
     { id: 'roadmap', label: 'Roadmap', when: function () { return !!AX.data.roadmap; } },
   ].filter(function (v) { return !v.when || v.when(); });
   AX.views = VIEWS;
 
   AX.lastExploreHash = AX.buildHash('explore', {});
-  nav.innerHTML = VIEWS.map(function (v) {
+  nav.innerHTML = VIEWS.filter(function (v) { return v.nav !== false; }).map(function (v) {
     return '<a href="#/' + v.id + '" data-view="' + v.id + '"' + ' data-anchor="nav.' + v.id + '">' + esc(v.label) + '</a>';
   }).join('');
   AX.onExploreHash = function (h) {
@@ -147,7 +148,6 @@
   // ---- Start -----------------------------------------------------------------------
   document.getElementById('tour-btn').addEventListener('click', function () { if (AX.tour) AX.tour.start(); });
   route();
-  // Someone arriving from an email footer came to read one page, and the home page offers the
-  // tour itself: do not put the tour invite over either.
-  if (AX.tour && current !== 'start' && current !== 'home') AX.tour.maybeInvite();
+  // Leave the email explanation, setup page and Home visible on arrival.
+  if (AX.tour && ['start', 'get-an-agent', 'home'].indexOf(current) === -1) AX.tour.maybeInvite();
 })();

@@ -1,11 +1,11 @@
 {
-  "updated": "2026-11-20T13:00Z",
-  "note": "Everything to build, in the order it will be done. On 13 Nov 2026 Jesse reviewed the demo and put three things first: RDF throughout, payment as a contract, and real runs behind every selector option; and paused benchmarking. Set by Jesse on 13 Nov 2026: the agent work first, then the paper, then zero-knowledge and joint computation, then the thesis, then adoption and the rest of the app suite. One gate, also set by Jesse: every use case and scenario marked \"not run yet\" becomes a real run, or is listed with the reason, before the last phases start. Careful thinking is done by Fable; building by Codex and Opus to Fable's briefs.",
+  "updated": "2026-11-20T19:30Z",
+  "note": "Everything to build, in the order it will be done. On 13 Nov 2026 the maintainer reviewed the demo and put three things first: RDF throughout, payment as a contract, and real runs behind every selector option; and paused benchmarking. Set by the maintainer on 13 Nov 2026: the agent work first, then the paper, then zero-knowledge and joint computation, then the thesis, then adoption and the rest of the app suite. One gate, also set by the maintainer: every use case and scenario marked \"not run yet\" becomes a real run, or is listed with the reason, before the last phases start. Careful thinking is done by Fable; building by Codex and Opus to Fable's briefs.",
   "phases": [
     {
       "id": "P9",
       "title": "RDF throughout, and every option a real run",
-      "goal": "From Jesse's review on 13 Nov 2026, now first in the order: meaning explicit at every gate, payment treated as a contract, and every option on every selector backed by a real run you can switch to on the mortgage journey. Of 38 alternative options, 13 have a real run somewhere in the use cases and 25 have none. On the mortgage journey none can be switched to as a real run today: the email trace shown there is a development fixture and is labelled as one. Done means: the journey runs under the baseline with that one option changed, between separately keyed agents, and one failure only that option can have also runs.",
+      "goal": "From the maintainer's review on 13 Nov 2026, now first in the order: meaning explicit at every gate, payment treated as a contract, and every option on every selector backed by a real run you can switch to on the mortgage journey. Of 38 alternative options, 13 have a real run somewhere in the use cases and 25 have none. On the mortgage journey none can be switched to as a real run today: the email trace shown there is a development fixture and is labelled as one. Done means: the journey runs under the baseline with that one option changed, between separately keyed agents, and one failure only that option can have also runs.",
       "items": [
         {
           "id": "P9.1",
@@ -73,7 +73,7 @@
         {
           "id": "P9.10",
           "title": "Proof of a query, and joint computation",
-          "detail": "Zero-knowledge proofs use Noir circuits, not a virtual machine (Jesse, 13 Nov). The seam is built and tested with stand-in verifiers. The engine project's joint-computation package has arrived and is being wired in for six paths now. Six proof paths wait on its Noir package; three more wait on new circuits for absence and totals (targets: circuits 23 Nov, package 4 Dec). The queries it asked for were sent on 13 Nov. 20 Nov: the sparq proof adapters are wired in and run live; 5 paths wait on sparq #7412 (missing catalogue plans for absence, totals and scoped queries).",
+          "detail": "Zero-knowledge proofs use Noir circuits, as agreed with the maintainer on 13 Nov. The seam is built and tested with stand-in verifiers. The engine project's joint-computation package has arrived and is being wired in for six paths now. Six proof paths wait on its Noir package; three more wait on new circuits for absence and totals (targets: circuits 23 Nov, package 4 Dec). The queries it asked for were sent on 13 Nov. 20 Nov: the sparq proof adapters are wired in and run live; 5 paths wait on sparq #7412 (missing catalogue plans for absence, totals and scoped queries).",
           "status": "doing",
           "owner": "Engine project, Codex"
         },
@@ -81,8 +81,9 @@
           "id": "P9.11",
           "title": "Two gate gaps found by the first evaluation pass",
           "detail": "Settled: both are real gaps in the gates. First, a message that leaves out a claim its operation needs was admitted and nothing asked for it (six cases in three use cases). Second, a permission to use something was read as also allowing it to be passed on (682 cases). Two new core clauses say what must happen, and a build brief is written (brief 27). It runs once the RDF build has landed, because it changes the same gate code. Still open: whether a person's own instructions and reads from memory count as admitted input in the evaluation's third property. The rest of the evaluation stays paused.",
-          "status": "next",
-          "owner": "Fable (settled), Codex (fix)"
+          "status": "done",
+          "owner": "Fable (settled), Codex (fix)",
+          "note": "Both gate gaps fixed (brief 27) and merged to main with the engine on 20 Nov."
         }
       ]
     },
@@ -116,8 +117,9 @@
           "id": "P1.4",
           "title": "Reference agent package",
           "detail": "Two gates, stores, a suite registry and a trace for every decision. Built; in review before merge (pull request 635).",
-          "status": "doing",
-          "owner": "Opus (to Fable's brief)"
+          "status": "done",
+          "owner": "Opus (to Fable's brief)",
+          "note": "Built and merged to main on 20 Nov (pull request 646) after eleven rounds of independent review."
         },
         {
           "id": "P1.5",
@@ -130,8 +132,9 @@
           "id": "P1.6",
           "title": "Swap the transport",
           "detail": "Direct transport and plain email both run through the same gates. The other transports are in the first section of this roadmap.",
-          "status": "doing",
-          "owner": "Opus (to Fable's brief)"
+          "status": "done",
+          "owner": "Opus (to Fable's brief)",
+          "note": "Direct, email, A2A, MCP and Solid inbox transports all run through the same gates; merged to main on 20 Nov."
         },
         {
           "id": "P1.7",
@@ -205,7 +208,7 @@
         },
         {
           "id": "P2.2",
-          "title": "Ten layer specifications",
+          "title": "Layer specifications",
           "detail": "For each layer: what a suite must define, and the suites registered so far.",
           "status": "done",
           "owner": "Fable"
@@ -395,22 +398,22 @@
         {
           "id": "P7.1",
           "title": "A name",
-          "detail": "Answerable. Chosen by Jesse on 13 Nov 2026.",
+          "detail": "The maintainer chose Answerable on 13 Nov 2026.",
           "status": "done",
-          "owner": "Fable, Jesse decides"
+          "owner": "Fable, with the maintainer's decision"
         },
         {
           "id": "P7.2",
           "title": "Email footer upgrade path",
           "detail": "\"I use an agent that supports this\" with a link; plain email still works, and both sides upgrade when they can.",
-          "status": "next",
+          "status": "done",
           "owner": "Fable"
         },
         {
           "id": "P7.3",
           "title": "Setup page",
-          "detail": "How to get an agent: connect an existing assistant through an adapter, or sign up to a hosted one.",
-          "status": "next",
+          "detail": "How to get an agent: connect an existing assistant through an adapter, or use a hosted agent. See what can be tried today.",
+          "status": "done",
           "owner": "Fable (design), Opus (plumbing)"
         },
         {

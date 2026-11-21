@@ -1,7 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // Sam's phone is drawn only from the trace: these tests pin what each moment of the recorded
-// mortgage runs puts on the principal's screen, and that every fact on an approval sheet is
-// text the agent actually sent.
+// mortgage runs puts on the principal's screen, including labels for the terms in the trace.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -36,7 +36,7 @@ test('each ask opens a sheet until its answer, then the answer is confirmed on t
   for (const pair of phone.asks(base)) {
     const sheet = phone.model(base, pair.ask, opt).overlay;
     assert.equal(sheet.type, 'sheet');
-    const text = base.events[pair.ask].chat.text;
+    const text = phone.displayText(base, base.events[pair.ask].chat.text);
     for (const [, value] of sheet.ask.facts) {
       if (value !== 'A certified face check') assert.ok(text.includes(value), `${value} is in the agent's words`);
     }
@@ -45,6 +45,20 @@ test('each ask opens a sheet until its answer, then the answer is confirmed on t
     assert.equal(confirm.declined, false);
     assert.equal(phone.model(base, pair.reply + 1, opt).overlay, null);
   }
+});
+
+test('the phone labels the mortgage evidence, its onward recipient and the valuation fee', () => {
+  const rules = phone.model(base, 0, opt).mandate.rules.map((rule) => rule.what);
+  assert.ok(rules.some((rule) => rule.startsWith('Share the mortgage evidence for credit assessment')));
+  assert.ok(rules.some((rule) => rule.startsWith('Pay the valuation fee')));
+  assert.doesNotMatch(rules.join(' '), /unlabelled resource|pay pay/i);
+  assert.match(base.events[0].rule.text, /pay Pay the valuation fee/);
+
+  const ask = indexOf(base, (e) => e.kind === 'ask-principal' && /pass them on/.test(e.chat.text));
+  const screen = phone.model(base, ask, opt);
+  assert.match(screen.feed.find((item) => item.now).text, /pass them on only to the underwriter/);
+  assert.deepEqual(screen.overlay.ask.facts.at(-1), ['Passed on to', 'the underwriter']);
+  assert.match(base.events[ask].chat.text, /the unlabelled resource/);
 });
 
 test('the face check is shown while the identity provider statement is checked', () => {

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // Sam's phone: what the principal sees at the current step of a recorded run, drawn in the
 // visual language of the Errand consumer app (apps/agent-chat). Everything shown is read from
 // the trace: the chat, the mandate the agent holds, the approval it asks for and the answer.
@@ -18,6 +19,37 @@
   }
   function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
   function trimDot(s) { return String(s || '').replace(/[.\s]+$/, ''); }
+
+  // The trace copy retains the engine's prose. Use the corresponding terms in the replay.
+  P.displayText = function (trace, text) {
+    var s = String(text || '').replace(/\b([Pp]ay) [Pp]ay\b/g, '$1');
+    if (trace.useCase === 'mortgage-in-principle') {
+      s = s.replace(/pass them on only to the unlabelled resource/g, 'pass them on only to the underwriter')
+        .replace(/never for the unlabelled resource/g, 'never for marketing')
+        .replace(/The fictional lender or the unlabelled resource/g, 'The fictional lender or the other lender named in the mandate')
+        .replace(/distribute the unlabelled resource for Credit Assessment/g, 'share the mortgage evidence for credit assessment')
+        .replace(/compensate the unlabelled resource for Mortgage Application/g, 'make a payment for the mortgage application')
+        .replace(/use the unlabelled resource, on its own/g, 'grant access to the mortgage evidence by link, on its own');
+      if (trace.scenario?.id === 'mortgage-injected-fee') {
+        s = s.replace(/pay 450 USD to the unlabelled resource/g, 'pay 450 USD to the proposed valuer');
+      }
+    }
+    switch (trace.useCase) {
+    case 'health-referral':
+      return s.replace(/use the unlabelled resource with The specialist clinic for Health referral/g,
+        'share the patient history with the specialist clinic for the referral');
+    case 'emergency-access':
+      return s.replace(/read the unlabelled resource/g, 'read the allergy record');
+    case 'probing-counterparty':
+      return s.replace(/take the next step in the unlabelled resource/g, 'act on the service request');
+    case 'production-change':
+      return s.replace(/take the next step in the unlabelled resource/g, 'carry out the proposed change');
+    case 'salary-account-change':
+      return s.replace(/unsigned invoke not permitted by the unlabelled resource/g, 'the salary account change requires a signed request');
+    default:
+      return s;
+    }
+  };
 
   // ---- Reading the trace ----------------------------------------------------------------
 
@@ -43,7 +75,7 @@
       var e = ev[i];
       if (e.kind === 'record' && e.agent === agentId && e.rule && /mandate/.test(e.rule.id || '')) {
         var rules = [];
-        String(e.rule.text || '').split(/(?<=\.)\s+(?=[A-Z])/).forEach(function (s) {
+        P.displayText(t, e.rule.text).split(/(?<=\.)\s+(?=[A-Z])/).forEach(function (s) {
           var m = s.match(/mandate lets the agent (.+?),? (on its own|after .+? approves)\.?$/);
           if (m) rules.push({ what: cap(m[1]), own: m[2] === 'on its own' });
           else if (s.trim()) rules.push({ what: s.trim(), own: null });
@@ -97,7 +129,7 @@
       return { kind: 'accept', title: 'Accept ' + m[1], primary: 'Approve', amount: m[3],
         facts: [['From', m[2]], ['Fee', m[3], 'total']] };
     }
-    if ((m = s.match(/^(.+?) asks for (\w+) of your statements: (.+?)\. They would use them for (.+?), keep them for (.+?) and pass them on only to (.+?)\. May I share them\?/))) {
+    if ((m = s.match(/^(.+?) asks for (\w+) of your statements: (.+?)\. They would use them for (.+?), keep them for (.+?) and pass them on only to (.+?)\.(?: .+?\.)? May I share them\?/))) {
       return { kind: 'share', title: 'Share ' + m[2] + ' statements', primary: 'Approve sharing',
         facts: [['With', m[1]], ['What', m[3]], ['Used for', m[4]], ['Kept for', m[5]], ['Passed on to', m[6]]] };
     }
@@ -168,16 +200,16 @@
     for (var k = 0; k <= idx; k++) {
       var e = ev[k];
       if (e.chat) {
-        var item = { type: 'bubble', who: e.chat.who === 'principal' ? 'principal' : 'agent', text: e.chat.text, i: k, now: k === idx };
+        var item = { type: 'bubble', who: e.chat.who === 'principal' ? 'principal' : 'agent', text: P.displayText(t, e.chat.text), i: k, now: k === idx };
         feed.push(item);
         if (e.kind === 'ask-principal' && byAsk[k]) {
           var p = byAsk[k];
           var answered = p.reply != null && p.reply <= idx;
           feed.push({ type: 'ask-chip', i: k, state: answered ? (P.declined(ev[p.reply]) ? 'declined' : 'approved') : 'waiting' });
         }
-        if (e.kind === 'principal-reply') feed.push({ type: 'signed', i: k, declined: P.declined(e), caption: e.caption || '' });
+        if (e.kind === 'principal-reply') feed.push({ type: 'signed', i: k, declined: P.declined(e), caption: P.displayText(t, e.caption) });
       } else if (e.agent === agentId && e.kind === 'decision' && (e.outcome === 'stop' || e.outcome === 'refuse')) {
-        feed.push({ type: 'stopped', i: k, outcome: e.outcome, caption: e.caption || '' });
+        feed.push({ type: 'stopped', i: k, outcome: e.outcome, caption: P.displayText(t, e.caption) });
       }
     }
     var overlay = null;
@@ -185,15 +217,18 @@
     pairs.forEach(function (p) { if (p.ask <= idx && (p.reply == null || idx < p.reply)) pending = p; });
     if (pending) {
       var askEv = ev[pending.ask];
-      var c = P.classifyAsk(askEv.chat && askEv.chat.text);
-      var why = P.whyChecks(t, pending.ask);
+      var text = P.displayText(t, (askEv.chat && askEv.chat.text) || askEv.caption);
+      var c = P.classifyAsk(text);
+      var why = P.whyChecks(t, pending.ask).map(function (c) {
+        return Object.assign({}, c, { caption: P.displayText(t, c.caption) });
+      });
       var asking = why.filter(function (x) { return x.verdict === 'ask-principal'; })[0] || null;
       var face = c.kind === 'face' ? P.faceProgress(t, pending, idx) : null;
       if (face && face.seen) {
         overlay = { type: 'face', key: 'face' + pending.ask, by: face.by, done: face.admitted };
       } else {
         overlay = {
-          type: 'sheet', key: 'ask' + pending.ask, ask: c, text: (askEv.chat && askEv.chat.text) || askEv.caption,
+          type: 'sheet', key: 'ask' + pending.ask, ask: c, text: text,
           caption: askEv.caption || '', why: why, asking: asking,
           digest: (String((askEv.chat && askEv.chat.text) || '').match(/digest: (sha-256:[0-9a-f]+)/) || [])[1] || null,
           unanswered: pending.reply == null && idx === ev.length - 1,
@@ -211,7 +246,6 @@
       var r = ev[idx];
       overlay = { type: 'confirm', key: 'reply' + idx, declined: P.declined(r), caption: r.caption || '', stronger: /attestation/.test(r.caption || '') };
     }
-    var cur = ev[idx];
     return {
       agentId: agentId,
       principal: P.shortName(opt.principal),
@@ -221,7 +255,7 @@
       feed: feed,
       overlay: overlay,
       autoTab: mandate && idx === mandate.i ? 'mandate' : 'chat',
-      now: opt.stepTitle ? opt.stepTitle(cur.step) : null,
+      now: opt.stepTitle ? opt.stepTitle(idx) : null,
       atEnd: idx === ev.length - 1,
       idx: idx,
     };
