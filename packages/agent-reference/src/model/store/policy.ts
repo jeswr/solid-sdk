@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 import type { Term } from "@jeswr/fetch-rdf";
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import {
@@ -279,7 +280,7 @@ function decodeRule(node: StoreNode, projected: OdrlRule | OdrlDuty): NativeRule
 }
 export function policyFromStore(dataset: Store, id: string): NativePolicy {
   const local = graphContents(dataset, id);
-  const projected = policyFromRdf(local);
+  const projected = policyFromRdf(local, { allowedActionIris: [PAY] });
   if (!projected || projected.id !== id) throw new TypeError("Expected a store ODRL policy");
   const root = view(id, local);
   const nativeId = root.term(ODRL_UID);

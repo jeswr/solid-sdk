@@ -1,9 +1,12 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { expect, it } from "vitest";
 import { evaluate } from "../src/evaluate.js";
 import {
   OdrlSerializationError,
   parsePolicy,
+  policyFromRdf,
   policyToJsonLd,
   policyToRdf,
   policyToTurtle,
@@ -32,7 +35,48 @@ it.each([
   for (const quad of actions)
     expect(quad.object).toMatchObject({ termType: "NamedNode", value: iri });
   expect(JSON.stringify(policyToJsonLd(input)).split(iri).length - 1).toBe(4);
-  expect(await parsePolicy(await policyToTurtle(input))).toEqual(input);
+  const options = action === iri ? { allowedActionIris: [iri] } : undefined;
+  expect(await parsePolicy(await policyToTurtle(input), undefined, undefined, options)).toEqual(
+    input,
+  );
+});
+
+it("reads only the listed extension action IRIs in rules and duties", async () => {
+  const allowed = "urn:test:Pay";
+  const unlisted = "urn:test:pay";
+  const standardRule = { type: "permission", action: "read" } as const;
+  const input: OdrlPolicy = {
+    id: "urn:test:policy",
+    type: "Set",
+    permissions: [
+      { ...standardRule, duties: [{ action: allowed }, { action: unlisted }] },
+      { type: "permission", action: allowed },
+      { type: "permission", action: unlisted },
+    ],
+    prohibitions: [
+      { type: "prohibition", action: allowed },
+      { type: "prohibition", action: unlisted },
+    ],
+    obligations: [{ action: allowed }, { action: unlisted }],
+  };
+  const turtle = await policyToTurtle(input);
+  const dataset = await parseRdf(turtle, "text/turtle");
+  const defaults = { id: input.id, type: input.type, permissions: [standardRule] };
+  expect(await parsePolicy(turtle)).toEqual(defaults);
+  expect(policyFromRdf(dataset)).toEqual(defaults);
+
+  const options = { allowedActionIris: [allowed] };
+  const optedIn = {
+    ...defaults,
+    permissions: [
+      { ...standardRule, duties: [{ action: allowed }] },
+      { type: "permission", action: allowed },
+    ],
+    prohibitions: [{ type: "prohibition", action: allowed }],
+    obligations: [{ action: allowed }],
+  };
+  expect(await parsePolicy(turtle, "text/turtle", undefined, options)).toEqual(optedIn);
+  expect(policyFromRdf(dataset, options)).toEqual(optedIn);
 });
 
 it.each([

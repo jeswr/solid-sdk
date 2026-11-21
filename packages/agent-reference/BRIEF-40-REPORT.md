@@ -793,3 +793,54 @@ still apply. The standing payment vocabulary decision remains
 `needs:jesse` … choose the long-term ODRL profile for the pilot payment action
 and define a reversible migration from `awp:pay`. The native pilot rule
 and evaluator already retain the exact `pay` action.
+
+## Phase 2 CI fix (40n)
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Baseline `1c45e5026`. Both solid-odrl readers skip rules and duties with
+unrecognized actions by default. `PolicyReadOptions.allowedActionIris` accepts
+extension actions by exact IRI match. Standard actions still decode to their
+short names and take precedence when a node supplies multiple actions. The
+store codec opts into `awp:pay` and restores native `pay`, including the
+verified invoice mandate's permit for `urn:rule:monthly-payments`. Writers
+continue to preserve clean absolute action IRIs.
+
+Node 24.22.3 and pnpm 10.4.1. The default-skip regression failed before the
+reader change. The allow-list test checks rules, permission duties and
+obligations in both reader entry points, including case-sensitive matching.
+
+| Check | Result |
+| --- | --- |
+| solid-odrl tests, `api:report`, `api:check` | 939 tests passed across 14 files. API Extractor generated and verified the report. |
+| rdf-engine tests | 224 passed across 11 files with the coverage gate enabled. The ordinary run passed 223 tests and hit `EPERM` while capturing the WASM-copy CLI's output. A local rerun supplied file-backed stdout to that real subprocess and kept the package and tests intact. |
+| Agent-reference phase 2 | 21 passed in `state-rdf`, `state-file-format`, `trust-rdf`, `policy-rdf`, and `store-vocabulary`. |
+| Agent-reference restart and regression suites | 231 passed across 20 files. The primary batch covered `email`, `forum`, `durable-capabilities`, `pod-mirror`, `runtime-graph-ingress`, `ledger-file-format`, `record-rdf`, `rdf-pipeline`, `store-quads`, `store-vocabulary`, `codegen`, `agreements`, `general-duties`, and `single-use`. The two follow-up batches covered `capabilities-b-adversarial`, `content`, `dataset-query`, `proofs`, `joint`, and `email-endpoint-alternative`. |
+| Daemon and personal-agent restart checks | 138 daemon tests passed in `gate-setup`, `daemon`, and `outbound`. 38 personal-agent tests passed in `mortgage-durable`, `custody`, and `actions`. |
+| Typecheck and Biome | Typecheck passed for solid-odrl, rdf-engine, agent-reference, agent-daemon, and the seven consumers below. Changed-file Biome, package lint for solid-odrl and agent-reference, and `lint:root` passed. Package lint reported existing warnings. |
+| RDF pipeline and traces | The RDF guard reported zero failures and 216 explicit allowances. Mortgage-core and pay-an-invoice ran two and three live paths. Both reported 278 runs, zero disagreements and five blocked. The trace, outline and manifest comparisons passed. |
+
+The `package.json` search found these seven additional workspace consumers of
+`@jeswr/solid-odrl` beyond rdf-engine and agent-reference. The two apps ran
+with lockfile dependencies installed offline in a disposable workspace copy.
+
+| Workspace consumer | Test result |
+| --- | --- |
+| `@jeswr/agent-authz-verifier` | 141 passed in 5 files |
+| `@jeswr/agent-mandate` | 858 passed in 12 files |
+| `@jeswr/app-access-manager` | 181 passed in 17 files |
+| `@jeswr/app-issues` | 720 passed in 47 files |
+| `@jeswr/personal-agent` | 520 passed, 77 failed, 4 skipped, and 2 unhandled loopback errors across 58 files |
+| `@jeswr/pkg-memory` | 809 passed in 15 files |
+| `@jeswr/pod-access` | 1,183 passed in 26 files |
+
+The full personal-agent run hit the sandbox's loopback and subprocess
+restrictions, including `listen EPERM`, `spawnSync EPERM`, and dependent
+timeouts. The failure, skip and unhandled error counts match the earlier
+sandbox run. [Brief 36J report](../personal-agent/BRIEF-36J-REPORT.md)
+
+The full workspace gate was attempted in the disposable copy. It stopped at
+`@jeswr/solid-webauthn-reauth` because `@simplewebauthn/browser` was absent in
+that copy. The agent-reference build was limited to compiling and copying
+generated modules in the worktree. The trace check ran in its own disposable
+copy, and the checked-in trace, outline and manifest files retain their bytes.

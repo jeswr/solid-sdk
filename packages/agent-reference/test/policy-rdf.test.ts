@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 import { ACTION_IRI, ODRL, policyFromRdf } from "@jeswr/solid-odrl";
 import { expect, it } from "vitest";
 import { digestOf } from "../src/core/canonical.js";
@@ -46,7 +47,8 @@ it("restores native policy order, inherited parties, explicit empties and exact 
   expect(rdf.getObjects(null, ODRL + "action", null).map((node) => node.value)).toEqual(
     expect.arrayContaining([AWP + "pay", ACTION_IRI.use, ACTION_IRI.read, ACTION_IRI.attribute]),
   );
-  expect(policyFromRdf(rdf)?.permissions).toHaveLength(3);
+  const standard = policyFromRdf(rdf);
+  expect(standard?.permissions?.map((rule) => rule.action).sort()).toEqual(["read", "use"]);
   const decoded = policyFromStore(rdf, input.id);
   expect(decoded).toEqual(input);
   expect(digestOf(decoded)).toBe(digestOf(input));

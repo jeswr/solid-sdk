@@ -4,6 +4,7 @@ description: Use when building, parsing, evaluating, or recording ODRL usage pol
 ---
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # ODRL policies and recipient collections
 
@@ -69,6 +70,8 @@ follow the repository's affected and full gate requirements before finishing.
 
 Use a standard `OdrlActionName` or an absolute profile IRI in rules and duties.
 The writers preserve profile IRIs lexically and reject unknown short names and
-IRIs that require escaping. The reader maps standard IRIs back to their existing
-names and preserves other absolute IRIs. Standard evaluation has no implication
-rules for profile IRIs. A profile must supply its own evaluation semantics.
+IRIs that require escaping. Readers map standard IRIs back to their existing names
+and skip rules and duties with unrecognized actions by default. To read a profile
+action, pass its exact IRI in `PolicyReadOptions.allowedActionIris` as the second
+argument to `policyFromRdf` or the fourth argument to `parsePolicy`. List only the
+IRIs your profile handles. A profile must supply its own evaluation semantics.

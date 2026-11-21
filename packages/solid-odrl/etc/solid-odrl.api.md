@@ -348,10 +348,15 @@ export type OperatorName = (typeof OPERATORS)[number];
 export const OPERATORS: readonly ["eq", "neq", "gt", "gteq", "lt", "lteq", "isAnyOf", "isAllOf", "isNoneOf", "isPartOf"];
 
 // @public
-export function parsePolicy(input: string | DatasetCore, contentType?: string, baseIRI?: string): Promise<OdrlPolicy | undefined>;
+export function parsePolicy(input: string | DatasetCore, contentType?: string, baseIRI?: string, options?: PolicyReadOptions): Promise<OdrlPolicy | undefined>;
 
 // @public
-export function policyFromRdf(dataset: DatasetCore): OdrlPolicy | undefined;
+export function policyFromRdf(dataset: DatasetCore, options?: PolicyReadOptions): OdrlPolicy | undefined;
+
+// @public
+export interface PolicyReadOptions {
+    readonly allowedActionIris?: readonly string[];
+}
 
 // @public
 export function policyToJsonLd(policy: OdrlPolicy): Record<string, unknown>;

@@ -5,8 +5,8 @@
 // The ODRL policy ↔ RDF lowering + round-trip. `policyToRdf` lowers a structured
 // OdrlPolicy to quads (via the typed wrapper write path — never hand-built
 // triples); `policyToTurtle`/`policyToJsonLd` serialise; `policyFromRdf`/
-// `parsePolicy` read a policy back from RDF (round-trip lossless on the policy
-// fields). All RDF reads/writes go through src/wrappers.ts.
+// `parsePolicy` read a policy back from RDF. All RDF reads/writes go through
+// src/wrappers.ts.
 
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { escapeIri, safeHttpIri, safeIri } from "@jeswr/rdf-serialize";
@@ -514,13 +514,23 @@ function constraintJsonLd(c: OdrlConstraint): Record<string, unknown> {
   return node;
 }
 
+/** Options shared by the ODRL policy readers. */
+export interface PolicyReadOptions {
+  /** Extension action IRIs to accept by exact match. Defaults to the standard action table alone. */
+  readonly allowedActionIris?: readonly string[];
+}
+
 /**
  * Read a structured {@link OdrlPolicy} back from an already-parsed RDF dataset.
  * Returns the FIRST well-formed policy found, or `undefined` if there is none.
  */
-export function policyFromRdf(dataset: DatasetCore): OdrlPolicy | undefined {
+export function policyFromRdf(
+  dataset: DatasetCore,
+  options?: PolicyReadOptions,
+): OdrlPolicy | undefined {
+  const allowedActionIris = options?.allowedActionIris ?? [];
   for (const node of wrapPolicy(dataset).policies()) {
-    const policy = projectPolicy(node);
+    const policy = projectPolicy(node, allowedActionIris);
     if (policy !== undefined) {
       return policy;
     }
@@ -537,12 +547,13 @@ export async function parsePolicy(
   input: string | DatasetCore,
   contentType = "text/turtle",
   baseIRI?: string,
+  options?: PolicyReadOptions,
 ): Promise<OdrlPolicy | undefined> {
   const dataset =
     typeof input === "string"
       ? await parseRdf(input, contentType, baseIRI ? { baseIRI } : {})
       : input;
-  return policyFromRdf(dataset);
+  return policyFromRdf(dataset, options);
 }
 
 /** The first recognised ODRL policy subtype among a node's rdf:type terms. */
@@ -569,7 +580,10 @@ function profileField(profiles: readonly string[]): { profile?: string | readonl
 }
 
 /** Project a {@link PolicyNode} to a plain {@link OdrlPolicy}, or `undefined`. */
-function projectPolicy(node: PolicyNode): OdrlPolicy | undefined {
+function projectPolicy(
+  node: PolicyNode,
+  allowedActionIris: readonly string[],
+): OdrlPolicy | undefined {
   const type = firstPolicyType(node.types);
   const profiles = [...node.profiles].filter((t) => t.termType === "NamedNode").map((t) => t.value);
   const assigner = firstIri(node.assigners);
@@ -585,13 +599,13 @@ function projectPolicy(node: PolicyNode): OdrlPolicy | undefined {
   const delegatedUnder = [...parents][0];
 
   const permissions = [...node.permissions]
-    .map((r) => projectRule(r, "permission"))
+    .map((r) => projectRule(r, "permission", allowedActionIris))
     .filter((r): r is OdrlRule => r !== undefined);
   const prohibitions = [...node.prohibitions]
-    .map((r) => projectRule(r, "prohibition"))
+    .map((r) => projectRule(r, "prohibition", allowedActionIris))
     .filter((r): r is OdrlRule => r !== undefined);
   const obligations = [...node.obligations]
-    .map((d) => projectDuty(d))
+    .map((d) => projectDuty(d, allowedActionIris))
     .filter((d): d is OdrlDuty => d !== undefined);
 
   return {
@@ -609,8 +623,12 @@ function projectPolicy(node: PolicyNode): OdrlPolicy | undefined {
 }
 
 /** Project a {@link RuleNode} to a plain {@link OdrlRule}, or `undefined` if malformed. */
-function projectRule(node: RuleNode, type: RuleType): OdrlRule | undefined {
-  const action = actionOf(node.actions);
+function projectRule(
+  node: RuleNode,
+  type: RuleType,
+  allowedActionIris: readonly string[],
+): OdrlRule | undefined {
+  const action = actionOf(node.actions, allowedActionIris);
   if (action === undefined) {
     return undefined;
   }
@@ -622,7 +640,9 @@ function projectRule(node: RuleNode, type: RuleType): OdrlRule | undefined {
     .filter((c): c is OdrlConstraint => c !== undefined);
   const duties =
     type === "permission"
-      ? [...node.duties].map((d) => projectDuty(d)).filter((d): d is OdrlDuty => d !== undefined)
+      ? [...node.duties]
+          .map((d) => projectDuty(d, allowedActionIris))
+          .filter((d): d is OdrlDuty => d !== undefined)
       : [];
 
   const id = node.termType === "NamedNode" ? node.value : undefined;
@@ -639,8 +659,8 @@ function projectRule(node: RuleNode, type: RuleType): OdrlRule | undefined {
 }
 
 /** Project a {@link DutyNode} to a plain {@link OdrlDuty}, or `undefined`. */
-function projectDuty(node: DutyNode): OdrlDuty | undefined {
-  const action = actionOf(node.actions);
+function projectDuty(node: DutyNode, allowedActionIris: readonly string[]): OdrlDuty | undefined {
+  const action = actionOf(node.actions, allowedActionIris);
   if (action === undefined) {
     return undefined;
   }
@@ -726,12 +746,19 @@ function coerceValue(value: string, datatype: string | undefined, isIri: boolean
 /** Retain the existing preference for a recognised action when several are supplied. */
 function actionOf(
   actions: ReadonlySet<{ termType: string; value: string }>,
+  allowedActionIris: readonly string[],
 ): OdrlAction | undefined {
   let extension: OdrlAction | undefined;
   for (const action of actions) {
     if (action.termType !== "NamedNode") continue;
     if (Object.hasOwn(IRI_TO_ACTION, action.value)) return IRI_TO_ACTION[action.value];
-    if (extension === undefined && absoluteAction(action.value)) extension = action.value;
+    if (
+      extension === undefined &&
+      allowedActionIris.includes(action.value) &&
+      absoluteAction(action.value)
+    ) {
+      extension = action.value;
+    }
   }
   return extension;
 }

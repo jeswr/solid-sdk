@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // Express + parse round-trip tests: build an ODRL policy, serialise to Turtle /
 // JSON-LD, parse it back, and assert the policy fields survive. Also asserts the
@@ -236,7 +237,7 @@ describe("policyFromRdf edge cases", () => {
     expect(parsed?.type).toBe("Set");
   });
 
-  it("retains the IRI of a profile action concept", async () => {
+  it("skips rules with unknown action IRIs by default", async () => {
     // A hand-written graph whose rule action is not a known ODRL action.
     const ttl = `
       @prefix odrl: <${ODRL}> .
@@ -244,9 +245,7 @@ describe("policyFromRdf edge cases", () => {
     `;
     const parsed = await parsePolicy(ttl);
     expect(parsed?.id).toBe("https://x/p");
-    expect(parsed?.permissions).toEqual([
-      { type: "permission", action: "https://x/unknownAction", target: "https://x/r" },
-    ]);
+    expect(parsed?.permissions).toBeUndefined();
   });
 
   it("policyFromRdf reads from an already-parsed dataset", async () => {
