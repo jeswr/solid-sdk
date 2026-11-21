@@ -52,6 +52,8 @@ Preserve ETags and conditional mutation headers. Use PodReadOptions.accept for R
 reads; generic byte reads must retain the backend default representation.
 
 Use fetch-rdf and typed wrappers for RDF reads, rdf-serialize for serialization.
+On a PodPort-only server, register chat tools only when the port has `head` and a WebID;
+discover chat ACLs through `PodPort.head` with the same scope/shape checks as the fetch path.
 Chat saves explicitly use channel `mcp` and scope source IDs with
 `chatConversationId(id, account)` before saving. Validate optional account inputs
 with `normalizeChatAccount`; use ChatWriter for label redaction and immutable
