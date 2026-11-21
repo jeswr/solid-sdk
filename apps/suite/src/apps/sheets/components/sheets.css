@@ -477,3 +477,65 @@
   display: grid;
   gap: var(--space-3);
 }
+
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.sht-history-dialog[data-slot="dialog-content"] {
+  width: min(1100px, calc(100vw - var(--space-6)));
+  max-width: 1100px;
+  align-content: start;
+  max-height: calc(100dvh - var(--space-6));
+  overflow: auto;
+}
+@media (min-width: 640px) {
+  .sht-history-dialog[data-slot="dialog-content"] {
+    top: 0;
+    right: 0;
+    left: auto;
+    height: 100dvh;
+    max-height: 100dvh;
+    translate: none;
+    transform: none;
+    border-radius: 0;
+  }
+}
+.sht-history-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(0, 3fr);
+  gap: var(--space-4);
+}
+.sht-version-list {
+  list-style: none;
+  padding: 0;
+  max-height: 50vh;
+  overflow: auto;
+}
+.sht-version-list button {
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-2);
+  text-align: left;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+}
+.sht-version-list button[aria-current="true"] {
+  background: var(--muted);
+}
+.sht-version-grid {
+  height: 50vh;
+  min-height: 240px;
+}
+.sht-version-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-block: var(--space-3);
+}
+@media (max-width: 639px) {
+  .sht-history-layout {
+    grid-template-columns: 1fr;
+  }
+  .sht-version-list {
+    max-height: 25vh;
+  }
+}

@@ -31,7 +31,7 @@ import { ArrowLeft, ChevronDown, Table2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import { useWorkbook } from "../hooks/use-workbook";
@@ -59,6 +59,10 @@ import "@univerjs/preset-sheets-data-validation/lib/index.css";
 
 const ChartWorkspace = lazy(() =>
   import("./chart-workspace").then((module) => ({ default: module.ChartWorkspace })),
+);
+
+const SheetVersionHistory = lazy(() =>
+  import("./version-history").then((module) => ({ default: module.SheetVersionHistory })),
 );
 
 declare global {
@@ -212,13 +216,20 @@ export function SheetEditor({ container }: { container: string }) {
   const fileTrigger = useRef<HTMLButtonElement>(null);
   const loadTheirVersion = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  const [dialog, setDialog] = useState<"import" | "delete" | "share">();
+  const [dialog, setDialog] = useState<
+    "import" | "delete" | "share" | "history" | "name-version"
+  >();
   const [mode, setMode] = useState<"new-sheet" | "replace-active">("new-sheet");
   const [csvFile, setCsvFile] = useState<File>();
   const [importError, setImportError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [returnConflictFocus, setReturnConflictFocus] = useState(false);
   const [grid, setGrid] = useState<{ container: string; revision: number }>();
+  const history = useMemo(
+    () => (state.workbook?.container === container ? service.versions?.(container) : undefined),
+    [service, container, state.workbook?.container],
+  );
+  const viewingHistory = dialog === "history" || dialog === "name-version";
   if (state.workbook?.container === container && grid?.container !== container)
     setGrid({ container, revision: 0 });
   useEffect(() => {
@@ -238,6 +249,14 @@ export function SheetEditor({ container }: { container: string }) {
     } finally {
       setBusy(false);
     }
+  };
+  const reloadGrid = async (restored?: Snapshot) => {
+    const loaded: SnapshotSaved = (snapshot, revision) => engine.current?.load(snapshot, revision);
+    if (restored) await state.restore(restored, loaded);
+    else await state.reload(loaded);
+    setChartRevision((revision) => revision + 1);
+    if (!engine.current)
+      setGrid((current) => ({ container, revision: (current?.revision ?? 0) + 1 }));
   };
   const download = () => {
     if (!engine.current) return;
@@ -365,12 +384,24 @@ export function SheetEditor({ container }: { container: string }) {
               >
                 Make a copy
               </DropdownMenuItem>
+              <DropdownMenuItem disabled={!history} onSelect={() => setDialog("history")}>
+                Version history
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!history || state.readOnly}
+                onSelect={() => setDialog("name-version")}
+              >
+                Name current version
+              </DropdownMenuItem>
               <DropdownMenuItem disabled={state.readOnly} onSelect={() => setDialog("delete")}>
                 Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <DataMenus engine={chartEngine} locked={state.readOnly || commentsLoading} />
+          <DataMenus
+            engine={chartEngine}
+            locked={state.readOnly || commentsLoading || viewingHistory}
+          />
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -417,14 +448,14 @@ export function SheetEditor({ container }: { container: string }) {
               onSaved={state.onSaved}
               engineRef={engine}
               onReady={setChartEngine}
-              readOnly={state.readOnly}
+              readOnly={state.readOnly || viewingHistory}
             />
             <Suspense fallback={null}>
               <ChartWorkspace
                 key={chartRevision}
                 engine={chartEngine}
                 snapshot={state.workbook.snapshot}
-                readOnly={state.readOnly || commentsLoading}
+                readOnly={state.readOnly || commentsLoading || viewingHistory}
               />
             </Suspense>
           </>
@@ -435,6 +466,26 @@ export function SheetEditor({ container }: { container: string }) {
           </div>
         )}
       </div>
+      {viewingHistory && history && (
+        <Suspense fallback={<p role="status">Loading version history…</p>}>
+          <SheetVersionHistory
+            history={history}
+            readOnly={state.readOnly}
+            namingCurrent={dialog === "name-version"}
+            close={() => setDialog(undefined)}
+            prepare={async () => {
+              await state.flush();
+              const pending = pendingSaves.get(container);
+              if (pending && pending.status !== "saved") throw new Error("Save changes first");
+            }}
+            restore={reloadGrid}
+            copy={async (snapshot) => {
+              const copy = await service.create({ title: `${title} (copy)`, snapshot });
+              router.push(workbookHref(copy.container));
+            }}
+          />
+        </Suspense>
+      )}
       {dialog === "share" && (
         <ShareWorkbook container={container} title={title} onClose={() => setDialog(undefined)} />
       )}
@@ -573,15 +624,7 @@ export function SheetEditor({ container }: { container: string }) {
               onClick={(event) => {
                 event.preventDefault();
                 void action(async () => {
-                  await state.reload((snapshot, revision) =>
-                    engine.current?.load(snapshot, revision),
-                  );
-                  setChartRevision((revision) => revision + 1);
-                  if (!engine.current)
-                    setGrid((current) => ({
-                      container,
-                      revision: (current?.revision ?? 0) + 1,
-                    }));
+                  await reloadGrid();
                 });
               }}
             >

@@ -104,6 +104,12 @@ export function useWorkbook(container: string) {
     onSaved,
     rename: (title: string) => writer.current?.rename(title),
     reload,
+    restore: async (snapshot: Snapshot, loaded?: SnapshotSaved) => {
+      if (!writer.current || writer.current.workbook.readOnly)
+        throw new Error("Write access required");
+      await writer.current.restore(snapshot);
+      await reload(loaded);
+    },
     retry: (force = false) => writer.current?.retry(force),
     flush: () => writer.current?.flush(),
     discard: () => writer.current?.discard(),

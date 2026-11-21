@@ -129,6 +129,8 @@ export interface CreateFromCsvInput {
 }
 
 export interface WorkbookService {
+  /** Pod-backed JSON snapshots, independent of the workbook RDF model. */
+  versions?(container: string): import("./versions").VersionHistory;
   /** `<storage>/sheets/` */
   readonly root: string;
   /** Workbooks in `root` (direct child containers with a readable index), newest first. */
@@ -159,7 +161,7 @@ export interface WorkbookService {
     container: string,
     snapshot: Snapshot,
     base: WorkbookVersion,
-    options?: { force?: boolean; title?: string },
+    options?: { force?: boolean; title?: string; snapshotCurrent?: boolean },
   ): Promise<SaveResult>;
   /** Updates only the title in `index.ttl` (If-Match). */
   rename(container: string, title: string, base: WorkbookVersion): Promise<SaveResult>;
