@@ -104,7 +104,7 @@ export function createSequenceMatcher(
           event.meta === (stroke.meta || (stroke.cmd && mac)) &&
           event.ctrl === (stroke.ctrl || (stroke.cmd && !mac)) &&
           event.alt === stroke.alt &&
-          (stroke.key === "?" || event.shift === stroke.shift)
+          (["?", "#"].includes(stroke.key) || event.shift === stroke.shift)
         );
       };
       let matching = candidates.filter(matches);
