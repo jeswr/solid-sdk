@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import { toast } from "@jeswr/suite-ui";
 import {
@@ -13,14 +14,15 @@ import {
 } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
 import { ensureSample } from "../demo/sample";
-import { type AccountSummary, listAccounts } from "../lib/data/accounts";
-import { type BudgetFile, loadBudgetHistory } from "../lib/data/budget";
-import { loadCategories } from "../lib/data/categories";
+import type { AccountSummary } from "../lib/data/accounts";
+import type { BudgetFile } from "../lib/data/budget";
 import { moneyRoot } from "../lib/data/container";
-import { allTransactions, type LedgerFilters, ledgerRows } from "../lib/data/ledger";
-import { loadRules, RulesFileError, type SavedRule } from "../lib/data/rules";
+import { type LedgerFilters, ledgerRows } from "../lib/data/ledger";
+import type { SavedRule } from "../lib/data/rules";
 import type { Category, Range, Transaction } from "../lib/model";
+import { type ReadProblem, readMoneySnapshot } from "./read-snapshot";
 export interface Snapshot {
+  problems?: ReadProblem[];
   accounts: AccountSummary[];
   transactions: Transaction[];
   categories: Category[];
@@ -72,27 +74,12 @@ export function MoneyProvider({ session, children }: { session: PodSession; chil
     setSaving(pending.current.length > 0);
   }, []);
   const read = useCallback(async () => {
-    const accounts = await listAccounts(session, today);
-    const transactions = await allTransactions(session);
-    const result = await loadCategories(session);
+    const result = await readMoneySnapshot(session, today);
     if (result.upgraded && !upgraded.current) {
       upgraded.current = true;
       toast("Upgraded your categories. Changes will be saved with your next edit.");
     }
-    // A broken rules file must not stop the rest of Money from loading.
-    const rules = await loadRules(session).then(
-      (file) => ({ rules: file.rules, rulesProblem: undefined }),
-      (failure: unknown) => ({
-        rules: [],
-        rulesProblem:
-          failure instanceof RulesFileError ? ("invalid" as const) : ("unavailable" as const),
-      }),
-    );
-    const budgets = await loadBudgetHistory(session).then(
-      (budgets) => ({ budgets, budgetProblem: undefined }),
-      (budgetProblem: unknown) => ({ budgets: [], budgetProblem }),
-    );
-    return { accounts, transactions, categories: result.categories, ...rules, ...budgets };
+    return result;
   }, [session, today]);
   const refresh = useCallback(async () => {
     const request = ++generation.current;
@@ -105,14 +92,12 @@ export function MoneyProvider({ session, children }: { session: PodSession; chil
       await ensureSample(session);
       const next = await read();
       if (!alive.current || request !== generation.current || pending.current.length) return;
-      baseline.current = next;
+      baseline.current = retainUnread(next, baseline.current);
       paint();
       setError(undefined);
       setStatus(next.accounts.length ? "ready" : "empty");
     } catch (failure) {
       if (alive.current && request === generation.current && !pending.current.length) {
-        baseline.current = empty;
-        paint();
         setError(failure);
         setStatus("error");
       }
@@ -171,7 +156,7 @@ export function MoneyProvider({ session, children }: { session: PodSession; chil
         try {
           const next = await read();
           if (alive.current && request === generation.current) {
-            baseline.current = next;
+            baseline.current = retainUnread(next, baseline.current);
             setStatus(baseline.current.accounts.length ? "ready" : "empty");
             setError(undefined);
           }
@@ -218,5 +203,27 @@ export function useTransactions(
       account && range.start <= range.end
         ? ledgerRows(account, money.transactions, range, filters, money.categories)
         : [],
+  };
+}
+
+/** Keep the last readable version visible until the failed document can be re-read. */
+function retainUnread(next: Snapshot, previous: Snapshot): Snapshot {
+  const failed = (id: string) => next.problems?.some((problem) => problem.url === id.split("#")[0]);
+  return {
+    ...next,
+    accounts: [...next.accounts, ...previous.accounts.filter((row) => failed(row.id))],
+    transactions: [...next.transactions, ...previous.transactions.filter((row) => failed(row.id))],
+    budgets: [
+      ...next.budgets,
+      ...previous.budgets.filter(
+        (row) =>
+          next.budgetProblem ||
+          next.problems?.some((problem) => problem.url.endsWith(`/budgets/${row.month}.ttl`)),
+      ),
+    ],
+    categories: next.problems?.some((problem) => problem.kind === "categories")
+      ? previous.categories
+      : next.categories,
+    rules: next.rulesProblem ? previous.rules : next.rules,
   };
 }

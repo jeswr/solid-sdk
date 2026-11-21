@@ -1,6 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
-import { Button, EmptyState, IconButton, Input } from "@jeswr/suite-ui";
+import { Button, EmptyState, ErrorState, IconButton, Input } from "@jeswr/suite-ui";
 import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -17,6 +18,7 @@ import {
 } from "../lib/data/rules";
 import { useMoney } from "../state/money-context";
 import { CategorySelect, Modal, MoneySelect } from "./money-forms";
+import { focusMoneyHeading } from "./money-states";
 
 const MATCH_LABELS: Record<RuleMatch, string> = {
   contains: "contains",
@@ -124,19 +126,41 @@ export function RulesScreen() {
         <div className="mon-rules-warning" role="status">
           {money.rulesProblem === "invalid" ? (
             <>
-              <p>
-                Your saved rules couldn&apos;t be read, so imports use category names instead. Start
-                again with no rules to add new ones.
-              </p>
-              <Button variant="outline" disabled={money.saving} onClick={() => setResetting(true)}>
-                Start again with no rules
-              </Button>
+              {!money.rules.length && <h2>Couldn't read your rules</h2>}
+              <ErrorState error="unknown">
+                <p>
+                  Your saved rules couldn&apos;t be read, so imports use category names instead.
+                  Start again with no rules to add new ones.
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    await money.refresh();
+                    focusMoneyHeading();
+                  }}
+                >
+                  Retry
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={money.saving}
+                  onClick={() => setResetting(true)}
+                >
+                  Start again with no rules
+                </Button>
+              </ErrorState>
             </>
           ) : (
             <>
               <p>Your rules couldn&apos;t be loaded. Imports use category names until they are.</p>
-              <Button variant="outline" onClick={() => void money.refresh()}>
-                Try again
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  await money.refresh();
+                  focusMoneyHeading();
+                }}
+              >
+                Retry
               </Button>
             </>
           )}
@@ -154,7 +178,7 @@ export function RulesScreen() {
               </Button>
             }
           />
-        ) : money.rulesProblem ? null : !money.rules.length ? (
+        ) : money.rulesProblem && !money.rules.length ? null : !money.rules.length ? (
           <EmptyState
             title="Sort transactions automatically"
             body="For example: when the description contains “Tesco”, file it under Groceries. Without rules, imports look for category names in descriptions."
