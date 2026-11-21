@@ -247,7 +247,7 @@ export async function discoverNoteShares(
   urls: readonly string[],
   session: SharingSession,
   signal: AbortSignal,
-  found: (url: string, shared: boolean) => void,
+  found: (url: string, shared: boolean, collaborators: string[]) => void,
   adapter: SharingAdapter = new WacSharingAdapter({
     ...session,
     fetch: wacOnlyFetch(session.fetch),
@@ -258,11 +258,14 @@ export async function discoverNoteShares(
       urls.slice(offset, offset + 4).map(async (url) => {
         try {
           const state = await adapter.load(url, signal);
+          const collaborators = state.people
+            .filter((person) => person.webId !== session.webId)
+            .map((person) => person.webId);
           if (!signal.aborted)
             found(
               url,
-              state.general.mode !== "restricted" ||
-                state.people.some((person) => person.webId !== session.webId),
+              state.general.mode !== "restricted" || collaborators.length > 0,
+              collaborators,
             );
         } catch {
           // Missing, inherited, unreadable or unsupported ACLs are unknown.

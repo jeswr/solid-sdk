@@ -10,6 +10,7 @@ import { decodeRef } from "@/lib/refs";
 import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import type { NoteFailure, StoredNote } from "../lib/model/store";
+import { noteSearchHref, parseNoteSearch } from "../lib/search-filters";
 import { noteLink } from "../lib/shared-note";
 import { NotesProvider, useNotesContext } from "../state/notes-context";
 import { useNoteReminders } from "../state/reminders";
@@ -22,7 +23,7 @@ import { NotesSidebar } from "./sidebar";
 const purged = new Set<string>();
 function NotesRoutes() {
   const pathname = useRoutePathname();
-  const query = useSearchParams().get("q") ?? "";
+  const filters = parseNoteSearch(useSearchParams());
   const { notes, active, archived, trashed } = useNotesContext();
   const router = useRouter();
   const reference = pathname.startsWith("/notes/n/")
@@ -82,13 +83,15 @@ function NotesRoutes() {
                     : "active"
         }
         {...(label === undefined ? {} : { label })}
-        query={query}
+        filters={filters}
       />
       {reference && selected && !invalid && <NoteDialog key={reference} note={selected} />}
     </>
   );
 }
 function NotesChrome({ children }: { children: ReactNode }) {
+  const filters = parseNoteSearch(useSearchParams());
+  const router = useRouter();
   const { store, session, refresh, prefs, updatePrefs, notes, openNote } = useNotesContext();
   const [purgeFailures, setPurgeFailures] = useState<NoteFailure[]>([]);
   useNoteReminders(
@@ -119,7 +122,13 @@ function NotesChrome({ children }: { children: ReactNode }) {
     <SuiteFrame
       app="notes"
       sidebar={<NotesSidebar />}
-      search={{ placeholder: "Search notes", action: "/notes/search", scopeLabel: "in Notes" }}
+      search={{
+        placeholder: "Search notes",
+        action: "/notes/search",
+        scopeLabel: "in Notes",
+        query: filters.q,
+        onSubmit: (q) => router.push(noteSearchHref({ ...filters, q })),
+      }}
       actions={
         <IconButton
           label={prefs.view === "grid" ? "List view" : "Grid view"}

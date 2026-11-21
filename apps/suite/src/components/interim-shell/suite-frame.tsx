@@ -38,7 +38,13 @@ export interface SuiteFrameProps {
   /** Top bar trailing actions. */
   actions?: ReactNode;
   /** Search placeholder and target (`?q=` is appended). */
-  search?: { placeholder: string; action: string; scopeLabel: string; query?: string };
+  search?: {
+    placeholder: string;
+    action: string;
+    scopeLabel: string;
+    query?: string;
+    onSubmit?: (query: string) => void;
+  };
   /** Details shown in a pane at ≥1024px and a modal Sheet below that. */
   details?: ReactNode;
   onDetailsClose?: () => void;
@@ -83,7 +89,8 @@ export function SearchBox({ search }: { search: NonNullable<SuiteFrameProps["sea
         onSubmit={(event) => {
           event.preventDefault();
           const q = value.trim();
-          router.push(q ? `${search.action}?q=${encodeURIComponent(q)}` : search.action);
+          if (search.onSubmit) search.onSubmit(q);
+          else router.push(q ? `${search.action}?q=${encodeURIComponent(q)}` : search.action);
         }}
       >
         <Search aria-hidden="true" size={18} strokeWidth={1.75} />
