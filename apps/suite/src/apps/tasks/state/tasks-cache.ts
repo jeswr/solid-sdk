@@ -139,6 +139,11 @@ export class TasksCache {
   /** Failed commit-time reads block queued completed deletes until an explicit strict refresh. */
   private completedDeletionBlocked = true;
   private undoOperations = new WeakMap<CompletionPlan, () => Promise<boolean | undefined>>();
+  private readonly offlineReceipts = new Map<string, string>();
+  /** Only an acknowledged create may replace an offline validator in an undo ownership check. */
+  readonly confirmOfflineWrite = (url: string, local: string, remote: string | null) => {
+    if (remote) this.offlineReceipts.set(`${url}\u0000${local}`, remote);
+  };
   private completionCopies = new WeakMap<CompletionPlan, StoredTask>();
   private undoRepairs = new Map<string, UndoRepair>();
   private sharedProjects = new Map<string, string>();
@@ -1260,7 +1265,8 @@ export class TasksCache {
     };
     const copyMatches = (copy: StoredTask) =>
       !!reservedCopy?.etag &&
-      copy.etag === reservedCopy.etag &&
+      copy.etag ===
+        (this.offlineReceipts.get(`${copy.url}\u0000${reservedCopy.etag}`) ?? reservedCopy.etag) &&
       isomorphic([...copy.dataset], [...reservedCopy.dataset]);
     const forward = (task: TaskItem) => {
       if (plan.kind !== "advance") return;
