@@ -1,14 +1,10 @@
-// AUTHORED-BY Codex GPT-6
-// AUTHORED-BY Claude Fable 5
-// Entry point: register the web components, then EITHER mount the ?demo-gated
-// read-only demo (the real views over an inert in-browser fixture pod — no
-// auth, no network, no writes) OR build the real LoginController
-// (reactive-auth + silent session restore) and mount the app. Demo mode is
-// reachable ONLY via the ?demo query param; the real path is unchanged.
-import "@jeswr/solid-elements";
+// AUTHORED-BY GPT-6.1 Sol
+// Mount either the inert ?demo fixture or the real app with one page-lifetime pod-auth core.
+
+import { SessionProvider } from "@jeswr/app-session/react";
 import { ThemeProvider } from "@jeswr/app-shell";
 import { createRoot } from "react-dom/client";
-import { buildController } from "./auth/controller.js";
+import { APP_NAME, getPodAuth, legacyCredentials } from "./auth/pod-auth.js";
 import { demoViewFromSearch } from "./demo/gate.js";
 import { App } from "./ui/App.jsx";
 import "./styles.css";
@@ -33,7 +29,14 @@ if (demoView !== null) {
   // there is never a double wrap.
   root.render(
     <ThemeProvider storageKey="access-manager:app-shell-theme">
-      <App controller={buildController()} />
+      <SessionProvider
+        getPodAuth={getPodAuth}
+        appName={APP_NAME}
+        dev={import.meta.env.DEV}
+        legacyCredentials={legacyCredentials}
+      >
+        <App />
+      </SessionProvider>
     </ThemeProvider>,
   );
 }

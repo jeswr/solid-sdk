@@ -7,7 +7,7 @@
   "author": "Claude Fable 5 (@jeswr PSS agent)",
   "type": "module",
   "engines": {
-    "node": ">=20.12"
+    "node": ">=24.5"
   },
   "scripts": {
     "dev": "vite",
@@ -22,26 +22,21 @@
     "gate": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
+    "@jeswr/app-session": "workspace:*",
     "@jeswr/app-shell": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/pod-access": "workspace:*",
-    "@jeswr/solid-elements": "workspace:*",
     "@jeswr/solid-odrl": "workspace:*",
-    "@jeswr/solid-session-restore": "workspace:*",
     "@jeswr/suite-vocab": "workspace:*",
-    "@lit/react": "^1.0.8",
     "@rdfjs/wrapper": "0.34.0",
     "@solid/object": "0.6.0",
-    "@solid/reactive-authentication": "0.1.5",
-    "dpop": "2.1.1",
-    "lit": "^3.3.3",
     "n3": "2.0.3",
-    "oauth4webapi": "3.8.6",
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.0",
+    "@jeswr/pod-auth": "workspace:*",
     "@rdfjs/types": "2.0.1",
     "@tailwindcss/vite": "4.3.1",
     "@testing-library/jest-dom": "6.9.1",

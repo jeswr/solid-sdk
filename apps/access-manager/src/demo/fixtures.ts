@@ -317,7 +317,7 @@ export function demoFixtures(): Record<string, string> {
 
 /**
  * The demo session: Ada's WebID over the read-only fixture pod. The same
- * `{ webId, fetch }` seam the real LoginController fills — with a fetch that
+ * `{ webId, fetch }` seam the real pod-auth fills — with a fetch that
  * can only read fixtures and throws on any write.
  */
 export function createDemoSession(): { session: Session; pod: DemoPod } {

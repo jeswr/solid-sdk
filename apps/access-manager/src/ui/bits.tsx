@@ -5,6 +5,7 @@
 // agent labels (profile-resolved names), mode badges, and the public-access flag.
 
 import { useEffect, useRef, useState } from "react";
+import { usePublicFetch } from "../auth/SessionContext.js";
 import type { WacMode } from "../lib/acl.js";
 import { AUTHENTICATED_AGENT, PUBLIC_AGENT } from "../lib/grants.js";
 import type { SolidFetch } from "../lib/http.js";
@@ -79,17 +80,18 @@ export function useOptimistic(): {
 
 /** A human label for an agent line (public/authenticated sentinels + WebIDs). */
 export function AgentLabel({ agent, fetchFn }: { agent: string; fetchFn: SolidFetch }) {
+  const profileFetch = usePublicFetch(fetchFn);
   const [name, setName] = useState<string | null>(null);
   useEffect(() => {
     if (agent === PUBLIC_AGENT || agent === AUTHENTICATED_AGENT) return;
     let cancelled = false;
-    resolveAgentDisplay(agent, fetchFn).then((d) => {
+    resolveAgentDisplay(agent, profileFetch).then((d) => {
       if (!cancelled && d.name !== agent) setName(d.name);
     });
     return () => {
       cancelled = true;
     };
-  }, [agent, fetchFn]);
+  }, [agent, profileFetch]);
 
   if (agent === PUBLIC_AGENT) {
     return (
