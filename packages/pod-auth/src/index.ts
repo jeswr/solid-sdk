@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { type Identity as Claims, sameIssuer } from "@jeswr/reactive-authentication";
 import { createAgentAuth } from "./agent.js";
+import { ResourceGrantError } from "./grants.js";
 import { StorageFailure } from "./kv.js";
 import { secureUrl, validateOptions } from "./options.js";
 import { AmbiguousIssuerError, createProviders } from "./providers.js";
@@ -16,10 +18,13 @@ import type {
 } from "./types.js";
 
 export { IssuerNotAuthorizedError } from "@jeswr/reactive-authentication";
+export type { ResourceGrant, ResourceGrantRefusal } from "./grants.js";
+export { ResourceGrantError, withinResourceGrants } from "./grants.js";
 export type {
   AuthEvent,
   AuthEventType,
   CidSubject,
+  GrantResourceOptions,
   Identity,
   KvStore,
   LoginHint,
@@ -61,6 +66,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
           identity: snapshot(),
           timestamp: (options.clock ?? Date.now)(),
           ...(url === undefined ? {} : { url }),
+          ...(type === "grants" ? { grants: providers.boundary.grants() } : {}),
         });
       } catch {
         /* Observers cannot interrupt credential policy or other observers. */
@@ -135,6 +141,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     lifetime.signal,
   );
   let observedFence = providers.fence.signal;
+  providers.boundary.onGrants(() => emit("grants"));
   /**
    * Ends a session an abandoned login may hold. A logout since the attempt began already superseded the
    * fence, so the attempt cannot commit, and a second purge could remove another tab's newer session.
@@ -188,6 +195,19 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     }
     return false;
   };
+  /** Whether a request starts inside a grant and outside own storage, following redirects. */
+  const confined = (input: RequestInfo | URL, init?: RequestInit) => {
+    const mode = init?.redirect ?? (input instanceof Request ? input.redirect : "follow");
+    if (mode !== "follow") return false;
+    try {
+      // A body-free Request resolves the URL exactly as the engine will, without reading a body.
+      return providers.boundary.confined(
+        new Request(input instanceof Request ? input.url : input).url,
+      );
+    } catch {
+      return false;
+    }
+  };
   const api: PodAuth = {
     fetch: async (input, init) => {
       lifetime.signal.throwIfAborted();
@@ -199,6 +219,9 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       try {
         const response = await providers.manager.fetch(input, {
           ...init,
+          // A request into a grant never follows a redirect, natively or after a 401, so a grant's
+          // server cannot steer it (with the account's credentials) into the user's own storage.
+          ...(confined(input, init) ? { redirect: "error" as const } : {}),
           signal: AbortSignal.any([lifetime.signal, ...(signal == null ? [] : [signal])]),
         });
         if (response.status === 401) await checkExpiry(started);
@@ -384,6 +407,43 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       pending = { key, promise, cancellable: abort !== undefined };
       return promise;
     },
+    grantResource: async (url, grantOptions) => {
+      // Transient activation is read before any await; it is what a consent click provides.
+      const activation = (globalThis.navigator as { userActivation?: { isActive: boolean } })
+        ?.userActivation;
+      if (activation !== undefined && !activation.isActive)
+        throw new ResourceGrantError("no-user-activation");
+      lifetime.signal.throwIfAborted();
+      const signal = AbortSignal.any([
+        lifetime.signal,
+        ...(grantOptions?.signal === undefined ? [] : [grantOptions.signal]),
+      ]);
+      signal.throwIfAborted();
+      const started = epoch;
+      if (current === null || expired || loggingOut !== undefined)
+        throw new ResourceGrantError("signed-out");
+      // Upgrades refresh the snapshot object; the account is what must stay the same.
+      const account = (identity: Identity | null) =>
+        identity === null
+          ? null
+          : JSON.stringify([identity.issuer, identity.subject, identity.webId]);
+      const selected = account(current);
+      return await providers.grant(
+        url,
+        current.issuer,
+        signal,
+        options.clock ?? Date.now,
+        () =>
+          account(current) === selected &&
+          epoch === started &&
+          !expired &&
+          loggingOut === undefined,
+      );
+    },
+    revokeResource: (grant) =>
+      providers.boundary.revoke(typeof grant === "string" ? grant : grant.root),
+    grants: () => providers.boundary.grants(),
+    isWithinGrantedScope: (url) => providers.boundary.withinGrants(url),
     on: (event, handler) => {
       let handlers = listeners.get(event);
       if (!handlers) {
