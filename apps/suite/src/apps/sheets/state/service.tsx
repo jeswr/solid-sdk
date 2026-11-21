@@ -20,6 +20,7 @@ export function WorkbookServiceProvider({
         publicFetch: session.mode === "demo" ? session.fetch : session.publicFetch,
         podRoot: session.storageUrl,
         webId: session.webId,
+        subscribe: session.subscribe,
       }),
     [session],
   );

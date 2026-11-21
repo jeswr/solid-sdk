@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import type { IWorkbookData } from "@univerjs/core";
 import type { FormulaDataModel } from "@univerjs/preset-sheets-core";
 import type { IFindQuery, IFindReplaceService } from "@univerjs/preset-sheets-find-replace";
 import { describe, expect, it, vi } from "vitest";
+import * as Y from "yjs";
 
 const headless = await vi.hoisted(async () => {
   const { createRequire } = await import("node:module");
@@ -118,6 +120,13 @@ vi.mock("@univerjs/preset-sheets-find-replace", () => ({
 }));
 
 import { readCharts, withCharts } from "../src/apps/sheets/lib/charts/spec";
+import {
+  axes,
+  LOCAL_ORIGIN,
+  seedSheets,
+  sheetStates,
+} from "../src/apps/sheets/lib/collaboration/model";
+import type { WorkbookCollaboration } from "../src/apps/sheets/lib/collaboration/persistence";
 import { currentCommentAnchor } from "../src/apps/sheets/lib/comments/anchors";
 import type { MountEngineOptions } from "../src/apps/sheets/lib/contract";
 import { mountUniver } from "../src/apps/sheets/lib/engine/univer";
@@ -170,6 +179,327 @@ async function find(f: Awaited<ReturnType<typeof mount>>, query: Partial<IFindQu
   if (!model) throw new Error("Missing find model");
   return model;
 }
+
+async function peers(data = snapshot("Name,Score\nZoe,3\nAmy,1\nBob,2", true), readOnly = false) {
+  const a = new Y.Doc();
+  seedSheets(a, data);
+  const b = new Y.Doc();
+  Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
+  const left = await mount(structuredClone(data), {
+    collaboration: { doc: a, readOnly: false } as WorkbookCollaboration,
+  });
+  const right = await mount(structuredClone(data), {
+    readOnly,
+    collaboration: { doc: b, readOnly } as WorkbookCollaboration,
+  });
+  const sync = () => {
+    Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
+    Y.applyUpdate(a, Y.encodeStateAsUpdate(b));
+  };
+  const dispose = () => {
+    left.engine.dispose();
+    right.engine.dispose();
+    a.destroy();
+    b.destroy();
+  };
+  return { left, right, a, b, sync, dispose };
+}
+
+function peerAxes(doc: Y.Doc) {
+  const state = sheetStates(doc).get("data");
+  if (!state) throw new Error("Missing peer sheet");
+  return axes(state);
+}
+
+it("clears a viewer's saved filter in exported snapshots after a remote structural change", async () => {
+  const saved = await mount();
+  await saved.engine.toggleFilter?.();
+  saved
+    .sheet()
+    .getFilter()
+    ?.setColumnFilterCriteria(0, {
+      colId: 0,
+      filters: { filters: ["Amy"] },
+    });
+  saved.current.univerAPI
+    .getActiveWorkbook()
+    ?.getSheetBySheetId("other")
+    ?.getRange("A1:A2")
+    .createFilter()
+    ?.setColumnFilterCriteria(0, {
+      colId: 0,
+      filters: { filters: ["Two"] },
+    });
+  const data = saved.engine.snapshot();
+  saved.engine.dispose();
+  const p = await peers(data, true);
+  try {
+    expect(p.right.sheet().getFilter()?.getFilteredOutRows()).toEqual([1, 3]);
+    expect(
+      await p.left.commands.executeCommand("sheet.command.remove-row", {
+        unitId: "original",
+        subUnitId: "data",
+        range: { startRow: 2, endRow: 2, startColumn: 0, endColumn: 1 },
+      }),
+    ).toBe(true);
+    p.sync();
+    expect(p.right.sheet().getFilter()).toBeNull();
+    const snapshot = p.right.engine.snapshot();
+    expect(JSON.stringify(snapshot.resources)).not.toContain("Amy");
+    expect(JSON.stringify(snapshot.resources)).toContain("Two");
+    p.right.engine.load(snapshot);
+    expect(p.right.sheet().getFilter()).toBeNull();
+    p.right.engine.setReadOnly(false);
+    expect(p.right.sheet().getFilter()).toBeNull();
+  } finally {
+    p.dispose();
+  }
+});
+
+it.each([
+  "range",
+  "sheet",
+] as const)("collaborates %s sorts without formulas and keeps no-op sorts off earlier undo steps", async (scope) => {
+  const p = await peers(snapshot("Name,Note\nZoe,Keep\nAmy\nBob,Tail"));
+  const original = p.left.engine.exportCsv();
+  const remoteWrites = vi.fn();
+  p.b.on("update", (_update, origin) => {
+    if (origin === LOCAL_ORIGIN) remoteWrites();
+  });
+  try {
+    const sort = () =>
+      p.left.engine.sortRange?.({ scope, column: 0, ascending: true, header: true });
+    expect(sort()).toEqual({ status: "sorted" });
+    p.sync();
+    const sorted = "Name,Note\r\nAmy,\r\nBob,Tail\r\nZoe,Keep\r\n";
+    expect(p.right.engine.exportCsv()).toBe(sorted);
+    expect(p.right.sheet().getRange("B2").getValue()).toBeNull();
+    expect(sort()).toEqual({ status: "sorted" });
+    expect(await p.left.current.univerAPI.undo()).toBe(true);
+    p.sync();
+    expect(p.right.engine.exportCsv()).toBe(sorted);
+    expect(await p.left.current.univerAPI.undo()).toBe(true);
+    p.sync();
+    expect(p.right.engine.exportCsv()).toBe(original);
+    expect(await p.left.current.univerAPI.redo()).toBe(true);
+    p.sync();
+    expect(p.right.engine.exportCsv()).toBe(sorted);
+    expect(remoteWrites).not.toHaveBeenCalled();
+    expect(
+      p.right.current.univer
+        .__getInjector()
+        .get(headless.core.IUndoRedoService)
+        .getUndoRedoStatus("original").undos,
+    ).toBe(0);
+  } finally {
+    p.dispose();
+  }
+});
+
+it("collaborates a sort as one stable-ID history step, including blanks, styles and formulas", async () => {
+  const data = snapshot("Name,Score,Note,Outside\nZoe,3,Note,Z\nAmy,1,,A\nBob,2,Tail,B");
+  const sheet = (data as unknown as IWorkbookData).sheets.data;
+  if (!sheet?.cellData?.[1]) throw new Error("Missing test cells");
+  sheet.cellData[1][2] = { f: "=B2*10", s: { bl: 1 } };
+  const p = await peers(data);
+  const transactions = vi.fn();
+  p.a.on("afterTransaction", (transaction) => {
+    if (transaction.origin === LOCAL_ORIGIN) transactions();
+  });
+  const before = peerAxes(p.a);
+  const original = p.left.engine.exportCsv();
+  try {
+    p.left.sheet().setActiveRange(p.left.sheet().getRange("A1:C4"));
+    expect(
+      p.left.engine.sortRange?.({ scope: "range", column: 0, ascending: true, header: true }),
+    ).toEqual({ status: "sorted" });
+    expect(transactions).toHaveBeenCalledTimes(1);
+    p.sync();
+    expect(p.right.engine.exportCsv()).toBe(p.left.engine.exportCsv());
+    expect(p.right.sheet().getRange("A2").getValue()).toBe("Amy");
+    expect(p.right.sheet().getRange("C2").getFormula()).toBe("");
+    expect(p.right.sheet().getRange("C4").getFormula()).toBe("=B4*10");
+    expect(p.right.sheet().getRange("C4").getCellStyleData()).toEqual(
+      p.left.sheet().getRange("C4").getCellStyleData(),
+    );
+    expect(p.right.sheet().getRange("D2").getValue()).toBe("Z");
+    expect(peerAxes(p.a)).toEqual(before);
+
+    // Undo on the author reaches the peer, even after its remote insertion.
+    expect(
+      await p.right.commands.executeCommand("sheet.command.insert-row", {
+        unitId: data.id,
+        subUnitId: "data",
+        direction: headless.core.Direction.UP,
+        range: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 3 },
+      }),
+    ).toBe(true);
+    p.sync();
+    expect(await p.left.current.univerAPI.undo()).toBe(true);
+    p.sync();
+    expect(p.right.sheet().getRange("A3").getValue()).toBe("Zoe");
+    expect(p.right.sheet().getRange("C3").getFormula()).toBe("=B3*10");
+    expect(p.right.engine.exportCsv()).toBe(p.left.engine.exportCsv());
+    expect(p.right.engine.exportCsv()).toBe(`,,,\r\n${original}`);
+    expect(await p.left.current.univerAPI.redo()).toBe(true);
+    p.sync();
+    expect(p.right.sheet().getRange("A3").getValue()).toBe("Amy");
+    expect(
+      await p.right.commands.executeCommand("sheet.command.set-range-values", {
+        unitId: data.id,
+        subUnitId: "data",
+        range: { startRow: 2, endRow: 2, startColumn: 1, endColumn: 1 },
+        value: { v: 11 },
+      }),
+    ).toBe(true);
+    p.sync();
+    expect(p.left.sheet().getRange("A3:B3").getValues()).toEqual([["Amy", 11]]);
+    expect(p.right.engine.exportCsv()).toBe(p.left.engine.exportCsv());
+  } finally {
+    p.dispose();
+  }
+});
+
+it("collaborates native single and bulk replacements of values and formulas across sheets", async () => {
+  const data = snapshot("Word,Formula\ncat,0\ncatfish,0", true);
+  const sheets = (data as unknown as IWorkbookData).sheets;
+  if (!sheets.data?.cellData?.[1] || !sheets.other) throw new Error("Missing test cells");
+  sheets.data.cellData[1][1] = { f: '=CONCAT("cat","fish")', v: "catfish", t: 1 };
+  sheets.other.cellData = { 1: { 0: { v: "cat", t: 1 } } };
+  const p = await peers(data);
+  const mutations = new Set<string>();
+  const listener = p.left.commands.onCommandExecuted((command, options) => {
+    if (command.type === headless.core.CommandType.MUTATION && !options?.fromFormula)
+      mutations.add(command.id);
+  });
+  try {
+    const single = await find(p.left, { matchesTheWholeCell: true });
+    single.moveToNextMatch({ noFocus: true });
+    expect(await single.replace("dog")).toBe(true);
+    p.sync();
+    expect(p.right.sheet().getRange("A2").getValue()).toBe("dog");
+    expect(await p.left.current.univerAPI.undo()).toBe(true);
+    p.sync();
+    expect(p.right.sheet().getRange("A2").getValue()).toBe("cat");
+
+    const all = await find(p.left, { findScope: headless.find.FindScope.UNIT });
+    expect(await all.replaceAll("dog")).toEqual({ success: 3, failure: 0 });
+    p.sync();
+    expect(p.right.sheet().getRange("A2:A3").getValues()).toEqual([["dog"], ["dogfish"]]);
+    expect(
+      p.right.current.univerAPI
+        .getActiveWorkbook()
+        ?.getSheetBySheetId("other")
+        ?.getRange("A2")
+        .getValue(),
+    ).toBe("dog");
+    expect(await p.left.current.univerAPI.undo()).toBe(true);
+    p.sync();
+    expect(p.right.sheet().getRange("A2:A3").getValues()).toEqual([["cat"], ["catfish"]]);
+    expect(
+      p.right.current.univerAPI
+        .getActiveWorkbook()
+        ?.getSheetBySheetId("other")
+        ?.getRange("A2")
+        .getValue(),
+    ).toBe("cat");
+    const formulas = await find(p.left, {
+      findString: "CONCAT",
+      findBy: headless.find.FindBy.FORMULA,
+      findScope: headless.find.FindScope.UNIT,
+    });
+    expect(await formulas.replaceAll("CONCATENATE")).toEqual({ success: 1, failure: 0 });
+    p.sync();
+    expect(p.right.sheet().getRange("B2").getFormula()).toBe('=CONCATENATE("cat","fish")');
+    expect([...mutations].filter((id) => !id.startsWith("formula."))).toEqual(
+      expect.arrayContaining(["sheet.mutation.set-range-values"]),
+    );
+    expect([...mutations].some((id) => /reorder|insert|remove|move/.test(id))).toBe(false);
+  } finally {
+    listener.dispose();
+    p.dispose();
+  }
+});
+
+it.each([
+  ["row", "insert", false],
+  ["row", "remove", false],
+  ["row", "move", false],
+  ["col", "insert", false],
+  ["col", "remove", false],
+  ["col", "move", false],
+  ["row", "insert", true],
+] as const)("keeps filters snapshot-only and clears them after remote %s %s (viewer: %s)", async (axis, kind, readOnly) => {
+  const p = await peers(undefined, readOnly);
+  const updates = vi.fn();
+  p.a.on("update", updates);
+  p.b.on("update", updates);
+  const before = peerAxes(p.a);
+  try {
+    expect(await p.left.engine.toggleFilter?.()).toBe(true);
+    p.left
+      .sheet()
+      .getFilter()
+      ?.setColumnFilterCriteria(0, {
+        colId: 0,
+        filters: { filters: ["Amy"] },
+      });
+    expect(await p.right.engine.toggleFilter?.()).toBe(true);
+    p.right
+      .sheet()
+      .getFilter()
+      ?.setColumnFilterCriteria(0, {
+        colId: 0,
+        filters: { filters: ["Zoe"] },
+      });
+    expect(p.left.sheet().getFilter()?.getFilteredOutRows()).toEqual([1, 3]);
+    expect(p.right.sheet().getFilter()?.getFilteredOutRows()).toEqual([2, 3]);
+    expect(JSON.stringify(p.left.engine.snapshot().resources)).toContain("Amy");
+    expect(await p.left.engine.clearFilter?.()).toBe(true);
+    expect(
+      await p.left.commands.executeCommand("sheet.command.re-calc-filter", {
+        unitId: "original",
+        subUnitId: "data",
+      }),
+    ).toBe(true);
+    expect(await p.left.engine.toggleFilter?.()).toBe(true);
+    expect(updates).not.toHaveBeenCalled();
+    expect(peerAxes(p.a)).toEqual(before);
+    expect(peerAxes(p.b)).toEqual(before);
+    const range = {
+      startRow: axis === "row" ? 1 : 0,
+      endRow: axis === "row" ? 1 : 3,
+      startColumn: axis === "col" && kind === "move" ? 1 : 0,
+      endColumn: axis === "col" ? (kind === "move" ? 1 : 0) : 1,
+      rangeType: axis === "row" ? headless.core.RANGE_TYPE.ROW : headless.core.RANGE_TYPE.COLUMN,
+    };
+    const target =
+      kind === "move" ? (axis === "row" ? "move-rows" : "move-cols") : `${kind}-${axis}`;
+    expect(
+      await p.left.commands.executeCommand(`sheet.command.${target}`, {
+        unitId: "original",
+        subUnitId: "data",
+        direction: axis === "row" ? headless.core.Direction.UP : headless.core.Direction.LEFT,
+        range,
+        fromRange: range,
+        toRange: {
+          ...range,
+          ...(axis === "row" ? { startRow: 0, endRow: 0 } : { startColumn: 0, endColumn: 0 }),
+        },
+      }),
+    ).toBe(true);
+    p.sync();
+    expect(p.right.sheet().getFilter()).toBeNull();
+    expect(p.right.engine.exportCsv()).toBe(p.left.engine.exportCsv());
+    expect(peerAxes(p.b)).toEqual(peerAxes(p.a));
+    expect(await p.left.current.univerAPI.undo()).toBe(true);
+    p.sync();
+    expect(p.right.engine.exportCsv()).toBe(p.left.engine.exportCsv());
+    expect(peerAxes(p.b)).toEqual(before);
+  } finally {
+    p.dispose();
+  }
+});
 
 describe("real Univer data tools", () => {
   it.each([
