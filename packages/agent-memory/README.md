@@ -66,9 +66,11 @@ only directly contained `.trig` files, skipping pending/nested containers and
 foreign listing members. Each resource needs a sibling `.trig.approval.json`
 with the approval ID and signed document. Recall verifies the approve decision,
 expiry and owner assertion key against the exact TriG bytes and destination.
-Resources without valid evidence, including copies from before evidence was
-stored, are skipped. Malformed approved TriG, storage failures and exceeded
-data bounds reject the call. Defaults are 1,000 listing entries, including
+It validates the full approved resource with the same SHACL shapes as promotion
+before selecting individual nanopubs. Recall skips resources without valid approval
+evidence or with a nonconforming validation report. Malformed approved TriG,
+validator errors, storage failures and exceeded data bounds reject the call.
+Defaults are 1,000 listing entries, including
 approval files, and 1 MiB per TriG resource. Approval files are capped at 1 MiB.
 
 Approvals use the real `agent-mandate.verifyApproval`, including the owner's

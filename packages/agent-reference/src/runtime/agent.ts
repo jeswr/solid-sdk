@@ -3296,47 +3296,56 @@ export class AgentRuntime {
     return this.admittedStatementItems().map((item) => copyData(item.statement));
   }
 
-  /** Detached facts and provenance for the same gate-held statements shown to the core. */
-  admittedFacts({ includeSuperseded = false } = {}): readonly AdmittedFact[] {
+  /** Detached task facts. Hosts can restrict revisions to deliveries they finally admitted. */
+  admittedFacts({
+    includeSuperseded = false,
+    isAdmittedReceipt,
+  }: {
+    includeSuperseded?: boolean;
+    isAdmittedReceipt?: (receipt: string) => boolean;
+  } = {}): readonly AdmittedFact[] {
+    const task = this.options.gates?.taskId ?? "*";
+    const context = this.gateMemory.context(task);
     const facts = new Map<string, AdmittedFact>();
-    const items = [...this.admittedStatementItems()].sort(
-      (a, b) => (a.admissionOrder ?? 0) - (b.admissionOrder ?? 0),
-    );
-    for (const { kind: _kind, accepted: _accepted, admissionOrder: _order, ...fact } of items) {
-      if (
-        fact.admittingDelivery?.receipt !==
-        this.gateMemory.facts.get(fact.id)?.admittingDelivery?.receipt
-      )
-        continue;
-      facts.set(fact.id, copyData(fact));
+    const confirmed = (fact: AdmittedFact) =>
+      fact.admittingDelivery !== undefined &&
+      isAdmittedReceipt?.(fact.admittingDelivery.receipt) === true;
+    const items = this.admittedStatementItems(isAdmittedReceipt ? confirmed : undefined);
+    const ordered = [...items].sort((a, b) => (a.admissionOrder ?? 0) - (b.admissionOrder ?? 0));
+    for (const { kind: _kind, accepted: _accepted, admissionOrder: _order, ...fact } of ordered) {
+      facts.set(fact.id, fact);
     }
     if (includeSuperseded) {
-      const task = this.options.gates?.taskId ?? "*";
-      const context = this.gateMemory.context(task);
       for (const fact of Object.values(this.gateMemory.precedenceHolds)) {
         if (
           fact.supersededBy &&
-          !this.gateMemory.facts.has(fact.id) &&
+          (isAdmittedReceipt
+            ? !facts.has(fact.id) && confirmed(fact)
+            : !this.gateMemory.facts.has(fact.id)) &&
           (fact.admittingDelivery?.task === task ||
             context.some(
               (item) => item.id === fact.id && item.digest === fact.digest && item.supersededBy,
             ))
         )
-          facts.set(fact.id, copyData(fact));
+          facts.set(fact.id, fact);
       }
     }
-    return [...facts.values()];
+    return [...facts.values()].map((fact) => copyData(fact));
   }
 
-  private admittedStatementItems(): readonly (ContextItem & { statement: JsonObject })[] {
+  private admittedStatementItems(
+    matchesRevision: (item: ContextItem, current: AdmittedFact) => boolean = (item, current) =>
+      current.digest === item.digest &&
+      current.admittingDelivery?.receipt === item.admittingDelivery?.receipt,
+  ): readonly (ContextItem & { statement: JsonObject })[] {
     return this.gateMemory
       .context(this.options.gates?.taskId ?? "*")
-      .filter(
-        (item): item is ContextItem & { statement: JsonObject } =>
-          item.accepted === true &&
-          this.gateMemory.facts.get(item.id)?.digest === item.digest &&
-          !!item.statement,
-      );
+      .filter((item): item is ContextItem & { statement: JsonObject } => {
+        const current = this.gateMemory.facts.get(item.id);
+        return (
+          item.accepted === true && !!item.statement && !!current && matchesRevision(item, current)
+        );
+      });
   }
   /**
    * The agreement this agent formed in one conversation, named by its terms digest, with

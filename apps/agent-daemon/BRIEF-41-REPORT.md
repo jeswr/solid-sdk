@@ -362,3 +362,25 @@ two pre-existing containers and checks their grants and inheritance targets.
 | Agent memory | All 58 offline tests and both TypeScript projects passed. The full suite could not start its CSS fixture because the sandbox denied loopback listen. |
 | Daemon | Source and test typechecks passed. Full Vitest passed 231 and failed 20. CSS and the D-2 demo hit loopback `EPERM`. Fifteen cloud tests timed out during loopback setup. The plist test hit Python spawn `EPERM`, and the two packaged checks received empty child stdout. The offline run passed 231, with three cases skipped by the test-name filter. |
 | Biome and root guards | Biome passed with existing reference warnings. SDK layers, RDF discipline, app duplication, agent layers and `git diff --check` passed. |
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Phase 2 review fixes, round 2 (41i)
+
+| Finding | Before | After |
+| --- | --- | --- |
+| Interaction-only recall | A signed fact with a declared purpose and default terms appeared in recall, including after reopening. The check expected two withheld facts and got one. | Runtime recall counts facts with an absent or different admitted purpose and facts with interaction-only default terms as withheld. The signed gate test checks a purpose-less admission, a matching-purpose admission without supplier terms, and an eligible admission with supplier terms, both live and after reopening. The purpose-less fact retains its absent purpose. |
+| Refused revision | After a refusal, recall returned an empty list for a statement with a prior confirmed admission. Changed and identical statement bytes reproduced this live and after reopening. | The gate retains distinct delivery receipts for identical statement bytes and supplies its confirmed receipts to the fact reader before the reader selects the latest eligible revision. The test checks the admitted statement, terms, purpose and provenance. A prior receipt already overwritten by an older build cannot be recovered from its saved context. |
+| Precedence trace | Restoring two equivalent winning statements across tasks named the second task's statement in the supersession trace. | The first occurrence of each statement ID keeps its position from context iteration. Admission sequence selects among revisions of that ID when both revisions have a sequence. Both numbered and legacy-order fixtures keep the previous winner. |
+| Owner-memory SHACL | Recall returned an exact signed copy of a resource that promotion rejected under SHACL. | The two paths validate the full dataset using the same shapes, validator and proposal base IRI. Recall skips nonconforming resources and rechecks approval expiry after validation. The real SHACL regression proves the exact copy is recallable under the conforming shape and withheld under the rejecting shape. |
+
+The tracked confirmation-rename, directory-sync and cleanup failure remains a
+separate issue.
+
+| Check | Result |
+| --- | --- |
+| Reference build and Vitest | Library-only TypeScript build, generated asset copy and typecheck passed. All 18 tests passed across admitted-facts, claim-failures and both oracle files. |
+| Targeted scenarios | `mortgage-core` ran two paths and `pay-an-invoice` ran three. The five trace diffs contained only `generated.commit` changes. Both manifests differed only in row order. The worktree index was read-only, so `git checkout-index` restored the generated files after `git checkout` could not acquire its index lock. Git reports an empty diff for traces, outlines and `scenario-runs.json`. |
+| Agent memory | Both TypeScript projects and all 59 offline tests passed. The CSS suite could not bind loopback in the sandbox. |
+| Daemon | Both TypeScript projects passed. Full Vitest passed 233 tests and reported 20 failures in loopback and subprocess fixtures. CSS and the D-2 demo hit `listen EPERM`, 15 cloud tests timed out during loopback setup, Python plist validation hit `spawnSync EPERM`, and the two packaged-binary checks received empty child stdout. The offline Vitest run passed 233 with three cases skipped by the test-name filter. A direct production package installed 177 cached dependencies and its CLI help ran successfully. |
+| Biome and root guards | Biome passed with warnings. `pnpm run lint:root` and `git diff --check` passed. |

@@ -183,6 +183,16 @@ export function createAgentMemory(options: AgentMemoryOptions): AgentMemory {
       now,
     });
   }
+  async function conformsToShapes(dataset: Nanopublications["dataset"]): Promise<boolean> {
+    const ownedEngine = options.validator === undefined ? createRdfEngine() : undefined;
+    const engine = options.validator ?? ownedEngine;
+    if (!engine) throw new Error("No SHACL validator available");
+    try {
+      return (await engine.validate(dataset, options.shapes)).conforms === true;
+    } finally {
+      ownedEngine?.dispose();
+    }
+  }
   async function existing(filename: string): Promise<RememberProposal | undefined> {
     for (const parent of [container, pending]) {
       const url = new URL(filename, parent).href;
@@ -278,7 +288,13 @@ export function createAgentMemory(options: AgentMemoryOptions): AgentMemory {
         const url = new URL(filename, pending).href;
         const result = await verifyEvidence(approval, url, termsDigest(url, entry.url, trig));
         if (!result.valid || result.approval.decision !== "approve") continue;
-        const data = await parseNanopublications(trig, entry.url);
+        // Use the signed proposal's base IRI, as promotion does for the same bytes.
+        const data = await parseNanopublications(trig, url);
+        if (
+          !(await conformsToShapes(data.dataset)) ||
+          !(now().getTime() < Date.parse(result.approval.expires))
+        )
+          continue;
         for (const np of data.nanopubs) {
           if (
             np.validity !== "Current" ||
@@ -391,15 +407,8 @@ export function createAgentMemory(options: AgentMemoryOptions): AgentMemory {
         };
         await verify();
         const etag = strongEtag(snapshot.etag);
-        const ownedEngine = options.validator === undefined ? createRdfEngine() : undefined;
-        const engine = options.validator ?? ownedEngine;
-        if (!engine) throw new Error("No SHACL validator available");
-        try {
-          const report = await engine.validate(data.dataset, options.shapes);
-          if (report.conforms !== true) throw new Error("Memory does not conform to SHACL shapes");
-        } finally {
-          ownedEngine?.dispose();
-        }
+        if (!(await conformsToShapes(data.dataset)))
+          throw new Error("Memory does not conform to SHACL shapes");
         // Validation may take time; do not promote under an approval that expired meanwhile.
         await verify();
         if (!alreadyMoved) {

@@ -12,12 +12,6 @@ export interface RuntimeMemoryOptions {
   readonly maxBytes?: number;
 }
 
-const defaultTerms = {
-  scope: "interaction",
-  onwardSharing: false,
-  retention: "interaction",
-} as const;
-
 type MemoryItem =
   | {
       kind: "admitted-fact";
@@ -36,7 +30,7 @@ type MemoryItem =
         | "disputedWith"
       > & {
         originalDigest: string | undefined;
-        terms: NonNullable<AdmittedFact["terms"]> | typeof defaultTerms;
+        terms: NonNullable<AdmittedFact["terms"]>;
       };
     }
   | {
@@ -94,7 +88,8 @@ export function createRuntimeMemory(o: RuntimeMemoryOptions): {
           disputedWith,
           statement,
         } = fact;
-        if (supersededBy !== undefined || admittedPurpose !== purpose) {
+        // Without supplier terms, the default permits use only in the original interaction.
+        if (supersededBy !== undefined || admittedPurpose !== purpose || !terms) {
           result.withheld++;
           continue;
         }
@@ -119,7 +114,7 @@ export function createRuntimeMemory(o: RuntimeMemoryOptions): {
               digest,
               originalDigest: original?.digest,
               admittedPurpose,
-              terms: terms ?? { ...defaultTerms },
+              terms,
               supersededBy,
               disputedWith,
             },

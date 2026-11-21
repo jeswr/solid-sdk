@@ -21,7 +21,14 @@ import {
   OWNER,
   PD,
   QUERY,
+  SHAPES,
 } from "./helpers.js";
+
+// Scope filtering also rejects uncategorised claims under shapes that permit them.
+const scopeShapes = SHAPES.replace(
+  "sh:path dpv:hasPersonalData; sh:minCount 1;",
+  "sh:path dpv:hasPersonalData;",
+);
 
 // These fixtures exercise recall on prebuilt batches, including malformed and out-of-scope data.
 async function seedSigned(
@@ -78,11 +85,30 @@ it("requires durable owner approval for the exact approved resource bytes", asyn
   expect(await reopened.recall(QUERY)).toHaveLength(0);
 });
 
-async function seed(h: Awaited<ReturnType<typeof harness>>) {
-  const preference = createFactAssertion(OWNER, {
-    template: "preference",
-    value: { propertyID: "scheduling", value: "Afternoons" },
+it("skips an exact signed copy of a resource that fails promotion's SHACL shape", async () => {
+  const h = await harness({ shapes: SHAPES.replace("sh:minCount 1", "sh:minCount 2") });
+  const item = await h.memory.proposeRemember(claim);
+  const approval = await h.sign(item);
+  await expect(h.memory.approveRemember(item.id, approval)).rejects.toThrow("SHACL");
+
+  const name = item.target.slice(CONTAINER.length);
+  await h.storage.create(CONTAINER, item.trig, { name, contentType: "application/trig" });
+  await h.storage.create(CONTAINER, JSON.stringify(approval), {
+    name: `${name}.approval.json`,
+    contentType: "application/json",
   });
+  expect(await createAgentMemory({ ...h.options, shapes: SHAPES }).recall(QUERY)).toMatchObject([
+    { resource: item.target },
+  ]);
+  expect(await h.memory.recall(QUERY)).toHaveLength(0);
+});
+
+async function seed(h: Awaited<ReturnType<typeof harness>>) {
+  const preference = (value: string) =>
+    createFactAssertion(OWNER, {
+      template: "preference",
+      value: { propertyID: "scheduling", value },
+    });
   const batch: Batch = {
     batch_id: "recall-fixture",
     worker: { agent_id: AGENT, agent_label: "Fixture" },
@@ -90,7 +116,7 @@ async function seed(h: Awaited<ReturnType<typeof harness>>) {
     claims: [
       {
         id: "preference",
-        assertion: preference,
+        assertion: preference("Afternoons"),
         epistemic: "SelfReportedExplicit",
         categories: ["pd:Preference"],
       },
@@ -124,12 +150,12 @@ async function seed(h: Awaited<ReturnType<typeof harness>>) {
       },
       ...(["Superseded", "Retracted", "Historical", "Contradicted"] as const).map((validity) => ({
         id: validity,
-        assertion: preference,
+        assertion: preference(`Preference marked ${validity}`),
         epistemic: "SelfReportedExplicit" as const,
         categories: ["pd:Preference"],
         validity,
       })),
-      { id: "uncategorised", assertion: preference, epistemic: "Mentioned" },
+      { id: "uncategorised", assertion: preference("Uncategorised"), epistemic: "Mentioned" },
     ],
   };
   const data = await buildNanopublications(batch, { owner: OWNER, generatedAt: NOW.toISOString() });
@@ -138,7 +164,7 @@ async function seed(h: Awaited<ReturnType<typeof harness>>) {
 }
 
 it("defaults to current preferences and removes every filtered sibling graph and quote", async () => {
-  const h = await harness();
+  const h = await harness({ shapes: scopeShapes });
   await seed(h);
   const results = await h.memory.recall(QUERY);
   expect(results).toHaveLength(1);
@@ -191,7 +217,7 @@ it.each([
 });
 
 it("requires every category in the mandate and permits health only when explicitly named", async () => {
-  const h = await harness();
+  const h = await harness({ shapes: scopeShapes });
   await seed(h);
   expect(await h.memory.recall({ ...QUERY, categories: ["pd:Health"] })).toEqual([]);
   const healthOnly = createAgentMemory({
@@ -210,7 +236,7 @@ it("requires every category in the mandate and permits health only when explicit
 });
 
 it("filters by about, category and limit without reading pending or foreign listing members", async () => {
-  const h = await harness();
+  const h = await harness({ shapes: scopeShapes });
   await seed(h);
   expect(await h.memory.recall({ ...QUERY, about: "https://example.org/someone-else" })).toEqual(
     [],
@@ -262,7 +288,7 @@ it.each([
 
 it("reloads scope and forwards purpose on every recall", async () => {
   const loader = vi.fn(async () => ({ ...mandate, memoryScope: ["pd:Health"] }));
-  const h = await harness({ loadMandate: loader });
+  const h = await harness({ shapes: scopeShapes, loadMandate: loader });
   await seed(h);
   expect(await h.memory.recall(QUERY)).toHaveLength(1);
   loader.mockResolvedValueOnce({ ...mandate, memoryScope: [] });

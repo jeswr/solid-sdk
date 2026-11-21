@@ -202,26 +202,25 @@ The factory passes both `gate` and `memory` to the daemon. `gate.facts` reads
 the reference runtime opened under the daemon's lease. The optional `admission`
 configuration gives the runtime a trusted task ID, reliance rules and operation
 handlers for evidence-bearing messages. The reference trust store supplies issuer
-pins and source authority rules. Gate recall requires a confirmed final `admitted`
-verdict for the specific delivery that supplied the fact. Facts from refused,
-interrupted, or older deliveries without that link are excluded. Reopening the same
-gate directory with the same task configuration preserves the recorded admission
-order, so the last admitted revision of a statement ID keeps its value and labels.
+pins and source authority rules. Gate recall selects the latest eligible revision of
+each statement ID whose delivery has a confirmed final `admitted` verdict. A later
+refused or interrupted delivery leaves that revision and its provenance available
+both live and after reopening the same gate directory with the same task configuration.
 
 Construct `ownerMemory` with `createAgentMemory`, using the authenticated
 workspace storage and a mandate loader that verifies owner, revocation, signed
 memory scope and purpose policy. Select the purpose IRI in the host. The tool
 treats the model query as a case-insensitive substring of admitted fact fields or
 owner assertion terms. Results are ordered by time and ID and default to 20 items
-and 64 KiB of JSON. Superseded facts with confirmed admissions and current facts
-whose admitted purpose is absent or differs from the host purpose contribute to
-the withheld count independently of the query. Returned facts carry provenance
-and effective terms. The default terms permit use for the interaction only,
-prohibit onward sharing, and require deletion when the interaction ends.
+and 64 KiB of JSON. Superseded facts with confirmed admissions, facts with an
+absent or different admitted purpose, and facts subject to the interaction-only
+default terms all contribute to the withheld count independently of the query.
+Reopening preserves an absent admitted purpose. Returned facts carry their
+recorded purpose, supplier terms and other provenance.
 Owner recall verifies the stored, unexpired owner-signed approval against the
-exact TriG bytes and destination. It skips resources without valid approval
-evidence. Owner memory results carry the four permitted graphs as RDF/JS quads
-and nanopublication metadata.
+exact TriG bytes and destination and validates the resource against the promotion
+SHACL shapes. It skips resources that fail either check. Owner memory results
+carry the four permitted graphs as RDF/JS quads and nanopublication metadata.
 
 ## Stop and resume
 

@@ -286,10 +286,11 @@ export function createGate(
     facts() {
       if (closed) throw new Error("Inbound gate is closed");
       return rt
-        .admittedFacts({ includeSuperseded: true })
-        .flatMap(({ admittingDelivery, ...fact }) =>
-          admittingDelivery && admittedReceipts.has(admittingDelivery.receipt) ? [fact] : [],
-        );
+        .admittedFacts({
+          includeSuperseded: true,
+          isAdmittedReceipt: (receipt) => admittedReceipts.has(receipt),
+        })
+        .map(({ admittingDelivery: _delivery, ...fact }) => fact);
     },
     async status() {
       await pending;

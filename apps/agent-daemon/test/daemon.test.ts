@@ -2260,8 +2260,60 @@ it("recalls the same admitted fact after reopening its gate directory", async ()
 });
 
 it.each([
+  { revision: "changed", value: "Refused replacement" },
+  { revision: "identical", value: assessment.value },
+])("keeps the admitted revision after a refused $revision delivery", async ({ value }) => {
+  const root = await mkdtemp(join(tmpdir(), "daemon-memory-refused-revision-"));
+  try {
+    const { options, signedInvocation } = await memoryGateFixture(root, "valid");
+    const reader = createDirectReader(
+      { inboxes: new Map(), accepted: new Map() },
+      new RecordingTokenProvider(),
+    );
+    const verifyRecall = async (gate: Awaited<ReturnType<typeof openGate>>) => {
+      const memory = createRuntimeMemory({
+        facts: gate.facts,
+        owner: { recall: async () => [] },
+        purpose: memoryPurpose,
+      });
+      expect.soft(await memory.recall("assessment")).toMatchObject({
+        items: [recalledAssessment],
+        withheld: 0,
+      });
+    };
+    const gate = await openGate(options);
+    try {
+      const deliver = (jws: string) =>
+        gate.check({
+          account: "fixture",
+          binding: "direct",
+          message: reader.ingest.parse({ id: "fixture", raw: encodeEnvelope(jws) }),
+        });
+      expect(await deliver(await signedInvocation(61, assessment, memoryPurpose))).toMatchObject({
+        outcome: "admitted",
+      });
+      await verifyRecall(gate);
+      expect(
+        await deliver(await signedInvocation(62, { ...assessment, value }, undefined, true)),
+      ).toMatchObject({ outcome: "refused", reason: "not-authorised" });
+      await verifyRecall(gate);
+    } finally {
+      await gate.close();
+    }
+    const reopened = await openGate(options);
+    try {
+      await verifyRecall(reopened);
+    } finally {
+      await reopened.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it.each([
   "refused",
-  "default-terms",
+  "interaction-only",
   "repeat",
   "superseded",
 ] as const)("preserves the %s recall result across restart", async (variant) => {
@@ -2295,10 +2347,11 @@ it.each([
     const deliveries =
       variant === "refused"
         ? [await signedInvocation(61, assessment, memoryPurpose, true)]
-        : variant === "default-terms"
+        : variant === "interaction-only"
           ? [
-              await signedInvocation(61, noTerms),
+              await signedInvocation(61, assessment),
               await signedInvocation(62, { ...noTerms, id: replacement.id }, memoryPurpose),
+              await signedInvocation(63, { ...assessment, id: "urn:test:scoped" }, memoryPurpose),
             ]
           : variant === "repeat"
             ? [
@@ -2322,20 +2375,19 @@ it.each([
       if (variant === "refused") {
         expect(active.facts()).toEqual([]);
         expect(result).toEqual({ items: [], withheld: 0 });
-      } else if (variant === "default-terms") {
-        expect(result.items).toHaveLength(1);
-        expect(result).toMatchObject({
-          items: [
-            {
-              id: replacement.id,
-              provenance: {
-                terms: { scope: "interaction", onwardSharing: false, retention: "interaction" },
-              },
-            },
-          ],
-          withheld: 1,
+      } else if (variant === "interaction-only") {
+        const unscoped = active.facts().find(({ id }) => id === assessment.id);
+        expect(unscoped).toBeDefined();
+        expect(unscoped?.admittedPurpose).toBeUndefined();
+        expect.soft(result).toMatchObject({
+          items: [{ id: "urn:test:scoped", provenance: { terms: assessment.terms } }],
+          withheld: 2,
         });
-        expect(await recall(active, "urn:test:other-purpose")).toEqual({ items: [], withheld: 2 });
+        expect(await recall(active, "urn:test:other-purpose")).toEqual({ items: [], withheld: 3 });
+        expect.soft(await recall(active, memoryPurpose, "no-match")).toEqual({
+          items: [],
+          withheld: 2,
+        });
       } else if (variant === "repeat") {
         expect(result).toEqual({ items: [], withheld: 1 });
         expect(await recall(active, "urn:test:other-purpose")).toMatchObject({

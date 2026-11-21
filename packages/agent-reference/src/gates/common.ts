@@ -198,16 +198,22 @@ export class GateMemory {
     readonly descriptionAddresses: ReadonlySet<string> = new Set(),
   ) {}
   restoreFacts(): void {
-    const entries = Object.values(this.contexts)
-      .flat()
-      .filter(
-        (item) =>
-          (item.kind === "statement" && item.accepted !== false) ||
-          (item.kind === "reading" && item.accepted === true),
-      )
-      .sort((a, b) => (a.admissionOrder ?? 0) - (b.admissionOrder ?? 0));
-    for (const { admissionOrder, ...item } of entries) {
+    const revisions = new Map<string, ContextItem>();
+    for (const item of Object.values(this.contexts).flat()) {
+      const { id, kind, accepted, admissionOrder } = item;
       this.admissionOrder = Math.max(this.admissionOrder, admissionOrder ?? 0);
+      if (
+        !(kind === "statement" && accepted !== false) &&
+        !(kind === "reading" && accepted === true)
+      )
+        continue;
+      const priorOrder = revisions.get(id)?.admissionOrder;
+      if (priorOrder !== undefined && admissionOrder !== undefined && priorOrder > admissionOrder)
+        continue;
+      // Preserve the first position of each ID for precedence ties, even across task contexts.
+      revisions.set(id, item);
+    }
+    for (const { admissionOrder: _order, ...item } of revisions.values()) {
       this.facts.set(item.id, item);
     }
   }
@@ -233,7 +239,14 @@ export class GateMemory {
   enter(task: string, item: ContextItem): void {
     this.contexts[task] ??= [];
     const items = this.contexts[task];
-    const index = items.findIndex((prior) => prior.id === item.id && prior.digest === item.digest);
+    const receipt = item.admittingDelivery?.receipt;
+    // Identical statement bytes can arrive in deliveries with different final verdicts.
+    const index = items.findIndex(
+      (prior) =>
+        prior.id === item.id &&
+        prior.digest === item.digest &&
+        (receipt === undefined || prior.admittingDelivery?.receipt === receipt),
+    );
     if (item.accepted === true && (item.kind === "statement" || item.kind === "reading"))
       item = { ...item, admissionOrder: ++this.admissionOrder };
     if (index < 0) items.push(item);
