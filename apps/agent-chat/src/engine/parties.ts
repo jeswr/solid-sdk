@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 /**
  * The other side of every exchange: stores, lenders, banks and the identity provider, each
  * with its own signing key. The inbound gate checks each message against the sender's pinned
@@ -36,6 +37,23 @@ type Received<T> = Verified<T> | { readonly ok: false; readonly reason: RefusalR
 const TYP = "application/verifiable-message+json";
 const AUDIENCE = "agent:errand";
 const MESSAGE_LIFETIME_MS = 15 * 60_000;
+
+function parseTimestamp(value: unknown): number {
+  if (typeof value !== "string") return NaN;
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/i.exec(
+    value,
+  );
+  const [, calendarTime, fraction = "", offset] = match ?? [];
+  if (!calendarTime || !offset || match?.[0] !== value) return NaN;
+  const dateTime = `${calendarTime.toUpperCase()}.${fraction.slice(0, 3).padEnd(3, "0")}`;
+  // Validate the written calendar date and time before applying the offset.
+  const localAsUtc = `${dateTime}Z`;
+  const local = Date.parse(localAsUtc);
+  if (!Number.isFinite(local) || new Date(local).toISOString() !== localAsUtc) return NaN;
+  const instant = Date.parse(`${dateTime}${offset.toUpperCase()}`);
+  // A fractional remainder falls after this tick of the millisecond engine clock.
+  return instant + Number(/[1-9]/.test(fraction.slice(3)));
+}
 
 export class Parties {
   private readonly seenIds = new Set<string>();
@@ -113,15 +131,15 @@ export class Parties {
     if (from !== expected) return { ok: false, reason: "sender-key-mismatch" };
     if (audience !== AUDIENCE) return { ok: false, reason: "wrong-audience" };
     if (typeof id !== "string" || !id.trim()) return { ok: false, reason: "malformed" };
-    const created = typeof createdAt === "string" ? Date.parse(createdAt) : NaN;
-    const expires = typeof expiresAt === "string" ? Date.parse(expiresAt) : NaN;
+    const created = parseTimestamp(createdAt);
+    const expires = parseTimestamp(expiresAt);
     const now = this.now().getTime();
     if (!Number.isFinite(created) || !Number.isFinite(expires) || !Number.isFinite(now))
       return { ok: false, reason: "malformed" };
     if (created > now) return { ok: false, reason: "not-yet-valid" };
     if (expires <= now) return { ok: false, reason: "expired" };
-    if (this.seenIds.has(id)) return { ok: false, reason: "replay-conflict" };
-    this.seenIds.add(id);
+    const seenKey = JSON.stringify([from, id]);
+    if (this.seenIds.has(seenKey)) return { ok: false, reason: "replay-conflict" };
 
     const checks: CheckLine[] = [
       {
@@ -152,6 +170,7 @@ export class Parties {
         code: "fit-for-use",
       });
     }
+    this.seenIds.add(seenKey);
     return { ok: true, payload: message, checks };
   }
 }

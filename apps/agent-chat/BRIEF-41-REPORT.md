@@ -77,3 +77,18 @@ The 15-minute lifetime is a demo default. Seen IDs last for the session, matchin
 - File a bead under P7.4 to replace the separate unsigned product-page fixture's scripted inbound check labels with recorded decisions from the checks that actually run. This fixture is outside the signed counterparty path at `src/engine/engine.ts:1042`.
 
 Tracker changes were outside this lane. Playwright validation remains pending in an environment that permits its loopback server.
+
+## Review fixes (41u)
+
+Lane 41u started at `81588e020`. Seven new regression cases failed against that engine and passed with the fixes below.
+
+| Finding | Fix and regression coverage |
+| --- | --- |
+| Refusals consumed message IDs | The receiver records an ID after admission, including a successful fitness check when supplied. A signed receipt refused for a different order can be admitted for its matching order. Another delivery then returns `replay-conflict`. |
+| Pinned senders shared an ID namespace | The receiver tracks the authenticated sender and message ID as a pair. The test admits two independently signed messages with the same ID and refuses a repeat from each sender. |
+| Mortgage decisions could follow a refused bank reply | The mortgage application stops at the balance step and tells the user the reply failed verification. Expired and wrong-audience replies both block lender decision signing, the offer card and its activity entry. |
+| Timestamp parsing normalized impossible calendar dates | Both signed timestamps must use a full date and time with a UTC designator or numeric offset. The parser round-trips the written calendar time before applying the offset. Tests refuse February 29 in a non-leap year and November 31, and verify the expiry boundary for a valid offset timestamp with fractional seconds. |
+
+Shopping skips refused listings and stops at a refused receipt before recording the purchase or spend. The focused suite passed the existing receipt mismatch and replay cases.
+
+Validation ran offline on Node `v24.22.3`. With `pnpm --filter @jeswr/app-agent-chat`, `exec vitest run test/engine.test.ts --maxWorkers=2` passed all 80 cases, `run typecheck` passed, and `exec biome check src/engine/parties.ts src/engine/engine.ts test/engine.test.ts` passed. `git diff --check` passed.

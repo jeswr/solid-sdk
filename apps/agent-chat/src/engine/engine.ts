@@ -1529,6 +1529,15 @@ export class Engine {
       asOf: this.now().toISOString(),
     });
     const bal = await this.receive(run, balance, MORTGAGE.bank.id);
+    if (!bal) {
+      await step(2, "stopped");
+      await this.say(
+        chatId,
+        `${MORTGAGE.bank.name}'s reply did not check out, so I have paused the application.`,
+        run,
+      );
+      return "blocked";
+    }
     await step(2, "done");
     await step(3, "running", 25);
     this.guard(run);
@@ -1563,7 +1572,7 @@ export class Engine {
       summary: `Decision in principle from ${lender.name}`,
       detail: `Up to $${offer.payload.upTo.toLocaleString("en-US")}, not binding`,
       checks: [],
-      inbound: [...offer.checks, ...(bal?.checks ?? []).slice(0, 0)],
+      inbound: offer.checks,
     });
     await this.say(chatId, `${lender.name} has replied.`, run);
     this.guard(run);
