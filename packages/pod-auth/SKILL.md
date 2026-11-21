@@ -118,10 +118,21 @@ first; storage failures are harmless. Providers use monograms by default; host-s
 - Automatic roots load on login/restore from `pim:storage` assertions naming the exact authenticated
   WebID, optionally through its linked LWS/Solid description. Call login/restore first when there are
   no static roots. Identities without WebIDs, including CID agents, need configured storage roots.
+  Description-advertised roots require a container URL on the identifier's origin and an unauthenticated,
+  non-redirected HEAD confirming a Solid `pim:Storage` type Link or exactly one LWS storage Link back to
+  that identifier. Even an ancestor containing the identifier needs confirmation. Drop invalid,
+  foreign-origin, non-container and unconfirmed claims silently. Reuse the engine's `head`, `describes`,
+  `selfIdentifiedSolidRoot` and `parseLinks` helpers; never trust the description alone.
   Never use `AutomaticCredentialBoundary` to authorize response-asserted roots: a target's type Link,
   storage Link/description, ancestor HEADs, challenge realm/AS or redirect destination is not a grant.
-- Apply the boundary's explicit AS-origin policy to UMA and both LWS discovery forms, including CID
-  composition. Exchange endpoints must also use granted origins and reject redirects. LWS audiences
+- Require UMA `as_uri` to use the requested storage's origin or an explicitly configured root's
+  origin (`boundary.trustUmaAuthorizationServer`); a learned storage's AS cannot receive another
+  storage's claim token or supply its RPT. Keep UMA's RPT context keyed by boundary storage and
+  captured account selection, separately from the OIDC session context. Restore may share the OIDC
+  session across storages but must never share their RPTs. Translate the captured UMA context only at
+  the shared-session read, preserving account validation and fences.
+- Apply the boundary's explicit AS-origin policy to both LWS discovery forms, including CID
+  composition. Exchange endpoints must use granted origins and reject redirects. LWS audiences
   must stay inside an existing grant, directly or through a description rooted within it; metadata
   can only narrow authority. Refuse before sending claim/subject tokens to untrusted endpoints.
 - Keep authenticated fetch's manual redirects and per-hop credential checks. Clear automatic roots
