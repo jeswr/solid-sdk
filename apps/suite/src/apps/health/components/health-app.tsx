@@ -6,6 +6,7 @@ import {
   Activity,
   ArrowDownToLine,
   ArrowUpFromLine,
+  BookOpen,
   Footprints,
   HeartPulse,
   LayoutDashboard,
@@ -45,6 +46,7 @@ function Sidebar() {
     { href: "/health/conditions", label: "Conditions", icon: ShieldCheck },
     { href: "/health/immunisations", label: "Immunisations", icon: Syringe },
     { href: "/health/workouts", label: "Workouts", icon: Footprints },
+    { href: "/health/diary", label: "Diary", icon: BookOpen },
     { href: "/health/import", label: "Import", icon: ArrowDownToLine },
     { href: "/health/export", label: "Export", icon: ArrowUpFromLine },
   ];

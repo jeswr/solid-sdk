@@ -3,9 +3,119 @@ import { mkdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
+import { seedDemoSession } from "../demo-session";
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+test("diary meal and symptom keyboard logging, edit, undo, search and patterns", async ({
+  page,
+}, info) => {
+  await ready(page, "/health/diary", "Diary");
+  const mealTrigger = page.getByRole("button", { name: "Log meal", exact: true }).first();
+  await mealTrigger.focus();
+  await page.keyboard.press("Enter");
+  let sheet = page.getByRole("dialog", { name: "Log meal", exact: true });
+  await expect(sheet).toBeVisible();
+  await sheet.getByRole("button", { name: "Save meal", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    sheet.getByRole("alert").filter({ hasText: "Enter at least one food" }),
+  ).toBeVisible();
+  await sheet.getByLabel("Foods (one per line)").focus();
+  await page.keyboard.type("Rice bowl");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("Rice, chickpeas, tomato");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("lunch, home-cooked");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("Diary keyboard test");
+  await sheet.getByRole("button", { name: "Save meal", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(sheet).toBeHidden();
+  await expect(
+    page.getByRole("heading", { level: 3, name: "Rice bowl", exact: true }),
+  ).toBeVisible();
+  await expect(mealTrigger).toBeFocused();
+
+  await page.getByRole("button", { name: "Log symptom", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  sheet = page.getByRole("dialog", { name: "Log symptom", exact: true });
+  await sheet.getByLabel("Severity (0 = none, 10 = worst)").focus();
+  await sheet.getByLabel("Severity (0 = none, 10 = worst)").selectOption("3");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("45");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("Mild bloating after lunch");
+  await sheet.getByRole("button", { name: "Save symptom", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(sheet).toBeHidden();
+  await expect(
+    page.locator("article").filter({ hasText: "Mild bloating after lunch" }),
+  ).toContainText("Severity 3/10 · 45 minutes");
+  await accessible(page);
+  await capture(page, info, "diary");
+
+  await page.getByRole("button", { name: "Edit Rice bowl", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  sheet = page.getByRole("dialog", { name: "Edit meal", exact: true });
+  await sheet.getByLabel("Foods (one per line)").focus();
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.type("Rice and beans");
+  await sheet.getByRole("button", { name: "Save meal", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(sheet).toBeHidden();
+  await expect(
+    page.getByRole("heading", { level: 3, name: "Rice and beans", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Delete Rice and beans", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("heading", { level: 3, name: "Rice and beans", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .locator("[data-sonner-toast]")
+    .filter({ hasText: "Diary entry deleted" })
+    .getByRole("button", { name: "Undo", exact: true })
+    .focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("heading", { level: 3, name: "Rice and beans", exact: true }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Meals", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.locator("article").filter({ hasText: "Mild bloating after lunch" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Clear", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await page.getByRole("link", { name: "Patterns", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Diary patterns", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("table")).toBeVisible();
+  await expect(page.getByText(/not a diagnosis or medical advice/)).toBeVisible();
+  await accessible(page);
+  await capture(page, info, "diary-patterns");
+  await ready(
+    page,
+    "/health/search?q=Diary%20keyboard%20test",
+    "Results for “Diary keyboard test”",
+  );
+  await page.getByRole("link", { name: /Rice and beans/ }).click();
+  await expect(
+    page.getByRole("heading", { level: 3, name: "Rice and beans", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { level: 3, name: "Rice and beans", exact: true }),
+  ).toBeVisible();
+});
 
 test.use({ locale: "en-GB" });
 test.beforeEach(async ({ page }) => {
+  // Real app routes sit behind the shell session guard; remember the demo account.
+  await seedDemoSession(page);
   // Keep Date deterministic while timers continue to run for autosync and UI waits.
   await page.clock.setFixedTime(new Date("2026-11-01T12:00:00Z"));
   await page.route("**/__health-test-reset", (route) =>

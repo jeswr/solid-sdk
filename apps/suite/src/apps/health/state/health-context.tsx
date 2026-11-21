@@ -32,6 +32,7 @@ import {
 import { createHealthDataStore } from "../lib/data/store";
 import { PartialGpxImportError } from "../lib/data/workouts";
 import type { Measurement, MetricKind, Precondition } from "../lib/model";
+import { DiaryProvider } from "./diary-context";
 
 export type AsyncState<T> =
   | { status: "loading" }
@@ -51,7 +52,7 @@ interface HealthContextValue {
   recordEdits: (ClinicalRecord & { generation: number })[];
   saving: number;
   invalidate(): void;
-  mutate<T>(write: () => Promise<T>, message: string): Promise<T>;
+  mutate<T>(write: () => Promise<T>, message?: string): Promise<T>;
   add(
     kind: MetricKind | "blood-pressure",
     value: number,
@@ -148,7 +149,7 @@ export function HealthProvider({
     };
   }, [session, store, invalidate]);
   const mutate = useCallback(
-    async <T,>(write: () => Promise<T>, message: string): Promise<T> => {
+    async <T,>(write: () => Promise<T>, message?: string): Promise<T> => {
       setSaving((value) => value + 1);
       const task = queue.current.then(write);
       queue.current = task.then(
@@ -158,7 +159,7 @@ export function HealthProvider({
       try {
         const result = await task;
         invalidate();
-        toast.success(message);
+        if (message) toast.success(message);
         return result;
       } catch (error) {
         invalidate();
@@ -296,7 +297,7 @@ export function HealthProvider({
         save,
       }}
     >
-      {children}
+      <DiaryProvider key={`${session.webId}:${session.storageUrl}`}>{children}</DiaryProvider>
     </Context>
   );
 }
