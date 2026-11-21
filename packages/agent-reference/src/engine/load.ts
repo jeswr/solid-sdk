@@ -9,6 +9,7 @@ import { validateRules } from "../derive/rules.js";
 import { checkDocumentTerms } from "../wire/contexts.js";
 import { SCENARIO_CONTEXT, scenarioContext, scenarioJsonLdLoader } from "../wire/store-contexts.js";
 import { gateFaultPlacementProblem } from "./faulty-gate.js";
+import { fixtureContextResolver } from "./fixture-context-resolver.js";
 import {
   type DomainProfile,
   domainProfileSchema,
@@ -85,10 +86,13 @@ export async function readCaseGraph(path: string) {
     }
     // The streaming parser drops entries from property-indexed arrays of objects.
     // Expand with the same offline JSON-LD processor used by the message reader.
-    const quads = await jsonld.toRDF(document as import("jsonld").NodeObject, {
-      format: "application/n-quads",
+    const contextResolver = fixtureContextResolver(document);
+    const options = {
+      format: "application/n-quads" as const,
       documentLoader: scenarioJsonLdLoader,
-    });
+      ...(contextResolver && { contextResolver }),
+    };
+    const quads = await jsonld.toRDF(document as import("jsonld").NodeObject, options);
     const dataset = await parseRdf(quads as unknown as string, "application/n-quads");
     return { dataset, root };
   } catch (error) {

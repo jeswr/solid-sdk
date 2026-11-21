@@ -587,3 +587,57 @@ guard copies and temporary test fixtures were removed.
 | `pnpm exec vitest run --maxWorkers=2` with the ten Phase 3 files listed above | All 84 tests passed with `.sparq` present, including all 11 engine tests. |
 | `pnpm exec vitest run --maxWorkers=2 test/engine.test.ts` with `.sparq` moved aside | Ten passed. The existing corpus count failed at 163 of 168 runnable paths because five require `sparq-zk-result/5`. Restored `.sparq` after the run. |
 | `node scripts/check-no-trace-change.mjs` | Passed after compilation. The two scenario runs reproduced five selected traces and preserved the outlines and manifest, with 278 runs, zero disagreements and five blocked paths. |
+
+## Phase 3 graph read speed (40l)
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The isolated scenarios test fell from **30.89 s to 6.28 s** on Node 24.22.3.
+Vitest's total duration, including imports, fell from 34.99 s to 10.40 s.
+The slowest fixture read fell from **2,697 ms to 659 ms**. Five files
+exceeded 1 s before the change and every file finished below 1 s afterward.
+
+A temporary probe measured each file in the compiled reader, timing JSON-LD
+expansion, context processing within expansion, and the subsequent N-Quads
+parse. Context time includes recursive scoped context processing once.
+The total also includes fixture admission and writing N-Quads.
+
+| Corpus | Files | Total (s) | Expansion (s) | Of which context processing (s) | N-Quads parse (s) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Scenarios | 74 | 32.990 → 6.289 | 29.983 → 3.610 | 22.095 → 2.381 | 2.121 → 1.751 |
+| Profiles | 71 | 1.292 → 0.615 | 0.999 → 0.333 | 0.784 → 0.258 | 0.119 → 0.110 |
+
+| Slowest files before the change | Total (ms) | Expansion (ms) | Of which context processing (ms) | N-Quads parse (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| `scenarios/cohort-count.json` | 2,697 → 659 | 2,144 → 290 | 1,563 → 160 | 437 → 267 |
+| `scenarios/salary-benchmark.json` | 2,574 → 402 | 2,392 → 249 | 1,740 → 129 | 131 → 111 |
+| `scenarios/platform-income.json` | 2,178 → 220 | 2,024 → 123 | 1,476 → 79 | 128 → 73 |
+| `scenarios/change-of-address.json` | 1,938 → 384 | 1,821 → 202 | 1,098 → 127 | 99 → 129 |
+| `scenarios/mortgage-main.json` | 1,676 → 403 | 1,415 → 161 | 1,004 → 96 | 170 → 160 |
+
+jsonld deep-cloned the active term map, including the large nested definitions
+inherited from the Scenario type scope, each time it applied or reverted a scoped
+context. A probe that shared resolved URLs alone kept the same processed-context
+miss counts and left the large files above 1 s. The fixture resolver now copies
+the term map and reuses its immutable entries. It uses jsonld 9's internal
+resolver and retains its context metadata and reversion behavior. Context
+processing calls and cache misses remained at 18,548 and 16,828 respectively
+for the scenarios. [Fixture resolver](src/engine/fixture-context-resolver.ts)
+
+The optimized resolver is local to fixture reads and uses the existing pinned
+loader. Documents with non-string context values use the default resolver,
+including when those values appear inside opaque JSON. All 145 fixtures matched
+their baseline N-Quads SHA-256, root IRI, and dataset size. The timed scenarios
+test used its original assertions and 60 s timeout.
+
+Ten additional inputs matched the baseline reader's acceptance and graph output
+or error, including nested contexts and context values inside opaque JSON.
+
+| Check | Result |
+| --- | --- |
+| `pnpm exec tsc -p tsconfig.build.json` and `node scripts/copy-generated.mjs` | Compile-only passed. |
+| `pnpm run typecheck` | Passed. |
+| `pnpm run lint` | Passed with the existing 647 Biome warnings and 614 informational diagnostics. The RDF pipeline reported zero failures and 217 existing allowances. |
+| `node scripts/check-fixtures-jsonld.mjs` and `node scripts/migrate-fixtures-jsonld.mjs --check` | All 145 fixture graphs and all 145 engine-object digests passed. |
+| Focused Vitest with `--maxWorkers=2` | 68 tests passed across `fixtures-jsonld`, `load-envelope`, `whole-message-fixtures`, `wire`, `wire-proof-graphs`, and `context-pins`. |
+| `node scripts/check-no-trace-change.mjs` | Both runs preserved the traces, outlines, and manifest rows. Each reported 278 runs, zero disagreements, and five blocked paths. |
