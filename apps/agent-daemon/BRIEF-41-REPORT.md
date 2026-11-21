@@ -384,3 +384,26 @@ separate issue.
 | Agent memory | Both TypeScript projects and all 59 offline tests passed. The CSS suite could not bind loopback in the sandbox. |
 | Daemon | Both TypeScript projects passed. Full Vitest passed 233 tests and reported 20 failures in loopback and subprocess fixtures. CSS and the D-2 demo hit `listen EPERM`, 15 cloud tests timed out during loopback setup, Python plist validation hit `spawnSync EPERM`, and the two packaged-binary checks received empty child stdout. The offline Vitest run passed 233 with three cases skipped by the test-name filter. A direct production package installed 177 cached dependencies and its CLI help ran successfully. |
 | Biome and root guards | Biome passed with warnings. `pnpm run lint:root` and `git diff --check` passed. |
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Phase 2 review fixes, round 3 (41j)
+
+| Finding | Before | After |
+| --- | --- | --- |
+| Derived recall with interaction-only inputs | A signed, matching-purpose derived claim appeared in recall live and after restart. The count was one for the direct input alone. | Runtime recall applies one effective-terms check per fact. It follows inherited terms and the recorded input IDs and digests recursively. A withheld or unavailable input also withholds the derived fact. The same regression now returns zero items and a count of two. The supplier-terms control remains recallable. |
+| Refused precedence successor | The gate recorded a supersession before refusing the winner. Recall withheld the earlier confirmed fact live and after restart. An earlier admitted revision of the winner's ID also masked this problem in the partial fix. | The confirmed-receipt read checks the gate's current or held successor for the same precedence group. When that successor's delivery lacks a confirmed admission, recall returns the earlier fact without the supersession marker. The regressions cover both a new successor ID and a refused revision of a previously admitted ID. |
+
+The signed gate regressions failed before the fixes and passed both live and after
+reopening the same directory. Unit tests also cover nested inherited default
+terms and transitive withholding for superseded inputs, inputs admitted for a
+different purpose, and inputs replaced under the same ID. Gate recording,
+derivation, and mixed legacy revision ordering retain their existing behavior.
+
+| Check | Result |
+| --- | --- |
+| Reference | Library-only TypeScript build, generated asset copy and typecheck passed. All 18 tests passed across admitted-facts, claim-failures and both oracle files. |
+| Targeted scenarios | `mortgage-core` ran two paths and `pay-an-invoice` ran three. The five traces differed only at `generated.commit`. The trace index and scenario manifest differed only in row order. `git checkout-index` restored the generated artifacts, and the trace, outline and manifest paths are clean. |
+| Agent memory | Both TypeScript projects and 59 offline tests passed. The full run reached the sandbox's loopback `EPERM` in the CSS fixture. |
+| Daemon | Both TypeScript projects and the build passed. The offline Vitest run passed 239 tests, with three skipped by the name filter. Full Vitest passed 239 tests and reported the same 20 sandbox failures as 41i in loopback and subprocess fixtures. Direct production packaging installed 177 cached dependencies with zero downloads. Plain Node imported the packaged daemon and ran `awp gate --help`. The temporary package directory was removed. |
+| Biome and root guards | Biome passed with existing reference warnings. `pnpm run lint:root` and `git diff --check` passed. |

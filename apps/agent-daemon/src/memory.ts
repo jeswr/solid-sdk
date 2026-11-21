@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 import type { AgentMemory, RecalledMemory } from "@jeswr/agent-memory";
 import { canonicalJson, isIri } from "@jeswr/agent-reference";
 import type { AdmittedFact } from "@jeswr/agent-reference/gates/common";
@@ -52,6 +53,56 @@ function time(value: string | undefined): number {
   return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
 }
 
+function recallTerms(facts: readonly AdmittedFact[], purpose: string) {
+  const byId = new Map(facts.map((fact) => [fact.id, fact]));
+  const decisions = new Map<AdmittedFact, AdmittedFact["terms"]>();
+  function hasReusableTerms(
+    terms: AdmittedFact["terms"] | null,
+  ): terms is NonNullable<AdmittedFact["terms"]> {
+    // A missing policy, including a null inherited policy, permits only the original interaction.
+    return (
+      terms != null && (terms.inherited?.every((input) => hasReusableTerms(input.terms)) ?? true)
+    );
+  }
+  function effectiveTerms(fact: AdmittedFact): AdmittedFact["terms"] {
+    if (decisions.has(fact)) return decisions.get(fact);
+    decisions.set(fact, undefined); // Withhold cycles as well as ineligible inputs.
+    const { terms, admittedPurpose, supersededBy, statement } = fact;
+    if (admittedPurpose !== purpose || supersededBy !== undefined || !hasReusableTerms(terms))
+      return undefined;
+
+    const derivation = statement?.derivation;
+    if (
+      derivation &&
+      typeof derivation === "object" &&
+      !Array.isArray(derivation) &&
+      "inputs" in derivation
+    ) {
+      const { inputs } = derivation;
+      if (
+        !Array.isArray(inputs) ||
+        !inputs.every((input) => {
+          if (
+            !input ||
+            typeof input !== "object" ||
+            Array.isArray(input) ||
+            typeof input.id !== "string" ||
+            typeof input.digest !== "string"
+          )
+            return false;
+          const source = byId.get(input.id);
+          // A different revision with the same ID cannot authorize recall of the recorded input.
+          return source?.digest === input.digest && effectiveTerms(source) !== undefined;
+        })
+      )
+        return undefined;
+    }
+    decisions.set(fact, terms);
+    return terms;
+  }
+  return effectiveTerms;
+}
+
 export function createRuntimeMemory(o: RuntimeMemoryOptions): {
   recall(query: string): Promise<RecallResult>;
 } {
@@ -72,7 +123,14 @@ export function createRuntimeMemory(o: RuntimeMemoryOptions): {
       const recalled = await owner.recall({ purpose, limit: 50 });
       const candidates: { item: MemoryItem; at: number; id: string }[] = [];
       const result: RecallResult = { items: [], withheld: 0 };
-      for (const fact of facts()) {
+      const admitted = facts();
+      const effectiveTerms = recallTerms(admitted, purpose);
+      for (const fact of admitted) {
+        const terms = effectiveTerms(fact);
+        if (!terms) {
+          result.withheld++;
+          continue;
+        }
         const {
           id,
           claimType,
@@ -83,16 +141,10 @@ export function createRuntimeMemory(o: RuntimeMemoryOptions): {
           digest,
           original,
           admittedPurpose,
-          terms,
           supersededBy,
           disputedWith,
           statement,
         } = fact;
-        // Without supplier terms, the default permits use only in the original interaction.
-        if (supersededBy !== undefined || admittedPurpose !== purpose || !terms) {
-          result.withheld++;
-          continue;
-        }
         if (
           ![claimType, subject, source].some(matches) &&
           !(statement && matches(canonicalJson(statement)))

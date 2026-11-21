@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 import { digestOf } from "@jeswr/agent-model";
 import type { AdmittedFact } from "@jeswr/agent-reference/gates/common";
 import { expect, it, vi } from "vitest";
@@ -36,6 +37,55 @@ it("counts superseded and other-purpose facts without returning their values", a
     withheld: 2,
   });
   expect(await memory.recall("unknown")).toEqual({ items: [], withheld: 2 });
+});
+
+it("withholds derived facts transitively and requires the recorded input revision", async () => {
+  const derive = (id: string, input: AdmittedFact): AdmittedFact => {
+    if (!input.digest) throw new Error("Missing input digest");
+    const statement = { derivation: { inputs: [{ id: input.id, digest: input.digest }] } };
+    return { ...fact, id, method: "derived", statement, digest: digestOf(statement) };
+  };
+  const derived = derive("urn:test:derived", fact);
+  const nested = derive("urn:test:nested", derived);
+  for (const input of [
+    { ...fact, admittedPurpose: "urn:test:other" },
+    { ...fact, supersededBy: "urn:test:replacement" },
+    { ...fact, digest: digestOf({ value: "Replacement" }) },
+  ]) {
+    const memory = createRuntimeMemory({
+      facts: () => [nested, derived, input],
+      owner: { recall: async () => [] },
+      purpose,
+    });
+    const withheld = input.digest === fact.digest ? 3 : 2;
+    expect(await memory.recall("no-match")).toEqual({ items: [], withheld });
+    expect(await memory.recall("urn:test:derived")).toEqual({ items: [], withheld });
+  }
+});
+
+it("withholds a policy that inherits interaction-only terms through another policy", async () => {
+  const memory = createRuntimeMemory({
+    facts: () => [
+      {
+        ...fact,
+        terms: {
+          policy: { id: "urn:test:outer" },
+          inherited: [
+            {
+              target: "urn:test:intermediate",
+              terms: {
+                policy: { id: "urn:test:intermediate" },
+                inherited: [{ target: "urn:test:original", terms: null }],
+              },
+            },
+          ],
+        },
+      },
+    ],
+    owner: { recall: async () => [] },
+    purpose,
+  });
+  expect(await memory.recall("afternoon")).toEqual({ items: [], withheld: 1 });
 });
 
 it("treats model queries literally, preserves trusted scope, and bounds ordered results", async () => {

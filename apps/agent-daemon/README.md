@@ -203,9 +203,10 @@ the reference runtime opened under the daemon's lease. The optional `admission`
 configuration gives the runtime a trusted task ID, reliance rules and operation
 handlers for evidence-bearing messages. The reference trust store supplies issuer
 pins and source authority rules. Gate recall selects the latest eligible revision of
-each statement ID whose delivery has a confirmed final `admitted` verdict. A later
-refused or interrupted delivery leaves that revision and its provenance available
-both live and after reopening the same gate directory with the same task configuration.
+each statement ID whose delivery has a confirmed final `admitted` verdict. A
+precedence successor also needs a confirmed `admitted` verdict to supersede an
+earlier fact in recall. This applies both live and after reopening the same gate
+directory with the same task configuration.
 
 Construct `ownerMemory` with `createAgentMemory`, using the authenticated
 workspace storage and a mandate loader that verifies owner, revocation, signed
@@ -215,6 +216,9 @@ owner assertion terms. Results are ordered by time and ID and default to 20 item
 and 64 KiB of JSON. Superseded facts with confirmed admissions, facts with an
 absent or different admitted purpose, and facts subject to the interaction-only
 default terms all contribute to the withheld count independently of the query.
+For a derived fact, recall checks inherited terms and the exact recorded input
+revisions recursively. A withheld or unavailable input also withholds the
+derived fact.
 Reopening preserves an absent admitted purpose. Returned facts carry their
 recorded purpose, supplier terms and other provenance.
 Owner recall verifies the stored, unexpired owner-signed approval against the

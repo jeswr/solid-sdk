@@ -43,7 +43,10 @@ import {
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { createGateway, GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
 import { fakeFetch } from "@jeswr/agent-model-gateway/testing";
-import { CONFIG_ED25519, introduce, PILOT_PROFILE } from "@jeswr/agent-reference";
+import { AgentRuntime, CONFIG_ED25519, introduce, PILOT_PROFILE } from "@jeswr/agent-reference";
+import type { JsonObject } from "@jeswr/agent-reference/core/types";
+import { evaluateRule, ruleSchema } from "@jeswr/agent-reference/derive/rules";
+import { GateMemory } from "@jeswr/agent-reference/gates/common";
 import { testKey } from "@jeswr/agent-reference/reference/keys";
 import { Cast, craftSigned, mandateOf, signClaim } from "@jeswr/agent-reference/scenarios/common";
 import { addSourceRule, pinIssuer, saveTrust } from "@jeswr/agent-reference/setup";
@@ -2082,7 +2085,7 @@ async function memoryGateFixture(
       id: "urn:test:source-rule",
       version: "1",
       source: memoryIssuer,
-      claimTypes: ["assessment"],
+      claimTypes: admission.reliance.rules.map(({ claimType }) => claimType),
       subjects: "any",
     });
   }
@@ -2090,7 +2093,7 @@ async function memoryGateFixture(
   const options = { directory, now, admission };
   async function signedInvocation(
     sequence: number,
-    statement: Omit<typeof assessment, "terms"> & { terms?: typeof assessment.terms },
+    statement: JsonObject,
     purpose?: string,
     refuse = false,
   ) {
@@ -2316,16 +2319,20 @@ it.each([
   "interaction-only",
   "repeat",
   "superseded",
+  "refused-successor",
+  "refused-successor-revision",
 ] as const)("preserves the %s recall result across restart", async (variant) => {
   const root = await mkdtemp(join(tmpdir(), "daemon-memory-review-"));
   try {
+    const refusedSuccessor =
+      variant === "refused-successor" || variant === "refused-successor-revision";
     const admission = {
       ...memoryAdmission,
       reliance: {
         ...memoryAdmission.reliance,
         rules: memoryAdmission.reliance.rules.map((rule) => ({
           ...rule,
-          ...(variant === "superseded" && {
+          ...((variant === "superseded" || refusedSuccessor) && {
             precedence: { sources: [memoryIssuer], freshness: "newer-first" as const },
           }),
         })),
@@ -2344,6 +2351,7 @@ it.each([
       asOf: memoryAt,
     };
     const older = { ...assessment, asOf: new Date(AT - 60_000).toISOString() };
+    const priorSuccessor = { ...replacement, subject: "urn:test:another-subject" };
     const deliveries =
       variant === "refused"
         ? [await signedInvocation(61, assessment, memoryPurpose, true)]
@@ -2360,8 +2368,11 @@ it.each([
                 await signedInvocation(63, assessment, "urn:test:other-purpose"),
               ]
             : [
+                ...(variant === "refused-successor-revision"
+                  ? [await signedInvocation(60, priorSuccessor, memoryPurpose)]
+                  : []),
                 await signedInvocation(61, older, memoryPurpose),
-                await signedInvocation(62, replacement, memoryPurpose),
+                await signedInvocation(62, replacement, memoryPurpose, refusedSuccessor),
               ];
     const gate = await openGate(options);
     const recall = (active: typeof gate, purpose = memoryPurpose, query = "assessment") =>
@@ -2370,7 +2381,7 @@ it.each([
         owner: { recall: async () => [] },
         purpose,
       }).recall(query);
-    const verifyRecall = async (active: typeof gate) => {
+    const verifyRecall = async (active: typeof gate, phase: string) => {
       const result = await recall(active);
       if (variant === "refused") {
         expect(active.facts()).toEqual([]);
@@ -2402,6 +2413,16 @@ it.each([
           ],
           withheld: 0,
         });
+      } else if (refusedSuccessor) {
+        expect.soft(result, phase).toMatchObject({
+          items: [
+            ...(variant === "refused-successor-revision"
+              ? [{ id: priorSuccessor.id, statement: priorSuccessor }]
+              : []),
+            { id: older.id, statement: older, provenance: { supersededBy: undefined } },
+          ],
+          withheld: 0,
+        });
       } else {
         expect(result.items).toHaveLength(1);
         expect(result).toMatchObject({ items: [{ id: replacement.id }], withheld: 1 });
@@ -2409,10 +2430,10 @@ it.each([
       }
     };
     try {
-      for (const jws of deliveries) {
+      for (const [index, jws] of deliveries.entries()) {
         const message = reader.ingest.parse({ id: "fixture", raw: encodeEnvelope(jws) });
         expect(await gate.check({ account: "fixture", binding: "direct", message })).toMatchObject(
-          variant === "refused"
+          variant === "refused" || (refusedSuccessor && index === deliveries.length - 1)
             ? { outcome: "refused", reason: "not-authorised" }
             : { outcome: "admitted" },
         );
@@ -2423,13 +2444,121 @@ it.each([
           expect.objectContaining({ id: assessment.id, accepted: true }),
         );
       }
-      await verifyRecall(gate);
+      if (refusedSuccessor) {
+        const state = JSON.parse(await readFile(join(options.directory, "state.json"), "utf8"));
+        expect(state.precedenceHolds[older.id]).toMatchObject({ supersededBy: replacement.id });
+      }
+      await verifyRecall(gate, "live");
     } finally {
       await gate.close();
     }
     const reopened = await openGate(options);
     try {
-      await verifyRecall(reopened);
+      await verifyRecall(reopened, "after restart");
+    } finally {
+      await reopened.close();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it.each([
+  "default",
+  "supplier",
+] as const)("enforces a derived fact's inherited %s terms live and after restart", async (terms) => {
+  const root = await mkdtemp(join(tmpdir(), "daemon-memory-derived-"));
+  try {
+    const rule = ruleSchema.parse({
+      id: "urn:test:assessment-threshold",
+      template: "threshold",
+      params: { input: "assessment", operator: "gte", value: 1 },
+      output: "eligible",
+      inputsFrom: [memoryIssuer],
+    });
+    const [assessmentRule] = memoryAdmission.reliance.rules;
+    if (!assessmentRule) throw new Error("Missing assessment reliance rule");
+    const { options, signedInvocation } = await memoryGateFixture(root, "valid", {
+      ...memoryAdmission,
+      reliance: {
+        ...memoryAdmission.reliance,
+        rules: [
+          assessmentRule,
+          { ...assessmentRule, claimType: rule.output, methods: ["derived"] },
+        ],
+      },
+    });
+    const input = { ...assessment, value: 2, ...(terms === "default" && { terms: undefined }) };
+    const reader = createDirectReader(
+      { inboxes: new Map(), accepted: new Map() },
+      new RecordingTokenProvider(),
+    );
+    const create = AgentRuntime.create.bind(AgentRuntime);
+    // Install a trusted rule for the fixture's real reference admission. Recall after reopening
+    // reads the persisted proof and terms without needing to run the rule again.
+    const setup = vi
+      .spyOn(AgentRuntime, "create")
+      .mockImplementationOnce((config) =>
+        create({ ...config, gates: { ...config.gates, rules: [rule] } }),
+      );
+    const gate = await openGate(options).finally(() => setup.mockRestore());
+    const verifyRecall = async (active: typeof gate, id: string, phase: string) => {
+      expect(active.facts().find((fact) => fact.id === id)).toMatchObject({
+        admittedPurpose: memoryPurpose,
+        terms: { inherited: [{ target: input.id, terms: input.terms ?? null }] },
+      });
+      const memory = createRuntimeMemory({
+        facts: active.facts,
+        owner: { recall: async () => [] },
+        purpose: memoryPurpose,
+      });
+      expect.soft(await memory.recall("eligible"), phase).toMatchObject({
+        items: terms === "default" ? [] : [{ id }],
+        withheld: terms === "default" ? 2 : 0,
+      });
+    };
+    let derivedId: string;
+    try {
+      const deliver = (jws: string) =>
+        gate.check({
+          account: "fixture",
+          binding: "direct",
+          message: reader.ingest.parse({ id: "fixture", raw: encodeEnvelope(jws) }),
+        });
+      expect(await deliver(await signedInvocation(61, input, memoryPurpose))).toMatchObject({
+        outcome: "admitted",
+      });
+      const source = gate.facts().find((fact) => fact.id === input.id);
+      if (!source?.digest) throw new Error("Missing admitted input");
+      const task = options.admission.taskId;
+      const memory = new GateMemory();
+      memory.enter(task, { ...source, kind: "statement", accepted: true, digest: source.digest });
+      memory.restoreFacts();
+      const derived = evaluateRule({
+        rules: [rule],
+        rule: rule.id,
+        memory,
+        task,
+        subject: input.subject,
+        deriver: memoryIssuer,
+        at: memoryAt,
+        purpose: memoryPurpose,
+      });
+      if (!derived.ok || typeof derived.statement.id !== "string")
+        throw new Error("Missing derived statement");
+      derivedId = derived.statement.id;
+      expect(
+        await deliver(await signedInvocation(62, derived.statement, memoryPurpose)),
+      ).toMatchObject({
+        outcome: "admitted",
+      });
+      await verifyRecall(gate, derivedId, "live");
+    } finally {
+      await gate.close();
+    }
+    const reopened = await openGate(options);
+    try {
+      await verifyRecall(reopened, derivedId, "after restart");
     } finally {
       await reopened.close();
     }

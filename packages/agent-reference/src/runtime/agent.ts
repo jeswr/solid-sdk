@@ -3315,7 +3315,7 @@ export class AgentRuntime {
     for (const { kind: _kind, accepted: _accepted, admissionOrder: _order, ...fact } of ordered) {
       facts.set(fact.id, fact);
     }
-    if (includeSuperseded) {
+    if (includeSuperseded || isAdmittedReceipt) {
       for (const fact of Object.values(this.gateMemory.precedenceHolds)) {
         if (
           fact.supersededBy &&
@@ -3330,7 +3330,30 @@ export class AgentRuntime {
           facts.set(fact.id, fact);
       }
     }
-    return [...facts.values()].map((fact) => copyData(fact));
+    const recalled: AdmittedFact[] = [];
+    for (const fact of facts.values()) {
+      const { supersededBy, ...prior } = fact;
+      if (isAdmittedReceipt && supersededBy !== undefined) {
+        // Check the gate's successor revision. A different revision selected for recall
+        // under the same statement ID cannot confirm this precedence decision.
+        const successor =
+          this.gateMemory.facts.get(supersededBy) ?? this.gateMemory.precedenceHolds[supersededBy];
+        if (
+          !successor ||
+          !confirmed(successor) ||
+          successor.admittedPurpose !== fact.admittedPurpose ||
+          successor.claimType !== fact.claimType ||
+          successor.subject !== fact.subject ||
+          digestOf(successor.statement?.period ?? null) !== digestOf(fact.statement?.period ?? null)
+        ) {
+          recalled.push(copyData(prior));
+          continue;
+        }
+        if (!includeSuperseded) continue;
+      }
+      recalled.push(copyData(fact));
+    }
+    return recalled;
   }
 
   private admittedStatementItems(
