@@ -6,7 +6,14 @@ import { tmpdir } from "os";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
 import { expect, it } from "vitest";
-import { FileLedger, readLedgerSegment, verifyLedgerAtHead } from "../src/store/ledger.js";
+import {
+  FileLedger,
+  LEDGER_GENESIS,
+  type LedgerEntry,
+  readLedgerSegment,
+  verifyLedgerAtHead,
+  verifyLedgerRange,
+} from "../src/store/ledger.js";
 
 const now = "2026-11-20T09:00:00Z";
 const temp = (run: (path: string) => void) => {
@@ -77,7 +84,34 @@ it("recovers a saved prefix across both formats and preserves the prefix bytes",
     expect(verifyLedgerAtHead(ledger.entries(), ledger.head()).ok).toBe(true);
   }));
 
-it.each(["before", "between"])("drops a non-entry JSONL line %s retained entries", (position) =>
+it.each(["false", "null", "[]", '"entry"', "0"])("rejects %s as the first JSONL entry", (line) =>
+  temp((path) => {
+    const ledger = new FileLedger(path, { segmentFormat: "jsonl" });
+    const first = ledger.append({ type: "event", value: 1 }, now);
+    const last = ledger.append({ type: "event", value: 2 }, now);
+    const saved = ledger.head();
+    const tampered = { ...last, record: { ...last.record, value: 3 } };
+    writeFileSync(path, `${line}\n${JSON.stringify(first)}\n${JSON.stringify(tampered)}\n`);
+
+    expect(() => verifyLedgerAtHead(ledger.entries(), saved)).toThrow(
+      "Stored ledger entries require a record",
+    );
+  }));
+
+it.each(["head", "range"])("rejects a missing row during %s verification", (mode) =>
+  temp((path) => {
+    const ledger = new FileLedger(path);
+    const entry = ledger.append({ type: "event" }, now);
+    const rows: LedgerEntry[] = [];
+    rows[1] = entry;
+    const result =
+      mode === "head"
+        ? verifyLedgerAtHead(rows, ledger.head())
+        : verifyLedgerRange(rows, LEDGER_GENESIS, ledger.head());
+    expect(result.ok).toBe(false);
+  }));
+
+it.each(["before", "between"])("rejects a non-entry JSONL line %s retained entries", (position) =>
   temp((path) => {
     const ledger = new FileLedger(path, { segmentFormat: "jsonl" });
     const first = ledger.append({ type: "event", value: 1 }, now);
@@ -86,12 +120,14 @@ it.each(["before", "between"])("drops a non-entry JSONL line %s retained entries
     const uncommitted = ledger.append({ type: "event", value: 3 }, now);
     const lines = [first, second, uncommitted].map((entry) => JSON.stringify(entry));
     lines.splice(position === "before" ? 0 : 1, 0, "false");
-    writeFileSync(path, lines.join("\n") + "\n");
+    const corrupted = `${lines.join("\n")}\n`;
+    writeFileSync(path, corrupted);
 
-    const reopened = new FileLedger(path);
-    reopened.recoverUncommittedSuffix(saved);
-    expect(reopened.entries()).toEqual([first, second]);
-    expect(verifyLedgerAtHead(reopened.entries(), saved).ok).toBe(true);
+    expect(() => new FileLedger(path)).toThrow("Stored ledger entries require a record");
+    expect(() => ledger.recoverUncommittedSuffix(saved)).toThrow(
+      "Stored ledger entries require a record",
+    );
+    expect(readFileSync(path, "utf8")).toBe(corrupted);
   }));
 
 it("restores the JSONL final newline at the saved head before appending", () =>
@@ -158,6 +194,27 @@ it("recovers JSONL by filtering sequence numbers and rewriting the retained rows
     ledger.recoverUncommittedSuffix(saved);
     expect(readFileSync(path, "utf8")).toBe(retained);
     expect(verifyLedgerAtHead(ledger.entries(), saved).ok).toBe(true);
+  }));
+
+it("refuses JSONL recovery when an older archive contains an uncommitted row", () =>
+  temp((path) => {
+    const ledger = new FileLedger(path, { segmentFormat: "jsonl", segmentMaxEntries: 1 });
+    ledger.append({ type: "event", value: 1 }, now);
+    ledger.append({ type: "event", value: 2 }, now);
+    const saved = ledger.head();
+    const archive = `${path}.seg-000001`;
+    const uncommitted = ledger.append({ type: "event", value: 3 }, now);
+    const active = readFileSync(path, "utf8");
+    appendFileSync(archive, `${JSON.stringify(uncommitted)}\n`);
+    const corrupted = readFileSync(archive, "utf8");
+
+    const reopened = new FileLedger(path);
+    expect(() => reopened.recoverUncommittedSuffix(saved)).toThrow(
+      "uncommitted rows precede retained rows",
+    );
+    expect(readFileSync(archive, "utf8")).toBe(corrupted);
+    expect(readFileSync(path, "utf8")).toBe(active);
+    expect(reopened.head()).toEqual(ledger.head());
   }));
 
 it("refuses N-Quads recovery when the saved entries are not a byte prefix", () =>

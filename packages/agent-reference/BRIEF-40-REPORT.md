@@ -296,3 +296,24 @@ Node 24.22.3 and pnpm 10.4.1. Every Vitest run used `--maxWorkers=2`.
 | `git diff --check` and protected-path comparison with `162ce4edf` | Passed. The oracle snapshot, trace and outline files, run manifest, and message context pins retain their bytes. |
 
 The combined reference run passed all 102 tests across 13 files in 756 seconds.
+
+## Review fixes (40e)
+
+- JSONL reads reject non-object rows and invalid record payloads with the existing
+  stored-record error. Recovery rejects those segments before rewriting them, so
+  the 40d fixture now checks refusal and byte preservation. Full-chain and range
+  verification both reject missing rows, and full-chain verification checks the
+  payload seal of every entry in a successful chain.
+  [JSONL reader](src/store/ledger.ts#L170) · [Full-chain verifier](src/store/ledger.ts#L428) · [Range verifier](src/store/ledger.ts#L487) · [Regressions](test/ledger-file-format.test.ts#L87)
+- Recovery refuses uncommitted rows in any archive that precedes the last retained
+  segment. The all-JSONL regression checks the ordering error, the preserved head,
+  and the bytes of the archive and active segment.
+  [Recovery](src/store/ledger.ts#L272) · [Regression](test/ledger-file-format.test.ts#L199)
+
+The pre-fix file-format run failed all ten new or updated cases. All 20
+file-format tests passed after the fix. The library-only build passed with Node
+24.22.3 using `npx tsc -p tsconfig.build.json && node scripts/copy-generated.mjs`.
+The requested Vitest run passed all 50 tests across four files, including the
+record corpus, in 681 seconds with `--maxWorkers=2`. Biome passed with one
+existing warning and seven existing informational diagnostics. `git diff --check`
+passed, and the trace, outline, and run-manifest diff was empty.

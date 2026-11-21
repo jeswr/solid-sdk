@@ -159,8 +159,19 @@ type SegmentFormat = NonNullable<FileLedgerOptions["segmentFormat"]>;
 const ENTRY_BOUNDARY =
   /^\s*<(urn:awp:record:[a-f0-9]{64})>[ \t]+<https:\/\/w3id\.org\/jeswr\/awp#entryHash>[ \t]+/;
 
+function isRecordObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isLedgerRecord(value: unknown): value is LedgerEntry["record"] {
+  return isRecordObject(value) && typeof value.type === "string";
+}
+
 function readLegacyLine(line: string): LedgerEntry {
-  return JSON.parse(line) as LedgerEntry;
+  const entry: unknown = JSON.parse(line);
+  if (!isRecordObject(entry) || !isLedgerRecord(entry.record))
+    throw new TypeError("Stored ledger entries require a record");
+  return entry as unknown as LedgerEntry;
 }
 
 function writeLegacyLine(path: string, entry: LedgerEntry): void {
@@ -267,14 +278,16 @@ export class FileLedger implements EvidenceLedger {
     });
     const prefix = segments.flatMap(({ kept }) => kept.map(({ entry }) => entry));
     const lastKept = segments.findLastIndex(({ kept }) => kept.length > 0);
-    // RDF is recovered by byte prefix, and only the last retained segment can be shortened.
-    const interleaved =
-      segments.some(({ format }) => format === "nquads") &&
-      segments.some(({ format, kept, rows }, index) => {
-        if (index < lastKept) return rows.some(({ entry }) => entry.seq > head.seq);
-        return format === "nquads" && kept.length > 0 && kept.at(-1) !== rows[kept.length - 1];
-      });
-    if (interleaved || !verifyLedgerAtHead(prefix, head).ok)
+    // Earlier segments stay intact, and the last RDF segment is recovered by byte prefix.
+    const interleaved = segments.some(({ format, kept, rows }, index) => {
+      if (index < lastKept) return kept.length !== rows.length;
+      return format === "nquads" && kept.length > 0 && kept.at(-1) !== rows[kept.length - 1];
+    });
+    if (interleaved)
+      throw new Error(
+        "Cannot resume the evidence ledger at an invalid saved head: uncommitted rows precede retained rows",
+      );
+    if (!verifyLedgerAtHead(prefix, head).ok)
       throw new Error("Cannot resume the evidence ledger at an invalid saved head");
     // Drop the newest segments first. Every intermediate state retains the saved head.
     this.currentCount = 0;
@@ -415,10 +428,10 @@ export interface LedgerCheck {
 export function verifyLedger(entries: readonly LedgerEntry[]): LedgerCheck {
   const scope =
     "chain integrity of the entries present; does not establish that unrecorded events did not occur or that the tail was not truncated";
-  const fail = (e: LedgerEntry, problem: string): LedgerCheck => ({
+  const fail = (e: LedgerEntry | undefined, problem: string): LedgerCheck => ({
     ok: false,
     entries: entries.length,
-    firstBadSeq: e.seq,
+    firstBadSeq: e?.seq,
     problem,
     scope,
   });
@@ -429,7 +442,7 @@ export function verifyLedger(entries: readonly LedgerEntry[]): LedgerCheck {
     // A pruned prefix is acceptable only if a retained checkpoint attests its end.
     const cp = entries.find(
       (e) =>
-        e.record.type === "ledger-checkpoint" &&
+        e?.record?.type === "ledger-checkpoint" &&
         e.record.lastPrunedSeq === first.seq - 1 &&
         e.record.lastPrunedHash === first.prev,
     );
@@ -439,7 +452,7 @@ export function verifyLedger(entries: readonly LedgerEntry[]): LedgerCheck {
   }
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
-    if (!e) break;
+    if (!e || !isLedgerRecord(e.record)) return fail(e, "invalid ledger entry");
     if (e.seq !== (first?.seq ?? 1) + i) return fail(e, "sequence gap");
     if (e.prev !== prev) return fail(e, "broken link");
     if (!validSeal(e)) return fail(e, "hash mismatch");
@@ -479,10 +492,10 @@ export function verifyLedgerRange(
 ): LedgerCheck {
   const scope =
     "chain integrity of the entries after an attested anchor; does not establish entries before the anchor or after the last one";
-  const fail = (e: LedgerRangeEntry, problem: string): LedgerCheck => ({
+  const fail = (e: LedgerRangeEntry | undefined, problem: string): LedgerCheck => ({
     ok: false,
     entries: entries.length,
-    firstBadSeq: e.seq,
+    firstBadSeq: e?.seq,
     problem,
     scope,
   });
@@ -492,7 +505,7 @@ export function verifyLedgerRange(
   let prev = anchor.hash;
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
-    if (!e) break;
+    if (!e) return fail(e, "invalid ledger entry");
     if (e.seq !== anchor.seq + 1 + i) return fail(e, "sequence gap");
     if (e.prev !== prev) return fail(e, i === 0 ? "anchor link" : "broken link");
     if (
