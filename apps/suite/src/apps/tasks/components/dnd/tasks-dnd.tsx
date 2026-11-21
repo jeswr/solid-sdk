@@ -197,7 +197,9 @@ export function TasksDnd({ children }: { children: ReactNode }) {
   const { preferences } = useTasksPreferences();
   const pathname = useRoutePathname();
   // A list sorted by due date, priority or name has no manual order to drop into.
-  const manual = (preferences.sort[pathname] ?? "manual") === "manual";
+  const manual =
+    (preferences.sort[pathname] ?? "manual") === "manual" &&
+    (preferences.groupBy[pathname] ?? "none") === "none";
   const flat = pathname.endsWith("/board");
   const [store] = useState(hintStore);
   const [active, setActive] = useState<TaskView>();

@@ -21,6 +21,7 @@ import { useTasks } from "../../state/tasks-context";
 import { deleteLabel, labelTargets, renameLabel } from "../../state/view-actions";
 import { LabelColourPicker } from "../label-colour-picker";
 import { CrossProjectView } from "./cross-project-view";
+import { GroupedTasks } from "./grouped-tasks";
 import { ViewGroup } from "./view-group";
 
 export function LabelView({ label }: { label: string }) {
@@ -115,14 +116,16 @@ export function LabelView({ label }: { label: string }) {
         </div>
       }
     >
-      {groups.map((group) => (
-        <ViewGroup
-          key={group.projectUrl}
-          title={group.projectTitle}
-          rows={group.tasks}
-          collapsible
-        />
-      ))}
+      <GroupedTasks rows={rows}>
+        {groups.map((group) => (
+          <ViewGroup
+            key={group.projectUrl}
+            title={group.projectTitle}
+            rows={group.tasks}
+            collapsible
+          />
+        ))}
+      </GroupedTasks>
       <AlertDialog
         open={Boolean(action)}
         onOpenChange={(open) => {

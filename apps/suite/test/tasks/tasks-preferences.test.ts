@@ -30,6 +30,7 @@ describe("Tasks preferences", () => {
       sharedProjects: [],
       favourites: [],
       sort: { inbox: "name" },
+      groupBy: {},
       viewMode: { home: "board" },
       collapsedSections: ["one"],
       sidebar: { labelsOpen: false, projectsOpen: false },

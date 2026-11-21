@@ -10,7 +10,7 @@ import {
   DropdownMenuSubTrigger,
   toast,
 } from "@jeswr/suite-ui";
-import { usePathname } from "next/navigation";
+import { useRoutePathname } from "@/lib/route-params";
 import { dropMessage, failedMessage, projectNames, sectionToast } from "../lib/dnd/announce";
 import {
   effectiveParent,
@@ -60,10 +60,11 @@ export const moveDown = relative(1);
 export function useTaskMoves(task: TaskView, flat = false) {
   const tasks = useTasks();
   const focus = useTaskListFocus();
-  const pathname = usePathname();
+  const pathname = useRoutePathname();
   const { preferences } = useTasksPreferences();
   // A list sorted by due date, priority or name offers no manual reordering.
-  const manual = (preferences.sort[pathname] ?? "manual") === "manual";
+  const grouped = (preferences.groupBy[pathname] ?? "none") !== "none";
+  const manual = (preferences.sort[pathname] ?? "manual") === "manual" && !grouped;
   const all = tasks.views.filter((view) => view.projectUrl === task.projectUrl);
   const options: PlanOptions = { all, manual, flat };
   const views = visibleTasks(all, preferences.showCompletedInProject);
@@ -96,7 +97,7 @@ export function useTaskMoves(task: TaskView, flat = false) {
       return written;
     });
   };
-  return { views, options, manual, plan, run };
+  return { views, options, manual, grouped, plan, run };
 }
 
 export function MoveMenuItems({

@@ -2,9 +2,11 @@
 "use client";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { type ReactNode, useId, useState } from "react";
+import { useRoutePathname } from "@/lib/route-params";
 import type { DropContainer } from "../../lib/dnd/types";
-import { flatRows } from "../../lib/views/project-groups";
+import { compareTasks, flatRows } from "../../lib/views/project-groups";
 import type { TaskView } from "../../lib/views/types";
+import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
 import { useDropTarget } from "../dnd/use-task-drag";
 import { TaskList } from "../task-list";
@@ -19,6 +21,7 @@ export function ViewGroup({
   children,
   dayKey,
   container,
+  showProject = true,
 }: {
   title: string;
   rows: readonly TaskView[];
@@ -30,8 +33,13 @@ export function ViewGroup({
   dayKey?: string;
   /** Rows drag out of every day group; only a dated group accepts drops (06-tasks §2.4). */
   container?: DropContainer;
+  showProject?: boolean;
 }) {
   const { views } = useTasks();
+  const viewId = useRoutePathname();
+  const { preferences } = useTasksPreferences();
+  const sort = preferences.sort[viewId];
+  const sorted = sort ? [...rows].sort(compareTasks(sort)) : rows;
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const id = useId();
   const dropDay = container?.kind === "day" ? container.dayKey : undefined;
@@ -66,7 +74,7 @@ export function ViewGroup({
         {actions}
       </div>
       <div id={`${id}-body`} hidden={collapsible && collapsed}>
-        <TaskList rows={flatRows(rows, views)} showProject container={container} />
+        <TaskList rows={flatRows(sorted, views)} showProject={showProject} container={container} />
         {children}
       </div>
     </section>
