@@ -37,6 +37,7 @@ import { createDaemon } from "../src/daemon.js";
 import { createMemoryState, createTestMemory } from "../src/testing.js";
 import type { DaemonOptions } from "../src/types.js";
 import { PodWorkspace } from "../src/workspace.js";
+import { testRecordPort } from "./record-port.js";
 
 it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed approval, transmission, audit and signed halt", async () => {
   const reservation = createServer();
@@ -296,6 +297,14 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
     let proposed = false;
     const daemonOptions: DaemonOptions = {
       gate: {
+        ...testRecordPort(actor, owner),
+        async release() {
+          return {
+            ok: true,
+            renderable: entry.renderable,
+            preview: entry.proposal.renderedPreview,
+          };
+        },
         async check({ message }) {
           return { outcome: "admitted", digest: `sha-256:${message.rawSha256}` };
         },
@@ -331,7 +340,8 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
       },
       now: () => Date.parse(at),
       isFlagged: async () => false,
-      project: async () => {
+      project: async (_proposal, sign) => {
+        await sign();
         stores.entries.set(proposal.id, entry);
         return entry;
       },

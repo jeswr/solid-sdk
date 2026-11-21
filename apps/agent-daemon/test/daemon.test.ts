@@ -81,6 +81,7 @@ import {
 } from "../src/testing.js";
 import type { DaemonOptions } from "../src/types.js";
 import { PodWorkspace } from "../src/workspace.js";
+import { testRecordPort } from "./record-port.js";
 
 export const ROOT = "https://pod.example/";
 export const OWNER = `${ROOT}profile/card#me`;
@@ -160,8 +161,30 @@ function harness() {
     },
     account: "fixture",
   }).reader;
+  const render = (proposal: OutboxEntry["proposal"]): OutboxEntry["renderable"] => ({
+    compactJws: "fixture.signed.carrier",
+    message: {
+      profile: "urn:profile:fixture",
+      configuration: "urn:config:fixture",
+      id: "urn:message:fixture",
+      conversation: proposal.intent.conversation,
+      kind: "invoke",
+      from: { actor: AGENT_ID },
+      createdAt: new Date(AT).toISOString(),
+      expiresAt: "2026-11-02T12:00:00.000Z",
+      body: {
+        operation: { id: proposal.intent.operation, version: "1" },
+        input: {},
+        basis: { kind: "public" },
+      },
+    },
+  });
   const options: DaemonOptions = {
     gate: {
+      ...testRecordPort(AGENT_ID, OWNER),
+      async release(proposal) {
+        return { ok: true, renderable: render(proposal), preview: "Fixture preview" };
+      },
       async check({ message }) {
         const digest = `sha-256:${message.rawSha256}`;
         try {
@@ -188,25 +211,10 @@ function harness() {
       entries: () => ledger.entries(),
       sync: async () => undefined,
     },
-    project: async (proposal) => {
-      const renderable: OutboxEntry["renderable"] = {
-        compactJws: "fixture.signed.carrier",
-        message: {
-          profile: "urn:profile:fixture",
-          configuration: "urn:config:fixture",
-          id: "urn:message:fixture",
-          conversation: proposal.intent.conversation,
-          kind: "invoke",
-          from: { actor: AGENT_ID },
-          createdAt: new Date(AT).toISOString(),
-          expiresAt: "2026-11-02T12:00:00.000Z",
-          body: {
-            operation: { id: proposal.intent.operation, version: "1" },
-            input: {},
-            basis: { kind: "public" },
-          },
-        },
-      };
+    project: async (proposal, sign) => {
+      const released = await sign();
+      if (!released.ok) throw new ProposalRefusedError(released.reason);
+      const { renderable } = released;
       const bytes = canonicalJson(renderable);
       const wire = { bytes, digest: digestBytes(bytes), mediaType: "application/json" };
       const entry: OutboxEntry = {
@@ -258,6 +266,8 @@ function harness() {
   return {
     pod,
     workspace,
+    release: (proposal: OutboxEntry["proposal"]) =>
+      ({ ok: true, renderable: render(proposal), preview: "Fixture preview" }) as const,
     state,
     ledger,
     options,
@@ -312,7 +322,10 @@ it.each([
   const records = h.ledger
     .entries()
     .map((e) => e.record)
-    .filter((r) => r.type !== "ledger-checkpoint");
+    .filter(
+      (r) =>
+        r.type !== "ledger-checkpoint" && r.type !== "gate-decision" && r.type !== "record-anchor",
+    );
   const taskId = records[0]?.taskId;
   expect(taskId).toMatch(/^task-[a-f0-9]{64}$/);
   expect(records.every((r) => r.taskId === taskId)).toBe(true);
@@ -356,7 +369,11 @@ it.each([
     // Cursor replay retains the task and producing Proposer call without invoking it again.
     await createDaemon(h.options).once();
     expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
-    expect(h.ledger.entries()).toHaveLength(records.length);
+    expect(
+      h.ledger
+        .entries()
+        .filter(({ record }) => record.type !== "gate-decision" && record.type !== "record-anchor"),
+    ).toHaveLength(records.length);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -376,7 +393,10 @@ it.each([
   const records = h.ledger
     .entries()
     .map((e) => e.record)
-    .filter((r) => r.type !== "ledger-checkpoint");
+    .filter(
+      (r) =>
+        r.type !== "ledger-checkpoint" && r.type !== "gate-decision" && r.type !== "record-anchor",
+    );
   const failure = records.find((r) => r.type === "model-call");
   expect(failure).toMatchObject({ taskId: records[0]?.taskId, inputTokens: 7, outputTokens: 3 });
   expect(failure?.taskId).toMatch(/^task-[a-f0-9]{64}$/);
@@ -402,7 +422,13 @@ it("imports ACL first, deterministically triages, proposes, audits, checkpoints,
   expect(h.state.cursors.get("fixture")).toBe("one");
   expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
   expect(h.executor.runOutboxOnce).toHaveBeenCalledOnce();
-  expect(h.ledger.entries().map((e) => e.record.type)).toEqual(["ingest", "proposal"]);
+  expect(h.ledger.entries().map((e) => e.record.type)).toEqual([
+    "gate-decision",
+    "ingest",
+    "gate-decision",
+    "proposal",
+    "record-anchor",
+  ]);
   expect(h.state.held()).toBe(false);
   expect([...h.pod.resources.keys()].some((url) => url.includes("agent/proposals/"))).toBe(true);
   // The agent introduces itself after the owner-only workspace ACL, before any inbox content.
@@ -432,10 +458,10 @@ it.each([
   if (cached) await h.state.proposalResults.put(key, result);
   else vi.mocked(h.options.gateway.proposer.propose).mockResolvedValue(result);
   const projectOutbox = vi.fn(h.options.project);
-  const project: DaemonOptions["project"] = async (proposal) => {
+  const project: DaemonOptions["project"] = async (proposal, release) => {
     expect(proposal.id).toBe(expectedId);
     expect((await h.state.proposalResults.get(key))?.proposals[0]?.id).toBe(expectedId);
-    return projectOutbox(proposal);
+    return projectOutbox(proposal, release);
   };
   const options = { ...h.options, project };
   await createDaemon(options).once();
@@ -477,14 +503,15 @@ async function legacyRun(
   };
   // The trusted outbox is idempotent by proposal ID, as the executor's store is.
   const outbox = new Map<string, OutboxEntry>();
-  const project = vi.fn<DaemonOptions["project"]>(async (proposal) => {
+  const project = vi.fn<DaemonOptions["project"]>(async (proposal, release) => {
+    const entry = await h.options.project(proposal, release);
     const existing = outbox.get(proposal.id);
     if (existing) return existing;
-    const entry = await h.options.project(proposal);
     outbox.set(proposal.id, entry);
     return entry;
   });
-  const entry = await project({ ...exampleRecords["action-proposal"], id: legacyId });
+  const legacy = { ...exampleRecords["action-proposal"], id: legacyId };
+  const entry = await project(legacy, async () => h.release(legacy));
   project.mockClear();
   const call = measuredCall("proposer");
   await h.state.proposalResults.put(key, {
@@ -762,7 +789,12 @@ it("retries finalization persistence failure without publishing or regenerating 
   const publish = vi.spyOn(h.workspace, "proposal");
   await expect(createDaemon(h.options).once()).rejects.toThrow("finalized cache unavailable");
   expect(publish).not.toHaveBeenCalled();
-  expect(h.ledger.entries().map((entry) => entry.record.type)).toEqual(["ingest"]);
+  expect(h.ledger.entries().map((entry) => entry.record.type)).toEqual([
+    "gate-decision",
+    "ingest",
+    "gate-decision",
+    "record-anchor",
+  ]);
   expect(h.state.cursors.size).toBe(0);
   expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
   await createDaemon(h.options).once();
@@ -794,11 +826,13 @@ it("refuses changed trusted terms when replaying existing proposal evidence", as
   const h = harness();
   vi.spyOn(h.state.checkpoints, "put").mockRejectedValueOnce(new Error("cursor unavailable"));
   await expect(createDaemon(h.options).once()).rejects.toThrow("cursor unavailable");
-  const entry = await h.options.project(exampleRecords["action-proposal"]);
+  const draft = exampleRecords["action-proposal"];
+  const entry = await h.options.project(draft, async () => h.release(draft));
   await expect(
     createDaemon({
       ...h.options,
-      project: async (proposal) => {
+      project: async (proposal, sign) => {
+        await sign();
         const changed = { ...entry, proposal, wireDigest: digestBytes("different wire") };
         changed.proposal.intent.termsDigest = proposalTermsDigest(changed);
         return changed;
@@ -814,8 +848,8 @@ it("refuses an outbox entry for a different proposal before audit or cursor comm
   await expect(
     createDaemon({
       ...h.options,
-      project: async (proposal) => ({
-        ...(await h.options.project(proposal)),
+      project: async (proposal, release) => ({
+        ...(await h.options.project(proposal, release)),
         proposal: { ...proposal, id: "urn:proposal:different" },
       }),
     }).once(),
@@ -830,8 +864,8 @@ it("refuses an outbox entry whose finalized approval digest does not match its t
   await expect(
     createDaemon({
       ...h.options,
-      project: async (proposal) => {
-        const entry = await h.options.project(proposal);
+      project: async (proposal, release) => {
+        const entry = await h.options.project(proposal, release);
         entry.proposal.intent.termsDigest = digestOf("model-supplied digest");
         return entry;
       },
@@ -893,7 +927,8 @@ it("executes and audits daemon proposal evidence using the same signed approval"
   const terms = proposalApprovalTerms(outbox);
   const mirror = new PodMirror(h.pod.io, ROOT);
   const writer = new AuditWriter(h.ledger, mirror);
-  const project = vi.fn(async (candidate: OutboxEntry["proposal"]) => {
+  const project = vi.fn<DaemonOptions["project"]>(async (candidate, sign) => {
+    await sign();
     const entry = { ...outbox, proposal: structuredClone(candidate) };
     entry.proposal.intent.termsDigest = proposalTermsDigest(entry);
     return entry;
@@ -1125,7 +1160,7 @@ it.each([
 ] as const)("routes a structured message with a %s verdict", async (outcome) => {
   const h = harness();
   const verdict = { outcome, digest: `sha-256:${h.message.rawSha256}` };
-  const gate = { check: vi.fn(async () => verdict) };
+  const gate = { ...h.options.gate, check: vi.fn(async () => verdict) };
   const reader = vi.spyOn(h.options.gateway.reader, "extract");
   await createDaemon({ ...h.options, gate }).once();
   expect(h.ingest.parse).toHaveBeenCalledOnce();
@@ -1160,6 +1195,7 @@ it("rolls back the entire batch before any inbox write when a gate check throws"
     next: "one",
   });
   const gate = {
+    ...h.options.gate,
     check: vi
       .fn()
       .mockResolvedValueOnce({ outcome: "admitted", digest: `sha-256:${h.message.rawSha256}` })
@@ -1172,7 +1208,10 @@ it("rolls back the entire batch before any inbox write when a gate check throws"
     h.pod.requests.some(({ url, method }) => method === "PUT" && url.includes("/direct/")),
   ).toBe(false);
   expect(h.state.cursors.size).toBe(0);
-  expect(h.ledger.entries()).toHaveLength(0);
+  expect(h.ledger.entries().map(({ record }) => record.type)).toEqual([
+    "gate-decision",
+    "record-anchor",
+  ]);
   expect(reader).not.toHaveBeenCalled();
   expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
 });
@@ -1190,7 +1229,10 @@ it.each([
   ["malformed", {}],
   ["bounds-exceeded", {}],
 ] as const)("refuses %s through the daemon's inbound gate", async (reason, changes) => {
-  const { gate, peer, receiver, sign, now } = await createTestGate();
+  const { gate, peer, receiver, sign, now } = await createTestGate(undefined, {
+    actor: AGENT_ID,
+    party: OWNER,
+  });
   try {
     const message = {
       profile: PILOT_PROFILE,
@@ -1273,6 +1315,18 @@ it.each([
     expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
     expect(h.pod.requests.some(({ url }) => url.includes("/inbox/direct/"))).toBe(false);
     expect(h.ledger.entries().some(({ record }) => record.type === "ingest")).toBe(false);
+    const gateDecisions = h.ledger
+      .entries()
+      .filter(({ record }) => record.type === "gate-decision");
+    expect(gateDecisions).toHaveLength(1);
+    expect(gateDecisions[0]?.record).toMatchObject({
+      direction: "in",
+      outcome: "refuse",
+      reason,
+      configuration: CONFIG_ED25519,
+      messageDigest: `sha-256:${checked.message.rawSha256}`,
+    });
+
     expect(h.state.cursors.get("fixture")).toBe("one");
     expect((await gate.status()).ledger.ok).toBe(true);
   } finally {
@@ -1282,7 +1336,10 @@ it.each([
 
 it("drops a genuinely bad signature and admits the valid signed message down the same reader", async () => {
   const h = harness();
-  const { gate, sign, peer, receiver, now } = await createTestGate();
+  const { gate, sign, peer, receiver, now } = await createTestGate(undefined, {
+    actor: AGENT_ID,
+    party: OWNER,
+  });
   try {
     const messageId = "urn:uuid:00000000-0000-4000-8000-000000000051";
     const jws = await sign({
@@ -1319,7 +1376,10 @@ it("drops a genuinely bad signature and admits the valid signed message down the
     expect(extracted).not.toHaveBeenCalled();
     expect(h.options.gateway.proposer.propose).not.toHaveBeenCalled();
     expect(h.pod.requests.some(({ url }) => url.includes("/inbox/direct/"))).toBe(false);
-    expect(h.ledger.entries()).toHaveLength(0);
+    expect(h.ledger.entries().map(({ record }) => record.type)).toEqual([
+      "gate-decision",
+      "record-anchor",
+    ]);
 
     const batch = { items: [{ id: "good", raw: good }], next: "two" };
     h.ingest.list.mockResolvedValue(batch);
@@ -1346,7 +1406,7 @@ it("drops a genuinely bad signature and admits the valid signed message down the
 
 it.each([false, true])("stores and triages plain email with owner flag %s", async (flagged) => {
   const h = harness();
-  const { gate } = await createTestGate();
+  const { gate } = await createTestGate(undefined, { actor: AGENT_ID, party: OWNER });
   const raw = [
     "From: peer@example.test",
     "To: receiver@example.test",
@@ -1389,7 +1449,7 @@ it.each([false, true])("stores and triages plain email with owner flag %s", asyn
 
 it("imports Latin-1 HTML mail before committing its cursor", async () => {
   const h = harness();
-  const { gate } = await createTestGate();
+  const { gate } = await createTestGate(undefined, { actor: AGENT_ID, party: OWNER });
   const raw = [
     "From: peer@example.test",
     "To: receiver@example.test",
@@ -1429,7 +1489,7 @@ it.each([
   ["text/html", "<p>Ordinary attachment</p>"],
 ])("imports ordinary mail with 13 %s attachments before committing its cursor", async (type, body) => {
   const h = harness();
-  const { gate } = await createTestGate();
+  const { gate } = await createTestGate(undefined, { actor: AGENT_ID, party: OWNER });
   const raw = [
     "From: peer@example.test",
     "To: receiver@example.test",
@@ -1562,7 +1622,7 @@ it.each([
 
 it("records a body-free Teams refusal before checkpointing the later valid message", async () => {
   const h = harness();
-  const { gate, ledger } = await createTestGate();
+  const { gate, ledger } = await createTestGate(undefined, { actor: AGENT_ID, party: OWNER });
   const oversized = { id: "oversized", subject: "x".repeat(65_536) };
   const { binding } = teams.reader([
     teams.page([{ id: teams.chat }]),
@@ -2568,12 +2628,18 @@ it.each([
 
 it("caches and audits a gate refusal without publishing or trying the proposal again", async () => {
   const h = harness();
-  const project = vi.fn<DaemonOptions["project"]>(async () => {
-    throw new ProposalRefusedError("unsupported-operation");
-  });
-  const daemon = createDaemon({ ...h.options, project });
+  const project = vi.fn(h.options.project);
+  const release = vi.fn(async () => ({ ok: false, reason: "unsupported-operation" }) as const);
+  const daemon = createDaemon({ ...h.options, project, gate: { ...h.options.gate, release } });
   await daemon.once();
   await daemon.once();
+  expect(release).toHaveBeenCalledOnce();
+  expect(
+    h.ledger
+      .entries()
+      .filter(({ record }) => record.type === "gate-decision" && record.direction === "out")
+      .map(({ record }) => record),
+  ).toMatchObject([{ outcome: "stop", reason: "unsupported-operation" }]);
   expect(project).toHaveBeenCalledOnce();
   expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
   const source = h.workspace.messageUrl(h.workspace.url("inbox/direct/fixture/"), "seed");
@@ -2592,4 +2658,78 @@ it("caches and audits a gate refusal without publishing or trying the proposal a
     proposal: proposal.id,
     reason: "unsupported-operation",
   });
+});
+
+it("writes a gate decision before handing the signed proposal to the projector", async () => {
+  const h = harness();
+  const project: DaemonOptions["project"] = async (proposal, sign) => {
+    const release = await sign();
+    if (!release.ok) throw new Error("Fixture release was refused");
+    expect(h.ledger.entries().at(-1)?.record).toMatchObject({
+      type: "gate-decision",
+      direction: "out",
+      outcome: "go",
+      messageDigest: digestBytes(release.renderable.compactJws),
+    });
+    return h.options.project(proposal, sign);
+  };
+  await createDaemon({ ...h.options, project }).once();
+  expect(h.executor.runOutboxOnce).toHaveBeenCalledOnce();
+});
+
+it("keeps rendering and execution behind a durable outbound gate decision", async () => {
+  const h = harness();
+  const { append } = h.options.audit;
+  h.options.audit.append = async (record, at) => {
+    if (record.type === "gate-decision" && record.direction === "out")
+      throw new Error("Gate audit unavailable");
+    return append(record, at);
+  };
+  const render = vi.fn(h.options.project);
+  const project: DaemonOptions["project"] = async (proposal, sign) => {
+    try {
+      await sign();
+      return render(proposal, sign);
+    } catch {
+      throw new ProposalRefusedError("unsupported-operation");
+    }
+  };
+  await expect(createDaemon({ ...h.options, project }).once()).rejects.toThrow(
+    "Gate audit unavailable",
+  );
+  expect(render).not.toHaveBeenCalled();
+  expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+  expect(h.state.cursors.size).toBe(0);
+});
+
+it("seals a moved audit head at heartbeat and shutdown, retrying if another writer advances it", async () => {
+  const h = harness();
+  const at = new Date(AT).toISOString();
+  const control = { type: "control", agent: AGENT_ID, owner: OWNER } as const;
+  const first = h.ledger.append({ ...control, id: "urn:control:heartbeat" }, at);
+  const port = testRecordPort(AGENT_ID, OWNER);
+  const anchor = vi.fn(port.anchor);
+  anchor.mockImplementationOnce(async (head) => {
+    expect(head).toEqual({ seq: first.seq, hash: first.hash });
+    h.ledger.append({ ...control, id: "urn:control:concurrent" }, at);
+    return port.anchor(head);
+  });
+  h.executor.runOutboxOnce.mockImplementationOnce(async () => {
+    expect(h.ledger.entries().at(-1)?.record).toMatchObject({
+      type: "record-anchor",
+      seq: 2,
+    });
+    h.ledger.append({ ...control, id: "urn:control:shutdown" }, at);
+    return {};
+  });
+  const daemon = createDaemon({
+    ...h.options,
+    accounts: [],
+    gate: { ...h.options.gate, head: port.head, anchor, release: vi.fn() },
+  });
+  await daemon.once();
+  expect(h.ledger.entries().at(-1)?.record).toMatchObject({ type: "record-anchor", seq: 4 });
+  expect(anchor).toHaveBeenCalledTimes(3);
+  await daemon.once();
+  expect(anchor).toHaveBeenCalledTimes(3);
 });

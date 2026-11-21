@@ -8,7 +8,7 @@ import {
   readEnvelope,
 } from "@jeswr/agent-channels";
 import type { ProposalRelease } from "@jeswr/agent-executor";
-import { type ActionProposal, digestBytes } from "@jeswr/agent-model";
+import { type ActionProposal, digestBytes, digestOf } from "@jeswr/agent-model";
 import {
   AgentRuntime,
   type AgentRuntimeOptions,
@@ -22,6 +22,7 @@ import {
   type TrustStoreData,
   verifyLedger,
 } from "@jeswr/agent-reference";
+import { REASON_CODES } from "@jeswr/agent-reference/core/types";
 import { randomUUID } from "crypto";
 import { constants } from "fs";
 import { lstat, open, readdir, rename, unlink } from "fs/promises";
@@ -48,6 +49,8 @@ export interface InboundGatePort {
   /** Durable ports open only inside the daemon's process lease. */
   open?(identity: GateIdentity): Promise<Gate>;
 }
+export type DaemonGatePort = InboundGatePort &
+  ({ open(identity: GateIdentity): Promise<Gate> } | Pick<Gate, "head" | "anchor" | "release">);
 type CheckInput = Parameters<InboundGatePort["check"]>[0];
 export type ParseRefusal = {
   reason: ChannelParseRefusalReason;
@@ -65,6 +68,17 @@ type GateOptions = {
 };
 const filePattern = /^verdict-([a-f0-9]{64}(?:-[a-f0-9]{64})?)\.json$/;
 const reasonCode = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
+const referenceReasons = new Set<string>([
+  ...REASON_CODES,
+  "ask-principal",
+  "indeterminate",
+  "proposal-conflict",
+  "admit",
+  "go",
+]);
+export function auditGateReason(reason: string): string {
+  return referenceReasons.has(reason) ? reason : "indeterminate";
+}
 const time = z.iso.datetime();
 const finalFields = { time, transaction: z.uuid().optional() };
 const storedVerdict = z.discriminatedUnion("outcome", [
@@ -181,7 +195,17 @@ function inboundDecision(step: StepResult): Decision {
   }
 }
 
-type GateRuntime = Pick<AgentRuntime, "receive" | "commitBindingEvent" | "admittedFacts" | "close">;
+type GateRuntime = Pick<
+  AgentRuntime,
+  | "identity"
+  | "receive"
+  | "commitBindingEvent"
+  | "admittedFacts"
+  | "recordHead"
+  | "witnessRecordHead"
+  | "close"
+>;
+type RecordHead = ReturnType<GateRuntime["recordHead"]>;
 
 export function createGate(
   rt: GateRuntime,
@@ -278,7 +302,7 @@ export function createGate(
       try {
         await event("binding-rejection", "indeterminate");
       } catch {
-        // A broken ledger cannot turn an indeterminate check into an admission.
+        throw new Error("Inbound gate could not record the check");
       }
       return { ...refused("indeterminate"), digest };
     }
@@ -293,9 +317,29 @@ export function createGate(
     check: (input: CheckInput) => enqueue(() => check(input)),
     recordParseRefusal: (input: ParseRefusalInput) => enqueue(() => check(input)),
     release: (proposal: ActionProposal) =>
-      enqueue<ProposalRelease>(
-        () => outbound?.release(proposal) ?? { ok: false, reason: "unsupported-operation" },
-      ),
+      enqueue<ProposalRelease>(async () => {
+        const result = (await outbound?.release(proposal)) ?? {
+          ok: false,
+          reason: "unsupported-operation",
+        };
+        // Local stops and cached decisions also need a head for this invocation.
+        await rt.commitBindingEvent({
+          type: "channel-observation",
+          binding: "suite-outbound",
+          digest: result.ok ? digestBytes(result.renderable.compactJws) : digestOf(proposal),
+          reason: result.ok ? "go" : auditGateReason(result.reason),
+        });
+        return result;
+      }),
+    head(): RecordHead {
+      return rt.recordHead();
+    },
+    anchor: (head: RecordHead) =>
+      enqueue(async () => {
+        const { actor, party } = rt.identity;
+        if (!party) throw new Error("record signing key unavailable");
+        return (await rt.witnessRecordHead({ actor, party, seq: head.seq, hash: head.hash })).jws;
+      }),
     verifyOwn: (compactJws: string, expected: ProposalContext | undefined) =>
       enqueue(() => {
         if (!outbound) throw new Error("Outbound gate is not configured");
@@ -480,7 +524,7 @@ export async function installGateMandate(options: {
 /** The daemon opens the durable gate under its existing process lease. */
 export function createInboundGate(
   options: GateOptions,
-): InboundGatePort & Pick<Gate, "facts" | "release" | "verifyOwn"> {
+): InboundGatePort & Required<Pick<InboundGatePort, "open">> & Pick<Gate, "facts" | "verifyOwn"> {
   let active: Gate | undefined;
   return {
     async check() {
@@ -489,10 +533,6 @@ export function createInboundGate(
     facts() {
       if (!active) throw new Error("Inbound gate requires an active daemon lease");
       return active.facts();
-    },
-    async release(proposal) {
-      if (!active) throw new Error("Outbound gate requires an active daemon lease");
-      return active.release(proposal);
     },
     async verifyOwn(compactJws, expected) {
       if (!active) throw new Error("Outbound gate requires an active daemon lease");

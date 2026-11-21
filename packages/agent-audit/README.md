@@ -43,14 +43,19 @@ decisions; mirror before pruning to preserve the complete pod prefix.
 
 Records accept the DESIGN §5 kinds: `ingest`, `proposal`, `decision`,
 `approval-seen`, `transmission`, `receipt`, `control`, `mandate-change`,
-`model-call`, `tamper-suspected`, the A-045 `conversation` and `tool-call` kinds,
-plus internal `ledger-checkpoint` records.
+`model-call`, `tamper-suspected`, `conversation`, `tool-call`,
+`gate-decision` and `record-anchor`, plus internal `ledger-checkpoint` records.
 Unknown fields, bodies, prompt text, raw recipient arrays, malformed timestamps,
 non-JSON values and oversized records are rejected. Records are capped at 64 KiB.
 `model-call` accepts identifiers, provider/context and numeric counts only.
 Use `hashRecipient(handle, accountId, salt)` with a secret random salt of at least
 32 bytes, retained only in the private runtime store. Hashes are account-bound
 HMAC-SHA-256 (`sha256:<hex>`), matching agent-mandate's recipient vocabulary.
+
+A `gate-decision` links the message or action digest and reference outcome to a
+specific reference-ledger sequence and hash. A `record-anchor` contains a bounded
+EdDSA receipt over the immediately preceding suite entry. Retain the paired gate
+ledger to check decision links and history through the latest witnessed head.
 
 For a complete proposal audit, write these linked events in order:
 
@@ -170,6 +175,12 @@ The subpath exports the shared record schemas and types, `ENTRY_KINDS`, `GENESIS
 `MAX_AUDIT_SEQ`, `checkedRecord`, `seal`, `parseAuditEntry`, `auditHeadSchema`,
 `parseAuditHead`, `verifyLedger`, `verifyRange`, `verifyLatestRange`, and their
 result types and scope strings (`CHAIN_SCOPE`, `AUDIT_SCOPE`, `HEAD_MISSING`).
+
+Supply verified reference ledger points as `verifyLedger(entries, { gateEntries })`
+to check decision links. Independently retained heads can also be passed as
+`witnessedHeads` to detect a missing or changed witnessed prefix. The daemon's
+offline audit command checks retained anchor JWS signatures using the configured
+gate public key.
 It also exports `writeEntryGraph`, `writeHeadGraph` and `AuditProjectionNode`:
 callers supply wrapper-backed nodes to write the same entry, decision and head
 projections as the daemon, without importing parsers, storage or Node modules.

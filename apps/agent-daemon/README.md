@@ -206,13 +206,12 @@ const gate = createInboundGate({
   outbound: { handlers, plan },
 });
 // Configure every send half used by bindings with verify: gate.verifyOwn.
-const prepareEntry = createOutboxProjector({
-  bindings,
-  accounts: outboundAccountsByBinding,
-  sign: gate.release,
-});
-
-const project = async (proposal: ActionProposal) => {
+const project: DaemonOptions["project"] = async (proposal, sign) => {
+  const prepareEntry = createOutboxProjector({
+    bindings,
+    accounts: outboundAccountsByBinding,
+    sign,
+  });
   const entry = await prepareEntry(proposal);
   await persistOutboxEntry(entry); // Host's idempotent executor store write.
   return entry;
@@ -220,7 +219,8 @@ const project = async (proposal: ActionProposal) => {
 // Supply gate and project to createDaemon or composeDaemon.
 ```
 
-`project` replaces the former `proposalWritten` option. Persist and return the exact
+Pass the daemon's `sign` callback to the projector. The callback writes the linked
+decision before returning the release for rendering. Persist and return the exact
 entry the executor reads. The projector replaces the model draft preview with a
 description drawn solely from signed message fields and binds the resulting
 preview, account, wire and intent to the approval digest. The daemon verifies
@@ -234,8 +234,20 @@ An interrupted release without a completed receipt requires a new proposal.
 The reference mandate controls release and sealing. The executor independently
 checks the VC mandate, HALT, approval and limits before delivery. **Known
 deviation** for outbound check 5. The executor decides approval and limits after
-the gate seals the message and records those verdicts in agent-audit. Phase 4
-links that evidence to the reference ledger.
+the gate seals the message and records those verdicts in agent-audit. The
+`gate-decision` links the gate outcome to its reference ledger head.
+
+### Verify the linked audit ledgers
+
+Every completed check and release records its outcome, digest and reference ledger
+head before downstream model calls or outbox projection. The heartbeat and shutdown
+seal each changed suite head with an EdDSA receipt signed by the gate.
+
+Run `awp audit --ledger <events.jsonl>` against the local audit file with the paired
+gate configured. The offline command checks both chains, looks up decision links,
+verifies retained anchor signatures and compares the suite history with heads
+witnessed in the gate ledger. Tail detection extends through the latest retained
+witness.
 
 ## Runtime memory
 

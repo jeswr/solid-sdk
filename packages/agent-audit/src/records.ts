@@ -4,7 +4,7 @@ import { canonicalJson, digestOf, isIri } from "@jeswr/agent-model/core/canonica
 import { z } from "zod";
 
 /** No free-form payloads: audit records contain references, digests and counts only. */
-export const ENTRY_KINDS = [
+const LEGACY_ENTRY_KINDS = [
   "ingest",
   "proposal",
   "decision",
@@ -18,6 +18,7 @@ export const ENTRY_KINDS = [
   "tamper-suspected",
   "conversation",
 ] as const;
+export const ENTRY_KINDS = [...LEGACY_ENTRY_KINDS, "gate-decision", "record-anchor"] as const;
 const iri = z
   .string()
   .max(2048)
@@ -48,7 +49,7 @@ export const termsSchema = z.strictObject({
   proposalDigest: digestSchema.optional(),
 });
 const recordSchema = z.strictObject({
-  type: z.enum(ENTRY_KINDS),
+  type: z.enum(LEGACY_ENTRY_KINDS),
   id: iri,
   agent: iri,
   owner: iri,
@@ -80,15 +81,109 @@ const recordSchema = z.strictObject({
   latencyMs: count.optional(),
   retries: count.optional(),
 });
+const identityFields = { id: iri, agent: iri, owner: iri };
+const linkedDigest = digestSchema.length(72);
+const gateDecisionSchema = z
+  .strictObject({
+    ...identityFields,
+    type: z.literal("gate-decision"),
+    direction: z.enum(["in", "out"]),
+    messageDigest: linkedDigest,
+    outcome: z.enum(["admit", "refuse", "unstructured", "go", "stop", "ask-principal"]),
+    reason: z
+      .string()
+      .regex(/^[a-z][a-z0-9-]{0,63}$/)
+      .refine((value) => !/\s/.test(value)),
+    configuration: iri,
+    gateSeq: count.min(1),
+    gateHash: linkedDigest,
+    taskId: taskIdSchema.optional(),
+    conversation: iri.optional(),
+  })
+  .refine(
+    ({ direction, outcome }) =>
+      (direction === "in") ===
+      (outcome === "admit" || outcome === "refuse" || outcome === "unstructured"),
+  );
+const witnessHeader = z.strictObject({
+  alg: z.literal("EdDSA"),
+  kid: z
+    .string()
+    .length(43)
+    .regex(/^[A-Za-z0-9_-]{43}$/),
+  typ: z.literal("awp-record-anchor+jws"),
+});
+const witnessPayload = z.strictObject({
+  type: z.literal("RecordAnchorReceipt"),
+  actor: iri,
+  party: iri,
+  subject: iri,
+  subjectParty: iri,
+  seq: count.min(1),
+  hash: linkedDigest,
+  at: z.iso.datetime(),
+});
+
+function jwsJson(part: string): unknown {
+  const bytes = Uint8Array.from(atob(part.replaceAll("-", "+").replaceAll("_", "/")), (c) =>
+    c.charCodeAt(0),
+  );
+  const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  const value: unknown = JSON.parse(text);
+  if (JSON.stringify(value) !== text) throw new Error("Invalid witness JSON");
+  return value;
+}
+const recordAnchorSchema = z
+  .strictObject({
+    ...identityFields,
+    type: z.literal("record-anchor"),
+    seq: count.min(1),
+    hash: linkedDigest,
+    jws: z
+      .string()
+      .max(4096)
+      .regex(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{86}$/)
+      .refine((value) => !/\s/.test(value)),
+  })
+  .refine(({ agent, owner, seq, hash, jws }) => {
+    // The wire is not an opaque text slot. Admit only the body-free self-witness shape.
+    // The offline auditor also verifies the signature against the configured gate key.
+    const [header, payload] = jws.split(".");
+    try {
+      if (!header || !payload || !witnessHeader.safeParse(jwsJson(header)).success) return false;
+      const signed = witnessPayload.parse(jwsJson(payload));
+      return (
+        signed.actor === agent &&
+        signed.subject === agent &&
+        signed.party === owner &&
+        signed.subjectParty === owner &&
+        signed.seq === seq &&
+        signed.hash === hash
+      );
+    } catch {
+      return false;
+    }
+  }, "Invalid record head witness");
+const auditRecordSchema = z.discriminatedUnion("type", [
+  recordSchema,
+  gateDecisionSchema,
+  recordAnchorSchema,
+]);
 const checkpointSchema = z.strictObject({
   type: z.literal("ledger-checkpoint"),
   lastPrunedSeq: count.min(1),
   lastPrunedHash: digestSchema,
 });
-export const ledgerRecordSchema = z.union([recordSchema, checkpointSchema]);
-export type AuditRecord = z.infer<typeof recordSchema>;
+export const ledgerRecordSchema = z.union([auditRecordSchema, checkpointSchema]);
+// Preserve optional property reads across kinds while keeping each kind's fields closed.
+type AuditVariant = z.infer<typeof auditRecordSchema>;
+type UnionKeys<T> = T extends unknown ? keyof T : never;
+type AuditFields<T> = T extends unknown
+  ? T & Partial<Record<Exclude<UnionKeys<AuditVariant>, keyof T>, never>>
+  : never;
+export type AuditRecord = AuditFields<AuditVariant>;
 export type AuditTerms = z.infer<typeof termsSchema>;
-export type LedgerRecord = z.infer<typeof ledgerRecordSchema>;
+export type LedgerRecord = AuditRecord | z.infer<typeof checkpointSchema>;
 export const GENESIS = "sha-256:genesis";
 /** Maximum published sequence the pod reader and mirror can process. */
 export const MAX_AUDIT_SEQ = 200000;
@@ -99,7 +194,13 @@ export const entrySchema = z.strictObject({
   record: ledgerRecordSchema,
   hash: digestSchema,
 });
-export type LedgerEntry = z.infer<typeof entrySchema>;
+export type LedgerEntry = Omit<z.infer<typeof entrySchema>, "record"> & { record: LedgerRecord };
+
+export class AuditHeadChangedError extends Error {
+  constructor() {
+    super("Audit head changed before anchoring");
+  }
+}
 
 /** Reject getters, cycles and lossy JSON before validating the privacy allowlist. */
 export function checkedRecord(value: unknown): LedgerRecord {
@@ -110,5 +211,7 @@ export function checkedRecord(value: unknown): LedgerRecord {
 }
 export function seal(seq: number, at: string, prev: string, value: unknown): LedgerEntry {
   const record = checkedRecord(value);
+  if (record.type === "record-anchor" && (record.seq !== seq - 1 || record.hash !== prev))
+    throw new AuditHeadChangedError();
   return entrySchema.parse({ seq, at, prev, record, hash: digestOf({ seq, at, prev, record }) });
 }

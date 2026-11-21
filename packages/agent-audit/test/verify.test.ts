@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AUDIT_SCOPE,
   type LedgerEntry as AuditEntry,
+  checkedRecord,
   GENESIS,
   HEAD_MISSING,
   parseAuditEntry,
@@ -13,6 +14,7 @@ import {
   verifyLedger,
   verifyRange,
 } from "../src/verify.js";
+import { required, witnessFixture } from "./fixture.js";
 
 const AT = "2026-10-26T12:00:00.000Z";
 const RECORD = {
@@ -279,4 +281,155 @@ it("enforces the UTF-8 record bound even for schema-valid supplied values", () =
   };
   expect(() => parseAuditEntry(entry)).toThrow("bound");
   expect(verifyRange([entry])).toMatchObject({ ok: false, problem: "Malformed record" });
+});
+
+const DIGEST = digestOf("checked bytes");
+const gateDecision = {
+  type: "gate-decision",
+  id: "urn:decision:1",
+  agent: RECORD.agent,
+  owner: RECORD.owner,
+  direction: "in",
+  outcome: "refuse",
+  reason: "bad-signature",
+  messageDigest: DIGEST,
+  configuration: "urn:configuration:signed-ed25519",
+  gateSeq: 3,
+  gateHash: digestOf("reference head"),
+} as const;
+const anchor = {
+  type: "record-anchor",
+  id: "urn:anchor:1",
+  agent: RECORD.agent,
+  owner: RECORD.owner,
+  seq: 1,
+  hash: DIGEST,
+  jws: witnessFixture(RECORD, { seq: 1, hash: DIGEST }),
+} as const;
+
+it.each([
+  gateDecision,
+  { ...gateDecision, outcome: "admit", reason: "admit", taskId: "task-1" },
+  { ...gateDecision, direction: "out", outcome: "go", reason: "go" },
+  { ...gateDecision, direction: "out", outcome: "stop", reason: "prohibited" },
+  { ...gateDecision, direction: "out", outcome: "ask-principal", reason: "ask-principal" },
+  { ...gateDecision, outcome: "unstructured", reason: "no-structured-content" },
+  anchor,
+])("accepts body-free $type $outcome", (record) => {
+  expect(checkedRecord(record)).toEqual(record);
+});
+
+it.each([
+  ["missing gate sequence", { ...gateDecision, gateSeq: null }],
+  ["wrong digest", { ...gateDecision, messageDigest: "actual message" }],
+  ["wrong direction for outcome", { ...gateDecision, direction: "out" }],
+  ["invalid configuration", { ...gateDecision, configuration: "prompt text" }],
+  ["long reason", { ...gateDecision, reason: "x".repeat(65) }],
+  ["free-form reason", { ...gateDecision, reason: "private prompt" }],
+  ["body", { ...gateDecision, body: "private message" }],
+  ["handle", { ...gateDecision, accountId: "private-handle" }],
+  ["prompt", { ...anchor, prompt: "private prompt" }],
+  ["long JWS", { ...anchor, jws: "a".repeat(4097) }],
+  ["JWS head mismatch", { ...anchor, hash: digestOf("different") }],
+  [
+    "JWS with embedded content",
+    {
+      ...anchor,
+      jws: anchor.jws.replace(
+        /\.([^.]+)\./,
+        (_, payload) =>
+          `.${Buffer.from(
+            JSON.stringify({
+              ...JSON.parse(Buffer.from(payload, "base64url").toString("utf8")),
+              prompt: "private prompt",
+            }),
+          ).toString("base64url")}.`,
+      ),
+    },
+  ],
+] as const)("accepts the valid shape but rejects %s", (_, record) => {
+  const original = record.type === "gate-decision" ? gateDecision : anchor;
+  expect(checkedRecord(original)).toEqual(original);
+  expect(() => checkedRecord(record)).toThrow();
+});
+
+it("reports a gate decision that has no matching sequence and hash in the gate ledger", () => {
+  const entry = seal(1, AT, GENESIS, gateDecision);
+  expect(verifyLedger([entry], { gateEntries: [] })).toMatchObject({
+    ok: false,
+    firstBadSeq: 1,
+    problem: "gate record missing",
+  });
+  expect(verifyLedger([entry], { gateEntries: [{ seq: 2, hash: gateDecision.gateHash }] }).ok).toBe(
+    false,
+  );
+  expect(verifyLedger([entry], { gateEntries: [{ seq: 3, hash: gateDecision.gateHash }] }).ok).toBe(
+    true,
+  );
+});
+
+it("checks independently witnessed heads through the retained prefix and detects truncation", () => {
+  const entries = activityFixture(3);
+  const first = required(entries[0]);
+  const second = required(entries[1]);
+  const last = required(entries[2]);
+  expect(verifyLedger(entries, { witnessedHeads: [last] }).ok).toBe(true);
+  expect(verifyLedger(entries.slice(0, -1), { witnessedHeads: [last] })).toMatchObject({
+    ok: false,
+    firstBadSeq: last.seq,
+    problem: "witnessed head missing or changed",
+  });
+  const checkpoint = seal(4, AT, last.hash, {
+    type: "ledger-checkpoint",
+    lastPrunedSeq: second.seq,
+    lastPrunedHash: second.hash,
+  });
+  const retained = [last, checkpoint];
+  expect(verifyLedger(retained, { witnessedHeads: entries }).ok).toBe(true);
+  expect(verifyLedger(retained, { witnessedHeads: [first] })).toMatchObject({
+    ok: false,
+    firstBadSeq: first.seq,
+    problem: "witnessed head missing or changed",
+  });
+});
+
+it("requires an anchor to name its immediate predecessor at write and verification", () => {
+  const first = seal(1, AT, GENESIS, RECORD);
+  expect(() => seal(3, AT, DIGEST, anchor)).toThrow("Audit head changed before anchoring");
+  expect(() => seal(2, AT, first.hash, anchor)).toThrow("Audit head changed before anchoring");
+  const rebuilt = (seq: number, prev: string) => {
+    const entry = { seq, at: AT, prev, record: anchor };
+    return { ...entry, hash: digestOf(entry) };
+  };
+  expect(verifyRange([first, rebuilt(2, first.hash)]).problem).toBe("Anchor head mismatch");
+  expect(verifyRange([rebuilt(3, DIGEST)]).problem).toBe("Anchor head mismatch");
+});
+
+it("checks each signed actor, party and sequence alongside the anchor row", () => {
+  const [header, payload, signature] = anchor.jws.split(".") as [string, string, string];
+  const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+  const withPayload = (part: string) => ({
+    ...anchor,
+    jws: [header, Buffer.from(part).toString("base64url"), signature].join("."),
+  });
+  for (const claim of ["actor", "subject", "party", "subjectParty", "seq"]) {
+    expect(() =>
+      checkedRecord(
+        withPayload(
+          JSON.stringify({
+            ...decoded,
+            [claim]: claim === "seq" ? 2 : "urn:other",
+          }),
+        ),
+      ),
+    ).toThrow("Invalid record head witness");
+  }
+  expect(() => checkedRecord(withPayload(` ${JSON.stringify(decoded)}`))).toThrow();
+  expect(() =>
+    checkedRecord({
+      ...anchor,
+      jws: `${Buffer.from("{}").toString("base64url")}.${payload}.${signature}`,
+    }),
+  ).toThrow();
+  expect(() => checkedRecord({ ...anchor, jws: `.${payload}.${signature}` })).toThrow();
 });

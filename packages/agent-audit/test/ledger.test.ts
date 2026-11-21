@@ -9,7 +9,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { FileLedger } from "../src/file-ledger.js";
 import { MemoryLedger, verifyLedger } from "../src/ledger.js";
 import { checkedRecord, ENTRY_KINDS, GENESIS, type LedgerEntry, seal } from "../src/records.js";
-import { required } from "./fixture.js";
+import { required, witnessFixture } from "./fixture.js";
 
 vi.mock("fs", async (importOriginal) => {
   const fs = await importOriginal<typeof import("fs")>();
@@ -36,7 +36,10 @@ afterEach(() => {
 it("accepts every specified kind, snapshots input/output and uses the pilot hash shape", () => {
   const ledger = new MemoryLedger();
   expect(verifyLedger([]).ok).toBe(true);
-  for (const type of ENTRY_KINDS) ledger.append({ ...record, type }, AT);
+  for (const type of ENTRY_KINDS.filter(
+    (type) => type !== "gate-decision" && type !== "record-anchor",
+  ))
+    ledger.append({ ...record, type }, AT);
   ledger.append(
     {
       ...record,
@@ -192,4 +195,26 @@ it("rejects corrupt storage and invalid bounds without deleting evidence", () =>
   writeFileSync(path, "{\n");
   expect(() => new FileLedger(path)).toThrow();
   expect(new FileLedger(join(path, "missing", "ledger")).segments()).toEqual([]);
+});
+
+it("keeps an anchor adjacent at a rotation boundary and resumes normal retention", () => {
+  const ledger = new FileLedger(file(), { segmentMaxEntries: 2 });
+  ledger.append(record, AT);
+  const head = ledger.append(record, AT);
+  const anchor = ({ seq, hash }: LedgerEntry) => ({
+    type: "record-anchor" as const,
+    id: "urn:anchor:test",
+    agent: record.agent,
+    owner: record.owner,
+    seq,
+    hash,
+    jws: witnessFixture(record, { seq, hash }),
+  });
+  const anchored = ledger.append(anchor(head), AT);
+  expect(anchored.prev).toEqual(head.hash);
+  expect(ledger.segments()).toEqual([]);
+  expect(() => ledger.append(anchor(anchored), AT)).toThrow("Audit head is already anchored");
+  ledger.append(record, AT);
+  expect(ledger.segments()).toHaveLength(1);
+  expect(verifyLedger(ledger.entries()).ok).toBe(true);
 });

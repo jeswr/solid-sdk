@@ -572,3 +572,53 @@ runtime signs inside the existing checked release path.
 | Executor Vitest with V8 coverage | 576 passed and all four metrics met 100% per-file thresholds. Four process-death cases in the full run timed out waiting for a child. A direct subprocess probe returned `EPERM`. |
 | Channel Vitest | 942 passed in the local run. Ten loopback cases in the full run hit `listen EPERM`; one existing skip remained. |
 | Biome and repository guards | Biome passed with existing reference warnings and infos. SDK layers, agent layers, RDF discipline, app duplication and `git diff --check` passed. |
+
+## Phase 4 (41o)
+
+### Changes
+
+| Location | Change |
+| --- | --- |
+| `packages/agent-audit/src/records.ts:86`, `:136`, `:212` and `packages/agent-audit/src/index.ts:20` | Added closed schemas for `gate-decision` and `record-anchor`. The 4 KiB compact JWS field admits only the self-witness header and payload, with identities and head bound to the row. Sealing rejects an anchor if the predecessor has moved. |
+| `packages/agent-audit/src/prov.ts:51`, `packages/agent-model/src/vocab.ts:18` and `packages/agent-model/docs/vocab.ttl:486` | Projected the gate and sealed head coordinates through the wrapper-backed PROV writer. The canonical record projection carries the remaining fields. |
+| `packages/agent-audit/src/verify.ts:76`, `:167` and `packages/agent-audit/src/reader.ts:66` | Verify the referenced sequence and hash against supplied gate evidence. Check retained history against independently witnessed points and require each anchor to follow the head it names. The pod reader accepts the same evidence options. |
+| `packages/agent-audit/src/file-ledger.ts:87` and `packages/agent-audit/src/stats.ts:126` | Kept the anchor adjacent to the signed predecessor at a rotation boundary. Excluded these integrity records from task instrumentation counts. |
+| `apps/agent-daemon/src/gate.ts:69`, `:301`, `:319`, `:334` and `:525` | Recorded a reference event for local and cached outbound verdicts, and exposed the reference head and EdDSA witness to the leased daemon. A failed reference write aborts the batch. Restricted the new audit reasons to reference and gate codes. |
+| `apps/agent-daemon/src/daemon.ts:169`, `:222`, `:263`, `:421`, `:517` and `:629` | Wrote inbound evidence before import or model calls, including parser refusals. Wrote outbound evidence before handing a release to the projector. Verified and sealed moved audit heads at heartbeat and after executor drain. An intervening writer invalidates a stale anchor and triggers a fresh witness. Authority polling continues during anchor I/O. |
+| `apps/agent-daemon/src/types.ts:40`, `:59`, `apps/agent-daemon/src/instrumentation.ts:44` and `apps/agent-daemon/README.md:203` | The host passes the daemon's audited signer to `createOutboxProjector`. Binding and account preflight stay ahead of release. The task recorder continues to accept the instrumentation kinds. |
+| `apps/agent-daemon/src/cli.ts:114`, `:196` and `apps/agent-daemon/README.md:240` | Added `awp audit --ledger <events.jsonl>`. It checks the paired local chains, finds missing gate links, verifies retained anchor JWS signatures against the configured gate public key and compares the audit ledger against heads witnessed in the gate ledger. |
+| `apps/suite/src/apps/agent/lib/audit.ts:32` and `apps/suite/src/apps/agent/components/activity.tsx:70`, `:391` | Activity shows “Checked a message” and “Record sealed” with record details under Advanced. The reader uses the shared schema and exact PROV projection. |
+| `apps/agent-daemon/src/testing.ts:17`, `test/record-port.ts:7`, `test/daemon.test.ts:184`, `test/gate.test.ts:76`, `test/composition.test.ts:54`, `test/polling-executor.test.ts:144`, `test/css.test.ts:300` and `demos/d2-spending-limits.test.ts:282` | Updated simulated hosts to expose record capabilities and use the audited signing callback. Existing ledger and statistics fixtures distinguish instrumentation kinds from the new kinds that have required fields. See `packages/agent-audit/test/ledger.test.ts:37`, `test/mirror.test.ts:65` and `test/stats.test.ts:17`. |
+
+### Failing tests and passing results
+
+| Case | Failure on the Phase 3 baseline | Passing Phase 4 behavior |
+| --- | --- | --- |
+| Audit schemas and gate ledger link, `packages/agent-audit/test/verify.test.ts:287` | All seven accept cases, all twelve paired accept/reject cases and the gate-link case reached the old schema rejection. | Required fields, qualified outcomes and the receipt shape are accepted. The invalid variants fail. A missing or mismatched gate sequence and hash is reported. |
+| Mirror round trip, `packages/agent-audit/test/mirror.test.ts:456` | The first append rejected `gate-decision` as an unknown kind. | `test/fixtures/gate-decision.ttl` and `test/fixtures/record-anchor.ttl` match the mirrored graphs. Exact round trip succeeds and supplying missing gate evidence fails. |
+| Eleven refused inbound cases, `apps/agent-daemon/test/daemon.test.ts:1231` | Expected one linked record and received zero in each case. | Each check yields one body-free refusal with the raw-byte digest. Neither model runs and the inbox and ingest record remain absent. |
+| Local CLI and signed anchor, `apps/agent-daemon/test/gate-setup.test.ts:725` | `TypeError: gate.head is not a function`. | The real gate signs and the CLI verifies the anchor. An altered decision, a forged signature in a rehashed chain and a tail truncated past an earlier anchor all fail. |
+| Seeded Activity read, `apps/suite/test/agent-audit.test.ts:371` | The seeded decision failed legacy schema validation. | Both golden rows load, their display labels match and their range verifies. |
+| Outbound evidence and heartbeat, `apps/agent-daemon/test/daemon.test.ts:2663`, `:2680` and `:2705` | The signer callback was missing, an audit failure resolved as a policy refusal and the expected heartbeat anchor was absent. | The decision is visible before rendering. Audit failure stops rendering, execution and cursor commit. Heartbeat and shutdown seal the moved heads once, including an intervening write. |
+| Witness and file boundaries, `packages/agent-audit/test/verify.test.ts:371`, `:396`, `:408` and `packages/agent-audit/test/ledger.test.ts:200` | All four supplemental regressions failed against the baseline. The older verifier accepted a truncated history despite a supplied witness, and the other cases hit the legacy schema rejection. | Checked retained prefixes, signed identity and sequence claims, the immediate predecessor and the rotation boundary. The shared witness fixture is in `packages/agent-audit/test/fixture.ts:149`. |
+
+### Verification
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/agent-model run build`, `pnpm --filter @jeswr/agent-audit run build`, `pnpm --filter @jeswr/app-agent-daemon run build` | Passed on Node 24. |
+| `NEXT_TELEMETRY_DISABLED=1 npm_config_offline=true pnpm --filter @jeswr/app-suite run build` | Passed. Next generated 168 static pages and the web check inspected 562 chunks. Webpack warned about dynamic imports in the existing guarded-fetch dependency. |
+| `pnpm --filter <package> run typecheck` for agent-model, agent-audit, app-agent-daemon and app-suite | All four passed. The suite's missing workspace dependencies were linked from the offline cache with zero downloads, then built with their own scripts. |
+| `pnpm exec vitest run --root packages/agent-model --maxWorkers=2 src test/exports.test.ts` | 188 passed. |
+| `pnpm exec vitest run --root packages/agent-audit --maxWorkers=2 test/verify.test.ts test/mirror.test.ts test/ledger.test.ts test/audit.test.ts test/browser.test.ts test/stats.test.ts test/exports.test.ts` with the packaged child-process case filtered out | 148 passed and 1 filtered out. Achieved 100% coverage for statements, branches, functions and lines. |
+| `pnpm exec vitest run --root apps/agent-daemon --maxWorkers=2` with daemon, gate, gate-setup, gate-channels, outbound, CLI, exports, instrumentation, polling-executor, composition, CSS and D-2 files selected | 188 passed and 3 filtered out after confirming the sandbox failures below. |
+| `pnpm exec vitest run --root apps/suite --maxWorkers=2 --coverage.enabled=false test/agent-audit.test.ts` | 30 passed. |
+| `node packages/agent-audit/bin/audit.mjs --help` and `node apps/agent-daemon/bin/awp.mjs --help` | Both passed directly. |
+| `pnpm exec biome check <changed TypeScript files>`, `git diff --check`, and `VITEST_MAX_WORKERS=2 pnpm run lint:root` | Passed. Root Biome reported six existing environment-variable warnings in `scripts/vercel-production.mjs`. Codegen and the agent-layer, SDK-layer, RDF and duplication guards passed. |
+
+### Deviations and follow-up
+
+- CSS and the D-2 integration case hit `listen EPERM` on loopback. The packaged audit and daemon subprocess cases received empty stdout. A direct subprocess probe reported `spawnSync EPERM`, and the two binaries printed help when started directly.
+- The audited signer is the daemon's projection seam. This keeps the binding and account preflight ahead of signing and lets the daemon require a durable decision before projection. The offline CLI audit is an explicit local mode alongside proposal audits.
+- The existing gate provided its EdDSA key and represented party. The scenario rebuild and comparison instructions were conditional on an agent-reference source change.
+- Bead to file under P7.4. Coordinate gate and suite ledger retention and document how to preserve independently held anchor heads and historical verification keys. Tail detection extends through the latest retained witness.

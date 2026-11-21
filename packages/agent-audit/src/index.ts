@@ -17,6 +17,7 @@ export {
   loadTrace,
 } from "./reader.js";
 export {
+  AuditHeadChangedError,
   type AuditRecord,
   type AuditTerms,
   ENTRY_KINDS,

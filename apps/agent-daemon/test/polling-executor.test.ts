@@ -13,6 +13,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createDaemon } from "../src/daemon.js";
 import { createMemoryPod, createMemoryState, createTestMemory } from "../src/testing.js";
 import { PodWorkspace } from "../src/workspace.js";
+import { testRecordPort } from "./record-port.js";
 
 afterEach(() => vi.useRealTimers());
 it("fences the real executor's suspended send grant on a halt discovered by the 30-second fallback", async () => {
@@ -140,7 +141,7 @@ it("fences the real executor's suspended send grant on a halt discovered by the 
   const ledger = new MemoryLedger();
   const controller = new AbortController();
   const run = createDaemon({
-    gate: { check: vi.fn() },
+    gate: { ...testRecordPort(agent, owner), check: vi.fn(), release: vi.fn() },
     workspace,
     accounts: [],
     lease: state.lease,

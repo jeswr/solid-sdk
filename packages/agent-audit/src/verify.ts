@@ -73,8 +73,44 @@ export interface LedgerCheck {
 export const CHAIN_SCOPE =
   "Integrity of retained entries only; unrecorded events and tail truncation cannot be detected without an independently trusted head.";
 /** Checkpoints attest retention, not independent proof of the deleted prefix. */
-export function verifyLedger(input: readonly LedgerEntry[]): LedgerCheck {
-  return checkChain(input, false).result;
+export function verifyLedger(
+  input: readonly LedgerEntry[],
+  options: {
+    /** Sequence/hash pairs supplied from the separately verified reference ledger. */
+    gateEntries?: readonly AuditHead[];
+    /** Heads retained independently of this ledger, for example in the gate ledger. */
+    witnessedHeads?: readonly AuditHead[];
+  } = {},
+): LedgerCheck {
+  const { result, entries } = checkChain(input, false);
+  if (!result.ok) return result;
+  const fail = (problem: string, firstBadSeq: number): LedgerCheck => ({
+    ...result,
+    ok: false,
+    problem,
+    firstBadSeq,
+  });
+  if (options.gateEntries) {
+    const gate = new Map(options.gateEntries.map(({ seq, hash }) => [seq, hash]));
+    for (const { seq, record } of entries) {
+      if (record.type === "gate-decision" && gate.get(record.gateSeq) !== record.gateHash)
+        return fail("gate record missing", seq);
+    }
+  }
+  if (options.witnessedHeads) {
+    const hashes = new Map(entries.map(({ seq, hash }) => [seq, hash]));
+    if (result.prunedThroughSeq !== undefined)
+      hashes.set(result.prunedThroughSeq, (entries[0] as LedgerEntry).prev);
+    const latest = options.witnessedHeads.reduce((max, head) => Math.max(max, head.seq), 0);
+    for (const witness of options.witnessedHeads) {
+      // Legitimate retention can discard older witnessed points, but the latest witness must
+      // still be covered. An asserted checkpoint alone cannot jump past every trusted head.
+      if (witness.seq < (result.prunedThroughSeq ?? 0) && witness.seq < latest) continue;
+      if (hashes.get(witness.seq) !== witness.hash)
+        return fail("witnessed head missing or changed", witness.seq);
+    }
+  }
+  return result;
 }
 
 interface ChainCheck {
@@ -128,6 +164,8 @@ function checkChain(input: readonly LedgerEntry[], range: boolean): ChainCheck {
     if (e.seq !== (first as LedgerEntry).seq + i) return fail("sequence gap", e.seq);
     if (e.prev !== prev || (e.seq > 1 && e.prev === GENESIS)) return fail("broken link", e.seq);
     const { seq, at, record } = e;
+    if (record.type === "record-anchor" && (record.seq !== seq - 1 || record.hash !== prev))
+      return fail("anchor head mismatch", seq);
     if (digestOf({ seq, at, prev, record }) !== e.hash) return fail("hash mismatch", e.seq);
     prev = e.hash;
   }
@@ -151,6 +189,7 @@ const RANGE_PROBLEMS: Record<string, string> = {
   "sequence gap": "Sequence gap",
   "broken link": "Broken link",
   "hash mismatch": "Hash mismatch",
+  "anchor head mismatch": "Anchor head mismatch",
 };
 /** Oldest first. A fetched subrange makes no claim about an omitted prefix. */
 export function verifyRange(

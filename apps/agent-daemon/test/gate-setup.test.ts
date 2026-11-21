@@ -1,12 +1,14 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.2 Sol
 
-import { MemoryLedger } from "@jeswr/agent-audit";
+import { FileLedger as AuditFileLedger, MemoryLedger } from "@jeswr/agent-audit";
+import { type LedgerEntry, seal } from "@jeswr/agent-audit/verify";
 import { encodeEnvelope, encodeEventContent } from "@jeswr/agent-channels";
 import { createDirectReader } from "@jeswr/agent-channels/direct";
 import { parseMatrixMessage } from "@jeswr/agent-channels/matrix";
 import { RecordingTokenProvider } from "@jeswr/agent-channels/testing";
 import { CredentialStore, noTransport } from "@jeswr/agent-credentials";
+import { digestBytes } from "@jeswr/agent-model";
 import { CONFIG_ED25519, PILOT_PROFILE } from "@jeswr/agent-reference";
 import { craftSigned } from "@jeswr/agent-reference/scenarios/common";
 import { mkdtemp, open, readdir, readFile, rm, stat, unlink, writeFile } from "fs/promises";
@@ -718,4 +720,102 @@ it("runs gate commands offline and takes the process lease only after confirmati
     verdicts: { admitted: 0, unstructured: 0, refused: 0 },
   });
   expect(composition).not.toHaveBeenCalled();
+});
+
+it("audits linked decisions, verifies the anchor, and detects an altered or truncated ledger", async () => {
+  const o = options();
+  await daemon.initGate(o);
+  const gate = await daemon.openGate(o);
+  const auditPath = join(root, "events.jsonl");
+  let ledger: AuditFileLedger;
+  let terminal: LedgerEntry;
+  try {
+    const digest = digestBytes("synthetic delivery");
+    await gate.recordParseRefusal({
+      binding: "direct",
+      account: "fixture",
+      reason: "malformed",
+      digest,
+    });
+    const gateHead = gate.head();
+    ledger = new AuditFileLedger(auditPath);
+    const identity = { agent: agentWebId, owner: ownerWebId };
+    const first = ledger.append(
+      {
+        ...identity,
+        id: "urn:decision:1",
+        type: "gate-decision",
+        direction: "in",
+        outcome: "refuse",
+        reason: "malformed",
+        messageDigest: digest,
+        configuration: CONFIG_ED25519,
+        gateSeq: gateHead.seq,
+        gateHash: gateHead.hash,
+      },
+      now().toISOString(),
+    );
+    ledger.append(
+      {
+        ...identity,
+        type: "record-anchor",
+        id: "urn:anchor:1",
+        seq: first.seq,
+        hash: first.hash,
+        jws: await gate.anchor({ seq: first.seq, hash: first.hash }),
+      },
+      now().toISOString(),
+    );
+    terminal = ledger.append(
+      { ...identity, type: "control", id: "urn:control:1" },
+      now().toISOString(),
+    );
+  } finally {
+    await gate.close();
+  }
+  const host = daemon.createCliHost({
+    gate: { stateDirectory: root, agentWebId, ownerWebId },
+    daemon: async () => {
+      throw new Error("Local audit does not start the daemon");
+    },
+    local: daemon.createLocalState(root),
+    ledger,
+    launchCommand: ["/node", "run"],
+    accounts: async () => [],
+    openLoginUrl: vi.fn(),
+    credentials: { store: new CredentialStore({ dir: root }), transport: noTransport, now },
+  });
+  const print = vi.fn();
+  const io = { print, signal: new AbortController().signal, confirm: vi.fn() };
+  const audit = () => daemon.runCli(["audit", "--ledger", auditPath], host, io);
+  expect(await audit()).toBe(0);
+  expect(print).toHaveBeenCalledWith("PASS");
+  const original = await readFile(auditPath, "utf8");
+  const [first, anchor] = ledger.entries();
+  if (!first || anchor?.record.type !== "record-anchor") throw new Error("Fixture anchor missing");
+  print.mockClear();
+  await writeFile(auditPath, original.replace('"reason":"malformed"', '"reason":"bad-signature"'));
+  expect(await audit()).toBe(1);
+  expect(print).toHaveBeenCalledWith(expect.stringContaining("integrity"));
+  print.mockClear();
+  const jws = anchor.record.jws.replace(/\.[^.]+$/, `.${"a".repeat(86)}`);
+  const forged = seal(anchor.seq, anchor.at, first.hash, { ...anchor.record, jws });
+  const changedTail = seal(terminal.seq, terminal.at, forged.hash, terminal.record);
+  await writeFile(
+    auditPath,
+    `${[first, forged, changedTail].map((e) => JSON.stringify(e)).join("\n")}\n`,
+  );
+  expect(await audit()).toBe(1);
+  expect(print).toHaveBeenCalledWith(expect.stringContaining("invalid anchor signature"));
+
+  const reopened = await daemon.openGate(o);
+  try {
+    await reopened.anchor({ seq: terminal.seq, hash: terminal.hash });
+  } finally {
+    await reopened.close();
+  }
+  print.mockClear();
+  await writeFile(auditPath, `${original.trimEnd().split("\n").slice(0, -1).join("\n")}\n`);
+  expect(await audit()).toBe(1);
+  expect(print).toHaveBeenCalledWith(expect.stringContaining("witnessed head"));
 });

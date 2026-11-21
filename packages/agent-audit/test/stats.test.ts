@@ -13,8 +13,12 @@ const base = {
 } as const;
 function fixture() {
   const ledger = new MemoryLedger();
-  const append = (id: string, type: AuditRecord["type"], fields: Partial<AuditRecord> = {}) =>
-    ledger.append({ ...base, id: `urn:event:${id}`, type, ...fields }, AT);
+  type InstrumentedRecord = Exclude<AuditRecord, { type: "gate-decision" | "record-anchor" }>;
+  const append = (
+    id: string,
+    type: InstrumentedRecord["type"],
+    fields: Partial<InstrumentedRecord> = {},
+  ) => ledger.append({ ...base, id: `urn:event:${id}`, type, ...fields }, AT);
   append("b", "conversation", { taskId: "task-b" });
   append("conversation", "conversation");
   append("proposal", "proposal");

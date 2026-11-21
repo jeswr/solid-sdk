@@ -91,7 +91,12 @@ export class FileLedger implements EvidenceLedger {
     const onDisk = this.entries();
     if (!verifyLedger(onDisk).ok || onDisk.at(-1)?.hash !== this.last?.hash)
       throw new Error("Ledger changed outside this writer");
-    if (this.currentCount >= this.bounds.segmentMaxEntries) this.rotate(at);
+    // Retention can append checkpoints. Keep a signed anchor adjacent to its predecessor;
+    // let the following ordinary append handle rotation and pruning.
+    if (this.last?.record.type === "record-anchor" && record.type === "record-anchor")
+      throw new Error("Audit head is already anchored");
+    if (record.type !== "record-anchor" && this.currentCount >= this.bounds.segmentMaxEntries)
+      this.rotate(at);
     const entry = this.next(record, at);
     this.writeLine(entry);
     return structuredClone(entry);
