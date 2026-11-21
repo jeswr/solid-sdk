@@ -1,10 +1,15 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Photos model (PHO-00)
 
 Hook-free model for PHO-01. The EXIF and photograph accessors were ported from
 `apps/pod-photos/src/photos`; albums retain legacy `schema:hasPart` reads and write ordered
 `schema:ListItem` membership. `parsePhotos` also reads the Pod Manager Google Photos connector's
-multi-subject `schema:ImageObject` documents. All new photos use `schema:Photograph`.
+multi-subject `schema:ImageObject` documents. New photos use `schema:Photograph`; videos use
+`schema:VideoObject` with the same descriptive, dimension, date and location predicates, and
+`schema:duration` as a typed `xsd:duration`. Bare VideoObject type markers without a content URL
+are ignored. `duration.ts` accepts fixed ISO durations (days, hours, minutes and fractional seconds),
+without calendar-dependent years/months, signs or exponent notation; writes use seconds only.
 Album ListItems and capture points may be named or blank RDF nodes; reads preserve their terms.
 Optional technical metadata is converted field by field, dropping invalid values/dates while
 retaining valid fields and other photos in the same document.
@@ -28,6 +33,44 @@ TIFF/EXIF bytes with an encoder double. No EXIF reader is mocked. WebP container
 extraction because the pinned reader does not support them; the encoder still decodes/validates
 pixels and supplies dimensions. WebP EXIF fields are omitted, and thumbnail orientation defaults
 to 1.
+
+MP4, MOV and WebM share this upload path and use encoder dimensions with orientation 1.
+MP4/MOV capture dates, legacy QuickTime coordinates and movie duration come from `mp4.ts`;
+sidecars fill missing capture fields and the encoder fills missing duration. WebM uses sidecars
+and encoder metadata directly. The bounded BMFF walker supports ordinary, extended and to-end
+box sizes, both movie-header versions and the 1904 epoch, QuickTime and ISO `meta` layouts,
+and zero terminators inside containers only when followed entirely by zero padding. Nested
+size-0 boxes with nonzero bytes are ambiguous with terminators and are refused; top-level
+to-end boxes remain supported. The lazy walker limits total box visits to
+100,000 and never descends into `mdat`. Invalid extents or excessive box counts yield no metadata.
+Location stripping validates the complete layout and rebuilds it in place using a contextual
+allow-list of playback boxes: movie/track headers, audio/video/timecode sample entries, their
+known codec configuration children, sample tables, data references and fragment/index boxes.
+Every non-allow-listed box is renamed `free` and its entire payload is zero-filled, including
+title/comment boxes, XMP, Exif, UUID/vendor boxes, `udta` and both QuickTime and ISO `meta` forms.
+Existing `free`, `skip` and `wide` payloads are also zero-filled. Within retained boxes, handler
+names, visual sample entries' 32-byte compressor names and trailing payloads of self-contained
+`alis`/`url `/`urn ` data references are zero-filled. Non-self-contained data references are
+refused. Optional timecode reel-name atoms and `sbgp`/`sgpd` boxes with grouping types other than
+`roll`, `prol`, `rap `, `sync`, `tele`, `alst`, `tscl`, `stsa` and `sap ` are neutralised as `free`.
+
+Only `vide`, `soun` and `tmcd` tracks with allow-listed sample formats survive. Other tracks,
+including iPhone `mebx` orientation tracks and vendor telemetry, are removed together with their
+sample bytes in `mdat`. Every `mdat` payload byte outside retained tracks' sample ranges is
+zero-filled too, including unreferenced gaps left by editors and entire unused payloads.
+Static ranges are resolved from `stsc`, `stsz`/`stz2` and `stco`/`co64`;
+fragment ranges use `tfhd`/`trex` defaults and `trun` offsets, including implicit base offsets.
+File-backed `iloc` item extents in removed metadata are erased too. Bounds, counts, offsets and
+sample aliasing are validated before mutation. Inconsistent or unresolved layouts fail closed
+with `VideoLocationError` and instructions to disable Remove location; refusal leaves the buffer
+untouched. No sizes change, so retained media and chunk offsets stay valid.
+
+The codec bitstreams of retained audio/video samples are not inspected: embedded metadata such
+as SEI user data inside H.264/HEVC frames may remain. `readVideoMetadata` still reads legacy
+location atoms for display before stripping. Upload preparation reads the MP4/MOV file once,
+extracts metadata, then scrubs the same caller-owned buffer without another full-buffer copy.
+The input Blob remains immutable.
+WebM/Matroska location stripping is refused.
 
 `uploadPhotos` writes each original, thumbnail, then metadata with create-only preconditions.
 An error stops the batch; earlier writes remain, and errors propagate with their HTTP status.

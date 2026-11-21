@@ -132,10 +132,10 @@ function Chrome({ children }: { children: ReactNode }) {
         <input
           ref={picker}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           hidden
-          aria-label="Upload images"
+          aria-label="Upload photos and videos"
           onChange={(event) => {
             photos.upload(Array.from(event.target.files ?? []), strip);
             event.target.value = "";
@@ -144,18 +144,18 @@ function Chrome({ children }: { children: ReactNode }) {
         <input
           ref={folderPicker}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           hidden
           {...{ webkitdirectory: "" }}
-          aria-label="Upload image folder"
+          aria-label="Upload photos and videos folder"
           onChange={(event) => {
             photos.upload(Array.from(event.target.files ?? []), strip);
             event.target.value = "";
           }}
         />
         <DropZoneOverlay
-          folderName="Photos"
+          folderName="photos and videos"
           onFiles={(files) => {
             photos.upload(
               files.files.map((entry) => entry.file),
