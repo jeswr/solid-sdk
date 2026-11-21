@@ -9,11 +9,12 @@ import {
   saveAgent,
   scopedUrn,
   TrustStore,
+  type TrustStoreData,
 } from "@jeswr/agent-reference";
 import { lstat, mkdir, realpath } from "fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "path";
 import { readGate } from "./gate.js";
-import { writePrivate } from "./local.js";
+import { acquireLocalLease, writePrivate } from "./local.js";
 
 type Confirm = (prompt: string) => Promise<boolean>;
 
@@ -121,6 +122,23 @@ export async function initGate(o: {
   return true;
 }
 
+async function addPin(data: TrustStoreData, card: IntroductionCard) {
+  const prior = await TrustStore.load(data);
+  if (
+    prior.data.keys.some(
+      (key) =>
+        ((key.kid === card.partyKey.kid || key.kid === card.actorKey.kid) &&
+          !(key.role === "party" && key.subject === card.party && key.kid === card.partyKey.kid) &&
+          !(key.role === "actor" && key.subject === card.actor && key.kid === card.actorKey.kid)) ||
+        (key.role === "party" && key.subject === card.party && key.kid !== card.partyKey.kid),
+    )
+  )
+    throw new Error("Introduction conflicts with an existing key");
+  const trust = introduce(prior.data, card);
+  await TrustStore.load(trust);
+  return trust;
+}
+
 export async function pinPeer(o: {
   directory: string;
   card: IntroductionCard;
@@ -144,21 +162,9 @@ export async function pinPeer(o: {
     if ("subject" in key && key.subject !== subject)
       throw new Error("Introduction key subject does not match its identity");
   }
-  const prior = await TrustStore.load(current.trust);
   // Validate both keys, including a party key which introduce() might already know.
   await TrustStore.load(introduce({ ...current.trust, keys: [] }, card));
-  if (
-    prior.data.keys.some(
-      (key) =>
-        ((key.kid === card.partyKey.kid || key.kid === card.actorKey.kid) &&
-          !(key.role === "party" && key.subject === card.party && key.kid === card.partyKey.kid) &&
-          !(key.role === "actor" && key.subject === card.actor && key.kid === card.actorKey.kid)) ||
-        (key.role === "party" && key.subject === card.party && key.kid !== card.partyKey.kid),
-    )
-  )
-    throw new Error("Introduction conflicts with an existing key");
-  const trust = introduce(prior.data, card);
-  await TrustStore.load(trust);
+  await addPin(current.trust, card);
   const review = [
     `Party thumbprint: ${card.partyKey.kid}`,
     `Actor thumbprint: ${card.actorKey.kid}`,
@@ -167,9 +173,19 @@ export async function pinPeer(o: {
   o.print?.(review);
   const prompt = "Confirm both thumbprints with the peer out of band before pinning.";
   if (!(await o.confirm(o.print ? prompt : `${review}\n${prompt}`))) return false;
-  const latest = await readGate(o.directory);
-  if (JSON.stringify(latest.trust) !== JSON.stringify(current.trust))
-    throw new Error("Trusted pins changed during confirmation");
-  await writePrivate(current.dir, "trust.json", JSON.stringify(trust, null, 2));
+  const release = await acquireLocalLease(current.dir, "pin.lock", 100);
+  try {
+    const latest = await readGate(current.dir);
+    if (
+      latest.identity.actor !== current.identity.actor ||
+      latest.identity.party !== current.identity.party ||
+      latest.actorKey.kid !== current.actorKey.kid
+    )
+      throw new Error("Gate identity changed during confirmation");
+    const trust = await addPin(latest.trust, card);
+    await writePrivate(current.dir, "trust.json", JSON.stringify(trust, null, 2));
+  } finally {
+    await release();
+  }
   return true;
 }

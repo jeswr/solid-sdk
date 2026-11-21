@@ -255,7 +255,8 @@ then reads `/v1.0/me/mailFolders/inbox/messages/delta?$select=id`, follows valid
 `/v1.0/me/messages/{id}/$value`. The same injected email parser enforces parity.
 Requests use immutable Graph IDs. Cursors bind the account and preserve pending
 IDs until the item/byte limits are drained. Duplicate IDs within a page and deleted
-tombstones are skipped; a MIME 404 skips a deleted item. HTTP 410 or a 4xx response
+tombstones are skipped; a MIME 404 skips a deleted item. A failed or oversized MIME
+read holds the cursor for retry. HTTP 410 or a 4xx response
 with error code `syncStateNotFound` on a saved delta state restarts the initial
 inbox sync. Other errors preserve the previous cursor for retry. Pages cap at 512
 rows and cursors at 64 KiB.
@@ -335,8 +336,8 @@ Both seconds and HTTP dates are accepted; excessive or invalid delays stop retri
 HTML bodies (case-insensitive content type) become plain text through the shared HTML
 projector, including `@Display Name` for `<at>` mentions and entity decoding after
 script/style removal. Text bodies and display names retain literal markup and entities;
-all paths strip control and bidi characters. System/deleted
-messages and malformed individual messages are skipped. Sender claims come from
+all paths strip control and bidi characters. The reader skips system and deleted
+messages and returns malformed messages for a typed parse refusal. Sender claims come from
 `from.user`; dates, stable message IDs, conversation signals and reply thread keys
 remain unverified. Parsing uses bounded raw JSON, ignores `native` and never follows
 attachment URLs. Chat and channel conversation IDs have separate namespaces.
@@ -573,8 +574,9 @@ per-event hints survive in the bounded cursor until delivery. The optional bound
 `native` JSON wrapper `{ bridge, event }` transports those hints alongside plaintext
 or decrypted content without altering `raw`. Existing A-027 cursors remain readable.
 The reader still imports only `m.direct` rooms; linking a bridge does not authorize
-group or history ingestion. Bridged text remains an observation: any Matrix envelope
-key is ignored, including one supplied by a remote user or a double puppet.
+group or history ingestion. Text without a Matrix envelope remains an observation.
+When the native envelope key is present, the parser treats it as a Matrix carrier
+and either decodes it or returns a typed refusal, regardless of the bridge hint.
 
 `describeMatrixBridge(channel, credentialState)` returns a descriptor with
 `binding: "matrix"`, the logical channel, its `signal-footer/0.1` or

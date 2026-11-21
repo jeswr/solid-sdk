@@ -13,9 +13,17 @@
  * dependency-light while sharing the class.
  */
 
+export type ChannelParseRefusalReason =
+  | "malformed"
+  | "human-parity-mismatch"
+  | "conflicting-structured-copies";
+
 /** A controlled, typed, fail-closed refusal thrown by a channel `parse`. */
 export class ChannelParseError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly reason: ChannelParseRefusalReason = "malformed",
+  ) {
     super(message);
     this.name = "ChannelParseError";
   }

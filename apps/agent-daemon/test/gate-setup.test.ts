@@ -126,13 +126,44 @@ it("atomically replaces trust.json and preserves the previously opened pins", as
   }
 });
 
+it("keeps both pins when two operators confirm concurrently", async () => {
+  const o = options();
+  await daemon.initGate(o);
+  const peers = await Promise.all(
+    ["first", "second"].map(async (name) => {
+      const directory = join(root, name);
+      await daemon.initGate({
+        ...o,
+        directory,
+        agentWebId: `https://${name}.example/actor#id`,
+        ownerWebId: `https://${name}.example/owner#id`,
+      });
+      return JSON.parse(await readFile(join(directory, "card.json"), "utf8"));
+    }),
+  );
+  let confirmations = 0;
+  let release!: () => void;
+  const bothConfirmed = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const confirm = async () => {
+    if (++confirmations === peers.length) release();
+    await bothConfirmed;
+    return true;
+  };
+  expect(await Promise.all(peers.map((card) => daemon.pinPeer({ ...o, card, confirm })))).toEqual([
+    true,
+    true,
+  ]);
+  expect(
+    (await readGateStatus(o.directory)).peers.map(({ thumbprint }) => thumbprint).sort(),
+  ).toEqual(peers.flatMap(({ actorKey, partyKey }) => [actorKey.kid, partyKey.kid]).sort());
+});
+
 it.each([
-  { outcome: "checking", reason: "result-uncertain" },
+  { outcome: "checking" },
   { outcome: "refused", reason: "bad-signature" },
-])("preserves a $outcome verdict when a Matrix bridge retry hides its carrier", async ({
-  outcome,
-  reason,
-}) => {
+])("holds an uncommitted $outcome verdict across Matrix bridge hints", async (verdict) => {
   const o = options();
   await daemon.initGate(o);
   const gate = await daemon.openGate(o);
@@ -149,11 +180,10 @@ it.each([
       native: JSON.stringify({ bridge: "signal", event: native }),
     });
     expect(first.jsonLdBlocks).toHaveLength(1);
-    expect(retry.jsonLdBlocks).toBeUndefined();
+    expect(retry.jsonLdBlocks).toEqual(first.jsonLdBlocks);
     expect(retry.rawSha256).toBe(first.rawSha256);
     const stored = JSON.stringify({
-      outcome,
-      ...(outcome === "refused" ? { reason } : {}),
+      ...verdict,
       time: now().toISOString(),
     });
     const path = join(o.directory, `verdict-${first.rawSha256}.json`);
@@ -162,7 +192,7 @@ it.each([
       await gate.check({ binding: "matrix", account: "fixture", message: retry }),
     ).toMatchObject({
       outcome: "refused",
-      reason,
+      reason: "result-uncertain",
     });
     expect(await readFile(path, "utf8")).toBe(stored);
   } finally {
@@ -277,7 +307,93 @@ async function signedInput(
   };
 }
 
-it.each([2, 3, 4])("refuses retries when verdict directory sync %i fails", async (failure) => {
+it("never caches an admission after a failed verdict sync and failed cleanup write", async () => {
+  const o = options();
+  const { peer, gate: memory } = await createTestGate();
+  await memory.close();
+  await daemon.initGate(o);
+  await daemon.pinPeer({ ...o, card: peer.card });
+  const { input } = await signedInput(o, peer);
+  const gate = await daemon.openGate(o);
+  const fs = await vi.importActual<typeof import("fs/promises")>("fs/promises");
+  const base = `verdict-${input.message.rawSha256}`;
+  let failed = false;
+  vi.mocked(open).mockImplementation(async (path, flags, mode) => {
+    if (failed && flags === "wx") throw new Error("cannot create another temporary file");
+    const handle = await fs.open(path, flags, mode);
+    if (path === o.directory) {
+      const record = JSON.parse(await fs.readFile(join(o.directory, `${base}.json`), "utf8"));
+      const files = await fs.readdir(o.directory);
+      if (record.outcome === "admitted" && !files.includes(`${base}.pending`)) {
+        handle.sync = async () => {
+          failed = true;
+          throw new Error("directory fsync failed");
+        };
+      }
+    }
+    return handle;
+  });
+  try {
+    expect(await gate.check(input)).toMatchObject({ outcome: "refused", reason: "indeterminate" });
+    expect(failed).toBe(true);
+    expect(await gate.check(input)).toMatchObject({
+      outcome: "refused",
+      reason: "result-uncertain",
+    });
+  } finally {
+    await gate.close();
+    vi.mocked(open).mockReset();
+  }
+  const reopened = await daemon.openGate(o);
+  try {
+    expect(await reopened.check(input)).toMatchObject({
+      outcome: "refused",
+      reason: "result-uncertain",
+    });
+  } finally {
+    await reopened.close();
+  }
+});
+
+it.each([
+  true,
+  false,
+])("checks a Matrix carrier across bridge hints (hint first: %s)", async (hintFirst) => {
+  const o = options();
+  const { peer, gate: memory } = await createTestGate();
+  await memory.close();
+  await daemon.initGate(o);
+  await daemon.pinPeer({ ...o, card: peer.card });
+  const { jws } = await signedInput(o, peer);
+  const native = event("$signed", {
+    msgtype: "m.text",
+    body: "Fixture",
+    ...encodeEventContent(jws),
+  });
+  const item = { id: native.event_id, raw: JSON.stringify(native) };
+  const hint = JSON.stringify({ bridge: "signal", event: native });
+  const base = { binding: "matrix", account: "fixture" };
+  const gate = await daemon.openGate(o);
+  const first = await gate.check({
+    ...base,
+    message: parseMatrixMessage({ ...item, native: hintFirst ? hint : undefined }),
+  });
+  await gate.close();
+  expect(first).toMatchObject({ outcome: "admitted" });
+  const reopened = await daemon.openGate(o);
+  try {
+    expect(
+      await reopened.check({
+        ...base,
+        message: parseMatrixMessage({ ...item, native: hintFirst ? undefined : hint }),
+      }),
+    ).toEqual(first);
+  } finally {
+    await reopened.close();
+  }
+});
+
+it.each([2, 3])("refuses retries when verdict directory sync %i fails", async (failure) => {
   const o = options();
   const { peer, gate: memory } = await createTestGate();
   await memory.close();
@@ -369,7 +485,10 @@ it.each([
   }
 });
 
-it("holds a legacy cached admission that carries no positive admission evidence", async () => {
+it.each([
+  undefined,
+  true,
+])("holds a legacy cached admission without a commit (verified: %s)", async (verified) => {
   const o = options();
   const { peer, gate: memory } = await createTestGate();
   await memory.close();
@@ -379,6 +498,7 @@ it("holds a legacy cached admission that carries no positive admission evidence"
     join(o.directory, `verdict-${input.message.rawSha256}.json`),
     JSON.stringify({
       outcome: "admitted",
+      verified,
       time: now().toISOString(),
       messageId: "urn:test:legacy",
       conversation: "urn:test:conversation",
@@ -396,7 +516,7 @@ it("holds a legacy cached admission that carries no positive admission evidence"
   }
 });
 
-it("rechecks a signed carrier against an old shared parity refusal", async () => {
+it("holds a legacy shared parity refusal without a commit record", async () => {
   const o = options();
   const { peer, gate: memory } = await createTestGate();
   await memory.close();
@@ -419,7 +539,10 @@ it("rechecks a signed carrier against an old shared parity refusal", async () =>
       outcome: "refused",
       reason: "result-uncertain",
     });
-    expect(await gate.check(input)).toMatchObject({ outcome: "admitted" });
+    expect(await gate.check(input)).toMatchObject({
+      outcome: "refused",
+      reason: "result-uncertain",
+    });
   } finally {
     await gate.close();
   }

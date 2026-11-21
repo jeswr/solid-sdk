@@ -1,6 +1,11 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.2 Sol
-import { type BridgeMessage, DIRECT, readEnvelope } from "@jeswr/agent-channels";
+import {
+  type BridgeMessage,
+  type ChannelParseRefusalReason,
+  DIRECT,
+  readEnvelope,
+} from "@jeswr/agent-channels";
 import { digestBytes } from "@jeswr/agent-model";
 import {
   AgentRuntime,
@@ -13,10 +18,11 @@ import {
   type TrustStoreData,
   verifyLedger,
 } from "@jeswr/agent-reference";
-import { lstat, readdir, unlink } from "fs/promises";
+import { randomUUID } from "crypto";
+import { lstat, readdir, rename } from "fs/promises";
 import { basename, dirname, join, resolve } from "path";
 import { z } from "zod";
-import { readPrivate, syncDirectory, writePrivate } from "./local.js";
+import { readPrivate, writePrivate } from "./local.js";
 
 export type GateOutcome = "admitted" | "unstructured" | "refused";
 export interface GateVerdict {
@@ -39,12 +45,13 @@ type ParseRefusalInput = {
   binding: string;
   account: string;
   raw: string | Uint8Array;
-  reason: "malformed" | "human-parity-mismatch";
+  reason: ChannelParseRefusalReason;
 };
 type GateOptions = { directory: string; now?: () => Date };
 const filePattern = /^verdict-([a-f0-9]{64}(?:-[a-f0-9]{64})?)\.json$/;
 const reasonCode = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
 const time = z.iso.datetime();
+const finalFields = { time, transaction: z.uuid().optional() };
 const storedVerdict = z.discriminatedUnion("outcome", [
   z.strictObject({ outcome: z.literal("checking"), time }),
   z.strictObject({
@@ -52,10 +59,10 @@ const storedVerdict = z.discriminatedUnion("outcome", [
     verified: z.literal(true).optional(),
     messageId: z.string(),
     conversation: z.string(),
-    time,
+    ...finalFields,
   }),
-  z.strictObject({ outcome: z.literal("unstructured"), time }),
-  z.strictObject({ outcome: z.literal("refused"), reason: reasonCode, time }),
+  z.strictObject({ outcome: z.literal("unstructured"), ...finalFields }),
+  z.strictObject({ outcome: z.literal("refused"), reason: reasonCode, ...finalFields }),
 ]);
 export type StoredVerdict = z.infer<typeof storedVerdict>;
 type Decision =
@@ -71,18 +78,14 @@ type VerdictStore = {
 function fileVerdicts(directory: string): VerdictStore {
   return {
     async get(hex) {
-      const pending = await readPrivate(join(directory, `verdict-${hex}.pending`));
-      if (pending !== undefined) {
-        const { time } = storedVerdict.parse(JSON.parse(pending));
-        return { outcome: "checking", time };
-      }
       const text = await readPrivate(join(directory, `verdict-${hex}.json`));
       if (text === undefined) return undefined;
       const verdict = storedVerdict.parse(JSON.parse(text));
-      if (verdict.outcome !== "admitted") return verdict;
-      const { verified, ...decision } = verdict;
-      // Earlier versions could cache a protocol acceptance without inbound admission.
-      return verified ? decision : { outcome: "checking", time: verdict.time };
+      if (verdict.outcome === "checking") return verdict;
+      const { transaction, ...decision } = verdict;
+      const commit = await readPrivate(join(directory, `verdict-${hex}.commit`));
+      if (transaction && commit === digestBytes(text)) return decision;
+      return { outcome: "checking", time: verdict.time };
     },
     async put(hex, verdict) {
       const name = `verdict-${hex}.json`;
@@ -90,19 +93,13 @@ function fileVerdicts(directory: string): VerdictStore {
         await writePrivate(directory, name, JSON.stringify(verdict));
         return;
       }
-      const staged = `verdict-${hex}.pending`;
-      const marker = JSON.stringify({ outcome: "checking", time: verdict.time });
-      const record = verdict.outcome === "admitted" ? { ...verdict, verified: true } : verdict;
-      // The side marker survives a failed final rename or directory sync, even after reopening.
-      await writePrivate(directory, staged, marker);
-      await writePrivate(directory, name, JSON.stringify(record));
-      await unlink(join(directory, staged));
-      try {
-        await syncDirectory(directory);
-      } catch (error) {
-        await writePrivate(directory, staged, marker);
-        throw error;
-      }
+      const record = JSON.stringify({ ...verdict, transaction: randomUUID() });
+      const staged = `verdict-${hex}.prepared`;
+      await writePrivate(directory, staged, digestBytes(record));
+      await writePrivate(directory, name, record);
+      // Publish proof only after both writes have completed their directory syncs.
+      // The atomic rename is the commit point. No cleanup can expose a failed write.
+      await rename(join(directory, staged), join(directory, `verdict-${hex}.commit`));
     },
     async digests() {
       return (await readdir(directory)).flatMap((name) => filePattern.exec(name)?.[1] ?? []).sort();
@@ -176,11 +173,7 @@ export function createGate(
     try {
       if (!validDigest) throw new Error("Invalid raw digest");
       const accountKey = `${hex}-${digestBytes(account).slice(8)}`;
-      const stored = await verdicts.get(hex);
-      // Pre-account verdicts cannot identify which footer produced the mismatch.
-      const legacyParity =
-        stored?.outcome === "refused" && stored.reason === "human-parity-mismatch";
-      const previous = legacyParity ? undefined : stored;
+      const previous = await verdicts.get(hex);
       const priorRefusal = refusalReason(previous) ?? refusalReason(await verdicts.get(accountKey));
       if (priorRefusal) {
         await event("binding-rejection", priorRefusal);
@@ -191,10 +184,6 @@ export function createGate(
       const failure = "reason" in input ? input.reason : carrier?.failure;
       const parityMismatch =
         jws !== undefined && message?.warnings.includes("human-parity-unverified");
-      if (legacyParity && jws === undefined && !failure) {
-        await event("binding-rejection", "result-uncertain");
-        return { ...refused("result-uncertain"), digest };
-      }
       if (!failure && !parityMismatch && jws !== undefined && previous?.outcome === "admitted") {
         await event("channel-observation", "cached-verdict");
         return {

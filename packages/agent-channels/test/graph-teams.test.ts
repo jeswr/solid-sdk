@@ -120,7 +120,7 @@ it("accepts Graph's raw and percent-encoded Teams IDs without widening the colle
   );
 });
 
-it("skips events, deleted messages and malformed individual cards while preserving later valid messages", async () => {
+it("skips system and deleted events and retains malformed messages across cursor paging", async () => {
   const r = reader([
     page([
       { messageType: "systemEventMessage" },
@@ -131,12 +131,25 @@ it("skips events, deleted messages and malformed individual cards while preservi
         id: "broken",
         attachments: [{ contentType: CARD_TYPE, content: "private invalid card" }],
       }),
+      row({ id: "oversized", subject: "x".repeat(40_000), summary: "x".repeat(40_000) }),
       row({ id: "ok", from: { user: { id: "sender" } } }),
     ]),
   ]);
-  const result = await r.binding.ingest.list(account, cursor(), bounds);
-  expect(result.items).toHaveLength(1);
-  expect(r.binding.ingest.parse(result.items[0] as never).sender).toEqual({ handle: "sender" });
+  const first = await r.binding.ingest.list(account, cursor(), { ...bounds, maxItems: 1 });
+  expect(first.items).toHaveLength(1);
+  expect(() => r.binding.ingest.parse(first.items[0] as never)).toThrow(
+    "invalid Teams inbound message",
+  );
+  const restarted = reader([]).binding;
+  const result = await restarted.ingest.list(account, first.next, bounds);
+  expect(result.items).toHaveLength(3);
+  expect(() => restarted.ingest.parse(result.items[0] as never)).toThrow(
+    "invalid Teams inbound message",
+  );
+  expect(() => restarted.ingest.parse(result.items[1] as never)).toThrow(
+    "invalid Teams inbound message",
+  );
+  expect(restarted.ingest.parse(result.items[2] as never).sender).toEqual({ handle: "sender" });
 });
 
 it("projects HTML and mentions to control-free text, drops closed/unclosed active content and decodes entities once", () => {

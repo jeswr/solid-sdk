@@ -103,3 +103,17 @@ it("enforces aggregate byte, part, header and nesting caps", () => {
     }),
   ).toEqual({ ok: false, detail: "unparseable MIME" });
 });
+
+it("counts only candidate parts during bounded carrier discovery", () => {
+  const html = "Content-Type: text/html\r\n\r\n<p>Hello</p>";
+  const attachment = "Content-Type: application/octet-stream\r\n\r\nattachment";
+  const bounded = { ...limits, maxParts: 1 };
+  const scan = { carriersOnly: true };
+  expect(parseMime(multipart([attachment, html, attachment]), bounded, scan)).toMatchObject({
+    ok: true,
+  });
+  expect(parseMime(multipart([html, attachment, html]), bounded, scan)).toEqual({
+    ok: false,
+    detail: "too many MIME parts",
+  });
+});

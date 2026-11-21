@@ -165,7 +165,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
         const verdict = await gate.recordParseRefusal?.({
           ...source,
           raw: item.raw,
-          reason: error.message === "human-parity-mismatch" ? "human-parity-mismatch" : "malformed",
+          reason: error.reason,
         });
         if (verdict?.outcome !== "refused" || verdict.reason === "indeterminate")
           throw new Error("Inbound gate could not record the parser refusal");

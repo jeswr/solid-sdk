@@ -138,64 +138,33 @@ function refusedMime(kind: string): Response {
   );
 }
 
-it.each(
-  sizeRefusals,
-)("skips refused MIME ($kind, nested guard: $nestedGuard) without consuming bounds or retaining its pending ID", async ({
-  kind,
-  nestedGuard,
-}) => {
-  const next = link("page2", "$skiptoken");
-  const r = reader(
-    [
-      { value: [{ id: "refused" }, { id: "a" }, { id: "b" }], "@odata.nextLink": next },
-      refusedMime(kind),
-      mime(),
-      mime(),
-      fixtures.empty,
-    ],
-    nestedGuard,
-  );
-  const first = await r.binding.ingest.list(account, undefined, { ...bounds, maxItems: 1 });
-  expect(first.items.map((item) => item.id)).toEqual(["a"]);
-  expect(JSON.parse(first.next)).toEqual({
-    account: account.id,
-    url: DELTA_INITIAL,
-    pending: ["b"],
-    resume: next,
-  });
-  const second = await r.binding.ingest.list(account, first.next, bounds);
-  expect(second.items.map((item) => item.id)).toEqual(["b"]);
-  expect(JSON.parse(second.next)).toMatchObject({ url: next, pending: [], resume: "" });
-  await r.binding.ingest.list(account, second.next, bounds);
-  expect(r.requests.at(-1)?.url.href).toBe(next);
-  expect(
-    r.requests.filter((request) => request.url.pathname.endsWith("/refused/$value")),
-  ).toHaveLength(1);
-  expect(r.queue).toEqual([]);
+it("holds the cursor for a message whose raw MIME could not be read within bounds", async () => {
+  const r = reader([
+    { value: [{ id: "oversized" }], "@odata.deltaLink": link("next") },
+    refusedMime("declared transport cap"),
+  ]);
+  await expect(r.binding.ingest.list(account, undefined, bounds)).rejects.toThrow(/cap/);
 });
 
 it.each(
   sizeRefusals,
-)("advances past a delta page containing only refused MIME ($kind, nested guard: $nestedGuard)", async ({
+)("retries the same message after a MIME read refusal ($kind, nested guard: $nestedGuard)", async ({
   kind,
   nestedGuard,
 }) => {
-  const next = link("after-refused");
-  const r = reader(
-    [
-      { value: [{ id: "refused" }], "@odata.deltaLink": next },
-      refusedMime(kind),
-      { value: [{ id: "valid" }], "@odata.deltaLink": link("after-valid") },
-      mime(),
-    ],
-    nestedGuard,
-  );
-  const first = await r.binding.ingest.list(account, undefined, bounds);
-  expect(first.items).toEqual([]);
-  expect(JSON.parse(first.next)).toMatchObject({ url: next, pending: [], resume: "" });
+  const next = link("page2", "$skiptoken");
+  const saved = cursor({ pending: ["refused", "a"], resume: next });
+  const r = reader([refusedMime(kind), mime(), mime()], nestedGuard);
+  await expect(r.binding.ingest.list(account, saved, bounds)).rejects.toThrow(/byte length|cap/);
+  const first = await r.binding.ingest.list(account, saved, { ...bounds, maxItems: 1 });
+  expect(first.items.map((item) => item.id)).toEqual(["refused"]);
+  expect(JSON.parse(first.next)).toMatchObject({ pending: ["a"], resume: next });
   const second = await r.binding.ingest.list(account, first.next, bounds);
-  expect(second.items.map((item) => item.id)).toEqual(["valid"]);
-  expect(r.requests[3]?.url.href).toBe(next);
+  expect(second.items.map((item) => item.id)).toEqual(["a"]);
+  expect(JSON.parse(second.next)).toMatchObject({ url: next, pending: [], resume: "" });
+  expect(
+    r.requests.filter((request) => request.url.pathname.endsWith("/refused/$value")),
+  ).toHaveLength(2);
   expect(r.queue).toEqual([]);
 });
 

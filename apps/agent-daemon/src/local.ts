@@ -63,37 +63,49 @@ export async function writePrivate(directory: string, name: string, text: string
   }
 }
 /** A crash leaves the lease present. Recovery requires the operator to establish quiescence. */
+export async function acquireLocalLease(directory: string, name: string, attempts = 1) {
+  const path = join(directory, name);
+  let file: Awaited<ReturnType<typeof open>>;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      file = await open(path, "wx", 0o600);
+      break;
+    } catch (error) {
+      if (attempt >= attempts || (error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  try {
+    await file.writeFile(String(process.pid));
+    await file.sync();
+    await syncDirectory(directory);
+  } catch (error) {
+    await file.close();
+    throw error;
+  }
+  const identity = await file.stat();
+  let released = false;
+  return async () => {
+    if (released) return;
+    const current = await lstat(path);
+    if (current.ino !== identity.ino || current.dev !== identity.dev) {
+      await file.close();
+      throw new Error("Process lease replaced");
+    }
+    try {
+      await unlink(path);
+      await syncDirectory(directory);
+    } finally {
+      await file.close();
+    }
+    released = true;
+  };
+}
 export function createProcessLease(directory: string): ProcessLease {
   return {
     async acquire() {
       new CredentialStore({ dir: directory });
-      const path = join(directory, "daemon.lock");
-      const file = await open(path, "wx", 0o600);
-      try {
-        await file.writeFile(String(process.pid));
-        await file.sync();
-        await syncDirectory(directory);
-      } catch (error) {
-        await file.close();
-        throw error;
-      }
-      const identity = await file.stat();
-      let released = false;
-      return async () => {
-        if (released) return;
-        const current = await lstat(path);
-        if (current.ino !== identity.ino || current.dev !== identity.dev) {
-          await file.close();
-          throw new Error("Process lease replaced");
-        }
-        try {
-          await unlink(path);
-          await syncDirectory(directory);
-        } finally {
-          await file.close();
-        }
-        released = true;
-      };
+      return acquireLocalLease(directory, "daemon.lock");
     },
   };
 }

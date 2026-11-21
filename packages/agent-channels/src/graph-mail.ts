@@ -4,7 +4,7 @@ import type { ChannelBinding } from "./binding.js";
 import type { InboundRawMessage } from "./channel.js";
 import { accountId } from "./direct/shared.js";
 import { assertEmailAddress, assertFooter, type EmailConfig, inspectEmail } from "./email-mime.js";
-import { ChannelParseError, ResponseSizeRefusedError } from "./errors.js";
+import { ChannelParseError } from "./errors.js";
 import {
   DELTA_INITIAL,
   deltaLink,
@@ -146,29 +146,17 @@ export function createGraphMailReader(options: GraphMailReaderOptions): ChannelB
         let bytes = 0;
         while (state.pending.length && items.length < maxItems) {
           const id = state.pending[0] as string;
-          let raw: Uint8Array;
-          try {
-            const response = await rest(
-              `/messages/${encodeURIComponent(id)}/$value`,
-              ref,
-              tokens,
-              "read",
-            );
-            if (response.status === 404) {
-              state.pending.shift();
-              continue;
-            }
-            raw = await mimeBody(response);
-          } catch (error) {
-            // Definitive MIME size refusals skip one item; failed reads remain retryable.
-            if (
-              !(error instanceof ChannelParseError) &&
-              !(error instanceof ResponseSizeRefusedError)
-            )
-              throw error;
+          const response = await rest(
+            `/messages/${encodeURIComponent(id)}/$value`,
+            ref,
+            tokens,
+            "read",
+          );
+          if (response.status === 404) {
             state.pending.shift();
             continue;
           }
+          const raw = await mimeBody(response);
           if (bytes + raw.byteLength > maxBytes) {
             if (!items.length) throw new RangeError("next item exceeds byte bound");
             break;

@@ -193,7 +193,8 @@ function inspectEmailDetails(raw: string | Uint8Array, config: EmailConfig) {
   collectStructuredCopies(mimeCarriers(scan.root), copies, true);
   if (copies.size === 0)
     return { message, root: undefined, proposal: undefined, parity: "none" as const };
-  if (copies.size !== 1) throw new ChannelParseError("conflicting structured copies");
+  if (copies.size !== 1)
+    throw new ChannelParseError("conflicting structured copies", "conflicting-structured-copies");
   // A carrier discovered by the scan still needs the full MIME tree for parity.
   const mime = legacyFoundCarrier ? scan : parseMime(raw);
   if (!mime.ok) throw new ChannelParseError("incomplete structured-copy extraction");
@@ -202,7 +203,8 @@ function inspectEmailDetails(raw: string | Uint8Array, config: EmailConfig) {
   const strict = new Set([...config.ownAccounts].map((a) => a.toLowerCase())).has(
     config.recipient.toLowerCase(),
   );
-  if (strict && !match) throw new ChannelParseError("human-parity-mismatch");
+  if (strict && !match)
+    throw new ChannelParseError("human-parity-mismatch", "human-parity-mismatch");
   return {
     message: {
       ...message,

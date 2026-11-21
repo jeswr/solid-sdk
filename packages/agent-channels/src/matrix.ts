@@ -87,24 +87,34 @@ function cursorState(cursor: string, account: string, homeserver: string, userId
   }
   return state as unknown as State;
 }
+function hasCleartextCarrier(event: Record<string, unknown>): boolean {
+  const content = event.content;
+  return (
+    event.type === "m.room.message" &&
+    content !== null &&
+    typeof content === "object" &&
+    Object.hasOwn(content, ENVELOPE_KEY)
+  );
+}
 /** Pure parser: decrypted content is still untrusted, and never authenticates an agent. */
 export function parseMatrixMessage(item: InboundRawMessage): import("./message.js").BridgeMessage {
   const raw = json(item.raw, MATRIX_CONTENT.maxBytes);
   if (raw.type === "m.room.encrypted" && typeof item.native !== "string")
     throw new ChannelParseError("Matrix encrypted event requires bounded decrypted JSON");
-  const native = typeof item.native === "string" ? json(item.native) : undefined;
-  const hint = native && Object.hasOwn(native, "bridge") ? bridgeChannel(native.bridge) : undefined;
+  const native =
+    typeof item.native === "string" && !hasCleartextCarrier(raw) ? json(item.native) : undefined;
+  const wrapped = native && Object.hasOwn(native, "bridge");
   const decoded =
     native === undefined
       ? raw
       : json(
-          hint === undefined ? (item.native as string) : JSON.stringify(record(native.event)),
+          wrapped ? JSON.stringify(record(native.event)) : (item.native as string),
           MATRIX_CONTENT.maxBytes,
         );
   const event = raw.type === "m.room.encrypted" ? decoded : raw;
   // The wrapper carries reader-side state without changing the raw provenance bytes.
   if (
-    hint !== undefined &&
+    wrapped &&
     (decoded.event_id !== raw.event_id ||
       decoded.room_id !== raw.room_id ||
       decoded.sender !== raw.sender)
@@ -127,14 +137,14 @@ export function parseMatrixMessage(item: InboundRawMessage): import("./message.j
   if (canonical.kind !== "message")
     throw new ChannelParseError("Matrix event is not a new text message");
   const content = record(event.content);
-  const ghost = detectMatrixBridge(event.sender);
+  const blocks = Object.hasOwn(content, ENVELOPE_KEY)
+    ? [encodeEnvelope(decodeEventContent(content))]
+    : undefined;
+  const hint = wrapped && blocks === undefined ? bridgeChannel(native.bridge) : undefined;
+  const ghost = blocks === undefined ? detectMatrixBridge(event.sender) : undefined;
   if (hint !== undefined && ghost !== undefined && hint !== ghost)
     throw new ChannelParseError("conflicting Matrix bridge hints");
   const channel = hint ?? ghost;
-  const blocks =
-    channel === undefined && Object.hasOwn(content, ENVELOPE_KEY)
-      ? [encodeEnvelope(decodeEventContent(content))]
-      : undefined;
   const bytes = typeof item.raw === "string" ? new TextEncoder().encode(item.raw) : item.raw;
   return {
     channel: channel ?? "matrix",
@@ -278,7 +288,9 @@ export function createMatrixReader(options: MatrixReaderOptions): ChannelBinding
                   if (updateBridge(event)) continue;
                   identifier(event.event_id, "$");
                   if (event.room_id !== undefined && event.room_id !== roomId) throw new Error();
-                  const bridge = detectMatrixBridge(event.sender, [...bridgeState.values()]);
+                  const bridge = hasCleartextCarrier(event)
+                    ? undefined
+                    : detectMatrixBridge(event.sender, [...bridgeState.values()]);
                   if (bridge !== undefined) bridges[event.event_id as string] = bridge;
                   pending.push({ ...event, room_id: roomId });
                 }

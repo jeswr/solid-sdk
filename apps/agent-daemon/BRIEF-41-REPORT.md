@@ -177,3 +177,38 @@ The reference manifest is 283 / 278 / 0 / 5. The manifest, traces, outlines and
 oracle fixtures match `0825ae9f3` byte-for-byte. `git diff --check` passed.
 The worktree is uncommitted. The lane used focused checks and the reference
 library-only build.
+
+## Review fixes (41d)
+
+| Finding | Change | Regression observed before the fix |
+| --- | --- | --- |
+| 1. Matrix bridge hints | `packages/agent-channels/src/matrix.ts:90` identifies cleartext carriers before using bridge hints. Line 140 decodes native carriers on cleartext and decrypted events. An envelope parse failure reaches the daemon's refusal path. | `apps/agent-daemon/test/gate-setup.test.ts:361` observed `unstructured` on both hinted first delivery and hinted replay after admission. `apps/agent-daemon/test/daemon.test.ts:1549` observed a malformed carrier parse as plain text with a bridge hint. `packages/agent-channels/test/matrix-bridges.test.ts:228` observed a hint conflict prevent native parsing. |
+| 2. Verdict commits | `apps/agent-daemon/src/gate.ts:80` requires a matching commit record. Line 95 syncs the verdict and prepared record before atomically publishing that record. | `apps/agent-daemon/test/gate-setup.test.ts:310` injected a directory sync failure and disabled further writes. The first check refused as indeterminate, but the retry returned an admission. The test now checks immediate and reopened retries. |
+| 3. Cursor outcomes | `packages/agent-channels/src/graph-teams.ts:217` keeps messages in the batch for parsing and recording by the daemon. Pending cursor pages retain malformed and oversized rows. `packages/agent-channels/src/graph-mail.ts:159` holds the cursor if the provider's raw MIME cannot be read within bounds. | `apps/agent-daemon/test/daemon.test.ts:1466` found no Teams rejection in the gate ledger when the cursor was about to advance. `packages/agent-channels/test/graph-mail.test.ts:141` observed an advanced delta cursor after a raw MIME size refusal. |
+| 4. Ordinary multipart mail | `packages/agent-channels/src/email/mime.ts:210` counts only carrier candidates during discovery. Structured parity still validates the full bounded MIME tree. | `apps/agent-daemon/test/daemon.test.ts:1416` sent a plain body with 13 attachments and observed no Reader call. The test now checks import, Reader classification and cursor advancement. |
+| 5. Concurrent pins | `apps/agent-daemon/src/gate-setup.ts:176` takes a per-gate file lease after confirmation, rereads the trust store and validates the merged pins before replacing it. | `apps/agent-daemon/test/gate-setup.test.ts:129` synchronized two operator confirmations. Both writes returned success and only one peer's pins survived. |
+| 6. Refusal reason | `packages/agent-channels/src/email-mime.ts:197` and `packages/agent-channels/src/graph-teams/card.ts:46` attach `conflicting-structured-copies` to the typed parse refusal. `apps/agent-daemon/src/daemon.ts:168` records that reason with the raw digest. | `apps/agent-daemon/test/daemon.test.ts:1466` observed `malformed` in the durable MIME record. Both MIME and Teams now assert the exact reason before the checkpoint write. |
+
+Earlier verdict files lack commit records and appear as `result-uncertain` on
+replay, including old shared parity refusals. Current parity refusals remain
+account-scoped. The verdict and prepared record are synced before the commit
+record is published. If a crash loses that final directory entry, the digest
+is held as interrupted.
+
+Node 24.22.3 was used throughout. Each Vitest invocation used `--maxWorkers=2`.
+
+| Check | Result |
+| --- | --- |
+| Reference library-only build and typecheck | `npx --no-install tsc -p tsconfig.build.json && node scripts/copy-generated.mjs` and `pnpm run typecheck` passed. |
+| Reference closing, Introduction Card, x402 settlement and `test/oracle` | 12 passed. The separate trace suite passed all 15 tests. |
+| Daemon and channels `pnpm run build`, `pnpm run typecheck` and `pnpm run lint` | Passed. |
+| Daemon Vitest with the 41c offline filters | 208 passed and 3 filtered. The unfiltered run passed 208 and encountered 20 failures in the loopback, cloud, subprocess and production fixtures. |
+| Channels Vitest | 933 passed and one existing skip. Ten origin tests hit `EPERM` on loopback bind. The offline run excluding `test/origins.test.ts` passed 892 with one skip. |
+| Focused channels coverage | 300 passed with one skip. Both MIME files, Matrix, Graph Mail, and the Teams reader, card and REST files reached 100% statements, branches, functions and lines. |
+| Offline production packaging and binary smoke checks | The pruned workspace installed 173 cached packages with zero downloads. The final run used pnpm's hardlink import mode to fit the sandbox disk quota. The isolated app entry point imported successfully. Both workspace help commands and packaged `gate --help` passed. |
+| Root SDK and agent layers, RDF discipline, app duplication, codegen, lockfile transport and reference dependency policy | Passed. |
+| Root agent-layer fixture suites with the 41c filters | 399 passed and 4 subprocess fixtures filtered. |
+
+The reference manifest is 283 / 278 / 0 / 5. The manifest, traces, outlines and
+oracle fixtures match `0825ae9f3` byte-for-byte. `git diff --check` passed.
+The worktree is uncommitted.

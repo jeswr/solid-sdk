@@ -161,12 +161,14 @@ match the configured WebIDs when the daemon starts.
 - `awp gate pin <card.json>` displays the public thumbprints and notice for
   comparison with the peer through a separate trusted channel. Stop the daemon
   before pinning because the command takes its process lease after confirmation.
-  The operator's pins supply the counterparty verification keys.
+  The pin API also takes a per-gate lease and merges each confirmed card into
+  the latest trust store. The operator's pins supply the counterparty verification keys.
 - `awp gate status` displays pinned subjects and thumbprints, ledger integrity,
   verdict counts and interrupted digests. Ask the sender for a new message
   when a check for that digest was interrupted. Identical raw-byte retries
-  reuse their finalized verdicts, and the reference runtime checks replays
-  across carriers.
+  reuse their finalized verdicts when the commit record matches. Earlier verdicts
+  without commit records appear as interrupted digests. The reference runtime
+  checks replays across carriers.
 
 Refused content stays outside the inbox, models and suite audit. The reference
 ledger records the decision locally. Plain human mail and chat remain available

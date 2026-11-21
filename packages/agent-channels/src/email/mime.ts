@@ -192,7 +192,7 @@ function parseEntity(
   carriersOnly: boolean,
 ): MimeNode {
   if (depth > limits.maxDepth) throw new MimeError("MIME nesting too deep");
-  if (++count.parts > limits.maxParts) throw new MimeError("too many MIME parts");
+  if (!carriersOnly && ++count.parts > limits.maxParts) throw new MimeError("too many MIME parts");
   const { head, body } = splitHeaderBody(s);
   const headers = parseHeaders(head, limits);
   const ctValues = headers.filter(([n]) => n === "content-type");
@@ -209,6 +209,7 @@ function parseEntity(
   }
   if (carriersOnly && type !== "text/html" && type !== "application/ld+json")
     return { headers, type, params };
+  if (carriersOnly && ++count.parts > limits.maxParts) throw new MimeError("too many MIME parts");
   const cte = headers.filter(([n]) => n === "content-transfer-encoding");
   if (cte.length > 1) throw new MimeError("duplicate Content-Transfer-Encoding");
   // Remove the single line break that precedes a boundary delimiter.

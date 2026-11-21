@@ -12,6 +12,7 @@ export const BASE = `${GRAPH}/v1.0`;
 export const graphTeamsOrigins = () => new Set([GRAPH]);
 export const JSON_LIMITS = { ...DEFAULT_LIMITS, maxStringLength: TEAMS_CARD.maxBytes };
 export const PAGE_LIMITS = { ...JSON_LIMITS, maxEnvelopeBytes: 1024 * 1024 };
+export const CURSOR_LIMITS = { ...PAGE_LIMITS, maxStringLength: PAGE_LIMITS.maxEnvelopeBytes };
 export interface GraphTeamsTiming {
   readonly sleep?: (milliseconds: number) => Promise<void>;
   readonly now?: () => number;
@@ -69,20 +70,19 @@ export function nextLink(value: unknown, current: URL): string {
   return url.href;
 }
 /** Shared byte/depth/node limits for hostile provider JSON, cards and saved cursors. */
-export function json(raw: string | Uint8Array, page = false): Record<string, unknown> {
+export function json(raw: string | Uint8Array, limits = JSON_LIMITS): Record<string, unknown> {
   try {
-    if (Buffer.byteLength(raw) > (page ? PAGE_LIMITS : JSON_LIMITS).maxEnvelopeBytes)
-      throw new Error();
+    if (Buffer.byteLength(raw) > limits.maxEnvelopeBytes) throw new Error();
     const text =
       typeof raw === "string" ? raw : new TextDecoder("utf-8", { fatal: true }).decode(raw);
-    return record(parseBoundedJson(text, page ? PAGE_LIMITS : JSON_LIMITS));
+    return record(parseBoundedJson(text, limits));
   } catch {
     throw new ChannelParseError("invalid Teams JSON");
   }
 }
 export async function responseJson(response: Response): Promise<Record<string, unknown>> {
   try {
-    return json(await response.text(), true);
+    return json(await response.text(), PAGE_LIMITS);
   } catch {
     throw new ChannelParseError("invalid Teams JSON response");
   }

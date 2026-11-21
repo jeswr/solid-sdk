@@ -7,11 +7,13 @@ import {
   ChannelParseError,
   DIRECT,
   encodeEnvelope,
+  encodeEnvelopeObject,
   type InboundRawMessage,
   readEnvelope,
 } from "@jeswr/agent-channels";
 import { createDirectReader } from "@jeswr/agent-channels/direct";
 import { inspectEmail } from "@jeswr/agent-channels/email-mime";
+import { createGraphTeamsReader } from "@jeswr/agent-channels/graph-teams";
 import { parseMatrixMessage } from "@jeswr/agent-channels/matrix";
 import { RecordingTokenProvider } from "@jeswr/agent-channels/testing";
 import {
@@ -51,12 +53,13 @@ import {
   issue,
   publishVerificationMethod,
 } from "@jeswr/solid-vc";
-import { mkdtemp, rm } from "fs/promises";
+import { mkdtemp, readFile, rm } from "fs/promises";
 import { Server } from "net";
 import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, expect, it, vi } from "vitest";
 import { event } from "../../../packages/agent-channels/test/fixtures/matrix.js";
+import * as teams from "../../../packages/agent-channels/test/fixtures/teams.js";
 import { createCliHost, runCli } from "../src/cli.js";
 import { createDaemon, pollInterval } from "../src/daemon.js";
 import { createInboundGate } from "../src/gate.js";
@@ -1410,6 +1413,139 @@ it("imports Latin-1 HTML mail before committing its cursor", async () => {
   }
 });
 
+it("imports ordinary mail with many attachments before committing its cursor", async () => {
+  const h = harness();
+  const { gate } = await createTestGate();
+  const raw = [
+    "From: peer@example.test",
+    "To: receiver@example.test",
+    'Content-Type: multipart/mixed; boundary="parts"',
+    "",
+    "--parts",
+    "Content-Type: text/plain",
+    "",
+    "Ordinary mail",
+    ...Array.from({ length: 13 }, () => [
+      "--parts",
+      "Content-Type: application/octet-stream",
+      "Content-Disposition: attachment",
+      "",
+      "attachment",
+    ]).flat(),
+    "--parts--",
+  ].join("\r\n");
+  h.ingest.list.mockResolvedValue({ items: [{ id: "attachments", raw }], next: "one" });
+  h.ingest.parse.mockImplementation(
+    ({ raw }) =>
+      inspectEmail(raw, {
+        parseEmail,
+        recipient: "receiver@example.test",
+        ownAccounts: new Set(["receiver@example.test"]),
+      }).message,
+  );
+  const extract = vi.spyOn(h.options.gateway.reader, "extract");
+  try {
+    await createDaemon({ ...h.options, gate }).once();
+    expect(extract).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        textBody: "Ordinary mail",
+        gate: expect.objectContaining({ outcome: "unstructured" }),
+      }),
+      expect.anything(),
+    );
+    expect([...h.pod.resources.values()].filter(({ body }) => body === raw)).toHaveLength(1);
+    expect(h.state.cursors.get("fixture")).toBe("one");
+  } finally {
+    await gate.close();
+  }
+});
+
+it.each([
+  "email-mime",
+  "graph-teams",
+])("records the %s conflict before committing its cursor", async (channel) => {
+  const h = harness();
+  const directory = await mkdtemp(join(tmpdir(), "daemon-conflict-gate-"));
+  const gateDirectory = join(directory, "gate");
+  const card = (jws: string) => ({
+    contentType: "application/vnd.microsoft.card.adaptive",
+    content: JSON.stringify({
+      type: "AdaptiveCard",
+      version: "1.4",
+      body: [],
+      data: { envelope: encodeEnvelopeObject(jws) },
+    }),
+  });
+  const attachments = [card("a.b.c"), card("a.b.d")];
+  const email = [
+    "From: peer@example.test",
+    "To: receiver@example.test",
+    'Content-Type: multipart/mixed; boundary="parts"',
+    "",
+    ...["a.b.c", "a.b.d"].flatMap((jws) => [
+      "--parts",
+      "Content-Type: application/ld+json",
+      "",
+      encodeEnvelope(jws),
+    ]),
+    "--parts--",
+  ].join("\r\n");
+  h.ingest.list.mockResolvedValue({ items: [{ id: "mail", raw: email }], next: "one" });
+  h.ingest.parse.mockImplementation(
+    ({ raw }) =>
+      inspectEmail(raw, {
+        parseEmail,
+        recipient: "receiver@example.test",
+        ownAccounts: new Set(["receiver@example.test"]),
+      }).message,
+  );
+  const binding =
+    channel === "graph-teams"
+      ? createGraphTeamsReader(
+          teams.reader([
+            teams.page([{ id: teams.chat }]),
+            teams.page([teams.row({ attachments })]),
+            teams.page(),
+          ]).config,
+        )
+      : { id: channel, ingest: h.ingest };
+  const raw = channel === "graph-teams" ? teams.item({ attachments }).raw : email;
+  const extract = vi.spyOn(h.options.gateway.reader, "extract");
+  const put = h.options.checkpoints.put.bind(h.options.checkpoints);
+  h.options.checkpoints.put = async (account, cursor) => {
+    const entries = (await readFile(join(gateDirectory, "ledger.jsonl"), "utf8"))
+      .trim()
+      .split("\n");
+    expect(entries.map((line) => JSON.parse(line).record)).toContainEqual(
+      expect.objectContaining({
+        type: "binding-rejection",
+        binding: channel,
+        digest: digestBytes(raw),
+        reason: "conflicting-structured-copies",
+      }),
+    );
+    await put(account, cursor);
+  };
+  try {
+    await initGate({
+      agentWebId: AGENT_ID,
+      ownerWebId: OWNER,
+      directory: gateDirectory,
+      ownerDir: join(directory, "owner"),
+      confirm: async () => true,
+    });
+    await createDaemon({
+      ...h.options,
+      accounts: [{ id: "fixture", enabled: true, category: "chat", binding }],
+      gate: createInboundGate({ directory: gateDirectory }),
+    }).once();
+    expect(h.state.cursors.get("fixture")).toBeDefined();
+    expect(extract).not.toHaveBeenCalled();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 it("durably refuses a Matrix parser failure before a bridge retry can hide the carrier", async () => {
   const h = harness();
   const directory = await mkdtemp(join(tmpdir(), "daemon-matrix-gate-"));
@@ -1423,10 +1559,10 @@ it("durably refuses a Matrix parser failure before a bridge retry can hide the c
   const item = { id: native.event_id, raw: JSON.stringify(native) };
   const bridged = { ...item, native: JSON.stringify({ bridge: "signal", event: native }) };
   expect(() => parseMatrixMessage(item)).toThrow(ChannelParseError);
-  expect(parseMatrixMessage(bridged).jsonLdBlocks).toBeUndefined();
+  expect(() => parseMatrixMessage(bridged)).toThrow(ChannelParseError);
   h.ingest.list
-    .mockResolvedValueOnce({ items: [item], next: "one" })
-    .mockResolvedValueOnce({ items: [bridged], next: "two" });
+    .mockResolvedValueOnce({ items: [bridged], next: "one" })
+    .mockResolvedValueOnce({ items: [item], next: "two" });
   h.ingest.parse.mockImplementation(parseMatrixMessage);
   const extract = vi.spyOn(h.options.gateway.reader, "extract");
   const options: DaemonOptions = {
