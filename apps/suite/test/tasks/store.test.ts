@@ -1705,6 +1705,36 @@ describe("transport failures and typed classification", () => {
     expect(requireEtag('"valid"')).toBe('"valid"');
     expect(new ModelError(412, storage, '"remote"').etag).toBe('"remote"');
   });
+  it("propagates a locked response body and cancels unsupported representations", async () => {
+    const empty = await new RdfIO(async () => new Response(null, { status: 204 })).read(storage);
+    expect(empty.dataset.size).toBe(0);
+    const locked = new Response("unavailable body");
+    const reader = locked.body?.getReader();
+    await expect(new RdfIO(async () => locked).read(storage)).rejects.toMatchObject({ status: 0 });
+    reader?.releaseLock();
+    const cancel = vi.fn();
+    const unsupported = new Response(new ReadableStream<Uint8Array>({ cancel }), {
+      headers: { "content-type": "application/octet-stream" },
+    });
+    await expect(new RdfIO(async () => unsupported).read(storage)).rejects.toThrow(
+      "Invalid RDF document",
+    );
+    expect(cancel).toHaveBeenCalledOnce();
+    const malformedCancel = vi.fn();
+    const malformed = new Response(
+      new ReadableStream<Uint8Array>({
+        start(stream) {
+          stream.enqueue(new TextEncoder().encode("!invalid RDF\n"));
+        },
+        cancel: malformedCancel,
+      }),
+      { headers: { "content-type": "text/turtle" } },
+    );
+    await expect(new RdfIO(async () => malformed).read(storage)).rejects.toThrow(
+      "Invalid RDF document",
+    );
+    expect(malformedCancel).toHaveBeenCalledOnce();
+  });
   it("retains absent response ETags and rejects failed/non-RDF reads without inventing empty data", async () => {
     const pod = new Pod();
     const io = new RdfIO(pod.fetch);

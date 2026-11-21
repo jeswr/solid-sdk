@@ -385,12 +385,27 @@ export class TaskStore {
   /** Strict reads fail on missing/unreadable resources; membership cleanup can skip invalid tasks. */
   async listTasks(
     stateStore: string,
-    { strict = false, skipInvalid = false } = {},
+    {
+      strict = false,
+      skipInvalid = false,
+      onInvalid,
+    }: {
+      strict?: boolean;
+      skipInvalid?: boolean;
+      /** Parsed documents rejected by task validation, for narrowly scoped membership cleanup. */
+      onInvalid?: (resource: Resource) => Promise<void>;
+    } = {},
   ): Promise<StoredTask[]> {
     const tasks: StoredTask[] = [];
     for (const url of await this.io.list(stateStore, { strict })) {
       if (!isTaskMember(url, stateStore)) continue;
-      const resource = strict ? await this.io.read(url) : await this.readListedResource(url);
+      let resource: Resource | undefined;
+      try {
+        resource = strict ? await this.io.read(url) : await this.readListedResource(url);
+      } catch (error) {
+        if (skipInvalid && error instanceof TypeError) continue;
+        throw error;
+      }
       if (!resource) continue;
       if (strict) {
         try {
@@ -398,7 +413,10 @@ export class TaskStore {
           if (!data) throw new TypeError("Expected a wf:Task.");
           validateTask(data);
         } catch (error) {
-          if (skipInvalid) continue;
+          if (skipInvalid) {
+            await onInvalid?.(resource);
+            continue;
+          }
           throw error;
         }
       }
@@ -406,6 +424,26 @@ export class TaskStore {
       if (task.isTask) tasks.push({ ...resource, task });
     }
     return tasks;
+  }
+  /** Remove only the revoked member's assignee triple, even if other task fields are invalid. */
+  async unassignInvalidTask(resource: Resource, webId: string): Promise<boolean> {
+    const dataset = new Store([...resource.dataset]);
+    const task = node(`${resource.url}#it`, dataset);
+    if (!task.nodes(`${NS.RDF}type`).has(node(`${NS.WF}Task`, dataset))) return false;
+    if (!task.nodes(`${NS.WF}assignee`).delete(node(webId, dataset))) return false;
+    try {
+      await this.io.write(resource.url, dataset, { etag: resource.etag });
+    } catch (error) {
+      // As with validated tasks, a lost PUT response may already have removed the assignment.
+      const current = await this.io.read(resource.url);
+      if (
+        node(`${resource.url}#it`, current.dataset)
+          .nodes(`${NS.WF}assignee`)
+          .has(node(webId, current.dataset))
+      )
+        throw error;
+    }
+    return true;
   }
   async createTask(
     project: StoredProject,
