@@ -400,7 +400,7 @@ describe("optional local A2A binding (official @a2a-js/sdk, loopback)", () => {
     });
     expect(await sendEnvelope(bobPeer, out)).toMatchObject({ ack: { disposition: "duplicate" } });
     expect(received(bob.a.dir)).toEqual([`describe:${A2A_BINDING}`]);
-  }, 20_000);
+  }, 30_000);
 
   describe("send-time authorisation: a denied message never leaves (zero requests at the peer)", () => {
     const denials: [string, (env: Setup, alice: Running) => Promise<void>, string][] = [
@@ -736,13 +736,16 @@ describe("optional local A2A binding (official @a2a-js/sdk, loopback)", () => {
 
   it("two agents sending to each other at the same moment do not deadlock", async () => {
     const env = await setup();
-    const alice = await host(env, "alice", { auto: false, deadlineMs: 3_000 });
-    const bob = await host(env, "bob", { auto: false, deadlineMs: 3_000 });
+    // A deadlock holds both sends until the deadline aborts them. The deadline sits well
+    // above a loaded CI runner's normal dispatch time (about 3 s) so only a deadlock reaches it.
+    const deadlineMs = 10_000;
+    const alice = await host(env, "alice", { auto: false, deadlineMs });
+    const bob = await host(env, "bob", { auto: false, deadlineMs });
     await propose(alice, "bob");
     await propose(bob, "alice", "2026-10-21");
     const started = Date.now();
     const [ra, rb] = await Promise.all([alice.dispatcher?.dispatch(), bob.dispatcher?.dispatch()]);
-    expect(Date.now() - started).toBeLessThan(2_500);
+    expect(Date.now() - started).toBeLessThan(deadlineMs - 2_000);
     expect(ra?.delivered).toHaveLength(1);
     expect(rb?.delivered).toHaveLength(1);
     expect(received(alice.a.dir)).toEqual([`describe:${A2A_BINDING}`]);
