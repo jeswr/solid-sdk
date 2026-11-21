@@ -46,11 +46,7 @@ export function DocsSidebar({ filter = "all" }: { filter?: string }) {
         <Link href="/docs?filter=starred" aria-current={filter === "starred" ? "page" : undefined}>
           Starred
         </Link>
-        <Hint text="Coming soon">
-          <Button variant="ghost" disabled>
-            Shared with me
-          </Button>
-        </Hint>
+        <Link href="/shared?app=docs">Shared with me</Link>
         <Link href="/drive/trash">Trash</Link>
       </nav>
       <p className="docs-sidebar-note">

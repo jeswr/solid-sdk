@@ -27,6 +27,10 @@
     "./offline": {
       "types": "./dist/offline.d.ts",
       "default": "./dist/offline.js"
+    },
+    "./shared": {
+      "types": "./dist/shared.d.ts",
+      "default": "./dist/shared.js"
     }
   },
   "files": [
@@ -52,7 +56,8 @@
     "@jeswr/rdf-engine": "workspace:*",
     "@jeswr/solid-offline": "workspace:*",
     "@jeswr/storage-capabilities": "workspace:*",
-    "@jeswr/storage-client": "workspace:*"
+    "@jeswr/storage-client": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*"
   },
   "peerDependencies": {
     "react": ">=18"

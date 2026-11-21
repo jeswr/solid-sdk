@@ -1,10 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { sharedAccountKey } from "@jeswr/suite-sdk/shared";
 import { type ReactNode, useSyncExternalStore } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { NS, node, serialize } from "../../src/apps/tasks/lib/model/rdf";
 import { createTracker } from "../../src/apps/tasks/lib/model/tracker";
 import type { TasksCache } from "../../src/apps/tasks/state/tasks-cache";
 import { encodeRef } from "../../src/lib/refs";
+import { hideSharedForAccount } from "../../src/lib/shared/hidden";
 import { MemorySharingAdapter } from "../../src/shell/share/memory-adapter";
 import { ShareError } from "../../src/shell/share/types";
 import { act, click, h, key, mount } from "../drive-ui-dom";
@@ -502,4 +505,63 @@ it("keeps this account's Shared with me in memory when storage is unavailable", 
     getItem.mockRestore();
     setItem.mockRestore();
   }
+});
+
+it("never turns a hidden shared project or favourite into an own project and reopens it", async () => {
+  const f = await frameCache();
+  cache = f.cache;
+  const url = "https://bob.example/home.ttl";
+  const shared = createTracker(url, "Hidden team", url.replace(/\.ttl$/, "/"), [bob, webId], now);
+  f.pod.seed(url, await serialize(shared.dataset));
+  await f.pod.emptyContainer(shared.tracker.stateStore as string);
+  ref = encodeRef(url);
+  path = `/tasks/p/${ref}`;
+  let prefs!: ReturnType<typeof useTasksPreferences>;
+  function Preferences() {
+    prefs = useTasksPreferences();
+    return null;
+  }
+  const probe = await mount(h(Preferences));
+  const view = await mount(h(TasksApp, null, "Project"));
+  expect(view.host.querySelector(`nav a[href="${path}"]`)).not.toBeNull();
+  await act(async () => prefs.dispatch({ type: "favouriteProject", url, value: true }));
+  await act(async () => hideSharedForAccount(webId, url));
+  expect(view.host.querySelector(`nav a[href="${path}"]`)).toBeNull();
+  expect(view.host.querySelector('[aria-label="Project actions for Hidden team"]')).toBeNull();
+  expect(cache.isOwnProject(url)).toBe(false);
+  path = "/tasks/inbox";
+  ref = undefined;
+  await view.render(h(TasksApp, null, "Inbox"));
+  path = `/tasks/p/${encodeRef(url)}`;
+  ref = encodeRef(url);
+  await view.render(h(TasksApp, null, "Project"));
+  expect(view.host.querySelector(`nav a[href="${path}"]`)).not.toBeNull();
+  expect(JSON.parse(localStorage.getItem(sharedAccountKey(webId)) ?? "[]")).toEqual([]);
+  await view.unmount();
+  await probe.unmount();
+});
+
+it("keeps an own favourite when a Shared hide names its URL", async () => {
+  const f = await frameCache();
+  cache = f.cache;
+  const own = await cache.createProject("Home");
+  if (!own) throw new Error("Missing project");
+  expect(cache.isOwnProject(own.url)).toBe(true);
+  let prefs!: ReturnType<typeof useTasksPreferences>;
+  function Preferences() {
+    prefs = useTasksPreferences();
+    return null;
+  }
+  const probe = await mount(h(Preferences));
+  const view = await mount(h(TasksApp, null, "Inbox"));
+  await act(async () => prefs.dispatch({ type: "favouriteProject", url: own.url, value: true }));
+  const favourites = () =>
+    [...view.host.querySelectorAll('section[aria-label="Favourites"] a')].map((link) =>
+      link.getAttribute("href"),
+    );
+  expect(favourites()).toEqual([`/tasks/p/${encodeRef(own.url)}`]);
+  await act(async () => hideSharedForAccount(webId, own.url));
+  expect(favourites()).toEqual([`/tasks/p/${encodeRef(own.url)}`]);
+  await view.unmount();
+  await probe.unmount();
 });

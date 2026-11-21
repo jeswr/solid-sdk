@@ -88,6 +88,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
   }, [projectUrl, activeProject, projectLoad, tasks.status, tasks.cache]);
   useEffect(() => {
     if (
+      projectUrl &&
       activeProject &&
       !tasks.cache.isOwnProject(activeProject.url) &&
       tasks.cache.hasSharedProject(activeProject.url)
@@ -97,7 +98,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
         url: activeProject.url,
         title: activeProject.tracker.title ?? "Project",
       });
-  }, [activeProject, tasks.cache, dispatch]);
+  }, [activeProject, projectUrl, tasks.cache, dispatch]);
   const taskRef = params.get("task");
   let taskUrl: string | undefined;
   try {

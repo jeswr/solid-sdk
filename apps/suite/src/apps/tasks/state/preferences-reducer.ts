@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+import { parseSharedEntries, removeSharedItem } from "@jeswr/suite-sdk/shared";
 import { isSharedTrackerUrl } from "../lib/model/rdf";
 import type { SortMode } from "../lib/views/project-groups";
 export interface TasksPreferences {
@@ -58,7 +59,7 @@ export function preferencesReducer(
       return {
         ...state,
         sharedProjects: [
-          ...state.sharedProjects.filter((project) => project.url !== action.url),
+          ...removeSharedItem(state.sharedProjects, action.url),
           { url: action.url, title: action.title },
         ],
       };
@@ -66,7 +67,7 @@ export function preferencesReducer(
     case "removeSharedProject":
       return {
         ...state,
-        sharedProjects: state.sharedProjects.filter((project) => project.url !== action.url),
+        sharedProjects: removeSharedItem(state.sharedProjects, action.url),
       };
     case "sort":
       return { ...state, sort: { ...state.sort, [action.viewId]: action.value } };
@@ -147,19 +148,7 @@ export function parseFavourites(raw: string | null): string[] {
 
 /** One account's Shared with me list, as stored under its own key. */
 export function parseSharedProjects(raw: string | null): TasksPreferences["sharedProjects"] {
-  try {
-    const value: unknown = JSON.parse(raw ?? "null");
-    if (!Array.isArray(value)) return [];
-    return [
-      ...new Map(
-        value
-          .filter(validSharedProject)
-          .map((project) => [project.url, { url: project.url, title: project.title }]),
-      ).values(),
-    ];
-  } catch {
-    return [];
-  }
+  return parseSharedEntries(raw, validSharedProject).map(({ url, title }) => ({ url, title }));
 }
 
 function validSharedProject(value: unknown): value is { url: string; title: string } {

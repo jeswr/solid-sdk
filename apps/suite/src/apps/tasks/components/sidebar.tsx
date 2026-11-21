@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
+import { visibleSharedItems } from "@jeswr/suite-sdk/shared";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +36,7 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { useRoutePathname } from "@/lib/route-params";
+import { useHiddenSharedItems } from "@/lib/shared/hidden";
 import { dueDate, isOverdue, localDay } from "../lib/format/due";
 import { ModelError } from "../lib/model/errors";
 import type { StoredProject } from "../lib/model/store";
@@ -288,15 +290,21 @@ export function TasksSidebar() {
   const overdue = dueToday.some((task) => isOverdue(task, now));
   const inboxCount = open.filter((task) => task.projectUrl === tasks.inboxUrl).length;
   const labels = unionLabels(tasks.projects.map((project) => project.tracker));
-  const shared = preferences.sharedProjects.filter(
+  const { hidden } = useHiddenSharedItems(preferences.sharedOwner ?? "");
+  const shared = visibleSharedItems(preferences.sharedProjects, hidden).filter(
     (project) => !tasks.cache.isOwnProject(project.url),
   );
-  const sharedUrls = new Set(shared.map((project) => project.url));
+  const sharedUrls = new Set(preferences.sharedProjects.map((project) => project.url));
+  const isShared = (url: string) => sharedUrls.has(url) || !tasks.cache.isOwnProject(url);
   const projects = tasks.projects.filter(
-    (project) => project.url !== tasks.inboxUrl && !sharedUrls.has(project.url),
+    (project) => project.url !== tasks.inboxUrl && !isShared(project.url),
   );
   // Refresh retains cached shared trackers on errors; confirmed deletions aren't favourites.
-  const favourites = tasks.projects.filter((project) => {
+  // A Shared hide applies to shared projects only, never to the user's own projects.
+  const favourites = visibleSharedItems(
+    tasks.projects,
+    hidden.filter((item) => !tasks.cache.isOwnProject(item.url)),
+  ).filter((project) => {
     const error = tasks.tasks[project.url]?.error;
     return (
       preferences.favourites.includes(project.url) &&
@@ -423,7 +431,7 @@ export function TasksSidebar() {
               <ProjectRow
                 key={project.url}
                 project={project}
-                shared={sharedUrls.has(project.url)}
+                shared={isShared(project.url)}
                 first={projects[0]?.url === project.url}
                 last={projects.at(-1)?.url === project.url}
               />

@@ -19,6 +19,7 @@ import { seedContacts } from "./seed-contacts";
 import { buildHomeSeed } from "./seed-home";
 import { seedPermissions } from "./seed-permissions";
 import { DEMO_INBOX, seedRequests } from "./seed-requests";
+import { seedShared } from "./seed-shared";
 
 const { namedNode, literal, quad } = DataFactory;
 const RDF_TYPE = namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
@@ -180,5 +181,10 @@ export async function buildDemoSeed(
     const { seedCalendar } = await import("./seed-calendar");
     return seedContacts(await seedCalendar(files, now), now);
   };
-  return seedRequests(await seeded(), DEMO_ROOT, DEMO_WEBID, now);
+  return seedRequests(
+    [...(await seeded()), ...(await seedShared(now))],
+    DEMO_ROOT,
+    DEMO_WEBID,
+    now,
+  );
 }

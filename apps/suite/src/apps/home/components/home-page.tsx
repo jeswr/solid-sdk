@@ -16,6 +16,8 @@ import {
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { SharedCard } from "@/lib/shared/shared-card";
+import "@/lib/shared/shared.css";
 import { DOMAINS, UNCATEGORISED, visibleDomains } from "../lib/model/domains";
 import {
   connectedSources,
@@ -124,6 +126,7 @@ export function HomePage({ domain }: { domain: string }) {
         asOf={data.loadedAt}
         onRetry={retry}
       />
+      {domain === "personal" ? <SharedCard /> : null}
       <DomainNavigation
         domains={visibleDomains(data.items)}
         active={entry.id}
