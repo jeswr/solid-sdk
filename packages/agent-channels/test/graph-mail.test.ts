@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { digestBytes, digestOf } from "@jeswr/agent-model";
 import { createGuardedFetch, SsrfError } from "@jeswr/guarded-fetch";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
 import { readFileSync } from "fs";
@@ -121,53 +123,58 @@ it("keeps pending IDs and continuation links until item and aggregate-byte bound
   ).rejects.toThrow("byte bound");
 });
 
-const sizeRefusals = [
-  "empty",
-  "MIME cap",
-  "declared transport cap",
-  "streamed transport cap",
-].flatMap((kind) => [
-  { kind, nestedGuard: false },
-  { kind, nestedGuard: true },
-]);
+const sizeRefusals = ["MIME cap", "declared transport cap", "streamed transport cap"].flatMap(
+  (kind) => [
+    { kind, nestedGuard: false },
+    { kind, nestedGuard: true },
+  ],
+);
 function refusedMime(kind: string): Response {
   if (kind === "declared transport cap")
     return new Response(null, { headers: { "content-length": String(1024 * 1024 + 1) } });
-  return mime(
-    "x".repeat(kind === "empty" ? 0 : kind === "MIME cap" ? MAX_EMAIL_BYTES + 1 : 1024 * 1024 + 1),
-  );
+  return mime("x".repeat(kind === "MIME cap" ? MAX_EMAIL_BYTES + 1 : 1024 * 1024 + 1));
 }
+
+it("refuses permanently oversized mail and continues to later items on the page", async () => {
+  const oversized = "x".repeat(MAX_EMAIL_BYTES + 1);
+  const r = reader([
+    { value: [{ id: "oversized" }, { id: "later" }], "@odata.deltaLink": link("next") },
+    mime(oversized),
+    mime(),
+  ]);
+  const result = await r.binding.ingest.list(account, undefined, bounds);
+  expect(result.refusals).toEqual([
+    { id: "oversized", digest: digestBytes(oversized), reason: "bounds-exceeded" },
+  ]);
+  expect(result.items.map(({ id }) => id)).toEqual(["later"]);
+  expect(JSON.parse(result.next)).toMatchObject({ pending: [], url: link("next") });
+});
 
 it.each(
   sizeRefusals,
-)("skips refused MIME ($kind, nested guard: $nestedGuard) without consuming bounds or retaining its pending ID", async ({
+)("consumes a size refusal as a bounded item ($kind, nested guard: $nestedGuard)", async ({
   kind,
   nestedGuard,
 }) => {
   const next = link("page2", "$skiptoken");
-  const r = reader(
-    [
-      { value: [{ id: "refused" }, { id: "a" }, { id: "b" }], "@odata.nextLink": next },
-      refusedMime(kind),
-      mime(),
-      mime(),
-      fixtures.empty,
-    ],
-    nestedGuard,
-  );
-  const first = await r.binding.ingest.list(account, undefined, { ...bounds, maxItems: 1 });
-  expect(first.items.map((item) => item.id)).toEqual(["a"]);
-  expect(JSON.parse(first.next)).toEqual({
-    account: account.id,
-    url: DELTA_INITIAL,
-    pending: ["b"],
-    resume: next,
-  });
+  const saved = cursor({ pending: ["refused", "a"], resume: next });
+  const r = reader([refusedMime(kind), mime(), mime()], nestedGuard);
+  const first = await r.binding.ingest.list(account, saved, { ...bounds, maxBytes: 1 });
+  expect(first.items).toEqual([]);
+  expect(first.refusals).toEqual([
+    {
+      id: "refused",
+      digest:
+        kind === "MIME cap"
+          ? digestBytes("x".repeat(MAX_EMAIL_BYTES + 1))
+          : digestOf(["graph-mail", account.id, "refused"]),
+      reason: "bounds-exceeded",
+    },
+  ]);
+  expect(JSON.parse(first.next)).toMatchObject({ pending: ["a"], resume: next });
   const second = await r.binding.ingest.list(account, first.next, bounds);
-  expect(second.items.map((item) => item.id)).toEqual(["b"]);
+  expect(second.items.map((item) => item.id)).toEqual(["a"]);
   expect(JSON.parse(second.next)).toMatchObject({ url: next, pending: [], resume: "" });
-  await r.binding.ingest.list(account, second.next, bounds);
-  expect(r.requests.at(-1)?.url.href).toBe(next);
   expect(
     r.requests.filter((request) => request.url.pathname.endsWith("/refused/$value")),
   ).toHaveLength(1);
@@ -175,37 +182,40 @@ it.each(
 });
 
 it.each(
-  sizeRefusals,
-)("advances past a delta page containing only refused MIME ($kind, nested guard: $nestedGuard)", async ({
+  sizeRefusals.filter(({ kind }) => kind !== "MIME cap"),
+)("retries unread mail after an oversized HTTP 503 ($kind, nested guard: $nestedGuard)", async ({
   kind,
   nestedGuard,
 }) => {
-  const next = link("after-refused");
-  const r = reader(
-    [
-      { value: [{ id: "refused" }], "@odata.deltaLink": next },
-      refusedMime(kind),
-      { value: [{ id: "valid" }], "@odata.deltaLink": link("after-valid") },
-      mime(),
-    ],
-    nestedGuard,
-  );
-  const first = await r.binding.ingest.list(account, undefined, bounds);
-  expect(first.items).toEqual([]);
-  expect(JSON.parse(first.next)).toMatchObject({ url: next, pending: [], resume: "" });
-  const second = await r.binding.ingest.list(account, first.next, bounds);
-  expect(second.items.map((item) => item.id)).toEqual(["valid"]);
-  expect(r.requests[3]?.url.href).toBe(next);
-  expect(r.queue).toEqual([]);
+  const cap = 1024 * 1024;
+  const failed =
+    kind === "declared transport cap"
+      ? new Response(null, { status: 503, headers: { "content-length": String(cap + 1) } })
+      : new Response("x".repeat(cap + 1), { status: 503 });
+  const saved = cursor({ pending: ["unread"], resume: link("resumed") });
+  const r = reader([failed, mime()], nestedGuard);
+
+  await expect(r.binding.ingest.list(account, saved, bounds)).rejects.toThrow("size cap");
+  const retry = await r.binding.ingest.list(account, saved, bounds);
+  expect(retry.items.map(({ id }) => id)).toEqual(["unread"]);
+  expect(retry.refusals).toBeUndefined();
+  expect(JSON.parse(retry.next)).toMatchObject({ pending: [], url: link("resumed") });
 });
 
 it.each(
-  ["HTTP 429", "HTTP 503", "transport", "guard", "body stream", "untyped size refusal"].flatMap(
-    (failure) => [
-      { failure, nestedGuard: false },
-      { failure, nestedGuard: true },
-    ],
-  ),
+  [
+    "HTTP 404",
+    "HTTP 429",
+    "HTTP 503",
+    "transport",
+    "guard",
+    "body stream",
+    "untyped size refusal",
+    "empty",
+  ].flatMap((failure) => [
+    { failure, nestedGuard: false },
+    { failure, nestedGuard: true },
+  ]),
 )("preserves pending IDs for retry after MIME $failure (nested guard: $nestedGuard)", async ({
   failure,
   nestedGuard,
@@ -226,17 +236,24 @@ it.each(
       ? new Error("transport failed")
       : failure === "guard"
         ? new SsrfError("unrelated guard refusal")
-        : failure === "body stream" || failure === "untyped size refusal"
-          ? stream
-          : new Response(null, { status: Number(failure.slice(5)) });
+        : failure === "empty"
+          ? mime("")
+          : failure === "body stream" || failure === "untyped size refusal"
+            ? stream
+            : new Response(null, { status: Number(failure.slice(5)) });
   const saved = cursor({ pending: ["a", "b"], resume: link("resumed") });
   const r = reader([failed, mime(), mime()], nestedGuard);
   await expect(r.binding.ingest.list(account, saved, bounds)).rejects.toThrow(
-    failure === "transport" || failure === "guard" || (nestedGuard && !failure.startsWith("HTTP"))
+    failure === "transport" ||
+      failure === "guard" ||
+      (nestedGuard && failure.endsWith("stream")) ||
+      (nestedGuard && failure === "untyped size refusal")
       ? "transport failed or refused redirect"
-      : failure === "untyped size refusal"
-        ? sizeMessage
-        : failure,
+      : failure === "empty"
+        ? "byte length"
+        : failure === "untyped size refusal"
+          ? sizeMessage
+          : failure,
   );
   expect(r.requests).toHaveLength(2);
   const retry = await r.binding.ingest.list(account, saved, bounds);
@@ -340,12 +357,8 @@ it("resolves each account's inbox separately and retries failed resolution witho
   }
 });
 
-it("resets only expired delta state, skips deleted MIME and leaves failed cursors retryable", async () => {
-  const r = reader([
-    new Response(null, { status: 410 }),
-    fixtures.last,
-    new Response(null, { status: 404 }),
-  ]);
+it("resets only expired delta state and leaves failed cursors retryable", async () => {
+  const r = reader([new Response(null, { status: 410 }), fixtures.empty]);
   expect((await r.binding.ingest.list(account, cursor(), bounds)).items).toEqual([]);
   expect(r.requests[2]?.url.href).toBe(DELTA_INITIAL);
   for (const status of [400, 401, 403, 404, 429, 500]) {

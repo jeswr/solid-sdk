@@ -220,6 +220,7 @@ it("extracts only the unverified envelope, strips controls, refuses malformed ca
   const item = { id: "$signed", raw: Buffer.from(JSON.stringify(native)) };
   expect(parseMatrixMessage(item)).toMatchObject({
     textBody: "hithere",
+    warnings: ["signature-unverified"],
     jsonLdBlocks: [
       canonicalJson(encodeEventContent(payload.compactJws)["org.jeswr.agent.envelope"]),
     ],

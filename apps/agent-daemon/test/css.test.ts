@@ -295,6 +295,11 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
     });
     let proposed = false;
     const daemonOptions: DaemonOptions = {
+      gate: {
+        async check({ message }) {
+          return { outcome: "admitted", digest: `sha-256:${message.rawSha256}` };
+        },
+      },
       workspace,
       accounts: [{ id: "fixture", binding: direct, category: "chat", enabled: true }],
       notifications: {

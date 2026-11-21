@@ -41,10 +41,14 @@ it.each(entries)("resolves implemented %s exports", (subpath, target) => {
           "configureCloud",
           "createCliHost",
           "createDaemon",
+          "createInboundGate",
           "createLocalState",
           "createProcessLease",
+          "initGate",
           "installLaunchd",
           "launchdPlist",
+          "openGate",
+          "pinPeer",
           "pollInterval",
           "runCli",
           "runCloud",
@@ -52,6 +56,6 @@ it.each(entries)("resolves implemented %s exports", (subpath, target) => {
           "runConfiguredCloud",
           "scrubLog",
         ]
-      : ["createMemoryPod", "createMemoryState"],
+      : ["createMemoryPod", "createMemoryState", "createTestGate"],
   );
 });

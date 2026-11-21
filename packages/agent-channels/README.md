@@ -51,7 +51,7 @@ and intended audience. Missing/unverifiable messages fail closed. Rendering is
 deterministic; validation and transmission enforce freshness. Lookup may reconcile
 an accepted message after expiry, using exact bytes as positive evidence.
 Parsed BridgeMessages carry unverified JSON-LD; parsing confers no authority.
-The root's pure `readEnvelope(raw)` validator is also used for daemon eligibility.
+The daemon host's inbound gate uses the root's pure `readEnvelope(raw)` validator and verifies the recovered JWS.
 It applies the same 64 KiB byte and compact-JWS string bounds as the direct parser.
 
 `transmit(wire, { account, tokens, assertAuthority, dryRun? })` defaults to dry-run. Explicit
@@ -255,7 +255,11 @@ then reads `/v1.0/me/mailFolders/inbox/messages/delta?$select=id`, follows valid
 `/v1.0/me/messages/{id}/$value`. The same injected email parser enforces parity.
 Requests use immutable Graph IDs. Cursors bind the account and preserve pending
 IDs until the item/byte limits are drained. Duplicate IDs within a page and deleted
-tombstones are skipped; a MIME 404 skips a deleted item. HTTP 410 or a 4xx response
+tombstones are skipped. Any non-2xx MIME fetch preserves the cursor for retry.
+A successful fetch of oversized MIME returns a `bounds-exceeded` refusal and
+paging continues. The refusal carries the message ID and a digest of the MIME
+bytes, or a digest derived from the binding,
+account and ID when the transport withholds the bytes. HTTP 410 or a 4xx response
 with error code `syncStateNotFound` on a saved delta state restarts the initial
 inbox sync. Other errors preserve the previous cursor for retry. Pages cap at 512
 rows and cursors at 64 KiB.
@@ -314,12 +318,14 @@ and Graph-only `ORIGINS` (A-025 / sst-688). It traverses `/me/chats` →
 `ChannelMessage.Read.All`; channel access can require tenant administrator consent.
 Send grants use `ChatMessage.Send`. OAuth and tenant consent stay with the host.
 
-Account-scoped cursors retain queued collections and pending raw messages across
+Account-scoped cursors retain queued collections and pending messages across
 restarts. Each call reads at most 32 collection pages, each scan at most 512 pages,
 with at most 512 queued collections or pending items. Pages and cursors cap at
 1 MiB; individual messages, cards and complete local send wires cap at 64 KiB,
-with the shared depth/node/array limits. Caller item/byte bounds never discard a
-pending message. A message that cannot fit alone refuses the call. Completed scans
+with the shared depth/node/array limits. The cursor retains oversized messages as
+`bounds-exceeded` refusals with the ID and digest. Pending refusals count toward the
+caller item bound. A valid-sized message that cannot fit the caller byte bound
+alone refuses the call. Completed scans
 restart on the next poll; consumers deduplicate stable IDs. This snapshot poller
 does not provide delta synchronization or fetch channel reply collections.
 
@@ -335,8 +341,8 @@ Both seconds and HTTP dates are accepted; excessive or invalid delays stop retri
 HTML bodies (case-insensitive content type) become plain text through the shared HTML
 projector, including `@Display Name` for `<at>` mentions and entity decoding after
 script/style removal. Text bodies and display names retain literal markup and entities;
-all paths strip control and bidi characters. System/deleted
-messages and malformed individual messages are skipped. Sender claims come from
+all paths strip control and bidi characters. The reader skips system and deleted
+messages and returns malformed messages for a typed parse refusal. Sender claims come from
 `from.user`; dates, stable message IDs, conversation signals and reply thread keys
 remain unverified. Parsing uses bounded raw JSON, ignores `native` and never follows
 attachment URLs. Chat and channel conversation IDs have separate namespaces.
@@ -573,8 +579,9 @@ per-event hints survive in the bounded cursor until delivery. The optional bound
 `native` JSON wrapper `{ bridge, event }` transports those hints alongside plaintext
 or decrypted content without altering `raw`. Existing A-027 cursors remain readable.
 The reader still imports only `m.direct` rooms; linking a bridge does not authorize
-group or history ingestion. Bridged text remains an observation: any Matrix envelope
-key is ignored, including one supplied by a remote user or a double puppet.
+group or history ingestion. Text without a Matrix envelope remains an observation.
+When the native envelope key is present, the parser treats it as a Matrix carrier
+and either decodes it or returns a typed refusal, regardless of the bridge hint.
 
 `describeMatrixBridge(channel, credentialState)` returns a descriptor with
 `binding: "matrix"`, the logical channel, its `signal-footer/0.1` or

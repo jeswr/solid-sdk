@@ -140,6 +140,7 @@ it("fences the real executor's suspended send grant on a halt discovered by the 
   const ledger = new MemoryLedger();
   const controller = new AbortController();
   const run = createDaemon({
+    gate: { check: vi.fn() },
     workspace,
     accounts: [],
     lease: state.lease,

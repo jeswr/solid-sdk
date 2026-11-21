@@ -7,6 +7,7 @@ import type { Gateway, ModelCall, ProposerContext } from "@jeswr/agent-model-gat
 import type { Interpreter } from "@jeswr/agentic-legacy-bridge";
 import type { PodAuth } from "@jeswr/pod-auth";
 import type { NotificationsClient, Timers } from "@jeswr/pod-notifications";
+import type { InboundGatePort } from "./gate.js";
 import type { PodWorkspace } from "./workspace.js";
 
 export interface DaemonAccount {
@@ -36,6 +37,7 @@ export interface ProcessLease {
   acquire(): Promise<() => Promise<void>>;
 }
 export interface DaemonOptions {
+  readonly gate: InboundGatePort;
   readonly accounts: readonly DaemonAccount[];
   readonly workspace: PodWorkspace;
   readonly notifications: NotificationsClient;

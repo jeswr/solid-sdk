@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { DEFAULT_LIMITS, parseBoundedJson } from "@jeswr/agent-model";
+import { DEFAULT_LIMITS, digestBytes, parseBoundedJson } from "@jeswr/agent-model";
 import { accountId, assertGrant } from "../direct/shared.js";
 import { MAX_EMAIL_BYTES } from "../email-mime.js";
 import { ChannelParseError } from "../errors.js";
@@ -117,10 +117,16 @@ export async function expiredDeltaState(response: Response): Promise<boolean> {
     return false;
   }
 }
+export class GraphMimeSizeRefusedError extends ChannelParseError {
+  constructor(readonly digest: string) {
+    super("invalid Graph MIME byte length", "bounds-exceeded");
+  }
+}
+
 export async function mimeBody(response: Response): Promise<Uint8Array> {
   if (!response.ok) throw new Error(`Graph MIME read failed: HTTP ${response.status}`);
   const raw = new Uint8Array(await response.arrayBuffer());
-  if (!raw.byteLength || raw.byteLength > MAX_EMAIL_BYTES)
-    throw new ChannelParseError("invalid Graph MIME byte length");
+  if (!raw.byteLength) throw new ChannelParseError("invalid Graph MIME byte length");
+  if (raw.byteLength > MAX_EMAIL_BYTES) throw new GraphMimeSizeRefusedError(digestBytes(raw));
   return raw;
 }

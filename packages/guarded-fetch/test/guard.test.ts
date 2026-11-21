@@ -24,6 +24,7 @@ import {
   guardedFetch,
   isDeniedHostname,
   normalizeHostForClassification,
+  ResponseBodyTooLargeError,
   SsrfError,
 } from "../src/index.js";
 
@@ -969,6 +970,30 @@ describe("guard — body cap + timeout", () => {
       })) as typeof globalThis.fetch;
     const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS, maxBytes: 1024 });
     await expect(guarded("https://big.example/doc")).rejects.toBeInstanceOf(SsrfError);
+  });
+
+  it("marks a size refusal with whether the response status was successful", async () => {
+    const cases = [
+      { status: 200, headers: { "content-length": "999999" }, ok: true },
+      { status: 503, headers: { "content-length": "999999" }, ok: false },
+      { status: 200, headers: {}, ok: true },
+      { status: 503, headers: {}, ok: false },
+    ];
+    for (const item of cases) {
+      const fetch = (async () =>
+        new Response("a".repeat(2048), {
+          status: item.status,
+          headers: { "content-type": "text/turtle", ...item.headers },
+        })) as typeof globalThis.fetch;
+      const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS, maxBytes: 1024 });
+      const error = await guarded("https://big.example/doc").then(
+        () => undefined,
+        (caught: unknown) => caught,
+      );
+      expect(error).toBeInstanceOf(ResponseBodyTooLargeError);
+      expect(error).toBeInstanceOf(SsrfError);
+      expect((error as ResponseBodyTooLargeError).responseOk).toBe(item.ok);
+    }
   });
 
   it("returns a capped Response whose body is the validated bytes", async () => {

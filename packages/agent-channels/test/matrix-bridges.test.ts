@@ -3,7 +3,8 @@
 import { canonicalJson, digestBytes } from "@jeswr/agent-model";
 import { expect, it, vi } from "vitest";
 import { capabilityToTurtle } from "../src/capability.js";
-import { encodeEventContent } from "../src/envelope.js";
+import { encodeEnvelope, encodeEventContent } from "../src/envelope.js";
+import { ChannelParseError } from "../src/errors.js";
 import { createMatrixSend, type MatrixSendOptions } from "../src/matrix/send.js";
 import {
   describeMatrixBridge,
@@ -81,14 +82,13 @@ it("refuses unsupported, malformed or conflicting bridge state without using sta
 
 it.each(
   channels,
-)("projects %s as plain observation with immutable raw provenance, ignoring forged carriers", (channel) => {
+)("keeps raw provenance for %s observations and refuses malformed native carriers", (channel) => {
   const value = {
     ...event(),
     sender: bridgeGhosts[channel],
     content: {
       msgtype: "m.text",
       body: "Remote text",
-      "org.jeswr.agent.envelope": { malformed: true },
     },
   };
   const raw = JSON.stringify(value);
@@ -102,6 +102,10 @@ it.each(
     rawByteLength: Buffer.byteLength(raw),
   });
   expect(parsed.jsonLdBlocks).toBeUndefined();
+  const malformed = { ...value, content: { ...value.content, "org.jeswr.agent.envelope": {} } };
+  expect(() => parseMatrixMessage({ id: "$one", raw: JSON.stringify(malformed) })).toThrow(
+    ChannelParseError,
+  );
 });
 
 it.each(
@@ -205,15 +209,52 @@ it("never trusts malformed cursor hints or mismatched decrypted/wrapped identiti
   ).toThrow("bounded");
 });
 
-it("ignores structured envelopes supplied by state-identified double puppets", async () => {
+it("preserves the native carrier when room state identifies a double puppet", async () => {
+  const { compactJws } = signed();
   const content = {
     msgtype: "m.text",
     body: "Human fallback",
-    ...encodeEventContent(signed().compactJws),
+    ...encodeEventContent(compactJws),
   };
   const r = reader([direct, bridgedSync([event("$one", content)], [bridgeState("signal")])]);
   const page = await r.binding.ingest.list(account, undefined, limits);
-  expect(r.binding.ingest.parse(required(page.items[0])).jsonLdBlocks).toBeUndefined();
+  expect(r.binding.ingest.parse(required(page.items[0]))).toMatchObject({
+    channel: "matrix",
+    jsonLdBlocks: [encodeEnvelope(compactJws)],
+    warnings: ["signature-unverified"],
+  });
+});
+
+it("uses the raw native carrier even when the bridge hints conflict", async () => {
+  const { compactJws } = signed();
+  const value = {
+    ...event("$one", {
+      msgtype: "m.text",
+      body: "Human fallback",
+      ...encodeEventContent(compactJws),
+    }),
+    sender: bridgeGhosts.signal,
+  };
+  const raw = JSON.stringify(value);
+  const blocks = [encodeEnvelope(compactJws)];
+  expect(
+    parseMatrixMessage({
+      id: "$one",
+      raw,
+      native: JSON.stringify({ bridge: "whatsapp", event: value }),
+    }).jsonLdBlocks,
+  ).toEqual(blocks);
+  const r = reader([direct, bridgedSync([value], [bridgeState("whatsapp")])]);
+  const page = await r.binding.ingest.list(account, undefined, limits);
+  expect(r.binding.ingest.parse(required(page.items[0])).jsonLdBlocks).toEqual(blocks);
+  const encrypted = { ...value, type: "m.room.encrypted", content: { ciphertext: "fixture" } };
+  expect(
+    parseMatrixMessage({
+      id: "$one",
+      raw: JSON.stringify(encrypted),
+      native: JSON.stringify({ bridge: "whatsapp", event: value }),
+    }),
+  ).toMatchObject({ channel: "matrix", jsonLdBlocks: blocks });
 });
 
 it.each(

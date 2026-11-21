@@ -42,6 +42,7 @@ export function envelopes(attachments: unknown): string[] {
     if (data.envelope === undefined) continue;
     out.push(encodeEnvelope(decodeEnvelopeObject(data.envelope)));
   }
-  if (new Set(out).size > 1) throw new ChannelParseError("conflicting Teams envelopes");
+  if (new Set(out).size > 1)
+    throw new ChannelParseError("conflicting Teams envelopes", "conflicting-structured-copies");
   return [...new Set(out)];
 }

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import {
+  BoundsError,
   canonicalJson,
   DEFAULT_LIMITS,
   digestBytes,
@@ -7,9 +8,16 @@ import {
   validateMessage,
 } from "@jeswr/agent-model";
 import { renderBodies } from "./email/bodies.js";
-import { headerValues, leaves, type MimeNode, parseMime, shapeOf } from "./email/mime.js";
+import {
+  DEFAULT_MIME_LIMITS,
+  headerValues,
+  leaves,
+  type MimeNode,
+  parseMime,
+  shapeOf,
+} from "./email/mime.js";
 import type { EmailMessage } from "./email-message.js";
-import { decodeEnvelopeObject } from "./envelope.js";
+import { decodeEnvelopeObject, encodeEnvelope } from "./envelope.js";
 import { ChannelParseError } from "./errors.js";
 import { toBridgeMessage } from "./message.js";
 import { AGENT_FOOTER } from "./profiles.js";
@@ -110,10 +118,19 @@ function scriptTagEnd(text: string, start: number): number {
 /** Inspect every carrier in the bounded tree, without the legacy parser's extraction caps. */
 function mimeCarriers(root: MimeNode): string[] {
   const blocks: string[] = [];
+  let parts = 0;
+  const countCarrierPart = () => {
+    if (++parts > DEFAULT_MIME_LIMITS.maxParts)
+      throw new ChannelParseError("incomplete structured-copy extraction");
+  };
   for (const part of leaves(root)) {
     const text = part.text as string;
-    if (part.type === "application/ld+json") blocks.push(text);
+    if (part.type === "application/ld+json") {
+      countCarrierPart();
+      blocks.push(text);
+    }
     if (part.type !== "text/html") continue;
+    const previous = blocks.length;
     // ASCII folding preserves indices even when body text contains expanding Unicode case folds.
     const lower = text.replace(/[A-Z]/g, (c) => c.toLowerCase());
     let cursor = 0;
@@ -121,7 +138,11 @@ function mimeCarriers(root: MimeNode): string[] {
       const start = lower.indexOf("<script", cursor);
       if (start < 0) break;
       const end = scriptTagEnd(lower, start + 7);
-      if (end < 0) throw new ChannelParseError("incomplete structured-copy extraction");
+      if (end < 0) {
+        if (lower.includes("application/ld+json", start + 7))
+          throw new ChannelParseError("incomplete structured-copy extraction");
+        break;
+      }
       cursor = end + 1;
       if (!lower.slice(start + 7, end).includes("application/ld+json")) continue;
       const close = lower.indexOf("</script", cursor);
@@ -132,6 +153,7 @@ function mimeCarriers(root: MimeNode): string[] {
         throw new ChannelParseError("incomplete structured-copy extraction");
       cursor = closeEnd + 1;
     }
+    if (blocks.length > previous) countCarrierPart();
   }
   return blocks;
 }
@@ -147,7 +169,9 @@ function collectStructuredCopies(
         ...DEFAULT_LIMITS,
         maxStringLength: DEFAULT_LIMITS.maxEnvelopeBytes,
       });
-    } catch {
+    } catch (error) {
+      if (error instanceof BoundsError && error.code === "too-large")
+        throw new ChannelParseError("structured copy exceeds local byte cap");
       if (requireComplete || block.includes("SignedMessage"))
         throw new ChannelParseError("malformed structured copy");
       continue;
@@ -180,21 +204,30 @@ function inspectEmailDetails(raw: string | Uint8Array, config: EmailConfig) {
   const message = toBridgeMessage(email);
   const copies = new Set<string>();
   collectStructuredCopies(email.jsonLdBlocks ?? [], copies);
+  const legacyFoundCarrier = copies.size > 0;
+  const scan = parseMime(raw, undefined, { carriersOnly: !legacyFoundCarrier });
+  if (!scan.ok) throw new ChannelParseError("incomplete structured-copy extraction");
+  collectStructuredCopies(mimeCarriers(scan.root), copies, true);
   if (copies.size === 0)
     return { message, root: undefined, proposal: undefined, parity: "none" as const };
-  const mime = parseMime(raw);
+  if (copies.size !== 1)
+    throw new ChannelParseError("conflicting structured copies", "conflicting-structured-copies");
+  // A carrier discovered by the scan still needs the full MIME tree for parity.
+  const mime = legacyFoundCarrier ? scan : parseMime(raw);
   if (!mime.ok) throw new ChannelParseError("incomplete structured-copy extraction");
-  collectStructuredCopies(mimeCarriers(mime.root), copies, true);
-  if (copies.size !== 1) throw new ChannelParseError("conflicting structured copies");
   const proposal = decodeEmailProposal([...copies][0] as string);
   const match = parityMatches(mime.root, proposal, footer);
   const strict = new Set([...config.ownAccounts].map((a) => a.toLowerCase())).has(
     config.recipient.toLowerCase(),
   );
-  if (strict && !match) throw new ChannelParseError("human-parity-mismatch");
+  if (strict && !match)
+    throw new ChannelParseError("human-parity-mismatch", "human-parity-mismatch");
   return {
     message: {
       ...message,
+      ...(!legacyFoundCarrier
+        ? { jsonLdBlocks: [...(message.jsonLdBlocks ?? []), encodeEnvelope(proposal.compactJws)] }
+        : {}),
       warnings: [
         ...message.warnings,
         "signature-unverified",

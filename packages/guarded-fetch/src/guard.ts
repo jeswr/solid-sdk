@@ -64,6 +64,16 @@ export class SsrfError extends Error {
   }
 }
 
+/** A response crossed the byte cap before the caller could inspect it. */
+export class ResponseBodyTooLargeError extends SsrfError {
+  constructor(
+    message: string,
+    readonly responseOk: boolean,
+  ) {
+    super(message);
+  }
+}
+
 /**
  * Raised for a NON-SSRF guard refusal: a disallowed port, or a content-type allowlist miss
  * when {@link GuardOptions.allowedContentTypes} is configured. SSRF refusals throw
@@ -509,8 +519,9 @@ class SsrfGuard {
     const declared = Number(res.headers.get("content-length") ?? Number.NaN);
     if (!Number.isNaN(declared) && declared > this.maxBytes) {
       controller.abort();
-      throw new SsrfError(
+      throw new ResponseBodyTooLargeError(
         `Response body for ${sanitizeUrl(url)} exceeds cap (Content-Length ${declared} > ${this.maxBytes}).`,
+        res.ok,
       );
     }
     const bytes = await this.readCapped(res, url, controller);
@@ -551,8 +562,9 @@ class SsrfGuard {
           total += value.byteLength;
           if (total > this.maxBytes) {
             controller.abort();
-            throw new SsrfError(
+            throw new ResponseBodyTooLargeError(
               `Response body for ${sanitizeUrl(url)} exceeds cap (${total} bytes > ${this.maxBytes}).`,
+              res.ok,
             );
           }
           chunks.push(value);

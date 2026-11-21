@@ -204,6 +204,9 @@ importers:
       '@jeswr/agent-model-gateway':
         specifier: workspace:*
         version: link:../../packages/agent-model-gateway
+      '@jeswr/agent-reference':
+        specifier: workspace:*
+        version: link:../../packages/agent-reference
       '@jeswr/agentic-legacy-bridge':
         specifier: workspace:*
         version: link:../../packages/agentic-legacy-bridge

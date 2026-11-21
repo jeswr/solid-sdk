@@ -259,6 +259,11 @@ it("D-2: hostile email/A2A can propose; Transfer and cumulative spending remain 
       } satisfies Pick<ChannelBinding, "id" | "ingest">,
     }));
     const daemon = createDaemon({
+      gate: {
+        async check({ message }) {
+          return { outcome: "unstructured", digest: `sha-256:${message.rawSha256}` };
+        },
+      },
       accounts,
       workspace,
       ...state,
