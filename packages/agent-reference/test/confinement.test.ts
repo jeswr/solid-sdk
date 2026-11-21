@@ -78,7 +78,9 @@ it("confines every scenario configuration (brief 31 C1 to C5) and preserves the 
     }
   }
   expect(tested).toBeGreaterThanOrEqual(3);
-}, 900_000);
+  // This runs every scenario configuration end to end; on CI runners under the parallel Turbo gate it
+  // takes about 13 to 15 minutes. A hang still fails, at this budget.
+}, 1_800_000);
 
 it("refuses a transport configuration that adds a step, inside an added segment or not", async () => {
   const { profile, scenario } = loadCase(root, "mortgage-main");
