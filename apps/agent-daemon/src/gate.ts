@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 import {
   type AuditRecord,
   GATE_DECISION_REASONS,
@@ -22,15 +23,18 @@ import {
   FileLedger,
   FileStateStore,
   readAgent,
+  type SigningKey,
   type StepResult,
   signCompact,
   TrustStore,
   type TrustStoreData,
+  verifyCompact,
   verifyLedger,
 } from "@jeswr/agent-reference";
+import { LEDGER_GENESIS, verifyLedgerAtHead } from "@jeswr/agent-reference/store/ledger";
 import { randomUUID } from "crypto";
 import { constants } from "fs";
-import { lstat, open, readdir, rename, unlink } from "fs/promises";
+import { lstat, mkdir, open, readdir, rename, unlink } from "fs/promises";
 import { basename, dirname, join, resolve } from "path";
 import { z } from "zod";
 import { readPrivate, syncDirectory, writePrivate } from "./local.js";
@@ -63,7 +67,7 @@ export type DaemonGatePort = InboundGatePort &
   (
     | { open(identity: GateIdentity): Promise<Gate> }
     | (Pick<Gate, "head" | "anchor" | "release"> &
-        Partial<Pick<Gate, "decisions" | "setReleaseAudit">>)
+        Partial<Pick<Gate, "decisions" | "evidence" | "recoverAnchor" | "setReleaseAudit">>)
   );
 type CheckInput = Parameters<InboundGatePort["check"]>[0];
 export type ParseRefusal = {
@@ -102,6 +106,29 @@ const decisionFields = z.object({
   taskId: z.string().optional(),
   conversation: z.string().optional(),
 });
+const pendingDecisionName = "pending.json";
+const pendingDecisionSchema = z.strictObject({
+  binding: z.string(),
+  fields: decisionFields.strict(),
+  replayKey: decisionDigest.optional(),
+  transaction: z.uuid(),
+  completion: z
+    .discriminatedUnion("type", [
+      z.strictObject({
+        type: z.literal("verdict"),
+        hex: z.string().regex(/^[a-f0-9]{64}(?:-[a-f0-9]{64})?$/),
+        digest: decisionDigest,
+      }),
+      z.strictObject({
+        type: z.literal("release"),
+        name: z.string().regex(/^release-[a-f0-9]{64}\.json$/),
+        digest: decisionDigest,
+      }),
+    ])
+    .optional(),
+});
+type PendingDecision = z.infer<typeof pendingDecisionSchema>;
+type DecisionCompletion = PendingDecision["completion"];
 type ReleaseAudit = {
   proposalDigest: string;
   task: ProjectionTask;
@@ -157,7 +184,11 @@ type Decision =
   | { outcome: "refused"; reason: string };
 type VerdictStore = {
   get(hex: string): Promise<StoredVerdict | undefined>;
-  put(hex: string, verdict: StoredVerdict): Promise<void>;
+  put(
+    hex: string,
+    verdict: StoredVerdict,
+    prepare?: (digest: string) => Promise<void>,
+  ): Promise<void>;
   digests(): Promise<string[]>;
 };
 
@@ -176,7 +207,7 @@ function fileVerdicts(directory: string): VerdictStore {
       }
       return { outcome: "checking", time: verdict.time };
     },
-    async put(hex, verdict) {
+    async put(hex, verdict, prepare) {
       const name = `verdict-${hex}.json`;
       if (verdict.outcome === "checking") {
         await writePrivate(directory, name, JSON.stringify(verdict));
@@ -184,6 +215,7 @@ function fileVerdicts(directory: string): VerdictStore {
       }
       const record = JSON.stringify({ ...verdict, transaction: randomUUID() });
       const digest = digestBytes(record);
+      await prepare?.(digest);
       const staged = `verdict-${hex}.prepared`;
       await writePrivate(directory, staged, digest);
       await writePrivate(directory, name, record);
@@ -264,6 +296,95 @@ type GateRuntime = Pick<
 type RecordHead = ReturnType<GateRuntime["recordHead"]>;
 const decisionType = "suite-gate-decision";
 
+function persistDecision(
+  rt: GateRuntime,
+  { binding, fields, replayKey, transaction }: PendingDecision,
+) {
+  return rt.commitBindingEvent({
+    type: decisionType,
+    binding,
+    ...fields,
+    ...(replayKey && { replayKey }),
+    transaction,
+  });
+}
+
+async function clearPendingDecision(directory: string) {
+  await unlink(join(directory, pendingDecisionName));
+  await syncDirectory(directory);
+}
+
+async function decisionCompleted(directory: string, completion: DecisionCompletion) {
+  if (!completion) return true;
+  if (completion.type === "release") {
+    const receipt = await readPrivate(join(directory, completion.name));
+    return receipt !== undefined && digestBytes(receipt) === completion.digest;
+  }
+  const base = join(directory, `verdict-${completion.hex}`);
+  const verdict = await readPrivate(`${base}.json`);
+  return (
+    verdict !== undefined &&
+    digestBytes(verdict) === completion.digest &&
+    (await readPrivate(`${base}.commit`)) === completion.digest &&
+    (await readPrivate(`${base}.confirmed`)) === completion.digest
+  );
+}
+
+async function openDecisionJournal(directory: string) {
+  const journal = join(directory, "decision-journal");
+  await mkdir(journal, { mode: 0o700, recursive: true });
+  const stat = await lstat(journal);
+  if (!stat.isDirectory() || (stat.mode & 0o777) !== 0o700 || stat.uid !== process.getuid?.())
+    throw new Error("Unsafe gate decision journal");
+  await syncDirectory(directory);
+  return journal;
+}
+
+async function recoverDecision(
+  rt: GateRuntime,
+  ledger: FileLedger,
+  directory: string,
+  journal: string,
+) {
+  const text = await readPrivate(join(journal, pendingDecisionName));
+  if (text === undefined) return;
+  const decision = pendingDecisionSchema.parse(JSON.parse(text));
+  const committed = ledger
+    .entries()
+    .some(
+      ({ record }) => record.type === decisionType && record.transaction === decision.transaction,
+    );
+  // A crash can leave the journal on either side of the ledger checkpoint.
+  if (!committed && (await decisionCompleted(directory, decision.completion)))
+    await persistDecision(rt, decision);
+  await clearPendingDecision(journal);
+}
+
+type ReferenceEntries = Parameters<typeof verifyLedger>[0];
+const witnessSeq = z.number().int().positive();
+export function gateWitnesses(entries: ReferenceEntries, { actor, party }: Partial<GateIdentity>) {
+  return entries.flatMap(({ record }) => {
+    if (record.type !== "record-anchor-receipt" || record.actor !== actor || record.party !== party)
+      return [];
+    return [
+      {
+        seq: witnessSeq.parse(record.seq),
+        hash: decisionDigest.parse(record.hash),
+      },
+    ];
+  });
+}
+
+export async function validAnchorSignature(jws: string, { kid, alg, publicJwk }: SigningKey) {
+  const result = await verifyCompact(jws, {
+    resolve: (id) => (id === kid ? { kid, alg, publicJwk } : undefined),
+    typ: "awp-record-anchor+jws",
+    allowedAlgs: ["EdDSA"],
+    limits: { ...DEFAULT_LIMITS, maxEnvelopeBytes: MAX_RECORD_ANCHOR_BYTES },
+  });
+  return result.outcome === "valid";
+}
+
 function assertAnchorSize(jws: string): void {
   // Compact JWS is ASCII, so each character is one byte.
   if (jws.length > MAX_RECORD_ANCHOR_BYTES) throw new Error("Record anchor exceeds size bound");
@@ -277,36 +398,68 @@ export function createGate(
   now: () => Date,
   admittedReceipts = new Set<string>(),
   outbound?: Awaited<ReturnType<typeof createOutboundGate>>,
+  durable?: { journal: string; actorKey: SigningKey },
 ) {
   let pending: Promise<unknown> = Promise.resolve();
   let closed = false;
   let releaseAudit: ReleaseAudit | undefined;
+  let decisionFault: { error: unknown } | undefined;
   const recorded = new Map<string, string>();
   for (const { record } of ledger.entries()) {
     if (record.type === decisionType && typeof record.replayKey === "string")
       recorded.set(record.replayKey, digestOf(decisionFields.parse(record)));
   }
 
-  async function recordDecision(binding: string, fields: DecisionFields, replayKey?: string) {
+  function decisionWriter(binding: string, replayKey?: string) {
     const key = replayKey === undefined ? undefined : decisionDigest.parse(replayKey);
-    const fingerprint = digestOf(fields);
-    if (key && recorded.get(key) === fingerprint) return;
-    await rt.commitBindingEvent({
-      type: decisionType,
-      binding,
-      ...fields,
-      ...(key && { replayKey: key }),
-    });
-    if (key) recorded.set(key, fingerprint);
+    let staged: PendingDecision | undefined;
+    let stagedFingerprint: string | undefined;
+    async function prepare(fields: DecisionFields, completion?: DecisionCompletion) {
+      if (!durable) return;
+      const fingerprint = digestOf(fields);
+      if (
+        stagedFingerprint === fingerprint ||
+        (!staged && key && recorded.get(key) === fingerprint)
+      )
+        return;
+      const decision = { binding, fields, replayKey: key, transaction: randomUUID(), completion };
+      await writePrivate(durable.journal, pendingDecisionName, JSON.stringify(decision));
+      staged = decision;
+      stagedFingerprint = fingerprint;
+    }
+    async function commit(fields: DecisionFields) {
+      const fingerprint = digestOf(fields);
+      try {
+        if (!key || recorded.get(key) !== fingerprint) {
+          await prepare(fields);
+          await persistDecision(
+            rt,
+            staged ?? { binding, fields, replayKey: key, transaction: randomUUID() },
+          );
+          if (key) recorded.set(key, fingerprint);
+        }
+        if (staged && durable) await clearPendingDecision(durable.journal);
+      } catch (error) {
+        decisionFault = { error };
+        throw error;
+      }
+    }
+    return { prepare, commit };
   }
 
   async function checked(input: CheckInput | ParseRefusalInput) {
-    const verdict = await check(input);
-    await recordDecision(input.binding, inboundAuditDecision(verdict), input.replayKey);
+    const writer = decisionWriter(input.binding, input.replayKey);
+    const verdict = await check(input, (verdict, completion) =>
+      writer.prepare(inboundAuditDecision(verdict), completion),
+    );
+    await writer.commit(inboundAuditDecision(verdict));
     return verdict;
   }
 
-  async function check(input: CheckInput | ParseRefusalInput): Promise<GateVerdict> {
+  async function check(
+    input: CheckInput | ParseRefusalInput,
+    prepare: (verdict: GateVerdict, completion: DecisionCompletion) => Promise<void>,
+  ): Promise<GateVerdict> {
     const { binding, account } = input;
     const message = "message" in input ? input.message : undefined;
     const digest =
@@ -325,6 +478,7 @@ export function createGate(
       const previous = await verdicts.get(hex);
       const priorRefusal = refusalReason(previous) ?? refusalReason(await verdicts.get(accountKey));
       if (priorRefusal) {
+        await prepare({ ...refused(priorRefusal), digest }, undefined);
         await event("binding-rejection", priorRefusal);
         return { ...refused(priorRefusal), digest };
       }
@@ -334,15 +488,18 @@ export function createGate(
       const parityMismatch =
         jws !== undefined && message?.warnings.includes("human-parity-unverified");
       if (!failure && !parityMismatch && jws !== undefined && previous?.outcome === "admitted") {
-        await event("channel-observation", "cached-verdict");
-        return {
+        const verdict = {
           outcome: "admitted",
           messageId: previous.messageId,
           conversation: previous.conversation,
           digest,
-        };
+        } as const;
+        await prepare(verdict, undefined);
+        await event("channel-observation", "cached-verdict");
+        return verdict;
       }
       if (!failure && jws === undefined && previous) {
+        await prepare({ outcome: "unstructured", digest }, undefined);
         await event("channel-observation", "no-structured-content");
         return { outcome: "unstructured", digest };
       }
@@ -379,11 +536,15 @@ export function createGate(
           ),
         );
       }
-      await verdicts.put(key, {
-        ...decision,
-        time: now().toISOString(),
-        ...(decision.outcome === "admitted" && { admissionReceipt }),
-      });
+      await verdicts.put(
+        key,
+        {
+          ...decision,
+          time: now().toISOString(),
+          ...(decision.outcome === "admitted" && { admissionReceipt }),
+        },
+        (hash) => prepare({ ...decision, digest }, { type: "verdict", hex: key, digest: hash }),
+      );
       if (decision.outcome === "admitted") admittedReceipts.add(admissionReceipt);
       return { ...decision, digest };
     } catch {
@@ -397,7 +558,10 @@ export function createGate(
   }
   function enqueue<T>(work: () => T | Promise<T>): Promise<T> {
     if (closed) return Promise.reject(new Error("Agent gate is closed"));
-    const result = pending.then(work);
+    const result = pending.then(() => {
+      if (decisionFault) throw decisionFault.error;
+      return work();
+    });
     pending = result.catch(() => undefined);
     return result;
   }
@@ -409,15 +573,26 @@ export function createGate(
       return enqueue<ProposalRelease>(async () => {
         if (audit && audit.proposalDigest !== digestOf(proposal))
           throw new Error("Outbox gate release mismatch");
-        const result = (await outbound?.release(proposal)) ?? {
+        const writer = decisionWriter(
+          "suite-outbound",
+          digestOf({ proposal: proposal.id, direction: "out" }),
+        );
+        const fields = (result: ProposalRelease) => ({
+          ...outboundAuditDecision(proposal, result),
+          ...audit?.task,
+        });
+        const result = (await outbound
+          ?.release(proposal, (result, name, digest) =>
+            writer.prepare(fields(result), { type: "release", name, digest }),
+          )
+          .catch((error) => {
+            decisionFault = { error };
+            throw error;
+          })) ?? {
           ok: false,
           reason: "unsupported-operation",
         };
-        await recordDecision(
-          "suite-outbound",
-          { ...outboundAuditDecision(proposal, result), ...audit?.task },
-          digestOf({ proposal: proposal.id, direction: "out" }),
-        );
+        await writer.commit(fields(result));
         await audit?.record(result);
         return result;
       });
@@ -426,16 +601,38 @@ export function createGate(
       releaseAudit = audit;
     },
     decisions(after: number) {
-      const entries = ledger.entries();
-      const last = entries.at(-1);
-      if (last && rt.recordHead().hash !== last.hash)
-        throw new Error("Gate ledger changed while reading decisions");
-      return entries.flatMap(({ seq, hash, record }) =>
+      return committedEntries().flatMap(({ seq, hash, record }) =>
         seq > after && record.type === decisionType
           ? [{ ...decisionFields.parse(record), gateSeq: seq, gateHash: hash }]
           : [],
       );
     },
+    evidence() {
+      const entries = committedEntries();
+      return {
+        gateEntries: entries.map(({ seq, hash }) => ({ seq, hash })),
+        witnessedHeads: gateWitnesses(entries, rt.identity),
+      };
+    },
+    recoverAnchor: (record: Extract<AuditRecord, { type: "record-anchor" }>) =>
+      enqueue(async () => {
+        const { actor, party } = rt.identity;
+        if (
+          gateWitnesses(committedEntries(), rt.identity).some(
+            ({ seq, hash }) => seq === record.seq && hash === record.hash,
+          )
+        )
+          return;
+        if (
+          !party ||
+          !durable ||
+          record.agent !== actor ||
+          record.owner !== party ||
+          !(await validAnchorSignature(record.jws, durable.actorKey))
+        )
+          throw new Error("Cannot witness an invalid audit anchor");
+        await rt.witnessRecordHead({ actor, party, seq: record.seq, hash: record.hash });
+      }),
     head(): RecordHead {
       return rt.recordHead();
     },
@@ -478,6 +675,14 @@ export function createGate(
       rt.close();
     },
   };
+
+  function committedEntries() {
+    const entries = ledger.entries();
+    const last = entries.at(-1);
+    if (last && rt.recordHead().hash !== last.hash)
+      throw new Error("Gate ledger changed while reading decisions");
+    return entries;
+  }
 }
 
 export type Gate = ReturnType<typeof createGate>;
@@ -555,6 +760,8 @@ async function openStoredGate(
   );
   const { runtime, ledger } = await openRuntime(stored, options);
   try {
+    const journal = await openDecisionJournal(stored.dir);
+    await recoverDecision(runtime, ledger, stored.dir, journal);
     const verdicts = fileVerdicts(stored.dir);
     const admittedReceipts = new Set<string>();
     if (admission) {
@@ -573,6 +780,7 @@ async function openStoredGate(
       now,
       admittedReceipts,
       outboundGate,
+      { journal, actorKey: stored.actorKey },
     );
   } catch (error) {
     runtime.close();
@@ -588,7 +796,10 @@ async function openRuntime(
   const store = new FileStateStore(join(stored.dir, "state.json"));
   try {
     const ledger = new FileLedger(join(stored.dir, "ledger.jsonl"));
-    if (!verifyLedger(ledger.entries()).ok)
+    const saved = store.load().ledgerAuditHead;
+    // Use the same saved-prefix recovery as the runtime before any daemon ledger reads.
+    if (saved && ledger.head().seq > saved.seq) ledger.recoverUncommittedSuffix(saved);
+    if (!verifyLedgerAtHead(ledger.entries(), saved ?? LEDGER_GENESIS).ok)
       throw new Error("Inbound gate ledger failed verification");
     const runtime = await AgentRuntime.create({
       identity: stored.identity,

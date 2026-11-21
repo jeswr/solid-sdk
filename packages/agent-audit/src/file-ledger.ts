@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Ported from personal-agent/src/pilot/store/ledger.ts. Single writer per path.
 import {
   appendFileSync,
@@ -15,7 +16,7 @@ import {
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { basename, dirname, join } from "path";
 import { type EvidenceLedger, gateDecisionReplay } from "./ledger.js";
-import { GENESIS, type LedgerEntry, type LedgerRecord, seal } from "./records.js";
+import { GENESIS, type LedgerEntry, type LedgerRecord, linkedGateHead, seal } from "./records.js";
 import { verifyLedger } from "./verify.js";
 
 export interface LedgerBounds {
@@ -98,25 +99,46 @@ export class FileLedger implements EvidenceLedger {
     if (this.last?.record.type === "record-anchor" && record.type === "record-anchor")
       throw new Error("Audit head is already anchored");
     if (record.type !== "record-anchor" && this.currentCount >= this.bounds.segmentMaxEntries)
-      this.rotate(at);
+      this.rotate(at, onDisk);
     const entry = this.next(record, at);
     this.writeLine(entry);
     return structuredClone(entry);
   }
-  private rotate(at: string): void {
+  private rotate(at: string, entries: readonly LedgerEntry[]): void {
     renameSync(this.path, `${this.path}.seg-${String(this.last?.seq).padStart(12, "0")}`);
     sync(dirname(this.path));
     this.currentCount = 0;
     const archived = this.segments();
     const excess = archived.length - this.bounds.maxSegments;
     if (excess <= 0) return;
-    const pruned = archived.slice(0, excess);
-    for (const p of pruned) {
-      const last = readSegment(p).at(-1) as LedgerEntry;
+    // The newest anchor may be awaiting its separate gate witness. Keep both candidates
+    // and their predecessors until a later anchor supersedes them.
+    const protectedHeads = entries
+      .filter(({ record }) => record.type === "record-anchor")
+      .slice(-2);
+    const protectedSeq = protectedHeads[0] ? protectedHeads[0].seq - 1 : Infinity;
+    let lastPrunedGate: ReturnType<typeof linkedGateHead>;
+    const includeGateLink = ({ record }: LedgerEntry) => {
+      const link = linkedGateHead(record);
+      if (link && (!lastPrunedGate || link.seq > lastPrunedGate.seq)) lastPrunedGate = link;
+    };
+    for (const entry of entries) {
+      if (entry.record.type === "ledger-checkpoint") includeGateLink(entry);
+    }
+    for (const p of archived.slice(0, excess)) {
+      const segment = readSegment(p);
+      const last = segment.at(-1) as LedgerEntry;
+      if (last.seq >= protectedSeq) break;
+      for (const entry of segment) includeGateLink(entry);
       // Every interrupted deletion prefix needs its own durable checkpoint.
       this.writeLine(
         this.next(
-          { type: "ledger-checkpoint", lastPrunedSeq: last.seq, lastPrunedHash: last.hash },
+          {
+            type: "ledger-checkpoint",
+            lastPrunedSeq: last.seq,
+            lastPrunedHash: last.hash,
+            ...(lastPrunedGate && { lastPrunedGate }),
+          },
           at,
         ),
       );

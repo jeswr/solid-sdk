@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { canonicalJson, digestOf } from "@jeswr/agent-model/core/canonical";
 import { z } from "zod";
 import {
@@ -7,6 +8,7 @@ import {
   entrySchema,
   GENESIS,
   type LedgerEntry,
+  linkedGateHead,
   MAX_AUDIT_SEQ,
 } from "./records.js";
 
@@ -24,6 +26,7 @@ export {
   type LedgerEntry,
   type LedgerRecord,
   ledgerRecordSchema,
+  linkedGateHead,
   MAX_AUDIT_SEQ,
   MAX_RECORD_ANCHOR_BYTES,
   recipientHashSchema,
@@ -82,6 +85,8 @@ export function verifyLedger(
     gateEntries?: readonly AuditHead[];
     /** Heads retained independently of this ledger, for example in the gate ledger. */
     witnessedHeads?: readonly AuditHead[];
+    /** Allow startup recovery to witness a durable suite anchor after a crash. */
+    allowUnwitnessedAnchors?: boolean;
   } = {},
 ): LedgerCheck {
   const { result, entries } = checkChain(input, false);
@@ -95,24 +100,34 @@ export function verifyLedger(
   if (options.gateEntries) {
     const gate = new Map(options.gateEntries.map(({ seq, hash }) => [seq, hash]));
     for (const { seq, record } of entries) {
-      if (record.type === "gate-decision" && gate.get(record.gateSeq) !== record.gateHash)
-        return fail("gate record missing", seq);
+      const link = linkedGateHead(record);
+      if (link && gate.get(link.seq) !== link.hash) return fail("gate record missing", seq);
     }
   }
   if (options.witnessedHeads) {
     const bySeq = new Map(entries.map((entry) => [entry.seq, entry]));
     const pruned = result.prunedThroughSeq ?? 0;
+    const latest = options.witnessedHeads.reduce((max, { seq }) => Math.max(max, seq), 0);
+    const witnessed = new Set<string>();
     for (const { seq, hash } of options.witnessedHeads) {
-      if (seq >= pruned) {
+      witnessed.add(`${seq}:${hash}`);
+      if (seq === latest) {
+        if (bySeq.get(seq)?.hash !== hash) return fail("witnessed head missing or changed", seq);
+      } else if (seq >= pruned) {
         const retainedHash = seq === pruned ? entries[0]?.prev : bySeq.get(seq)?.hash;
         if (retainedHash !== hash) return fail("witnessed head missing or changed", seq);
       }
-      // An anchor must immediately follow the head it seals. A checkpoint can cover
-      // both rows, or cover just the witnessed head with the anchor still retained.
+      // Only older witnesses can be covered by the verified prefix checkpoint.
       if (seq + 1 <= pruned) continue;
       // The chain check binds an anchor to the predecessor at this position.
       if (bySeq.get(seq + 1)?.record.type !== "record-anchor")
         return fail("witness anchor missing", seq + 1);
+    }
+    if (!options.allowUnwitnessedAnchors) {
+      for (const { seq, record } of entries) {
+        if (record.type === "record-anchor" && !witnessed.has(`${record.seq}:${record.hash}`))
+          return fail("anchor has no matching gate witness", seq);
+      }
     }
   }
   return result;

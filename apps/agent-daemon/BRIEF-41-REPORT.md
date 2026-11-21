@@ -663,3 +663,26 @@ runtime signs inside the existing checked release path.
 All Vitest selections used `--maxWorkers=2`. The packaged audit and daemon subprocess tests received empty stdout in this sandbox. Both CLIs printed help when invoked directly with Node. No commit was made.
 
 Recovery uses completed suite decisions retained in the gate ledger. Older reference records may omit the digest of the original channel bytes, so recovery does not infer that digest from a signature or message payload. The retention and historical-key follow-up from 41o still applies.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Phase 4 review fixes, round 2 (41q)
+
+| Finding | Regression evidence |
+| --- | --- |
+| Checkpoints could replace all witnessed evidence | The baseline passed a checkpoint that omitted the latest witnessed head and anchor, and rotation deleted both while a newer anchor awaited its witness. Verification now requires both rows. Retention protects the two newest anchors and their predecessors so the preceding witness remains available during publication of the next anchor. An older witness can be covered by an intact checkpointed prefix. |
+| Gate ledger fsync before the state checkpoint | Reopening the baseline stopped at `Gate ledger changed while reading decisions`. Startup now uses the reference ledger API to recover to the saved state head, restores the pending decision, and projects it before executor dispatch. The regression also verifies the interrupted pass made no Reader or Proposer calls. |
+| Committed check or release before the decision row | The baseline reopened with no decision for a confirmed inbound refusal or a successful outbound release. The gate journals body-free decision fields ahead of verdict or receipt publication and checks the completion marker on recovery. The recovered refusal and release each appear once and retain the expected outcome and digest. |
+| Older gate snapshot next to newer suite decisions | The baseline started successfully after restoring a coherent older gate snapshot. Startup now rejects a suite decision or checkpoint whose gate sequence and hash are unavailable and stops before model calls or dispatch. |
+| All linked decisions pruned | The baseline projected a duplicate after retention removed every linked decision. Pruning now carries the highest removed gate sequence and hash forward through subsequent checkpoints. Reconciliation uses the higher watermark from checkpoints and retained decisions. |
+| Durable suite anchor without a gate witness | The baseline dispatched without repairing the anchor, and the offline CLI passed it. Startup now verifies the anchor signature and witnesses its exact head once across successive restarts. The offline auditor reports a missing matching witness as a breach. |
+
+Gate ledger access uses the agent-reference APIs. Legacy checkpoints decode without gate coordinates. Recovering already pruned witnessed heads requires the original suite records. Recovery applies to suite checks and releases with durable completion markers, and interrupted operations retain the gate's existing hold behavior.
+
+### Verification
+
+- The daemon's offline selection passed 288 tests. A separate final run passed all seven targeted daemon regressions. The loopback CSS and D-2 cases and the packaged CLI and launchd subprocess cases were excluded from the offline selection. Both CLI binaries printed help when invoked directly with Node.
+- Agent-audit passed 155 tests with 100% statement, branch, function and line coverage. The packaged subprocess case was excluded.
+- Agent-model passed 188 tests. The Suite agent selection passed 484 tests across the main run and an isolated retry of the route tests. The focused Suite audit file passed all 30 tests.
+- Agent-model, agent-audit, the daemon and the Suite passed builds and typechecks. The Suite production build generated 168 pages and checked 562 chunks, with the existing guarded-fetch dependency warnings.
+- Root lint and the agent layer, RDF discipline and app duplication guards passed. Agent-reference source and trace files are byte-for-byte identical to the baseline.

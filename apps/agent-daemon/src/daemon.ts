@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { AuditHeadChangedError, type AuditRecord, verifyLedger } from "@jeswr/agent-audit";
+import { linkedGateHead } from "@jeswr/agent-audit/verify";
 import {
   type BridgeMessage,
   ChannelParseError,
@@ -158,7 +159,12 @@ export function createDaemon(o: DaemonOptions): Daemon {
       );
   }
   type SessionGate = Pick<Gate, "check" | "head" | "anchor" | "release"> &
-    Partial<Pick<Gate, "recordParseRefusal" | "decisions" | "setReleaseAudit">>;
+    Partial<
+      Pick<
+        Gate,
+        "recordParseRefusal" | "decisions" | "evidence" | "recoverAnchor" | "setReleaseAudit"
+      >
+    >;
   // Check/release, head capture and audit append must stay together relative to witnessing.
   let gateWork: Promise<unknown> = Promise.resolve();
   function inGateOrder<T>(work: () => Promise<T>): Promise<T> {
@@ -191,9 +197,30 @@ export function createDaemon(o: DaemonOptions): Daemon {
   }
   async function reconcileGate(gate: SessionGate) {
     if (!gate.decisions) return;
-    const linked = o.audit.entries().findLast(({ record }) => record.type === "gate-decision");
-    const after = linked?.record.type === "gate-decision" ? linked.record.gateSeq : 0;
+    const after = o.audit
+      .entries()
+      .reduce((max, { record }) => Math.max(max, linkedGateHead(record)?.seq ?? 0), 0);
     for (const decision of gate.decisions(after)) await gateDecision(decision);
+  }
+  async function recoverGate(gate: SessionGate) {
+    if (gate.evidence) {
+      const entries = o.audit.entries();
+      const evidence = gate.evidence();
+      const verified = verifyLedger(entries, { ...evidence, allowUnwitnessedAnchors: true });
+      if (!verified.ok)
+        throw new Error(`Audit ledger ${verified.problem} at record ${verified.firstBadSeq}`);
+      const witnessed = new Set(evidence.witnessedHeads.map(({ seq, hash }) => `${seq}:${hash}`));
+      let recovered = false;
+      for (const { record } of entries) {
+        if (record.type !== "record-anchor" || witnessed.has(`${record.seq}:${record.hash}`))
+          continue;
+        if (!gate.recoverAnchor) throw new Error("Gate cannot recover the retained audit anchor");
+        await gate.recoverAnchor(record);
+        recovered = true;
+      }
+      if (recovered) await o.audit.sync();
+    }
+    await reconcileGate(gate);
   }
   async function recordGate(gate: SessionGate, fields: ReturnType<typeof inboundAuditDecision>) {
     if (gate.decisions) return reconcileGate(gate);
@@ -574,7 +601,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
       const gate = gateSession ?? o.gate;
       if (!("head" in gate && "anchor" in gate && "release" in gate))
         throw new Error("Missing gate record capability");
-      await inGateOrder(() => reconcileGate(gate));
+      await inGateOrder(() => recoverGate(gate));
       await o.workspace.initialize();
       recordingGate = gate;
       await o.workspace.introduce(o.agentWebId);

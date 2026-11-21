@@ -11,23 +11,24 @@ import {
   taskStatsCsv,
   taskStatsJson,
 } from "@jeswr/agent-audit";
-import {
-  MAX_RECORD_ANCHOR_BYTES,
-  verifyLedger as verifyAuditLedger,
-} from "@jeswr/agent-audit/verify";
+import { verifyLedger as verifyAuditLedger } from "@jeswr/agent-audit/verify";
 import { type Deps, login } from "@jeswr/agent-credentials";
 import type { ControlStore } from "@jeswr/agent-executor";
 import {
-  DEFAULT_LIMITS,
   type IntroductionCard,
   FileLedger as ReferenceLedger,
-  verifyCompact,
   verifyLedger as verifyGateLedger,
 } from "@jeswr/agent-reference";
 import { constants, existsSync } from "fs";
 import { open } from "fs/promises";
 import { join } from "path";
-import { installGateMandate, readGate, readGateStatus } from "./gate.js";
+import {
+  gateWitnesses,
+  installGateMandate,
+  readGate,
+  readGateStatus,
+  validAnchorSignature,
+} from "./gate.js";
 import { initGate, pinPeer } from "./gate-setup.js";
 import { installLaunchd } from "./launchd.js";
 import { type createLocalState, createProcessLease } from "./local.js";
@@ -222,36 +223,17 @@ async function auditLocal(
     return fail("gate identity mismatch");
   const gateEntries = new ReferenceLedger(join(directory, "ledger.jsonl")).entries();
   if (!verifyGateLedger(gateEntries).ok) return fail("gate ledger integrity failure");
-  const witnessedHeads = gateEntries.flatMap(({ record }) => {
-    if (record.type !== "record-anchor-receipt" || record.actor !== actor || record.party !== party)
-      return [];
-    const { seq, hash } = record;
-    if (
-      typeof seq !== "number" ||
-      !Number.isSafeInteger(seq) ||
-      seq <= 0 ||
-      typeof hash !== "string" ||
-      !/^sha-256:[0-9a-f]{64}$/.test(hash)
-    )
-      throw new Error("Invalid gate witness");
-    return [{ seq, hash }];
-  });
+  const witnessedHeads = gateWitnesses(gateEntries, stored.identity);
   const check = verifyAuditLedger(entries, { gateEntries, witnessedHeads });
   if (!check.ok) return fail(`${check.problem} at record ${check.firstBadSeq}`);
-  const { kid, alg, publicJwk } = stored.actorKey;
   for (const { seq, record } of entries) {
     if (record.type === "ledger-checkpoint") continue;
     if (record.agent !== actor || record.owner !== party)
       return fail(`identity mismatch at record ${seq}`);
     if (record.type !== "record-anchor") continue;
     // The schema checks the exact signed payload shape and its agreement with this row.
-    const result = await verifyCompact(record.jws, {
-      resolve: (id) => (id === kid ? { kid, alg, publicJwk } : undefined),
-      typ: "awp-record-anchor+jws",
-      allowedAlgs: ["EdDSA"],
-      limits: { ...DEFAULT_LIMITS, maxEnvelopeBytes: MAX_RECORD_ANCHOR_BYTES },
-    });
-    if (result.outcome !== "valid") return fail(`invalid anchor signature at record ${seq}`);
+    if (!(await validAnchorSignature(record.jws, stored.actorKey)))
+      return fail(`invalid anchor signature at record ${seq}`);
   }
   print("PASS");
   return 0;

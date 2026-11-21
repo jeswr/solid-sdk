@@ -1,5 +1,6 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 
 import { FileLedger as AuditFileLedger, MemoryLedger } from "@jeswr/agent-audit";
 import { type LedgerEntry, seal } from "@jeswr/agent-audit/verify";
@@ -14,7 +15,7 @@ import { craftSigned } from "@jeswr/agent-reference/scenarios/common";
 import { readLedgerSegment } from "@jeswr/agent-reference/store/ledger";
 import { mkdtemp, open, readdir, readFile, rm, stat, unlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
-import { join } from "path";
+import { dirname, join } from "path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { event } from "../../../packages/agent-channels/test/fixtures/matrix.js";
 import { readGateStatus } from "../src/gate.js";
@@ -412,7 +413,8 @@ it.each([
   }
   let failed = false;
   vi.mocked(open).mockImplementation(async (path, flags, mode) => {
-    if (failed && flags === "wx") throw new Error("cannot create another temporary file");
+    if (failed && flags === "wx" && typeof path === "string" && dirname(path) === o.directory)
+      throw new Error("cannot create another verdict temporary file");
     const handle = await fs.open(path, flags, mode);
     if (path === o.directory) {
       const record = JSON.parse(await fs.readFile(join(o.directory, `${base}.json`), "utf8"));
@@ -830,6 +832,25 @@ it("audits linked decisions, verifies the anchor, and detects an altered or trun
 
   const reopened = await daemon.openGate(o);
   try {
+    const anchored = (jws: string) =>
+      seal(terminal.seq + 1, terminal.at, terminal.hash, {
+        ...anchor.record,
+        id: "urn:anchor:orphan",
+        seq: terminal.seq,
+        hash: terminal.hash,
+        jws,
+      });
+    await expect(
+      reopened.anchor({ seq: terminal.seq, hash: terminal.hash }, async (jws) => {
+        await writeFile(auditPath, `${original}${JSON.stringify(anchored(jws))}\n`);
+        throw new Error("crashed before witnessing");
+      }),
+    ).rejects.toThrow("crashed before witnessing");
+    print.mockClear();
+    expect(await audit()).toBe(1);
+    expect(print).toHaveBeenCalledWith(
+      expect.stringContaining("anchor has no matching gate witness"),
+    );
     await reopened.anchor({ seq: terminal.seq, hash: terminal.hash });
   } finally {
     await reopened.close();

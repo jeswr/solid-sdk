@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { digestOf } from "@jeswr/agent-model/core/canonical";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -369,6 +370,23 @@ it("reports a gate decision that has no matching sequence and hash in the gate l
   );
 });
 
+it("checks the gate link carried by a pruning checkpoint", () => {
+  const first = seal(1, AT, GENESIS, gateDecision);
+  const lastPrunedGate = { seq: gateDecision.gateSeq, hash: gateDecision.gateHash };
+  const checkpoint = seal(2, AT, first.hash, {
+    type: "ledger-checkpoint",
+    lastPrunedSeq: first.seq,
+    lastPrunedHash: first.hash,
+    lastPrunedGate,
+  });
+  expect(verifyLedger([checkpoint], { gateEntries: [lastPrunedGate] }).ok).toBe(true);
+  expect(
+    verifyLedger([checkpoint], {
+      gateEntries: [{ ...lastPrunedGate, hash: digestOf("different fork") }],
+    }),
+  ).toMatchObject({ ok: false, problem: "gate record missing", firstBadSeq: 2 });
+});
+
 it("reports truncation before the latest witnessed head or its anchor", () => {
   const entries = activityFixture(3);
   const head = required(entries[2]);
@@ -391,7 +409,7 @@ it("reports truncation before the latest witnessed head or its anchor", () => {
   });
 });
 
-it("accepts a latest witness and its anchor pruned by a valid checkpoint", () => {
+it("rejects a checkpoint that replaces the latest witnessed anchor or its head", () => {
   const first = required(activityFixture(1)[0]);
   const anchored = seal(2, AT, first.hash, {
     ...anchor,
@@ -403,13 +421,42 @@ it("accepts a latest witness and its anchor pruned by a valid checkpoint", () =>
     lastPrunedSeq: anchored.seq,
     lastPrunedHash: anchored.hash,
   });
-  expect(verifyLedger([checkpoint], { witnessedHeads: [first] }).ok).toBe(true);
+  expect(verifyLedger([checkpoint], { witnessedHeads: [first] })).toMatchObject({
+    ok: false,
+    problem: "witnessed head missing or changed",
+  });
   const headOnly = seal(3, AT, anchored.hash, {
     type: "ledger-checkpoint",
     lastPrunedSeq: first.seq,
     lastPrunedHash: first.hash,
   });
-  expect(verifyLedger([anchored, headOnly], { witnessedHeads: [first] }).ok).toBe(true);
+  expect(verifyLedger([anchored, headOnly], { witnessedHeads: [first] }).ok).toBe(false);
+  const nextAnchor = seal(4, AT, headOnly.hash, {
+    ...anchor,
+    seq: headOnly.seq,
+    hash: headOnly.hash,
+    jws: witnessFixture(RECORD, headOnly),
+  });
+  const retained = [anchored, headOnly, nextAnchor];
+  expect(verifyLedger(retained, { witnessedHeads: [first, headOnly] }).ok).toBe(true);
+  expect(
+    verifyLedger(retained, {
+      witnessedHeads: [{ seq: first.seq, hash: DIGEST }, headOnly],
+    }),
+  ).toMatchObject({ ok: false, problem: "witnessed head missing or changed" });
+  expect(verifyLedger([first, ...retained], { witnessedHeads: [first, headOnly] }).ok).toBe(true);
+  const latest = seal(4, AT, checkpoint.hash, {
+    ...anchor,
+    seq: checkpoint.seq,
+    hash: checkpoint.hash,
+    jws: witnessFixture(RECORD, checkpoint),
+  });
+  expect(verifyLedger([checkpoint, latest], { witnessedHeads: [first, checkpoint] }).ok).toBe(true);
+  expect(verifyLedger([checkpoint, latest], { witnessedHeads: [checkpoint, first] }).ok).toBe(true);
+  expect(verifyLedger([checkpoint, latest], { witnessedHeads: [] })).toMatchObject({
+    ok: false,
+    problem: "anchor has no matching gate witness",
+  });
   expect(
     verifyLedger([anchored, headOnly], {
       witnessedHeads: [{ seq: first.seq, hash: DIGEST }],

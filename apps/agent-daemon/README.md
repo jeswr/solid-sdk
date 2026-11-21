@@ -241,19 +241,25 @@ the gate seals the message and records those verdicts in agent-audit. The
 ### Verify the linked audit ledgers
 
 Every completed check and release leaves a body-free decision in the reference
-ledger. Startup and account processing reconcile missing suite decisions from
-these rows before any new model calls or sends. A retry of a decision uses the
-same audit ID, derived from the reference sequence and hash.
+ledger. The gate stages completed decisions so it can recover across a crash
+between the verdict or release receipt and the reference state checkpoint.
+Startup verifies the suite's retained decision links and pruning checkpoints
+against the recovered gate ledger. Startup and account processing reconcile
+missing suite decisions from that verified progress before new model calls or
+sends. A retry of a decision uses the same audit ID, derived from the reference
+sequence and hash.
 The heartbeat and shutdown seal each changed suite head with an EdDSA receipt.
-The suite writes the local anchor before the gate persists its witness. Startup
-rejects WebIDs that would put a signed receipt over the 4 KiB limit.
+The suite writes the local anchor before the gate persists its witness. If a
+crash interrupts that sequence, startup checks the signature and witnesses the
+anchor's exact head before dispatch. Startup rejects WebIDs that would put a
+signed receipt over the 4 KiB limit.
 
 Run `awp audit --ledger <events.jsonl>` against the local audit file with the paired
 gate configured. The offline command checks both chains, looks up decision links,
-verifies retained anchor signatures and checks for each witness's audit head and
-anchor, including evidence covered by a retention checkpoint. It reports a
-missing witnessed head or anchor as a breach. Truncation of the unwitnessed tail
-after the latest witness cannot be detected.
+verifies retained anchor signatures and requires a matching witness for each
+retained anchor. It requires both the latest witnessed head and its anchor in
+the suite ledger. A valid retention checkpoint can cover older witnesses.
+Truncation of the unwitnessed tail after the latest witness cannot be detected.
 
 ## Runtime memory
 

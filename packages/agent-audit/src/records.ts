@@ -265,6 +265,7 @@ const checkpointSchema = z.strictObject({
   type: z.literal("ledger-checkpoint"),
   lastPrunedSeq: count.min(1),
   lastPrunedHash: digestSchema,
+  lastPrunedGate: z.strictObject({ seq: count.min(1), hash: digestSchema }).optional(),
 });
 export const ledgerRecordSchema = z.union([auditRecordSchema, checkpointSchema]);
 // Preserve optional property reads across kinds while keeping each kind's fields closed.
@@ -276,6 +277,10 @@ type AuditFields<T> = T extends unknown
 export type AuditRecord = AuditFields<AuditVariant>;
 export type AuditTerms = z.infer<typeof termsSchema>;
 export type LedgerRecord = AuditRecord | z.infer<typeof checkpointSchema>;
+export function linkedGateHead(record: LedgerRecord): { seq: number; hash: string } | undefined {
+  if (record.type === "ledger-checkpoint") return record.lastPrunedGate;
+  if (record.type === "gate-decision") return { seq: record.gateSeq, hash: record.gateHash };
+}
 export const GENESIS = "sha-256:genesis";
 /** Maximum published sequence the pod reader and mirror can process. */
 export const MAX_AUDIT_SEQ = 200000;

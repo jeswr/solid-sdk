@@ -9,7 +9,7 @@ import * as execution from "@jeswr/agent-executor";
 import { createMemoryStores } from "@jeswr/agent-executor/testing";
 import { AGENT, issueApproval, solidOdrlEngine, verifyApproval } from "@jeswr/agent-mandate";
 import { type ActionProposal, canonicalJson, digestBytes } from "@jeswr/agent-model";
-import { CONFIG_ED25519, saveAgent } from "@jeswr/agent-reference";
+import { AgentRuntime, CONFIG_ED25519, saveAgent } from "@jeswr/agent-reference";
 import {
   SCHEDULE_OP,
   SchedulingHandler,
@@ -426,6 +426,37 @@ it("rechecks a previously released proposal after a deny-all mandate is installe
     await expect(f.project()).rejects.toMatchObject({ reason });
     expect(f.stores.entries.size).toBe(0);
     expect(f.verify).not.toHaveBeenCalled();
+  } finally {
+    await f.close();
+  }
+});
+
+it("recovers the decision for a committed release interrupted before its gate decision append", async () => {
+  const f = await fixture();
+  try {
+    const commit = AgentRuntime.prototype.commitBindingEvent;
+    const interrupt = vi.spyOn(AgentRuntime.prototype, "commitBindingEvent");
+    interrupt.mockImplementation(function (this: AgentRuntime, record) {
+      if (record.type === "suite-gate-decision" && record.direction === "out")
+        return Promise.reject(new Error("crashed after the release receipt"));
+      return commit.call(this, record);
+    });
+    try {
+      await expect(f.project()).rejects.toThrow("crashed after the release receipt");
+      expect(f.stores.entries.size).toBe(0);
+    } finally {
+      interrupt.mockRestore();
+    }
+    const reopened = await f.reopen();
+    const decisions = () => reopened.decisions(0).filter(({ direction }) => direction === "out");
+    expect(decisions()).toMatchObject([{ outcome: "go", reason: "go" }]);
+    const entry = await f.project();
+    expect(decisions()).toMatchObject([
+      {
+        outcome: "go",
+        messageDigest: digestBytes(entry.renderable.compactJws),
+      },
+    ]);
   } finally {
     await f.close();
   }
