@@ -4,10 +4,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readInbox, type InboxNotification } from "@/lib/inbox";
 import { activityLabel, notificationTitle, hostOf, formatPublished } from "@/lib/inbox-display";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  Skeleton,
+} from "@jeswr/suite-ui";
 import { AlertCircle, ArrowUpRight, Bell, Inbox as InboxIcon, RefreshCw } from "lucide-react";
 
 /**

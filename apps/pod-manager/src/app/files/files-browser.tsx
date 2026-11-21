@@ -28,7 +28,9 @@ import { FileRow } from "@/components/file-row";
 import { FileToolbar, uploadMany } from "@/components/file-actions";
 import { EmptyState, ErrorState } from "@/components/states";
 import { ItemRowSkeleton } from "@/components/item-row";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Skeleton,
+} from "@jeswr/suite-ui";
 
 export function FilesBrowser() {
   // useSearchParams needs a Suspense boundary under `output: export`.

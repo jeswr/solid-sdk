@@ -28,9 +28,14 @@ import {
   describeModes,
   type CategoryAccess,
 } from "@/lib/permissions";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Skeleton,
+} from "@jeswr/suite-ui";
 
 export default function ConnectedAppPage() {
   // useSearchParams requires a Suspense boundary in a prerendered page.

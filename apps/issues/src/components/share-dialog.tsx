@@ -8,22 +8,20 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { removeAccess } from "@/lib/sharing";
 import { assignRole, listRoleAssignments, ROLES, ROLE_PRESETS, type Role, type RoleAssignment } from "@/lib/roles";
 import {
+  Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@jeswr/suite-ui";
 import { AlertCircle, Loader2, Trash2, UserPlus } from "lucide-react";
 import { PersonAvatar, PersonName } from "@/components/person";
 
@@ -125,7 +123,7 @@ export function ShareDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg sm:w-lg!">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

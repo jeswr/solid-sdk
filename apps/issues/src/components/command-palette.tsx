@@ -7,7 +7,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
+} from "@jeswr/suite-ui";
 import type { ReactNode } from "react";
 
 export interface PaletteCommand {
@@ -33,7 +33,13 @@ export function CommandPalette({
   groups: PaletteGroup[];
 }) {
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange} title="Command palette" description="Search actions and views">
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Command palette"
+      description="Search actions and views"
+      showCloseButton={false}
+    >
       <CommandInput placeholder="Type a command or view…" />
       <CommandList>
         <CommandEmpty>No matching commands.</CommandEmpty>

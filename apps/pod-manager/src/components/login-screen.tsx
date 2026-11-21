@@ -14,7 +14,9 @@ import "./sign-in-theme.css";
 import { useSession } from "@/components/session-provider";
 import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Button } from "@/components/ui/button";
+import {
+  Button,
+} from "@jeswr/suite-ui";
 import { allowInsecureLoopback } from "@/lib/auth-environment";
 
 export function signInProviders(): SignInProvider[] {

@@ -15,8 +15,10 @@ import { bookmarksStore, bookmarkHost, type Bookmark } from "@/lib/bookmarks";
 import { useStore, useItems } from "@/components/use-productivity";
 import { EmptyState, ErrorState } from "@/components/states";
 import { ItemRowSkeleton } from "@/components/item-row";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import {
+  Badge,
+  Button,
+} from "@jeswr/suite-ui";
 import { safeLinkHref } from "@/lib/pod-scope";
 import type { StoredItem } from "@/lib/productivity-store";
 

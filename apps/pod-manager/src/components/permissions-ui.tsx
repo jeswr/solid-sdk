@@ -5,7 +5,9 @@
  * badges and category phrasing (DESIGN.md §6 — no jargon, ever).
  */
 import { ExternalLink } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import {
+  Badge,
+} from "@jeswr/suite-ui";
 import { safeLinkHref } from "@/lib/pod-scope";
 import type { AccessMode } from "@/lib/permissions";
 import type { ConnectedApp } from "@/components/use-permissions";

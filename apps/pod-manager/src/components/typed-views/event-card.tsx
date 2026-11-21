@@ -11,7 +11,10 @@
  */
 import { CalendarDays, MapPin } from "lucide-react";
 import type { CalendarEventItem, EventModel } from "@/lib/typed-views/event-view";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+} from "@jeswr/suite-ui";
 import { SourceActionButton } from "@/components/typed-views/source-action";
 
 /** The event-card list for an events resource. */

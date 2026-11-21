@@ -3,7 +3,9 @@ import { ChevronRight, Folder, FileText } from "lucide-react";
 import type { PodItem } from "@/lib/pod-data";
 import { chooseViewer, viewerKindLabel } from "@/lib/viewers";
 import { formatBytes, formatModified } from "@/lib/format";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Skeleton,
+} from "@jeswr/suite-ui";
 
 /** One item row in a category list — links to the item detail view. */
 export function ItemRow({ item, categoryId }: { item: PodItem; categoryId: string }) {
