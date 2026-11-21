@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 // The Explore view: configuration bar, chat, stage, inspector, timeline, player. Classic script.
 (function () {
   'use strict';
@@ -607,10 +608,13 @@
     cap.textContent = displayText(e.caption);
     var raw = root.querySelector('#raw');
     raw.hidden = S.level !== 'raw';
-    if (S.level === 'raw') raw.textContent = JSON.stringify(e, null, 2);
+    if (S.level === 'raw') raw.innerHTML = AX.highlight(JSON.stringify(e, null, 2), 'json');
   }
 
   // ---- Inspector ----------------------------------------------------------
+  function codeBlock(text, lang, rdf) {
+    return '<pre class="json' + (rdf ? ' rdf-doc' : '') + '"><code>' + AX.highlight(text, lang) + '</code></pre>';
+  }
   function refsHtml(refs) {
     if (!refs || !refs.length) return '';
     return '<dl class="kv"><dt>Spec layers exercised</dt><dd><ul class="refs">' + refs.map(function (r) {
@@ -649,7 +653,7 @@
     }
     h += '</div>';
     if (form === 'jsonld') {
-      h += '<pre class="json rdf-doc">' + esc(invalidJson ? doc : JSON.stringify(doc, null, 2)) + '</pre>';
+      h += codeBlock(invalidJson ? doc : JSON.stringify(doc, null, 2), 'jsonld', true);
       if (ctx !== undefined) {
         h += '<p class="rdf-note">' + (S.rdfContext
           ? 'The context maps each short name to a full term. It is pinned: the gate never fetches it.'
@@ -657,7 +661,7 @@
           ' <button type="button" class="linkish" data-rdf-context="1">' + (S.rdfContext ? 'Hide context' : 'Show context') + '</button></p>';
       }
     } else {
-      h += '<pre class="json rdf-doc">' + esc(text) + '</pre><p class="rdf-note">The same graph, written out in full.</p>';
+      h += codeBlock(text, 'rdf', true) + '<p class="rdf-note">The same graph, written out in full.</p>';
     }
     return h + '</div>';
   }
@@ -668,7 +672,7 @@
     h += '<p class="msg-meta"><code>' + esc(p.id) + '</code> <span class="kind-chip">' + esc(p.kind) + '</span> ' + esc(sender) + ' to ' + esc(receiver) + '</p>';
     h += rdfHtml(p);
     if (p.attachments && p.attachments.length) {
-      h += '<details class="layer present"><summary>Attachments</summary><pre class="json">' + esc(JSON.stringify(p.attachments, null, 2)) + '</pre></details>';
+      h += '<details class="layer present"><summary>Attachments</summary>' + codeBlock(JSON.stringify(p.attachments, null, 2)) + '</details>';
     }
     h += '<div class="layer carriage"><div class="layer-head"><span class="ln">Carriage</span><span class="lstate untrusted">Never trusted</span></div><p>' + esc(AX.suiteName('transport', p.carriage.suite) + '. ' + displayText(p.carriage.summary)) + '</p></div>';
     h += '<div class="signed"><div class="signed-label">Signed by ' + esc(sender) + '</div>';
@@ -680,7 +684,7 @@
       if (lv.present && lv.raw !== undefined) {
         h += '<details class="' + cls + '"><summary class="layer-head">' + head + '</summary>' + body +
           '<p class="read-by">Read by: ' + esc(ml.readBy) + '</p>' +
-          '<pre class="json">' + esc(JSON.stringify(lv.raw, null, 2)) + '</pre>' + (lv.digest ? '<p class="digest"><code>' + esc(lv.digest) + '</code></p>' : '') + '</details>';
+          codeBlock(JSON.stringify(lv.raw, null, 2)) + (lv.digest ? '<p class="digest"><code>' + esc(lv.digest) + '</code></p>' : '') + '</details>';
       } else {
         h += '<div class="' + cls + '"><div class="layer-head">' + head + '</div>' + body + '</div>';
       }
@@ -698,8 +702,11 @@
     if (objects.length) h += '<p class="settle-sub">What was sent, in this protocol\'s own form</p>';
     objects.forEach(function (o) {
       h += '<details class="layer present"><summary class="layer-head"><span class="ln">' + esc(o.name) + '</span><span class="lstate">' + esc(o.form || '') + '</span></summary>';
-      if (o.shown !== undefined) h += '<pre class="json">' + esc(show(o.shown)) + '</pre>';
-      if (o.raw !== undefined) h += '<details class="as-sent"><summary>As sent</summary><pre class="json">' + esc(show(o.raw)) + '</pre></details>';
+      if (o.shown !== undefined) h += codeBlock(show(o.shown));
+      if (o.raw !== undefined) {
+        const lang = typeof o.raw === 'string' && /^HTTP\b/.test(o.form) ? 'http' : undefined;
+        h += '<details class="as-sent"><summary>As sent</summary>' + codeBlock(show(o.raw), lang) + '</details>';
+      }
       h += '</details>';
     });
     if (s.note) h += '<p class="rdf-note">' + esc(s.note) + '</p>';
@@ -708,10 +715,11 @@
       h += '<p class="settle-sub">What the gate read from it and checked</p>';
       if (Array.isArray(facts) && facts.length && facts.every(function (f) { return f && typeof f === 'object' && f.value !== undefined; })) {
         h += '<dl class="kv facts">' + facts.map(function (f) {
-          return '<dt>' + esc(f.label || f.name || f.term || '') + '</dt><dd>' + esc(show(f.value)) + (f.from ? '<div class="rule-id">from <code>' + esc(f.from) + '</code></div>' : '') + '</dd>';
+          var value = f.value && typeof f.value === 'object' ? codeBlock(show(f.value)) : esc(show(f.value));
+          return '<dt>' + esc(f.label || f.name || f.term || '') + '</dt><dd>' + value + (f.from ? '<div class="rule-id">from <code>' + esc(f.from) + '</code></div>' : '') + '</dd>';
         }).join('') + '</dl>';
       } else {
-        h += '<pre class="json rdf-doc">' + esc(show(facts)) + '</pre>';
+        h += codeBlock(show(facts), undefined, true);
       }
       h += '<p class="rdf-note">These terms are the same whichever way of settling is chosen, and the same checks run on them.</p>';
     }
@@ -784,7 +792,7 @@
       h += '<section class="part-info"><h3>' + esc(part ? part.name : e.part) + '</h3><p>' + esc(part ? part.summary : '') + '</p>';
       if (e.rule) h += '<dl class="kv"><dt>Rule</dt><dd>' + esc(displayText(e.rule.text)) + '<div class="rule-id"><code>' + esc(e.rule.id) + '</code></div></dd></dl>';
       if (e.chat) h += '<dl class="kv"><dt>In the chat</dt><dd>' + esc(displayText(e.chat.text)) + '</dd></dl>';
-      if (e.fact) h += '<details class="layer present fact"><summary class="layer-head"><span class="ln">Fact stored</span><span class="lstate">' + esc(e.fact.claimType || '') + '</span></summary><pre class="json">' + esc(JSON.stringify(e.fact, null, 2)) + '</pre></details>';
+      if (e.fact) h += '<details class="layer present fact"><summary class="layer-head"><span class="ln">Fact stored</span><span class="lstate">' + esc(e.fact.claimType || '') + '</span></summary>' + codeBlock(JSON.stringify(e.fact, null, 2)) + '</details>';
       h += refsHtml(e.refs) + '</section>';
     } else if (e.packet) {
       h += refsHtml(e.refs);

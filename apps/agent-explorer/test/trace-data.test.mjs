@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -12,6 +13,7 @@ import traceData from '../js/trace-data.js';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const util = readFileSync(new URL('../js/util.js', import.meta.url), 'utf8');
+const highlighter = readFileSync(new URL('../js/highlight.js', import.meta.url), 'utf8');
 const model = JSON.parse(readFileSync(new URL('../data/model.json', import.meta.url), 'utf8'));
 
 async function fixture() {
@@ -42,6 +44,7 @@ function browser(fetch, data) {
   window.self = window.top = window;
   const context = vm.createContext({ window, fetch, location: { hash: '#/start' }, history: {}, Map });
   vm.runInContext(util, context);
+  vm.runInContext(highlighter, context);
   return { AX: window.AX, index, context, window };
 }
 
@@ -119,7 +122,7 @@ test('overview views render from the index without fetching event data', () => {
   } };
   window.self = window.top = window;
   const context = vm.createContext({ window, fetch: () => { throw new Error('overview fetched a trace'); }, location: { hash: '#/start' }, history: {} });
-  for (const file of ['util', 'markdown', 'diagram', 'views', 'requirements', 'specs', 'start']) {
+  for (const file of ['util', 'highlight', 'markdown', 'diagram', 'views', 'requirements', 'specs', 'start']) {
     vm.runInContext(readFileSync(root + 'js/' + file + '.js', 'utf8'), context);
   }
   const AX = window.AX;
@@ -310,12 +313,23 @@ test('Explore uses one step count, shows recorded branch decisions and keeps the
   assert.match(stage, /id="ax-packet"[^]*?<rect x="-11" y="-8"/);
 
   const inspector = node('#inspector');
-  assert.match(inspector.innerHTML, /<pre class="json rdf-doc">\{\n {2}&quot;id&quot;/);
+  assert.match(inspector.innerHTML, /<pre class="json rdf-doc"><code><span class="tok-punctuation">\{<\/span>\n {2}<span class="tok-key">&quot;id&quot;<\/span>/);
   assert.doesNotMatch(inspector.innerHTML, /&quot;@context&quot;/);
   assert.ok(inspector.innerHTML.includes('<code>' + digest + '</code>'));
   inspector.click({ target: { closest: (selector) => selector === '[data-rdf-context]' ? {} : null } });
-  assert.match(inspector.innerHTML, /<pre class="json rdf-doc">\{\n {2}&quot;@context&quot;/);
-  assert.equal(typeof E.state.trace.events.find((e) => e.seq === 81).packet.jsonld, 'string');
+  assert.match(inspector.innerHTML, /<pre class="json rdf-doc"><code><span class="tok-punctuation">\{<\/span>\n {2}<span class="tok-keyword">&quot;@context&quot;<\/span>/);
+  const event = E.state.trace.events.find((e) => e.seq === 81);
+  const stripTokens = (html) => html.replace(/<span class="tok-[a-z-]+">([^<>]*)<\/span>/g, '$1');
+  const linkedDataHtml = () => inspector.innerHTML.match(/<pre class="json rdf-doc"><code>([\s\S]*?)<\/code><\/pre>/)[1];
+  assert.equal(stripTokens(linkedDataHtml()), setup.AX.esc(JSON.stringify(JSON.parse(event.packet.jsonld), null, 2)));
+  inspector.click({ target: { closest: (selector) => selector === '[data-rdf-form]' ? { dataset: { rdfForm: 'text' } } : null } });
+  assert.match(linkedDataHtml(), /<span class="tok-iri">/);
+  assert.equal(stripTokens(linkedDataHtml()), setup.AX.esc(event.packet.rdf));
+
+  await E.apply({ scenario: 'mortgage-main', seq: 81, level: 'raw' });
+  assert.equal(node('#raw').hidden, false);
+  assert.match(node('#raw').innerHTML, /<span class="tok-key">/);
+  assert.equal(stripTokens(node('#raw').innerHTML), setup.AX.esc(JSON.stringify(event, null, 2)));
 
   node('.stage').clientWidth = 360;
   E.rerender();

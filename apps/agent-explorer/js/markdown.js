@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2 Sol
 // A small Markdown renderer for the Specifications view. No dependency. All text is escaped.
 // Supports: ATX headings with ids, paragraphs, bold, italic, inline code, links, autolinks,
 // ordered/unordered/nested lists, fenced code, tables, blockquotes, horizontal rules.
@@ -87,7 +88,7 @@
         i++;
         while (i < lines.length && lines[i].trim().indexOf(marker) !== 0) { code.push(lines[i]); i++; }
         i++;
-        out += '<pre><code' + (lang ? ' data-lang="' + esc(lang) + '"' : '') + '>' + esc(code.join('\n')) + '</code></pre>';
+        out += '<pre><code' + (lang ? ' data-lang="' + esc(lang) + '"' : '') + '>' + AX.highlight(code.join('\n'), lang || 'text') + '</code></pre>';
         continue;
       }
       if ((m = line.match(RE.heading))) {
