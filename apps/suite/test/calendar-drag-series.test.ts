@@ -412,6 +412,7 @@ it.each([
       ? { kind: "update", url, etag: '"e1"', data: plan.original }
       : { kind: "delete", url, etag: '"e1"' },
     { current: undefined },
+    { mode, action: "edit" },
   );
   expect(calls.map(([name]) => name)).toEqual(["resolve"]);
   expect(release).toHaveBeenCalledOnce();
@@ -449,4 +450,18 @@ it("accepts durable success without a preview", async () => {
     mutations: mutations({ compound: async () => true }).value,
     replacement: { current: undefined },
   });
+});
+
+it("keeps compatibility with a compound adapter that declines journal ownership", async () => {
+  const { value, calls } = mutations({ compound: async () => false });
+  await applySeriesPlan({
+    plan: { created: series, original: null },
+    source,
+    mode: "following",
+    target: work,
+    mutations: value,
+    replacement: { current: undefined },
+    newId: counter(),
+  });
+  expect(calls.map(([name]) => name)).toEqual(["resolve", "create", "resolve", "delete"]);
 });

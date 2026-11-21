@@ -198,6 +198,7 @@ export interface SeriesMutations {
         created: Extract<EventWrite, { kind: "create" }>,
         original: Exclude<EventWrite, { kind: "create" }>,
         replacement: SeriesReplacement,
+        operation: { mode: SeriesMode; action: "edit" | "delete" },
       ) => Promise<boolean>)
     | undefined;
   resolve(url: string, etag: string | null, requireConfirmation?: boolean): Promise<string>;
@@ -287,6 +288,7 @@ export async function applySeriesPlan({
           ? { kind: "update", url: source.url, data: plan.original, etag }
           : { kind: "delete", url: source.url, etag },
         replacement,
+        { mode, action: "edit" },
       );
       if (handled) {
         release?.();

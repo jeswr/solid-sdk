@@ -6,7 +6,11 @@ export default defineConfig({
     globals: false,
     setupFiles: ['./test/setup.ts'],
     coverage: {
+      enabled: true,
       provider: 'v8',
+      thresholds: {
+        'src/journal.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
+      },
       reporter: ['text', 'json-summary'],
       include: ['src/**/*.ts'],
       // Worker + page-client wiring depends on real ServiceWorker / page globals

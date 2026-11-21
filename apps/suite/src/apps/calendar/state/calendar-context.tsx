@@ -15,8 +15,10 @@ import {
   useState,
 } from "react";
 import { type PodSession, usePodSessionState } from "@/lib/session/pod-session";
+import { useConnectionState } from "@/shell/sync/connection-state";
 import { type CalendarEvent, expandEvent, validateEvent } from "../lib/model";
 import { eventDocument } from "./editing";
+import { intentsKey } from "./intents";
 import { createEventOutbox } from "./outbox";
 import {
   compareOccurrences,
@@ -84,6 +86,7 @@ function SessionCalendarProvider({
   session: PodSession;
   children: ReactNode;
 }) {
+  const connection = useConnectionState();
   const [calendars, setCalendars] = useState<CalendarsState>({ status: "loading" });
   const [prefs, updatePrefs] = useState<Preferences>({ hidden: [], view: "week", weekStart: 1 });
   const [revision, setRevision] = useState(0);
@@ -154,7 +157,7 @@ function SessionCalendarProvider({
     return () => {
       live = false;
     };
-  }, [session, revision]);
+  }, [session, revision, connection]);
   const mutate = useMemo(
     () =>
       eventMutations(
@@ -205,7 +208,11 @@ function SessionCalendarProvider({
           eventDocument(write.url, session.storageUrl, current.calendars);
           if (write.kind !== "delete") validateEvent(write.data);
         },
-        { ...session, warn: (message) => toast.error(message) },
+        {
+          ...session,
+          warn: (message) => toast.error(message),
+          notice: (message) => toast(message),
+        },
       ),
     [session, mutate],
   );
@@ -216,10 +223,19 @@ function SessionCalendarProvider({
     const retry = () => {
       void outbox.flush();
     };
-    retry();
+    if (connection === "online") retry();
     addEventListener("online", retry);
-    return () => removeEventListener("online", retry);
-  }, [outbox, ready]);
+    const unsubscribe = session.subscribe(retry);
+    const sync = (event: StorageEvent) => {
+      if (event.key?.startsWith(intentsKey(session.webId, session.storageUrl))) retry();
+    };
+    addEventListener("storage", sync);
+    return () => {
+      unsubscribe();
+      removeEventListener("online", retry);
+      removeEventListener("storage", sync);
+    };
+  }, [outbox, ready, connection, session]);
   const create = useCallback(
     async (title: string, colour: string) => {
       try {
@@ -336,7 +352,10 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   if (state.status === "error")
     return <ErrorState error="unreachable" actions={{ retry: () => location.reload() }} />;
   return (
-    <SessionCalendarProvider key={state.session.webId} session={state.session}>
+    <SessionCalendarProvider
+      key={JSON.stringify([state.session.webId, state.session.storageUrl])}
+      session={state.session}
+    >
       {children}
     </SessionCalendarProvider>
   );
