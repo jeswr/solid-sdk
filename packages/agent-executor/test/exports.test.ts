@@ -33,9 +33,11 @@ it.each(entries)("resolves the %s public API", (subpath, target) => {
     subpath === "."
       ? [
           "MAX_TRANSMISSION_ATTEMPTS",
+          "ProposalRefusedError",
           "createExecutor",
           "createFileTransmissionStore",
           "createHaltFileCheck",
+          "createOutboxProjector",
           "proposalApprovalTerms",
           "proposalTermsDigest",
         ]

@@ -12,6 +12,7 @@ export {
   type GateOutcome,
   type GateVerdict,
   type InboundGatePort,
+  type OutboundMapping,
   openGate,
 } from "./gate.js";
 export { initGate, pinPeer } from "./gate-setup.js";

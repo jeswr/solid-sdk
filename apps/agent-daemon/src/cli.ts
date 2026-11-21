@@ -17,7 +17,7 @@ import type { IntroductionCard } from "@jeswr/agent-reference";
 import { constants, existsSync } from "fs";
 import { open } from "fs/promises";
 import { join } from "path";
-import { readGateStatus } from "./gate.js";
+import { installGateMandate, readGateStatus } from "./gate.js";
 import { initGate, pinPeer } from "./gate-setup.js";
 import { installLaunchd } from "./launchd.js";
 import { type createLocalState, createProcessLease } from "./local.js";
@@ -112,7 +112,8 @@ export function createCliHost(o: CliHostOptions): CliHost {
 const usage =
   "Usage: awp run | once | halt | resume | status | accounts | login <profile> | stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv] | audit <artifact> [--at <instant>] | install-launchd | gate";
 const statsUsage = "Usage: awp stats [--ledger <events.jsonl>] [--task <id>] [--format json|csv]";
-const gateUsage = "Usage: awp gate init --owner-dir <dir> | pin <card.json> | status";
+const gateUsage =
+  "Usage: awp gate init --owner-dir <dir> | pin <card.json> | mandate <mandate.jws> | status";
 const compositionRequired = "awp requires a trusted composition module (Node --import)";
 
 async function readCard(path: string): Promise<IntroductionCard> {
@@ -155,6 +156,16 @@ function gateCommand(options: NonNullable<CliHostOptions["gate"]>): NonNullable<
           print: (line) => io.print(line),
         });
         io.print(pinned ? "Peer pinned" : "cancelled");
+        return 0;
+      }
+      if (operation === "mandate" && value && args.length === 2) {
+        release = await createProcessLease(options.stateDirectory).acquire();
+        await installGateMandate({
+          directory,
+          path: value,
+          identity: { actor: options.agentWebId, party: options.ownerWebId },
+        });
+        io.print("Gate mandate installed");
         return 0;
       }
       io.print(gateUsage);

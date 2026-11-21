@@ -12,6 +12,14 @@ const resultSchema = z.strictObject({
       return record;
     }),
   ),
+  refused: z
+    .array(
+      z.strictObject({
+        id: z.string(),
+        reason: z.string().min(1).max(1024),
+      }),
+    )
+    .optional(),
   calls: z.array(
     z.strictObject({
       id: z.string(),

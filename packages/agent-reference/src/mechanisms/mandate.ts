@@ -287,6 +287,12 @@ export function actionDigest(intent: ActionIntent): string {
 
 export const NO_MANDATE_GRANT = "no applicable grant in the mandate (deny by default)";
 
+export function mandateWindowFailure(mandate: OwnerMandate, at: string): string | undefined {
+  const now = Date.parse(at);
+  if (now < Date.parse(mandate.validFrom)) return "mandate-invalid: not yet valid";
+  if (now >= Date.parse(mandate.validUntil)) return "mandate-invalid: expired";
+}
+
 export interface EvaluateInput {
   readonly loaded: (Pick<LoadedMandate, "mandate" | "digest"> & Partial<LoadedMandate>) | undefined;
   readonly loadFailure?: string;
@@ -331,13 +337,8 @@ export function evaluateIntent(input: EvaluateInput): AuthorisationDecision {
   }
   if (input.withdrawn) return { ...base, outcome: "deny", reason: "mandate-withdrawn" };
   const m = input.loaded.mandate;
-  const now = Date.parse(input.at);
-  if (now < Date.parse(m.validFrom)) {
-    return { ...base, outcome: "deny", reason: "mandate-invalid: not yet valid" };
-  }
-  if (now >= Date.parse(m.validUntil)) {
-    return { ...base, outcome: "deny", reason: "mandate-invalid: expired" };
-  }
+  const windowFailure = mandateWindowFailure(m, input.at);
+  if (windowFailure) return { ...base, outcome: "deny", reason: windowFailure };
   const issues = [
     ...subsetIssues(m.autonomous, "autonomous"),
     ...subsetIssues(m.withApproval, "withApproval"),

@@ -15,7 +15,13 @@ import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import type { OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, MASTODON_FOOTER } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
-import type { AccountRef, RenderableProposal, Wire } from "../types.js";
+import type {
+  AccountRef,
+  EnvelopeVerifier,
+  ProposalContext,
+  RenderableProposal,
+  Wire,
+} from "../types.js";
 import {
   DEFAULT_INSTANCE,
   id,
@@ -35,7 +41,7 @@ export interface MastodonSendOptions {
   /** Trusted actor -> one Mastodon acct; never resolved from inbound or model-supplied mentions. */
   readonly recipients: ReadonlyMap<string, string>;
   /** Pure local verifier checking the pinned sender key and intended audience. */
-  readonly verify: (compactJws: string) => Promise<unknown>;
+  readonly verify: EnvelopeVerifier;
   /** Executor verifies current owner approval bound to the complete wire and sender account. */
   readonly verifyApproval: (wire: Wire, account: AccountRef) => Promise<boolean>;
   readonly now?: () => number;
@@ -80,14 +86,18 @@ export function createMastodonSend(
     )
       throw new ChannelParseError("Mastodon proposal is expired or not yet valid");
   }
-  const render: NonNullable<ChannelBinding["send"]>["render"] = async (proposal, carriage) => {
+  const render: NonNullable<ChannelBinding["send"]>["render"] = async (
+    proposal,
+    carriage,
+    context,
+  ) => {
     if (canonicalJson(carriage) !== canonicalJson(MASTODON_FOOTER))
       throw new ChannelParseError("unsupported Mastodon carriage");
     const compactJws = proposal.compactJws;
     const decoded = decode(compactJws);
     assertJsonBounds(proposal.message);
     const proposed = canonicalJson(proposal.message);
-    const payload = await verify(compactJws);
+    const payload = await verify(compactJws, context);
     assertJsonBounds(payload);
     const checked = validateMessage(payload);
     if (
@@ -125,21 +135,25 @@ export function createMastodonSend(
       throw new ChannelParseError("invalid Mastodon wire");
     return Object.freeze(wire);
   }
-  async function checked(input: Wire) {
+  async function checked(input: Wire, context: ProposalContext | undefined) {
     const wire = snapshot(input);
     const plan = record(parseBoundedJson(wire.bytes, WIRE_LIMITS));
     const proposal = decode(plan.compactJws as string);
-    if ((await render(proposal, MASTODON_FOOTER)).bytes !== wire.bytes)
+    if ((await render(proposal, MASTODON_FOOTER, context)).bytes !== wire.bytes)
       throw new ChannelParseError("Mastodon wire differs from signed proposal");
     return { wire, proposal, body: canonicalJson(record(plan.request)) };
   }
   return {
     render,
-    async validate(wire, proposal) {
+    async validate(wire, proposal, context) {
       try {
         const actual = snapshot(wire);
         const compactJws = proposal.compactJws;
-        const expected = await render({ message: proposal.message, compactJws }, MASTODON_FOOTER);
+        const expected = await render(
+          { message: proposal.message, compactJws },
+          MASTODON_FOOTER,
+          context,
+        );
         current(decode(compactJws));
         return actual.bytes === expected.bytes
           ? { ok: true }
@@ -153,7 +167,7 @@ export function createMastodonSend(
         if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
         if (accountId(io.account) !== account.id)
           throw new ProviderRejectedError("Mastodon account differs from configured sender");
-        const { wire, proposal, body } = await checked(input);
+        const { wire, proposal, body } = await checked(input, io.expected);
         current(proposal);
         const response = await rest(
           "/api/v1/statuses",

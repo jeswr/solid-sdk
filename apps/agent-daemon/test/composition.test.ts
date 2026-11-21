@@ -74,7 +74,7 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
           },
         },
         isFlagged: async () => false,
-        proposalWritten: vi.fn(),
+        project: vi.fn(),
         audit: { append: vi.fn(), entries: () => [], sync: vi.fn() },
       } satisfies Omit<DaemonOptions, "workspace" | "notifications" | "ownerWebId">;
     },
