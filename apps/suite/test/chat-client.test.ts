@@ -40,7 +40,10 @@ afterEach(() => {
 it("creates, joins, lists and leaves rooms without touching their contents", async () => {
   expect(await client.joinedRooms()).toEqual([]);
   await client.leave(`${ROOT}chat/rooms/absent/`);
-  const room = await client.createRoom({ name: "Café & books", members: [BOB] });
+  const { invitations: _invitations, ...room } = await client.createRoom({
+    name: "Café & books",
+    members: [BOB],
+  });
   expect(room).toMatchObject({
     name: "Café & books",
     url: `${ROOT}chat/rooms/cafe-books/`,
@@ -255,7 +258,7 @@ it("deduplicates direct rooms regardless of member order and respects broken row
   const dm = await client.createDirect(BOB);
   expect(dm.url).toMatch(/\/dm-[a-f\d]{16}\/$/);
   expect(dm).toMatchObject({ name: "", isDirect: true, members: [ME, BOB] });
-  expect(await client.createDirect(BOB)).toEqual(dm);
+  expect(await client.createDirect(BOB)).toEqual({ ...dm, invitations: [] });
   expect((await client.joinedRooms()).length).toBe(3);
   await expect(client.createDirect(ME)).rejects.toMatchObject({ code: "invalid-input" });
   const reserved = await client.createRoom({ name: "dm-0123456789abcdef", members: [BOB] });
@@ -469,7 +472,8 @@ it("concurrent clients converge on one deterministic DM, even before the winning
   vi.useRealTimers();
   const second = new ChatClient(pod.fetch, ROOT, ME);
   const [a, b] = await Promise.all([client.createDirect(BOB), second.createDirect(BOB)]);
-  expect(a).toEqual(b);
+  expect({ ...a, invitations: [] }).toEqual({ ...b, invitations: [] });
+  expect([a, b].filter((room) => room.invitations.length)).toHaveLength(1);
   expect(pod.snapshot().containers.filter(([url]) => /\/dm-[a-f\d]+\/$/.test(url))).toHaveLength(1);
   expect((await client.joinedRooms()).map((room) => room.url)).toEqual([a.url]);
 });

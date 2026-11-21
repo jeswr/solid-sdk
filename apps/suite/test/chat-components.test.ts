@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -8,6 +9,8 @@ import { PreferencesStore } from "../src/apps/chat/lib/client/preferences-store"
 import { ChatProvider, type ChatSession, useChat } from "../src/apps/chat/state/chat-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { encodeIdentifierRef, encodeRef } from "../src/lib/refs";
+import { AccountsContext } from "../src/shell/session/accounts-context";
+import type { AccountsContextValue } from "../src/shell/session/accounts-provider";
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
@@ -822,4 +825,179 @@ it("opens a room with no invitees immediately instead of showing the invite step
     `/chat/r/${encodeRef(`${ROOT}chat/rooms/just-me/`)}`,
   );
   expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Invite people");
+});
+
+it.each([
+  true,
+  false,
+])("offers a Copy link fallback only for failed members within this pod: %s", async (samePod) => {
+  const { toast } = await import("@jeswr/suite-ui");
+  const pod = createDemoPod({ root: ROOT });
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  const clipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  vi.stubGlobal("location", new URL("https://suite.example/"));
+  try {
+    await mount(h(ChatProvider, { session: session(pod), children: h(NewRoomPage) }));
+    await fill(
+      document.querySelector('input[placeholder="e.g. Book club"]') as HTMLInputElement,
+      "Invited room",
+    );
+    await fill(
+      document.querySelector('[role="combobox"]') as HTMLInputElement,
+      samePod ? `${ROOT}bob/profile#me` : "https://bob.example.org/profile/card#me",
+    );
+    await click(document.querySelector(".su-picker-input button") as HTMLElement);
+    await click(document.querySelector('button[type="submit"]') as HTMLElement);
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Invite people");
+    const notice = toast.getHistory().at(-1);
+    if (!notice || !("title" in notice)) throw new Error("Missing delivery notice");
+    const title = typeof notice.title === "function" ? notice.title() : notice.title;
+    expect(renderToStaticMarkup(h("div", null, title))).toContain(
+      samePod ? "notify 1 member. Share the invite link instead." : "notify 1 member.",
+    );
+    if (!samePod) {
+      expect(notice.action).toBeUndefined();
+      expect(renderToStaticMarkup(h("div", null, title))).not.toContain("Share the invite link");
+      return;
+    }
+    const action = notice?.action;
+    if (!action || typeof action !== "object" || !("onClick" in action))
+      throw new Error("Missing toast action");
+    expect(action.label).toBe("Copy link");
+    await act(() =>
+      action.onClick({ defaultPrevented: false } as Parameters<typeof action.onClick>[0]),
+    );
+    expect(writeText).toHaveBeenCalledWith(
+      `https://suite.example/chat/r/${encodeRef(`${ROOT}chat/rooms/invited-room/`)}`,
+    );
+  } finally {
+    if (clipboard) Object.defineProperty(navigator, "clipboard", clipboard);
+    else Reflect.deleteProperty(navigator, "clipboard");
+    Reflect.deleteProperty(globalThis, "location");
+  }
+});
+
+it("lets room creation and failure notices finish after unmount, and fences late navigation", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const pending = deferred<Awaited<ReturnType<ChatClient["createRoom"]>>>();
+  const create = vi.spyOn(ChatClient.prototype, "createRoom").mockReturnValue(pending.promise);
+  const view = await mount(h(ChatProvider, { session: session(pod), children: h(NewRoomPage) }));
+  await fill(
+    document.querySelector('input[placeholder="e.g. Book club"]') as HTMLInputElement,
+    "Late room",
+  );
+  await click(document.querySelector('button[type="submit"]') as HTMLElement);
+  const signal = create.mock.calls[0]?.[0].signal;
+  expect(signal?.aborted).toBe(false);
+  await view.unmount();
+  expect(signal?.aborted).toBe(false);
+  await act(() =>
+    pending.resolve({
+      url: ROOM,
+      name: "Late room",
+      members: [ME],
+      creator: ME,
+      created: undefined,
+      isDirect: false,
+      invitations: [{ webId: "https://foreign.example/#me", delivered: false }],
+    }),
+  );
+  const { toast } = await import("@jeswr/suite-ui");
+  const notice = toast.getHistory().at(-1);
+  if (!notice || !("title" in notice)) throw new Error("Missing detached delivery notice");
+  const title = typeof notice.title === "function" ? notice.title() : notice.title;
+  expect(renderToStaticMarkup(h("div", null, title))).toContain("notify 1 member.");
+  expect(routing.replace).not.toHaveBeenCalled();
+});
+
+it("opens an existing room outside chat/rooms/<slug>/ in the user's pod", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const url = `${ROOT}notes/long-chat/`;
+  const room = vi.spyOn(ChatClient.prototype, "room").mockResolvedValue({
+    url,
+    name: "Long chat",
+    members: [ME],
+    creator: ME,
+    created: undefined,
+    isDirect: false,
+  });
+  const view = await mount(
+    h(ChatProvider, {
+      session: session(pod),
+      children: h(RoomRoute, { reference: encodeRef(url) }),
+    }),
+  );
+  expect(view.host.textContent).not.toContain("This room link isn't valid");
+  expect(view.host.querySelector("h1")?.textContent).toBe("Long chat");
+  expect(room).toHaveBeenCalledWith(url);
+  await view.render(
+    h(ChatProvider, {
+      session: session(pod),
+      children: h(RoomRoute, { reference: encodeRef(`${url}?q=1`) }),
+    }),
+  );
+  expect(view.host.textContent).toContain("This room link isn't valid");
+});
+
+it("tells a non-member why Join is unavailable", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const owner = new ChatClient(pod.fetch, ROOT, "https://bob.example/#me");
+  const room = await owner.createRoom({ name: "Members only", members: [] });
+  // The demo pod's storage is shared, so leave the owner's joined list to view as a stranger.
+  await owner.leave(room.url);
+  const view = await mount(
+    h(ChatProvider, { session: session(pod), children: h(RoomView, { url: room.url }) }),
+  );
+  const prompt = view.host.querySelector(".chat-join") as HTMLElement;
+  expect(prompt.textContent).toContain(
+    "You can't join because this account is not a member of this room. Ask the room creator to add you.",
+  );
+  expect(prompt.textContent).not.toContain("Join this conversation");
+  expect(prompt.querySelector("button")?.disabled).toBe(true);
+});
+
+it.each([
+  [true, 1],
+  [false, 0],
+])("shows a creation's delivery notice only while the same account is active (%s)", async (same, notices) => {
+  const pod = createDemoPod({ root: ROOT });
+  const pending = deferred<Awaited<ReturnType<ChatClient["createRoom"]>>>();
+  vi.spyOn(ChatClient.prototype, "createRoom").mockReturnValue(pending.promise);
+  let active = true;
+  const isActiveAccount = vi.fn(() => active);
+  const accounts = {
+    active: { id: "alice" },
+    sessionVersion: 7,
+    isActiveAccount,
+  } as unknown as AccountsContextValue;
+  const view = await mount(
+    h(
+      AccountsContext,
+      { value: accounts },
+      h(ChatProvider, { session: session(pod), children: h(NewRoomPage) }),
+    ),
+  );
+  await fill(
+    document.querySelector('input[placeholder="e.g. Book club"]') as HTMLInputElement,
+    "Switched room",
+  );
+  await click(document.querySelector('button[type="submit"]') as HTMLElement);
+  await view.unmount();
+  active = same;
+  const { toast } = await import("@jeswr/suite-ui");
+  const before = toast.getHistory().length;
+  await act(() =>
+    pending.resolve({
+      url: ROOM,
+      name: "Switched room",
+      members: [ME],
+      creator: ME,
+      created: undefined,
+      isDirect: false,
+      invitations: [{ webId: "https://foreign.example/#me", delivered: false }],
+    }),
+  );
+  expect(toast.getHistory().length - before).toBe(notices);
+  expect(isActiveAccount).toHaveBeenCalledWith("alice", 7);
 });

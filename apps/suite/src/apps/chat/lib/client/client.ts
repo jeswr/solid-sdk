@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import {
@@ -8,6 +9,7 @@ import {
   isWithinPodScope,
   refuseRedirects,
 } from "@jeswr/guarded-fetch";
+import { createInboxReader, withAbortSignal } from "@jeswr/pod-access/notify";
 import { encodeRef } from "../../../../lib/refs";
 import {
   ChatIoError,
@@ -48,6 +50,13 @@ import {
   type SearchSnippet,
 } from "../search";
 import { aggregateReactions, type ReactionSummary } from "../timeline";
+import {
+  deliverInvitations,
+  type Invitation,
+  type InvitationDelivery,
+  type InvitationRoomCache,
+  readInvitations,
+} from "./invitations";
 import { PreferencesStore } from "./preferences-store";
 
 export interface Room {
@@ -58,6 +67,9 @@ export interface Room {
   created: string | undefined;
   isDirect: boolean;
   lastActivity?: Date;
+}
+export interface CreatedRoom extends Room {
+  invitations: InvitationDelivery[];
 }
 export type JoinedRoom = Room | { url: string; error: unknown };
 export interface Message extends ChatMessage {
@@ -152,17 +164,28 @@ export class ChatClient {
   private readonly known = new Map<string, Message>();
   private readonly profiles = new Map<string, Promise<string>>();
   private readonly resolvedNames = new Map<string, string>();
+  private invitationSignal = new AbortController().signal;
+  private invitationQueue: Promise<unknown> = Promise.resolve();
+  private invitationScan:
+    | { controller: AbortController; callers: number; pending: Promise<Invitation[]> }
+    | undefined;
+  private readonly invitationRooms: InvitationRoomCache = new Map();
+  private readonly inboxReader;
   private joinedCache: JoinedRoom[] | undefined;
   constructor(
-    fetch: typeof globalThis.fetch,
+    private readonly sessionFetch: typeof globalThis.fetch,
     readonly storageUrl: string,
     readonly webId: string,
     private readonly publicFetch: typeof globalThis.fetch = globalThis.fetch,
     displayName?: string,
   ) {
     this.fetch = createPodScopedFetch(roomContainer(storageUrl), {
-      fetch: refuseRedirects(fetch),
+      fetch: refuseRedirects(sessionFetch),
       maxRedirects: 0,
+    });
+    this.inboxReader = createInboxReader({
+      fetch: withAbortSignal(sessionFetch, () => this.invitationSignal),
+      maxItems: 100,
     });
     httpIri(webId);
     this.preferences = new PreferencesStore(this.fetch, storageUrl);
@@ -493,10 +516,103 @@ export class ChatClient {
       await copyMessageTask(this.fetch, this.storageUrl, this.webId, message, task);
     }
   }
-  async createRoom({ name, members }: { name: string; members: readonly string[] }): Promise<Room> {
+  /**
+   * Sidebar and drawer copies share one in-flight scan. Each caller keeps its own cancellation;
+   * the scan is aborted only once every caller has left. Scans run one at a time, so a scan's
+   * discovery requests never run under a later scan's signal.
+   */
+  invitations({ signal }: { signal?: AbortSignal | undefined } = {}): Promise<Invitation[]> {
+    if (signal?.aborted) return Promise.reject(signal.reason);
+    let scan = this.invitationScan;
+    if (!scan) {
+      const controller = new AbortController();
+      const read = () => {
+        this.invitationSignal = controller.signal;
+        return readInvitations({
+          reader: this.inboxReader,
+          joinedFetch: this.fetch,
+          storage: this.storageUrl,
+          webId: this.webId,
+          signal: controller.signal,
+          loadRoom: (url, signal) => this.room(url, { signal }),
+          cache: this.invitationRooms,
+        });
+      };
+      const pending = this.invitationQueue.then(read, read);
+      this.invitationQueue = pending;
+      const current = { controller, callers: 0, pending };
+      pending.then(
+        () => this.endScan(current),
+        () => this.endScan(current),
+      );
+      this.invitationScan = scan = current;
+    }
+    const shared = scan;
+    shared.callers++;
+    return new Promise<Invitation[]>((resolve, reject) => {
+      let left = false;
+      const leave = () => {
+        left = true;
+        signal?.removeEventListener("abort", abort);
+        shared.callers--;
+      };
+      const abort = () => {
+        leave();
+        if (shared.callers === 0) {
+          shared.controller.abort();
+          this.endScan(shared);
+        }
+        reject((signal as AbortSignal).reason);
+      };
+      signal?.addEventListener("abort", abort, { once: true });
+      // Settling an already rejected caller is a no-op; only its count must not drop twice.
+      const settle = () => {
+        if (!left) leave();
+      };
+      shared.pending.then(
+        (value) => {
+          settle();
+          resolve(value);
+        },
+        (error: unknown) => {
+          settle();
+          reject(error);
+        },
+      );
+    });
+  }
+  private endScan(scan: NonNullable<ChatClient["invitationScan"]>) {
+    if (this.invitationScan === scan) this.invitationScan = undefined;
+  }
+
+  private async invited(room: Room, signal?: AbortSignal): Promise<CreatedRoom> {
+    return {
+      ...room,
+      invitations: await deliverInvitations(
+        this.sessionFetch,
+        this.webId,
+        room,
+        this.resolvedNames.get(this.webId) ?? this.webId,
+        signal,
+      ),
+    };
+  }
+  async createRoom({
+    name,
+    members,
+    signal,
+  }: {
+    name: string;
+    members: readonly string[];
+    signal?: AbortSignal;
+  }): Promise<CreatedRoom> {
+    signal?.throwIfAborted();
     const base = slug(name);
     // Deterministic DM addresses are reserved: a named room never occupies one.
-    return this.create(/^dm-[a-f\d]{16}$/.test(base) ? `${base}-room` : base, name, members);
+    return this.invited(
+      await this.create(/^dm-[a-f\d]{16}$/.test(base) ? `${base}-room` : base, name, members),
+      signal,
+    );
   }
   private async create(baseSlug: string, name: string, members: readonly string[]): Promise<Room> {
     for (let suffix = 1; ; suffix++) {
@@ -522,7 +638,11 @@ export class ChatClient {
       );
     }
   }
-  async createDirect(webId: string): Promise<Room> {
+  async createDirect(
+    webId: string,
+    { signal }: { signal?: AbortSignal } = {},
+  ): Promise<CreatedRoom> {
+    signal?.throwIfAborted();
     httpIri(webId);
     const people = [...new Set([this.webId, webId])].sort();
     if (people.length !== 2) throw new ChatModelError("invalid-input");
@@ -532,7 +652,7 @@ export class ChatClient {
         room.isDirect &&
         people.every((person) => room.members.includes(person)),
     );
-    if (existing) return existing as Room;
+    if (existing) return { ...(existing as Room), invitations: [] };
     const digest = await crypto.subtle.digest(
       "SHA-256",
       new TextEncoder().encode(JSON.stringify(people)),
@@ -544,6 +664,8 @@ export class ChatClient {
     const candidate = `dm-${hash}`;
     const url = `${roomContainer(this.storageUrl)}chat/rooms/${candidate}/`;
     let room: Room;
+    let created = false;
+    signal?.throwIfAborted();
     try {
       const document = await createModelRoom(this.fetch, this.storageUrl, candidate, {
         name: "",
@@ -551,6 +673,7 @@ export class ChatClient {
         creator: this.webId,
         created: new Date(),
       });
+      created = true;
       room = roomResult(
         url,
         readRoom(url, document.dataset) as NonNullable<ReturnType<typeof readRoom>>,
@@ -570,13 +693,14 @@ export class ChatClient {
         );
         const resumed = readRoom(url, document.dataset);
         if (!resumed) throw failure;
+        created = true;
         return roomResult(url, resumed);
       });
       if (!room.isDirect || !people.every((person) => room.members.includes(person)))
         throw new ChatClientError("direct-room-collision");
     }
     await this.join(url);
-    return room;
+    return created ? this.invited(room, signal) : { ...room, invitations: [] };
   }
   private async directWinner(url: string): Promise<Room> {
     // The container is claimed before its ACL/index are written. Give the winner

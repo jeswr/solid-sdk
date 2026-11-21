@@ -15,7 +15,7 @@ import {
 import type { PodSession } from "@/lib/session/pod-session";
 import { ChatClient, classifyChatError, type JoinedRoom, type Message } from "../lib/client";
 import type { ReadPreferences } from "../lib/model";
-import { ChatLocalState } from "./local-state";
+import { ChatLocalState, INVITATIONS_JOINED } from "./local-state";
 import { ChatOutbox, type Outgoing } from "./outbox";
 
 export type { Outgoing } from "./outbox";
@@ -304,6 +304,9 @@ export function useChatActions() {
       retry: invalidate,
       async join(url: string) {
         await client.join(url);
+        window.dispatchEvent(
+          new CustomEvent(INVITATIONS_JOINED, { detail: { webId: client.webId } }),
+        );
         invalidate();
       },
       async leave(url: string) {

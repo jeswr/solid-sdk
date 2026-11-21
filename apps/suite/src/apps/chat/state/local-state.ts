@@ -1,6 +1,13 @@
 // AUTHORED-BY Codex GPT-6
+import { createAccountIdSet } from "@/lib/account-id-set";
 
 const PREFIX = "solid-suite:chat:v1:";
+export const INVITATIONS_JOINED = "chat-invitations-joined";
+export const DISMISSALS_CHANGED = "chat-invitation-dismissals-changed";
+export const invitationDismissalKey = (webId: string) =>
+  `${PREFIX}invitation-dismissals:${JSON.stringify([webId])}`;
+export const invitationDismissals = (webId: string) =>
+  createAccountIdSet(invitationDismissalKey(webId), webId, 200);
 type Kind = "outbox" | "draft";
 const keyFor = (kind: Kind, webId: string, room: string) =>
   `${PREFIX}${kind}:${JSON.stringify([webId, room])}`;

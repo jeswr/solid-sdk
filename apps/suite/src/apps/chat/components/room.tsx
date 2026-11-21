@@ -268,6 +268,22 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
         <IconButton label="Copy invite link" variant="ghost" onClick={copy}>
           <Copy size={18} aria-hidden="true" />
         </IconButton>
+        {isJoined && (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              void actions
+                .leave(url)
+                .catch(() => toast.error("Couldn't leave this room"))
+                .finally(() => setBusy(false));
+            }}
+          >
+            Leave room
+          </Button>
+        )}
         <IconButton
           label={details ? "Hide details" : "Show details"}
           variant="ghost"
@@ -314,12 +330,16 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
       ) : !isJoined || !member ? (
         <div className="chat-join">
           <p>
-            {isJoined
-              ? "This account is not a member. Ask the room creator for posting access."
+            {!member
+              ? isJoined
+                ? "This account is not a member. Ask the room creator for posting access."
+                : "You can't join because this account is not a member of this room. Ask the room creator to add you."
               : "Join this conversation to keep it in your room list."}
           </p>
           <Button
-            disabled={busy || isJoined || joined.status !== "ready"}
+            disabled={
+              busy || isJoined || joined.status !== "ready" || room.status !== "ready" || !member
+            }
             onClick={() => {
               setBusy(true);
               void actions
@@ -409,6 +429,8 @@ function RoomRouteContent({ reference }: { reference: string }) {
   let url: string;
   let messageId: string | undefined;
   try {
+    // Ordinary room links keep the pod-scope check below; only inbox Offers use the stricter
+    // chat/rooms/<slug>/ normaliser, so existing rooms elsewhere in the pod still open.
     url = roomContainer(decodeRef(reference));
   } catch {
     return (

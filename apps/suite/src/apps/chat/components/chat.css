@@ -145,6 +145,21 @@
 .chat-room-link[aria-current="page"] {
   background: var(--app-chat-soft);
 }
+.chat-invitation {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow-wrap: anywhere;
+}
+.chat-invitation .chat-room-link {
+  padding: 0;
+}
+.chat-invitation button {
+  justify-self: start;
+}
 .chat-room-label {
   flex: 1;
   min-width: 0;
@@ -464,6 +479,9 @@
   font-size: var(--text-xs);
   line-height: var(--lh-xs);
   color: var(--foreground-muted);
+}
+.chat-invitation .chat-hint {
+  margin: 0;
 }
 .chat-editing {
   display: flex;

@@ -1,9 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { mkdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import AxeBuilder from "@axe-core/playwright";
+import { roomInvitation } from "@jeswr/pod-access/notify";
 import { expect, type Page, type TestInfo, test } from "@playwright/test";
+// solid-agent-notify is pod-access's transport; its activity module has no demo-pod imports.
+import {
+  buildActivity,
+  serializeTurtle,
+} from "../../../../packages/solid-agent-notify/src/activity";
+import { seedDemoSession } from "../demo-session";
 
 const BOB = "https://bob.example.org/profile/card#me";
 test.use({ locale: "en" });
@@ -26,6 +34,7 @@ test.beforeEach(async ({ page }) => {
     });
   });
   await page.unroute("**/__chat-test-reset");
+  await seedDemoSession(page);
   // Observe clipboard writes without requiring a platform clipboard in CI.
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
@@ -278,4 +287,54 @@ test("keeps offline sends queued and supports multiline text and the edit shortc
   await composer.press("Shift+Enter");
   await composer.press("L");
   await expect(composer).toHaveValue("Line one\nL");
+});
+
+// The demo has one user and an LDN inbox. Seed an Offer through its fixture fetch;
+// Cross-user delivery remains tracked in the two-user CSS work (sst-rn91).
+test("demo inbox offers open, join and disappear after leaving through the UI", async ({
+  page,
+}) => {
+  await createRoom(page, "Invited book club");
+  const roomUrl = page.url();
+  await page.getByRole("button", { name: "Leave room", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Join room", exact: true })).toBeEnabled();
+  const root = "https://alice.demo.pod/";
+  const room = `${root}chat/rooms/invited-book-club/`;
+  // pod-access's Offer, serialised by solid-agent-notify's typed builder and Turtle writer.
+  const offer = roomInvitation(room);
+  if (offer.type !== "Offer") throw new Error("roomInvitation must build an Offer");
+  const body = await serializeTurtle(
+    buildActivity({ ...offer, type: offer.type, actor: `${root}profile/card#me` }),
+  );
+  await page.evaluate(
+    async ({ root, body }) => {
+      const pod = window.__suiteDemoPod;
+      if (!pod) throw new Error("Demo pod fixture is unavailable");
+      const posted = await pod.fetch(`${root}inbox/`, {
+        method: "POST",
+        headers: { "content-type": "text/turtle" },
+        body,
+      });
+      if (!posted.ok) throw new Error("Demo inbox refused the fixture Offer");
+    },
+    { root, body },
+  );
+  await page.goto("/chat");
+  if ((page.viewportSize()?.width ?? 1280) < 1024)
+    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+  const invitations = page.getByRole("region", { name: "Invitations", exact: true });
+  await expect(
+    invitations.getByRole("link", { name: "Invited book club", exact: true }),
+  ).toHaveAttribute("href", new URL(roomUrl).pathname);
+  await expect(invitations).toContainText("Invitation claims to be from alice.demo.pod");
+  await invitations.getByRole("link").click();
+  await page.getByRole("button", { name: "Join room", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "Message", exact: true })).toBeEnabled();
+  if ((page.viewportSize()?.width ?? 1280) < 1024)
+    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+  await expect(invitations).toBeHidden();
+  await page.reload();
+  if ((page.viewportSize()?.width ?? 1280) < 1024)
+    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+  await expect(invitations).toBeHidden();
 });

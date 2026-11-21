@@ -11,6 +11,12 @@ for AS2 and LongChat messages. No hooks, React, shell or suite-sdk imports.
   `as:Collection`, `vcard:hasMember`; reads legacy `pc:participant` and
   `as:attributedTo` membership too. `joinRoom` / `saveJoinedRoom` only update
   the caller's `chat/rooms.ttl#it` collection; they confer no remote access.
+- `invitationRoom(value, storage?)`: wraps `apps/suite/src/lib/chat-invitation-room.ts`, the
+  one HTTP(S) Offer target normaliser the shell tray imports directly (so the shell does not
+  load this model), throwing `ChatModelError("invalid-input")`. Accept only `chat/rooms/<slug>/` or its canonical `index.ttl#it` subject;
+  reject queries, fragments on containers and non-room paths. With storage supplied,
+  own-pod rooms must be directly under that storage's `chat/rooms/` directory. Ordinary room
+  links use `roomContainer`, not this normaliser.
 - `dayUrl`, `dayPage`: UTC `yyyy/mm/dd.ttl`, inclusive backwards date cursor,
   explicit lower bound and bounded number of days. Missing days are empty;
   errors other than 404 propagate. Each returned document keeps its validator.
