@@ -1706,3 +1706,39 @@ package at its literal import path. Biome and the agent layer guard passed.
 The RDF pipeline reported zero failures and 216 existing allowances.
 `generate-traces.mjs` also wrote all five reference traces with their tables
 in a disposable directory.
+
+## Review 40r10 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The projection escapes percent signs and additional fragment delimiters in
+every IRI fragment. Separate views rooted at `#entry#two` and `#entry%23two`
+produce distinct RDF identifiers and recorder keys. JSON-LD carries each
+`rdf:JSON` value as a typed string with the stored lexical form. The
+quad-for-quad test covers nested key order and unpaired surrogates.
+
+The grant-lift event links the sealed grant entry returned by the runtime
+append. The provider settlement event links the transfer selected by the
+receipt's ledger reference. The payment test reconstructs the transfer from
+its RDF view and verifies the digest against the receipt. The grant test
+compares the event's sequence, caption and fact with the committed trace.
+
+The scenario runner replaces matching manifest rows in place. The manifest
+matches `origin/main` byte for byte. Disposable hand runs of `age-check`,
+`mortgage-core` and the mortgage baseline configuration each kept those
+manifest bytes. The no-trace-change guard now compares the rows in order
+and passed for all five paths in its two scenarios with and without the
+sample shared tables.
+
+The Node 24 library compile, schema check, typecheck and Biome error check
+passed. All 75 focused engine tests passed, including the linked-switch byte
+comparisons and the six joint-recording digest checks. All 57 explorer tests
+passed on the committed corpus and again with four hand-run traces and their
+shared tables in a disposable copy. The bundle copied both sample tables
+byte for byte. The tracked traces and outlines match their original bytes.
+
+Fresh-process checks also matched the committed trace bytes for the grant
+and payment runs after removing the linked fields. Repeating `pay-an-invoice`
+in one process varies three existing packets. The same variation reproduced
+on the starting commit `e3796a576` with linked views off. The linked run's
+stripped bytes matched the corresponding repeated switch-off run exactly.

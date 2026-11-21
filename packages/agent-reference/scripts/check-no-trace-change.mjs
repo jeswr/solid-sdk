@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { spawnSync } from "child_process";
 import {
@@ -90,7 +91,7 @@ try {
   const { paths: oldPaths, ...oldMeta } = before;
   const { paths: newPaths, ...newMeta } = after;
   compare(manifestFile + " metadata", newMeta, oldMeta);
-  compare(manifestFile + " paths", multiset(newPaths), multiset(oldPaths));
+  compare(`${manifestFile} paths and order`, newPaths, oldPaths);
   compare(indexFile, multiset(json(copy, indexFile)), multiset(json(root, indexFile)));
 
   for (const dir of ["traces", "outlines"]) {

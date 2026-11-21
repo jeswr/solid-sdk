@@ -1,13 +1,15 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 import type { DatasetCore, Quad } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import jsonld from "jsonld";
 import { DataFactory, Store } from "n3";
-import { scopedId } from "../model/named-values.js";
+import { XSD } from "../model/named-values.js";
+import { RDF_TYPE } from "../model/store/common.js";
 import { AWP, ODRL, PROV, SCHEMA } from "../profile/vocabulary.js";
 import { ODRL_CONTEXT } from "./contexts.js";
 import { STORE_CONTEXT, storeJsonLdLoader } from "./store-contexts.js";
-import { writeNQuads } from "./store-quads.js";
+import { readNQuads, writeNQuads } from "./store-quads.js";
 
 const prefixes = {
   awp: AWP,
@@ -19,6 +21,20 @@ const prefixes = {
   rdfs: "http://www.w3.org/2000/01/rdf-schema#",
   xsd: "http://www.w3.org/2001/XMLSchema#",
 };
+
+type NamedNode = Extract<Quad["subject"], { termType: "NamedNode" }>;
+
+// Strict JSON-LD readers reject a second '#'. Escaping '%' in every fragment
+// makes the mapping reversible even when two identifiers occur in different views.
+function displayIri(term: NamedNode): NamedNode {
+  const split = term.value.indexOf("#");
+  if (split === -1) return term;
+  const fragment = term.value.slice(split + 1);
+  const escaped = fragment.replaceAll("%", "%25").replaceAll("#", "%23");
+  return escaped === fragment
+    ? term
+    : DataFactory.namedNode(term.value.slice(0, split + 1) + escaped);
+}
 
 /** Include all quads reachable from the root, independent of their source graph. */
 export function storeProjection(dataset: DatasetCore, root: string): Store {
@@ -34,7 +50,11 @@ export function storeProjection(dataset: DatasetCore, root: string): Store {
   const pending = [root];
   for (const id of pending) {
     for (const { subject, predicate, object } of subjects.get(id) ?? []) {
-      projected.addQuad(subject, predicate, object);
+      projected.addQuad(
+        subject.termType === "NamedNode" ? displayIri(subject) : subject,
+        predicate.termType === "NamedNode" ? displayIri(predicate) : predicate,
+        object.termType === "NamedNode" ? displayIri(object) : object,
+      );
       if (
         object.termType === "NamedNode" &&
         subjects.has(object.value) &&
@@ -45,38 +65,38 @@ export function storeProjection(dataset: DatasetCore, root: string): Store {
       }
     }
   }
-  // Some held rule ids append a second '#' to a vocabulary IRI. Escape it in the
-  // display graph so strict JSON-LD readers retain the node and its links.
-  const terms = new Set<string>();
-  for (const { subject, predicate, object } of projected) {
-    terms.add(subject.value);
-    terms.add(predicate.value);
-    if (object.termType === "NamedNode") terms.add(object.value);
+  return projected;
+}
+
+/** Expand the named store graph while preserving every literal's lexical form. */
+function expandedStore(projected: Store): jsonld.NodeObject[] {
+  const nodes = new Map<
+    string,
+    Record<string, (string | jsonld.NodeObject | jsonld.ValueObject)[]>
+  >();
+  // Use the same canonical quad order as the recorder fingerprint. fromRDF turns
+  // rdf:JSON literals into @json values, which a reader would then canonicalize again.
+  for (const { subject, predicate, object } of readNQuads(writeNQuads(projected))) {
+    const node = nodes.get(subject.value) ?? {};
+    nodes.set(subject.value, node);
+    const isType = predicate.value === RDF_TYPE && object.termType === "NamedNode";
+    const property = isType ? "@type" : predicate.value;
+    const values = node[property] ?? [];
+    node[property] = values;
+    if (object.termType === "NamedNode") {
+      values.push(isType ? object.value : { "@id": object.value });
+    } else if (object.termType === "Literal") {
+      values.push({
+        "@value": object.value,
+        ...(object.language
+          ? { "@language": object.language }
+          : object.datatype.value === `${XSD}string`
+            ? {}
+            : { "@type": object.datatype.value }),
+      });
+    }
   }
-  const aliases = new Map<string, string>();
-  for (const iri of [...terms].sort()) {
-    const fragment = iri.indexOf("#");
-    if (fragment < 0 || !iri.includes("#", fragment + 1)) continue;
-    const escaped = iri.slice(0, fragment + 1) + iri.slice(fragment + 1).replaceAll("#", "%23");
-    let id = escaped;
-    while (terms.has(id)) id = scopedId(id, iri);
-    terms.add(id);
-    aliases.set(iri, id);
-  }
-  if (!aliases.size) return projected;
-  type NamedNode = Extract<Quad["subject"], { termType: "NamedNode" }>;
-  const rename = (term: NamedNode): NamedNode => {
-    const id = aliases.get(term.value);
-    return id === undefined ? term : DataFactory.namedNode(id);
-  };
-  const display = new Store();
-  for (const { subject, predicate, object } of projected)
-    display.addQuad(
-      subject.termType === "NamedNode" ? rename(subject) : subject,
-      predicate.termType === "NamedNode" ? rename(predicate) : predicate,
-      object.termType === "NamedNode" ? rename(object) : object,
-    );
-  return display;
+  return Array.from(nodes, ([id, node]) => ({ "@id": id, ...node }));
 }
 
 export interface LinkedStoreView<Kind extends string = string> {
@@ -108,9 +128,8 @@ export async function linkedViewOfProjection<Kind extends string>(
   // The store context already aliases credential terms such as issuer. Adding the
   // VC context can redefine protected terms such as kid. Other terms keep their IRIs.
   const context = uses(prefixes.odrl) ? [ODRL_CONTEXT, STORE_CONTEXT] : STORE_CONTEXT;
-  const expanded = await jsonld.fromRDF(writeNQuads(projected), { format: "application/n-quads" });
   const compacted = await jsonld.compact(
-    expanded,
+    expandedStore(projected),
     context as unknown as NonNullable<Parameters<typeof jsonld.compact>[1]>,
     { documentLoader: storeJsonLdLoader },
   );

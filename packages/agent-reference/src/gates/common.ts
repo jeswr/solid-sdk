@@ -8,9 +8,11 @@
  */
 import type { OdrlRule } from "@jeswr/solid-odrl";
 import type { Iri } from "../core/types.js";
+import type { LoadedMandate } from "../mechanisms/mandate.js";
 import { vocabularyLabel } from "../model/labels.js";
 import { alternativeWireId } from "../profile/configurations.js";
 import { type ContentVocabulary, identifiersIn } from "../profile/content.js";
+import type { LedgerEntry } from "../store/ledger.js";
 import type { Configuration, LayerId } from "../suites/registry.js";
 import { trustLinks } from "../trace/linked.js";
 import type { Namer } from "../trace/packet.js";
@@ -309,6 +311,7 @@ export interface GateContext {
     readonly load?: (
       jws: string,
     ) => ReturnType<typeof import("../mechanisms/mandate.js").loadMandate>;
+    readonly onGrantRecorded?: (loaded: LoadedMandate, entry: LedgerEntry) => void;
     readonly check: (
       jws: string | undefined,
       actor: string,

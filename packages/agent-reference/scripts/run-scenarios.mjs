@@ -164,14 +164,24 @@ for (const file of readdirSync(join(root, "scenarios"))
     writeFileSync(join(root, "scenarios", file), `${JSON.stringify(original, null, 2)}\n`);
   }
 }
-if (selected)
-  status.paths.push(
-    ...previous.filter(
-      (p) =>
-        p.scenario !== selected ||
-        (selectedConfiguration && (p.configuration ?? "baseline") !== selectedConfiguration),
-    ),
-  );
+if (selected) {
+  // Replace existing rows in place and append newly discovered paths.
+  const configurationOf = (row) => row.configuration ?? "baseline";
+  const keyOf = (row) => JSON.stringify([configurationOf(row), row.path]);
+  const updates = new Map(status.paths.map((row) => [keyOf(row), row]));
+  status.paths = previous.flatMap((row) => {
+    if (
+      row.scenario !== selected ||
+      (selectedConfiguration && configurationOf(row) !== selectedConfiguration)
+    )
+      return [row];
+    const key = keyOf(row);
+    const update = updates.get(key);
+    updates.delete(key);
+    return update ? [update] : [];
+  });
+  status.paths.push(...updates.values());
+}
 writeFileSync(join(root, "scenario-runs.json"), `${JSON.stringify(status, null, 2)}\n`);
 const indexPath = join(root, "traces", "index.json");
 const existing = JSON.parse(readFileSync(indexPath, "utf8"));

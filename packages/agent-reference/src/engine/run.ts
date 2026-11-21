@@ -126,7 +126,7 @@ import { PUBLIC_READ } from "../suites/public-read.js";
 import { scenarioRegistry } from "../suites/scenario.js";
 import { PresentedFederationResolver } from "../suites/trust-federation.js";
 import { ReputationResolver } from "../suites/trust-reputation.js";
-import { recordLink } from "../trace/linked.js";
+import { paymentTransferLink, recordLink } from "../trace/linked.js";
 import { type TraceObservation, TraceRecorder } from "../trace/recorder.js";
 import {
   type OutlineEntry,
@@ -2119,8 +2119,8 @@ async function runPath(
                 agent.id === "sam-agent" ? authorizationServer.current() : undefined,
               ...(agent.id === "sam-agent"
                 ? {
-                    load: async (source: string) => {
-                      const checked = await authorizationServer.verify(authorizationGrant, {
+                    load: (source: string) =>
+                      authorizationServer.verify(authorizationGrant, {
                         trust,
                         actor: cast.get(agent.id).identity.actor,
                         party: cast.get(agent.id).identity.party,
@@ -2135,27 +2135,28 @@ async function runPath(
                             subject: cast.get(agent.id).identity.party,
                             at: now().toISOString(),
                           }).outcome === "accepted",
-                      });
-                      if (checked.ok)
-                        recorder.sink(agent.traceId ?? agent.id).emit({
-                          part: "record",
-                          kind: "record",
-                          caption:
-                            "Sam approved at the fictional bank authorization server. Its signed authorization details are lifted into the autonomous and with-approval ODRL policies read by the gate.",
-                          fact: {
-                            id: checked.loaded.mandate.id,
-                            label: "ODRL mandate lifted from the server grant",
-                            claimType: "authority.grant-lift",
-                            subject: cast.get(agent.id).identity.party,
-                            source: authorizationServer.identity,
-                            value: {
-                              grantDigest: digestOf(authorizationGrant),
-                              autonomous: checked.loaded.mandate.autonomous,
-                              withApproval: checked.loaded.mandate.withApproval,
-                            },
+                      }),
+                    onGrantRecorded: ({ mandate }, entry) => {
+                      const sink = recorder.sink(agent.traceId ?? agent.id);
+                      sink.emit({
+                        part: "record",
+                        kind: "record",
+                        caption:
+                          "Sam approved at the fictional bank authorization server. Its signed authorization details are lifted into the autonomous and with-approval ODRL policies read by the gate.",
+                        fact: {
+                          id: mandate.id,
+                          label: "ODRL mandate lifted from the server grant",
+                          claimType: "authority.grant-lift",
+                          subject: cast.get(agent.id).identity.party,
+                          source: authorizationServer.identity,
+                          value: {
+                            grantDigest: digestOf(authorizationGrant),
+                            autonomous: mandate.autonomous,
+                            withApproval: mandate.withApproval,
                           },
-                        });
-                      return checked;
+                        },
+                        ...(sink.linked ? { linkedInputs: [recordLink(entry)] } : {}),
+                      });
                     },
                   }
                 : {}),
@@ -2712,21 +2713,27 @@ async function runPath(
                     provider.accounts.find((a) => a.party === admitted.payer),
                   );
                   const suite = selectedSettlement(configuration.layers.settlement, settlement);
+                  const ledger = required(paymentLedgers.get(agent.id));
                   const settled = await suite.settle(admitted.objects, {
                     party: cast.get(agent.id).identity.party ?? "",
                     payerAccount: account.id,
-                    ledger: required(paymentLedgers.get(agent.id)),
+                    ledger,
                     now: now().toISOString(),
                   });
                   const receipt = suite.lift(settled);
                   const trace = suite.trace
                     ? await suite.trace(settled)
                     : await paymentTrace(receipt);
-                  recorder.sink(agent.traceId ?? agent.id).emit({
+                  const sink = recorder.sink(agent.traceId ?? agent.id);
+                  const entry = sink.linked
+                    ? ledger.entries.find((entry) => entry.digest === receipt.ledgerReference)
+                    : undefined;
+                  sink.emit({
                     part: "record",
                     kind: "record",
                     caption: "The fictional provider records the ledger transfer and its receipt.",
                     settlement: trace,
+                    ...(entry ? { linkedInputs: [paymentTransferLink(entry)] } : {}),
                   });
                   return {
                     conclusion: "completed" as const,

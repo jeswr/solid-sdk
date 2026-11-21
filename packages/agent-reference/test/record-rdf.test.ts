@@ -1,11 +1,13 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { readFileSync } from "fs";
 import { DataFactory, Store } from "n3";
 import ShaclValidator from "rdf-validate-shacl";
 import { expect, it } from "vitest";
-import { digestOf } from "../src/core/canonical.js";
+import { digestBytes, digestOf } from "../src/core/canonical.js";
+import { StoreNode } from "../src/model/store/common.js";
 import {
   REQUIRED_TYPED_RECORDS,
   rangeEntryDataset,
@@ -20,6 +22,7 @@ import {
   verifyLedger,
   verifyLedgerRange,
 } from "../src/store/ledger.js";
+import { TraceRecorder } from "../src/trace/recorder.js";
 import { storeDocumentLoader } from "../src/wire/store-contexts.js";
 import { linkedView, storeProjection } from "../src/wire/store-document.js";
 import { readNQuads, writeNQuads } from "../src/wire/store-quads.js";
@@ -238,8 +241,14 @@ it("projects only reachable subjects and renders the same RDF via Turtle and JSO
   dataset.addQuad(subject, p, child, namedNode("urn:other-graph"));
   dataset.addQuad(child, issuer, namedNode(root));
   dataset.addQuad(namedNode("urn:unreachable"), p, child);
+  const json = { z: "\ud800", a: { z: "\udfff", a: true } };
+  const jsonPredicate = `${awp}exactValue`;
+  new StoreNode(child, dataset, "fixture").putValue(jsonPredicate, json);
   const expected = storeProjection(dataset, root);
-  expect(expected.size).toBe(projection.size + 2);
+  expect(expected.size).toBe(projection.size + 3);
+  expect(expected.getObjects(child, jsonPredicate, null)).toEqual([
+    literal(JSON.stringify(json), namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON")),
+  ]);
   const view = await linkedView(dataset, root, "record");
   expect(view.what).toBe("record");
   expect(JSON.parse(view.jsonld)["@context"]).toEqual(view.context);
@@ -254,4 +263,31 @@ it("projects only reachable subjects and renders the same RDF via Turtle and JSO
       expect(expected.has(quad)).toBe(true);
     }
   }
+});
+
+it("keeps fragment escapes distinct across views and recorder keys", async () => {
+  const recorder = new TraceRecorder(undefined, true);
+  const sink = recorder.sink("agent");
+  for (const root of ["urn:fixture#entry#two", "urn:fixture#entry%23two"]) {
+    const dataset = new Store();
+    dataset.addQuad(namedNode(root), namedNode(rdfType), namedNode(`${awp}RecordEntry`));
+    sink.emit({
+      part: "record",
+      kind: "record",
+      caption: "A recorded entry.",
+      linkedInputs: [{ what: "record-entry", root, dataset }],
+    });
+  }
+  await recorder.complete();
+  const keys = recorder.events().flatMap((event) => event.linked ?? []);
+  const views = keys.map((key) => {
+    const view = recorder.linkedViews()?.[key];
+    if (!view) throw new Error(`Missing linked view ${key}`);
+    expect(digestBytes(view.jsonld)).toBe(key);
+    return view;
+  });
+  expect(new Set(keys).size).toBe(2);
+  expect(Object.keys(recorder.linkedViews() ?? {})).toEqual(keys);
+  expect(views[0]?.jsonld).not.toBe(views[1]?.jsonld);
+  expect(views[0]?.turtle).not.toBe(views[1]?.turtle);
 });

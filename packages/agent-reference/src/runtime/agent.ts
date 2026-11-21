@@ -440,7 +440,11 @@ export class AgentRuntime {
   private readonly clock: () => Date;
   /** The writer may advance the checkpoint only when it opened at the saved head. */
   private ledgerAuditTrusted: boolean;
-  private readonly deferredMandateRecords: Array<{ record: LedgerRecord; at: string }> = [];
+  private readonly deferredMandateRecords: Array<{
+    record: LedgerRecord;
+    at: string;
+    onRecorded?: (entry: LedgerEntry) => void;
+  }> = [];
   private readonly presentationSink?: import("../trace/recorder.js").TraceSink;
   private readonly newId: () => string;
   private readonly handlers = new Map<string, OperationHandler>();
@@ -1224,33 +1228,44 @@ export class AgentRuntime {
       this.mandateFailure = "no mandate configured";
       return;
     }
-    const result = this.options.gates?.authorizationGrant?.load
-      ? await this.options.gates.authorizationGrant.load(source)
+    const grant = this.options.gates?.authorizationGrant;
+    const result = grant?.load
+      ? await grant.load(source)
       : await loadMandate(source, {
           trust: this.trust,
           actor: this.identity.actor,
           limits: this.limits,
           at: this.now(),
         });
-    const recordMandate = <T extends LedgerRecord>(record: T) => {
-      if (deferRecord) this.deferredMandateRecords.push({ record, at: this.now() });
-      else this.record(record);
+    const recordMandate = <T extends LedgerRecord>(
+      record: T,
+      onRecorded?: (entry: LedgerEntry) => void,
+    ) => {
+      if (deferRecord) this.deferredMandateRecords.push({ record, at: this.now(), onRecorded });
+      else {
+        const entry = this.record(record);
+        onRecorded?.(entry);
+      }
     };
     recordMandate(result.ok ? result.loaded.verification : result.verification);
     if (result.ok) {
       this.mandate = result.loaded;
       this.gateMemory.rememberIdentifiers("*", result.loaded.mandate);
       this.mandateFailure = undefined;
-      recordMandate({
-        type: "grant",
-        id: result.loaded.mandate.id,
-        kind: "owner-mandate",
-        grantor: result.loaded.mandate.issuer,
-        grantee: result.loaded.mandate.subject,
-        digest: result.loaded.digest,
-        validUntil: result.loaded.mandate.validUntil,
-        at: this.now(),
-      });
+      const onGrantRecorded = grant?.load && grant.onGrantRecorded;
+      recordMandate(
+        {
+          type: "grant",
+          id: result.loaded.mandate.id,
+          kind: "owner-mandate",
+          grantor: result.loaded.mandate.issuer,
+          grantee: result.loaded.mandate.subject,
+          digest: result.loaded.digest,
+          validUntil: result.loaded.mandate.validUntil,
+          at: this.now(),
+        },
+        onGrantRecorded && ((entry) => onGrantRecorded(result.loaded, entry)),
+      );
     } else {
       this.mandate = undefined;
       this.mandateFailure = result.reason;
@@ -9979,8 +9994,10 @@ export class AgentRuntime {
         throw new Error("Cannot resume the evidence ledger without a valid saved prefix");
       this.ledger.recoverUncommittedSuffix(saved);
       this.ledgerAuditTrusted = true;
-      for (const pending of this.deferredMandateRecords)
-        this.ledger.append(jointLogView(pending.record), pending.at);
+      for (const pending of this.deferredMandateRecords) {
+        const entry = this.ledger.append(jointLogView(pending.record), pending.at);
+        pending.onRecorded?.(entry);
+      }
       this.deferredMandateRecords.length = 0;
     }
     return this.ledger.append(jointLogView(record), this.now());

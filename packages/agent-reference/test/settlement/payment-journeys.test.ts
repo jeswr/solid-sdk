@@ -1,11 +1,15 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
+import { parseRdf } from "@jeswr/fetch-rdf";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
 import { describe, expect, it } from "vitest";
+import { digestOf } from "../../src/core/canonical.js";
 import { loadCase } from "../../src/engine/load.js";
 import { type PathResult, patch, runScenario } from "../../src/engine/run.js";
+import { NamedValuesNode } from "../../src/model/named-values.js";
 import { PaymentFacts } from "../../src/model/payment.js";
+import { recordGraphIri } from "../../src/model/store/record.js";
 import { RdfOrderSuite } from "../../src/settlement/rdf-order.js";
 import { scenarioRegistry } from "../../src/suites/scenario.js";
 import type { TraceFile } from "../../src/trace/types.js";
@@ -27,6 +31,7 @@ function run(id: string) {
     const input = loadCase(root, id);
     result = runScenario(input.profile, input.scenario, {
       reportExpectationFailures: id === "pay-an-invoice",
+      linked: id === "pay-an-invoice",
     });
     runs.set(id, result);
   }
@@ -86,6 +91,29 @@ describe("separately keyed signed payment journeys", () => {
         for (const view of Object.values(event.packet.layers))
           expect(view.summary).not.toMatch(/https?:\/\/|urn:/);
     }
+  }, 120_000);
+  it("links the provider's recorded transfer to the receipt digest", async () => {
+    const trace = traceOf(await run("pay-an-invoice"));
+    const event = required(
+      trace.events.find((e) => e.caption.includes("records the ledger transfer")),
+    );
+    const receipt = new RdfOrderSuite().lift(await readPaymentObjects(event.settlement?.facts));
+    const order = new PaymentFacts(required(receipt.order), receipt.dataset);
+    const views = event.linked?.map((key) => trace.linked?.[key]);
+    expect(views?.map((view) => view?.what)).toEqual(["record-entry"]);
+    const dataset = await parseRdf(required(views?.[0]).turtle, "text/turtle");
+    const root = recordGraphIri(required(receipt.ledgerReference));
+    const { digest, ...transfer } = new NamedValuesNode(root, dataset).toObject();
+    expect(transfer).toMatchObject({
+      sequence: 1,
+      previous: null,
+      amount: receipt.amount,
+      currency: receipt.currency,
+      to: order.account,
+      onceKey: order.onceKey,
+    });
+    expect(digest).toBe(receipt.ledgerReference);
+    expect(digestOf(transfer)).toBe(digest);
   }, 120_000);
   it("files the expense claim as a signed compensation offer with the merchant receipt", async () => {
     const trace = traceOf(await run("expenses"));

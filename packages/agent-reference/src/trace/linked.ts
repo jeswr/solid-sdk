@@ -1,16 +1,18 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@jeswr/fetch-rdf";
 import { digestOf } from "../core/canonical.js";
 import type { AdmittedFact, ContextItem, ItemTerms } from "../gates/common.js";
 import { jointLogView } from "../mechanisms/joint-privacy.js";
 import { makeNode } from "../model/core-node.js";
 import { IndexedStore } from "../model/indexed-store.js";
-import { scopedId } from "../model/named-values.js";
+import { NamedValuesNode, scopedId } from "../model/named-values.js";
 import { writeMemoryFact, writePolicy } from "../model/store/memory.js";
 import { policyDataset, policySubject } from "../model/store/policy.js";
 import { recordEntryDataset, recordGraphIri } from "../model/store/record.js";
 import { trustDataset } from "../model/store/trust.js";
 import { AWP } from "../profile/vocabulary.js";
+import type { LedgerEntry as PaymentLedgerEntry } from "../settlement/ledger.js";
 import type { LedgerEntry } from "../store/ledger.js";
 import type { TrustBasis } from "../trust/resolver.js";
 import type { TraceLinkedKind } from "./types.js";
@@ -41,6 +43,13 @@ export function recordLink(entry: LedgerEntry): TraceLinkedInput {
     root: recordGraphIri(entry.hash),
     dataset: recordEntryDataset(entry),
   };
+}
+
+export function paymentTransferLink(entry: Readonly<PaymentLedgerEntry>): TraceLinkedInput {
+  const dataset = new IndexedStore();
+  const root = recordGraphIri(entry.digest);
+  NamedValuesNode.from({ ...entry }, root, dataset);
+  return { what: "record-entry", root, dataset };
 }
 
 export function termsLinks(
