@@ -458,3 +458,78 @@ the Solid backend's exact PUT behavior for named creates.
 | Daemon typecheck and Biome | Both TypeScript projects and Biome on the changed TypeScript files passed. `git diff --check` passed. |
 | Offline daemon Vitest | 256 passed. Four cases were skipped by name, and the cloud and CSS files were excluded. |
 | Full daemon Vitest | `npx vitest run --maxWorkers=2` passed 256 and reported the same 20 sandbox failures as 41k. CSS and D-2 hit `listen EPERM`, 15 cloud cases timed out in loopback setup, launchd hit `spawnSync python3 EPERM`, and the two packaging checks received empty subprocess stdout. |
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Phase 3 (41m)
+
+The daemon releases proposal messages through the leased reference runtime. The
+executor retains its existing dispatch checks and provider access. The current
+reference runtime emits signed JSON-LD packets by default, so this phase adds an
+explicit compact JWS option to `sendMessage` for the existing W17 carrier. The
+runtime signs inside the existing checked release path.
+
+### Files changed
+
+- `apps/agent-daemon/src/gate.ts`, `outbound.ts`, and `index.ts` expose the outbound
+  mapping and lease-bound release and verification. Private release receipts
+  bind a proposal to the exact bytes in the reference outbox. Retrying a complete
+  release reuses those bytes. An interrupted release refuses a retry of that
+  proposal.
+- `apps/agent-daemon/src/cli.ts` adds `awp gate mandate <mandate.jws>`. It holds the
+  daemon process lease and installs the supplied file only after the runtime
+  verifies the pinned owner proof, subject, validity and revocation status.
+- `apps/agent-daemon/src/daemon.ts`, `types.ts`, and `proposal-results.ts` replace
+  `proposalWritten` with `project`, durably cache typed refusals and audit them
+  without publishing pending proposals. The composition, CSS, polling-executor
+  and D-2 fixtures adopt the renamed option.
+- `packages/agent-executor/src/projector.ts` and `index.ts` add the projector and
+  typed refusal. It renders through the selected send binding and commits the
+  exact wire, trusted account, intent and gate-produced preview to approval.
+  The executor's export contract and projector tests cover the new API.
+- `packages/agent-reference/src/runtime/agent.ts` adds compact signing for an
+  explicitly authorised follow-up. The option checks that the authorised
+  recipient matches the conversation's peer and holds compact releases in a
+  conversation awaiting the principal.
+- `apps/agent-daemon/README.md` documents host wiring, mandate installation and
+  the approval and limits timing. `test/outbound.test.ts` and `test/daemon.test.ts`
+  cover the integration and refusal cache.
+
+### Red and green checks
+
+| Added cases | Initial failing output | Passing result |
+| --- | --- | --- |
+| Right-key and foreign-key JWS without a release | `TypeError: f.gate.verifyOwn is not a function` | The real direct send half rejects both at render and transmit. A new own-key signature reusing a released ID also fails verification. |
+| Missing mapping, recipient outside the allowed set and deny-all | `TypeError: f.gate.release is not a function` | `unsupported-operation`, `ask-principal` and the deny-by-default mandate reason respectively, before outbox insertion or executor approval lookup. |
+| One approved send and peer admission, code-rendered preview, and invalidated approval after one changed term | `TypeError: gate.release is not a function` | The release survives restart with identical bytes. A verified owner approval permits one direct send, and the peer runtime admits the mailbox bytes. The preview excludes the model instruction. Changing only the approval-bound expiry prevents dispatch with the old approval. |
+| Pinned-owner mandate installation | `TypeError: installGateMandate is not a function` | A foreign owner's signature leaves the old file in place. The CLI refuses a held process lease and installs the pinned owner's signed file after the lease is free. |
+| Refusal cache and audit replay | `TypeError: ProposalRefusedError is not a constructor` | A repeated batch projects once, retains one refusal and audits it once without writing a pending resource. |
+| Projector success, typed refusal, missing binding and missing account | `TypeError: createOutboxProjector is not a function` | A successful projection binds the preview, wire and account. Refusals and missing configuration stop before rendering. |
+
+### Invariants and follow-up
+
+- O1. The direct binding verifies the gate signature and exact released bytes
+  before rendering or dispatch. Host composition supplies the same gate
+  verifier to every send half.
+- O2. The reference runtime checks the mapped intent and message before signing.
+  The executor's nine-step gate independently checks the VC mandate, control
+  state, exact approval, limits and wire at dispatch.
+- O3. The gate renders the preview from the released message and its authorised
+  operation and purpose. Approval binds the preview and the exact carrier.
+- O4. The daemon treats `ask-principal` as a refusal and cannot approve on behalf
+  of the owner.
+- O5. A missing mapping and the deny-all mandate prevent new releases.
+- The executor decides approval and limits after sealing and records them in
+  agent-audit. Phase 4 links the verdicts to the reference ledger. The orchestrator
+  owns the bead. Signing a reference mandate remains the owner's act.
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| Reference library-only rebuild and requested suites | All four suites passed, 18 tests. Git status for `traces/`, `outlines/` and `scenario-runs.json` was empty. |
+| Daemon source and test TypeScript checks | Passed. |
+| Full daemon Vitest | 266 passed and 20 sandbox failures. CSS and D-2 hit `listen EPERM`. Fifteen cloud tests timed out in loopback setup. Launchd hit `spawnSync python3 EPERM`. The packaged CLI and dependency graph checks received empty subprocess stdout. |
+| Daemon Vitest without sandbox-dependent cases | 266 passed. |
+| Executor Vitest with V8 coverage | 576 accessible tests passed and per-file thresholds passed at 100% statements, branches, functions and lines. The four process-death cases timed out waiting for a child. A direct subprocess probe returned `EPERM`. |
+| Biome and repository guards | Biome exited successfully with existing warnings and infos in the reference runtime. SDK layers, agent layers, RDF discipline, app duplication and `git diff --check` passed. |

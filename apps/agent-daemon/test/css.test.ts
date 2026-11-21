@@ -331,7 +331,7 @@ it("composes an in-memory CSS pod and direct binding: inbound, proposal, signed 
       },
       now: () => Date.parse(at),
       isFlagged: async () => false,
-      proposalWritten: async () => {
+      project: async () => {
         stores.entries.set(proposal.id, entry);
         return entry;
       },

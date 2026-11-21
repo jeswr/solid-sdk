@@ -5,7 +5,7 @@ import {
   ChannelParseError,
   type InboundRawMessage,
 } from "@jeswr/agent-channels";
-import { proposalApprovalTerms } from "@jeswr/agent-executor";
+import { ProposalRefusedError, proposalApprovalTerms } from "@jeswr/agent-executor";
 import { canonicalJson, digestOf, podRecordSchema } from "@jeswr/agent-model";
 import { GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
 import { importInbound } from "@jeswr/agentic-legacy-bridge";
@@ -305,8 +305,16 @@ export function createDaemon(o: DaemonOptions): Daemon {
         await o.proposalResults.put(key, result);
       }
       const entries = [];
+      const refused = [...(result.refused ?? [])];
       for (const proposal of result.proposals) {
-        const entry = await o.proposalWritten(proposal);
+        let entry: Awaited<ReturnType<DaemonOptions["project"]>>;
+        try {
+          entry = await o.project(proposal);
+        } catch (error) {
+          if (!(error instanceof ProposalRefusedError)) throw error;
+          refused.push({ id: proposal.id, reason: error.reason });
+          continue;
+        }
         if (entry.proposal.id !== proposal.id) throw new Error("Outbox proposal mismatch");
         if (entry.proposal.intent.termsDigest !== digestOf(proposalApprovalTerms(entry)))
           throw new Error("Outbox terms digest mismatch");
@@ -315,14 +323,24 @@ export function createDaemon(o: DaemonOptions): Daemon {
       result = checkedProposalResult({
         calls: result.calls,
         proposals: entries.map((entry) => entry.proposal),
+        ...(refused.length > 0 && { refused }),
       });
       // Publish only the finalized proposals returned by the trusted outbox projection.
       // Keep the original result durable until this replacement succeeds, so retries
       // retain model-call and proposal identities even if projection or fsync fails.
       await o.proposalResults.put(key, result);
-      // Model-call evidence names the proposal ID that is projected and published.
-      const proposalRef = result.proposals.length === 1 ? result.proposals[0]?.id : undefined;
-      await calls(result.calls, task, proposalRef);
+      const proposalIds = [...result.proposals, ...refused].map(({ id }) => id);
+      await calls(result.calls, task, proposalIds.length === 1 ? proposalIds[0] : undefined);
+      for (const { id, reason } of refused) {
+        await append({
+          type: "decision",
+          id: `urn:sha256:${digestOf({ proposal: id, task: task.taskId, event: "gate-refusal" }).slice(8)}`,
+          proposal: id,
+          status: "refused",
+          reason: /^[a-z][a-z0-9-]{0,63}$/.test(reason) ? reason : "gate-refused",
+          ...task,
+        });
+      }
       for (const entry of entries) {
         const proposal = entry.proposal;
         if (o.workspace.proposalLocation(proposal.id) === proposal.id)

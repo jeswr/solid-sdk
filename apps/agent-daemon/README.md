@@ -75,8 +75,8 @@ Each enabled account is processed serially, including accounts sharing a binding
 6. Stamp and create proposals only inside `agent/proposals/`; an identical replay
    is safe, but a conflicting rewrite fails. Save each stamped Proposer result in
    durable local `proposalResults` before outbox projection. Replace that cache with
-   the trusted outbox's finalized proposals before pod publication or model counters,
-   and reuse it when a batch retries, including empty results. Commit the ingest
+   the finalized proposals and any gate refusals before pod publication or model
+   counters, and reuse it when a batch retries, including empty results. Commit the ingest
    cursor only after the entire batch succeeds.
 7. Run the executor's outbox pass. It alone owns send capabilities and credentials.
 
@@ -93,12 +93,7 @@ controls, approvals and mandates: parsing RDF is insufficient. Its local HALT ch
 must read `createLocalState(...).halted` on every gate pass, and use its
 `assertNotHalted` as the control store's synchronous dispatch check. Wire/action validation,
 exact approval terms, accounting, durable transmissions and send adapters remain
-executor obligations. `proposalWritten` runs before pod publication and must
-idempotently project proposals into the trusted outbox, returning the exact
-`OutboxEntry` used by the executor with `proposal.intent.termsDigest` set using
-`proposalTermsDigest(entry)`. The daemon checks that digest and durably caches the
-finalized proposal before publishing the same proposal to the pod and audit.
-The hook must never send or grant approval. The daemon derives body-free evidence
+executor obligations. The daemon derives body-free evidence
 with `proposalApprovalTerms(entry)` from agent-executor, including account-bound
 recipient hashes, the exact wire digest and a hash committing the full private
 proposal, carrier and expiry. It records `digestOf(terms)`, matching the executor's
@@ -167,6 +162,11 @@ match the configured WebIDs when the daemon starts.
   before pinning because the command takes its process lease after confirmation.
   The pin API also takes a per-gate lease and merges each confirmed card into
   the latest trust store. The operator's pins supply the counterparty verification keys.
+- `awp gate mandate <mandate.jws>` installs the reference mandate after verifying
+  its `awp-mandate+jws` proof against the pinned owner key and checking the actor,
+  validity and revocation. Stop the daemon first so the command can acquire its
+  process lease. The owner signs the file independently with the separately held
+  owner key. The command only verifies and installs that signed file.
 - `awp gate status` displays pinned subjects and thumbprints, ledger integrity,
   verdict counts and interrupted digests. Ask the sender for a new message
   when a check for that digest was interrupted. Identical raw-byte retries
@@ -178,8 +178,60 @@ Refused content stays outside the inbox, models and suite audit. The reference
 ledger records the decision locally. Plain human mail and chat remain available
 for triage and can reach the Proposer when the owner flags a thread. They supply
 no admitted evidence. Pod inbox identity stays `unverified` because the channel
-handle is an observation. The daemon keeps reference-generated replies in the
-local runtime outbox during this phase.
+handle is an observation. Reference-generated replies stay in the local runtime
+outbox. Suite send halves accept only messages explicitly released for a proposal.
+
+## Outbound gate
+
+Supply `outbound: { handlers, plan }` to `createInboundGate`. The trusted host maps a
+proposal to a reference plan in an established conversation and binds the exact
+action, recipient and terms. Keep the mapping deterministic across retries and
+ignore the draft's preview and terms digest. A missing mapping or the deny-all
+reference mandate prevents new releases. The gate holds `ask-principal` actions
+without granting approval.
+
+Pass `gate.verifyOwn` as the `verify` option of **every** send half. It checks the
+actor signature and requires the exact compact JWS in the gate's durable release
+record and reference outbox. Construct the executor's send bindings with trusted
+validators that bind every intent term and the destination account to the
+released wire. The daemon delegates rendering to those bindings through the
+executor projector.
+
+```ts
+const gate = createInboundGate({
+  directory: join(stateDirectory, "gate"),
+  admission: { taskId, reliance, handlers },
+  outbound: { handlers, plan },
+});
+// Configure every send half used by bindings with verify: gate.verifyOwn.
+const prepareEntry = createOutboxProjector({
+  bindings,
+  accounts: outboundAccountsByBinding,
+  sign: gate.release,
+});
+
+const project = async (proposal: ActionProposal) => {
+  const entry = await prepareEntry(proposal);
+  await persistOutboxEntry(entry); // Host's idempotent executor store write.
+  return entry;
+};
+// Supply gate and project to createDaemon or composeDaemon.
+```
+
+`project` replaces the former `proposalWritten` option. Persist and return the exact
+entry the executor reads. The projector replaces the model draft preview with a
+description of the released message and binds the resulting preview, account,
+wire and intent to the approval digest. The daemon verifies that digest before
+publishing the pending proposal. A typed refusal is cached and audited with the
+proposal reference, and the daemon skips outbox and pending proposal publication
+for that refusal. Confirmed gate releases reuse their original wire on retries.
+An interrupted release without a completed receipt requires a new proposal.
+
+The reference mandate controls release and sealing. The executor independently
+checks the VC mandate, HALT, approval and limits before delivery. **Known
+deviation** for outbound check 5. The executor decides approval and limits after
+the gate seals the message and records those verdicts in agent-audit. Phase 4
+links that evidence to the reference ledger.
 
 ## Runtime memory
 
