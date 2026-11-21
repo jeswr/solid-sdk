@@ -68,6 +68,7 @@ import { Cast, craftSigned, mandateOf, signClaim } from "@jeswr/agent-reference/
 import { addSourceRule, pinIssuer, saveTrust } from "@jeswr/agent-reference/setup";
 import { readLedgerSegment } from "@jeswr/agent-reference/store/ledger";
 import { readRuntimeStateFile } from "@jeswr/agent-reference/store/state";
+import { carriageBytes } from "@jeswr/agent-reference/wire/carriage";
 import { parseEmail } from "@jeswr/agentic-legacy-bridge";
 import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
 import {
@@ -2295,6 +2296,42 @@ it.each([
         items: variant === "valid" ? [recalledAssessment] : [],
         withheld: 0,
       });
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("hides an inbound fact when the decision record fails to commit", async () => {
+  const root = await mkdtemp(join(tmpdir(), "daemon-memory-uncommitted-"));
+  try {
+    const { options, signedInvocation } = await memoryGateFixture(root, "valid");
+    const delivery = carriageBytes({
+      format: "awp-jws-compact/0.1",
+      jws: await signedInvocation(61, assessment, memoryPurpose),
+    });
+    const gate = await openGate(options);
+    const commit = AgentRuntime.prototype.commitBindingEvent;
+    const duringCommit = vi.fn(() => gate.facts());
+    const failure = new Error("decision commit failed");
+    const write = vi
+      .spyOn(AgentRuntime.prototype, "commitBindingEvent")
+      .mockImplementation(function (this: AgentRuntime, record) {
+        if (record.type === "suite-gate-decision" && record.outcome === "admit") {
+          duringCommit();
+          return Promise.reject(failure);
+        }
+        return commit.call(this, record);
+      });
+    try {
+      await expect(
+        gate.receiveCarriage({ binding: "direct-http", delivery }, new AbortController().signal),
+      ).rejects.toThrow(failure);
+      expect(duringCommit).toHaveReturnedWith([]);
+      expect(gate.facts()).toEqual([]);
+    } finally {
+      write.mockRestore();
+      await gate.close();
     }
   } finally {
     await rm(root, { recursive: true, force: true });
