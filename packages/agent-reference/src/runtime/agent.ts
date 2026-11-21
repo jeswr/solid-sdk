@@ -577,12 +577,13 @@ export class AgentRuntime {
     this.state.auditApprovalProofs ??= {};
     this.state.emailChallenges ??= {};
     const head = this.ledger.head?.();
-    const checkpoint = this.state.ledgerAuditHead;
+    const checkpoint = this.state.ledgerAuditHead ?? LEDGER_GENESIS;
     this.ledgerAuditTrusted =
       !!head &&
       (!this.ledger.requiresTrustedCheckpoint ||
-        (head.seq === LEDGER_GENESIS.seq && head.hash === LEDGER_GENESIS.hash && !checkpoint) ||
-        (head.seq === checkpoint?.seq && head.hash === checkpoint.hash));
+        (head.seq === checkpoint.seq &&
+          head.hash === checkpoint.hash &&
+          verifyLedgerAtHead(this.ledger.entries(), checkpoint).ok));
     this.state.domain.derivedRequests ??= {};
     this.state.domain.fixedJointSessions ??= {};
     const originalSink = options.gates?.sink;

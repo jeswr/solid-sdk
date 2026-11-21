@@ -1,6 +1,15 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
-// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-import { appendFileSync, cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import {
+  appendFileSync,
+  cpSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+  // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+} from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { tmpdir } from "os";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
@@ -39,6 +48,43 @@ it("writes N-Quads blocks ending with the entry hash and reopens at the same hea
     expect(reopened.entries()).toEqual([first, second]);
     expect(reopened.head()).toEqual(ledger.head());
     expect(verifyLedgerAtHead(reopened.entries(), ledger.head()).ok).toBe(true);
+  }));
+
+it("reuses only byte-identical prefixes and keeps decoded rows private", () =>
+  temp((path) => {
+    const ledger = new FileLedger(path);
+    const first = ledger.append({ type: "event", values: ["évidence"] }, now);
+    const firstBytes = readFileSync(path, "utf8");
+    const [read] = readLedgerSegment(path);
+    (read?.record.values as string[])[0] = "changed by caller";
+    const second = ledger.append({ type: "event", value: 2 }, now);
+    expect(new FileLedger(path).entries()).toEqual([first, second]);
+
+    const trusted = ledger.head();
+    const { atime, mtime, size } = statSync(path);
+    const complete = readFileSync(path, "utf8");
+    const tampered = complete.replace('"évidence"', '"évidenca"');
+    writeFileSync(path, tampered);
+    utimesSync(path, atime, mtime);
+    expect(statSync(path).size).toBe(size);
+    const reopened = new FileLedger(path);
+    expect(reopened.head()).toEqual(trusted);
+    expect(verifyLedgerAtHead(reopened.entries(), trusted)).toMatchObject({
+      ok: false,
+      firstBadSeq: first.seq,
+      problem: "hash mismatch",
+    });
+
+    writeFileSync(path, complete);
+    expect(readLedgerSegment(path)).toEqual([first, second]);
+    ledger.append({ type: "uncommitted" }, now);
+    ledger.recoverUncommittedSuffix(trusted);
+    expect(readFileSync(path, "utf8")).toBe(complete);
+
+    writeFileSync(path, firstBytes);
+    const retained = readLedgerSegment(path);
+    expect(retained).toEqual([first]);
+    expect(verifyLedgerAtHead(retained, trusted).ok).toBe(false);
   }));
 
 it("keeps a legacy checkpointed segment in JSONL until rotation", () =>

@@ -351,3 +351,72 @@ selected traces matched apart from `generated.commit`. The other traces and
 outlines matched byte-for-byte, and the manifest and index rows matched. The
 script removed its temporary copy, and the worktree output files retained their
 original bytes.
+
+## Performance (40g)
+
+The Node 24.22.3 CPU profile of the issuance-authority test took 26.65 s. It
+attributed 11.83 s to segment reads, split almost evenly between the
+`FileLedger` constructor and `entries()`. Of that, 8.38 s was in
+`recordEntryFrom`, including 4.30 s rebuilding the canonical graph, and 2.96 s
+was in `readNQuads`. The profile attributed about 0.13 s to N-Quads
+serialization on append.
+
+The reader now rereads the file bytes and compares them to a cached decoded
+prefix. A byte-identical prefix ending at a complete block can be reused across
+ledger instances. New blocks and changed bytes go through the original RDF
+parser and canonical graph check. The shared cache is capped at 16 MiB of file
+bytes and returns independent copies to callers. Recovery and pruning discard
+removed cache entries. Durable runtime startup verifies the retained chain when
+accepting a saved head, and audit reads still recompute seals. Appends still
+seal and fsync each entry. [Ledger reader](src/store/ledger.ts) ·
+[Runtime open](src/runtime/agent.ts)
+
+The ledger regressions cover cache reuse across opens and appends, same-size
+tampering, caller mutation of nested values, truncation, and recovery of a
+prefix containing multibyte text. The audit regression checks that a runtime
+reopened on a corrupted chain refuses to append even if the head hash field
+still matches. [Ledger regressions](test/ledger-file-format.test.ts) ·
+[Audit regression](test/email.test.ts)
+
+The before and after pilot runs used one Vitest worker on Node 24.22.3. Times
+are for the individual test bodies.
+
+| Pilot test | Before | After |
+| --- | ---: | ---: |
+| Health-durable issuance authority | 27.98 s | 15.56 s |
+| CLI negotiation through Gmail payload files | 7.11 s | 5.21 s |
+| A2A simultaneous send | Setup failed at 55 ms | Setup failed at 34 ms |
+
+Issuance was 44% faster and 5.8% above the supplied 14.7 s main baseline.
+The A2A attempts both stopped before the timed dispatch. An independent
+loopback bind returned `EPERM`, so the 2,500 ms assertion remains unverified
+here.
+
+The library-only compile and package typecheck passed. The six focused
+reference files passed all 103 tests, including the ledger format, record RDF,
+durable capabilities, store quads, email audit and credential replay. Biome
+passed on the changed TypeScript files with 17 warnings and nine informational
+diagnostics. The separately run RDF pipeline check reproduced the starting
+commit's three `json-signature` diagnostics in `admittedStatementItems`.
+
+The Addendum A check ran mortgage-core and pay-an-invoice in a disposable
+copy. Both reported 278 runs, zero disagreements and five blocked paths. The
+five selected traces matched after removing `generated.commit`. The remaining
+traces, outlines, manifest and index matched, and the disposable copy was
+removed.
+
+The sampled record corpus and both oracle files passed all four tests in
+850.04 s. The full personal-agent run with `--maxWorkers=2` reported 520
+passed, 77 failed and four skipped across 58 files. The remaining failures were
+in these fixtures.
+
+- Loopback listeners failed in `credentials`, `a2a`, `demo` scenario C,
+  `conventional`, `public-reply`, `energy-durable`, the health
+  `protected-disclosure` cases, `provider-http`, both dashboard suites
+  and the `guarded-fetch-undici` setup hook.
+- The SPARQ stand-ins could not spawn in `policy-config`, `policy-engine`,
+  the policy-pinning A2A case and the industrial `protected-disclosure` cases.
+  The MCP FIFO test could not spawn `mkfifo`.
+- The real credential helper fixtures failed or timed out in
+  `actions/providers.test.ts` and `actions/providers/credentials.test.ts`.
+  A standalone Node child with piped stdio exited without echoing its input.

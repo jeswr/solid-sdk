@@ -1199,6 +1199,9 @@ it("fails closed when an authenticated file ledger entry has changed", async () 
     const entry = required(f.ledger.entries().at(-1));
     tamperLedgerEntry(path, entry, { ...entry, record: { ...entry.record, value: "changed" } });
     await f.reopen();
+    expect(() =>
+      f.runtime.recordObservation({ type: "after-reopen", observedBy: "urn:test" }),
+    ).toThrow("Cannot resume the evidence ledger without a valid saved prefix");
     expect(() => f.runtime.recordHead()).toThrow("record head is unavailable");
     expect(await f.runtime.auditRecord()).toMatchObject({ ok: false, released: [] });
   } finally {
