@@ -433,3 +433,28 @@ unusable ACL destination or the type index.
 | Targeted scenarios | `mortgage-core` ran two paths and `pay-an-invoice` ran three. The five traces differed only at `generated.commit`. The trace index and scenario manifest differed only in row order. All generated trace, outline and manifest files were restored. |
 | Production package | The frozen offline install reused 177 cached dependencies with zero downloads. Plain Node imported the packaged daemon and ran `awp gate --help`. The temporary package directory was removed. |
 | Biome and root guards | Biome on changed TypeScript files, `pnpm run lint:root` and `git diff --check` passed. |
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Phase 2 review fixes, round 5 (41l)
+
+Workspace initialization rejects ACL URLs already claimed by another
+container or reserved for workspace writes. The shared-link regression checks
+that the first ACL keeps its grants and startup stops before registration.
+
+When the private type index is missing, the daemon conditionally creates an
+empty document. It discovers the index's own `rel="acl"` link with the same
+checks used for containers, writes the owner-only ACL, then adds the
+registration using the index's ETag. An empty index left by a failed attempt
+must pass ACL discovery and protection on restart as well. The regressions
+verify the write order with a nonstandard ACL URL and check that unusable links
+leave the index empty across attempts.
+
+The in-memory pod fixture now advertises ACL links for documents and models
+the Solid backend's exact PUT behavior for named creates.
+
+| Check | Result |
+| --- | --- |
+| Daemon typecheck and Biome | Both TypeScript projects and Biome on the changed TypeScript files passed. `git diff --check` passed. |
+| Offline daemon Vitest | 256 passed. Four cases were skipped by name, and the cloud and CSS files were excluded. |
+| Full daemon Vitest | `npx vitest run --maxWorkers=2` passed 256 and reported the same 20 sandbox failures as 41k. CSS and D-2 hit `listen EPERM`, 15 cloud cases timed out in loopback setup, launchd hit `spawnSync python3 EPERM`, and the two packaging checks received empty subprocess stdout. |

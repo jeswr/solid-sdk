@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6.2 Sol
 import {
   type ActionProposal,
   canonicalJson,
@@ -25,6 +26,19 @@ import { DataFactory, Store } from "n3";
 const AGENT = "https://jeswr.org/ns/agent#";
 const SOLID = "http://www.w3.org/ns/solid/terms#";
 const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+const CONTAINERS = [
+  "control/",
+  "approvals/",
+  "inbox/",
+  "proposals/",
+  "conversations/",
+  "outbox/",
+  "audit/",
+];
+const MEMORY_CONTAINERS = ["memory/", "memory/pending/"];
+const DESCRIPTORS = "descriptors/";
+const AGENT_DESCRIPTOR = `${DESCRIPTORS}agent.ttl`;
+const HEARTBEAT = "control/heartbeat.ttl";
 class Node extends TermWrapper {
   iris(p: string) {
     return SetFrom.subjectPredicate(this, p, NamedNodeAs.string, NamedNodeFrom.string);
@@ -199,42 +213,53 @@ export class PodWorkspace {
     }
   }
 
-  private async ownerOnlyContainer(url: string): Promise<void> {
-    let container = await this.container(url);
-    if (!container) {
+  private async discoverAcl(url: string, reserved: ReadonlySet<string>, resource?: ReadResult) {
+    const kind = url.endsWith("/") ? "Container" : "Type index";
+    if (!resource) {
       try {
-        container = await this.storage.head(url);
+        resource = await this.storage.head(url);
       } catch (error) {
-        throw this.failure("Container ACL discovery failed", error);
+        throw this.failure(`${kind} ACL discovery failed`, error);
       }
     }
-    const acls = container.links.get("acl");
+    const acls = resource.links.get("acl");
     if (acls?.length !== 1 || !acls[0])
-      throw new Error('Container must advertise a unique WAC ACL link (rel="acl")');
+      throw new Error(`${kind} must advertise a unique WAC ACL link (rel="acl")`);
     const target = new URL(acls[0].target);
     if (target.origin !== new URL(url).origin)
-      throw new Error("Container ACL link points to another origin");
-    if (target.pathname.endsWith("/") || target.href === url.slice(0, -1))
-      throw new Error("Container ACL link must point to an ACL document");
-    await this.put(target.href, await buildOwnerOnlyAclTurtle(url, this.ownerWebId));
+      throw new Error(`${kind} ACL link points to another origin`);
+    this.assertScope(target.href);
+    if (target.pathname.endsWith("/") || target.href === new URL(url).href.replace(/\/$/, ""))
+      throw new Error(`${kind} ACL link must point to an ACL document`);
+    if (
+      reserved.has(target.href) ||
+      new URL(this.index).href.startsWith(`${target.href}/`) ||
+      this.within(target.href, "inbox/") ||
+      (this.within(target.href, "proposals/") && target.pathname.endsWith(".ttl")) ||
+      (this.within(target.href, "memory/") && /\.trig(?:\.approval\.json)?$/.test(target.pathname))
+    )
+      throw new Error(`${kind} ACL URL collision`);
+    return target.href;
+  }
+
+  private async ownerOnlyContainer(url: string, reserved: Set<string>): Promise<void> {
+    const aclUrl = await this.discoverAcl(url, reserved, await this.container(url));
+    await this.put(aclUrl, await buildOwnerOnlyAclTurtle(url, this.ownerWebId));
+    reserved.add(aclUrl);
   }
 
   async initialize(): Promise<void> {
+    const reserved = new Set([
+      new URL(this.index).href,
+      ...["", ...CONTAINERS, ...MEMORY_CONTAINERS, DESCRIPTORS, AGENT_DESCRIPTOR, HEARTBEAT].map(
+        (path) => this.url(path).replace(/\/$/, ""),
+      ),
+    ]);
     // The first nonempty write locks the workspace, before any inbox or audit content.
-    await this.ownerOnlyContainer(this.url(""));
-    for (const path of [
-      "control/",
-      "approvals/",
-      "inbox/",
-      "proposals/",
-      "conversations/",
-      "outbox/",
-      "audit/",
-    ])
-      await this.container(this.url(path));
-    for (const path of ["memory/", "memory/pending/"])
-      await this.ownerOnlyContainer(this.url(path));
-    await this.register();
+    await this.ownerOnlyContainer(this.url(""), reserved);
+    for (const path of CONTAINERS) await this.container(this.url(path));
+    for (const path of MEMORY_CONTAINERS) await this.ownerOnlyContainer(this.url(path), reserved);
+    await this.register(reserved);
   }
   async inbox(binding: string, account: string): Promise<string> {
     if (![binding, account].every((s) => /^[a-z0-9][a-z0-9-]{0,39}$/.test(s)))
@@ -308,26 +333,48 @@ export class PodWorkspace {
    */
   async introduce(agentWebId: string): Promise<void> {
     const agent = safe(agentWebId).href;
-    await this.container(this.url("descriptors/"));
+    await this.container(this.url(DESCRIPTORS));
     const store = new Store();
-    const resource = node(store, this.url("descriptors/agent.ttl"));
+    const resource = node(store, this.url(AGENT_DESCRIPTOR));
     resource.iri(`${RDF}type`, `${AGENT}ImplementationDescription`);
     resource.iri(`${AGENT}describes`, agent);
     await this.put(resource.value, await turtle(store));
   }
   async heartbeat(at: Date, state: "running" | "paused" | "stopped" = "running"): Promise<void> {
     const store = new Store();
-    const resource = node(store, this.url("control/heartbeat.ttl"));
+    const resource = node(store, this.url(HEARTBEAT));
     resource.iri(`${RDF}type`, `${AGENT}Heartbeat`);
     resource.text("http://www.w3.org/ns/prov#generatedAtTime", at.toISOString());
     resource.text(`${AGENT}state`, state);
     await this.put(resource.value, await turtle(store));
   }
-  private async register() {
+  private async register(reserved: ReadonlySet<string>) {
     // Explicit private index is provisioned/discovered by the host; no public registration.
     for (let attempt = 0; attempt < 3; attempt++) {
-      const current = await this.document(this.index);
-      if (!current.missing && !current.etag) throw new Error("Type index lacks validator");
+      let current = await this.document(this.index);
+      // An empty index may be left by an interrupted bootstrap. Secure it before adding content.
+      const needsAcl = current.store.size === 0;
+      if (current.missing) {
+        let creationEtag: string | null = null;
+        try {
+          const created = await this.create(this.index, "");
+          if (created.etagSource === "response") creationEtag = created.etag;
+        } catch (error) {
+          if (this.nameTaken(error)) continue;
+          throw this.failure("Type index registration failed", error);
+        }
+        current = creationEtag
+          ? { ...current, etag: creationEtag, missing: false }
+          : await this.document(this.index);
+      }
+      const { etag } = current;
+      if (!etag) throw new Error("Type index lacks validator");
+      if (needsAcl) {
+        const aclUrl = await this.discoverAcl(this.index, reserved);
+        await this.put(aclUrl, await this.resourceAcl(this.index, aclUrl));
+        node(current.store, this.index).iris(`${RDF}type`).add(`${SOLID}TypeIndex`);
+        node(current.store, this.index).iris(`${RDF}type`).add(`${SOLID}UnlistedDocument`);
+      }
       const entry = node(current.store, `${this.index}#agent-workspace`);
       if (
         entry.iris(`${SOLID}forClass`).has(`${AGENT}AgentWorkspace`) &&
@@ -338,35 +385,23 @@ export class PodWorkspace {
       entry.iri(`${SOLID}forClass`, `${AGENT}AgentWorkspace`);
       entry.iri(`${SOLID}instance`, this.url(""));
       entry.iris(`${SOLID}instanceContainer`).clear();
-      if (current.missing) {
-        node(current.store, this.index).iris(`${RDF}type`).add(`${SOLID}TypeIndex`);
-        node(current.store, this.index).iris(`${RDF}type`).add(`${SOLID}UnlistedDocument`);
-        await this.put(`${this.index}.acl`, await this.resourceAcl(this.index));
-      }
       try {
-        const body = await turtle(current.store);
-        if (current.missing) await this.create(this.index, body);
-        else
-          await this.storage.write(this.index, body, {
-            contentType: "text/turtle",
-            ifMatch: current.etag as string,
-          });
+        await this.storage.write(this.index, await turtle(current.store), {
+          contentType: "text/turtle",
+          ifMatch: etag,
+        });
       } catch (error) {
-        if (
-          error instanceof StorageError &&
-          (current.missing ? this.nameTaken(error) : error.code === "precondition-failed")
-        )
-          continue;
+        if (error instanceof StorageError && error.code === "precondition-failed") continue;
         throw this.failure("Type index registration failed", error);
       }
       return;
     }
     throw new Error("Type index conflict limit");
   }
-  private async resourceAcl(url: string) {
+  private async resourceAcl(url: string, aclUrl: string) {
     const store = new Store();
     const acl = "http://www.w3.org/ns/auth/acl#";
-    const authorization = node(store, `${url}.acl#owner`);
+    const authorization = node(store, `${aclUrl}#owner`);
     authorization.iri(`${RDF}type`, `${acl}Authorization`);
     authorization.iri(`${acl}agent`, this.ownerWebId);
     authorization.iri(`${acl}accessTo`, url);

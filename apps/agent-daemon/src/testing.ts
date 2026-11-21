@@ -117,7 +117,7 @@ export function createMemoryPod(root = "https://pod.example/") {
   const aclLinks = new Map<string, string | null>();
   const aclLink = (url: string) => {
     const target = aclLinks.get(url);
-    return target === undefined ? (url.endsWith("/") ? ".acl" : null) : target;
+    return target === undefined ? (url.endsWith("/") ? ".acl" : `${url}.acl`) : target;
   };
   const resources = new Map<string, { body: string; type: string; etag: string }>();
   const requests: { url: string; method: string; body: string; headers: Headers }[] = [];
@@ -158,7 +158,10 @@ export function createMemoryPod(root = "https://pod.example/") {
       return result;
     },
     async create(parent, body, options = {}) {
-      const url = `${parent}${encodeURIComponent(options.name ?? "")}${options.kind === "container" ? "/" : ""}`;
+      const { name, ...rest } = options;
+      const url =
+        options.exactUrl ??
+        `${parent}${encodeURIComponent(name ?? "")}${options.kind === "container" ? "/" : ""}`;
       record(
         url,
         "PUT",
@@ -168,7 +171,12 @@ export function createMemoryPod(root = "https://pod.example/") {
           "if-none-match": "*",
         }),
       );
-      const result = await memory.create(parent, body, options);
+      // A Solid named create uses exact PUT, which can also create missing parent containers.
+      const result = await memory.create(
+        parent,
+        body,
+        name !== undefined && options.exactUrl === undefined ? { ...rest, exactUrl: url } : options,
+      );
       await snapshot(result.url);
       return result;
     },
