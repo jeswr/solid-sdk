@@ -299,7 +299,7 @@ describe("injected pod I/O", () => {
       [1, 1],
       [0, 0],
     ]);
-    expect((await loadThreads(s.store, inbox)).items[0]!.thread.value).toBe(thread);
+    expect((await loadThreads(s.store, inbox)).items[0]!.id).toBe(thread);
     expect((await loadThread(s.store, thread)).map((m) => m.value)).toEqual([message]);
     s.files.set(`${root}empty/`, { body: "", etag: '"empty"' });
     expect(await s.store.list(`${root}empty/`)).toEqual([]);
@@ -337,7 +337,7 @@ describe("injected pod I/O", () => {
     const values = (page: ReturnType<typeof pageThreads>) => ({
       ...page,
       items: page.items.map((row) => ({
-        thread: row.thread.value,
+        thread: row.id,
         messages: row.messages.map((m) => ({ iri: m.value, sent: m.dateSent })),
       })),
     });
@@ -625,7 +625,8 @@ it("reads messages without thread links and handles empty thread/folder document
   const loaded = await s.store.load(documentOf(message));
   loaded.mailbox.message(message).partOfThread = undefined;
   await s.store.save(loaded);
-  expect((await loadThreads(s.store, inbox)).items).toEqual([]);
+  expect((await loadThreads(s.store, inbox)).items[0]?.id).toBe(message);
+  expect((await loadThread(s.store, message)).map((m) => m.value)).toEqual([message]);
   const empty = new MailboxDataset(new Store(), DataFactory);
   s.seed(thread, empty);
   s.seed(inbox, empty);

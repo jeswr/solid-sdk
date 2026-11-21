@@ -18,8 +18,16 @@ Network/parser errors retain their original cause. After any conflict or partial
 Inline JSON-LD contexts are supported; remote contexts and `@import` are rejected before parsing
 because the RDF parser cannot apply the scoped transport to its context loader.
 
-`loadFolders`, `loadThreads` and `loadThread` return hook-free data. Only a missing
-folders container is treated as empty; missing referenced resources surface errors.
+`loadFolders`, `loadThreads` and `loadThread` return hook-free data. A missing folders
+container is treated as empty; referenced documents that return 404 are skipped. Thread
+metadata returning 401, 403 or 410 also degrades to orphan rows; other errors surface.
+Each folder message not covered by a loaded thread gets its own
+single-message row: `{ id: message.value, thread: undefined, messages: [message] }`.
+Real thread rows use the thread IRI as `id`. Paging sorts both kinds together by newest
+message, then `id`, and totals include both. `loadThread` accepts either kind of IRI;
+a message IRI returns exactly that message, even when its `partOfThread` is dangling.
+The client uses `id` for row links and selection, so the existing thread route, read,
+star, label and archive actions operate on the same message without synthetic RDF.
 Folder counts retain message totals/unread counts and add `unreadThreads`, counting
 conversations with any unread member, including replies outside that folder. Pure `folderCounts`,
 `pageThreads` and `threadMessages` also work on cached snapshots. Folder paging loads every
@@ -86,3 +94,6 @@ pairs. Leading comments and skipped blocks do not consume the visible-text allow
 exceeding either bound sets `truncated`. Compared with the old regex fallback, it drops unfinished markup and
 unclosed script/style/head bodies and decodes uppercase named entities. Valid mail fixtures
 retain their output; the cap and malformed-input behavior prevent hostile rescans.
+
+Search includes orphan rows, tolerating the same unavailable thread metadata as folder lists.
+Counts and paging index message/thread membership once per loaded snapshot.
