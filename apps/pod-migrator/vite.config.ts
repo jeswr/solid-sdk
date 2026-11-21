@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -66,7 +67,7 @@ export function clientIdDocument(origin: string, base = "/") {
     client_id: `${app}clientid.jsonld`,
     client_name: "Pod Migrator",
     client_uri: app,
-    redirect_uris: [`${app}callback/source`, `${app}callback/target`],
+    redirect_uris: [`${app}callback/source/`, `${app}callback/target/`],
     scope: "openid webid offline_access",
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
@@ -74,13 +75,38 @@ export function clientIdDocument(origin: string, base = "/") {
   };
 }
 
+/** A callback is a popup document, never an application entry point. */
+export function callbackHtml(origin: string): string {
+  // JSON encoding plus HTML escaping keeps configuration outside the script grammar.
+  const target = JSON.stringify(origin).replaceAll("<", "\\u003c");
+  return `<!doctype html>
+<!-- AUTHORED-BY GPT-6.1 Sol -->
+<html lang="en"><head><meta charset="utf-8"><title>Signing you in · Pod Migrator</title></head>
+<body><p>Signing you in…</p><script>
+if (window.opener) window.opener.postMessage(location.href, ${target});
+</script></body></html>`;
+}
+
 export function clientDocumentPlugin(origin: string, base = "/"): Plugin {
   const body = `${JSON.stringify(clientIdDocument(origin, base), null, 2)}\n`;
+  const callback = callbackHtml(origin);
   return {
     name: "pod-migrator-client-document",
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
-        if (request.url?.split("?")[0] !== `${base}clientid.jsonld`) {
+        const path = request.url?.split("?")[0];
+        if (
+          ["source", "target"].some(
+            (id) =>
+              path === `${base}callback/${id}/` || path === `${base}callback/${id}/index.html`,
+          )
+        ) {
+          response.setHeader("Content-Type", "text/html; charset=utf-8");
+          response.setHeader("Cache-Control", "no-store");
+          response.end(callback);
+          return;
+        }
+        if (path !== `${base}clientid.jsonld`) {
           next();
           return;
         }
@@ -95,12 +121,9 @@ export function clientDocumentPlugin(origin: string, base = "/"): Plugin {
       handler(_options, bundle) {
         const index = bundle["index.html"];
         if (index?.type !== "asset") throw new Error("Missing built index.html");
-        for (const fileName of [
-          "404.html",
-          "callback/source/index.html",
-          "callback/target/index.html",
-        ])
-          this.emitFile({ type: "asset", fileName, source: index.source });
+        this.emitFile({ type: "asset", fileName: "404.html", source: index.source });
+        for (const id of ["source", "target"])
+          this.emitFile({ type: "asset", fileName: `callback/${id}/index.html`, source: callback });
         this.emitFile({ type: "asset", fileName: "clientid.jsonld", source: body });
       },
     },

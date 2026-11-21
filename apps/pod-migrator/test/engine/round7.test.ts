@@ -1,9 +1,10 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
 import { assertNotWider, emptyPolicy } from "../../src/engine/policy.js";
-import { ACL, ACP, RdfNode, serialize } from "../../src/engine/rdf.js";
+import { ACL, ACP, serialize } from "../../src/engine/rdf.js";
 import { readAcp } from "../../src/engine/systems/acp.js";
 import { readWac } from "../../src/engine/systems/wac.js";
 import { translatePolicy } from "../../src/engine/translation.js";
@@ -328,3 +329,5 @@ describe("round 7: established target conditions", () => {
     ).not.toThrow();
   });
 });
+
+import { RdfNode } from "./rdf-node.js";

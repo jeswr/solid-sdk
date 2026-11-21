@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
@@ -67,7 +68,7 @@ describe("review gating", () => {
   it("passes the detected implementations with both physical sessions, including after swapping", async () => {
     const essRoot = "https://storage.inrupt.com/bob/";
     const connections = fakeConnections();
-    vi.spyOn(connections[1].auth, "publicFetch").mockImplementation(
+    vi.spyOn(connections[1], "publicFetch").mockImplementation(
       async () =>
         new Response(profileTurtle.replace(`<${targetRoot}>`, `<${essRoot}>`), {
           headers: { "content-type": "text/turtle" },
@@ -102,8 +103,10 @@ describe("review gating", () => {
     );
     expect(createPodHttp).toHaveBeenCalledWith({
       root: sourceRoot,
-      fetch: connections[0].auth.publicFetch,
+      fetch: connections[0].publicFetch,
     });
+    expect(createPodHttp).toHaveBeenCalledWith({ root: sourceRoot, fetch: connections[0].fetch });
+    expect(createPodHttp).toHaveBeenCalledWith({ root: essRoot, fetch: connections[1].fetch });
     fireEvent.click(screen.getByRole("button", { name: "Back to options" }));
     fireEvent.click(screen.getByRole("button", { name: /Swap source and target/ }));
     fireEvent.click(screen.getByRole("button", { name: /Create migration plan/ }));
@@ -116,13 +119,13 @@ describe("review gating", () => {
     );
     expect(createPodHttp).toHaveBeenCalledWith({
       root: essRoot,
-      fetch: connections[1].auth.publicFetch,
+      fetch: connections[1].publicFetch,
     });
   });
   it("requires both connections before proceeding", async () => {
     const connections = fakeConnections();
-    vi.spyOn(connections[0], "initialize").mockResolvedValue();
-    vi.spyOn(connections[1], "initialize").mockResolvedValue();
+    vi.spyOn(connections[0], "updateSession").mockResolvedValue();
+    vi.spyOn(connections[1], "updateSession").mockResolvedValue();
     render(<App connections={connections} />);
     expect(screen.getByRole("button", { name: /Continue to target/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Swap source and target/ })).toBeDisabled();
@@ -193,11 +196,11 @@ describe("review gating", () => {
       expect.objectContaining({
         source: expect.objectContaining({
           root: targetRoot,
-          ownerWebId: connections[1].auth.webId,
+          ownerWebId: connections[1].snapshot().webId,
         }),
         target: expect.objectContaining({
           root: sourceRoot,
-          ownerWebId: connections[0].auth.webId,
+          ownerWebId: connections[0].snapshot().webId,
         }),
         targetContainer: sourceRoot,
         rewriteIris: false,

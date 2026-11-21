@@ -1,10 +1,11 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { LiteralFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
 import { expect, it, vi } from "vitest";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
-import { RdfNode, serialize } from "../../src/engine/rdf.js";
+import { serialize } from "../../src/engine/rdf.js";
 import { writeAcp } from "../../src/engine/systems/acp.js";
 import { acl, grant, pods, resolve, stranger } from "./helpers.js";
 
@@ -319,3 +320,5 @@ it.each([
     expect(target.requests.filter((request) => request.method === "PUT")).toEqual([]);
   }
 });
+
+import { RdfNode } from "./rdf-node.js";

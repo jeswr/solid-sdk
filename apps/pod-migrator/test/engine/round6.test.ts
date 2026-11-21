@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { DataFactory } from "n3";
 import { describe, expect, it, vi } from "vitest";
@@ -7,7 +8,7 @@ import {
   finalizePlan,
   planMigration,
 } from "../../src/engine/index.js";
-import { ACL, ACP, RdfNode, serialize } from "../../src/engine/rdf.js";
+import { ACL, ACP, serialize } from "../../src/engine/rdf.js";
 import { readAcp } from "../../src/engine/systems/acp.js";
 import { FakePod } from "./fake-pod.js";
 import { acl, grant, pods, policy, resolve, stranger } from "./helpers.js";
@@ -219,3 +220,5 @@ describe("round 6 regressions", () => {
     ).toEqual(new Set(["read", "append", "write", "control"]));
   });
 });
+
+import { RdfNode } from "./rdf-node.js";

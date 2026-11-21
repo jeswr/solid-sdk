@@ -1,8 +1,9 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { DataFactory, type Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
-import { ACL, ACP, RDF, RdfNode, serialize } from "../../src/engine/rdf.js";
+import { ACL, ACP, RDF, serialize } from "../../src/engine/rdf.js";
 import { readAcp } from "../../src/engine/systems/acp.js";
 import { targetFixture } from "./allowlist-fixtures.js";
 import { allowedEssTarget, FakePod } from "./fake-pod.js";
@@ -269,3 +270,5 @@ describe("round 8: source client wildcards", () => {
     expect(await target.permissions(`${target.root}file`)).toEqual(new Set());
   });
 });
+
+import { RdfNode } from "./rdf-node.js";
