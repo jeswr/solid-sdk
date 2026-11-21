@@ -13,6 +13,7 @@ import {
   Popover,
   PopoverAnchor,
   PopoverContent,
+  PopoverTrigger,
   Toolbar,
   toast,
 } from "@jeswr/suite-ui";
@@ -28,6 +29,7 @@ import {
   Link as LinkIcon,
   List,
   ListTodo,
+  MoreHorizontal,
   Pin,
   PinOff,
   Share2,
@@ -46,6 +48,7 @@ import { PREFIXES } from "@/apps/docs/lib/model/vocab";
 import { encodeRef } from "@/lib/refs";
 import { notesExtensions } from "../editor/extensions";
 import { NoteMoveBlockedError } from "../lib/model/errors";
+import type { NoteRevision } from "../lib/model/note";
 import type { StoredNote } from "../lib/model/store";
 import { checklistItems } from "../lib/ui/checklist";
 import { getPendingDrafts } from "../state/draft-registry";
@@ -56,6 +59,7 @@ import { ColourPicker, ConfirmDialog, LabelChips, LabelPicker } from "./controls
 import { ReminderChip, ReminderPicker } from "./reminder-picker";
 import { hasOpenItems, SendToTasksDialog } from "./send-to-tasks";
 import { ShareNote } from "./share-note";
+import { NoteVersionHistory } from "./version-history";
 
 export function NoteDialog({ note }: { note: StoredNote }) {
   const {
@@ -80,6 +84,9 @@ export function NoteDialog({ note }: { note: StoredNote }) {
   );
   const [, selectionChanged] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreButton = useRef<HTMLButtonElement>(null);
   const actionPending = useRef(false);
   // Keep the destination across failed moves and dismissed confirmations.
   const conversions = useRef(
@@ -99,7 +106,9 @@ export function NoteDialog({ note }: { note: StoredNote }) {
   const titleInput = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const trashed = note.location === "trashed";
-  const readOnly = trashed || busy || !!viewOnly;
+  const readOnly = trashed || busy || !!viewOnly || historyOpen;
+  const canRestore = useRef(false);
+  canRestore.current = !trashed && !viewOnly;
   const handler = useRef(change);
   handler.current = change;
   const editor = useEditor(
@@ -179,6 +188,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
     actionPending.current = false;
     const locked =
       trashed ||
+      historyOpen ||
       note.readOnly ||
       getPendingDrafts(session.webId).get(note.url)?.status === "read-only";
     if (titleInput.current) titleInput.current.readOnly = !!locked;
@@ -218,6 +228,20 @@ export function NoteDialog({ note }: { note: StoredNote }) {
       await flush();
     } catch {
       // The save status retains the error and draft for another retry.
+    } finally {
+      unlock();
+    }
+  };
+  const restoreVersion = async (revision: NoteRevision) => {
+    if (!canRestore.current || !lock()) throw new Error("This note can't be restored.");
+    try {
+      // Flush through the shared registry before replacing the local draft. Its
+      // writer preserves normal ETag conflicts, permission changes and retry recovery.
+      const saved = await flush();
+      if (!canRestore.current || saved.readOnly) throw new Error("This note is view only.");
+      change({ title: revision.title ?? saved.title, body: revision.body, preserveCurrent: true });
+      await flush();
+      setHistoryOpen(false);
     } finally {
       unlock();
     }
@@ -317,6 +341,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
     >
       <DialogContent
         className="notes-dialog"
+        aria-hidden={historyOpen || undefined}
         data-note-colour={prefs.colours[note.url] ?? "default"}
         showCloseButton={false}
         onOpenAutoFocus={(event) => {
@@ -472,6 +497,36 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           <LabelChips links={false} labels={draft.labels} />
           <ReminderChip value={note.reminder} now={new Date(now)} />
           <div className="notes-dialog-actions">
+            <Popover open={moreOpen} onOpenChange={setMoreOpen}>
+              <PopoverTrigger asChild>
+                <IconButton
+                  ref={moreButton}
+                  label="More note actions"
+                  variant="ghost"
+                  disabled={busy}
+                >
+                  <MoreHorizontal size={18} aria-hidden="true" />
+                </IconButton>
+              </PopoverTrigger>
+              <PopoverContent
+                className="notes-popover notes-more-menu"
+                aria-label="More note actions"
+                onCloseAutoFocus={(event) => {
+                  if (historyOpen) event.preventDefault();
+                }}
+              >
+                <Button
+                  variant="ghost"
+                  disabled={trashed || busy}
+                  onClick={() => {
+                    setHistoryOpen(true);
+                    setMoreOpen(false);
+                  }}
+                >
+                  Version history
+                </Button>
+              </PopoverContent>
+            </Popover>
             {viewOnly ? null : trashed ? (
               <Button
                 variant="outline"
@@ -607,6 +662,18 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           </div>
         </footer>
       </DialogContent>
+      {historyOpen && (
+        <NoteVersionHistory
+          revisions={note.revisions}
+          current={draft}
+          readOnly={!!viewOnly || trashed}
+          restore={restoreVersion}
+          close={() => setHistoryOpen(false)}
+          menu={moreButton}
+          http={session.fetch}
+          podRoot={session.storageUrl}
+        />
+      )}
       {sharing && (
         <ShareNote
           note={sharing}
