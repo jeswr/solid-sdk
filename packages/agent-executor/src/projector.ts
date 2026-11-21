@@ -29,10 +29,11 @@ export function createOutboxProjector(options: {
     const account = accounts.get(id);
     if (binding?.id !== id || !account) throw new ProposalRefusedError("unsupported-binding");
 
+    const expected = { proposalId: proposal.id, conversation: proposal.intent.conversation };
     const release = await options.sign(proposal);
     if (!release.ok) throw new ProposalRefusedError(release.reason);
     const { renderable, preview } = release;
-    const wire = await binding.send.render(renderable, binding.carriage);
+    const wire = await binding.send.render(renderable, binding.carriage, expected);
     const entry = {
       proposal: { ...proposal, renderedPreview: preview, intent: { ...proposal.intent } },
       renderable,

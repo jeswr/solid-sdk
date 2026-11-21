@@ -4,6 +4,7 @@ import {
   type BridgeMessage,
   type ChannelParseRefusalReason,
   DIRECT,
+  type ProposalContext,
   readEnvelope,
 } from "@jeswr/agent-channels";
 import type { ProposalRelease } from "@jeswr/agent-executor";
@@ -295,10 +296,10 @@ export function createGate(
       enqueue<ProposalRelease>(
         () => outbound?.release(proposal) ?? { ok: false, reason: "unsupported-operation" },
       ),
-    verifyOwn: (compactJws: string) =>
+    verifyOwn: (compactJws: string, expected: ProposalContext | undefined) =>
       enqueue(() => {
         if (!outbound) throw new Error("Outbound gate is not configured");
-        return outbound.verifyOwn(compactJws);
+        return outbound.verifyOwn(compactJws, expected);
       }),
     facts() {
       if (closed) throw new Error("Inbound gate is closed");
@@ -469,8 +470,7 @@ export async function installGateMandate(options: {
   const { runtime } = await openRuntime(stored, options);
   try {
     await runtime.reloadMandate(jws);
-    const status = runtime.mandateStatus();
-    if (!status.loaded || status.revoked) throw new Error("Gate mandate was refused");
+    if (!runtime.activeMandateDigest()) throw new Error("Gate mandate was refused");
     await writePrivate(stored.dir, "mandate.jws", jws);
   } finally {
     runtime.close();
@@ -494,9 +494,9 @@ export function createInboundGate(
       if (!active) throw new Error("Outbound gate requires an active daemon lease");
       return active.release(proposal);
     },
-    async verifyOwn(compactJws) {
+    async verifyOwn(compactJws, expected) {
       if (!active) throw new Error("Outbound gate requires an active daemon lease");
-      return active.verifyOwn(compactJws);
+      return active.verifyOwn(compactJws, expected);
     },
     async open(identity) {
       const stored = await readGate(options.directory);

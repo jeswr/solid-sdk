@@ -191,11 +191,13 @@ reference mandate prevents new releases. The gate holds `ask-principal` actions
 without granting approval.
 
 Pass `gate.verifyOwn` as the `verify` option of **every** send half. It checks the
-actor signature and requires the exact compact JWS in the gate's durable release
-record and reference outbox. Construct the executor's send bindings with trusted
-validators that bind every intent term and the destination account to the
-released wire. The daemon delegates rendering to those bindings through the
-executor projector.
+actor signature and requires the exact compact JWS in the gate's durable record
+and reference outbox for the expected proposal and conversation under the active
+mandate. The projector and executor supply that context from the proposal being
+processed. Preserve it through any send binding wrapper. Pass the executor's
+`expected` context to the channel's `send.validate(wire, renderable, expected)`
+when implementing the trusted validator that binds all intent terms and the
+destination account to the wire.
 
 ```ts
 const gate = createInboundGate({
@@ -220,11 +222,13 @@ const project = async (proposal: ActionProposal) => {
 
 `project` replaces the former `proposalWritten` option. Persist and return the exact
 entry the executor reads. The projector replaces the model draft preview with a
-description of the released message and binds the resulting preview, account,
-wire and intent to the approval digest. The daemon verifies that digest before
-publishing the pending proposal. A typed refusal is cached and audited with the
+description drawn solely from signed message fields and binds the resulting
+preview, account, wire and intent to the approval digest. The daemon verifies
+that digest before publishing the pending proposal. A typed refusal is cached and audited with the
 proposal reference, and the daemon skips outbox and pending proposal publication
-for that refusal. Confirmed gate releases reuse their original wire on retries.
+for that refusal. Confirmed gate releases reuse their original wire while the
+same mandate is active. A changed mandate requires a fresh runtime release, and
+queued envelopes released under a different mandate fail verification.
 An interrupted release without a completed receipt requires a new proposal.
 
 The reference mandate controls release and sealing. The executor independently

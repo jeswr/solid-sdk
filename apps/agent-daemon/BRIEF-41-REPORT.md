@@ -533,3 +533,42 @@ runtime signs inside the existing checked release path.
 | Daemon Vitest without sandbox-dependent cases | 266 passed. |
 | Executor Vitest with V8 coverage | 576 accessible tests passed and per-file thresholds passed at 100% statements, branches, functions and lines. The four process-death cases timed out waiting for a child. A direct subprocess probe returned `EPERM`. |
 | Biome and repository guards | Biome exited successfully with existing warnings and infos in the reference runtime. SDK layers, agent layers, RDF discipline, app duplication and `git diff --check` passed. |
+
+## Phase 3 review fixes (41n)
+
+- The daemon binds each release receipt to the digest of the active reference
+  mandate. A retry under the same active mandate can reuse the wire. A replacement
+  mandate or a legacy receipt without a digest sends the proposal through the
+  runtime again. Verification rejects an existing envelope whose receipt carries
+  an inactive or missing mandate digest, including before a retry updates the receipt.
+- The projector and executor pass the expected proposal ID and conversation
+  through the send interface. Each concrete send half forwards them to its
+  verifier, including when it rechecks the carrier at dispatch. The daemon README
+  describes how host wrappers pass the same context through validation.
+- The outbound gate builds the approval preview solely from the signed message,
+  omitting absent fields. The executor binds the resulting preview and wire to
+  the approval digest.
+- The reference runtime shares its mandate validity check with the CLI installer.
+  The installer preserves the installed file when a pinned owner's replacement
+  is expired or future-dated.
+
+### Red and green checks
+
+| Regression | Initial failing output | Passing result |
+| --- | --- | --- |
+| Retry after installing a deny-all mandate | Expected `ok: false`, received `ok: true`. | Verification rejects the old envelope before retry. The runtime denies the retry and the projector creates no executor entry. |
+| Verify an envelope for another proposal or conversation | The verification promise resolved instead of rejecting. | Verify, project and direct transmit reject both mismatches. Verification succeeds for the original proposal and conversation. |
+| Omit unsigned delivery purpose from preview | Expected no `purpose` property, received the mapped scheduling purpose. | The preview omits `purpose`; the signed operation and delivery terms remain visible. |
+| Install expired and future-dated owner mandates | Both cases returned CLI status 0 instead of 1. | Both return status 1 and preserve the installed bytes. A mandate starting at the current time installs successfully. |
+
+### Verification
+
+| Check | Result |
+| --- | --- |
+| Outbound integration | 14 passed, including the four review regressions and both invalid date cases. |
+| TypeScript | Reference library-only rebuild and generated asset copy passed. Channels, executor and daemon source builds and test typechecks passed. |
+| Reference Vitest and traces | All 18 tests passed across admitted-facts, claim-failures and both oracle suites. Git status for `traces/`, `outlines/` and `scenario-runs.json` was empty. |
+| Daemon Vitest | 271 passed in both runs. The full run reported 20 sandbox failures. CSS and D-2 hit `listen EPERM`, 15 cloud tests timed out in loopback setup, launchd hit `spawnSync python3 EPERM`, and two packaging checks received empty subprocess stdout. |
+| Executor Vitest with V8 coverage | 576 passed and all four metrics met 100% per-file thresholds. Four process-death cases in the full run timed out waiting for a child. A direct subprocess probe returned `EPERM`. |
+| Channel Vitest | 942 passed in the local run. Ten loopback cases in the full run hit `listen EPERM`; one existing skip remained. |
+| Biome and repository guards | Biome passed with existing reference warnings and infos. SDK layers, agent layers, RDF discipline, app duplication and `git diff --check` passed. |

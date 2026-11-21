@@ -10,7 +10,13 @@ import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import { createOriginScopedFetch, type OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, DISCORD_FOOTER } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
-import type { AccountRef, RenderableProposal, Wire } from "../types.js";
+import type {
+  AccountRef,
+  EnvelopeVerifier,
+  ProposalContext,
+  RenderableProposal,
+  Wire,
+} from "../types.js";
 import { readJson, snowflake } from "./shared.js";
 
 export interface DiscordSendOptions {
@@ -19,7 +25,7 @@ export interface DiscordSendOptions {
   readonly recipients: ReadonlyMap<string, string>;
   readonly footer?: string;
   /** Pure local verifier of the pinned signing key and intended audience. */
-  readonly verify: (compactJws: string) => Promise<unknown>;
+  readonly verify: EnvelopeVerifier;
   /** Load the signed proposal from the executor's local outbox, by the approved wire digest.
    * Discord carries no signed envelope, so it cannot be recovered from wire bytes. */
   readonly resolveProposal: (wire: Wire) => Promise<RenderableProposal>;
@@ -53,13 +59,13 @@ export function createDiscordSend(
     )
       throw new ChannelParseError("Discord message is expired or not yet valid");
   }
-  async function prepare(proposal: RenderableProposal) {
+  async function prepare(proposal: RenderableProposal, context: ProposalContext | undefined) {
     // Snapshot both the signed bytes and proposed content before an async verifier can yield.
     const compactJws = proposal.compactJws;
     const decoded = decodeEmailProposal(compactJws);
     assertJsonBounds(proposal.message);
     const proposed = canonicalJson(proposal.message);
-    const payload = await verify(compactJws);
+    const payload = await verify(compactJws, context);
     assertJsonBounds(payload);
     const result = validateMessage(payload);
     if (
@@ -111,17 +117,21 @@ export function createDiscordSend(
       throw new ChannelParseError("invalid Discord wire");
     return wire;
   }
-  async function render(proposal: RenderableProposal, carriage: CarriageProfile) {
+  async function render(
+    proposal: RenderableProposal,
+    carriage: CarriageProfile,
+    context?: ProposalContext,
+  ) {
     if (canonicalJson(carriage) !== canonicalJson(DISCORD_FOOTER))
       throw new ChannelParseError("unsupported Discord carriage");
-    return (await prepare(proposal)).wire;
+    return (await prepare(proposal, context)).wire;
   }
   return {
     render,
-    async validate(wire, proposal) {
+    async validate(wire, proposal, context) {
       try {
         const copy = snapshot(wire);
-        const expected = await prepare(proposal);
+        const expected = await prepare(proposal, context);
         current(expected.message);
         return copy.bytes === expected.wire.bytes
           ? { ok: true }
@@ -136,7 +146,7 @@ export function createDiscordSend(
         if (accountId(io.account) !== account.id)
           throw new ProviderRejectedError("Discord account differs from configured bot");
         const copy = snapshot(wire);
-        const expected = await prepare(await resolveProposal(copy));
+        const expected = await prepare(await resolveProposal(copy), io.expected);
         if (expected.wire.bytes !== copy.bytes)
           throw new ChannelParseError("Discord wire differs from signed proposal");
         current(expected.message);

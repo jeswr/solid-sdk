@@ -10,6 +10,7 @@ import type {
   BindingState,
   Bounds,
   Cursor,
+  ProposalContext,
   ProviderLookupResult,
   ProviderSendResult,
   RenderableProposal,
@@ -49,17 +50,22 @@ export interface ChannelBinding<Raw = unknown> {
   /** Send half — exported ONLY from the "./<id>/send" subpath; importable ONLY by @jeswr/agent-executor. */
   readonly send?: {
     /** Build the exact wire bytes for a proposal. Pure. The digest of `wire` is what the owner approves. */
-    render(proposal: RenderableProposal, carriage: CarriageProfile): Promise<Wire>;
+    render(
+      proposal: RenderableProposal,
+      carriage: CarriageProfile,
+      expected?: ProposalContext,
+    ): Promise<Wire>;
     /** Re-derive and check `wire` from the proposal (defence against a tampered outbox entry). */
     validate(
       wire: Wire,
       proposal: RenderableProposal,
+      expected?: ProposalContext,
     ): Promise<{ ok: true } | { ok: false; reason: ReasonCode }>;
     /** Transmit. ProviderRejectedError is a definitive provider/gate refusal;
      * SendNotDispatchedError retains the cause of any local pre-dispatch failure. */
     transmit(wire: Wire, io: TransmissionIo): Promise<ProviderSendResult>;
     /** Positive-evidence lookup for an uncertain send (§4.3). */
-    lookup?(wire: Wire): Promise<ProviderLookupResult>;
+    lookup?(wire: Wire, expected?: ProposalContext): Promise<ProviderLookupResult>;
     /** Whether `lookup` absence is causally final (A2A loopback: yes; mail providers: never). */
     readonly finalAbsence?: true;
   };

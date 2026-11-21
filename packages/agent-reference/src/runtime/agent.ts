@@ -92,6 +92,7 @@ import {
   evaluateIntent,
   type LoadedMandate,
   loadMandate,
+  mandateWindowFailure,
   verifyApproval,
 } from "../mechanisms/mandate.js";
 import { type PolicyEngine, solidOdrlEngine } from "../mechanisms/policy-engine.js";
@@ -1270,6 +1271,13 @@ export class AgentRuntime {
       revoked: this.mandate ? this.isRevoked(this.mandate) : false,
       ...(this.mandateFailure ? { failure: this.mandateFailure } : {}),
     };
+  }
+
+  /** Digest of the verified, currently valid and unrevoked owner mandate. */
+  activeMandateDigest(): string | undefined {
+    const mandate = this.mandate;
+    if (mandate && !this.isRevoked(mandate) && !mandateWindowFailure(mandate.mandate, this.now()))
+      return mandate.digest;
   }
 
   private isRevoked(m: LoadedMandate): boolean {

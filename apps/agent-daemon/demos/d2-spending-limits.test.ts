@@ -306,7 +306,10 @@ it("D-2: hostile email/A2A can propose; Transfer and cumulative spending remain 
             },
           },
         };
-        const wire = await binding.send.render(renderable, binding.carriage);
+        const wire = await binding.send.render(renderable, binding.carriage, {
+          proposalId: proposal.id,
+          conversation: proposal.intent.conversation,
+        });
         const entry: OutboxEntry = { proposal, renderable, account, wire, wireDigest: wire.digest };
         proposal.intent.termsDigest = proposalTermsDigest(entry);
         stores.entries.set(proposal.id, entry);

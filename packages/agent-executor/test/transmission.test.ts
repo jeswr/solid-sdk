@@ -114,7 +114,10 @@ describe("step 7: durable idempotency and pilot recovery", () => {
       providerRef: "peer:found",
     });
     expect([...h.settlements.values()][0]).toMatchObject({ status: "sent", final: true });
-    expect(h.binding.send.lookup).toHaveBeenCalledWith(e.wire);
+    expect(h.binding.send.lookup).toHaveBeenCalledWith(e.wire, {
+      proposalId: e.proposal.id,
+      conversation: e.proposal.intent.conversation,
+    });
     expect(h.binding.send.transmit).not.toHaveBeenCalled();
     expect(h.options.tokens.send).not.toHaveBeenCalled();
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "duplicate" });
@@ -299,7 +302,10 @@ describe("step 7: durable idempotency and pilot recovery", () => {
       lookup: vi.fn(async () => ({ outcome: "absent" as const })),
     });
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
-    expect(h.binding.send.lookup).toHaveBeenCalledWith(e.wire);
+    expect(h.binding.send.lookup).toHaveBeenCalledWith(e.wire, {
+      proposalId: e.proposal.id,
+      conversation: e.proposal.intent.conversation,
+    });
     expect(h.binding.send.transmit).toHaveBeenCalledOnce();
     expect(h.records.get(e.proposal.id)?.attempts).toBe(2);
   });

@@ -133,6 +133,7 @@ async function fixture(mode: "permit" | "ask" | "deny" = "permit", mapped = true
     validUntil: UNTIL,
     state: "proposed",
   };
+  const expected = { proposalId: proposal.id, conversation: proposal.intent.conversation };
   const outbound: OutboundMapping = {
     handlers: [handler],
     plan: (draft) => ({
@@ -167,7 +168,7 @@ async function fixture(mode: "permit" | "ask" | "deny" = "permit", mapped = true
   const binding = createInMemoryDirectBinding({
     tokens,
     now: () => now().getTime(),
-    verify: (jws) => gate.verifyOwn(jws),
+    verify: (jws, context) => gate.verifyOwn(jws, context),
   });
   const observed = binding.ingest.parse({ id: inbound.id, raw: encodeEnvelope(jws) });
   expect(
@@ -213,12 +214,12 @@ async function fixture(mode: "permit" | "ask" | "deny" = "permit", mapped = true
       ...binding,
       send: {
         ...binding.send,
-        async validate(wire, { account: destination, intent, renderable }) {
+        async validate(wire, { account: destination, intent, renderable, expected }) {
           const { termsDigest: _digest, ...draft } = proposal.intent;
           const { termsDigest: _supplied, ...supplied } = intent;
           if (destination.id !== account.id || canonicalJson(supplied) !== canonicalJson(draft))
             return { ok: false, reason: "terms-digest-mismatch" };
-          return binding.send.validate(wire, renderable);
+          return binding.send.validate(wire, renderable, expected);
         },
       },
     },
@@ -234,17 +235,21 @@ async function fixture(mode: "permit" | "ask" | "deny" = "permit", mapped = true
     policy: solidOdrlEngine,
     dryRun: false,
   });
-  async function project(draft = proposal) {
+  async function project(
+    draft = proposal,
+    sign: typeof gate.release = (value) => gate.release(value),
+  ) {
     const entry = await execution.createOutboxProjector({
       bindings,
       accounts: { direct: account },
-      sign: (value) => gate.release(value),
+      sign,
     })(draft);
     stores.entries.set(draft.id, entry);
     return entry;
   }
   return {
     proposal,
+    expected,
     sender,
     receiver,
     peerRuntime,
@@ -256,8 +261,13 @@ async function fixture(mode: "permit" | "ask" | "deny" = "permit", mapped = true
     verify,
     project,
     tokens,
-    async reopen() {
+    async reopen(mandateJws?: string) {
       await gate.close();
+      if (mandateJws) {
+        const path = join(root, "replacement.jws");
+        await writeFile(path, mandateJws);
+        await installGateMandate({ directory: options.directory, path, now });
+      }
       gate = await daemon.openGate(options);
       return gate;
     },
@@ -295,9 +305,11 @@ it.each([
       to: { actor: peer.actor, party: peer.party },
     };
     const { jws } = await craftSigned(key === "own" ? f.sender : f.receiver, message);
-    await expect(f.gate.verifyOwn(jws)).rejects.toThrow(key === "own" ? /released/ : /signature/);
+    await expect(f.gate.verifyOwn(jws, f.expected)).rejects.toThrow(
+      key === "own" ? /released/ : /signature/,
+    );
     await expect(
-      f.binding.send.render({ compactJws: jws, message }, f.binding.carriage),
+      f.binding.send.render({ compactJws: jws, message }, f.binding.carriage, f.expected),
     ).rejects.toThrow();
     const bytes = encodeEnvelope(jws);
     await expect(
@@ -307,7 +319,13 @@ it.each([
           digest: digestBytes(bytes),
           mediaType: "application/ld+json",
         },
-        { account, tokens: f.tokens, dryRun: false, assertAuthority: vi.fn() },
+        {
+          account,
+          tokens: f.tokens,
+          expected: f.expected,
+          dryRun: false,
+          assertAuthority: vi.fn(),
+        },
       ),
     ).rejects.toThrow();
     expect(f.tokens.calls.filter(({ access }) => access === "send")).toHaveLength(0);
@@ -351,12 +369,12 @@ it("seals once across restart, sends once after owner approval, and reaches the 
   try {
     const entry = await f.project();
     const reopened = await f.reopen();
-    await expect(reopened.verifyOwn(entry.renderable.compactJws)).resolves.toEqual(
+    await expect(reopened.verifyOwn(entry.renderable.compactJws, f.expected)).resolves.toEqual(
       entry.renderable.message,
     );
     expect(await f.project(entry.proposal)).toEqual(entry);
     const forged = await craftSigned(f.sender, { ...entry.renderable.message, expiresAt: UNTIL });
-    await expect(reopened.verifyOwn(forged.jws)).rejects.toThrow(/released/);
+    await expect(reopened.verifyOwn(forged.jws, f.expected)).rejects.toThrow(/released/);
     expect(await f.executor.transmit(f.proposal.id)).toMatchObject({ status: "awaiting-approval" });
     await f.approve(entry);
     expect(await f.executor.transmit(f.proposal.id)).toMatchObject({ status: "sent" });
@@ -381,6 +399,76 @@ it("seals once across restart, sends once after owner approval, and reaches the 
   }
 });
 
+it("rechecks a previously released proposal after a deny-all mandate is installed", async () => {
+  const f = await fixture();
+  try {
+    const released = await f.gate.release(f.proposal);
+    if (!released.ok) throw new Error(released.reason);
+    const mandate = mandateOf(
+      "deny-all",
+      [],
+    )({
+      owner: agent.party,
+      actor: agent.actor,
+      validFrom: AT,
+      validUntil: UNTIL,
+    });
+    const gate = await f.reopen(await signMandate(f.sender.ownerKey, mandate));
+    const reason = "no applicable grant in the mandate (deny by default)";
+    // Verify before retry updates the receipt, as an already queued outbox entry would.
+    await expect(gate.verifyOwn(released.renderable.compactJws, f.expected)).rejects.toThrow(
+      /active mandate/,
+    );
+    await expect(gate.release(f.proposal)).resolves.toEqual({ ok: false, reason });
+    await expect(f.project()).rejects.toMatchObject({ reason });
+    expect(f.stores.entries.size).toBe(0);
+    expect(f.verify).not.toHaveBeenCalled();
+  } finally {
+    await f.close();
+  }
+});
+
+it("rejects a gate envelope used for a different proposal or conversation", async () => {
+  const f = await fixture();
+  try {
+    const entry = await f.project();
+    const jws = entry.renderable.compactJws;
+    const differentProposal = {
+      ...f.proposal,
+      id: "https://pod.example/agent/proposals/other.ttl",
+    };
+    const differentConversation = {
+      ...f.proposal,
+      intent: { ...f.proposal.intent, conversation: "urn:test:other-conversation" },
+    };
+    await expect(f.gate.verifyOwn(jws, f.expected)).resolves.toEqual(entry.renderable.message);
+    await expect(f.gate.verifyOwn(jws, undefined)).rejects.toThrow(/released/);
+    for (const proposal of [differentProposal, differentConversation]) {
+      const expected = { proposalId: proposal.id, conversation: proposal.intent.conversation };
+      await expect(f.gate.verifyOwn(jws, expected)).rejects.toThrow(/released/);
+      await expect(
+        f.project(proposal, async () => ({
+          ok: true,
+          renderable: entry.renderable,
+          preview: entry.proposal.renderedPreview,
+        })),
+      ).rejects.toThrow(/released/);
+      await expect(
+        f.binding.send.transmit(entry.wire, {
+          account,
+          expected,
+          tokens: f.tokens,
+          dryRun: false,
+          assertAuthority: vi.fn(),
+        }),
+      ).rejects.toMatchObject({ cause: { message: expect.stringMatching(/released/) } });
+    }
+    expect(f.tokens.calls.filter(({ access }) => access === "send")).toHaveLength(0);
+  } finally {
+    await f.close();
+  }
+});
+
 it("replaces the model preview with a code-rendered description of the signed terms", async () => {
   const f = await fixture();
   try {
@@ -389,6 +477,18 @@ it("replaces the model preview with a code-rendered description of the signed te
     expect(entry.proposal.renderedPreview).toContain(peer.party);
     expect(entry.proposal.renderedPreview).toContain(SCHEDULE_OP.id);
     expect(entry.proposal.renderedPreview).toContain('"durationMinutes":30');
+  } finally {
+    await f.close();
+  }
+});
+
+it("omits the mapped purpose when it is absent from the signed delivery", async () => {
+  const f = await fixture();
+  try {
+    const entry = await f.project();
+    expect(entry.proposal.intent.purpose).toBe(PURPOSE.scheduling);
+    expect(entry.renderable.message.body).not.toHaveProperty("purpose");
+    expect(JSON.parse(entry.proposal.renderedPreview)).not.toHaveProperty("purpose");
   } finally {
     await f.close();
   }
@@ -417,7 +517,11 @@ it("invalidates owner approval when one approval-bound term changes", async () =
   }
 });
 
-it("installs only a mandate signed by the pinned owner", async () => {
+it.each([
+  ["expired", "2026-11-20T12:00:00.000Z", AT],
+  ["future", "2026-11-21T12:00:00.001Z", UNTIL],
+  ["current", AT, UNTIL],
+])("installs only a current mandate signed by the pinned owner (%s)", async (validity, validFrom, validUntil) => {
   const f = await fixture("deny");
   await f.close();
   const directory = join(root, agent.name);
@@ -427,8 +531,8 @@ it("installs only a mandate signed by the pinned owner", async () => {
   const mandate = schedulingMandate([peer.party])({
     owner: agent.party,
     actor: agent.actor,
-    validFrom: AT,
-    validUntil: UNTIL,
+    validFrom,
+    validUntil,
   });
   await writeFile(source, await signMandate(f.receiver.ownerKey, mandate));
   await expect(installGateMandate({ directory, path: source, now })).rejects.toThrow(/mandate/);
@@ -459,8 +563,12 @@ it("installs only a mandate signed by the pinned owner", async () => {
     } finally {
       await unlock();
     }
-    expect(await daemon.runCli(["gate", "mandate", source], host, io)).toBe(0);
-    expect((await readFile(installed, "utf8")).trim()).toBe(signed);
+    expect(await daemon.runCli(["gate", "mandate", source], host, io)).toBe(
+      validity === "current" ? 0 : 1,
+    );
+    expect((await readFile(installed, "utf8")).trim()).toBe(
+      validity === "current" ? signed : previous.trim(),
+    );
     expect(composition).not.toHaveBeenCalled();
   } finally {
     vi.useRealTimers();
