@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.2 Sol
+
 import {
   accessRequests,
   deadline,
@@ -25,6 +26,7 @@ import { selectedSettlement } from "../settlement/configurations.js";
 import type { ProtocolObjects, SettlementSuite } from "../settlement/types.js";
 import type { PodGrant } from "../standins/pod-access.js";
 import { negotiatedRequestMatches } from "../suites/meaning-negotiated.js";
+import { termsLinks } from "../trace/linked.js";
 import { decodeJws } from "../wire/inspect.js";
 import { documentConfiguration, isMessagePacket, packetProofInfo } from "../wire/message-packet.js";
 import { paymentDocumentIn, paymentTrace } from "../wire/payment.js";
@@ -90,7 +92,7 @@ import {
   NOT_APPLICABLE,
   PASS_CODE,
   refsFor,
-  resolutionView,
+  resolutionTrace,
   ruleText,
 } from "./common.js";
 import {
@@ -1909,7 +1911,7 @@ export class OutboundGate {
     }
     const label = this.deps.gate.taskLabel?.(task) ?? idWords(task, this.name);
     const r = resolver.resolveRecipient({ party, task, taskLabel: label, at: this.deps.now() });
-    const resolution = { resolution: resolutionView(r) };
+    const resolution = resolutionTrace(r, this.deps.gate);
     if (r.outcome === "accepted") {
       this.verdict(verdicts, subject, "recipient", "pass", `${this.name(party)}: ${r.answer}`, {
         ...resolution,
@@ -2346,6 +2348,7 @@ export class OutboundGate {
         `${fact?.label ?? "An item"}: ${lower(text)}`,
         {
           ...(reason ? { reason } : {}),
+          ...termsLinks(this.deps.gate.sink?.linked, terms),
           rule: {
             id: terms?.policy?.id ?? "default-terms",
             text: terms

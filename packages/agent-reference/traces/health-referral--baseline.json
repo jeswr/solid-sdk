@@ -78,7 +78,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -153,7 +153,11 @@
         "answer": "Accepted, for organization role claims only."
       },
       "caption": "The professional register's organization role statement: The professional register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:17c2997eb0806463824e292ca6b6edc000505915c2a0ed99d3a7ab7449feab5f",
+        "sha-256:6aca5fdb320900c02d146b6fa2505fdcec56e1dd372a0ac1d845f9cb7ccbc220"
+      ]
     },
     {
       "seq": 3,
@@ -200,7 +204,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The professional register's organization role statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6343e55ff98733dfeb9a588279e8d94b1e0d8953578ab3a3fe5bcb2ed45c33ab"
+      ]
     },
     {
       "seq": 5,
@@ -244,7 +251,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The professional register's organization role statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4417d8c56286a98a71f830e655647019a30b374036b625e29d8a662a5816bc32"
+      ]
     },
     {
       "seq": 7,
@@ -267,7 +277,10 @@
         },
         "provenance": "signed by The professional register"
       },
-      "caption": "The professional register's organization role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The professional register's organization role statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:b37a1942d2188588a0ec914cf9d17f5a051c66669a42764f8923f40e53207d8f"
+      ]
     },
     {
       "seq": 8,
@@ -313,7 +326,10 @@
       },
       "reason": "within-mandate",
       "caption": "The family practice's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:664385b2f63a5bd7fc9417d88d634318f9f3d696c38e8210038fc80482667e5d"
+      ]
     },
     {
       "seq": 10,
@@ -363,7 +379,10 @@
       },
       "reason": "recipient-established",
       "caption": "The specialist clinic: Accepted, for the unlabelled resource only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:88d36d67b6ae9b7dcd75d590d77f9641ebe9d0e283f1667179d3dd0e5a608c25"
+      ]
     },
     {
       "seq": 11,
@@ -454,7 +473,10 @@
         "text": "Requires 1 approval(s) from clinician."
       },
       "caption": "The required people must decide this exact action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:664385b2f63a5bd7fc9417d88d634318f9f3d696c38e8210038fc80482667e5d"
+      ]
     },
     {
       "seq": 14,
@@ -476,7 +498,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The action is held for the named decision makers.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9496b2973cc2ed6f414e8ee280d1deac8a7aa6f2adddeea2a76933f917701b71"
+      ]
     },
     {
       "seq": 15,
@@ -535,7 +560,10 @@
       },
       "reason": "within-mandate",
       "caption": "The family practice's mandate covers this action.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:664385b2f63a5bd7fc9417d88d634318f9f3d696c38e8210038fc80482667e5d"
+      ]
     },
     {
       "seq": 18,
@@ -585,7 +613,10 @@
       },
       "reason": "recipient-established",
       "caption": "The specialist clinic: Accepted, for the unlabelled resource only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:88d36d67b6ae9b7dcd75d590d77f9641ebe9d0e283f1667179d3dd0e5a608c25"
+      ]
     },
     {
       "seq": 19,
@@ -710,7 +741,10 @@
       },
       "reason": "within-mandate",
       "caption": "The family practice's mandate covers this action.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:664385b2f63a5bd7fc9417d88d634318f9f3d696c38e8210038fc80482667e5d"
+      ]
     },
     {
       "seq": 23,
@@ -760,7 +794,10 @@
       },
       "reason": "recipient-established",
       "caption": "The specialist clinic: Accepted, for the unlabelled resource only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:88d36d67b6ae9b7dcd75d590d77f9641ebe9d0e283f1667179d3dd0e5a608c25"
+      ]
     },
     {
       "seq": 24,
@@ -1000,7 +1037,10 @@
       "messageId": "urn:awp:engine-health-referral-main:practice-agent:0002",
       "messageDigest": "sha-256:b5e6e37508008f623c8d17d71ad0a36ce7d53caf394810b964156b3f657755c4",
       "caption": "The invoke message goes to The specialist clinic’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:53c4a245bfec7d11b14f34055b4297cf445470d09ed0809701cf8a92d883ef74"
+      ]
     },
     {
       "seq": 32,
@@ -1437,7 +1477,10 @@
       "messageId": "urn:awp:engine-health-referral-main:practice-agent:0002",
       "messageDigest": "sha-256:b5e6e37508008f623c8d17d71ad0a36ce7d53caf394810b964156b3f657755c4",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:38084f809be4efc78e9bdcd9cb319f2ae7e72d5fd7c7c9982cef783fe9dbe677"
+      ]
     },
     {
       "seq": 40,
@@ -1500,7 +1543,11 @@
         "answer": "Accepted, for referral history claims only."
       },
       "caption": "The local record holder's referral history statement: The local record holder is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:2ae85872e1ea1dc686ad7b342f3b38f0209d11080b73fe367d98d5cd18fb2255",
+        "sha-256:1d8bcbd7f1c2fc67c7a609aff0d2aa727507beb5252ca0e437ae09fa8b497cb4"
+      ]
     },
     {
       "seq": 42,
@@ -1547,7 +1594,10 @@
         "text": "Its terms allow this: use for Health referral."
       },
       "caption": "The local record holder's referral history statement: its terms allow this: use for Health referral.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:020fe550403ce3f2027d5e866112f88dd5bc4b0c0331823ed72fca5800a5bf0f"
+      ]
     },
     {
       "seq": 44,
@@ -1591,7 +1641,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The local record holder's referral history statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:a5c1b17085f72969db18c31fe69698de885a87f7d2d5ae672a40d9cefab92260"
+      ]
     },
     {
       "seq": 46,
@@ -1614,7 +1667,10 @@
         },
         "provenance": "signed by The local record holder"
       },
-      "caption": "The local record holder's referral history statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The local record holder's referral history statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:fda6ef6b981f815a28bb2b1fda95b61c387c1d5c0281c7afbcfc4fdfbd1cdd07"
+      ]
     },
     {
       "seq": 47,
@@ -1622,7 +1678,11 @@
       "agent": "clinic-agent",
       "part": "record",
       "kind": "record",
-      "caption": "23 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "23 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:0cde37fbfd5de4723dc560416f9e1a0b9ba1578b1026db38d95409f0fd011819"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/health-referral--baseline.json"
 }

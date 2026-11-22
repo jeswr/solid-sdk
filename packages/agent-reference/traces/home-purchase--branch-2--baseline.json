@@ -101,7 +101,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -211,7 +211,10 @@
       "outcome": "refuse",
       "reason": "source-not-authoritative",
       "caption": "The fictional land registry's land ownership statement is refused and kept out of memory.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0e4bd36818990d1b801a1fd5f8d67033d484a680691c9d847f05f972992de0e7"
+      ]
     },
     {
       "seq": 5,
@@ -304,7 +307,11 @@
       "outcome": "stop",
       "reason": "source-not-authoritative",
       "caption": "A refused source cannot authorize the action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a151f5f38f647dee698bdca64f19e185fd271ac9038a2cd7939beac4b84749ca"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/home-purchase--baseline.json"
 }

@@ -68,7 +68,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -139,7 +139,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The borrower's unstructured content statement: The borrower is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:00c334023cbbddf7089cd36a3e3f3ba2b131a3598a5e500f86246ee929e7ecd1",
+        "sha-256:585e18c6afbaf0a3b049a656458745172ff701500f97234700291eb8557eead1"
+      ]
     },
     {
       "seq": 3,
@@ -186,7 +190,10 @@
         "text": "Its terms allow this: use for Hardship request; share for Hardship request."
       },
       "caption": "The borrower's unstructured content statement: its terms allow this: use for Hardship request; share for Hardship request.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ef1076b5e494768f75788a6d04151bdf90b242ba99b808eebd2e2005d2d44c36"
+      ]
     },
     {
       "seq": 5,
@@ -230,7 +237,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The borrower's unstructured content statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1ca913aa8b0720778909080caa531c53731c3c9057a89fd6a34be93ffcdf248e"
+      ]
     },
     {
       "seq": 7,
@@ -253,7 +263,10 @@
         },
         "provenance": "signed by The borrower"
       },
-      "caption": "The borrower's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The borrower's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:3e770d7fba9f85d77c21300875d0106d5c1b9137eb0b783bdc6e7bad8d869321"
+      ]
     },
     {
       "seq": 8,
@@ -340,7 +353,10 @@
       },
       "reason": "recipient-established",
       "caption": "The borrower: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:239287a517eefb6834ca6ec4cdcbdcf1c9556b5e51e07db5b7433431071bad89"
+      ]
     },
     {
       "seq": 11,
@@ -517,7 +533,10 @@
       "messageId": "urn:awp:engine-hardship-request-main:receiver-agent:0002",
       "messageDigest": "sha-256:f8a9029e5f2228f32755446a45e443b58e2582261f78e33de4f7f3b106d66b85",
       "caption": "The invoke message goes to The borrower’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:37dc94f86f0816ff1e058aeabab032533f615513f77542ac289103a2c895062f"
+      ]
     },
     {
       "seq": 17,
@@ -932,7 +951,10 @@
       "messageId": "urn:awp:engine-hardship-request-main:receiver-agent:0002",
       "messageDigest": "sha-256:f8a9029e5f2228f32755446a45e443b58e2582261f78e33de4f7f3b106d66b85",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:1f89e9574bfaff9e9648d257e5caf937bcb2107656b2c85fef8c2e992046f9b4"
+      ]
     },
     {
       "seq": 25,
@@ -1019,7 +1041,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for Asking a lender for breathing space only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1fab6fa90dee8ec8bc7fe038331b3a450721d3f50645a8a4506a36d44045fb88"
+      ]
     },
     {
       "seq": 28,
@@ -1132,7 +1157,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The action is held for the named decision makers.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:00dac1ea487244f9513aaa5703a0e7f28ca3024b34d328ea45eeef179e49e85f"
+      ]
     },
     {
       "seq": 32,
@@ -1238,7 +1266,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for Asking a lender for breathing space only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:1fab6fa90dee8ec8bc7fe038331b3a450721d3f50645a8a4506a36d44045fb88"
+      ]
     },
     {
       "seq": 36,
@@ -1387,7 +1418,10 @@
       },
       "reason": "terms-allow",
       "caption": "The borrower's unstructured content statement: its terms allow this: use for Hardship request; share for Hardship request.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:ef1076b5e494768f75788a6d04151bdf90b242ba99b808eebd2e2005d2d44c36"
+      ]
     },
     {
       "seq": 41,
@@ -1574,7 +1608,10 @@
       "outcome": "ask-principal",
       "reason": "context-not-clear",
       "caption": "The task context is not clear for this text, recipient and purpose.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:b32962e57bc5885b77748eb4f65e87e08e3fbf0ef7160c7eb7217c30ba639f0c"
+      ]
     },
     {
       "seq": 47,
@@ -1680,7 +1717,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for Asking a lender for breathing space only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:1fab6fa90dee8ec8bc7fe038331b3a450721d3f50645a8a4506a36d44045fb88"
+      ]
     },
     {
       "seq": 51,
@@ -1829,7 +1869,10 @@
       },
       "reason": "terms-allow",
       "caption": "The borrower's unstructured content statement: its terms allow this: use for Hardship request; share for Hardship request.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:ef1076b5e494768f75788a6d04151bdf90b242ba99b808eebd2e2005d2d44c36"
+      ]
     },
     {
       "seq": 56,
@@ -2113,7 +2156,10 @@
       "messageId": "urn:awp:engine-hardship-request-main:owner-agent:0002",
       "messageDigest": "sha-256:9bdd5c5c8ce0e477dd968ed4acccceabbbec58052bd990f34fd61557f0ccc4ab",
       "caption": "The invoke message goes to The lender’s agent.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:2cc416e5e6bff602ab6ef3d9a36f1cb74f6f1c667f319e2d800f9999be837795"
+      ]
     },
     {
       "seq": 65,
@@ -2614,7 +2660,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The borrower's unstructured content statement: The borrower is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f88af8051927b0346b7004de5700ee53d9f19cabfe7f0a40eb6b38e41cef0ecf",
+        "sha-256:c262a8a2495068986e08228fe2a6b9afe746f6a19d36f683de23cace110a5609"
+      ]
     },
     {
       "seq": 69,
@@ -2665,7 +2715,10 @@
         "text": "Its terms allow this: use for Hardship request; share for Hardship request."
       },
       "caption": "The borrower's unstructured content statement: its terms allow this: use for Hardship request; share for Hardship request.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ef1076b5e494768f75788a6d04151bdf90b242ba99b808eebd2e2005d2d44c36"
+      ]
     },
     {
       "seq": 71,
@@ -2706,7 +2759,10 @@
       "messageId": "urn:awp:engine-hardship-request-main:owner-agent:0002",
       "messageDigest": "sha-256:9bdd5c5c8ce0e477dd968ed4acccceabbbec58052bd990f34fd61557f0ccc4ab",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:58c9c647c2d26b5b81bc5a58717875586d8ce1a35b5a9d48c554517efe74cc7d"
+      ]
     },
     {
       "seq": 73,
@@ -2729,7 +2785,10 @@
         },
         "provenance": "signed by The borrower"
       },
-      "caption": "The borrower's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The borrower's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:9b6c094cbf72babae362be95042bc56893af2f805c5912e37108df903db29ebc"
+      ]
     },
     {
       "seq": 74,
@@ -2744,6 +2803,9 @@
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:hardship-request:owner"
         }
+      ],
+      "linked": [
+        "sha-256:241f249b585986745f91b0fd31188381283a4c8fbf56b49ba7546f3489c0f4e6"
       ]
     },
     {
@@ -2752,7 +2814,10 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:b2c34fad4f9a0152bb5737aabaf78dc891ad87c6bb00dc9097f01958a3020562; claim content opinion."
+      "caption": "Model-output reading of unstructured data sha-256:b2c34fad4f9a0152bb5737aabaf78dc891ad87c6bb00dc9097f01958a3020562; claim content opinion.",
+      "linked": [
+        "sha-256:7f78ed0fb25c8bd0d810fb121fad09b05bc63912f66c278ad4e7e06ddb63a40f"
+      ]
     },
     {
       "seq": 76,
@@ -2839,7 +2904,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for A person decides on the original content only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:c22e60a50d3a7e6f1e2a946180c9a18fcbe1a5f6bd9910ea97c0781b6d31a1bb"
+      ]
     },
     {
       "seq": 79,
@@ -2952,7 +3020,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The action is held for the named decision makers.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:eb01014e467b84d1f37b48f0b733d426e3ff6146090eee5d702f794c9d795fc7"
+      ]
     },
     {
       "seq": 83,
@@ -2967,5 +3038,6 @@
       },
       "caption": "The gate built this request from the action and the approval rule."
     }
-  ]
+  ],
+  "linkedTable": "linked/hardship-request--baseline.json"
 }

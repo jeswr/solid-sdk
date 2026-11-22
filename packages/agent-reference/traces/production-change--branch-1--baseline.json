@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -146,7 +146,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The monitoring service's unstructured content statement: The monitoring service is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d82c1bf5d6fc17720bd578d2803903d6243a22b6c1ff9e70543fa0e938dd3d73",
+        "sha-256:2a4861f5dbe367b0d4eaca2d3e2046153b3730af44ab1f5d883f1a850b4d2e40"
+      ]
     },
     {
       "seq": 3,
@@ -193,7 +197,10 @@
         "text": "Its terms allow this: use for Production change; share for Production change."
       },
       "caption": "The monitoring service's unstructured content statement: its terms allow this: use for Production change; share for Production change.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:84d54751b5a3ac4957175c96dd83aee8acdc74833070be8a15c3725fcdf5a049"
+      ]
     },
     {
       "seq": 5,
@@ -237,7 +244,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The monitoring service's unstructured content statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b7336699721ecac532fe090b2cc79247955422645d8e4c7f0a9a9a567b4066b2"
+      ]
     },
     {
       "seq": 7,
@@ -260,7 +270,10 @@
         },
         "provenance": "signed by The monitoring service"
       },
-      "caption": "The monitoring service's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The monitoring service's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:55f3bbc09209e1183022367feda075532bf9c51e5067388e98da8c8889f7a899"
+      ]
     },
     {
       "seq": 8,
@@ -347,7 +360,10 @@
       },
       "reason": "recipient-established",
       "caption": "The monitoring service: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b5d7aa802bd6bcdd5d4b6ff2f2e2bb46908f92db3ac1bd495dff6242f389a994"
+      ]
     },
     {
       "seq": 11,
@@ -524,7 +540,10 @@
       "messageId": "urn:awp:engine-production-change-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:9b47250316edd8070400df5f1048d0d0d5b92263486e3e2086d4f41660112bbd",
       "caption": "The invoke message goes to The monitoring service’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6f9eaa92b2b09cfd245c6a9394793872bc95ec6948878a79a30674a4e7521ef2"
+      ]
     },
     {
       "seq": 17,
@@ -939,7 +958,10 @@
       "messageId": "urn:awp:engine-production-change-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:9b47250316edd8070400df5f1048d0d0d5b92263486e3e2086d4f41660112bbd",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:b3a93ac74d95196e2ed01aa0808c4218e3dc48fdb0b95e93228dc35179dc9aa2"
+      ]
     },
     {
       "seq": 25,
@@ -1026,7 +1048,10 @@
       },
       "reason": "recipient-established",
       "caption": "The operations team: Accepted, for An operations agent changes a live system only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:83b72686f7ba1a488d36583409066e9e51e6a44179041d1dad9c15849137ba85"
+      ]
     },
     {
       "seq": 28,
@@ -1175,7 +1200,10 @@
       },
       "reason": "terms-allow",
       "caption": "The monitoring service's unstructured content statement: its terms allow this: use for Production change; share for Production change.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:84d54751b5a3ac4957175c96dd83aee8acdc74833070be8a15c3725fcdf5a049"
+      ]
     },
     {
       "seq": 33,
@@ -1362,7 +1390,10 @@
       "outcome": "ask-principal",
       "reason": "context-not-clear",
       "caption": "The task context is not clear for this text, recipient and purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2fe4e88b711557a0d2d917eaf94c1f993f621d42424ce0dad03efd546098d05e"
+      ]
     },
     {
       "seq": 39,
@@ -1468,7 +1499,10 @@
       },
       "reason": "recipient-established",
       "caption": "The operations team: Accepted, for An operations agent changes a live system only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:83b72686f7ba1a488d36583409066e9e51e6a44179041d1dad9c15849137ba85"
+      ]
     },
     {
       "seq": 43,
@@ -1617,7 +1651,10 @@
       },
       "reason": "terms-allow",
       "caption": "The monitoring service's unstructured content statement: its terms allow this: use for Production change; share for Production change.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:84d54751b5a3ac4957175c96dd83aee8acdc74833070be8a15c3725fcdf5a049"
+      ]
     },
     {
       "seq": 48,
@@ -1901,7 +1938,10 @@
       "messageId": "urn:awp:engine-production-change-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:fddaeae471dee373836e68448e67aa434b2427a4d9582042e33071569b28366b",
       "caption": "The invoke message goes to The operations team’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:e1fd67deb165dd4bcacb3ffbf1084a3d04a8a86138ad8175ce833e63ff424cfd"
+      ]
     },
     {
       "seq": 57,
@@ -2402,7 +2442,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The monitoring service's unstructured content statement: The monitoring service is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1dd06002033afb386e9c80680603d6c9f0a9489a547d6777aae903deb63159d8",
+        "sha-256:c79e16a047fa1023aca391c9a0cc8a8e79f99e4e61e4cff2183def8b4e1df434"
+      ]
     },
     {
       "seq": 61,
@@ -2453,7 +2497,10 @@
         "text": "Its terms allow this: use for Production change; share for Production change."
       },
       "caption": "The monitoring service's unstructured content statement: its terms allow this: use for Production change; share for Production change.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:84d54751b5a3ac4957175c96dd83aee8acdc74833070be8a15c3725fcdf5a049"
+      ]
     },
     {
       "seq": 63,
@@ -2494,7 +2541,10 @@
       "messageId": "urn:awp:engine-production-change-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:fddaeae471dee373836e68448e67aa434b2427a4d9582042e33071569b28366b",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d7162a14a9f3b36e7fec1ad88a1620a24c02f9c34042056006f13de3e8c04f5b"
+      ]
     },
     {
       "seq": 65,
@@ -2517,7 +2567,10 @@
         },
         "provenance": "signed by The monitoring service"
       },
-      "caption": "The monitoring service's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The monitoring service's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:7ca65fe7858ed9305c07d70d784e9b80694ae55b313ec0aa1270ab2f314654cd"
+      ]
     },
     {
       "seq": 66,
@@ -2532,6 +2585,9 @@
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:production-change:owner"
         }
+      ],
+      "linked": [
+        "sha-256:c8121c22b37305dd60a9784ba85aaf10ca969cae29d169d747fc3947f213a228"
       ]
     },
     {
@@ -2540,7 +2596,10 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:9c88f84623730deeb50cdc6690f2135335e237917b779acc4bb86bfb8d46e6db; claim content opinion."
+      "caption": "Model-output reading of unstructured data sha-256:9c88f84623730deeb50cdc6690f2135335e237917b779acc4bb86bfb8d46e6db; claim content opinion.",
+      "linked": [
+        "sha-256:ea3b179b623e6e4a7fb33a0650983c66f273e413fc23e854a25491e9d150078a"
+      ]
     },
     {
       "seq": 68,
@@ -2598,7 +2657,10 @@
         "text": "No rule in The operations team's mandate lets the agent take the next step in the unlabelled resource with The operations team for Production change (no applicable grant in the mandate (deny by default))."
       },
       "caption": "The operations team's mandate does not allow this: take the next step in the unlabelled resource with The operations team.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:c23c832ff440226183fd5439f8963a7c8f7e7061f12789095627cc75760b3e22"
+      ]
     },
     {
       "seq": 70,
@@ -2620,7 +2682,11 @@
       "outcome": "stop",
       "reason": "not-authorised",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:cde5d5fdf190f9f5ba49d714fc35418d959f5053a6961b057cd0bc2cead16084"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/production-change--baseline.json"
 }

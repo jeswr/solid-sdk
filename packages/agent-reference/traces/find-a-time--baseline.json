@@ -84,7 +84,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -167,7 +167,11 @@
         "answer": "Accepted, for calendar first free claims only."
       },
       "caption": "The fictional shared calendar service's calendar first free statement: The fictional shared calendar service is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:09cb3d928a56cb5d55d0505c6df6b3169c4d630bddf83da8a3fccffb74f03849",
+        "sha-256:c2a599cdc8e617311bb408393d2be7541e6ca747c96af82a11d44e7a7ab749fb"
+      ]
     },
     {
       "seq": 3,
@@ -214,7 +218,10 @@
         "text": "Its terms allow this: use for Find a time; share for Find a time."
       },
       "caption": "The fictional shared calendar service's calendar first free statement: its terms allow this: use for Find a time; share for Find a time.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1ff083e5079696adee28ab699f255df348cb4621a6b1276f6118a175824b833d"
+      ]
     },
     {
       "seq": 5,
@@ -258,7 +265,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional shared calendar service's calendar first free statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:552e7720dfa307b1ef52b47a2656cf22d0d2e67ab755adfac91b49b5046bce3e"
+      ]
     },
     {
       "seq": 7,
@@ -281,7 +291,10 @@
         },
         "provenance": "signed by The fictional shared calendar service"
       },
-      "caption": "The fictional shared calendar service's calendar first free statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional shared calendar service's calendar first free statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:9e0697f1a09cdf191fbf4e2ac5075c4f3d8355cb2b6039fcc901c05b28b7d489"
+      ]
     },
     {
       "seq": 8,
@@ -344,7 +357,11 @@
         "answer": "Accepted, for calendar second free claims only."
       },
       "caption": "The fictional shared calendar service's calendar second free statement: The fictional shared calendar service is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:09cb3d928a56cb5d55d0505c6df6b3169c4d630bddf83da8a3fccffb74f03849",
+        "sha-256:c2a599cdc8e617311bb408393d2be7541e6ca747c96af82a11d44e7a7ab749fb"
+      ]
     },
     {
       "seq": 10,
@@ -391,7 +408,10 @@
         "text": "Its terms allow this: use for Find a time; share for Find a time."
       },
       "caption": "The fictional shared calendar service's calendar second free statement: its terms allow this: use for Find a time; share for Find a time.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:95b754728e0e304c9176a0ed18c515ceb3299c42dffa3a48619ddfc2125c42d2"
+      ]
     },
     {
       "seq": 12,
@@ -435,7 +455,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional shared calendar service's calendar second free statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9ca73e329cb5bce1ff2c4b21d471e23b1b7d1fc77d913ea5a0bcca526e236e1c"
+      ]
     },
     {
       "seq": 14,
@@ -458,7 +481,10 @@
         },
         "provenance": "signed by The fictional shared calendar service"
       },
-      "caption": "The fictional shared calendar service's calendar second free statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional shared calendar service's calendar second free statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:80de3eb9d30fb90cc74799eebb7c22a3158ad088f363994bd6702ecd8596fdaf"
+      ]
     },
     {
       "seq": 15,
@@ -517,7 +543,10 @@
         "answer": "Accepted, for calendar second free claims only."
       },
       "caption": "The receiver checks each original input issuer for the claim the rule read.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:c2a599cdc8e617311bb408393d2be7541e6ca747c96af82a11d44e7a7ab749fb"
+      ]
     },
     {
       "seq": 17,
@@ -552,7 +581,10 @@
         "answer": "Accepted, for calendar first free claims only."
       },
       "caption": "The receiver checks each original input issuer for the claim the rule read.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:c2a599cdc8e617311bb408393d2be7541e6ca747c96af82a11d44e7a7ab749fb"
+      ]
     },
     {
       "seq": 18,
@@ -591,7 +623,11 @@
         "answer": "Accepted, for calendar slot free claims only."
       },
       "caption": "The fictional shared calendar service's calendar slot free statement: The fictional shared calendar service is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:09cb3d928a56cb5d55d0505c6df6b3169c4d630bddf83da8a3fccffb74f03849",
+        "sha-256:c2a599cdc8e617311bb408393d2be7541e6ca747c96af82a11d44e7a7ab749fb"
+      ]
     },
     {
       "seq": 19,
@@ -638,7 +674,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The fictional shared calendar service's calendar slot free statement: its terms allow this: .",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:773672294f9dd0f8cdcf3caa57e19c9ee9dd7c383e0e44e203b04146c59a502c"
+      ]
     },
     {
       "seq": 21,
@@ -682,7 +721,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional shared calendar service's calendar slot free statement is admitted.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:164c0fd43cd071a75a0578238ac58facca9e819eb618bea2116e0e17e5944286"
+      ]
     },
     {
       "seq": 23,
@@ -705,7 +747,10 @@
         },
         "provenance": "signed by The fictional shared calendar service"
       },
-      "caption": "The fictional shared calendar service's calendar slot free statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional shared calendar service's calendar slot free statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:343e6ccc0df9758899e446e2225d3265721ffa6616c157c303aef3fc261c318f"
+      ]
     },
     {
       "seq": 24,
@@ -792,7 +837,10 @@
       },
       "reason": "recipient-established",
       "caption": "The first person: Accepted, for Share a signed free-slot derivation only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:edc62542a3107fa017bedd2b6f1298fdb441bd2bb9494e38392610181ae7ff0e"
+      ]
     },
     {
       "seq": 27,
@@ -941,7 +989,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional shared calendar service's calendar slot free statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:773672294f9dd0f8cdcf3caa57e19c9ee9dd7c383e0e44e203b04146c59a502c"
+      ]
     },
     {
       "seq": 32,
@@ -1060,7 +1111,10 @@
       "messageId": "urn:awp:engine-find-a-time-main:calendar-agent:0002",
       "messageDigest": "sha-256:625e4a1398cde778dc83281943104092c89125a5743653789cc34b8b9ea23462",
       "caption": "The invoke message goes to The first person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b85e93d93da897ad8cf0379e35d4ee261e1d7ef029e87309ed2ec5ae5dcbab0d"
+      ]
     },
     {
       "seq": 36,
@@ -1699,7 +1753,10 @@
         "answer": "Accepted, for calendar second free claims only."
       },
       "caption": "The receiver checks each original input issuer for the claim the rule read.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ec583077d82b3d6c40ffb2869b3c7d3df65d79db6fee2f3803b270a301b6361b"
+      ]
     },
     {
       "seq": 40,
@@ -1734,7 +1791,10 @@
         "answer": "Accepted, for calendar first free claims only."
       },
       "caption": "The receiver checks each original input issuer for the claim the rule read.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ec583077d82b3d6c40ffb2869b3c7d3df65d79db6fee2f3803b270a301b6361b"
+      ]
     },
     {
       "seq": 41,
@@ -1773,7 +1833,11 @@
         "answer": "Accepted, for calendar slot free claims only."
       },
       "caption": "The fictional shared calendar service's calendar slot free statement: The fictional shared calendar service is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b61508140ae00b7c26687609a7f1fb28961fb726107803708f29931a0f1bff0f",
+        "sha-256:ec583077d82b3d6c40ffb2869b3c7d3df65d79db6fee2f3803b270a301b6361b"
+      ]
     },
     {
       "seq": 42,
@@ -1824,7 +1888,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The fictional shared calendar service's calendar slot free statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:773672294f9dd0f8cdcf3caa57e19c9ee9dd7c383e0e44e203b04146c59a502c"
+      ]
     },
     {
       "seq": 44,
@@ -1865,7 +1932,10 @@
       "messageId": "urn:awp:engine-find-a-time-main:calendar-agent:0002",
       "messageDigest": "sha-256:625e4a1398cde778dc83281943104092c89125a5743653789cc34b8b9ea23462",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:dfa216c0261e50080a750276edfc4ca34853ab5d05d54fe07b1a00ddda0cfbd2"
+      ]
     },
     {
       "seq": 46,
@@ -1888,7 +1958,10 @@
         },
         "provenance": "signed by The fictional shared calendar service"
       },
-      "caption": "The fictional shared calendar service's calendar slot free statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional shared calendar service's calendar slot free statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:4960392aae6ec1f4c672c179d256a3b71a51f839012839c12d8eb00b984432b1"
+      ]
     },
     {
       "seq": 47,
@@ -1975,7 +2048,10 @@
       },
       "reason": "recipient-established",
       "caption": "The second person: Accepted, for Share a signed free-slot derivation only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:03d000a761a4dda2c179b33b76277a74f9a509208ad9b9f446236e07f91d4ecf"
+      ]
     },
     {
       "seq": 50,
@@ -2124,7 +2200,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional shared calendar service's calendar slot free statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:773672294f9dd0f8cdcf3caa57e19c9ee9dd7c383e0e44e203b04146c59a502c"
+      ]
     },
     {
       "seq": 55,
@@ -2243,7 +2322,10 @@
       "messageId": "urn:awp:engine-find-a-time-main:calendar-agent:0004",
       "messageDigest": "sha-256:04f18469102455c3f75c4d3a05041f667010fe1edbff2cb18b0e7f3422a92cc1",
       "caption": "The invoke message goes to The second person’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:c1d58c7c313ab380432a317158cef99c7b82708b0105595150e706560210cde8"
+      ]
     },
     {
       "seq": 59,
@@ -2882,7 +2964,10 @@
         "answer": "Accepted, for calendar second free claims only."
       },
       "caption": "The receiver checks each original input issuer for the claim the rule read.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cba6db66bbc5d258dfc69e921121e5fea902b9aaa04d28c7262973a0db8e8601"
+      ]
     },
     {
       "seq": 63,
@@ -2917,7 +3002,10 @@
         "answer": "Accepted, for calendar first free claims only."
       },
       "caption": "The receiver checks each original input issuer for the claim the rule read.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cba6db66bbc5d258dfc69e921121e5fea902b9aaa04d28c7262973a0db8e8601"
+      ]
     },
     {
       "seq": 64,
@@ -2956,7 +3044,11 @@
         "answer": "Accepted, for calendar slot free claims only."
       },
       "caption": "The fictional shared calendar service's calendar slot free statement: The fictional shared calendar service is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fe098252aebb1f2a5a3d175dd5c838b6bbc7bbf0a83d6a995e8711e812ba1edc",
+        "sha-256:cba6db66bbc5d258dfc69e921121e5fea902b9aaa04d28c7262973a0db8e8601"
+      ]
     },
     {
       "seq": 65,
@@ -3007,7 +3099,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The fictional shared calendar service's calendar slot free statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:773672294f9dd0f8cdcf3caa57e19c9ee9dd7c383e0e44e203b04146c59a502c"
+      ]
     },
     {
       "seq": 67,
@@ -3048,7 +3143,10 @@
       "messageId": "urn:awp:engine-find-a-time-main:calendar-agent:0004",
       "messageDigest": "sha-256:04f18469102455c3f75c4d3a05041f667010fe1edbff2cb18b0e7f3422a92cc1",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c1270b0087314bee0dc3d5c7ead4df2137f3a7e1994a015c90f688e1067b699d"
+      ]
     },
     {
       "seq": 69,
@@ -3071,7 +3169,11 @@
         },
         "provenance": "signed by The fictional shared calendar service"
       },
-      "caption": "The fictional shared calendar service's calendar slot free statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional shared calendar service's calendar slot free statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:4960392aae6ec1f4c672c179d256a3b71a51f839012839c12d8eb00b984432b1"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/find-a-time--baseline.json"
 }

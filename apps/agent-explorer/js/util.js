@@ -266,7 +266,7 @@
           var list = byPacket[id];
           list.forEach(function (e, k) { e.leg = [k / list.length, (k + 1) / list.length]; });
         });
-        return t;
+        return AX.linked.load(t, index.traceUrl).then(function () { return t; });
       }).catch(function (error) {
         traceLoads.delete(index.key); // an explicit retry may try again
         throw error;

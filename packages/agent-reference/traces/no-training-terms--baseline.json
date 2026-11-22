@@ -67,7 +67,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -146,7 +146,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The publisher's unstructured content statement: The publisher is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:771047f3ea36e9f0e2403bd7d65d8501278a76ce9a9da6f1002e879436959106",
+        "sha-256:49a83517b1dc927423bafb0aa88983eeaf0d28e252b9d526536d6276781afd00"
+      ]
     },
     {
       "seq": 3,
@@ -193,7 +197,10 @@
         "text": "Its terms allow this: use for No training terms; share for No training terms; never for the unlabelled resource."
       },
       "caption": "The publisher's unstructured content statement: its terms allow this: use for No training terms; share for No training terms; never for the unlabelled resource.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6a28bf34230b5adb745afe6ed6dd8643d546958783dc0ee5f5e08a98308a23fd"
+      ]
     },
     {
       "seq": 5,
@@ -237,7 +244,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The publisher's unstructured content statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7a7c99958479c846e66ed76aafa5b5aa6a34ab49540be0873cdfa18cfe1959c4"
+      ]
     },
     {
       "seq": 7,
@@ -260,7 +270,10 @@
         },
         "provenance": "signed by The publisher"
       },
-      "caption": "The publisher's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The publisher's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:b2ddd1f4de62a44b8fd9557ba6773e172b434425b6ab62406113965530861b34"
+      ]
     },
     {
       "seq": 8,
@@ -347,7 +360,10 @@
       },
       "reason": "recipient-established",
       "caption": "The publisher: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:370f7f30b54f5ddce31bbb8cdee0d056ce4adfb8173d263854c4d0d6f58f61f3"
+      ]
     },
     {
       "seq": 11,
@@ -524,7 +540,10 @@
       "messageId": "urn:awp:engine-no-training-terms-main:receiver-agent:0002",
       "messageDigest": "sha-256:81b08dd7a33fd16370f8c649331bed29ae5d4f5ef1e3653e73c1e9590399fcc1",
       "caption": "The invoke message goes to The publisher’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:89215e73762362cb5c57a17da405a032cf1146605980f17faa79f8e7390b6649"
+      ]
     },
     {
       "seq": 17,
@@ -939,7 +958,10 @@
       "messageId": "urn:awp:engine-no-training-terms-main:receiver-agent:0002",
       "messageDigest": "sha-256:81b08dd7a33fd16370f8c649331bed29ae5d4f5ef1e3653e73c1e9590399fcc1",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:77f84c8ce8fe22983ccf8d7e8af640f582c3895ff9bfbdcae62c8f30916fa21b"
+      ]
     },
     {
       "seq": 25,
@@ -1026,7 +1048,10 @@
       },
       "reason": "recipient-established",
       "caption": "The model developer: Accepted, for Content that must not be used for training only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5d880bc46dc58b676aa50c32f69590376007735636122252e1aa45aeac10a89a"
+      ]
     },
     {
       "seq": 28,
@@ -1175,7 +1200,10 @@
       },
       "reason": "terms-allow",
       "caption": "The publisher's unstructured content statement: its terms allow this: use for No training terms; share for No training terms; never for the unlabelled resource.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6a28bf34230b5adb745afe6ed6dd8643d546958783dc0ee5f5e08a98308a23fd"
+      ]
     },
     {
       "seq": 33,
@@ -1362,7 +1390,10 @@
       "outcome": "ask-principal",
       "reason": "context-not-clear",
       "caption": "The task context is not clear for this text, recipient and purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4c998ea1c31f61f84e40a50b1e7b2f97cb6b0577a237ba31f191311d21633e94"
+      ]
     },
     {
       "seq": 39,
@@ -1468,7 +1499,10 @@
       },
       "reason": "recipient-established",
       "caption": "The model developer: Accepted, for Content that must not be used for training only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:5d880bc46dc58b676aa50c32f69590376007735636122252e1aa45aeac10a89a"
+      ]
     },
     {
       "seq": 43,
@@ -1617,7 +1651,10 @@
       },
       "reason": "terms-allow",
       "caption": "The publisher's unstructured content statement: its terms allow this: use for No training terms; share for No training terms; never for the unlabelled resource.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:6a28bf34230b5adb745afe6ed6dd8643d546958783dc0ee5f5e08a98308a23fd"
+      ]
     },
     {
       "seq": 48,
@@ -1901,7 +1938,10 @@
       "messageId": "urn:awp:engine-no-training-terms-main:owner-agent:0002",
       "messageDigest": "sha-256:f17a4109fe6cca639969e4d0b4b2f96a0e3bb00d996582e32424a0cd6f0899a3",
       "caption": "The invoke message goes to The model developer’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:fd6f3d7e19f48319396ff162c2667d13ad455862381cdace6122bb598044a248"
+      ]
     },
     {
       "seq": 57,
@@ -2430,7 +2470,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The publisher's unstructured content statement: The publisher is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8f518cf14651d54ced8be44119b6f1661b7114bd8af55ec1a50c53cb6aa66224",
+        "sha-256:5b05a94bc7a84749b48fb1362fe95d2a20af2a4b2be8748dee8155a5219f2eba"
+      ]
     },
     {
       "seq": 61,
@@ -2481,7 +2525,10 @@
         "text": "Its terms allow this: use for No training terms; share for No training terms; never for the unlabelled resource."
       },
       "caption": "The publisher's unstructured content statement: its terms allow this: use for No training terms; share for No training terms; never for the unlabelled resource.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6a28bf34230b5adb745afe6ed6dd8643d546958783dc0ee5f5e08a98308a23fd"
+      ]
     },
     {
       "seq": 63,
@@ -2522,7 +2569,10 @@
       "messageId": "urn:awp:engine-no-training-terms-main:owner-agent:0002",
       "messageDigest": "sha-256:f17a4109fe6cca639969e4d0b4b2f96a0e3bb00d996582e32424a0cd6f0899a3",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0f30a1f2b9d31323df702113485c5caa25e610a4bed2ccd70a0caf3fcf0e9101"
+      ]
     },
     {
       "seq": 65,
@@ -2545,7 +2595,10 @@
         },
         "provenance": "signed by The publisher"
       },
-      "caption": "The publisher's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The publisher's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:e51bc083575c55193dcc26a1324a02caefae23f1a37e63821782f356d682c0ff"
+      ]
     },
     {
       "seq": 66,
@@ -2560,6 +2613,9 @@
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:no-training-terms:owner"
         }
+      ],
+      "linked": [
+        "sha-256:6c3f38b6e15701d876fce634e7ae427cad0085f4169d13265deb552be530e657"
       ]
     },
     {
@@ -2568,7 +2624,10 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:9eab041aa48787a741fb24982e39553b09e41b118f36ef6574a5ec8f2b761fcc; claim content opinion."
+      "caption": "Model-output reading of unstructured data sha-256:9eab041aa48787a741fb24982e39553b09e41b118f36ef6574a5ec8f2b761fcc; claim content opinion.",
+      "linked": [
+        "sha-256:ccce618c01eb50d791280c1c4ce2104eb3966c066292f2f8e299749a961bded8"
+      ]
     },
     {
       "seq": 68,
@@ -2655,7 +2714,10 @@
       },
       "reason": "recipient-established",
       "caption": "The model developer: Accepted, for A person decides on the original content only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:363e69236a95b16d4fac13eb1726550df53a0e235ed73a12501f519180764df7"
+      ]
     },
     {
       "seq": 71,
@@ -2802,7 +2864,11 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in A person decides on the original content with The model developer.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:db8b3e7318aeba49e388e067602b581573c555edbd0597f2ace3b9e0664cc4a9"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/no-training-terms--baseline.json"
 }

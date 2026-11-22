@@ -108,7 +108,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -215,7 +215,10 @@
       },
       "reason": "recipient-established",
       "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0252c211eedf1339663b7197b18b524dfb994ab60db7ccec3a95f126a0995922"
+      ]
     },
     {
       "seq": 4,
@@ -362,7 +365,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:72518ade448eec5e4a1d651f9824b33283f89b29f24ac8d16efeee3be66c6bfa"
+      ]
     },
     {
       "seq": 9,
@@ -514,7 +520,10 @@
       },
       "reason": "recipient-established",
       "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:92a434c44bfeb447391eb5e5b16c8cbf1aa7bf891c3fcf4f96e08b109e65ec97"
+      ]
     },
     {
       "seq": 18,
@@ -661,7 +670,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ca338a05683cf8365937087a6efc053b7dce193e0b930283c37b1ecd10042b0d"
+      ]
     },
     {
       "seq": 23,
@@ -813,7 +825,10 @@
       },
       "reason": "recipient-established",
       "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a4b14b0cd49b93dee562f9c953f01563a5a9922891a77a7f185346c834683899"
+      ]
     },
     {
       "seq": 32,
@@ -960,7 +975,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c662940a03c0f1d48c85a0fa6d8e94e207935499bcf0243437eb3d2432422574"
+      ]
     },
     {
       "seq": 37,
@@ -1112,7 +1130,10 @@
       },
       "reason": "recipient-established",
       "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:0252c211eedf1339663b7197b18b524dfb994ab60db7ccec3a95f126a0995922"
+      ]
     },
     {
       "seq": 46,
@@ -1259,7 +1280,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:aa149f16f1a53b8c97e1478d1ac063ce6983e68a851ebb7b45b84388bc7c89a4"
+      ]
     },
     {
       "seq": 51,
@@ -1411,7 +1435,10 @@
       },
       "reason": "recipient-established",
       "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:0252c211eedf1339663b7197b18b524dfb994ab60db7ccec3a95f126a0995922"
+      ]
     },
     {
       "seq": 60,
@@ -1558,7 +1585,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:3043886b15b5e7ad1d97d6411f2ffacb3ba57111cb1e4f29b76d14e5935041a8"
+      ]
     },
     {
       "seq": 65,
@@ -1776,7 +1806,10 @@
       },
       "reason": "recipient-established",
       "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:92a434c44bfeb447391eb5e5b16c8cbf1aa7bf891c3fcf4f96e08b109e65ec97"
+      ]
     },
     {
       "seq": 80,
@@ -1923,7 +1956,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:c721c4a589a4b1aa49e69f8c9a9875e0c488ea94d0a6357de1ffd06bcc7cf925"
+      ]
     },
     {
       "seq": 85,
@@ -2075,7 +2111,10 @@
       },
       "reason": "recipient-established",
       "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:a4b14b0cd49b93dee562f9c953f01563a5a9922891a77a7f185346c834683899"
+      ]
     },
     {
       "seq": 94,
@@ -2222,7 +2261,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:43f8e3c7cf48e15dda8ca43c1cc8eb0adaa700864c59733b8681fe9ff332efc3"
+      ]
     },
     {
       "seq": 99,
@@ -2374,7 +2416,10 @@
       },
       "reason": "recipient-established",
       "caption": "The switching service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:0252c211eedf1339663b7197b18b524dfb994ab60db7ccec3a95f126a0995922"
+      ]
     },
     {
       "seq": 108,
@@ -2521,7 +2566,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The switching service.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:bc5395c9ecb1b7b91993f6a6df1381e9f369f0e57603b9b5c33d1239679b1527"
+      ]
     },
     {
       "seq": 113,
@@ -2673,7 +2721,10 @@
       },
       "reason": "recipient-established",
       "caption": "The old supplier: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:b19ff9f62890c8088fbe37f3cf5f0e4c080c6c73402daa5194d8375015dc422b"
+      ]
     },
     {
       "seq": 122,
@@ -2820,7 +2871,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: share Accepting the same agreement terms with The old supplier.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:81220032d7b057491c18c5f351c8338d5bd6242256d0e8f504a9b17236eeedbd"
+      ]
     },
     {
       "seq": 127,
@@ -2942,5 +2996,6 @@
       "reason": "authority-valid",
       "caption": "The service admits the signed request."
     }
-  ]
+  ],
+  "linkedTable": "linked/energy-switch--baseline.json"
 }

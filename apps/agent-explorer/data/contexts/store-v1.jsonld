@@ -1,0 +1,675 @@
+{
+  "x-authored-by": "AUTHORED-BY Codex GPT-6.2 Sol",
+  "@context": {
+    "@version": 1.1,
+    "@protected": true,
+    "type": "@type",
+    "id": "@id",
+    "RecordEntry": "https://w3id.org/jeswr/awp#RecordEntry",
+    "WithheldRecordEntry": "https://w3id.org/jeswr/awp#WithheldRecordEntry",
+    "GateCheckRecord": "https://w3id.org/jeswr/awp#GateCheckRecord",
+    "GateDecisionRecord": "https://w3id.org/jeswr/awp#GateDecisionRecord",
+    "MessageRecord": "https://w3id.org/jeswr/awp#MessageRecord",
+    "ItemTransferRecord": "https://w3id.org/jeswr/awp#ItemTransferRecord",
+    "ApprovalRecord": "https://w3id.org/jeswr/awp#ApprovalRecord",
+    "RecordCheckpoint": "https://w3id.org/jeswr/awp#RecordCheckpoint",
+    "UntypedRecord": "https://w3id.org/jeswr/awp#UntypedRecord",
+    "VerificationResult": "https://w3id.org/jeswr/awp#VerificationResult",
+    "RepresentationAssessment": "https://w3id.org/jeswr/awp#RepresentationAssessment",
+    "AuthorisationDecision": "https://w3id.org/jeswr/awp#AuthorisationDecision",
+    "GrantRecord": "https://w3id.org/jeswr/awp#GrantRecord",
+    "NamedValueCollection": "https://w3id.org/jeswr/awp#NamedValueCollection",
+    "NullValue": "https://w3id.org/jeswr/awp#NullValue",
+    "sequence": {
+      "@id": "https://w3id.org/jeswr/awp#sequence",
+      "@type": "http://www.w3.org/2001/XMLSchema#integer"
+    },
+    "previousEntryHash": "https://w3id.org/jeswr/awp#previousEntryHash",
+    "previousEntry": {
+      "@id": "https://w3id.org/jeswr/awp#previousEntry",
+      "@type": "@id"
+    },
+    "entryHash": "https://w3id.org/jeswr/awp#entryHash",
+    "recordDigest": "https://w3id.org/jeswr/awp#recordDigest",
+    "recordType": "https://w3id.org/jeswr/awp#recordType",
+    "record": {
+      "@id": "https://w3id.org/jeswr/awp#record",
+      "@type": "@id"
+    },
+    "recordFieldOrder": {
+      "@id": "https://w3id.org/jeswr/awp#recordFieldOrder",
+      "@type": "@id"
+    },
+    "recordValues": {
+      "@id": "https://w3id.org/jeswr/awp#recordValues",
+      "@type": "@id"
+    },
+    "recordIdentifier": {
+      "@id": "https://w3id.org/jeswr/awp#recordIdentifier",
+      "@type": "@id"
+    },
+    "recordAgent": {
+      "@id": "https://w3id.org/jeswr/awp#recordAgent",
+      "@type": "@id"
+    },
+    "recordGate": "https://w3id.org/jeswr/awp#recordGate",
+    "recordChecks": {
+      "@id": "https://w3id.org/jeswr/awp#recordChecks",
+      "@type": "@id"
+    },
+    "recordLimitations": {
+      "@id": "https://w3id.org/jeswr/awp#recordLimitations",
+      "@type": "@id"
+    },
+    "recordExplanation": "https://w3id.org/jeswr/awp#recordExplanation",
+    "messageKind": "https://w3id.org/jeswr/awp#messageKind",
+    "recordBinding": "https://w3id.org/jeswr/awp#recordBinding",
+    "recordApprovalBinding": {
+      "@id": "https://w3id.org/jeswr/awp#recordApprovalBinding",
+      "@type": "@id"
+    },
+    "recordConditions": {
+      "@id": "https://w3id.org/jeswr/awp#recordConditions",
+      "@type": "@id"
+    },
+    "transferItem": {
+      "@id": "https://w3id.org/jeswr/awp#transferItem",
+      "@type": "@id"
+    },
+    "transferRecipient": {
+      "@id": "https://w3id.org/jeswr/awp#transferRecipient",
+      "@type": "@id"
+    },
+    "transferAgreement": {
+      "@id": "https://w3id.org/jeswr/awp#transferAgreement",
+      "@type": "@id"
+    },
+    "transferDuties": {
+      "@id": "https://w3id.org/jeswr/awp#transferDuties",
+      "@type": "@id"
+    },
+    "transferMessage": {
+      "@id": "https://w3id.org/jeswr/awp#transferMessage",
+      "@type": "@id"
+    },
+    "approvalDecision": {
+      "@id": "https://w3id.org/jeswr/awp#approvalDecision",
+      "@type": "@id"
+    },
+    "approvalProofDigest": "https://w3id.org/jeswr/awp#approvalProofDigest",
+    "approvalJwsDigest": "https://w3id.org/jeswr/awp#approvalJwsDigest",
+    "recordStandIn": "https://w3id.org/jeswr/awp#recordStandIn",
+    "approvalJws": "https://w3id.org/jeswr/awp#approvalJws",
+    "prunedSegments": {
+      "@id": "https://w3id.org/jeswr/awp#prunedSegments",
+      "@type": "@id"
+    },
+    "lastPrunedSeq": {
+      "@id": "https://w3id.org/jeswr/awp#lastPrunedSeq",
+      "@type": "http://www.w3.org/2001/XMLSchema#integer"
+    },
+    "lastPrunedHash": "https://w3id.org/jeswr/awp#lastPrunedHash",
+    "checkpointNote": "https://w3id.org/jeswr/awp#checkpointNote",
+    "generatedAtTime": {
+      "@id": "http://www.w3.org/ns/prov#generatedAtTime",
+      "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+    },
+    "at": {
+      "@id": "https://w3id.org/jeswr/awp#at",
+      "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+    },
+    "reason": {
+      "@id": "https://w3id.org/jeswr/awp#reason",
+      "@type": "@id"
+    },
+    "check": {
+      "@id": "https://w3id.org/jeswr/awp#check",
+      "@type": "@id"
+    },
+    "verdict": {
+      "@id": "https://w3id.org/jeswr/awp#verdict",
+      "@type": "@id"
+    },
+    "outcome": {
+      "@id": "https://w3id.org/jeswr/awp#outcome",
+      "@type": "@id"
+    },
+    "ItemList": "https://schema.org/ItemList",
+    "PropertyValue": "https://schema.org/PropertyValue",
+    "itemListElement": {
+      "@id": "https://schema.org/itemListElement",
+      "@type": "@id"
+    },
+    "position": {
+      "@id": "https://schema.org/position",
+      "@type": "http://www.w3.org/2001/XMLSchema#integer"
+    },
+    "name": "https://schema.org/name",
+    "propertyID": {
+      "@id": "https://schema.org/propertyID",
+      "@type": "@id"
+    },
+    "value": "https://schema.org/value",
+    "protectedObject": "https://w3id.org/jeswr/awp#protectedObject",
+    "property": "https://w3id.org/jeswr/awp#property",
+    "mechanism": "https://w3id.org/jeswr/awp#mechanism",
+    "verificationMaterial": "https://w3id.org/jeswr/awp#verificationMaterial",
+    "attributedTo": {
+      "@id": "http://www.w3.org/ns/prov#wasAttributedTo",
+      "@type": "@id"
+    },
+    "verifier": {
+      "@id": "https://w3id.org/jeswr/awp#verifier",
+      "@type": "@id"
+    },
+    "deciderRole": "https://w3id.org/jeswr/awp#deciderRole",
+    "evaluator": {
+      "@id": "https://w3id.org/jeswr/awp#evaluator",
+      "@type": "@id"
+    },
+    "actor": {
+      "@id": "https://w3id.org/jeswr/awp#actor",
+      "@type": "@id"
+    },
+    "party": {
+      "@id": "https://w3id.org/jeswr/awp#party",
+      "@type": "@id"
+    },
+    "operation": {
+      "@id": "https://w3id.org/jeswr/awp#operation",
+      "@type": "@id"
+    },
+    "statement": {
+      "@id": "https://w3id.org/jeswr/awp#statement",
+      "@type": "@id"
+    },
+    "decider": {
+      "@id": "https://w3id.org/jeswr/awp#decider",
+      "@type": "@id"
+    },
+    "actionDigest": "https://w3id.org/jeswr/awp#actionDigest",
+    "recordAction": {
+      "@id": "http://www.w3.org/ns/odrl/2/action",
+      "@type": "@id"
+    },
+    "policy": {
+      "@id": "https://w3id.org/jeswr/awp#policy",
+      "@type": "@id"
+    },
+    "basis": "https://w3id.org/jeswr/awp#basis",
+    "approval": {
+      "@id": "https://w3id.org/jeswr/awp#approval",
+      "@type": "@id"
+    },
+    "matchedRule": "https://w3id.org/jeswr/awp#matchedRule",
+    "kind": {
+      "@id": "https://w3id.org/jeswr/awp#kind",
+      "@type": "@id"
+    },
+    "grantor": {
+      "@id": "https://w3id.org/jeswr/awp#grantor",
+      "@type": "@id"
+    },
+    "grantee": {
+      "@id": "https://w3id.org/jeswr/awp#grantee",
+      "@type": "@id"
+    },
+    "digest": "https://w3id.org/jeswr/awp#digest",
+    "validUntil": {
+      "@id": "https://www.w3.org/2018/credentials#validUntil",
+      "@type": "http://www.w3.org/2001/XMLSchema#dateTime"
+    },
+    "derivedFrom": {
+      "@id": "http://www.w3.org/ns/prov#wasDerivedFrom",
+      "@type": "@id"
+    },
+    "conversation": {
+      "@id": "https://w3id.org/jeswr/awp#conversation",
+      "@type": "@id"
+    },
+    "onBehalfOfClaim": {
+      "@id": "http://www.w3.org/ns/prov#actedOnBehalfOf",
+      "@type": "@id"
+    },
+    "subject": {
+      "@id": "https://w3id.org/jeswr/awp#subject",
+      "@type": "@id"
+    },
+    "issuer": {
+      "@id": "https://www.w3.org/2018/credentials#issuer",
+      "@type": "@id"
+    },
+    "originalDigests": {
+      "@id": "https://w3id.org/jeswr/awp#recordOriginalDigests",
+      "@type": "@id"
+    },
+    "transferSubjectText": "https://w3id.org/jeswr/awp#transferSubjectText",
+    "RuntimeSnapshot": "https://w3id.org/jeswr/awp#RuntimeSnapshot",
+    "stateVersion": {
+      "@id": "https://w3id.org/jeswr/awp#stateVersion"
+    },
+    "section": {
+      "@id": "https://w3id.org/jeswr/awp#section",
+      "@type": "@id"
+    },
+    "StateSection": "https://w3id.org/jeswr/awp#StateSection",
+    "sectionPresent": {
+      "@id": "https://w3id.org/jeswr/awp#sectionPresent"
+    },
+    "stateEntry": {
+      "@id": "https://w3id.org/jeswr/awp#stateEntry",
+      "@type": "@id"
+    },
+    "StateEntry": "https://w3id.org/jeswr/awp#StateEntry",
+    "entryKey": {
+      "@id": "https://w3id.org/jeswr/awp#entryKey"
+    },
+    "entryValue": {
+      "@id": "https://w3id.org/jeswr/awp#entryValue"
+    },
+    "TypedStateSection": "https://w3id.org/jeswr/awp#TypedStateSection",
+    "TypedStateEntry": "https://w3id.org/jeswr/awp#TypedStateEntry",
+    "TrustPin": "https://w3id.org/jeswr/awp#TrustPin",
+    "kid": {
+      "@id": "https://w3id.org/jeswr/awp#kid"
+    },
+    "admittedPurpose": {
+      "@id": "https://w3id.org/jeswr/awp#admittedPurpose",
+      "@type": "@id"
+    },
+    "effectiveUntil": {
+      "@id": "https://w3id.org/jeswr/awp#effectiveUntil"
+    },
+    "MandateRevocation": "https://w3id.org/jeswr/awp#MandateRevocation",
+    "stateMandateVersion": {
+      "@id": "https://w3id.org/jeswr/awp#stateMandateVersion"
+    },
+    "PaymentReservation": "https://w3id.org/jeswr/awp#PaymentReservation",
+    "reservationPeriod": {
+      "@id": "https://w3id.org/jeswr/awp#reservationPeriod"
+    },
+    "amountMinor": {
+      "@id": "https://w3id.org/jeswr/awp#amountMinor"
+    },
+    "TrustStore": "https://w3id.org/jeswr/awp#TrustStore",
+    "storeVersion": {
+      "@id": "https://w3id.org/jeswr/awp#storeVersion"
+    },
+    "owner": {
+      "@id": "https://w3id.org/jeswr/awp#owner",
+      "@type": "@id"
+    },
+    "pinnedKey": {
+      "@id": "https://w3id.org/jeswr/awp#pinnedKey",
+      "@type": "@id"
+    },
+    "sourceAuthorityRule": {
+      "@id": "https://w3id.org/jeswr/awp#sourceAuthorityRule",
+      "@type": "@id"
+    },
+    "trustController": {
+      "@id": "https://w3id.org/jeswr/awp#trustController",
+      "@type": "@id"
+    },
+    "recordKeyDelegation": {
+      "@id": "https://w3id.org/jeswr/awp#recordKeyDelegation",
+      "@type": "@id"
+    },
+    "PinnedKey": "https://w3id.org/jeswr/awp#PinnedKey",
+    "keyRole": {
+      "@id": "https://w3id.org/jeswr/awp#keyRole",
+      "@type": "@id"
+    },
+    "keySubject": {
+      "@id": "https://w3id.org/jeswr/awp#keySubject",
+      "@type": "@id"
+    },
+    "endpoint": {
+      "@id": "https://w3id.org/jeswr/awp#endpoint",
+      "@type": "@id"
+    },
+    "note": {
+      "@id": "https://w3id.org/jeswr/awp#note"
+    },
+    "alg": {
+      "@id": "https://w3id.org/jeswr/awp#alg"
+    },
+    "publicKey": {
+      "@id": "https://w3id.org/jeswr/awp#publicKey",
+      "@type": "@id"
+    },
+    "JsonWebKey": "https://w3id.org/jeswr/awp#JsonWebKey",
+    "kty": {
+      "@id": "https://w3id.org/jeswr/awp#kty"
+    },
+    "crv": {
+      "@id": "https://w3id.org/jeswr/awp#crv"
+    },
+    "x": {
+      "@id": "https://w3id.org/jeswr/awp#x"
+    },
+    "y": {
+      "@id": "https://w3id.org/jeswr/awp#y"
+    },
+    "SourceAuthorityRule": "https://w3id.org/jeswr/awp#SourceAuthorityRule",
+    "version": {
+      "@id": "https://w3id.org/jeswr/awp#version"
+    },
+    "source": {
+      "@id": "https://w3id.org/jeswr/awp#source",
+      "@type": "@id"
+    },
+    "claimType": {
+      "@id": "https://w3id.org/jeswr/awp#claimType",
+      "@type": "@id"
+    },
+    "subjects": {
+      "@id": "https://w3id.org/jeswr/awp#subjects",
+      "@type": "@id"
+    },
+    "effectiveFrom": {
+      "@id": "https://w3id.org/jeswr/awp#effectiveFrom"
+    },
+    "framework": {
+      "@id": "https://w3id.org/jeswr/awp#framework"
+    },
+    "PinnedRecordKey": "https://w3id.org/jeswr/awp#PinnedRecordKey",
+    "RecordKeyDelegation": "https://w3id.org/jeswr/awp#RecordKeyDelegation",
+    "identity": {
+      "@id": "https://w3id.org/jeswr/awp#identity",
+      "@type": "@id"
+    },
+    "recordPublicKey": {
+      "@id": "https://w3id.org/jeswr/awp#recordPublicKey",
+      "@type": "@id"
+    },
+    "delegation": {
+      "@id": "https://w3id.org/jeswr/awp#delegation"
+    },
+    "delegationDigest": {
+      "@id": "https://w3id.org/jeswr/awp#delegationDigest"
+    },
+    "TrustController": "https://w3id.org/jeswr/awp#TrustController",
+    "TrustHold": "https://w3id.org/jeswr/awp#TrustHold",
+    "trustMessage": {
+      "@id": "https://w3id.org/jeswr/awp#trustMessage",
+      "@type": "@id"
+    },
+    "trustWire": {
+      "@id": "https://w3id.org/jeswr/awp#trustWire",
+      "@type": "@id"
+    },
+    "TrustRefusal": "https://w3id.org/jeswr/awp#TrustRefusal",
+    "trustRefused": {
+      "@id": "https://w3id.org/jeswr/awp#trustRefused"
+    },
+    "OwnListEntry": "https://w3id.org/jeswr/awp#OwnListEntry",
+    "trustTasks": {
+      "@id": "https://w3id.org/jeswr/awp#trustTasks",
+      "@type": "@id"
+    },
+    "trustBlocked": {
+      "@id": "https://w3id.org/jeswr/awp#trustBlocked"
+    },
+    "RegisterEntry": "https://w3id.org/jeswr/awp#RegisterEntry",
+    "authorizedFor": {
+      "@id": "https://w3id.org/jeswr/awp#authorizedFor",
+      "@type": "@id"
+    },
+    "trustStatus": {
+      "@id": "https://w3id.org/jeswr/awp#trustStatus"
+    },
+    "Register": "https://w3id.org/jeswr/awp#Register",
+    "answersFor": {
+      "@id": "https://w3id.org/jeswr/awp#answersFor"
+    },
+    "registerEntry": {
+      "@id": "https://w3id.org/jeswr/awp#registerEntry",
+      "@type": "@id"
+    },
+    "answerTtlMs": {
+      "@id": "https://w3id.org/jeswr/awp#answerTtlMs"
+    },
+    "TrustRoot": "https://w3id.org/jeswr/awp#TrustRoot",
+    "trustRegister": {
+      "@id": "https://w3id.org/jeswr/awp#trustRegister",
+      "@type": "@id"
+    },
+    "MemoryScope": "https://w3id.org/jeswr/awp#MemoryScope",
+    "memoryItem": {
+      "@id": "https://w3id.org/jeswr/awp#memoryItem",
+      "@type": "@id"
+    },
+    "MemoryItem": "https://w3id.org/jeswr/awp#MemoryItem",
+    "compactProofDigest": {
+      "@id": "https://w3id.org/jeswr/awp#compactProofDigest"
+    },
+    "method": {
+      "@id": "https://w3id.org/jeswr/awp#method"
+    },
+    "asOf": {
+      "@id": "https://w3id.org/jeswr/awp#asOf"
+    },
+    "identifiers": {
+      "@id": "https://w3id.org/jeswr/awp#identifiers",
+      "@type": "@id"
+    },
+    "supersededBy": {
+      "@id": "https://w3id.org/jeswr/awp#supersededBy",
+      "@type": "@id"
+    },
+    "disputedWith": {
+      "@id": "https://w3id.org/jeswr/awp#disputedWith",
+      "@type": "@id"
+    },
+    "admittingDelivery": {
+      "@id": "https://w3id.org/jeswr/awp#admittingDelivery",
+      "@type": "@id"
+    },
+    "original": {
+      "@id": "https://w3id.org/jeswr/awp#original",
+      "@type": "@id"
+    },
+    "itemKind": {
+      "@id": "https://w3id.org/jeswr/awp#itemKind",
+      "@type": "@id"
+    },
+    "accepted": {
+      "@id": "https://w3id.org/jeswr/awp#accepted"
+    },
+    "admissionOrder": {
+      "@id": "https://w3id.org/jeswr/awp#admissionOrder"
+    },
+    "terms": {
+      "@id": "https://w3id.org/jeswr/awp#terms",
+      "@type": "@id"
+    },
+    "dataUseGrant": {
+      "@id": "https://w3id.org/jeswr/awp#dataUseGrant",
+      "@type": "@id"
+    },
+    "ItemTerms": "https://w3id.org/jeswr/awp#ItemTerms",
+    "minimumGroup": {
+      "@id": "https://w3id.org/jeswr/awp#minimumGroup"
+    },
+    "deleteWithinDays": {
+      "@id": "https://w3id.org/jeswr/awp#deleteWithinDays"
+    },
+    "recipientMustBe": {
+      "@id": "https://w3id.org/jeswr/awp#recipientMustBe",
+      "@type": "@id"
+    },
+    "inheritedTerms": {
+      "@id": "https://w3id.org/jeswr/awp#inheritedTerms",
+      "@type": "@id"
+    },
+    "InheritedItemTerms": "https://w3id.org/jeswr/awp#InheritedItemTerms",
+    "OriginalStatement": "https://w3id.org/jeswr/awp#OriginalStatement",
+    "evidence": {
+      "@id": "https://w3id.org/jeswr/awp#evidence",
+      "@type": "@id"
+    },
+    "EvidenceItem": "https://w3id.org/jeswr/awp#EvidenceItem",
+    "role": {
+      "@id": "https://w3id.org/jeswr/awp#role",
+      "@type": "@id"
+    },
+    "format": {
+      "@id": "https://w3id.org/jeswr/awp#format"
+    },
+    "evidenceBytes": {
+      "@id": "https://w3id.org/jeswr/awp#evidenceBytes"
+    },
+    "evidenceBytesDigest": {
+      "@id": "https://w3id.org/jeswr/awp#evidenceBytesDigest"
+    },
+    "RelianceHold": "https://w3id.org/jeswr/awp#RelianceHold",
+    "memoryTask": {
+      "@id": "https://w3id.org/jeswr/awp#memoryTask"
+    },
+    "relianceReason": {
+      "@id": "https://w3id.org/jeswr/awp#relianceReason"
+    },
+    "KnownIdentifiers": "https://w3id.org/jeswr/awp#KnownIdentifiers",
+    "StatementRefusal": "https://w3id.org/jeswr/awp#StatementRefusal",
+    "refusedStatement": {
+      "@id": "https://w3id.org/jeswr/awp#refusedStatement"
+    },
+    "RelianceBinding": "https://w3id.org/jeswr/awp#RelianceBinding",
+    "relianceBinding": {
+      "@id": "https://w3id.org/jeswr/awp#relianceBinding"
+    },
+    "DescriptionAddress": "https://w3id.org/jeswr/awp#DescriptionAddress",
+    "descriptionAddress": {
+      "@id": "https://w3id.org/jeswr/awp#descriptionAddress",
+      "@type": "@id"
+    },
+    "StoredMandate": "https://w3id.org/jeswr/awp#StoredMandate",
+    "mandateCredential": {
+      "@id": "https://w3id.org/jeswr/awp#mandateCredential",
+      "@type": "@id"
+    },
+    "mandateCredentialDigest": {
+      "@id": "https://w3id.org/jeswr/awp#mandateCredentialDigest"
+    },
+    "autonomousPolicy": {
+      "@id": "https://w3id.org/jeswr/awp#autonomousPolicy",
+      "@type": "@id"
+    },
+    "withApprovalPolicy": {
+      "@id": "https://w3id.org/jeswr/awp#withApprovalPolicy",
+      "@type": "@id"
+    },
+    "standingRules": {
+      "@id": "https://w3id.org/jeswr/awp#standingRules",
+      "@type": "@id"
+    },
+    "dutyRules": {
+      "@id": "https://w3id.org/jeswr/awp#dutyRules",
+      "@type": "@id"
+    },
+    "StandingRule": "https://w3id.org/jeswr/awp#StandingRule",
+    "standingWhen": {
+      "@id": "https://w3id.org/jeswr/awp#standingWhen",
+      "@type": "@id"
+    },
+    "standingAllows": {
+      "@id": "https://w3id.org/jeswr/awp#standingAllows",
+      "@type": "@id"
+    },
+    "standingDuties": {
+      "@id": "https://w3id.org/jeswr/awp#standingDuties",
+      "@type": "@id"
+    },
+    "DutyRule": "https://w3id.org/jeswr/awp#DutyRule",
+    "dutyKind": {
+      "@id": "https://w3id.org/jeswr/awp#dutyKind"
+    },
+    "dutyItems": {
+      "@id": "https://w3id.org/jeswr/awp#dutyItems",
+      "@type": "@id"
+    },
+    "dutyOn": {
+      "@id": "https://w3id.org/jeswr/awp#dutyOn"
+    },
+    "dutyParties": {
+      "@id": "https://w3id.org/jeswr/awp#dutyParties",
+      "@type": "@id"
+    },
+    "dutyWithinSeconds": {
+      "@id": "https://w3id.org/jeswr/awp#dutyWithinSeconds"
+    },
+    "dutyEvent": {
+      "@id": "https://w3id.org/jeswr/awp#dutyEvent"
+    },
+    "ApprovalGrant": "https://w3id.org/jeswr/awp#ApprovalGrant",
+    "approvalDecisionName": {
+      "@id": "https://w3id.org/jeswr/awp#approvalDecisionName"
+    },
+    "approvalPayment": {
+      "@id": "https://w3id.org/jeswr/awp#approvalPayment",
+      "@type": "@id"
+    },
+    "approvalUsed": {
+      "@id": "https://w3id.org/jeswr/awp#approvalUsed"
+    },
+    "approvalSigner": {
+      "@id": "https://w3id.org/jeswr/awp#approvalSigner",
+      "@type": "@id"
+    },
+    "issuedAt": {
+      "@id": "https://w3id.org/jeswr/awp#issuedAt"
+    },
+    "OrganisationApprovals": "https://w3id.org/jeswr/awp#OrganisationApprovals",
+    "approvalItems": {
+      "@id": "https://w3id.org/jeswr/awp#approvalItems",
+      "@type": "@id"
+    },
+    "RecordHead": "https://w3id.org/jeswr/awp#RecordHead",
+    "AuthoredProof": "https://w3id.org/jeswr/awp#AuthoredProof",
+    "requestDigest": {
+      "@id": "https://w3id.org/jeswr/awp#requestDigest"
+    },
+    "RecordedMessage": "https://w3id.org/jeswr/awp#RecordedMessage",
+    "recordDirection": {
+      "@id": "https://w3id.org/jeswr/awp#recordDirection"
+    },
+    "recordJws": {
+      "@id": "https://w3id.org/jeswr/awp#recordJws"
+    },
+    "recordJwsDigest": {
+      "@id": "https://w3id.org/jeswr/awp#recordJwsDigest"
+    },
+    "credentialsAdmitted": {
+      "@id": "https://w3id.org/jeswr/awp#credentialsAdmitted"
+    },
+    "policyFields": "https://w3id.org/jeswr/awp#policyFields",
+    "policyProfile": "https://w3id.org/jeswr/awp#policyProfile",
+    "policyRightOperand": "https://w3id.org/jeswr/awp#policyRightOperand",
+    "policyOperandDatatype": "https://w3id.org/jeswr/awp#policyOperandDatatype",
+    "policyActionSpelling": "https://w3id.org/jeswr/awp#policyActionSpelling",
+    "policyRuleKind": "https://w3id.org/jeswr/awp#policyRuleKind",
+    "policyApprovals": "https://w3id.org/jeswr/awp#policyApprovals",
+    "policyLimit": "https://w3id.org/jeswr/awp#policyLimit",
+    "storedBytesDigest": "https://w3id.org/jeswr/awp#storedBytesDigest",
+    "pay": "https://w3id.org/jeswr/awp#pay",
+    "anySubject": "https://w3id.org/jeswr/awp#anySubject",
+    "key-role-actor": "https://w3id.org/jeswr/awp#key-role/actor",
+    "key-role-party": "https://w3id.org/jeswr/awp#key-role/party",
+    "key-role-issuer": "https://w3id.org/jeswr/awp#key-role/issuer",
+    "item-kind-statement": "https://w3id.org/jeswr/awp#item-kind/statement",
+    "item-kind-memory": "https://w3id.org/jeswr/awp#item-kind/memory",
+    "item-kind-message": "https://w3id.org/jeswr/awp#item-kind/message",
+    "item-kind-reading": "https://w3id.org/jeswr/awp#item-kind/reading",
+    "item-kind-content": "https://w3id.org/jeswr/awp#item-kind/content",
+    "label": "http://www.w3.org/2000/01/rdf-schema#label",
+    "controller": {
+      "@id": "https://w3id.org/security#controller",
+      "@type": "@id"
+    },
+    "hasPolicy": {
+      "@id": "http://www.w3.org/ns/odrl/2/hasPolicy",
+      "@type": "@id"
+    }
+  }
+}

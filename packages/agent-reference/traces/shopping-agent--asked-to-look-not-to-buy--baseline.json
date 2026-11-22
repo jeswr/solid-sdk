@@ -83,7 +83,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -162,7 +162,11 @@
         "answer": "Accepted, for payee-account claims only."
       },
       "caption": "The payment provider's payee account statement: The payment provider is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:419a25a060e2a54ca2b6cc02e87e7e85616c6ae070a0f847e36880db3019b60a",
+        "sha-256:b499f752d61034cb15a9c9703df9c6792a46e120bf37b490e970343baf1e96c6"
+      ]
     },
     {
       "seq": 3,
@@ -209,7 +213,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The payment provider's payee account statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:02688dab70f683a3dc30e84e44f478593d5cf79ffce9bf7665bd0080077e01c6"
+      ]
     },
     {
       "seq": 5,
@@ -253,7 +260,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The payment provider's payee account statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4046712f2b4c2ebdad66569c7cb2639487d187ec9cb5975796332d8d08cd0514"
+      ]
     },
     {
       "seq": 7,
@@ -276,7 +286,10 @@
         },
         "provenance": "signed by The payment provider"
       },
-      "caption": "The payment provider's payee account statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The payment provider's payee account statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:2bd4f2863438b8debd2cfa1fa688fa842e28a04685b0db54823924a417ca0c81"
+      ]
     },
     {
       "seq": 8,
@@ -339,7 +352,11 @@
         "answer": "Accepted, for invoice claims only."
       },
       "caption": "The chosen merchant's invoice statement: The chosen merchant is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:3f010654c3962cf465c7249407505500febe34280638276a39be31e2fa85098a",
+        "sha-256:53193f6671ec56726c437ffe195654fc55ce4213e5d92baae162507b1a24d111"
+      ]
     },
     {
       "seq": 10,
@@ -430,7 +447,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The chosen merchant's invoice statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:748ff136eddb298e9e85d337640bae0328dd5c3fed66f7bdd2b523b12b3952e0"
+      ]
     },
     {
       "seq": 14,
@@ -449,7 +469,10 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "provenance": "signed by The chosen merchant"
       },
-      "caption": "The chosen merchant's invoice statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The chosen merchant's invoice statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c240be021d95a5c76d822fb4b0d136e82155e130e46ff247db6d4936d3612cb8"
+      ]
     },
     {
       "seq": 15,
@@ -512,7 +535,11 @@
         "answer": "Accepted, for other-offer claims only."
       },
       "caption": "The other merchant's other offer statement: The other merchant is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:a0f5c3dc5174c6cf9f7d9885fc57859231bcb3d4d446380f0952ad03c42ebe24",
+        "sha-256:2c1d45fd9254f93337fd0145d313df0f7c5a767d0cefca207147636a056e4266"
+      ]
     },
     {
       "seq": 17,
@@ -603,7 +630,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The other merchant's other offer statement is admitted.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:bf3e5a328ca5f62eec2c5d795a8d91e709a1ec78873b509baf0aad30926bf847"
+      ]
     },
     {
       "seq": 21,
@@ -622,7 +652,10 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "provenance": "signed by The other merchant"
       },
-      "caption": "The other merchant's other offer statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The other merchant's other offer statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:1f7205a62f6357aaebc3b9a9adc510af237ab14a7ceb54590676644417c71f62"
+      ]
     },
     {
       "seq": 22,
@@ -680,7 +713,10 @@
       },
       "reason": "within-mandate",
       "caption": "The chosen merchant's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:04e278787b4c5ee3913b7cb7287bc8556ca5e49baabd3f260dec4016b198159f"
+      ]
     },
     {
       "seq": 25,
@@ -725,7 +761,10 @@
       },
       "reason": "recipient-established",
       "caption": "The shopper: Accepted, for Agree the service only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0515834905c2403079c38ecb542ca5c1d6c5093a82b56418317d70f142488bc4"
+      ]
     },
     {
       "seq": 26,
@@ -1037,7 +1076,10 @@
           "purpose": "urn:purpose:shopping-agent"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:da6bb3e10cd3cf3d24ddb37d9b4d1759ece680f413308f256dffe60d3ae918f6"
+      ]
     },
     {
       "seq": 32,
@@ -2092,7 +2134,10 @@
           "purpose": "urn:purpose:shopping-agent"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:3b4b0d9f7315ea74ff3e9ba63e415f8a9952ac86d4515fc9b65e8e3c13dad7eb"
+      ]
     },
     {
       "seq": 40,
@@ -2138,7 +2183,10 @@
       },
       "reason": "within-mandate",
       "caption": "The shopper's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:497099f1daa8e60946f29407991a912d6102b4d19d71cc6bb00d5455c5b30426"
+      ]
     },
     {
       "seq": 42,
@@ -2183,7 +2231,10 @@
       },
       "reason": "recipient-established",
       "caption": "The chosen merchant: Accepted, for Agree the service only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d892d9ea8c68881ddc2b507db0da9f1f12c07d72c28944de4b41533df9f22780"
+      ]
     },
     {
       "seq": 43,
@@ -2331,7 +2382,10 @@
       "messageId": "urn:awp:engine-shopping-agent-asked-to-look-not-to-buy:business-agent:0001",
       "messageDigest": "sha-256:d93992a4e0cee1124cfed22eb6abafb5b9db26e1a1ee040292a5832ed193bfa7",
       "caption": "The accept message goes to The chosen merchant’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b60bf6373681ae58226d9b114b811960b8016337db94e05c11c3a73f1bfebe1d"
+      ]
     },
     {
       "seq": 48,
@@ -2750,7 +2804,10 @@
       "messageId": "urn:awp:engine-shopping-agent-asked-to-look-not-to-buy:business-agent:0001",
       "messageDigest": "sha-256:d93992a4e0cee1124cfed22eb6abafb5b9db26e1a1ee040292a5832ed193bfa7",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0ba130cf03c9974ff7c867579cf6cea51c121b397d950690b1d42922b2dc2a9d"
+      ]
     },
     {
       "seq": 56,
@@ -2829,7 +2886,10 @@
       },
       "reason": "recipient-established",
       "caption": "The shopper: Accepted, for Agree the service only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:0515834905c2403079c38ecb542ca5c1d6c5093a82b56418317d70f142488bc4"
+      ]
     },
     {
       "seq": 58,
@@ -2977,7 +3037,10 @@
       "messageId": "urn:awp:engine-shopping-agent-asked-to-look-not-to-buy:supplier-agent:0003",
       "messageDigest": "sha-256:f2b74e40b6772c9daaa2b31d7c3e04028511171313cf5434aee4b23b4312e0b2",
       "caption": "The receipt message goes to The shopper’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:3682a742ca50cdf14a4b29a0eeb34914a4fd8a5fea97ac9d1d59056f58800a85"
+      ]
     },
     {
       "seq": 63,
@@ -3326,7 +3389,10 @@
       "messageId": "urn:awp:engine-shopping-agent-asked-to-look-not-to-buy:supplier-agent:0003",
       "messageDigest": "sha-256:f2b74e40b6772c9daaa2b31d7c3e04028511171313cf5434aee4b23b4312e0b2",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:e3bcc1cc9c366f61cb41c6fc4649c741b74407c21c1174f39ee48f8c9980aa7f"
+      ]
     },
     {
       "seq": 71,
@@ -3403,7 +3469,10 @@
       },
       "reason": "within-mandate",
       "caption": "The chosen merchant's mandate covers this action.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:eb2122352bd5622d32f9077eda35c766f96fa9a0ca7ccbbfd27b9419ca10910e"
+      ]
     },
     {
       "seq": 74,
@@ -3448,7 +3517,10 @@
       },
       "reason": "recipient-established",
       "caption": "The shopper: Accepted, for Request payment only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:0515834905c2403079c38ecb542ca5c1d6c5093a82b56418317d70f142488bc4"
+      ]
     },
     {
       "seq": 75,
@@ -3694,7 +3766,10 @@
           "totalPaymentDue": "300.00"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:13bcf5bf9bef352965f1d273794639c00809127c84f43b23aa24bf9507119348"
+      ]
     },
     {
       "seq": 81,
@@ -4223,7 +4298,11 @@
           "totalPaymentDue": "300.00"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:3f010654c3962cf465c7249407505500febe34280638276a39be31e2fa85098a",
+        "sha-256:53193f6671ec56726c437ffe195654fc55ce4213e5d92baae162507b1a24d111"
+      ]
     },
     {
       "seq": 85,
@@ -4407,7 +4486,10 @@
           "totalPaymentDue": "300.00"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:8209ad5d9f7bba7eb0831917cc14704fc644bffef1c73eaf8e42a962410fe411"
+      ]
     },
     {
       "seq": 89,
@@ -4449,7 +4531,10 @@
           "totalPaymentDue": "300.00"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:a682efeef7951f60dd61c06679dbbcfae30b21e69c55a14248395591512ee745"
+      ]
     },
     {
       "seq": 90,
@@ -4849,7 +4934,10 @@
           ]
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:9753782e7b9f7cde5c41a1635784ed8b66bed88bc2a963523debeecb30cf824f"
+      ]
     },
     {
       "seq": 97,
@@ -4886,5 +4974,6 @@
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
       }
     }
-  ]
+  ],
+  "linkedTable": "linked/shopping-agent--baseline.json"
 }

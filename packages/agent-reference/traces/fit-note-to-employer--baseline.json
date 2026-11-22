@@ -70,7 +70,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -141,7 +141,11 @@
         "answer": "Accepted, for work fitness claims only."
       },
       "caption": "The clinician's work fitness statement: The clinician is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d5e399a0bd96b9cb8b690abee3bbb9993a60eb69ced69cf511a6672f36c2ba03",
+        "sha-256:e7ce93ccf76d1dfe5d96796f00fec6f20a4587c04adbae91c476751fb8d40e28"
+      ]
     },
     {
       "seq": 3,
@@ -188,7 +192,10 @@
         "text": "Its terms allow this: use for Fit note to employer; share for Fit note to employer."
       },
       "caption": "The clinician's work fitness statement: its terms allow this: use for Fit note to employer; share for Fit note to employer.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:12827157225879f782b79ffc2a699d7ef49b298e2b90595214a6ddabff0d8d9b"
+      ]
     },
     {
       "seq": 5,
@@ -232,7 +239,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The clinician's work fitness statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3bf9aaa741063e65c504776e6bfdcb0b1edf7ee68e00002bebe30c7c68567b51"
+      ]
     },
     {
       "seq": 7,
@@ -255,7 +265,10 @@
         },
         "provenance": "signed by The clinician"
       },
-      "caption": "The clinician's work fitness statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The clinician's work fitness statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:388e5f82d0ae705fb2e09dac8b8edbc279b3a7bd247d18fb164cdb419b6b591c"
+      ]
     },
     {
       "seq": 8,
@@ -342,7 +355,10 @@
       },
       "reason": "recipient-established",
       "caption": "The employee: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fa786fd0ea7a2d9468e1a94f5bc6939534a8e76babcfe466f1e499be52a6ac7e"
+      ]
     },
     {
       "seq": 11,
@@ -519,7 +535,10 @@
       "messageId": "urn:awp:engine-fit-note-to-employer-main:receiver-agent:0002",
       "messageDigest": "sha-256:d991fce0b3fa69c3bf8323b65874e5c53b0374dd0cec829373468e181e027d54",
       "caption": "The invoke message goes to The employee’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d770d217076694a0b9e20d5333ad1890133831e6b061a6ede76ca163051a828f"
+      ]
     },
     {
       "seq": 17,
@@ -932,7 +951,10 @@
       "messageId": "urn:awp:engine-fit-note-to-employer-main:receiver-agent:0002",
       "messageDigest": "sha-256:d991fce0b3fa69c3bf8323b65874e5c53b0374dd0cec829373468e181e027d54",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9b11671bdfc9272b8dd630e6e05ff539939905dcc66eae32d39cad3362c8f390"
+      ]
     },
     {
       "seq": 25,
@@ -1019,7 +1041,10 @@
       },
       "reason": "recipient-established",
       "caption": "The employer: Accepted, for Telling an employer about fitness for work only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:89c0f3d830ac494b320153114dc27878ec86c93b30985c8b086a70e6c8957a98"
+      ]
     },
     {
       "seq": 28,
@@ -1168,7 +1193,10 @@
       },
       "reason": "terms-allow",
       "caption": "The clinician's work fitness statement: its terms allow this: use for Fit note to employer; share for Fit note to employer.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:12827157225879f782b79ffc2a699d7ef49b298e2b90595214a6ddabff0d8d9b"
+      ]
     },
     {
       "seq": 33,
@@ -1258,7 +1286,10 @@
       "messageId": "urn:awp:engine-fit-note-to-employer-main:owner-agent:0002",
       "messageDigest": "sha-256:7c56a9588c63d150b04bf59e99dcb61a03222148a1d3e472131c39142532ab01",
       "caption": "The invoke message goes to The employer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:22210b3c06c85fc2cd63dff75bd0fb317303ea1b1c73ea1f2b463697b4f87185"
+      ]
     },
     {
       "seq": 36,
@@ -1733,7 +1764,11 @@
         "answer": "Accepted, for work fitness claims only."
       },
       "caption": "The clinician's work fitness statement: The clinician is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fd7ad6d60d21e012d03b4a7d9ffba7195c694dca467c7f201465beeb1eb49999",
+        "sha-256:0cfa8be6d04597e085f39c45413efc7ca1a0a100842468b8b3a4f1b3d421278e"
+      ]
     },
     {
       "seq": 40,
@@ -1784,7 +1819,10 @@
         "text": "Its terms allow this: use for Fit note to employer; share for Fit note to employer."
       },
       "caption": "The clinician's work fitness statement: its terms allow this: use for Fit note to employer; share for Fit note to employer.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:12827157225879f782b79ffc2a699d7ef49b298e2b90595214a6ddabff0d8d9b"
+      ]
     },
     {
       "seq": 42,
@@ -1825,7 +1863,10 @@
       "messageId": "urn:awp:engine-fit-note-to-employer-main:owner-agent:0002",
       "messageDigest": "sha-256:7c56a9588c63d150b04bf59e99dcb61a03222148a1d3e472131c39142532ab01",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:736967293fc3edd99583a13fe558dc2881d6ffe8065c28244d00838d53d39efc"
+      ]
     },
     {
       "seq": 44,
@@ -1848,7 +1889,10 @@
         },
         "provenance": "signed by The clinician"
       },
-      "caption": "The clinician's work fitness statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The clinician's work fitness statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:6609bd0dcb17d5a61b51b6eb6181cbd4e7b249b4e4bd2e3d897121d00d416b0b"
+      ]
     },
     {
       "seq": 45,
@@ -1927,7 +1971,10 @@
       },
       "reason": "recipient-established",
       "caption": "The employee: Accepted, for Telling an employer about fitness for work only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:fa786fd0ea7a2d9468e1a94f5bc6939534a8e76babcfe466f1e499be52a6ac7e"
+      ]
     },
     {
       "seq": 47,
@@ -2075,7 +2122,10 @@
       "messageId": "urn:awp:engine-fit-note-to-employer-main:receiver-agent:0003",
       "messageDigest": "sha-256:6bab678d2551ad3abbc25d1ca618d90af7baad5aaf2011eb525be1acc16cab17",
       "caption": "The deliver message goes to The employee’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:daa6c5f9e464185c9c4b0ddf4a0685a1b3286964f555ce67a127b46a553460a5"
+      ]
     },
     {
       "seq": 52,
@@ -2450,7 +2500,10 @@
       "messageId": "urn:awp:engine-fit-note-to-employer-main:receiver-agent:0003",
       "messageDigest": "sha-256:6bab678d2551ad3abbc25d1ca618d90af7baad5aaf2011eb525be1acc16cab17",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:bce244240fe11fc0aa82bcc5c7ee6f2bf2ec6cc903f3387877906d06522ea14a"
+      ]
     },
     {
       "seq": 60,
@@ -2458,7 +2511,11 @@
       "agent": "receiver-agent",
       "part": "record",
       "kind": "record",
-      "caption": "32 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "32 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:daa6c5f9e464185c9c4b0ddf4a0685a1b3286964f555ce67a127b46a553460a5"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/fit-note-to-employer--baseline.json"
 }

@@ -201,7 +201,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -239,7 +239,10 @@
           "suite": "odrl-rules"
         }
       ],
-      "caption": "Sam, the fictional applicant signed this mandate with their own key; the agent verified it, wrote it to its record, and every check reads it: 9 rules, valid until 2027-01-12."
+      "caption": "Sam, the fictional applicant signed this mandate with their own key; the agent verified it, wrote it to its record, and every check reads it: 9 rules, valid until 2027-01-12.",
+      "linked": [
+        "sha-256:bf39ed73b37f988ddf2292b264d00fc3745286098bc9d8096b16a2eebd4af3ff"
+      ]
     },
     {
       "seq": 2,
@@ -314,7 +317,11 @@
         "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "The fictional lender's signed product terms: The fictional lender is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:89790f933285ede99f0ac6663991ed4c0aee9f6752c59b5f19dad359a6e58100",
+        "sha-256:02b93f5a3659a225ad57792742daef29d80e5dc91ac80278bab57f3fab1ffbe2"
+      ]
     },
     {
       "seq": 5,
@@ -361,7 +368,10 @@
         "text": "Its terms allow this: use for Product Search; share for Product Search."
       },
       "caption": "The fictional lender's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0b78b08fe1af837c4359405346b596b59e6fecba4ca496f9606e1d0b2fb4b4cc"
+      ]
     },
     {
       "seq": 7,
@@ -415,7 +425,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional lender's signed product terms is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5160a5dd6bdc3e600b8a4bb8f4bf29d271cf4b24fccb60eecfaa3bfc3a758eb4"
+      ]
     },
     {
       "seq": 9,
@@ -444,7 +457,10 @@
         },
         "provenance": "signed by The fictional lender, issued 2026-11-01T09:00:00Z"
       },
-      "caption": "The fictional lender's signed product terms is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional lender's signed product terms is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:2715f9946d7f462c685d9f472f590b63b82b953aa6047a8ea9ba3a3dd441f9e0"
+      ]
     },
     {
       "seq": 10,
@@ -507,7 +523,11 @@
         "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "Sam’s fictional bank's signed product terms: Sam’s fictional bank is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:17558f01c735af8c31f630b840c839044cf2d127512d2c637e1f128a86278df8",
+        "sha-256:b854714d426026780b0f7b24adb5ee79b05bc61a44df69b763a465674b8edcdf"
+      ]
     },
     {
       "seq": 12,
@@ -554,7 +574,10 @@
         "text": "Its terms allow this: use for Product Search; share for Product Search."
       },
       "caption": "Sam’s fictional bank's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4c6165fa6cd8eeb39195378258764f94bc94bad5e262156acc186a95b2f6ac51"
+      ]
     },
     {
       "seq": 14,
@@ -608,7 +631,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "Sam’s fictional bank's signed product terms is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:de95c5333553f0c5018487e3fff8962d45865beeb416e2f82f0b15c9e79211c1"
+      ]
     },
     {
       "seq": 16,
@@ -637,7 +663,10 @@
         },
         "provenance": "signed by Sam’s fictional bank, issued 2026-11-01T09:00:00Z"
       },
-      "caption": "Sam’s fictional bank's signed product terms is stored with its source, how it was produced, its date and its terms."
+      "caption": "Sam’s fictional bank's signed product terms is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:9e6df05173b5be598c3b44f6b3e8d90e7e18f86f8fcf1d9a3b2e216aa27a27c3"
+      ]
     },
     {
       "seq": 17,
@@ -700,7 +729,11 @@
         "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "Willow Lending, a fictional unlisted lender's signed product terms: Willow Lending, a fictional unlisted lender is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:a3b631514428404dd11d2bc7302fce46d3e02da824b2db01037324b4018076ae",
+        "sha-256:aeadbb4b4a69649bad20254feccfa161d663f37b36db55f1ee2beb02cfe1570d"
+      ]
     },
     {
       "seq": 19,
@@ -747,7 +780,10 @@
         "text": "Its terms allow this: use for Product Search; share for Product Search."
       },
       "caption": "Willow Lending, a fictional unlisted lender's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:4986c113e861a0b2ce56c196cbbb0bf276c8c8b004027a2945bd4f13b92e61b2"
+      ]
     },
     {
       "seq": 21,
@@ -801,7 +837,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "Willow Lending, a fictional unlisted lender's signed product terms is admitted.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:840b0cc92770ea3ce0203a2c39ce59ff28c9928b49e5bd9c9909d7f630b7bbae"
+      ]
     },
     {
       "seq": 23,
@@ -830,7 +869,10 @@
         },
         "provenance": "signed by Willow Lending, a fictional unlisted lender, issued 2026-11-01T09:00:00Z"
       },
-      "caption": "Willow Lending, a fictional unlisted lender's signed product terms is stored with its source, how it was produced, its date and its terms."
+      "caption": "Willow Lending, a fictional unlisted lender's signed product terms is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:5bc14df2d0d5b204e9df053499c8b1ea2e256354df5fd2a6d01cd9ddf4ad0fb7"
+      ]
     },
     {
       "seq": 24,
@@ -917,7 +959,10 @@
       },
       "reason": "recipient-established",
       "caption": "The mortgage product index: Accepted, for Search mortgage products only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fdafde076f40a409875664ab5d8adfc10ad3092ccafa0af551f8e719b8a873c1"
+      ]
     },
     {
       "seq": 27,
@@ -1094,7 +1139,10 @@
       "messageId": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0002",
       "messageDigest": "sha-256:be7643df892d8865bd8a2c47be38e9271d1fea75643dad5b11dc7079d0315f16",
       "caption": "The invoke message goes to The mortgage product index’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cc4f1af9dc5a359ffe38a1f7c877bd67471093ae96a6dc7dee12a727202284fe"
+      ]
     },
     {
       "seq": 33,
@@ -1443,7 +1491,10 @@
       "messageId": "urn:awp:engine-mortgage-main-high-score-not-registered:sam-agent:0002",
       "messageDigest": "sha-256:be7643df892d8865bd8a2c47be38e9271d1fea75643dad5b11dc7079d0315f16",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:bcec7fe9fbd69ef52fa75d2f6fcbd7de06d62e7f25a503b8308421a421bccedb"
+      ]
     },
     {
       "seq": 41,
@@ -1569,7 +1620,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional lender's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0b78b08fe1af837c4359405346b596b59e6fecba4ca496f9606e1d0b2fb4b4cc"
+      ]
     },
     {
       "seq": 45,
@@ -1629,7 +1683,10 @@
       },
       "reason": "terms-allow",
       "caption": "Sam’s fictional bank's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4c6165fa6cd8eeb39195378258764f94bc94bad5e262156acc186a95b2f6ac51"
+      ]
     },
     {
       "seq": 47,
@@ -1689,7 +1746,10 @@
       },
       "reason": "terms-allow",
       "caption": "Willow Lending, a fictional unlisted lender's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4986c113e861a0b2ce56c196cbbb0bf276c8c8b004027a2945bd4f13b92e61b2"
+      ]
     },
     {
       "seq": 49,
@@ -1749,7 +1809,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional lender's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0b78b08fe1af837c4359405346b596b59e6fecba4ca496f9606e1d0b2fb4b4cc"
+      ]
     },
     {
       "seq": 51,
@@ -1781,7 +1844,10 @@
       },
       "reason": "terms-allow",
       "caption": "Sam’s fictional bank's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4c6165fa6cd8eeb39195378258764f94bc94bad5e262156acc186a95b2f6ac51"
+      ]
     },
     {
       "seq": 52,
@@ -1813,7 +1879,10 @@
       },
       "reason": "terms-allow",
       "caption": "Willow Lending, a fictional unlisted lender's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4986c113e861a0b2ce56c196cbbb0bf276c8c8b004027a2945bd4f13b92e61b2"
+      ]
     },
     {
       "seq": 53,
@@ -1900,7 +1969,10 @@
       "messageId": "urn:awp:engine-mortgage-main-high-score-not-registered:index-agent:0001",
       "messageDigest": "sha-256:22eaec4378c7ef5fb272dd18d719cdd8e79598ed68e749425d3daa39bc24be2d",
       "caption": "The deliver message goes to Sam, the fictional applicant.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:90d6b6c04a395ce6f498f2fe666cac4066da364a86a2e45b8a01872941abcb83"
+      ]
     },
     {
       "seq": 56,
@@ -2752,7 +2824,10 @@
         "answer": "Accepted, for mortgage product claims only."
       },
       "caption": "Sam’s fictional bank's signed product terms: Sam’s fictional bank is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1747bb9a789233dab41bf3e78c6d089064581259c760bf02dd636270cc390f63"
+      ]
     },
     {
       "seq": 61,
@@ -2844,7 +2919,10 @@
         "text": "Its terms allow this: use for Product Search; share for Product Search."
       },
       "caption": "The fictional lender's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0b78b08fe1af837c4359405346b596b59e6fecba4ca496f9606e1d0b2fb4b4cc"
+      ]
     },
     {
       "seq": 64,
@@ -2872,7 +2950,10 @@
         "text": "Its terms allow this: use for Product Search; share for Product Search."
       },
       "caption": "Sam’s fictional bank's signed product terms: its terms allow this: use for Product Search; share for Product Search.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4c6165fa6cd8eeb39195378258764f94bc94bad5e262156acc186a95b2f6ac51"
+      ]
     },
     {
       "seq": 65,
@@ -2961,7 +3042,10 @@
       "messageId": "urn:awp:engine-mortgage-main-high-score-not-registered:index-agent:0001",
       "messageDigest": "sha-256:22eaec4378c7ef5fb272dd18d719cdd8e79598ed68e749425d3daa39bc24be2d",
       "caption": "The message is admitted; statements that did not pass are labelled as not admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:60189b9fa2afae100e5c512525e8169d746c7e073d5e689bfe3e7046c79b810e"
+      ]
     },
     {
       "seq": 68,
@@ -2990,7 +3074,10 @@
         },
         "provenance": "signed by The fictional lender, issued 2026-11-01T09:00:00Z"
       },
-      "caption": "The fictional lender's signed product terms is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional lender's signed product terms is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:ca72722bd0a13648f0107e38191c98e4fef237e650b78bdf5822359c4f119054"
+      ]
     },
     {
       "seq": 69,
@@ -3020,7 +3107,11 @@
         "provenance": "signed by Sam’s fictional bank, issued 2026-11-01T09:00:00Z"
       },
       "caption": "Sam’s fictional bank's signed product terms is stored with its source, how it was produced, its date and its terms.",
-      "segmentEnd": "payment"
+      "segmentEnd": "payment",
+      "linked": [
+        "sha-256:25ef070e8abada943921553dad57cfed47dbcba8a00b50012cbdbb77169a4d52"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/mortgage-main--trust-reputation.json"
 }

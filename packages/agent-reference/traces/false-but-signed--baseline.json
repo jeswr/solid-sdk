@@ -69,7 +69,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -144,7 +144,11 @@
         "answer": "Accepted, for annual-income claims only."
       },
       "caption": "The employer's annual income statement: The employer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b6c3919ab203850049c4f569eb4e75afd54271917a757cb087508141112ae1d7",
+        "sha-256:8113a1211c40fb7d10fd2106a19283534598c8537309aef627fb9fb861dc6a54"
+      ]
     },
     {
       "seq": 3,
@@ -191,7 +195,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The employer's annual income statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fed307f3e992bf837ce98dde5d5bdd528568474b2a58017c1a7f6b338d8d1d6b"
+      ]
     },
     {
       "seq": 5,
@@ -260,7 +267,10 @@
       "outcome": "ask-more",
       "reason": "completeness-not-established",
       "caption": "The employer's annual income statement is refused and kept out of memory.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2f613c6c9a66195750d9b529b692f284791c94629e3e06376619b70877bd1260"
+      ]
     },
     {
       "seq": 8,
@@ -323,7 +333,11 @@
         "answer": "Accepted, for annual-income claims only."
       },
       "caption": "The fictional tax register's annual income statement: The fictional tax register is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:a5d176d49c9e19b2bdf24445682d256264a4f7073652e30cafdf8592f1c7a3c5",
+        "sha-256:c83f592cfa06bdd95bfab9c075e1e82c031d654306706d9d5bd2c307466c105d"
+      ]
     },
     {
       "seq": 10,
@@ -439,7 +453,10 @@
       "outcome": "ask-more",
       "reason": "completeness-not-established",
       "caption": "The fictional tax register's annual income statement is refused and kept out of memory.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:c4041374c3a92e16895c75c2dd77bd6a2a260960c10d1e136ec505e8f43b418d"
+      ]
     },
     {
       "seq": 15,
@@ -447,7 +464,11 @@
       "agent": "lender-agent",
       "part": "record",
       "kind": "record",
-      "caption": "20 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "20 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:c4041374c3a92e16895c75c2dd77bd6a2a260960c10d1e136ec505e8f43b418d"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/false-but-signed--baseline.json"
 }

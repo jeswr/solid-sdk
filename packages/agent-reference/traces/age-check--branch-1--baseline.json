@@ -70,7 +70,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -149,7 +149,11 @@
         "answer": "Accepted, for identity document claims only."
       },
       "caption": "The identity issuer's identity document statement: The identity issuer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9f05a601a2c88914f7bf5a08e3e4ea20697cf7b38aa95c982d68dfb09b0f3fbf",
+        "sha-256:f2f6b0af37d27bb1224707049c51af0673c1e11abe8b4952d2d58bb0e5b5b33c"
+      ]
     },
     {
       "seq": 3,
@@ -196,7 +200,10 @@
         "text": "Its terms allow this: use for Identity management; share for Identity management."
       },
       "caption": "The identity issuer's identity document statement: its terms allow this: use for Identity management; share for Identity management.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5443c305820516ca3a36f5eecba76dab1f01caf9dd0872cbacd193dd92fb4afb"
+      ]
     },
     {
       "seq": 5,
@@ -240,7 +247,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The identity issuer's identity document statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:027724ec51a3ebebfe212f0d088a4a14729df55584d3adc68be57f243343788c"
+      ]
     },
     {
       "seq": 7,
@@ -263,7 +273,10 @@
         },
         "provenance": "signed by The identity issuer"
       },
-      "caption": "The identity issuer's identity document statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The identity issuer's identity document statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:7faeb8e6120d3f22ce3fe80667688df13c147a6264dbdc265a09ce0b925facc5"
+      ]
     },
     {
       "seq": 8,
@@ -350,7 +363,10 @@
       },
       "reason": "recipient-established",
       "caption": "The customer: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fb871390cf9062bf41ae44248910291b331d8b61892f660235ea7054ef9ad783"
+      ]
     },
     {
       "seq": 11,
@@ -527,7 +543,10 @@
       "messageId": "urn:awp:engine-age-check-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:72b475a3c02771335c99d190d0cad02402782c46ec5ba5c7d343bc7517bafdfa",
       "caption": "The invoke message goes to The customer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6df493036883a4cecc2115cd9c9de5567e1297a1ead81fcdba4d0a4d47c63290"
+      ]
     },
     {
       "seq": 17,
@@ -944,7 +963,10 @@
       "messageId": "urn:awp:engine-age-check-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:72b475a3c02771335c99d190d0cad02402782c46ec5ba5c7d343bc7517bafdfa",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:b25b6478ed20abea043865ef517b3ffa8544a9641806261fb9dfa92cc72489c6"
+      ]
     },
     {
       "seq": 25,
@@ -1031,7 +1053,10 @@
       },
       "reason": "recipient-established",
       "caption": "The merchant: Accepted, for Proving age to buy something only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4f41d7ca6ccd1e7996ef6f3b9bd919ddd50d3176c3b8728d5a1ec2e77c372631"
+      ]
     },
     {
       "seq": 28,
@@ -1169,7 +1194,11 @@
       "outcome": "stop",
       "reason": "excessive-scope",
       "caption": "The credential is not necessary for this purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5c755e2043f5c6d779cebe93d3bc9cd543242a062bf52e71bb978d6cd40b2e17"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/age-check--baseline.json"
 }

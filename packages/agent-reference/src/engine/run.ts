@@ -29,7 +29,7 @@ import {
   PurposeBoundStore,
   purposeStoreReleaseCheck,
 } from "../domains/purpose-store.js";
-import type { GateContext } from "../gates/common.js";
+import { type GateContext, resolutionTrace } from "../gates/common.js";
 import { FictionalAgentRegistry } from "../mechanisms/agent-registry.js";
 import {
   type AgreementCredential,
@@ -126,6 +126,7 @@ import { PUBLIC_READ } from "../suites/public-read.js";
 import { scenarioRegistry } from "../suites/scenario.js";
 import { PresentedFederationResolver } from "../suites/trust-federation.js";
 import { ReputationResolver } from "../suites/trust-reputation.js";
+import { paymentTransferLink, recordLink } from "../trace/linked.js";
 import { type TraceObservation, TraceRecorder } from "../trace/recorder.js";
 import {
   type OutlineEntry,
@@ -408,6 +409,7 @@ export async function runScenario(
     beforeSolidStep?: (fixture: SolidStepFixture) => void | Promise<void>;
     proofCache?: ProofCache;
     generateProofs?: boolean;
+    linked?: boolean;
   } = {},
 ): Promise<PathResult[]> {
   if (options.beforeSolidStep && !options.testOnly)
@@ -743,6 +745,7 @@ async function runPath(
   options: {
     proofCache?: ProofCache;
     generateProofs?: boolean;
+    linked?: boolean;
     alternative?: Scenario["configurations"][number];
     onlyUnder?: string;
     pathKind: PathResult["pathKind"];
@@ -840,7 +843,7 @@ async function runPath(
         wire: evidence.value,
         statement,
       });
-  });
+  }, options.linked);
   const cast = new Cast(now, {
     keys: async (id) => ({
       owner: await testKey(`engine/${id}/owner`),
@@ -2086,15 +2089,7 @@ async function runPath(
                   caption: checked.ok
                     ? "The accepted registry's current signed entry names Sam as principal, binds the agent key and covers this operation."
                     : "The current registry entry does not establish authority for this operation.",
-                  ...(accepted
-                    ? {
-                        resolution: {
-                          question: accepted.question,
-                          path: accepted.path.map((p) => ({ ...p })),
-                          answer: accepted.answer,
-                        },
-                      }
-                    : {}),
+                  ...(accepted ? resolutionTrace(accepted, gate) : {}),
                   ...(checked.ok
                     ? {
                         fact: {
@@ -2124,8 +2119,8 @@ async function runPath(
                 agent.id === "sam-agent" ? authorizationServer.current() : undefined,
               ...(agent.id === "sam-agent"
                 ? {
-                    load: async (source: string) => {
-                      const checked = await authorizationServer.verify(authorizationGrant, {
+                    load: (source: string) =>
+                      authorizationServer.verify(authorizationGrant, {
                         trust,
                         actor: cast.get(agent.id).identity.actor,
                         party: cast.get(agent.id).identity.party,
@@ -2140,27 +2135,28 @@ async function runPath(
                             subject: cast.get(agent.id).identity.party,
                             at: now().toISOString(),
                           }).outcome === "accepted",
-                      });
-                      if (checked.ok)
-                        recorder.sink(agent.traceId ?? agent.id).emit({
-                          part: "record",
-                          kind: "record",
-                          caption:
-                            "Sam approved at the fictional bank authorization server. Its signed authorization details are lifted into the autonomous and with-approval ODRL policies read by the gate.",
-                          fact: {
-                            id: checked.loaded.mandate.id,
-                            label: "ODRL mandate lifted from the server grant",
-                            claimType: "authority.grant-lift",
-                            subject: cast.get(agent.id).identity.party,
-                            source: authorizationServer.identity,
-                            value: {
-                              grantDigest: digestOf(authorizationGrant),
-                              autonomous: checked.loaded.mandate.autonomous,
-                              withApproval: checked.loaded.mandate.withApproval,
-                            },
+                      }),
+                    onGrantRecorded: ({ mandate }, entry) => {
+                      const sink = recorder.sink(agent.traceId ?? agent.id);
+                      sink.emit({
+                        part: "record",
+                        kind: "record",
+                        caption:
+                          "Sam approved at the fictional bank authorization server. Its signed authorization details are lifted into the autonomous and with-approval ODRL policies read by the gate.",
+                        fact: {
+                          id: mandate.id,
+                          label: "ODRL mandate lifted from the server grant",
+                          claimType: "authority.grant-lift",
+                          subject: cast.get(agent.id).identity.party,
+                          source: authorizationServer.identity,
+                          value: {
+                            grantDigest: digestOf(authorizationGrant),
+                            autonomous: mandate.autonomous,
+                            withApproval: mandate.withApproval,
                           },
-                        });
-                      return checked;
+                        },
+                        ...(sink.linked ? { linkedInputs: [recordLink(entry)] } : {}),
+                      });
                     },
                   }
                 : {}),
@@ -2188,15 +2184,7 @@ async function runPath(
                   caption: checked.ok
                     ? "The accepted authorization server binds the principal, the explicit actor and the actor key to the lifted permissions."
                     : "The authorization grant does not establish the required principal, actor and key binding.",
-                  ...(accepted
-                    ? {
-                        resolution: {
-                          question: accepted.question,
-                          path: accepted.path.map((p) => ({ ...p })),
-                          answer: accepted.answer,
-                        },
-                      }
-                    : {}),
+                  ...(accepted ? resolutionTrace(accepted, gate) : {}),
                 });
                 if (!checked.ok) return checked.reason;
                 return [
@@ -2498,6 +2486,7 @@ async function runPath(
       },
       resolver: new TrustResolver({
         principal: name(cast.get(agent.id).identity.party),
+        traceLinked: options.linked,
         trust,
         ownList,
         root: scenario.trust.root,
@@ -2527,6 +2516,7 @@ async function runPath(
             principal: name(cast.get(agent.id).identity.party),
             trust,
             ownList: scenario.trust.ownLists[agent.id],
+            traceLinked: options.linked,
             root: scenario.trust.root,
             name,
           },
@@ -2554,6 +2544,7 @@ async function runPath(
             principal: name(cast.get(agent.id).identity.party),
             trust,
             ownList: scenario.trust.ownLists[agent.id],
+            traceLinked: options.linked,
             root: scenario.trust.root,
             name,
           },
@@ -2722,21 +2713,27 @@ async function runPath(
                     provider.accounts.find((a) => a.party === admitted.payer),
                   );
                   const suite = selectedSettlement(configuration.layers.settlement, settlement);
+                  const ledger = required(paymentLedgers.get(agent.id));
                   const settled = await suite.settle(admitted.objects, {
                     party: cast.get(agent.id).identity.party ?? "",
                     payerAccount: account.id,
-                    ledger: required(paymentLedgers.get(agent.id)),
+                    ledger,
                     now: now().toISOString(),
                   });
                   const receipt = suite.lift(settled);
                   const trace = suite.trace
                     ? await suite.trace(settled)
                     : await paymentTrace(receipt);
-                  recorder.sink(agent.traceId ?? agent.id).emit({
+                  const sink = recorder.sink(agent.traceId ?? agent.id);
+                  const entry = sink.linked
+                    ? ledger.entries.find((entry) => entry.digest === receipt.ledgerReference)
+                    : undefined;
+                  sink.emit({
                     part: "record",
                     kind: "record",
                     caption: "The fictional provider records the ledger transfer and its receipt.",
                     settlement: trace,
+                    ...(entry ? { linkedInputs: [paymentTransferLink(entry)] } : {}),
                   });
                   return {
                     conclusion: "completed" as const,
@@ -3776,16 +3773,20 @@ async function runPath(
         });
         break;
       }
-      case "pod-store":
+      case "pod-store": {
         for (const statement of step.statements)
           await runtime.storeInEvidencePod(String(required(signed[statement]).statement.id));
-        recorder.sink(parties.get(step.agent)?.traceId ?? step.agent).emit({
+        const sink = recorder.sink(parties.get(step.agent)?.traceId ?? step.agent);
+        const entry = sink.linked ? required(ledgers.get(step.agent)).entries().at(-1) : undefined;
+        sink.emit({
           part: "record",
           kind: "record",
+          ...(entry ? { linkedInputs: [recordLink(entry)] } : {}),
           caption:
             "The admitted balance statement is stored unchanged in Sam’s private evidence pod.",
         });
         break;
+      }
       case "reference-read":
         result = await runtime.readByReference(step.item, step.purpose);
         enqueue(step.agent, result as StepResult);
@@ -4503,6 +4504,7 @@ async function runPath(
   if (recordMirror && !(await recordMirror.flush()))
     throw new Error("The final principal record could not be mirrored");
   await recorder.complete();
+  const linked = recorder.linkedViews();
   const trace: TraceFile = {
     schema: TRACE_SCHEMA,
     useCase: scenario.useCase ?? scenario.id,
@@ -4589,6 +4591,7 @@ async function runPath(
         }
       : {}),
     events: recorder.events(),
+    ...(linked ? { linked } : {}),
   };
   return {
     trace,

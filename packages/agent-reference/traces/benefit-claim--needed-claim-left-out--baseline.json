@@ -84,7 +84,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -159,7 +159,11 @@
         "answer": "Accepted, for benefit income claims only."
       },
       "caption": "The employer's benefit income statement: The employer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9f7b26615eec25f158df3e787e77e3a0718d9d49cd65e13edee3ceb217800343",
+        "sha-256:b1323f2c5f95ffe2d87da50870d84b1d9f0de8ffaca82c25ce99ec2bd364eabd"
+      ]
     },
     {
       "seq": 3,
@@ -206,7 +210,10 @@
         "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
       "caption": "The employer's benefit income statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9cce2bead2c09037b93fe0d91991d9a7b7e55883457398dac0c8a352a57bfbd0"
+      ]
     },
     {
       "seq": 5,
@@ -250,7 +257,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The employer's benefit income statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f1125d59a2de903219904023ce42ebd1aa861c319424f3b255f0bba571c0fb91"
+      ]
     },
     {
       "seq": 7,
@@ -273,7 +283,10 @@
         },
         "provenance": "signed by The employer"
       },
-      "caption": "The employer's benefit income statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The employer's benefit income statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:9bb4531ad8679ca9a2b6b4cc9a396478f7968dc2a0b55a0e31264e1706679432"
+      ]
     },
     {
       "seq": 8,
@@ -336,7 +349,11 @@
         "answer": "Accepted, for benefit rent claims only."
       },
       "caption": "The landlord's benefit rent statement: The landlord is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:e1a8fd1444cd4ee4f6f4f520091b1899d2c8710074d95cae5da3c6a0aad5b0a2",
+        "sha-256:b16bce2862bf7fd570526ac3ba07d8da2d3438592bd3ff1bd772f8ee3e7f1463"
+      ]
     },
     {
       "seq": 10,
@@ -383,7 +400,10 @@
         "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
       "caption": "The landlord's benefit rent statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:d4af318ccf6a87653787b88e70f3b5c0660b76ec5a0223fba37431daa75d6a63"
+      ]
     },
     {
       "seq": 12,
@@ -427,7 +447,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The landlord's benefit rent statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:ceac6b15fb2ba3b9cd31189912725a44b6d9578af4fcc36f7d4da6e48f735247"
+      ]
     },
     {
       "seq": 14,
@@ -450,7 +473,10 @@
         },
         "provenance": "signed by The landlord"
       },
-      "caption": "The landlord's benefit rent statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The landlord's benefit rent statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:54df2ab9377bef92fbc4e37512e57c2ee5b3782749720a4069b8f4b26ab1825b"
+      ]
     },
     {
       "seq": 15,
@@ -513,7 +539,11 @@
         "answer": "Accepted, for benefit household claims only."
       },
       "caption": "The household register's benefit household statement: The household register is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:0d214324521836a707d4467bda0fb04a13e346ddb67cb9e58cc643d49fceb751",
+        "sha-256:a845b58e04c6350d7b0b17f024c6e0458acb92b96311e55ac6aad28181bc5284"
+      ]
     },
     {
       "seq": 17,
@@ -560,7 +590,10 @@
         "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
       "caption": "The household register's benefit household statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:54d410c4449c7a01dd1b2a44a80210fa9eeb21745537e4bd8bce710d61002e21"
+      ]
     },
     {
       "seq": 19,
@@ -604,7 +637,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The household register's benefit household statement is admitted.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:c5f7ebbb9df72ab618fa1be7013629f3ec3a42c65fc1f89758b9213cb7e5747c"
+      ]
     },
     {
       "seq": 21,
@@ -627,7 +663,10 @@
         },
         "provenance": "signed by The household register"
       },
-      "caption": "The household register's benefit household statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The household register's benefit household statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:494acd39eb59b0cdcef98ddcf25f7a8ea2c4661bc45022e20e9b55ce8b5abc59"
+      ]
     },
     {
       "seq": 22,
@@ -714,7 +753,10 @@
       },
       "reason": "recipient-established",
       "caption": "The claimant: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1ef623f40fc09e8a87c92ef0f69cd3c71e7b305946142dd94188c7be5ff7f762"
+      ]
     },
     {
       "seq": 25,
@@ -891,7 +933,10 @@
       "messageId": "urn:awp:engine-benefit-claim-needed-claim-left-out:receiver-agent:0002",
       "messageDigest": "sha-256:0016f45a9934c9d183109a701cea9e48cf0a5b548eb73fd42332bcf5969cf00e",
       "caption": "The invoke message goes to The claimant’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:837907a8192b1c4ce693c43a6a169c3851abc1fde5c5ab12d0f1accfb004a633"
+      ]
     },
     {
       "seq": 31,
@@ -1304,7 +1349,10 @@
       "messageId": "urn:awp:engine-benefit-claim-needed-claim-left-out:receiver-agent:0002",
       "messageDigest": "sha-256:0016f45a9934c9d183109a701cea9e48cf0a5b548eb73fd42332bcf5969cf00e",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:427ead96862768a58785b752f5ee0aa1d407a3e55b75ccfcff0740250364a095"
+      ]
     },
     {
       "seq": 39,
@@ -1391,7 +1439,10 @@
       },
       "reason": "recipient-established",
       "caption": "The benefits office: Accepted, for Claiming a benefit only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ff81967dee21e79642da86eb235fb5c0a8c7b2c43f1a841e3c576066892bfaba"
+      ]
     },
     {
       "seq": 42,
@@ -1540,7 +1591,10 @@
       },
       "reason": "terms-allow",
       "caption": "The employer's benefit income statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9cce2bead2c09037b93fe0d91991d9a7b7e55883457398dac0c8a352a57bfbd0"
+      ]
     },
     {
       "seq": 47,
@@ -1602,7 +1656,10 @@
       },
       "reason": "terms-allow",
       "caption": "The household register's benefit household statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:54d410c4449c7a01dd1b2a44a80210fa9eeb21745537e4bd8bce710d61002e21"
+      ]
     },
     {
       "seq": 49,
@@ -1692,7 +1749,10 @@
       "messageId": "urn:awp:engine-benefit-claim-needed-claim-left-out:owner-agent:0002",
       "messageDigest": "sha-256:3ace9e8331402468976754372a8bdf1bf9ac75ded5ab831a22093ee2f77cd6ae",
       "caption": "The invoke message goes to The benefits office’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:11040aaabb8cd1fef3d99cf37f505083a4e035bb1b51616c0e08b50357abbc97"
+      ]
     },
     {
       "seq": 52,
@@ -2273,7 +2333,11 @@
         "answer": "Accepted, for benefit income claims only."
       },
       "caption": "The employer's benefit income statement: The employer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:32088a0b84ce5c3497eb2718e77533fe427060ae46a61b5552671af9fd0df5aa",
+        "sha-256:0a304de20c0c44b67ae603ac5ade1bf841e92ff643cb6b82d3de1652c9c86b28"
+      ]
     },
     {
       "seq": 56,
@@ -2312,7 +2376,11 @@
         "answer": "Accepted, for benefit household claims only."
       },
       "caption": "The household register's benefit household statement: The household register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:44bf6abfe00741fbf7acdb456435aae18090844f0b7931f5930a82a3f21fec45",
+        "sha-256:2340057d23f1a76af07e306f36f50b32f6fb63a7d6e2211f1eef8eff93f60dee"
+      ]
     },
     {
       "seq": 57,
@@ -2363,7 +2431,10 @@
         "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
       "caption": "The employer's benefit income statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9cce2bead2c09037b93fe0d91991d9a7b7e55883457398dac0c8a352a57bfbd0"
+      ]
     },
     {
       "seq": 59,
@@ -2391,7 +2462,10 @@
         "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
       "caption": "The household register's benefit household statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:54d410c4449c7a01dd1b2a44a80210fa9eeb21745537e4bd8bce710d61002e21"
+      ]
     },
     {
       "seq": 60,
@@ -2499,7 +2573,10 @@
         },
         "provenance": "signed by The employer"
       },
-      "caption": "The employer's benefit income statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The employer's benefit income statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:f865cc16edd40327c7d2d1b8fa7c5c41f5d3c7079303a1b0a2de1d40ff361ae9"
+      ]
     },
     {
       "seq": 64,
@@ -2522,7 +2599,10 @@
         },
         "provenance": "signed by The household register"
       },
-      "caption": "The household register's benefit household statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The household register's benefit household statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:9d075ad9fec8ddaaf4daa15634749c6875d2d126aee5cd6ca06fae104f9108b4"
+      ]
     },
     {
       "seq": 65,
@@ -2541,6 +2621,9 @@
           "suite": "fixed-vocabulary",
           "id": "urn:fictional:benefit-claim:landlord"
         }
+      ],
+      "linked": [
+        "sha-256:a67cc54fce8e097f0e8ad0c85998fbf335b5de8590a93f497c8e28985da77808"
       ]
     },
     {
@@ -2620,7 +2703,10 @@
       },
       "reason": "recipient-established",
       "caption": "The claimant: Accepted, for Claiming a benefit only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:1ef623f40fc09e8a87c92ef0f69cd3c71e7b305946142dd94188c7be5ff7f762"
+      ]
     },
     {
       "seq": 68,
@@ -2836,7 +2922,10 @@
       "messageId": "urn:awp:engine-benefit-claim-needed-claim-left-out:receiver-agent:0005",
       "messageDigest": "sha-256:28f0ecc3d28114abbad7dc501e8fd77c9c6d7741f0c804fa5e583b2edeaa124c",
       "caption": "The challenge message goes to The claimant’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:7f7f9b917e076c3c8a5609ca336da0adbb44fe3554d3544ad40e48badc50c186"
+      ]
     },
     {
       "seq": 75,
@@ -3213,7 +3302,10 @@
       "messageId": "urn:awp:engine-benefit-claim-needed-claim-left-out:receiver-agent:0005",
       "messageDigest": "sha-256:28f0ecc3d28114abbad7dc501e8fd77c9c6d7741f0c804fa5e583b2edeaa124c",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:dd3787c65259fe33057694eff35fc09981bc4d64f542dc7d08241d9f2894439b"
+      ]
     },
     {
       "seq": 83,
@@ -3300,7 +3392,10 @@
       },
       "reason": "recipient-established",
       "caption": "The benefits office: Accepted, for Claiming a benefit only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:ff81967dee21e79642da86eb235fb5c0a8c7b2c43f1a841e3c576066892bfaba"
+      ]
     },
     {
       "seq": 86,
@@ -3449,7 +3544,10 @@
       },
       "reason": "terms-allow",
       "caption": "The employer's benefit income statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9cce2bead2c09037b93fe0d91991d9a7b7e55883457398dac0c8a352a57bfbd0"
+      ]
     },
     {
       "seq": 91,
@@ -3511,7 +3609,10 @@
       },
       "reason": "terms-allow",
       "caption": "The landlord's benefit rent statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:d4af318ccf6a87653787b88e70f3b5c0660b76ec5a0223fba37431daa75d6a63"
+      ]
     },
     {
       "seq": 93,
@@ -3573,7 +3674,10 @@
       },
       "reason": "terms-allow",
       "caption": "The household register's benefit household statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:54d410c4449c7a01dd1b2a44a80210fa9eeb21745537e4bd8bce710d61002e21"
+      ]
     },
     {
       "seq": 95,
@@ -3663,7 +3767,10 @@
       "messageId": "urn:awp:engine-benefit-claim-needed-claim-left-out:owner-agent:0004",
       "messageDigest": "sha-256:18909aeee97c17dd23d38b45861e5a7b87c9af937527c9746365f7447276f032",
       "caption": "The invoke message goes to The benefits office’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:18863a8a98b5b0a2cc56d6e40a1e34c6dd16fb18556f35837989faee02e63291"
+      ]
     },
     {
       "seq": 98,
@@ -4354,7 +4461,11 @@
         "answer": "Accepted, for benefit income claims only."
       },
       "caption": "The employer's benefit income statement: The employer is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:32088a0b84ce5c3497eb2718e77533fe427060ae46a61b5552671af9fd0df5aa",
+        "sha-256:0a304de20c0c44b67ae603ac5ade1bf841e92ff643cb6b82d3de1652c9c86b28"
+      ]
     },
     {
       "seq": 102,
@@ -4393,7 +4504,11 @@
         "answer": "Accepted, for benefit rent claims only."
       },
       "caption": "The landlord's benefit rent statement: The landlord is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:46d8736aadf8e1053bbb824a3da09622a5605347adb2af28960ce13b63fa42e0",
+        "sha-256:f16e26b4e6b037d53879aa10000a16325277bf8c326501e33e31c6265da74436"
+      ]
     },
     {
       "seq": 103,
@@ -4432,7 +4547,11 @@
         "answer": "Accepted, for benefit household claims only."
       },
       "caption": "The household register's benefit household statement: The household register is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:44bf6abfe00741fbf7acdb456435aae18090844f0b7931f5930a82a3f21fec45",
+        "sha-256:2340057d23f1a76af07e306f36f50b32f6fb63a7d6e2211f1eef8eff93f60dee"
+      ]
     },
     {
       "seq": 104,
@@ -4483,7 +4602,10 @@
         "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
       "caption": "The employer's benefit income statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9cce2bead2c09037b93fe0d91991d9a7b7e55883457398dac0c8a352a57bfbd0"
+      ]
     },
     {
       "seq": 106,
@@ -4511,7 +4633,10 @@
         "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
       "caption": "The landlord's benefit rent statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:d4af318ccf6a87653787b88e70f3b5c0660b76ec5a0223fba37431daa75d6a63"
+      ]
     },
     {
       "seq": 107,
@@ -4539,7 +4664,10 @@
         "text": "Its terms allow this: use for Benefit claim; share for Benefit claim."
       },
       "caption": "The household register's benefit household statement: its terms allow this: use for Benefit claim; share for Benefit claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:54d410c4449c7a01dd1b2a44a80210fa9eeb21745537e4bd8bce710d61002e21"
+      ]
     },
     {
       "seq": 108,
@@ -4653,7 +4781,10 @@
       "messageId": "urn:awp:engine-benefit-claim-needed-claim-left-out:owner-agent:0004",
       "messageDigest": "sha-256:18909aeee97c17dd23d38b45861e5a7b87c9af937527c9746365f7447276f032",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:6b829d4e860216f5840f259f4bfed0f73090fa78baf7c36a4a9b75a78abb28f2"
+      ]
     },
     {
       "seq": 113,
@@ -4676,7 +4807,10 @@
         },
         "provenance": "signed by The employer"
       },
-      "caption": "The employer's benefit income statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The employer's benefit income statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:f865cc16edd40327c7d2d1b8fa7c5c41f5d3c7079303a1b0a2de1d40ff361ae9"
+      ]
     },
     {
       "seq": 114,
@@ -4699,7 +4833,10 @@
         },
         "provenance": "signed by The landlord"
       },
-      "caption": "The landlord's benefit rent statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The landlord's benefit rent statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:4a91b0dd2c38df0f04f6c005397f445197cb5661379d547c0eca1a6b09aeec48"
+      ]
     },
     {
       "seq": 115,
@@ -4722,7 +4859,10 @@
         },
         "provenance": "signed by The household register"
       },
-      "caption": "The household register's benefit household statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The household register's benefit household statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:9d075ad9fec8ddaaf4daa15634749c6875d2d126aee5cd6ca06fae104f9108b4"
+      ]
     },
     {
       "seq": 116,
@@ -4801,7 +4941,10 @@
       },
       "reason": "recipient-established",
       "caption": "The claimant: Accepted, for Claiming a benefit only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:1ef623f40fc09e8a87c92ef0f69cd3c71e7b305946142dd94188c7be5ff7f762"
+      ]
     },
     {
       "seq": 118,
@@ -4949,7 +5092,10 @@
       "messageId": "urn:awp:engine-benefit-claim-needed-claim-left-out:receiver-agent:0006",
       "messageDigest": "sha-256:3d05d493b7d8da47258463ea39106c693484c78b246b6b7d983ff760d6ad82ad",
       "caption": "The deliver message goes to The claimant’s agent.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:649f22eb8c85d1da7da80b9fac2d397d050501e669e3cb91458d400c2be4102f"
+      ]
     },
     {
       "seq": 123,
@@ -5322,7 +5468,10 @@
       "messageId": "urn:awp:engine-benefit-claim-needed-claim-left-out:receiver-agent:0006",
       "messageDigest": "sha-256:3d05d493b7d8da47258463ea39106c693484c78b246b6b7d983ff760d6ad82ad",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:05da83e5135d53fdd99da1c277330c843adffe10683da0494ad7a0ef62cb0d6e"
+      ]
     },
     {
       "seq": 131,
@@ -5330,7 +5479,11 @@
       "agent": "receiver-agent",
       "part": "record",
       "kind": "record",
-      "caption": "69 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "69 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:649f22eb8c85d1da7da80b9fac2d397d050501e669e3cb91458d400c2be4102f"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/benefit-claim--baseline.json"
 }

@@ -87,7 +87,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -162,7 +162,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The hospital's unstructured content statement: The hospital is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c0a17fe9c970a233fba5949c09fe95fc452992a95a133e7a1d59d46e453c6587",
+        "sha-256:95cfc6e75ef1179106b368f87d39c8a514404791b664dcad5f08d0a9c47b89fe"
+      ]
     },
     {
       "seq": 3,
@@ -209,7 +213,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The hospital's unstructured content statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:baa30cbd3cd65ed57bf69ef22dd48f878184e518358db14ee88c00361ef95a0b"
+      ]
     },
     {
       "seq": 5,
@@ -253,7 +260,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The hospital's unstructured content statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2cbb2f2598eb9ad789df99100aadafca6b1a16fef2120440ebabbc0b1000e97e"
+      ]
     },
     {
       "seq": 7,
@@ -276,7 +286,10 @@
         },
         "provenance": "signed by The hospital"
       },
-      "caption": "The hospital's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The hospital's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c9c2305087767b9b072c62788850130b775087c977b5206c93509ce97235052b"
+      ]
     },
     {
       "seq": 8,
@@ -339,7 +352,11 @@
         "answer": "Accepted, for clinical diagnosis claims only."
       },
       "caption": "The hospital's clinical diagnosis statement: The hospital is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6f9563829dfcb1029060d8bc58d51b7bd6401c5d06c59356f660b558d53f681a",
+        "sha-256:0f25bb3d679aaa9752237fe7cf137c43a55c8b340c1022c7f54e4cc4ced46bb6"
+      ]
     },
     {
       "seq": 10,
@@ -386,7 +403,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The hospital's clinical diagnosis statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:553107ee3f43456f1e57014c33dd6f1ae88e3106b197ccde8248477d381eb7f5"
+      ]
     },
     {
       "seq": 12,
@@ -430,7 +450,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The hospital's clinical diagnosis statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d871fd2658f15ffeaf43d6091122aeb8668457e50a42b98399e048155a6951b4"
+      ]
     },
     {
       "seq": 14,
@@ -453,7 +476,10 @@
         },
         "provenance": "signed by The hospital"
       },
-      "caption": "The hospital's clinical diagnosis statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The hospital's clinical diagnosis statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:648fc180d9ceed243d866794fa8f043ab1a2423fa46d8c2f7b9ee0c9868c87f8"
+      ]
     },
     {
       "seq": 15,
@@ -545,7 +571,10 @@
       },
       "reason": "recipient-established",
       "caption": "The family practice: Accepted, for the unlabelled resource only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cdac5cd79ce8d01fef0102690fb34939a63e0aa722556131f4ee29d9c4996808"
+      ]
     },
     {
       "seq": 18,
@@ -694,7 +723,10 @@
       },
       "reason": "terms-allow",
       "caption": "The hospital's unstructured content statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:baa30cbd3cd65ed57bf69ef22dd48f878184e518358db14ee88c00361ef95a0b"
+      ]
     },
     {
       "seq": 23,
@@ -847,7 +879,10 @@
       "messageId": "urn:awp:engine-discharge-letter-branch-1:patient-agent:0002",
       "messageDigest": "sha-256:f4bb0b125273b0b7f5e24bff8615c3a125f11a86a51e1b2099ab43e432dadcf5",
       "caption": "The invoke message goes to The family practice’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5a31e7ca2869fd8ac3062ee1e285fd21d5e31befe4a89d0452d4bdaf9aa54a88"
+      ]
     },
     {
       "seq": 28,
@@ -1308,7 +1343,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The hospital's unstructured content statement: The hospital is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:72cad8f0e2c466f15339f9f621e9feabf5bbe10260bc31dfb796e0869a594208",
+        "sha-256:90d2cee9cd961ac4ef13128620797c16bbbac2ddb55e6e48767b614bef382a4e"
+      ]
     },
     {
       "seq": 32,
@@ -1359,7 +1398,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The hospital's unstructured content statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:baa30cbd3cd65ed57bf69ef22dd48f878184e518358db14ee88c00361ef95a0b"
+      ]
     },
     {
       "seq": 34,
@@ -1405,7 +1447,10 @@
       "messageId": "urn:awp:engine-discharge-letter-branch-1:patient-agent:0002",
       "messageDigest": "sha-256:f4bb0b125273b0b7f5e24bff8615c3a125f11a86a51e1b2099ab43e432dadcf5",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a0be3c42862b0626d6f73e946b72f89fb37101ddf613c967b4924ae806e3e514"
+      ]
     },
     {
       "seq": 36,
@@ -1428,7 +1473,10 @@
         },
         "provenance": "signed by The hospital"
       },
-      "caption": "The hospital's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The hospital's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:3d23efc47af90c76ce66dbcafc3e9302aaca61172be7d87201dddb0f912e49a7"
+      ]
     },
     {
       "seq": 37,
@@ -1443,6 +1491,9 @@
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:hospital"
         }
+      ],
+      "linked": [
+        "sha-256:4d7b879ef77bec2dd565444dfc0bf16b5320e38e29ee81d7b369d3b817151005"
       ]
     },
     {
@@ -1451,7 +1502,10 @@
       "agent": "practice-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3; claim clinical diagnosis."
+      "caption": "Model-output reading of unstructured data sha-256:8a6d3211ff32ce891e8cae6b1e2845474e6d4fbd75f93ec8c99140e8031518d3; claim clinical diagnosis.",
+      "linked": [
+        "sha-256:0b344231c335c5356776f32388970532103822f812a560728bda77f556d20ecd"
+      ]
     },
     {
       "seq": 39,
@@ -1544,7 +1598,11 @@
       "outcome": "stop",
       "reason": "method-not-accepted",
       "caption": "Unaccepted support cannot authorize an action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4199a2e69c7d5f0a00a39446ccbcbfa2818f94328942138aa4fc44255156aaf3"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/discharge-letter--baseline.json"
 }

@@ -68,7 +68,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -143,7 +143,11 @@
         "answer": "Accepted, for personal data copy claims only."
       },
       "caption": "The company's personal data copy statement: The company is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:81782e294d699fc498a18f934f2496b43efda0c6d59452203a443e1b76a1ece6",
+        "sha-256:2380e8fa552642636bd5460e9930e800d9beadafae04874b58bf2c18a2acce07"
+      ]
     },
     {
       "seq": 3,
@@ -190,7 +194,10 @@
         "text": "Its terms allow this: use for Subject access request; share for Subject access request."
       },
       "caption": "The company's personal data copy statement: its terms allow this: use for Subject access request; share for Subject access request.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7833dfa7149a6b38ca4aa766abcfba107b31e3c66a1d3cfcc992a87f8a3a45f2"
+      ]
     },
     {
       "seq": 5,
@@ -234,7 +241,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The company's personal data copy statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:aba59cc1a5b580e99e7e4493669cdf358dad2b0728dcab77078c41bd8bdf1850"
+      ]
     },
     {
       "seq": 7,
@@ -257,7 +267,10 @@
         },
         "provenance": "signed by The company"
       },
-      "caption": "The company's personal data copy statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The company's personal data copy statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:491bf2d56ddb0594dee4c0939413739cb93eb476fb93e78b87941230ae8ff881"
+      ]
     },
     {
       "seq": 8,
@@ -344,7 +357,10 @@
       },
       "reason": "recipient-established",
       "caption": "The company: Accepted, for Asking a company what it holds about you only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3a9126123f2b9461a07f956b33048e1ba5d55a1549a9adce72c0b63e88165f58"
+      ]
     },
     {
       "seq": 11,
@@ -521,7 +537,10 @@
       "messageId": "urn:awp:engine-subject-access-request-main:owner-agent:0002",
       "messageDigest": "sha-256:80acf3c88ff85da731b0cf4f7dcb6d7c715359ee40e60b117d63047a9719fde5",
       "caption": "The invoke message goes to The company’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2f3cbb0595f5cfde9b7c9dd0f7586d763b3095b3fcc4db93d393e9a0b436313f"
+      ]
     },
     {
       "seq": 17,
@@ -934,7 +953,10 @@
       "messageId": "urn:awp:engine-subject-access-request-main:owner-agent:0002",
       "messageDigest": "sha-256:80acf3c88ff85da731b0cf4f7dcb6d7c715359ee40e60b117d63047a9719fde5",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:07675a7d00f2f0fb56af04cd5df3894ca1a25e5fcd058ef58e693d7be41172dc"
+      ]
     },
     {
       "seq": 25,
@@ -1013,7 +1035,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Asking a company what it holds about you only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c20197e5d162febe7c0464cf920c13a78f899856c00f5a8eeb8d077ff4fc9098"
+      ]
     },
     {
       "seq": 27,
@@ -1075,7 +1100,10 @@
       },
       "reason": "terms-allow",
       "caption": "The company's personal data copy statement: its terms allow this: use for Subject access request; share for Subject access request.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7833dfa7149a6b38ca4aa766abcfba107b31e3c66a1d3cfcc992a87f8a3a45f2"
+      ]
     },
     {
       "seq": 29,
@@ -1137,7 +1165,10 @@
       },
       "reason": "terms-allow",
       "caption": "The company's personal data copy statement: its terms allow this: use for Subject access request; share for Subject access request.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7833dfa7149a6b38ca4aa766abcfba107b31e3c66a1d3cfcc992a87f8a3a45f2"
+      ]
     },
     {
       "seq": 31,
@@ -1227,7 +1258,10 @@
       "messageId": "urn:awp:engine-subject-access-request-main:receiver-agent:0001",
       "messageDigest": "sha-256:c9501da7f885bc9fdf224952264c8d157565ab7ec781e1ceb70ee2e073c40430",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bbaf902ccf3197482dcdcce9ef5eac187a1ae8c5e31ce58895ea303d1073e5a1"
+      ]
     },
     {
       "seq": 34,
@@ -1676,7 +1710,11 @@
         "answer": "Accepted, for personal data copy claims only."
       },
       "caption": "The company's personal data copy statement: The company is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4b4c1b23f95c6f862f00f083592a1b6190a334a921e933f46220fb6dd4d71f9f",
+        "sha-256:1a66303de774773695ca7def7d93c5c6935b2669d8ff5e89874e1edf00945ede"
+      ]
     },
     {
       "seq": 38,
@@ -1723,7 +1761,10 @@
         "text": "Its terms allow this: use for Subject access request; share for Subject access request."
       },
       "caption": "The company's personal data copy statement: its terms allow this: use for Subject access request; share for Subject access request.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7833dfa7149a6b38ca4aa766abcfba107b31e3c66a1d3cfcc992a87f8a3a45f2"
+      ]
     },
     {
       "seq": 40,
@@ -1764,7 +1805,10 @@
       "messageId": "urn:awp:engine-subject-access-request-main:receiver-agent:0001",
       "messageDigest": "sha-256:c9501da7f885bc9fdf224952264c8d157565ab7ec781e1ceb70ee2e073c40430",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:77cb5930bf3324f1f60f8cbe9968cc8abc2ce1acd7f4e38f34ab6f0791cde073"
+      ]
     },
     {
       "seq": 42,
@@ -1787,7 +1831,10 @@
         },
         "provenance": "signed by The company"
       },
-      "caption": "The company's personal data copy statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The company's personal data copy statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:93d556a039185c85cacfbf8b90e5dcf0f5edede677fd44f93389329304501e59"
+      ]
     },
     {
       "seq": 43,
@@ -1795,7 +1842,11 @@
       "agent": "owner-agent",
       "part": "record",
       "kind": "record",
-      "caption": "22 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "22 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:0a3e2942fa83fd770aa56ef0f850427ef00e295602111cd84ee65e792658e55a"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/subject-access-request--baseline.json"
 }

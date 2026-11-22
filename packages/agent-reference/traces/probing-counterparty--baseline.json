@@ -66,7 +66,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [],
@@ -144,7 +144,11 @@
         "answer": "Accepted, for contact claims only."
       },
       "caption": "Rowan, a fictional customer's contact statement: Rowan, a fictional customer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2554b45491324fd7e6c8b501e85fa43e3e9ece7c4c6082330b284bb999b1c6cf",
+        "sha-256:db3698b7c87f5d3ff21ea73c780ee95db7377f0fd9ddf6e6ec1449bf7d162fd7"
+      ]
     },
     {
       "seq": 4,
@@ -191,7 +195,10 @@
         "text": "Its terms allow this: use for Service query; share for Service query."
       },
       "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for Service query; share for Service query.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:405ecb7df903b098315486e8677967d76fa6575ae0604983f6b3b63810f4dc76"
+      ]
     },
     {
       "seq": 6,
@@ -235,7 +242,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "Rowan, a fictional customer's contact statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5e8ab7796336697e35dab8156339482c673af6a06d9ea1480d8a4d873a23d2e2"
+      ]
     },
     {
       "seq": 8,
@@ -258,7 +268,10 @@
         },
         "provenance": "signed by Rowan, a fictional customer"
       },
-      "caption": "Rowan, a fictional customer's contact statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Rowan, a fictional customer's contact statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:ca04d9ed7958a98cd4b0fef9a95c3e546b039b2f8c23475b42b9f7243c0bd56e"
+      ]
     },
     {
       "seq": 9,
@@ -345,7 +358,10 @@
       },
       "reason": "recipient-established",
       "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:292d0ef17a80007b71e8d76af9a222e37eb408fbce9cedda66f474d1ae185e07"
+      ]
     },
     {
       "seq": 12,
@@ -522,7 +538,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-main:service-agent:0002",
       "messageDigest": "sha-256:c934fc585bc3ad51f7cba435c669fbf2025a96306954d7edfdf991d445b4b890",
       "caption": "The propose message goes to Rowan’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4b47a96963eace51c345dcc20c7bc981d2f9936a748455c9fcbbbc6a56498f8f"
+      ]
     },
     {
       "seq": 18,
@@ -945,7 +964,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-main:service-agent:0002",
       "messageDigest": "sha-256:c934fc585bc3ad51f7cba435c669fbf2025a96306954d7edfdf991d445b4b890",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:5e467dd798de33f132c899a55b97f282721b29b118d2fad375aa49416cf72cc0"
+      ]
     },
     {
       "seq": 26,
@@ -1038,7 +1060,10 @@
       },
       "reason": "recipient-established",
       "caption": "The fictional service: Accepted, for A bounded request for contact details only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6497dd6f6866ddefe7568e4f5b2b4345904f3a8594862367805c8d60da3e24c4"
+      ]
     },
     {
       "seq": 29,
@@ -1110,7 +1135,10 @@
       },
       "reason": "terms-allow",
       "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for Service query; share for Service query.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:405ecb7df903b098315486e8677967d76fa6575ae0604983f6b3b63810f4dc76"
+      ]
     },
     {
       "seq": 31,
@@ -1209,7 +1237,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-main:person-agent:0001",
       "messageDigest": "sha-256:de14abcde9a275c1e810c310cb09c5de263db689377cb94da4564422934b1df9",
       "caption": "The accept message goes to The service’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0197207c606e2c131fe8cafe7f964b9ae614b8792b2f438c729d5d55de206c20"
+      ]
     },
     {
       "seq": 34,
@@ -1433,7 +1464,10 @@
       },
       "reason": "recipient-established",
       "caption": "The fictional service: Accepted, for A bounded request for contact details only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:6497dd6f6866ddefe7568e4f5b2b4345904f3a8594862367805c8d60da3e24c4"
+      ]
     },
     {
       "seq": 38,
@@ -1505,7 +1539,10 @@
       },
       "reason": "terms-allow",
       "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for Service query; share for Service query.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:405ecb7df903b098315486e8677967d76fa6575ae0604983f6b3b63810f4dc76"
+      ]
     },
     {
       "seq": 40,
@@ -1605,7 +1642,10 @@
       },
       "reason": "terms-allow",
       "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for Service query; share for Service query.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:405ecb7df903b098315486e8677967d76fa6575ae0604983f6b3b63810f4dc76"
+      ]
     },
     {
       "seq": 43,
@@ -1704,7 +1744,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-main:person-agent:0002",
       "messageDigest": "sha-256:5b05590d4179e08510fc732ce0c722960ece4cb4ae07f9cc2db5dcd0d31215ae",
       "caption": "The deliver message goes to The service’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:c37b9961973848b290ec4bd9f0e31cccac0929f595a7e2c96d0f0471474ab4ed"
+      ]
     },
     {
       "seq": 46,
@@ -2149,7 +2192,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-main:person-agent:0001",
       "messageDigest": "sha-256:de14abcde9a275c1e810c310cb09c5de263db689377cb94da4564422934b1df9",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1c2068b5a228d45397555296809c9de7e95d7b7e399e34465d46908da42f1a0d"
+      ]
     },
     {
       "seq": 54,
@@ -2403,7 +2449,11 @@
         "answer": "Accepted, for contact claims only."
       },
       "caption": "Rowan, a fictional customer's contact statement: Rowan, a fictional customer is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:11e5b80fd70a9f1a683d97522142e6a5823a377d27ba10342d48e01ce6fdd515",
+        "sha-256:a45c57155e8abf76d1a6f2601f1d149ad1c613d07349123622cf1836359548e1"
+      ]
     },
     {
       "seq": 57,
@@ -2454,7 +2504,10 @@
         "text": "Its terms allow this: use for Service query; share for Service query."
       },
       "caption": "Rowan, a fictional customer's contact statement: its terms allow this: use for Service query; share for Service query.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:405ecb7df903b098315486e8677967d76fa6575ae0604983f6b3b63810f4dc76"
+      ]
     },
     {
       "seq": 59,
@@ -2495,7 +2548,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-main:person-agent:0002",
       "messageDigest": "sha-256:5b05590d4179e08510fc732ce0c722960ece4cb4ae07f9cc2db5dcd0d31215ae",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:e8811653f3adba5ca9bdef63baaaf484a56e166cc8767ea0342dc5002a6e77a2"
+      ]
     },
     {
       "seq": 61,
@@ -2518,7 +2574,10 @@
         },
         "provenance": "signed by Rowan, a fictional customer"
       },
-      "caption": "Rowan, a fictional customer's contact statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Rowan, a fictional customer's contact statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:6b21ba51178767765f0469856a12be028da32eafb56a92baeb7cdb58a9782290"
+      ]
     },
     {
       "seq": 62,
@@ -2526,7 +2585,11 @@
       "agent": "person-agent",
       "part": "record",
       "kind": "record",
-      "caption": "44 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "44 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:facd95324fe16389164b62fa1252c058e02033a2047c6879b3dc0c4f46da53f8"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/probing-counterparty--baseline.json"
 }

@@ -68,7 +68,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -139,7 +139,11 @@
         "answer": "Accepted, for traveller margin claims only."
       },
       "caption": "The traveller's traveller margin statement: The traveller is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:dcecd3c7f4a56bf579d9bdd79147662244565dd4093fea9f55f9d6ba1297aeb6",
+        "sha-256:0d1e4a00d0085bfcc4ccc22c76ddb2c0769ed2f00be88a7fc77c612bc23418f5"
+      ]
     },
     {
       "seq": 3,
@@ -186,7 +190,10 @@
         "text": "Its terms allow this: use for Traveller planning."
       },
       "caption": "The traveller's traveller margin statement: its terms allow this: use for Traveller planning.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d848da5edd2bf335c27da68495f65d2f2fc97e971edf90a2e09b50d0dd5db731"
+      ]
     },
     {
       "seq": 5,
@@ -230,7 +237,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The traveller's traveller margin statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e2d24c82d240e88f26ac4bec74eb95bb7f222371e05f0cde6827618c561f16e7"
+      ]
     },
     {
       "seq": 7,
@@ -253,7 +263,10 @@
         },
         "provenance": "signed by The traveller"
       },
-      "caption": "The traveller's traveller margin statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The traveller's traveller margin statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:1d7bc35bde65e581943681a4ddbf8461cc6a7bb4658875108688482ffa9d1d3a"
+      ]
     },
     {
       "seq": 8,
@@ -340,7 +353,10 @@
       },
       "reason": "recipient-established",
       "caption": "The traveller: Accepted, for Rebooking after a cancelled flight only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b4b6833c9b6f0493a7f130478ae9c2fe6765cb13cb15eeb5f614c78c2609972a"
+      ]
     },
     {
       "seq": 11,
@@ -517,7 +533,10 @@
       "messageId": "urn:awp:engine-disruption-rebooking-main:receiver-agent:0002",
       "messageDigest": "sha-256:49af43dcc66a1496b22fd54c7a1b7e94aaa2052c95f743db7935c60216e1d089",
       "caption": "The propose message goes to The traveller’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ec97f069b0ede7c9060d8a3cdf09161e77f2ce8bee6a81d3687cfba1308cc4a2"
+      ]
     },
     {
       "seq": 17,
@@ -940,7 +959,10 @@
       "messageId": "urn:awp:engine-disruption-rebooking-main:receiver-agent:0002",
       "messageDigest": "sha-256:49af43dcc66a1496b22fd54c7a1b7e94aaa2052c95f743db7935c60216e1d089",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:d06afa3d1882aedeba5499d67a083862ced6a06e96d77e435b17344a1c0f4ebc"
+      ]
     },
     {
       "seq": 25,
@@ -1027,7 +1049,10 @@
       },
       "reason": "recipient-established",
       "caption": "The airline: Accepted, for Rebooking after a cancelled flight only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0fc2da0d4a475d56ac1370499661212f5d69f5d07e50a5fcb70c6e9b0b1152cb"
+      ]
     },
     {
       "seq": 28,
@@ -1175,7 +1200,10 @@
       "messageId": "urn:awp:engine-disruption-rebooking-main:owner-agent:0001",
       "messageDigest": "sha-256:3fe640165f16f8ea2e6de3808174af7bc95e2c59eb358439fa93799cca625adc",
       "caption": "The accept message goes to The airline’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:73b2f240fe2a9efe7dd22757038f8f234c853f2cd715f84efb7fc6c8a229b430"
+      ]
     },
     {
       "seq": 33,
@@ -1582,7 +1610,10 @@
       "messageId": "urn:awp:engine-disruption-rebooking-main:owner-agent:0001",
       "messageDigest": "sha-256:3fe640165f16f8ea2e6de3808174af7bc95e2c59eb358439fa93799cca625adc",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d1851b09547ad45385e7cfb7df4675e5c8d0ae0a45bfc356c71f6199d169153c"
+      ]
     },
     {
       "seq": 41,
@@ -1590,7 +1621,10 @@
       "agent": "owner-agent",
       "part": "record",
       "kind": "record",
-      "caption": "30 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "30 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:5aa6d23b6368038e3cd8b112fd16e142c71f7324f113895f1b2a4d44d864ceed"
+      ]
     },
     {
       "seq": 42,
@@ -1598,7 +1632,11 @@
       "agent": "receiver-agent",
       "part": "record",
       "kind": "record",
-      "caption": "23 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "23 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:2028c3bd8a508216e5c6f8e01a6479a6b16f54a5ced1a16130246a54cb861648"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/disruption-rebooking--baseline.json"
 }

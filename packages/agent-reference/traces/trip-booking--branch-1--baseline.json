@@ -108,7 +108,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -191,7 +191,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The hotel's unstructured content statement: The hotel is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7201d93101b768e03fd24875ca38b40c4d52d1718ba74c3640d68d97a04f4477",
+        "sha-256:4c560f443a91adfa265289db6ef77cfd9e518029578a79b09e234358e6bff977"
+      ]
     },
     {
       "seq": 3,
@@ -238,7 +242,10 @@
         "text": "Its terms allow this: use for Trip booking; share for Trip booking."
       },
       "caption": "The hotel's unstructured content statement: its terms allow this: use for Trip booking; share for Trip booking.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f69d57adf03727612f7e10dea5c0b0351caf7d60c55e0c8eb4f3db63c8a7baf8"
+      ]
     },
     {
       "seq": 5,
@@ -282,7 +289,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The hotel's unstructured content statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e078ffea6446c835c0e9642a16287f61d5156d0a4117cc2f94c3eaa897423bc6"
+      ]
     },
     {
       "seq": 7,
@@ -305,7 +315,10 @@
         },
         "provenance": "signed by The hotel"
       },
-      "caption": "The hotel's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The hotel's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:a0de020ad031703309c78c4bc7cd1a923fc96c57be45ea48a3c26cf4c5653706"
+      ]
     },
     {
       "seq": 8,
@@ -392,7 +405,10 @@
       },
       "reason": "recipient-established",
       "caption": "The hotel: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0fc0255e29b32992f3b88004e55ece7ce1c704afbcfb623daacb80d2e4b003ab"
+      ]
     },
     {
       "seq": 11,
@@ -569,7 +585,10 @@
       "messageId": "urn:awp:engine-trip-booking-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:08a668a174cb58cde3505bc3d3481a225deee94327056b45439aa66aafc0cf72",
       "caption": "The invoke message goes to The hotel’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fc02a40906db86d63f60235e1e9bb57bf8eb1f47d1d1e3c08d218ac5874dd010"
+      ]
     },
     {
       "seq": 17,
@@ -990,7 +1009,10 @@
       "messageId": "urn:awp:engine-trip-booking-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:08a668a174cb58cde3505bc3d3481a225deee94327056b45439aa66aafc0cf72",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:21c71bc46b5fccb2575b16e013972204806a3015bf8d54f2d749a579e291855c"
+      ]
     },
     {
       "seq": 25,
@@ -1077,7 +1099,10 @@
       },
       "reason": "recipient-established",
       "caption": "The traveller: Accepted, for Booking a trip only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c956f6729180ef92581114b72691dc85a309d554714de3c1d1db92f941d4aa74"
+      ]
     },
     {
       "seq": 28,
@@ -1226,7 +1251,10 @@
       },
       "reason": "terms-allow",
       "caption": "The hotel's unstructured content statement: its terms allow this: use for Trip booking; share for Trip booking.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f69d57adf03727612f7e10dea5c0b0351caf7d60c55e0c8eb4f3db63c8a7baf8"
+      ]
     },
     {
       "seq": 33,
@@ -1413,7 +1441,10 @@
       "outcome": "ask-principal",
       "reason": "context-not-clear",
       "caption": "The task context is not clear for this text, recipient and purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fa90ee40c485f77942e564269f41e00d696710bcd272b39ee03bcbe07a7b5463"
+      ]
     },
     {
       "seq": 39,
@@ -1519,7 +1550,10 @@
       },
       "reason": "recipient-established",
       "caption": "The traveller: Accepted, for Booking a trip only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:c956f6729180ef92581114b72691dc85a309d554714de3c1d1db92f941d4aa74"
+      ]
     },
     {
       "seq": 43,
@@ -1668,7 +1702,10 @@
       },
       "reason": "terms-allow",
       "caption": "The hotel's unstructured content statement: its terms allow this: use for Trip booking; share for Trip booking.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:f69d57adf03727612f7e10dea5c0b0351caf7d60c55e0c8eb4f3db63c8a7baf8"
+      ]
     },
     {
       "seq": 48,
@@ -1952,7 +1989,10 @@
       "messageId": "urn:awp:engine-trip-booking-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:f044c6b4034eba61673d732becf53ec3a8211a66bdb9565d5515060e978a5a09",
       "caption": "The invoke message goes to The traveller’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:27672cda7ff938a67705f3568ca1cf5c42291de6f562298e57eaaec0c040c08e"
+      ]
     },
     {
       "seq": 57,
@@ -2459,7 +2499,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The hotel's unstructured content statement: The hotel is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:75069a7659285591e7a1391d251dcae2bc6186da84d1f7be0db544dc05b0bbf7",
+        "sha-256:6b2e4beae672fea5fcc66e282f44530bfada0589561a5e400f4a8c70efd71bcc"
+      ]
     },
     {
       "seq": 61,
@@ -2510,7 +2554,10 @@
         "text": "Its terms allow this: use for Trip booking; share for Trip booking."
       },
       "caption": "The hotel's unstructured content statement: its terms allow this: use for Trip booking; share for Trip booking.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f69d57adf03727612f7e10dea5c0b0351caf7d60c55e0c8eb4f3db63c8a7baf8"
+      ]
     },
     {
       "seq": 63,
@@ -2551,7 +2598,10 @@
       "messageId": "urn:awp:engine-trip-booking-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:f044c6b4034eba61673d732becf53ec3a8211a66bdb9565d5515060e978a5a09",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:790e6be14dc57865ec58143e0df60dd5dcd971a42fe7619b368f80bc78c311df"
+      ]
     },
     {
       "seq": 65,
@@ -2574,7 +2624,10 @@
         },
         "provenance": "signed by The hotel"
       },
-      "caption": "The hotel's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The hotel's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:b0bf61346ff303ed7f72b7a7fb8c725c936124cc9194ad3a0798594f437dc6ff"
+      ]
     },
     {
       "seq": 66,
@@ -2589,6 +2642,9 @@
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:trip-booking:owner"
         }
+      ],
+      "linked": [
+        "sha-256:fc0eedd5e864adeecaa01c9bd04b12808181479acef71ffab81249c314ceae2f"
       ]
     },
     {
@@ -2597,7 +2653,10 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:b58dea6bd0fe221c63262062dcbcaca2ffc8a857f30593ef6a24db078c7d2014; claim content opinion."
+      "caption": "Model-output reading of unstructured data sha-256:b58dea6bd0fe221c63262062dcbcaca2ffc8a857f30593ef6a24db078c7d2014; claim content opinion.",
+      "linked": [
+        "sha-256:a505a89904ae01093cb650b34b37e0488daecd1cd58fb51e46d73781c04f7429"
+      ]
     },
     {
       "seq": 68,
@@ -2655,7 +2714,10 @@
         "text": "No rule in The traveller's mandate lets the agent take the next step in The dearer hotel outside the approved booking with The traveller for Trip booking (no applicable grant in the mandate (deny by default))."
       },
       "caption": "The traveller's mandate does not allow this: take the next step in The dearer hotel outside the approved booking with The traveller.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:2b706738acac40caf1920da5becae53d4bbc6b94aee14b8d5b319a5bee0ad087"
+      ]
     },
     {
       "seq": 70,
@@ -2677,7 +2739,11 @@
       "outcome": "stop",
       "reason": "not-authorised",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:61659226875e1dd4633080b858c329d64585a29f423a2f596aef92dbfbd38369"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/trip-booking--baseline.json"
 }

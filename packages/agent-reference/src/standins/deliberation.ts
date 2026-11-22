@@ -6,6 +6,7 @@ import { type PublicKeyRecord, type SigningKey, verifyCompact } from "../mechani
 import { signStatement } from "../mechanisms/statements.js";
 import type { TrustStore } from "../mechanisms/trust.js";
 import { SuiteValuesNode } from "../model/suite-values.js";
+import { memoryLink } from "../trace/linked.js";
 import type { TraceSink } from "../trace/recorder.js";
 
 export const negotiatedMeaningSchema = z.strictObject({
@@ -132,28 +133,44 @@ export class FictionalDeliberationPlatform {
       throw new Error("An exchange cannot silently change its term definition.");
     // Cache only the evidence this independently keyed platform has actually verified.
     this.records.set(proposal.string("exchange")!, { proposal, approvals, receipt });
+    const fact = {
+      id: proposal.string("term")!,
+      label: "Proposed definition of irregular income",
+      claimType: "term.deliberation",
+      subject: proposal.string("term")!,
+      source: this.identity,
+      method: "recorded-by-authority",
+      value: {
+        signedRecord: receipt,
+        definition: proposal.string("definition")!,
+        exchange: proposal.string("exchange")!,
+        principalApprovals: approvals.length,
+      },
+      provenance:
+        "The fictional platform verified the proposal and every attached signature before recording it.",
+    };
     this.sink?.emit({
       part: "record",
       kind: "store",
       caption: approvals.length
         ? "The fictional deliberation platform records the proposal and the principals’ signed approval of its exact definition for this exchange."
         : "The fictional deliberation platform records the agents’ agreement; no person has approved the definition.",
-      fact: {
-        id: proposal.string("term")!,
-        label: "Proposed definition of irregular income",
-        claimType: "term.deliberation",
-        subject: proposal.string("term")!,
-        source: this.identity,
-        method: "recorded-by-authority",
-        value: {
-          signedRecord: receipt,
-          definition: proposal.string("definition")!,
-          exchange: proposal.string("exchange")!,
-          principalApprovals: approvals.length,
-        },
-        provenance:
-          "The fictional platform verified the proposal and every attached signature before recording it.",
-      },
+      fact,
+      ...(this.sink.linked
+        ? {
+            linkedInputs: [
+              memoryLink({
+                id: fact.id,
+                label: fact.label,
+                claimType: fact.claimType,
+                subject: fact.subject,
+                source: fact.source,
+                method: fact.method,
+                statement: fact.value,
+              }),
+            ],
+          }
+        : {}),
     });
     return receipt;
   }

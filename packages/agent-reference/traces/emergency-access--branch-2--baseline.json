@@ -106,7 +106,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -181,7 +181,11 @@
         "answer": "Accepted, for emergency declaration claims only."
       },
       "caption": "The clinician's emergency declaration statement: The clinician is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:15c0181d05a54a300e54acf13695ed482a5b7d59819a275ca27ea19d97133fb8",
+        "sha-256:6731ce41511b2139a63541cbd46eaa2b1d05e9073c1b11e0c6ef950ddd99fe9e"
+      ]
     },
     {
       "seq": 3,
@@ -228,7 +232,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The clinician's emergency declaration statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1953973596eb4255e01f47e0961e2e08e2226568b7ce24e948bacabab77c3dde"
+      ]
     },
     {
       "seq": 5,
@@ -272,7 +279,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The clinician's emergency declaration statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8367059e70520c5faba535ab5dfb1dc2893dd795f71df1c214169780cd9e90b2"
+      ]
     },
     {
       "seq": 7,
@@ -295,7 +305,10 @@
         },
         "provenance": "signed by The clinician"
       },
-      "caption": "The clinician's emergency declaration statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The clinician's emergency declaration statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:88244014844312b7d4580bdee95728c0bf66a3aa0c53ed386effec6cb5c0379e"
+      ]
     },
     {
       "seq": 8,
@@ -358,7 +371,11 @@
         "answer": "Accepted, for clinical summary claims only."
       },
       "caption": "The family practice's clinical summary statement: The family practice is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:908d72377f1579eb4441718766241c5c62c5c20f7e908f7a2ed259f14015741a",
+        "sha-256:475fde59bc69325c4ea8248d5bb9ef19712ce75e5f330d67dbe4aa69df280f14"
+      ]
     },
     {
       "seq": 10,
@@ -405,7 +422,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The family practice's clinical summary statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3b70c02963d63c6a48650ed1ea31edac800e4ad238d738f6b8c8ece85f217533"
+      ]
     },
     {
       "seq": 12,
@@ -449,7 +469,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The family practice's clinical summary statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d3e3573b07dbd9d99b82ccb1e396c57b7ae95747f6778b3084641e18d193c939"
+      ]
     },
     {
       "seq": 14,
@@ -472,7 +495,10 @@
         },
         "provenance": "signed by The family practice"
       },
-      "caption": "The family practice's clinical summary statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The family practice's clinical summary statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:cb4ba47e3a99e9ea7c5c9ece921e747f5efdbacb8dbf5066eaed80c93df16359"
+      ]
     },
     {
       "seq": 15,
@@ -564,7 +590,10 @@
       },
       "reason": "recipient-established",
       "caption": "The patient: Accepted, for the unlabelled resource only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:847c11015b9223f22a3b801bfedd9e137e9bcb2a768b810a39df40b39f21ab68"
+      ]
     },
     {
       "seq": 18,
@@ -713,7 +742,10 @@
       },
       "reason": "terms-allow",
       "caption": "The clinician's emergency declaration statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1953973596eb4255e01f47e0961e2e08e2226568b7ce24e948bacabab77c3dde"
+      ]
     },
     {
       "seq": 23,
@@ -803,7 +835,10 @@
       "messageId": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0002",
       "messageDigest": "sha-256:2835911278d8476d5fda9d2122766e521d5d1c926e38c8c74e5cc0f02ea25403",
       "caption": "The invoke message goes to The patient’s record agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f592927d60a3f53c1104e016ef5432e368140e1418d18c4479216c3e4ffd4dae"
+      ]
     },
     {
       "seq": 26,
@@ -1242,7 +1277,11 @@
         "answer": "Accepted, for emergency declaration claims only."
       },
       "caption": "The clinician's emergency declaration statement: The clinician is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:99ab9540377743584babc87acd63be599c3cbbed8325b7e5180b1dcd3ff7de86",
+        "sha-256:bfc18d7db299cbb2a6af329e98bc168ae1017f0076cc259d60a1c786885c208f"
+      ]
     },
     {
       "seq": 30,
@@ -1293,7 +1332,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The clinician's emergency declaration statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:1953973596eb4255e01f47e0961e2e08e2226568b7ce24e948bacabab77c3dde"
+      ]
     },
     {
       "seq": 32,
@@ -1339,7 +1381,10 @@
       "messageId": "urn:awp:engine-emergency-access-branch-2:clinician-agent:0002",
       "messageDigest": "sha-256:2835911278d8476d5fda9d2122766e521d5d1c926e38c8c74e5cc0f02ea25403",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:40ab64ad4a40f16d81b9a025e488e4775247494afc1d389104dba2dcffc4fc4e"
+      ]
     },
     {
       "seq": 34,
@@ -1362,7 +1407,10 @@
         },
         "provenance": "signed by The clinician"
       },
-      "caption": "The clinician's emergency declaration statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The clinician's emergency declaration statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:2e4e6ff03ef94ae19221dc58d0062643ff66e1ba8ef01ee6075fd1414ff41136"
+      ]
     },
     {
       "seq": 35,
@@ -1432,7 +1480,10 @@
         "text": "No rule in The patient's mandate lets the agent read the unlabelled resource with The clinician for Emergency access (source-unknown)."
       },
       "caption": "The patient's mandate does not allow this: read the unlabelled resource with The clinician.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:dd81b79c344e96962da7d23f8942840b43486929ed96210625d7b83e8a1fdf64"
+      ]
     },
     {
       "seq": 38,
@@ -1454,7 +1505,11 @@
       "outcome": "stop",
       "reason": "source-unknown",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:175a3aec76524bfafe0026c5f1779f5d3f39974bf37f4cc4f02b96e11d112d81"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/emergency-access--baseline.json"
 }

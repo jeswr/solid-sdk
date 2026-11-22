@@ -650,6 +650,13 @@
               }
             ]
           },
+          "linked": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^sha-256:[a-f0-9]{64}$"
+            }
+          },
           "fault": {
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9-]*$"
@@ -657,6 +664,62 @@
         },
         "additionalProperties": {}
       }
+    },
+    "linked": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^sha-256:[a-f0-9]{64}$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "what": {
+            "type": "string",
+            "enum": [
+              "memory-item",
+              "record-entry",
+              "policy",
+              "trust-entry"
+            ]
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            ]
+          },
+          "jsonld": {
+            "type": "string",
+            "minLength": 1
+          },
+          "turtle": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "what",
+          "context",
+          "jsonld",
+          "turtle"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "linkedTable": {
+      "type": "string",
+      "pattern": "^linked\\/[a-z0-9][a-z0-9-]*\\.json$"
     }
   },
   "required": [
@@ -664,6 +727,12 @@
     "events"
   ],
   "additionalProperties": {},
+  "not": {
+    "required": [
+      "linked",
+      "linkedTable"
+    ]
+  },
   "x-authored-by": "Codex GPT-6",
   "$id": "urn:agent-reference:schema:agent-trace:0.1"
 }

@@ -72,7 +72,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -147,7 +147,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The fictional team's unstructured content statement: The fictional team is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4600cb9e4c38a45a17ef8840733c206bf403f8fe4079e3da2256714457c4ea8b",
+        "sha-256:04694add0c41caba70cb8463351323c8d689df61eaa4f5afd653f69733905986"
+      ]
     },
     {
       "seq": 3,
@@ -194,7 +198,10 @@
         "text": "Its terms allow this: use for Meeting notes; share for Meeting notes."
       },
       "caption": "The fictional team's unstructured content statement: its terms allow this: use for Meeting notes; share for Meeting notes.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:96a5fea03a41322972e5e9870fa74839256d3943e7b05b6ee94c4a301b747556"
+      ]
     },
     {
       "seq": 5,
@@ -238,7 +245,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional team's unstructured content statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:685252faa129e824adc8aec137148909bcd80e14c74997a7b94667e9680323d8"
+      ]
     },
     {
       "seq": 7,
@@ -261,7 +271,10 @@
         },
         "provenance": "signed by The fictional team"
       },
-      "caption": "The fictional team's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional team's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:b72248600579b77d0afe0dd81d6f4206d949a6473420514c89d93846b38dcacf"
+      ]
     },
     {
       "seq": 8,
@@ -348,7 +361,10 @@
       },
       "reason": "recipient-established",
       "caption": "The fictional team: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:93368bb9a5207d183262254bf98836da363e2539c3c98417f6ba9c6d20b1148d"
+      ]
     },
     {
       "seq": 11,
@@ -525,7 +541,10 @@
       "messageId": "urn:awp:engine-meeting-notes-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:a9074b5c225d8690338cc8361cd730e26f45414874e72b33f44ba84ddf091f22",
       "caption": "The invoke message goes to The fictional team’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:532525f901695d4e638aea76c4517702aa43a81dc1c3c3dbc46f8367c8aef6bc"
+      ]
     },
     {
       "seq": 17,
@@ -940,7 +959,10 @@
       "messageId": "urn:awp:engine-meeting-notes-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:a9074b5c225d8690338cc8361cd730e26f45414874e72b33f44ba84ddf091f22",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:fcf4dfdf48e1d4b20fe563cbf057c5877e59cae6f6fba49c632cc3612dd5bd00"
+      ]
     },
     {
       "seq": 25,
@@ -1027,7 +1049,10 @@
       },
       "reason": "recipient-established",
       "caption": "The team’s coordination service: Accepted, for An assistant that remembers meetings only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:716207adfaf45f026168abe768d18614de21002f0c5893f1a85add5b02d15c4d"
+      ]
     },
     {
       "seq": 28,
@@ -1176,7 +1201,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional team's unstructured content statement: its terms allow this: use for Meeting notes; share for Meeting notes.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:96a5fea03a41322972e5e9870fa74839256d3943e7b05b6ee94c4a301b747556"
+      ]
     },
     {
       "seq": 33,
@@ -1363,7 +1391,10 @@
       "outcome": "ask-principal",
       "reason": "context-not-clear",
       "caption": "The task context is not clear for this text, recipient and purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cbe978acdd21cc5070eeba4af8d9f8029c11aa2132cb0ce50c261e536ff24f13"
+      ]
     },
     {
       "seq": 39,
@@ -1469,7 +1500,10 @@
       },
       "reason": "recipient-established",
       "caption": "The team’s coordination service: Accepted, for An assistant that remembers meetings only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:716207adfaf45f026168abe768d18614de21002f0c5893f1a85add5b02d15c4d"
+      ]
     },
     {
       "seq": 43,
@@ -1618,7 +1652,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional team's unstructured content statement: its terms allow this: use for Meeting notes; share for Meeting notes.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:96a5fea03a41322972e5e9870fa74839256d3943e7b05b6ee94c4a301b747556"
+      ]
     },
     {
       "seq": 48,
@@ -1902,7 +1939,10 @@
       "messageId": "urn:awp:engine-meeting-notes-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:03da6f27273d2ba07b717e8baee31be3859f27b7dff0d129722034aec9af2546",
       "caption": "The invoke message goes to The team’s coordination service’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:c2d03d5555d2ef6e835d090d70bea0f8d824cef2cb7010564f4e5f652e90e0f7"
+      ]
     },
     {
       "seq": 57,
@@ -2403,7 +2443,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The fictional team's unstructured content statement: The fictional team is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1d268e8e6e9ff0bd86aed06efce307760585944893d9b1f4fc760b7b4a79957b",
+        "sha-256:8064799a4356c014ffa550093774de80ef9e9e0817d51ef985f27c18a5529a6a"
+      ]
     },
     {
       "seq": 61,
@@ -2454,7 +2498,10 @@
         "text": "Its terms allow this: use for Meeting notes; share for Meeting notes."
       },
       "caption": "The fictional team's unstructured content statement: its terms allow this: use for Meeting notes; share for Meeting notes.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:96a5fea03a41322972e5e9870fa74839256d3943e7b05b6ee94c4a301b747556"
+      ]
     },
     {
       "seq": 63,
@@ -2495,7 +2542,10 @@
       "messageId": "urn:awp:engine-meeting-notes-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:03da6f27273d2ba07b717e8baee31be3859f27b7dff0d129722034aec9af2546",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c0ced9bf8543fc5cd05f561172aaf0c9e5d7b4a57d98bd920764eed1c5f0a9de"
+      ]
     },
     {
       "seq": 65,
@@ -2518,7 +2568,10 @@
         },
         "provenance": "signed by The fictional team"
       },
-      "caption": "The fictional team's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional team's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:a96ef4aebce955d67418e305e6603fa8721f339135366fd13ea2298557a04385"
+      ]
     },
     {
       "seq": 66,
@@ -2533,6 +2586,9 @@
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:meeting-notes:owner"
         }
+      ],
+      "linked": [
+        "sha-256:8fca1fde54ee281f62ce965ca3e9218ca9d712ae036a60d136c7e7c5f4b58216"
       ]
     },
     {
@@ -2541,7 +2597,10 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:82b55d9f99864a80863975e71fc7dd785cefb94ef1b5cc27a8ef0459dc2a96b2; claim meeting note."
+      "caption": "Model-output reading of unstructured data sha-256:82b55d9f99864a80863975e71fc7dd785cefb94ef1b5cc27a8ef0459dc2a96b2; claim meeting note.",
+      "linked": [
+        "sha-256:5db76a49d684bb11e901d0e010707bcc80d859a597aa242c2a07b1817de9943a"
+      ]
     },
     {
       "seq": 68,
@@ -2604,7 +2663,11 @@
         "answer": "Accepted, for meeting note claims only."
       },
       "caption": "The team’s coordination service’s agent's meeting note statement: The team’s coordination service’s agent is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:5699b2057d3c34846c3b28b2c75ffc598ae371f566a867ed03e73f57c1306c45",
+        "sha-256:3d80b9625fe0b8676a3d56cf2a510ec775b87af071ffb215cc120abaabc39412"
+      ]
     },
     {
       "seq": 70,
@@ -2651,7 +2714,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The team’s coordination service’s agent's meeting note statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:99eff1251caec7a2a6312b47c5d01aecb8fa400077e37dced0c0e4dd0b9786fa"
+      ]
     },
     {
       "seq": 72,
@@ -2695,7 +2761,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The team’s coordination service’s agent's meeting note statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:abf6884bfee83c64b0894e61af8cc938e65678c604fa1daaefff6298e8aeafea"
+      ]
     },
     {
       "seq": 74,
@@ -2718,7 +2787,10 @@
         },
         "provenance": "signed by The team’s coordination service’s agent"
       },
-      "caption": "The team’s coordination service’s agent's meeting note statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The team’s coordination service’s agent's meeting note statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:6961ecfa75afc92fcd3de7de11fe2d356590542801269501cf910a22dc1c9592"
+      ]
     },
     {
       "seq": 75,
@@ -2805,7 +2877,10 @@
       },
       "reason": "recipient-established",
       "caption": "The team’s coordination service: Accepted, for A person decides on the original content only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:b7c4d5f866fbd1dc4fba8d0c454e4459d2b7487abda97ad547a883532b21d443"
+      ]
     },
     {
       "seq": 78,
@@ -2918,7 +2993,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The action is held for the named decision makers.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:5bdc1a4ac4f3bf672a787a9a87c0b6abeb0a86d3cffda51d7f215fe4964b0924"
+      ]
     },
     {
       "seq": 82,
@@ -2933,5 +3011,6 @@
       },
       "caption": "The gate built this request from the action and the approval rule."
     }
-  ]
+  ],
+  "linkedTable": "linked/meeting-notes--baseline.json"
 }

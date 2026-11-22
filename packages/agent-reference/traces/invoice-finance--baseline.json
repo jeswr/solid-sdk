@@ -85,7 +85,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -156,7 +156,11 @@
         "answer": "Accepted, for invoice valid claims only."
       },
       "caption": "The buyer's invoice valid statement: The buyer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:58fb7b6a0da4a20b87b187d1e15ca78d8b1053cfc302bbb8e1a6a082a10c62e1",
+        "sha-256:8f78bdc29a5fb5358f5487d56a23d0f3dc4709a0d612c886a819b8b5bbf3fad9"
+      ]
     },
     {
       "seq": 3,
@@ -203,7 +207,10 @@
         "text": "Its terms allow this: use for Invoice finance."
       },
       "caption": "The buyer's invoice valid statement: its terms allow this: use for Invoice finance.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:24d594be89a03bb5b7023952d49c4f9aa46c220d207fb80d55fdf95ec1914359"
+      ]
     },
     {
       "seq": 5,
@@ -247,7 +254,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The buyer's invoice valid statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d07d6fca84f4921f340d4a538308bcd0fbcf860396e3ebb373683ec1d35e5aff"
+      ]
     },
     {
       "seq": 7,
@@ -270,7 +280,10 @@
         },
         "provenance": "signed by The buyer"
       },
-      "caption": "The buyer's invoice valid statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The buyer's invoice valid statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c6a1da27e5c693f63a020f1b5a4e86f5aa6a8b6a96b33ed8f426a2118dc22cac"
+      ]
     },
     {
       "seq": 8,
@@ -357,7 +370,10 @@
       },
       "reason": "recipient-established",
       "caption": "The first financier: Accepted, for Financing an invoice once only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cafa9850a2efde6aa6789b0f95dce6c8e26de8651755a2195a6552123d86b0b0"
+      ]
     },
     {
       "seq": 11,
@@ -646,7 +662,11 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Financing an invoice once with The first financier.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:37157235ddb1c0e457f6dd009015dcf477f10c90aa5ba225ba469cca14d03855"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/invoice-finance--baseline.json"
 }

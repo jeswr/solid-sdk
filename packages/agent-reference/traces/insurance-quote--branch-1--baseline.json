@@ -74,7 +74,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -153,7 +153,11 @@
         "answer": "Accepted, for identity details claims only."
       },
       "caption": "The driver's identity details statement: The driver is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fd8e342a03f6c55539c56dba95ad1d1be2e22f3d14224bc4f4b70ac52a305a83",
+        "sha-256:2c6cab6ea85c9b9389100a40f729a6807e61ae6749015fac283b4345b1b5fc3b"
+      ]
     },
     {
       "seq": 3,
@@ -200,7 +204,10 @@
         "text": "Its terms allow this: use for Driver record; share for Driver record."
       },
       "caption": "The driver's identity details statement: its terms allow this: use for Driver record; share for Driver record.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7061eb0843da9948218c0b4297469080c484062f525b466408015aff6aa6b9f4"
+      ]
     },
     {
       "seq": 5,
@@ -244,7 +251,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The driver's identity details statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:913974771a29f370ecd9c215249918a16681e79934dc6659a6f960bc3840fed0"
+      ]
     },
     {
       "seq": 7,
@@ -267,7 +277,10 @@
         },
         "provenance": "signed by The driver"
       },
-      "caption": "The driver's identity details statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The driver's identity details statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:46479c1685ff8ad6a3477cc0573c8d83f8058b106448f080f1173e13fde7a340"
+      ]
     },
     {
       "seq": 8,
@@ -354,7 +367,10 @@
       },
       "reason": "recipient-established",
       "caption": "The driver: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e820c05432896120b21034152e7e72350e788a56a8afd50586eab3db0a5d9207"
+      ]
     },
     {
       "seq": 11,
@@ -531,7 +547,10 @@
       "messageId": "urn:awp:engine-insurance-quote-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:3828d45e4ee2c7f4d056b9b607493b5578c3b366629e2bdbbd1689d034a054f3",
       "caption": "The invoke message goes to The driver’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:dcd750ab0a1b6595836f6d2d1bf49e19cb16e15fd2ed735974cd425bbc3de52b"
+      ]
     },
     {
       "seq": 17,
@@ -948,7 +967,10 @@
       "messageId": "urn:awp:engine-insurance-quote-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:3828d45e4ee2c7f4d056b9b607493b5578c3b366629e2bdbbd1689d034a054f3",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9d61371371db243215023e9461d4e7e8b2fe6d7b86035dfb4fd585741b3ca030"
+      ]
     },
     {
       "seq": 25,
@@ -1035,7 +1057,10 @@
       },
       "reason": "recipient-established",
       "caption": "The insurer: Accepted, for An insurance quote with the least disclosure only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:96d2fe1260231656d617007679c72d5802b057864cea4e6617f08e48d69b545c"
+      ]
     },
     {
       "seq": 28,
@@ -1173,7 +1198,11 @@
       "outcome": "stop",
       "reason": "excessive-scope",
       "caption": "The credential is not necessary for this purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:530cc6821fd6eb9fc83124f04802dbc0108c64e5beb1b090f41e4d9601757986"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/insurance-quote--baseline.json"
 }

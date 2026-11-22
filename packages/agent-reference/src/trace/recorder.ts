@@ -9,7 +9,7 @@
  * run is, and never writes an agent event.
  */
 
-import { digestOf } from "../core/canonical.js";
+import { digestBytes, digestOf } from "../core/canonical.js";
 import type { EvidenceItem, JsonObject } from "../core/types.js";
 import { jointLogView } from "../mechanisms/joint-privacy.js";
 import { copyData } from "../model/copy.js";
@@ -23,7 +23,10 @@ import {
   paymentTrace,
   readPaymentObjects,
 } from "../wire/payment.js";
-import type { TraceEvent, TraceEventInput } from "./types.js";
+import { linkedViewOfProjection, storeProjection } from "../wire/store-document.js";
+import { writeNQuads } from "../wire/store-quads.js";
+import type { TraceLinkedInput } from "./linked.js";
+import type { TraceEvent, TraceEventInput, TraceLinkedView } from "./types.js";
 
 export interface VerifiedStatement {
   readonly statement: JsonObject;
@@ -50,11 +53,53 @@ export interface TraceSink {
   readonly agent: string;
   /** Opt in to comparisons using the original data before the trace projection. */
   readonly observePayloads?: boolean;
+  readonly linked?: boolean;
   emit(event: TraceEventInput, observation?: TraceObservation): void;
 }
 
 export class TraceRecorder {
-  constructor(private readonly observe?: (seq: number, observation: TraceObservation) => void) {}
+  constructor(
+    private readonly observe?: (seq: number, observation: TraceObservation) => void,
+    linked = false,
+  ) {
+    if (linked) this.linkedJobs = new Map();
+  }
+
+  private readonly linkedJobs?: Map<number, readonly TraceLinkedInput[]>;
+  private linkedTable?: Record<string, TraceLinkedView>;
+
+  linkedViews(): Readonly<Record<string, TraceLinkedView>> | undefined {
+    return this.linkedTable;
+  }
+
+  private async completeLinked(): Promise<void> {
+    if (!this.linkedJobs?.size) return;
+    const table: Record<string, TraceLinkedView> = {};
+    const graphs = new Map<string, string>();
+    for (const [index, inputs] of this.linkedJobs) {
+      const keys = new Set<string>();
+      for (const { dataset, root, what } of inputs) {
+        const graph = storeProjection(dataset, root);
+        const fingerprint = digestBytes(writeNQuads(graph));
+        const identity = `${what}:${fingerprint}`;
+        let key = graphs.get(identity);
+        if (!key) {
+          const view = await linkedViewOfProjection(graph, what);
+          key = digestBytes(view.jsonld);
+          if (Object.hasOwn(table, key) && table[key]?.what !== what)
+            throw new Error("Linked view graph has conflicting categories");
+          graphs.set(identity, key);
+          table[key] ??= view;
+        }
+        keys.add(key);
+      }
+      const event = this.list[index];
+      if (!event) throw new Error("Linked trace event was removed before completion");
+      this.list[index] = { ...event, linked: [...keys] };
+    }
+    this.linkedJobs.clear();
+    this.linkedTable = table;
+  }
 
   private selected?: SettlementSuite;
   settlement(suite: SettlementSuite): void {
@@ -70,6 +115,7 @@ export class TraceRecorder {
   async complete(): Promise<void> {
     await Promise.all(this.settlementJobs);
     if (this.settlementErrors.length) throw this.settlementErrors[0];
+    if (this.linkedJobs) await this.completeLinked();
   }
   private current = 0;
   private nextSegment: "payment" | "added" | undefined;
@@ -125,10 +171,11 @@ export class TraceRecorder {
     return {
       agent,
       observePayloads: !!this.observe,
+      linked: this.linkedJobs !== undefined,
       emit: (event, observation) => {
         if (observation) this.observe?.(this.list.length + 1, observation);
         if (this.rule) this.current = this.rule(agent, event, this.current);
-        const { settlementFacts, settlementDocument, ...plain } = event;
+        const { settlementFacts, settlementDocument, linkedInputs, ...plain } = event;
         const view = jointLogView(plain);
         const displayed = this.presentation
           ? this.presentation.labels.annotations(view, this.presentation.meaningSuite)
@@ -142,6 +189,7 @@ export class TraceRecorder {
           ...(this.addedBy ? { addedBy: this.addedBy.by } : {}),
         });
         this.nextSegment = undefined;
+        if (linkedInputs?.length) this.linkedJobs?.set(this.list.length - 1, linkedInputs);
         if ((settlementFacts || settlementDocument) && !event.settlement) {
           const index = this.list.length - 1;
           const key = settlementFacts

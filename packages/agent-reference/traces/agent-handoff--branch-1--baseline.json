@@ -70,7 +70,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -141,7 +141,11 @@
         "answer": "Accepted, for delivery address claims only."
       },
       "caption": "The customer's delivery address statement: The customer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9150b468c4ee51e595fc1dd91b19f0a7ff3ed0f03c25aa3cf3cc8e7b23b89b5f",
+        "sha-256:5a61838d310367cc6ae11534c2df8fe30eb333c0b3fd123e4fb99d0fa2599cbb"
+      ]
     },
     {
       "seq": 3,
@@ -188,7 +192,10 @@
         "text": "Its terms allow this: use for Delivery."
       },
       "caption": "The customer's delivery address statement: its terms allow this: use for Delivery.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b1b7f3e8d212484d5d42a532dbafc13260ed045ca5da6218204be3305e6ba3c3"
+      ]
     },
     {
       "seq": 5,
@@ -232,7 +239,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The customer's delivery address statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a476b1ad9fa59f432e6410a637d9f1b112e4ac1d3d2245f1a0f759b51cf83c33"
+      ]
     },
     {
       "seq": 7,
@@ -255,7 +265,10 @@
         },
         "provenance": "signed by The customer"
       },
-      "caption": "The customer's delivery address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The customer's delivery address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:4bdc7bae8c32147ed4f7a352876ea023965b250cd13d6b198556763c7ed3e003"
+      ]
     },
     {
       "seq": 8,
@@ -342,7 +355,10 @@
       },
       "reason": "recipient-established",
       "caption": "The retailer: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:efef87915b6c572833ef2b90ec77b1885b773bd7b4ca1890be62ee389a2d771d"
+      ]
     },
     {
       "seq": 11,
@@ -519,7 +535,10 @@
       "messageId": "urn:awp:engine-agent-handoff-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:d91a80752bb29a8f6d098b5655edeb7a77702127100918fbc7b43cb83c0ae1bb",
       "caption": "The invoke message goes to The retailer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0d47ebfd3f304dd00ec2e52cd468951675622463a3da96d8541e3e8f8fea7cd2"
+      ]
     },
     {
       "seq": 17,
@@ -932,7 +951,10 @@
       "messageId": "urn:awp:engine-agent-handoff-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:d91a80752bb29a8f6d098b5655edeb7a77702127100918fbc7b43cb83c0ae1bb",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:8a1fa6c482b1d7e525f418001831c827d63f3d7167d89efaad8a2690348634f8"
+      ]
     },
     {
       "seq": 25,
@@ -1019,7 +1041,10 @@
       },
       "reason": "recipient-established",
       "caption": "The tax authority: Accepted, for A service agent hands a customer to a partner's agent only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:486727b51c96d735649bb5f27e4a23bdd1506e17484fa243140f51e0b4bcde3c"
+      ]
     },
     {
       "seq": 28,
@@ -1168,7 +1193,10 @@
         "text": "The issuer's terms: use for Delivery. They go out with the data."
       },
       "caption": "The customer's delivery address statement: its terms forbid this (use for Delivery).",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b1b7f3e8d212484d5d42a532dbafc13260ed045ca5da6218204be3305e6ba3c3"
+      ]
     },
     {
       "seq": 33,
@@ -1190,7 +1218,11 @@
       "outcome": "stop",
       "reason": "prohibited",
       "caption": "The actual credential's terms prohibit release.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:389dad0bf4cc8807524882d3123394e1b361d295f2c51df04c98bbad856260fa"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/agent-handoff--baseline.json"
 }

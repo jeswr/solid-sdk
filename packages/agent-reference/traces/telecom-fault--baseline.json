@@ -67,7 +67,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -154,7 +154,11 @@
         "answer": "Accepted, for router light claims only."
       },
       "caption": "The customer's router light statement: The customer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ef5e6fd1d167678174bf7fc87e27200ef00a95f41405a70f04d0f308d907ad0d",
+        "sha-256:2f77988ca947d087f64bd8b9ed1a3339ae6d19fe8246f5802caff2deab096011"
+      ]
     },
     {
       "seq": 4,
@@ -201,7 +205,10 @@
         "text": "Its terms allow this: use for Telecom fault; share for Telecom fault."
       },
       "caption": "The customer's router light statement: its terms allow this: use for Telecom fault; share for Telecom fault.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a64eb40a871743ce9525081841b7e69f238de34686a224df72304cfc2b8be5be"
+      ]
     },
     {
       "seq": 6,
@@ -245,7 +252,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The customer's router light statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:be1024dbc2dbc0ac711703133f34e6f07adeb2caa26e8cafdd865fdf30b78d0b"
+      ]
     },
     {
       "seq": 8,
@@ -268,7 +278,10 @@
         },
         "provenance": "signed by The customer"
       },
-      "caption": "The customer's router light statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The customer's router light statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:3d651e2e1ed475d341d2e0bab6c2ff094a16896d40703ae0f29b7c64c0e297bf"
+      ]
     },
     {
       "seq": 9,
@@ -355,7 +368,10 @@
       },
       "reason": "recipient-established",
       "caption": "The customer: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:91b17b102b11160e8ef08e07f2821499667e8f9507334652c045f4a07a5f6513"
+      ]
     },
     {
       "seq": 12,
@@ -532,7 +548,10 @@
       "messageId": "urn:awp:engine-telecom-fault-main:receiver-agent:0002",
       "messageDigest": "sha-256:dee4ce558673e839ab13e5cda3deb1726baefaeeb21fc77fb3e33c468fdd3771",
       "caption": "The invoke message goes to The customer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f32e6d097a784a1dd5b9df1a3440654f0141f749cd112eb17d74b1b2b42ce0a8"
+      ]
     },
     {
       "seq": 18,
@@ -947,7 +966,10 @@
       "messageId": "urn:awp:engine-telecom-fault-main:receiver-agent:0002",
       "messageDigest": "sha-256:dee4ce558673e839ab13e5cda3deb1726baefaeeb21fc77fb3e33c468fdd3771",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:13a486d31072f60c9a119b4380e90f441c4cf9434dbc51510b35735b23e2b85f"
+      ]
     },
     {
       "seq": 26,
@@ -1034,7 +1056,10 @@
       },
       "reason": "recipient-established",
       "caption": "The broadband provider: Accepted, for Fixing a broadband fault together only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a10f6ff40e266a8638e7de18557409a8facf16fb38afa724ace5a927d5f00d03"
+      ]
     },
     {
       "seq": 29,
@@ -1183,7 +1208,10 @@
       },
       "reason": "terms-allow",
       "caption": "The customer's router light statement: its terms allow this: use for Telecom fault; share for Telecom fault.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a64eb40a871743ce9525081841b7e69f238de34686a224df72304cfc2b8be5be"
+      ]
     },
     {
       "seq": 34,
@@ -1273,7 +1301,10 @@
       "messageId": "urn:awp:engine-telecom-fault-main:owner-agent:0002",
       "messageDigest": "sha-256:81164cdbc4b7cad6f71f38afa07df076e33ae7d45cd4021045f160367b6bea9a",
       "caption": "The invoke message goes to The broadband provider’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b6dedb82a4f955a9ef1227c78a3bc3c8a91acdc851b83cc269c0ed911cbcf1ab"
+      ]
     },
     {
       "seq": 37,
@@ -1744,7 +1775,11 @@
         "answer": "Accepted, for router light claims only."
       },
       "caption": "The customer's router light statement: The customer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:41c7992045e3bbc04f624d2fdefd072dd765e22cb4dd428608f89c7c008383dc",
+        "sha-256:e0219e65db1fb88326474fd21585955172ce440be73a7fa9030828b9d3d5a018"
+      ]
     },
     {
       "seq": 41,
@@ -1795,7 +1830,10 @@
         "text": "Its terms allow this: use for Telecom fault; share for Telecom fault."
       },
       "caption": "The customer's router light statement: its terms allow this: use for Telecom fault; share for Telecom fault.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a64eb40a871743ce9525081841b7e69f238de34686a224df72304cfc2b8be5be"
+      ]
     },
     {
       "seq": 43,
@@ -1836,7 +1874,10 @@
       "messageId": "urn:awp:engine-telecom-fault-main:owner-agent:0002",
       "messageDigest": "sha-256:81164cdbc4b7cad6f71f38afa07df076e33ae7d45cd4021045f160367b6bea9a",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:74a90357eadaf9d56911f173ab6f7b51b585426bb81441c432b371a3bb682557"
+      ]
     },
     {
       "seq": 45,
@@ -1859,7 +1900,10 @@
         },
         "provenance": "signed by The customer"
       },
-      "caption": "The customer's router light statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The customer's router light statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:8f437156f74abc351f9fe365adcea89ac7ca67725e7b3829be7c5133a70af17d"
+      ]
     },
     {
       "seq": 46,
@@ -1938,7 +1982,10 @@
       },
       "reason": "recipient-established",
       "caption": "The customer: Accepted, for Fixing a broadband fault together only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:91b17b102b11160e8ef08e07f2821499667e8f9507334652c045f4a07a5f6513"
+      ]
     },
     {
       "seq": 48,
@@ -2086,7 +2133,10 @@
       "messageId": "urn:awp:engine-telecom-fault-main:receiver-agent:0003",
       "messageDigest": "sha-256:2dd5e4df319bf3e086b37ff125e35342145a5a151a0a3273af98e275921778c0",
       "caption": "The deliver message goes to The customer’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:61f0fe995c66769a9f59c7682316d21b830d7c77d4bed6d63dc0d8a623dfb74c"
+      ]
     },
     {
       "seq": 53,
@@ -2461,7 +2511,10 @@
       "messageId": "urn:awp:engine-telecom-fault-main:receiver-agent:0003",
       "messageDigest": "sha-256:2dd5e4df319bf3e086b37ff125e35342145a5a151a0a3273af98e275921778c0",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:8201f8bb29001f2c2b71eb0c48236a0c92be32f98688e796ffdac08862b8a5f8"
+      ]
     },
     {
       "seq": 61,
@@ -2469,7 +2522,11 @@
       "agent": "receiver-agent",
       "part": "record",
       "kind": "record",
-      "caption": "32 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "32 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:61f0fe995c66769a9f59c7682316d21b830d7c77d4bed6d63dc0d8a623dfb74c"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/telecom-fault--baseline.json"
 }

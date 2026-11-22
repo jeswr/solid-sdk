@@ -18,9 +18,12 @@ import { loadCase } from "../dist/engine/load.js";
 import { assertPublishable } from "../dist/engine/publication.js";
 import { runScenario } from "../dist/engine/run.js";
 import { outlineOf } from "../dist/trace/types.js";
+import { publishScenarioRuns, readScenarioRuns } from "./publish-scenario-runs.mjs";
 import { jointPaths, recordedJoint, traceHash } from "./recorded-joint.mjs";
+import { ScenarioTraceWriter } from "./write-scenario-traces.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+const linked = !process.argv.includes("--no-linked");
 const record = process.argv.includes("--record-outlines");
 const selected = process.argv.find((arg) => arg.startsWith("--scenario="))?.slice(11);
 const requestedConfiguration = process.argv
@@ -30,10 +33,10 @@ const selectedConfiguration = requestedConfiguration === "all" ? undefined : req
 if (selectedConfiguration && !selected)
   throw new Error("A configuration selection requires --scenario");
 const status = { "x-authored-by": "Codex GPT-6", schema: "agent-scenario-runs/0.1", paths: [] };
-const previous = JSON.parse(readFileSync(join(root, "scenario-runs.json"), "utf8")).paths.map(
-  (row) => ({ ...row, settlement: row.settlement ?? "rdf-order" }),
-);
+const recordedPaths = readScenarioRuns(root);
 const index = [];
+const writers = [];
+using stages = new DisposableStack();
 let retained = 0;
 let executed = 0;
 const registry = await availableAdapters();
@@ -43,7 +46,7 @@ try {
 } catch {}
 mkdirSync(join(root, "traces"), { recursive: true });
 mkdirSync(join(root, "outlines"), { recursive: true });
-// Write each configuration before running the next. The full matrix includes large traces.
+// Stage each configuration on disk before running the next. The full matrix includes large traces.
 async function* pathsFor(profile, scenario) {
   const configurations =
     selectedConfiguration === "baseline"
@@ -52,15 +55,23 @@ async function* pathsFor(profile, scenario) {
         ? [selectedConfiguration]
         : [undefined, ...scenario.configurations.map((entry) => entry.id)];
   const proofCache = new ProofCache(join(root, "proofs"));
-  for (const configuration of configurations)
-    yield* await runScenario(profile, scenario, {
+  for (const configuration of configurations) {
+    const writer = stages.use(
+      new ScenarioTraceWriter(join(root, "traces"), scenario.id, configuration ?? "baseline"),
+    );
+    const paths = await runScenario(profile, scenario, {
       commit,
+      linked,
       configuration,
       compare: !record,
       reportExpectationFailures: true,
       registry,
       proofCache,
     });
+    for (const path of paths) yield { path, writer };
+    writer.stageViews();
+    writers.push(writer);
+  }
 }
 for (const file of readdirSync(join(root, "scenarios"))
   .filter((f) => f.endsWith(".json"))
@@ -68,14 +79,10 @@ for (const file of readdirSync(join(root, "scenarios"))
   const id = file.slice(0, -5);
   if (selected && selected !== id) continue;
   const { profile, scenario } = loadCase(root, id);
-  for await (const path of pathsFor(profile, scenario)) {
+  for await (const { path, writer } of pathsFor(profile, scenario)) {
     assertPublishable(path);
-    if (
-      path.blocked &&
-      jointPaths.has(`${id}/${path.path}`) &&
-      !registry.jointProtocols.has(SPARQ_AGGREGATE.method)
-    ) {
-      const saved = recordedJoint(root, previous, id, path.path);
+    if (!path.configuration && jointPaths.has(`${id}/${path.path}`)) {
+      const saved = recordedJoint(root, recordedPaths, id, path.path);
       status.paths.push(saved);
       const trace = JSON.parse(readFileSync(join(root, "traces", saved.trace), "utf8"));
       index.push({
@@ -90,7 +97,7 @@ for (const file of readdirSync(join(root, "scenarios"))
     const stem = path.pathKind === "main" ? id : `${id}--${path.path}`;
     const suffix = path.configuration ?? "baseline";
     const traceBytes = path.trace
-      ? `${JSON.stringify({ "x-authored-by": "Codex GPT-6", ...path.trace }, null, 2)}\n`
+      ? writer.write(`${stem}--${suffix}.json`, { "x-authored-by": "Codex GPT-6", ...path.trace })
       : undefined;
     status.paths.push({
       scenario: id,
@@ -138,7 +145,6 @@ for (const file of readdirSync(join(root, "scenarios"))
       if (path.pathKind === "main") scenario.expect = outline;
       else scenario.branches.find((b) => b.id === path.path).outline = outline;
     }
-    writeFileSync(join(root, "traces", `${stem}--${suffix}.json`), traceBytes);
     const outlinePath = join(root, "outlines", `${stem}--${suffix}.json`);
     let legacyArray = false;
     try {
@@ -164,27 +170,16 @@ for (const file of readdirSync(join(root, "scenarios"))
     writeFileSync(join(root, "scenarios", file), `${JSON.stringify(original, null, 2)}\n`);
   }
 }
-if (selected)
-  status.paths.push(
-    ...previous.filter(
-      (p) =>
-        p.scenario !== selected ||
-        (selectedConfiguration && (p.configuration ?? "baseline") !== selectedConfiguration),
-    ),
-  );
-writeFileSync(join(root, "scenario-runs.json"), `${JSON.stringify(status, null, 2)}\n`);
-const indexPath = join(root, "traces", "index.json");
-const existing = JSON.parse(readFileSync(indexPath, "utf8"));
-const newFiles = new Set(index.map((item) => item.file));
-writeFileSync(
-  indexPath,
-  `${JSON.stringify([...existing.filter((item) => !newFiles.has(item.file)), ...index], null, 2)}\n`,
-);
+const paths = publishScenarioRuns(root, status, index, {
+  scenario: selected,
+  configuration: selectedConfiguration,
+  writers,
+});
 console.log(
-  `${executed} live data paths ran; manifest: ${status.paths.filter((p) => p.status === "runs").length} runs, ${status.paths.filter((p) => p.status === "disagrees").length} disagree, ${status.paths.filter((p) => p.status === "blocked").length} blocked`,
+  `${executed} live data paths ran; manifest: ${paths.filter((p) => p.status === "runs").length} runs, ${paths.filter((p) => p.status === "disagrees").length} disagree, ${paths.filter((p) => p.status === "blocked").length} blocked`,
 );
 
 if (retained)
   console.log(
-    `${retained} recorded real joint paths retained after SHA-256 verification; package absent, no live rerun.`,
+    `${retained} recorded real joint paths retained after SHA-256 verification; original trace bytes kept.`,
   );

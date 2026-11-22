@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -142,7 +142,11 @@
         "answer": "Accepted, for traveller margin claims only."
       },
       "caption": "The traveller's traveller margin statement: The traveller is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:dcecd3c7f4a56bf579d9bdd79147662244565dd4093fea9f55f9d6ba1297aeb6",
+        "sha-256:0d1e4a00d0085bfcc4ccc22c76ddb2c0769ed2f00be88a7fc77c612bc23418f5"
+      ]
     },
     {
       "seq": 3,
@@ -189,7 +193,10 @@
         "text": "Its terms allow this: use for Traveller planning."
       },
       "caption": "The traveller's traveller margin statement: its terms allow this: use for Traveller planning.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d848da5edd2bf335c27da68495f65d2f2fc97e971edf90a2e09b50d0dd5db731"
+      ]
     },
     {
       "seq": 5,
@@ -233,7 +240,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The traveller's traveller margin statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e2d24c82d240e88f26ac4bec74eb95bb7f222371e05f0cde6827618c561f16e7"
+      ]
     },
     {
       "seq": 7,
@@ -256,7 +266,10 @@
         },
         "provenance": "signed by The traveller"
       },
-      "caption": "The traveller's traveller margin statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The traveller's traveller margin statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:1d7bc35bde65e581943681a4ddbf8461cc6a7bb4658875108688482ffa9d1d3a"
+      ]
     },
     {
       "seq": 8,
@@ -343,7 +356,10 @@
       },
       "reason": "recipient-established",
       "caption": "The traveller: Accepted, for Rebooking after a cancelled flight only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b4b6833c9b6f0493a7f130478ae9c2fe6765cb13cb15eeb5f614c78c2609972a"
+      ]
     },
     {
       "seq": 11,
@@ -520,7 +536,10 @@
       "messageId": "urn:awp:engine-disruption-rebooking-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:9a974ff8913b68fcf153ad766771de7209e3f5290a82433020e325bd04668849",
       "caption": "The propose message goes to The traveller’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:81f0fc09932ec30773090c850575788d9e94f91f1ea35cf9d7758707926e33ff"
+      ]
     },
     {
       "seq": 17,
@@ -943,7 +962,10 @@
       "messageId": "urn:awp:engine-disruption-rebooking-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:9a974ff8913b68fcf153ad766771de7209e3f5290a82433020e325bd04668849",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:a575ae99a6e5a39575e9240f52e411334bfe720b15afabba00f87faff8f10076"
+      ]
     },
     {
       "seq": 25,
@@ -1030,7 +1052,10 @@
       },
       "reason": "recipient-established",
       "caption": "The airline: Accepted, for Rebooking after a cancelled flight only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0fc2da0d4a475d56ac1370499661212f5d69f5d07e50a5fcb70c6e9b0b1152cb"
+      ]
     },
     {
       "seq": 28,
@@ -1143,7 +1168,10 @@
       "outcome": "ask-principal",
       "reason": "limit-exceeded",
       "caption": "The gate holds the action and asks The traveller.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:86d8c4877f80801d5c9bedc509d23c2376687f64b529e1fed5b06000bf813235"
+      ]
     },
     {
       "seq": 32,
@@ -1157,5 +1185,6 @@
       },
       "caption": "The traveller is asked to approve this exact action; the approval will be bound to its digest."
     }
-  ]
+  ],
+  "linkedTable": "linked/disruption-rebooking--baseline.json"
 }

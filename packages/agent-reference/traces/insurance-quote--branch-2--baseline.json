@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -150,7 +150,11 @@
         "answer": "Accepted, for claims completeness claims only."
       },
       "caption": "The claims register's claims completeness statement: The claims register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0be280e1b75ee47a6293bcfd273f062864c60e6633b55911886ae8d9d55b49c9",
+        "sha-256:caab59ff5837507cd8bc593f896bb34b643445c3924724eb47fd5ccf0193e036"
+      ]
     },
     {
       "seq": 3,
@@ -197,7 +201,10 @@
         "text": "Its terms allow this: use for Insurance quote; share for Insurance quote."
       },
       "caption": "The claims register's claims completeness statement: its terms allow this: use for Insurance quote; share for Insurance quote.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6b71d25572504495a6667f5629fc518565ce194e04049ca9fcb779fbf858db58"
+      ]
     },
     {
       "seq": 5,
@@ -241,7 +248,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The claims register's claims completeness statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6faf5dc0a0f8e1ea1d56f6b58306ea6a9ef016c52913aa9a18cef63627a980c0"
+      ]
     },
     {
       "seq": 7,
@@ -268,7 +278,10 @@
         },
         "provenance": "signed by The claims register"
       },
-      "caption": "The claims register's claims completeness statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The claims register's claims completeness statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:b8ad628c6cfa4f16f77866ac501b759d321f9a755b70547e1b36fa690434cb60"
+      ]
     },
     {
       "seq": 8,
@@ -331,7 +344,11 @@
         "answer": "Accepted, for claims list claims only."
       },
       "caption": "The claims register's claims list statement: The claims register is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:eeba06bcb7f45980539df32b545ce79335cb15bca9c0961659feaf79eca30cd7",
+        "sha-256:d171552f177783e01df9817338f3c23f714de4579e2f8e044b377d05493eb6a8"
+      ]
     },
     {
       "seq": 10,
@@ -378,7 +395,10 @@
         "text": "Its terms allow this: use for Insurance quote; share for Insurance quote."
       },
       "caption": "The claims register's claims list statement: its terms allow this: use for Insurance quote; share for Insurance quote.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:7ef91ef8fb7ca59c5aded149b6d2985096ba2a22091bee5eb5b781ac25bd8818"
+      ]
     },
     {
       "seq": 12,
@@ -442,7 +462,11 @@
       "outcome": "ask-more",
       "reason": "completeness-not-established",
       "caption": "The claims register's claims list statement is refused and kept out of memory.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:5f90bf2e1a8d8fbd71ada9c88ff72b4b80b93e022114a36db2a6d80613199613"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/insurance-quote--baseline.json"
 }

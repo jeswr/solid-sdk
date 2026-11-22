@@ -76,7 +76,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -171,7 +171,10 @@
       },
       "reason": "recipient-established",
       "caption": "A care provider: Accepted, for An adult child acts for a parent only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e46b2098b2fee1f2be654815dd639cda9ca8b321f67cb6b8ae53fb5c0738b517"
+      ]
     },
     {
       "seq": 4,
@@ -348,7 +351,10 @@
       "messageId": "urn:awp:engine-carer-acts-for-parent-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:dcbb77ef3609604aa1dd7b240ddd2ff40995e8ae64bcf2c2b22960b4205d4bfc",
       "caption": "The invoke message goes to The receiving agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2f56b8f4581daf795dbc20a39a28fb34d31b79e112a4b772cd240b601f398a43"
+      ]
     },
     {
       "seq": 10,
@@ -768,7 +774,10 @@
       "messageId": "urn:awp:engine-carer-acts-for-parent-branch-1:owner-agent:0002",
       "reason": "representation-out-of-scope",
       "caption": "The message is refused (representation-out-of-scope: representation not accepted); the core never sees it.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:775831318b6c91b8e07d83ba0ce03a55a665fa2e329ef442494894a3715c1d2d"
+      ]
     },
     {
       "seq": 16,
@@ -847,7 +856,10 @@
       },
       "reason": "recipient-established",
       "caption": "A parent: Accepted, for An adult child acts for a parent only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c2e0e7453b6be74992f6cd49f9fb37d20a93437e5246a991b7afc3e3cf57283a"
+      ]
     },
     {
       "seq": 18,
@@ -995,7 +1007,10 @@
       "messageId": "urn:awp:engine-carer-acts-for-parent-branch-1:receiver-agent:0001",
       "messageDigest": "sha-256:2db7bc67041bb314c2814949e88e8c48589bd642f92e81b14d37ee9cc76d98e9",
       "caption": "The refuse message goes to The representative’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8d8fd082e90569ca10868615fa17ef54920dc180c5a7bf5ab5f8608bb49ab0cd"
+      ]
     },
     {
       "seq": 23,
@@ -1104,5 +1119,6 @@
       "caption": "The receiving agent sends a refuse message to The representative’s agent.",
       "gateRun": 1
     }
-  ]
+  ],
+  "linkedTable": "linked/carer-acts-for-parent--baseline.json"
 }

@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -146,7 +146,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The tenant's unstructured content statement: The tenant is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b9c8ee0160a8dc0c0ac56b2e87a2343f6af93c9aadbfb74883b664432d9f838a",
+        "sha-256:6b689ebd889df5aa324843565c33bcddfad1cd4ed3aa07ac84e3baeb8412b7c1"
+      ]
     },
     {
       "seq": 3,
@@ -193,7 +197,10 @@
         "text": "Its terms allow this: use for Repair request; share for Repair request."
       },
       "caption": "The tenant's unstructured content statement: its terms allow this: use for Repair request; share for Repair request.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bcd695745df71641b68f5ad7e9f4cb8c7647f3237041d1df3129e10170b55ce0"
+      ]
     },
     {
       "seq": 5,
@@ -237,7 +244,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The tenant's unstructured content statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:63b4e9182303eb13e8e9655f19125f564c142820a6541624a9d3665c90189b70"
+      ]
     },
     {
       "seq": 7,
@@ -260,7 +270,10 @@
         },
         "provenance": "signed by The tenant"
       },
-      "caption": "The tenant's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The tenant's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:6abce513b14a01a6a004aadcad1ac3304c1f03d4f17c7d4914b1af0805717ec9"
+      ]
     },
     {
       "seq": 8,
@@ -347,7 +360,10 @@
       },
       "reason": "recipient-established",
       "caption": "The tenant: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:45978b982ff5588b290d6cfed89959ff91b0cf2a11e76a252dc93a10cacaa0a9"
+      ]
     },
     {
       "seq": 11,
@@ -524,7 +540,10 @@
       "messageId": "urn:awp:engine-repair-request-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:99376323c49f096e774429371cd3b24220259b041c767a0d40af965dc28fa853",
       "caption": "The invoke message goes to The tenant’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:669f0ac3671f48346b13272669350a0b0ad668f9a9b10c2f565d16665aa29b08"
+      ]
     },
     {
       "seq": 17,
@@ -939,7 +958,10 @@
       "messageId": "urn:awp:engine-repair-request-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:99376323c49f096e774429371cd3b24220259b041c767a0d40af965dc28fa853",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:6353ad55877dbe7e311fff8f528acc2c1520f416fdba3ce94e7f3884c8b0968d"
+      ]
     },
     {
       "seq": 25,
@@ -1026,7 +1048,10 @@
       },
       "reason": "recipient-established",
       "caption": "The landlord: Accepted, for Reporting a repair only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:eb075de8235c4a1b50f13e4951192df082909a2e4acd207eeb69e0eea05268d8"
+      ]
     },
     {
       "seq": 28,
@@ -1175,7 +1200,10 @@
       },
       "reason": "terms-allow",
       "caption": "The tenant's unstructured content statement: its terms allow this: use for Repair request; share for Repair request.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bcd695745df71641b68f5ad7e9f4cb8c7647f3237041d1df3129e10170b55ce0"
+      ]
     },
     {
       "seq": 33,
@@ -1362,7 +1390,10 @@
       "outcome": "ask-principal",
       "reason": "context-not-clear",
       "caption": "The task context is not clear for this text, recipient and purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:23b91e31472664b9545175b0ddd0ad4ae1e0c6f2e0e3043d314079b416f2ee0f"
+      ]
     },
     {
       "seq": 39,
@@ -1468,7 +1499,10 @@
       },
       "reason": "recipient-established",
       "caption": "The landlord: Accepted, for Reporting a repair only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:eb075de8235c4a1b50f13e4951192df082909a2e4acd207eeb69e0eea05268d8"
+      ]
     },
     {
       "seq": 43,
@@ -1617,7 +1651,10 @@
       },
       "reason": "terms-allow",
       "caption": "The tenant's unstructured content statement: its terms allow this: use for Repair request; share for Repair request.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:bcd695745df71641b68f5ad7e9f4cb8c7647f3237041d1df3129e10170b55ce0"
+      ]
     },
     {
       "seq": 48,
@@ -1901,7 +1938,10 @@
       "messageId": "urn:awp:engine-repair-request-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:7c1b2100e391a9434e5acf665d2e5f5fce53033fc78d7ee62e39723a6439c721",
       "caption": "The invoke message goes to The landlord’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:3cabec76b6d64312cd1cbce92120cff2512f7a5cd9cb08f324efe78fcca2668c"
+      ]
     },
     {
       "seq": 57,
@@ -2402,7 +2442,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The tenant's unstructured content statement: The tenant is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a90988c280314a1c19ad9824f67b2c381dbf987de6e325b0daa9eb2026ca4a1c",
+        "sha-256:997d2f20c380b71eaa7e61d73f55870d54418c3c9d4a32f483d87fb1e70b6077"
+      ]
     },
     {
       "seq": 61,
@@ -2453,7 +2497,10 @@
         "text": "Its terms allow this: use for Repair request; share for Repair request."
       },
       "caption": "The tenant's unstructured content statement: its terms allow this: use for Repair request; share for Repair request.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bcd695745df71641b68f5ad7e9f4cb8c7647f3237041d1df3129e10170b55ce0"
+      ]
     },
     {
       "seq": 63,
@@ -2494,7 +2541,10 @@
       "messageId": "urn:awp:engine-repair-request-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:7c1b2100e391a9434e5acf665d2e5f5fce53033fc78d7ee62e39723a6439c721",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:84d221dcf759b9386e162cba7f081ca9f5ac7eecf9e1f747a06a936e63f69634"
+      ]
     },
     {
       "seq": 65,
@@ -2517,7 +2567,10 @@
         },
         "provenance": "signed by The tenant"
       },
-      "caption": "The tenant's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The tenant's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:0096dbb5d5ef069dac478b52b744d87a29182726673bf6aa203fa0ecdc82367e"
+      ]
     },
     {
       "seq": 66,
@@ -2532,6 +2585,9 @@
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:repair-request:owner"
         }
+      ],
+      "linked": [
+        "sha-256:2d2f08bc8b1763e0a9ddf5edde558725494348a8a013508cd78dee5950d3e5e7"
       ]
     },
     {
@@ -2540,7 +2596,10 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:f1d51679d4375cfc1c2fd7aeaccf162f545d057c0df8887b76a88e4e7a06ecac; claim repair booking."
+      "caption": "Model-output reading of unstructured data sha-256:f1d51679d4375cfc1c2fd7aeaccf162f545d057c0df8887b76a88e4e7a06ecac; claim repair booking.",
+      "linked": [
+        "sha-256:daef1c565b60c6203745d0fb59de4865bcb4ae61c87a5b22b1a5295bd7de6cc3"
+      ]
     },
     {
       "seq": 68,
@@ -2603,7 +2662,11 @@
         "answer": "Accepted, for repair booking claims only."
       },
       "caption": "The landlord’s agent's repair booking statement: The landlord’s agent is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:d046b56aeeed90b9a04b1eaad04d064b384c9a811abef38253d1426f7c3fb707",
+        "sha-256:ec8769f5e711db2a89210bd80f0a5eaefe10bcd33f5dd135f2f9d4d741edd436"
+      ]
     },
     {
       "seq": 70,
@@ -2650,7 +2713,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The landlord’s agent's repair booking statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:ec32a28731bc8d7fd3929888a4940912b69c85a716edecde48bf85e20cd9dd35"
+      ]
     },
     {
       "seq": 72,
@@ -2694,7 +2760,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The landlord’s agent's repair booking statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:3f78a09718904e261818bf1a4f44f54b78b9c88c4d85351528ea62a18ca6c193"
+      ]
     },
     {
       "seq": 74,
@@ -2717,7 +2786,10 @@
         },
         "provenance": "signed by The landlord’s agent"
       },
-      "caption": "The landlord’s agent's repair booking statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The landlord’s agent's repair booking statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:7b6d61aa7b3003e7a7545164d2c7c02646686aa0498e8a72a4a7cc774eb9c309"
+      ]
     },
     {
       "seq": 75,
@@ -2804,7 +2876,10 @@
       },
       "reason": "recipient-established",
       "caption": "The landlord: Accepted, for A person decides on the original content only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:ae3ce43130c805df8fd97876b3cf382dff54b816e20aeb5942e036ee359a1e5a"
+      ]
     },
     {
       "seq": 78,
@@ -2917,7 +2992,10 @@
       "outcome": "ask-principal",
       "reason": "limit-exceeded",
       "caption": "The gate holds the action and asks The landlord.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:70cb6ec6dcd0f558a608b4aef4da6d06eac6a7ad44b8d22c2b0267b86fe5b7c2"
+      ]
     },
     {
       "seq": 82,
@@ -2931,5 +3009,6 @@
       },
       "caption": "The landlord is asked to approve this exact action; the approval will be bound to its digest."
     }
-  ]
+  ],
+  "linkedTable": "linked/repair-request--baseline.json"
 }

@@ -81,7 +81,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -160,7 +160,11 @@
         "answer": "Accepted, for company exists claims only."
       },
       "caption": "The fictional company register's company exists statement: The fictional company register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5822ae091d40c00f759e55acb7fbfc3e7a5f611018b8b5902ae12b3ed66a297b",
+        "sha-256:60f8c0b6a5728c6c6ee10b83532656e7c4e88171331e2260496cdbc71731c112"
+      ]
     },
     {
       "seq": 3,
@@ -207,7 +211,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The fictional company register's company exists statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:63b9a16c2b7b4f7e2dd1e7a4aeb0d30beabfc9b2f69deb19cb2dadc0fc3e5ce9"
+      ]
     },
     {
       "seq": 5,
@@ -251,7 +258,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional company register's company exists statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3d4aaa810a9b66cf6073a1ad48fe582fe21d10c536d9d74005b8f411c8ea49db"
+      ]
     },
     {
       "seq": 7,
@@ -274,7 +284,10 @@
         },
         "provenance": "signed by The fictional company register"
       },
-      "caption": "The fictional company register's company exists statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional company register's company exists statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:2a8e9bf902990f072a5cd1cdacce96773f82d444b6ef8890e41fc71f4813d988"
+      ]
     },
     {
       "seq": 8,
@@ -337,7 +350,11 @@
         "answer": "Accepted, for bank account owner claims only."
       },
       "caption": "The supplier’s bank's bank account owner statement: The supplier’s bank is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:40a393b2e967b21e44f67403678a3d0634590ed5bb589dd7b0ff7ee9447e2469",
+        "sha-256:59ef8e22795b6cd3246ab1e94afaf9a2fc880f2999b6c9ba4a55ef095034da73"
+      ]
     },
     {
       "seq": 10,
@@ -384,7 +401,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The supplier’s bank's bank account owner statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:0b7a49bab094e42c2ec89b42debc037f2c383f2479271188a0ee04df9bbeca33"
+      ]
     },
     {
       "seq": 12,
@@ -428,7 +448,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The supplier’s bank's bank account owner statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:0f21bf3c9fe3edc10ff72b7a151474faa8eb00be37dcdd4ba4b92198bfb74234"
+      ]
     },
     {
       "seq": 14,
@@ -451,7 +474,10 @@
         },
         "provenance": "signed by The supplier’s bank"
       },
-      "caption": "The supplier’s bank's bank account owner statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The supplier’s bank's bank account owner statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:a4180960b9ea9a787ac9b768fb8921f49da4c838191923082aafeaa98bdb445a"
+      ]
     },
     {
       "seq": 15,
@@ -514,7 +540,11 @@
         "answer": "Accepted, for certificate claims only."
       },
       "caption": "The fictional certifier's certificate statement: The fictional certifier is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:022cf375a93201b47e3512ede9f255521c37ed30685a58eea2887e517862765a",
+        "sha-256:493375e2b1075d7010fb40eddc548f6438e6652535e684e3d347a5e3000e21d3"
+      ]
     },
     {
       "seq": 17,
@@ -561,7 +591,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The fictional certifier's certificate statement: its terms allow this: .",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:ebf873ba74a3046a78356eeb0b407fb0032cfcf4ca2accd778b9846684fc0aef"
+      ]
     },
     {
       "seq": 19,
@@ -605,7 +638,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional certifier's certificate statement is admitted.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:f3f48547b86568b274b47569eeb2b4b2daf8c455b23100c855b6ab715405540f"
+      ]
     },
     {
       "seq": 21,
@@ -628,7 +664,10 @@
         },
         "provenance": "signed by The fictional certifier"
       },
-      "caption": "The fictional certifier's certificate statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional certifier's certificate statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:d4205153f43f86c09a41c95b6a3610f054ec9675f36d8d7bd1e6f1260e5e9d04"
+      ]
     },
     {
       "seq": 22,
@@ -720,7 +759,10 @@
       },
       "reason": "recipient-established",
       "caption": "The buyer: Accepted, for the unlabelled resource only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:398d060783d4758c04427a065b48109b61eabd2026be21c10a1c2947d6339f2d"
+      ]
     },
     {
       "seq": 25,
@@ -869,7 +911,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional company register's company exists statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:63b9a16c2b7b4f7e2dd1e7a4aeb0d30beabfc9b2f69deb19cb2dadc0fc3e5ce9"
+      ]
     },
     {
       "seq": 30,
@@ -931,7 +976,10 @@
       },
       "reason": "terms-allow",
       "caption": "The supplier’s bank's bank account owner statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0b7a49bab094e42c2ec89b42debc037f2c383f2479271188a0ee04df9bbeca33"
+      ]
     },
     {
       "seq": 32,
@@ -993,7 +1041,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional certifier's certificate statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ebf873ba74a3046a78356eeb0b407fb0032cfcf4ca2accd778b9846684fc0aef"
+      ]
     },
     {
       "seq": 34,
@@ -1083,7 +1134,10 @@
       "messageId": "urn:awp:engine-supplier-onboarding-main:supplier-agent:0002",
       "messageDigest": "sha-256:e78c8e808c574723ed0650e57c3f1eafd159f3a2ee66840cbe8f54a660a76155",
       "caption": "The invoke message goes to The buyer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a5a6ab602e0cfc2506e89f711a3f3767aeb6cbb5ed92bd0b21971dd714c1fe4f"
+      ]
     },
     {
       "seq": 37,
@@ -1712,7 +1766,11 @@
         "answer": "Accepted, for company exists claims only."
       },
       "caption": "The fictional company register's company exists statement: The fictional company register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e696b3f307dbc5e2a3a1ac17a0ae8d67df0f4054f70b545124c23c7fd6073177",
+        "sha-256:e8ea67812118534128083dff7b01181883637f61d1aec8bbea0deaf082a4a290"
+      ]
     },
     {
       "seq": 41,
@@ -1751,7 +1809,11 @@
         "answer": "Accepted, for bank account owner claims only."
       },
       "caption": "The supplier’s bank's bank account owner statement: The supplier’s bank is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1526c2cf8242e04ddabd3253880a704902408f0d364cc94867a437f5f966f0d1",
+        "sha-256:8e8c6d2a5268654b55ac18dccbda83b038d614013a5e5e43ac7b110129678499"
+      ]
     },
     {
       "seq": 42,
@@ -1790,7 +1852,11 @@
         "answer": "Accepted, for certificate claims only."
       },
       "caption": "The fictional certifier's certificate statement: The fictional certifier is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ac9bad5f806770ef9dca82135d705d6a3fd0592989e0410d3a13896d0d53ee0b",
+        "sha-256:076ec9c553ed14a24d0b187ab0c30c4f648dabeab4b82e57fbd2d3c693637d42"
+      ]
     },
     {
       "seq": 43,
@@ -1841,7 +1907,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The fictional company register's company exists statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:63b9a16c2b7b4f7e2dd1e7a4aeb0d30beabfc9b2f69deb19cb2dadc0fc3e5ce9"
+      ]
     },
     {
       "seq": 45,
@@ -1869,7 +1938,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The supplier’s bank's bank account owner statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0b7a49bab094e42c2ec89b42debc037f2c383f2479271188a0ee04df9bbeca33"
+      ]
     },
     {
       "seq": 46,
@@ -1897,7 +1969,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The fictional certifier's certificate statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ebf873ba74a3046a78356eeb0b407fb0032cfcf4ca2accd778b9846684fc0aef"
+      ]
     },
     {
       "seq": 47,
@@ -2009,7 +2084,10 @@
       "messageId": "urn:awp:engine-supplier-onboarding-main:supplier-agent:0002",
       "messageDigest": "sha-256:e78c8e808c574723ed0650e57c3f1eafd159f3a2ee66840cbe8f54a660a76155",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c4af2a5c4edf17e45affb54486bb395f4b66c33de620d50e0e545f4316b3fd29"
+      ]
     },
     {
       "seq": 51,
@@ -2032,7 +2110,10 @@
         },
         "provenance": "signed by The fictional company register"
       },
-      "caption": "The fictional company register's company exists statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional company register's company exists statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:7a8683fbaec31acad86e371e94bcfce51faaefabac85b6cdc5630e8cd539e57f"
+      ]
     },
     {
       "seq": 52,
@@ -2055,7 +2136,10 @@
         },
         "provenance": "signed by The supplier’s bank"
       },
-      "caption": "The supplier’s bank's bank account owner statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The supplier’s bank's bank account owner statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c91b98dcb966e069514108affcaca78f93f88bafda765f2494e8a660748fa69f"
+      ]
     },
     {
       "seq": 53,
@@ -2078,7 +2162,10 @@
         },
         "provenance": "signed by The fictional certifier"
       },
-      "caption": "The fictional certifier's certificate statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional certifier's certificate statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:379ce5d80255966e3d130519bb7ddb5f7b45661ff43574ef3b609f46796c6f83"
+      ]
     },
     {
       "seq": 54,
@@ -2170,7 +2257,10 @@
       },
       "reason": "recipient-established",
       "caption": "The supplier: Accepted, for the unlabelled resource only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9602dafe2d801489078c9f1dee2da55677cefea61418565e884b231e22581bd3"
+      ]
     },
     {
       "seq": 57,
@@ -2317,7 +2407,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: use the unlabelled resource with The supplier.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:21961f030f8edc6627e819e3dd2a57f81809d7fc582c0132168a69dcfa6f0f2c"
+      ]
     },
     {
       "seq": 62,
@@ -2325,7 +2418,11 @@
       "agent": "buyer-agent",
       "part": "record",
       "kind": "record",
-      "caption": "43 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "43 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:c9a189d6c700667a92efb009ca09d723fdeb9e2f0813bfc4c784a19eadb05019"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/supplier-onboarding--baseline.json"
 }

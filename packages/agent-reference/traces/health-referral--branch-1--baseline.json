@@ -81,7 +81,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -180,7 +180,10 @@
       },
       "reason": "recipient-established",
       "caption": "The family practice: Accepted, for Request more referral history only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:64232eb3d53d4f895d0e963555c0f518d602ff7a3e086fbb6034305bb6664406"
+      ]
     },
     {
       "seq": 4,
@@ -357,7 +360,10 @@
       "messageId": "urn:awp:engine-health-referral-branch-1:clinic-agent:0002",
       "messageDigest": "sha-256:d9540130c6901defd2c17e0fe313e4de556ac4dbad39959398eeb950562b030a",
       "caption": "The invoke message goes to The family practice’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5acf83950ab38d05b65d9adf22ddcaf3eb1890cc8e8a4b4c94ea138e16a5e7a1"
+      ]
     },
     {
       "seq": 10,
@@ -774,7 +780,10 @@
       "messageId": "urn:awp:engine-health-referral-branch-1:clinic-agent:0002",
       "messageDigest": "sha-256:d9540130c6901defd2c17e0fe313e4de556ac4dbad39959398eeb950562b030a",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2661ff1082ff76d3aba797747bfb583d2cda2d99bd3075b51e1956bfa89f521b"
+      ]
     },
     {
       "seq": 18,
@@ -837,7 +846,11 @@
         "answer": "Accepted, for organization role claims only."
       },
       "caption": "The professional register's organization role statement: The professional register is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:17c2997eb0806463824e292ca6b6edc000505915c2a0ed99d3a7ab7449feab5f",
+        "sha-256:6aca5fdb320900c02d146b6fa2505fdcec56e1dd372a0ac1d845f9cb7ccbc220"
+      ]
     },
     {
       "seq": 20,
@@ -884,7 +897,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The professional register's organization role statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:6343e55ff98733dfeb9a588279e8d94b1e0d8953578ab3a3fe5bcb2ed45c33ab"
+      ]
     },
     {
       "seq": 22,
@@ -928,7 +944,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The professional register's organization role statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:c3872aeb90d6352e1d0a1adc0b3d3ec17c146dbd2a6e1493dc311df6ba880878"
+      ]
     },
     {
       "seq": 24,
@@ -951,7 +970,10 @@
         },
         "provenance": "signed by The professional register"
       },
-      "caption": "The professional register's organization role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The professional register's organization role statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:b37a1942d2188588a0ec914cf9d17f5a051c66669a42764f8923f40e53207d8f"
+      ]
     },
     {
       "seq": 25,
@@ -997,7 +1019,10 @@
       },
       "reason": "within-mandate",
       "caption": "The family practice's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:664385b2f63a5bd7fc9417d88d634318f9f3d696c38e8210038fc80482667e5d"
+      ]
     },
     {
       "seq": 27,
@@ -1047,7 +1072,10 @@
       },
       "reason": "recipient-established",
       "caption": "The specialist clinic: Accepted, for the unlabelled resource only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:88d36d67b6ae9b7dcd75d590d77f9641ebe9d0e283f1667179d3dd0e5a608c25"
+      ]
     },
     {
       "seq": 28,
@@ -1138,7 +1166,10 @@
         "text": "Requires 1 approval(s) from clinician."
       },
       "caption": "The required people must decide this exact action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:664385b2f63a5bd7fc9417d88d634318f9f3d696c38e8210038fc80482667e5d"
+      ]
     },
     {
       "seq": 31,
@@ -1160,7 +1191,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The action is held for the named decision makers.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:776734bc6b911e9ef8b227ddc1ba890a0ea92b8dac3468e3cd29f28af6390981"
+      ]
     },
     {
       "seq": 32,
@@ -1175,5 +1209,6 @@
       },
       "caption": "The gate built this request from the action and the approval rule."
     }
-  ]
+  ],
+  "linkedTable": "linked/health-referral--baseline.json"
 }

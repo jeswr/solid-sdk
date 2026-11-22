@@ -178,6 +178,7 @@ export function matrixSink(
   return {
     agent: sink.agent,
     observePayloads: sink.observePayloads,
+    linked: sink.linked,
     emit(input, payload) {
       // This generated step-up question contains an operation name, never exact proposed text.
       const event = input.chat?.text.startsWith("Before ")

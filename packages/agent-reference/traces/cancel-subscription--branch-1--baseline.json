@@ -70,7 +70,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -145,7 +145,11 @@
         "answer": "Accepted, for subscription control claims only."
       },
       "caption": "The subscription service's subscription control statement: The subscription service is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:37110d69236ed843459179ae4dca3b34439d3c7f13842f0347316d64ef579d04",
+        "sha-256:0f705981249958754f1b72222aa327f2f405dc6bc62e1825b2c20d22aa60893a"
+      ]
     },
     {
       "seq": 3,
@@ -192,7 +196,10 @@
         "text": "Its terms allow this: use for Cancel subscription; share for Cancel subscription."
       },
       "caption": "The subscription service's subscription control statement: its terms allow this: use for Cancel subscription; share for Cancel subscription.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:91d14db33dbe75c10d7915a732da299966fb893215a3d7f9b644053f9a82ad4e"
+      ]
     },
     {
       "seq": 5,
@@ -236,7 +243,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The subscription service's subscription control statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:31f5af0cb77b0aa83e296fe61812201a64b49b7868ff78a6be83b0aec5bc12a4"
+      ]
     },
     {
       "seq": 7,
@@ -259,7 +269,10 @@
         },
         "provenance": "signed by The subscription service"
       },
-      "caption": "The subscription service's subscription control statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The subscription service's subscription control statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:f4bc5f43ede33c30cebe9d6ba3390be11888f6e90dad276fedbb95e482433737"
+      ]
     },
     {
       "seq": 8,
@@ -346,7 +359,10 @@
       },
       "reason": "recipient-established",
       "caption": "The subscriber: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2165fabee79a35ac890051d0cf2b38d133730bd4cccf64512ba1b2e318169467"
+      ]
     },
     {
       "seq": 11,
@@ -523,7 +539,10 @@
       "messageId": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:2ab80009a74bff9510b205c950be73faa00e735b95a75866155580b88d44ef21",
       "caption": "The invoke message goes to The subscriber’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9d340130bf760dcb785d43bbe66a9dd5488b27f66a6b729770b31650561211d5"
+      ]
     },
     {
       "seq": 17,
@@ -938,7 +957,10 @@
       "messageId": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:2ab80009a74bff9510b205c950be73faa00e735b95a75866155580b88d44ef21",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:282f78918453e8f8013ed10212b6d99e4da352cea35c0b29df8141e0fc74e280"
+      ]
     },
     {
       "seq": 25,
@@ -1025,7 +1047,10 @@
       },
       "reason": "recipient-established",
       "caption": "The subscription service: Accepted, for Cancelling a subscription only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bc3bca40cc80cd00d08f837655619694f311a3c8db5a02c8b947818f56713a61"
+      ]
     },
     {
       "seq": 28,
@@ -1174,7 +1199,10 @@
       },
       "reason": "terms-allow",
       "caption": "The subscription service's subscription control statement: its terms allow this: use for Cancel subscription; share for Cancel subscription.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:91d14db33dbe75c10d7915a732da299966fb893215a3d7f9b644053f9a82ad4e"
+      ]
     },
     {
       "seq": 33,
@@ -1264,7 +1292,10 @@
       "messageId": "urn:awp:engine-cancel-subscription-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:28f1bde2150e8116f565aa6d281c1a489dcbfac87fcf9d5e5501332bb53b9154",
       "caption": "The invoke message goes to The subscription service’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9b1c870fa3af63098b6e9d63155a2ffe4aeb9587f4144b8c11857c6b23463b4a"
+      ]
     },
     {
       "seq": 36,
@@ -1737,7 +1768,11 @@
         "answer": "Accepted, for subscription control claims only."
       },
       "caption": "The subscription service's subscription control statement: The subscription service is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5a11e69dde025c91531ff3fd19441dc0b0c4c9680e657c28f25fdafa866116b3",
+        "sha-256:69ed419a08bb3c70bfe12569c8af7078f545f0000a3db13c192a4bbe6034712f"
+      ]
     },
     {
       "seq": 40,
@@ -1788,7 +1823,10 @@
         "text": "Its terms allow this: use for Cancel subscription; share for Cancel subscription."
       },
       "caption": "The subscription service's subscription control statement: its terms allow this: use for Cancel subscription; share for Cancel subscription.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:91d14db33dbe75c10d7915a732da299966fb893215a3d7f9b644053f9a82ad4e"
+      ]
     },
     {
       "seq": 42,
@@ -1829,7 +1867,10 @@
       "messageId": "urn:awp:engine-cancel-subscription-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:28f1bde2150e8116f565aa6d281c1a489dcbfac87fcf9d5e5501332bb53b9154",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:da52ef734477d07e92c5d4751e68d7d59038e6c1d5f77e588bc2b80297e00c3e"
+      ]
     },
     {
       "seq": 44,
@@ -1852,7 +1893,10 @@
         },
         "provenance": "signed by The subscription service"
       },
-      "caption": "The subscription service's subscription control statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The subscription service's subscription control statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:222c060715d074d800ac3b8a11cbffd274b87b09e76c8986d327fde1494b5cd7"
+      ]
     },
     {
       "seq": 45,
@@ -1939,7 +1983,10 @@
       },
       "reason": "recipient-established",
       "caption": "The subscriber: Accepted, for Offer free months to stay only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:2165fabee79a35ac890051d0cf2b38d133730bd4cccf64512ba1b2e318169467"
+      ]
     },
     {
       "seq": 48,
@@ -2116,7 +2163,10 @@
       "messageId": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0004",
       "messageDigest": "sha-256:ed9d77b77fa223ad1ed42cef9a94df8ece2fdd68993a7bba2eef5f8b340f77cd",
       "caption": "The propose message goes to The subscriber’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:e50ee6df2d9d025f3b0e45fa6824cbf54328a7f083e1a0a37931bffbfdc7d2f5"
+      ]
     },
     {
       "seq": 54,
@@ -2527,7 +2577,10 @@
       "messageId": "urn:awp:engine-cancel-subscription-branch-1:receiver-agent:0004",
       "messageDigest": "sha-256:ed9d77b77fa223ad1ed42cef9a94df8ece2fdd68993a7bba2eef5f8b340f77cd",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:ac9c495d495e5ddb99b843557dfe58d470e287f86f1f860b38615336904fe25b"
+      ]
     },
     {
       "seq": 62,
@@ -2573,7 +2626,10 @@
         "text": "No rule in The subscriber's mandate lets the agent take the next step in Offer free months to stay with The subscription service for Cancel subscription (no applicable grant in the mandate (deny by default))."
       },
       "caption": "The subscriber's mandate does not allow this: take the next step in Offer free months to stay with The subscription service.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:55f4e16e415822bc46b7374ab9489125b7c1bbc3e5c1f519aa7ff29d3df87513"
+      ]
     },
     {
       "seq": 64,
@@ -2595,7 +2651,11 @@
       "outcome": "stop",
       "reason": "not-authorised",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:07a5f24bd6c05a03c7af820e5905dd688822c04dbea44e28fad4baf21b1b87e5"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/cancel-subscription--baseline.json"
 }

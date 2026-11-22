@@ -70,7 +70,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -149,7 +149,11 @@
         "answer": "Accepted, for product recall claims only."
       },
       "caption": "The manufacturer's product recall statement: The manufacturer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e8f3528d714ff5bd96d636d2ff062516ab0fe6558fe22704218b1afd4f9ae6e5",
+        "sha-256:bc4f70bcfeffcd1c08172f4210d3fe8aec57af2cb4ea10468d4426cb34740bef"
+      ]
     },
     {
       "seq": 3,
@@ -196,7 +200,10 @@
         "text": "Its terms allow this: use for Recall notice; share for Recall notice."
       },
       "caption": "The manufacturer's product recall statement: its terms allow this: use for Recall notice; share for Recall notice.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9e5ba9f27d2e817d4b57b56382d7dd62b80819ac2aa67aff8d01203f120b85d8"
+      ]
     },
     {
       "seq": 5,
@@ -240,7 +247,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The manufacturer's product recall statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e8cb54e9e758531ebb3c6031c9e841344683f05870ddf5928a6aaa8353ae9cf6"
+      ]
     },
     {
       "seq": 7,
@@ -263,7 +273,10 @@
         },
         "provenance": "signed by The manufacturer"
       },
-      "caption": "The manufacturer's product recall statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The manufacturer's product recall statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:9ed6cdaef443e0f1f4b54829d4d4735d86299743c18ec97709403a0f95b294fb"
+      ]
     },
     {
       "seq": 8,
@@ -350,7 +363,10 @@
       },
       "reason": "recipient-established",
       "caption": "The manufacturer: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:82adfc6d6d2cbd01f54f823f19dde3e32497f48ae0a5c154fc001ae46001fc12"
+      ]
     },
     {
       "seq": 11,
@@ -527,7 +543,10 @@
       "messageId": "urn:awp:engine-recall-notice-main:receiver-agent:0002",
       "messageDigest": "sha-256:b4066cdb1a8a3f3b606c892bb787dc48573ff15afc0d134106a74ac6d8c32096",
       "caption": "The invoke message goes to The manufacturer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:152e030c6ff0cd43fdb7a6fd482f77b07974d7e7ff51235314389c9c41ead662"
+      ]
     },
     {
       "seq": 17,
@@ -940,7 +959,10 @@
       "messageId": "urn:awp:engine-recall-notice-main:receiver-agent:0002",
       "messageDigest": "sha-256:b4066cdb1a8a3f3b606c892bb787dc48573ff15afc0d134106a74ac6d8c32096",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:6337154818f0a03ff8c18ad1fa8251d25d8d91a278938613b72eb30f16a51261"
+      ]
     },
     {
       "seq": 25,
@@ -1027,7 +1049,10 @@
       },
       "reason": "recipient-established",
       "caption": "The product owner: Accepted, for A product recall notice only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:131afbc898d40f11dd28d91840806610cff06cd65235a5453b7aae8cb58d937f"
+      ]
     },
     {
       "seq": 28,
@@ -1176,7 +1201,10 @@
       },
       "reason": "terms-allow",
       "caption": "The manufacturer's product recall statement: its terms allow this: use for Recall notice; share for Recall notice.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9e5ba9f27d2e817d4b57b56382d7dd62b80819ac2aa67aff8d01203f120b85d8"
+      ]
     },
     {
       "seq": 33,
@@ -1266,7 +1294,10 @@
       "messageId": "urn:awp:engine-recall-notice-main:owner-agent:0002",
       "messageDigest": "sha-256:c818338439eaa4bffb04fb220d209b1842e316d04fa42e89eae142724e30f511",
       "caption": "The invoke message goes to The product owner’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7f9a6d7cd9c33f6b9f7161096cbe85e05791ccaec48844e719ff23a630fdb089"
+      ]
     },
     {
       "seq": 36,
@@ -1739,7 +1770,11 @@
         "answer": "Accepted, for product recall claims only."
       },
       "caption": "The manufacturer's product recall statement: The manufacturer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fe7b6dfc1864cc1e79a607344fb85971b5e7a794d6d6354b60648481dc71d1f1",
+        "sha-256:fbcbc51381a6754df7abe6505178fa57dd3ad26511d8e5835f84d9f68229b3c9"
+      ]
     },
     {
       "seq": 40,
@@ -1790,7 +1825,10 @@
         "text": "Its terms allow this: use for Recall notice; share for Recall notice."
       },
       "caption": "The manufacturer's product recall statement: its terms allow this: use for Recall notice; share for Recall notice.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9e5ba9f27d2e817d4b57b56382d7dd62b80819ac2aa67aff8d01203f120b85d8"
+      ]
     },
     {
       "seq": 42,
@@ -1831,7 +1869,10 @@
       "messageId": "urn:awp:engine-recall-notice-main:owner-agent:0002",
       "messageDigest": "sha-256:c818338439eaa4bffb04fb220d209b1842e316d04fa42e89eae142724e30f511",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6583f4b21737d30fee35deb06f4fe51bca3d85e93d9e55005a5cbb1e86bf9927"
+      ]
     },
     {
       "seq": 44,
@@ -1854,7 +1895,10 @@
         },
         "provenance": "signed by The manufacturer"
       },
-      "caption": "The manufacturer's product recall statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The manufacturer's product recall statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:144f5327f73fcc8dfb9fa5b129d565fb74df2d3e885d71376a5e3bfe9ba22b0b"
+      ]
     },
     {
       "seq": 45,
@@ -1933,7 +1977,10 @@
       },
       "reason": "recipient-established",
       "caption": "The manufacturer: Accepted, for A product recall notice only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:82adfc6d6d2cbd01f54f823f19dde3e32497f48ae0a5c154fc001ae46001fc12"
+      ]
     },
     {
       "seq": 47,
@@ -2081,7 +2128,10 @@
       "messageId": "urn:awp:engine-recall-notice-main:receiver-agent:0003",
       "messageDigest": "sha-256:16e8879194e0731b8f143fe546438de640a7b10f2e0289500331ec7e26f56b92",
       "caption": "The deliver message goes to The manufacturer’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:627728ec14ec181f75ce699d72807ff6590e0590e58c8503ff11a2973ad9e5d3"
+      ]
     },
     {
       "seq": 52,
@@ -2456,7 +2506,10 @@
       "messageId": "urn:awp:engine-recall-notice-main:receiver-agent:0003",
       "messageDigest": "sha-256:16e8879194e0731b8f143fe546438de640a7b10f2e0289500331ec7e26f56b92",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:c0637da54d987373abbaaad2b41fc350b3b4699c77c9cc734f637854a8c19573"
+      ]
     },
     {
       "seq": 60,
@@ -2464,7 +2517,11 @@
       "agent": "receiver-agent",
       "part": "record",
       "kind": "record",
-      "caption": "32 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "32 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:627728ec14ec181f75ce699d72807ff6590e0590e58c8503ff11a2973ad9e5d3"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/recall-notice--baseline.json"
 }

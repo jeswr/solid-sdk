@@ -75,7 +75,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -158,7 +158,11 @@
         "answer": "Accepted, for material recycled fraction claims only."
       },
       "caption": "The supplying tier's material recycled fraction statement: The supplying tier is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:abe16cbcc3a02225173c82aed57644139669d6e26ec96ccc879339baa7df422d",
+        "sha-256:5e57a2699e2bc6371a28ab7c53d40296db4edb7c25e70c4d34ebdefd293814d4"
+      ]
     },
     {
       "seq": 3,
@@ -205,7 +209,10 @@
         "text": "Its terms allow this: use for Recycled content; share for Recycled content."
       },
       "caption": "The supplying tier's material recycled fraction statement: its terms allow this: use for Recycled content; share for Recycled content.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8699dc60890c0758784677e6d577d716e989738163be9df29df2262e305d822b"
+      ]
     },
     {
       "seq": 5,
@@ -277,7 +284,11 @@
           "suite": "fixed-vocabulary",
           "id": "urn:fictional:recycled-content:tier-3"
         }
+      ],
+      "linked": [
+        "sha-256:8c1223202baec7bf7467ec43b6c6f5fbc4d577d514349145392d4069baa43bfb"
       ]
     }
-  ]
+  ],
+  "linkedTable": "linked/recycled-content--baseline.json"
 }

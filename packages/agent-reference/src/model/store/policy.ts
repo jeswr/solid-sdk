@@ -90,7 +90,7 @@ function readIdentifier(node: StoreNode, predicate: string): string | undefined 
   if (term !== undefined) return term.termType === "NamedNode" ? term.value : readStoreText(term);
 }
 
-function policySubject(id: string): string {
+export function policySubject(id: string): string {
   const term = storeIdentifier(id);
   return term.termType === "NamedNode" ? id : scopedId("urn:awp:policy", JSON.stringify(id));
 }

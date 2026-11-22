@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.2 Sol
+
 import {
   type AccessPointer,
   deadline,
@@ -10,6 +11,7 @@ import {
   verifyAccessPointer,
 } from "../mechanisms/access-pointer.js";
 import { readCarried } from "../settlement/carried.js";
+
 // AUTHORED-BY Codex GPT-6
 
 import { digestBytes as credentialDigest } from "../core/canonical.js";
@@ -30,6 +32,7 @@ import { certifiedQuality } from "../suites/reliance-certificate.js";
 import { confidenceFitness } from "../suites/reliance-confidence.js";
 import { corroborateIncome } from "../suites/reliance-corroboration.js";
 import { checkIndexReceipt } from "../suites/trust-index.js";
+import { memoryLink, termsLinks } from "../trace/linked.js";
 import {
   declaredJwsKid,
   documentConfiguration,
@@ -108,7 +111,7 @@ import {
   NOT_APPLICABLE,
   PASS_CODE,
   refsFor,
-  resolutionView,
+  resolutionTrace,
 } from "./common.js";
 import { acceptsOfferedTerms, evaluateItemTerms, fitnessOf, termsSummary } from "./quality.js";
 
@@ -1719,7 +1722,7 @@ export class InboundGate {
               (!permitted || permitted.includes(String(input.issuer)))
                 ? "source-accepted"
                 : "source-not-authoritative",
-            ...(resolution ? { resolution: resolutionView(resolution) } : {}),
+            ...(resolution ? resolutionTrace(resolution, this.deps.gate) : {}),
           },
         );
         if (
@@ -1750,7 +1753,7 @@ export class InboundGate {
         {
           ...(r.reason ? { reason: r.reason } : {}),
           ...(r.rule ? { rule: r.rule } : {}),
-          ...(r.resolution ? { resolution: resolutionView(r.resolution) } : {}),
+          ...(r.resolution ? resolutionTrace(r.resolution, this.deps.gate, r.rule?.id) : {}),
         },
       );
       if (c && r.reason === "source-unknown" && this.deps.gate.resolver?.pinnedOnly)
@@ -1795,6 +1798,7 @@ export class InboundGate {
         {
           ...(t.reason ? { reason: t.reason } : {}),
           rule: { id: terms?.policy?.id ?? "default-terms", text: t.text },
+          ...termsLinks(this.deps.gate.sink?.linked, terms),
         },
       );
       if (t.verdict !== "pass")
@@ -1876,6 +1880,21 @@ export class InboundGate {
       this.emit({
         part: "memory",
         kind: "store",
+        ...(this.deps.gate.sink?.linked
+          ? {
+              linkedInputs: [
+                memoryLink({
+                  id: String(interpretation.value.id),
+                  label: "Mapped employment status",
+                  claimType: "employment.status",
+                  subject: String(c.subject),
+                  source: c.issuer,
+                  method: "derived",
+                  statement: interpretation.value,
+                }),
+              ],
+            }
+          : {}),
         caption:
           "Employment status interpreted through the signed mapping, alongside its original payroll statement.",
         fact: {

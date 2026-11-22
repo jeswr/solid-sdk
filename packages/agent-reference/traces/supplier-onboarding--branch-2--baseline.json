@@ -84,7 +84,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -163,7 +163,11 @@
         "answer": "Accepted, for company exists claims only."
       },
       "caption": "The fictional company register's company exists statement: The fictional company register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5822ae091d40c00f759e55acb7fbfc3e7a5f611018b8b5902ae12b3ed66a297b",
+        "sha-256:60f8c0b6a5728c6c6ee10b83532656e7c4e88171331e2260496cdbc71731c112"
+      ]
     },
     {
       "seq": 3,
@@ -210,7 +214,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The fictional company register's company exists statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:63b9a16c2b7b4f7e2dd1e7a4aeb0d30beabfc9b2f69deb19cb2dadc0fc3e5ce9"
+      ]
     },
     {
       "seq": 5,
@@ -254,7 +261,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional company register's company exists statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:eceb6402b2b45e7e6c942779d38e83973f8706a4d2e2d4186053fea5bdc8a07f"
+      ]
     },
     {
       "seq": 7,
@@ -277,7 +287,10 @@
         },
         "provenance": "signed by The fictional company register"
       },
-      "caption": "The fictional company register's company exists statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional company register's company exists statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:2a8e9bf902990f072a5cd1cdacce96773f82d444b6ef8890e41fc71f4813d988"
+      ]
     },
     {
       "seq": 8,
@@ -367,7 +380,10 @@
       "outcome": "refuse",
       "reason": "source-not-authoritative",
       "caption": "The supplier’s bank's bank account owner statement is refused and kept out of memory.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:6734aa43a91b1322ab71a1044b11424c12a307b926bb95a878a060149dc220db"
+      ]
     },
     {
       "seq": 12,
@@ -430,7 +446,11 @@
         "answer": "Accepted, for certificate claims only."
       },
       "caption": "The fictional certifier's certificate statement: The fictional certifier is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:022cf375a93201b47e3512ede9f255521c37ed30685a58eea2887e517862765a",
+        "sha-256:493375e2b1075d7010fb40eddc548f6438e6652535e684e3d347a5e3000e21d3"
+      ]
     },
     {
       "seq": 14,
@@ -477,7 +497,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The fictional certifier's certificate statement: its terms allow this: .",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:ebf873ba74a3046a78356eeb0b407fb0032cfcf4ca2accd778b9846684fc0aef"
+      ]
     },
     {
       "seq": 16,
@@ -521,7 +544,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional certifier's certificate statement is admitted.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:699081f168b2ede28b75909565f79db8332fb94060709e8bbe8892b70195c803"
+      ]
     },
     {
       "seq": 18,
@@ -544,7 +570,10 @@
         },
         "provenance": "signed by The fictional certifier"
       },
-      "caption": "The fictional certifier's certificate statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional certifier's certificate statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:d4205153f43f86c09a41c95b6a3610f054ec9675f36d8d7bd1e6f1260e5e9d04"
+      ]
     },
     {
       "seq": 19,
@@ -637,7 +666,11 @@
       "outcome": "stop",
       "reason": "source-not-authoritative",
       "caption": "A refused source cannot authorize the action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9432fd0721f7cff1aa0dd25c1dd502953b85eefb3e15015ef85711a85a7a9b39"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/supplier-onboarding--baseline.json"
 }

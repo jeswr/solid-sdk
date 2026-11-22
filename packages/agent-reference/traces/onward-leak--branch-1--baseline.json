@@ -107,7 +107,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -186,7 +186,11 @@
         "answer": "Accepted, for income total claims only."
       },
       "caption": "The person’s bank's income total statement: The person’s bank is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:35b5e62c78488979c9c97d614cc14ca2970478f302f32e16cf8914abcce763b4",
+        "sha-256:afff24e97553718c1905cbb0ffa9c16e05b4042e8268af83201fedc403e8e567"
+      ]
     },
     {
       "seq": 3,
@@ -233,7 +237,10 @@
         "text": "Its terms allow this: use for Lending."
       },
       "caption": "The person’s bank's income total statement: its terms allow this: use for Lending.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:aeb3f40d921c35146e281dca0a78ced71e110c262e5f16f479fd99dbc5144b26"
+      ]
     },
     {
       "seq": 5,
@@ -277,7 +284,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The person’s bank's income total statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5ebcd4bc274ba4a8bd73ea176abf83ed82cb2480c74a7d035922022a45831ff1"
+      ]
     },
     {
       "seq": 7,
@@ -300,7 +310,10 @@
         },
         "provenance": "signed by The person’s bank"
       },
-      "caption": "The person’s bank's income total statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The person’s bank's income total statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:d97067ee38f1ec9d7938ac3c6413f99707bbd6d1f5276bfa611b8aada829e518"
+      ]
     },
     {
       "seq": 8,
@@ -387,7 +400,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:067f7bfa54ce06e21027403ae52dabdb045e9678889e1a6840531d658e5148c1"
+      ]
     },
     {
       "seq": 11,
@@ -564,7 +580,10 @@
       "messageId": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:520beaf61e39dfc253dfe1f12e052f07d7d586ce27490ec6577cf6a39c78f099",
       "caption": "The invoke message goes to The lender’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d80c24c6b73154256428c50d74e1a2cf4f6c1b5099ab4c22ce28417e5895a5c6"
+      ]
     },
     {
       "seq": 17,
@@ -983,7 +1002,10 @@
       "messageId": "urn:awp:engine-onward-leak-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:520beaf61e39dfc253dfe1f12e052f07d7d586ce27490ec6577cf6a39c78f099",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:61b6290a46a95eb32ec993da7ec4d6902f56bd8beed00188d03910b39c3f7489"
+      ]
     },
     {
       "seq": 25,
@@ -1070,7 +1092,10 @@
       },
       "reason": "recipient-established",
       "caption": "The marketing company: Accepted, for A receiver passes data on against its terms only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3af4e37fe5db7f6178f3c08f9f1c22c09eae0edb2e204edf94bda868cb11e20a"
+      ]
     },
     {
       "seq": 28,
@@ -1219,7 +1244,10 @@
         "text": "The issuer's terms: use for Lending. They go out with the data."
       },
       "caption": "The person’s bank's income total statement: its terms forbid this (use for Lending).",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:aeb3f40d921c35146e281dca0a78ced71e110c262e5f16f479fd99dbc5144b26"
+      ]
     },
     {
       "seq": 33,
@@ -1241,7 +1269,11 @@
       "outcome": "stop",
       "reason": "prohibited",
       "caption": "The actual credential's terms prohibit release.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ba1efcf769b3eb292c11473385870ed8766ce4858864d454f91e4ec377c11127"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/onward-leak--baseline.json"
 }

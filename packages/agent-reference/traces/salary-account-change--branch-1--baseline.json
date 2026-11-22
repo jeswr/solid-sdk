@@ -77,7 +77,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -152,7 +152,11 @@
         "answer": "Accepted, for salary account claims only."
       },
       "caption": "The employee’s bank's salary account statement: The employee’s bank is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:32571e66000f56807a4511fe7155af13ccfe0249693b71f60022fc8eddfe6d6e",
+        "sha-256:12b4493574964faa985e48ee81ab609f88f98696b503d873bacaba78f304827b"
+      ]
     },
     {
       "seq": 3,
@@ -199,7 +203,10 @@
         "text": "Its terms allow this: use for Salary account change; share for Salary account change."
       },
       "caption": "The employee’s bank's salary account statement: its terms allow this: use for Salary account change; share for Salary account change.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:052beabcc537ea3f8e1b689e9cd10b3a757f6d8188f3c6e44bd254651d122c6c"
+      ]
     },
     {
       "seq": 5,
@@ -243,7 +250,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The employee’s bank's salary account statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cb8f58017c2ec90a2ab53b06f129382f04dd4ee22109ba0f474a049ac0e87580"
+      ]
     },
     {
       "seq": 7,
@@ -266,7 +276,10 @@
         },
         "provenance": "signed by The employee’s bank"
       },
-      "caption": "The employee’s bank's salary account statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The employee’s bank's salary account statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:a5b8601f3ea976162abdfb4dbe4a3b7eb2affe1a5591d3f98723516adbe6b219"
+      ]
     },
     {
       "seq": 8,
@@ -353,7 +366,10 @@
       },
       "reason": "recipient-established",
       "caption": "The employee: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c36b4c84c6d4637ed24eb0047c65c99fb76ad9f98698aed855947144d1adb903"
+      ]
     },
     {
       "seq": 11,
@@ -530,7 +546,10 @@
       "messageId": "urn:awp:engine-salary-account-change-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:fa0dd449f6b0f58d89e67f3c4b17765f701dedd37bcdff1baf1cad9df0ff4051",
       "caption": "The invoke message goes to The employee’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bd95ee042ac92fdf0cdf6ae47fa218b286d75c52e26ce9a49288c663ad851898"
+      ]
     },
     {
       "seq": 17,
@@ -945,7 +964,10 @@
       "messageId": "urn:awp:engine-salary-account-change-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:fa0dd449f6b0f58d89e67f3c4b17765f701dedd37bcdff1baf1cad9df0ff4051",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:38364820f48ea7f0ebe129f864e95bab008c66d924d3681336888ff1564cb368"
+      ]
     },
     {
       "seq": 25,
@@ -1032,7 +1054,10 @@
       },
       "reason": "recipient-established",
       "caption": "The employer: Accepted, for A request to change where salary is paid only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e6d1abeec4eacb564b45fac10c06d24df097368433dd99a116f74c2ebd079a23"
+      ]
     },
     {
       "seq": 28,
@@ -1181,7 +1206,10 @@
       },
       "reason": "terms-allow",
       "caption": "The employee’s bank's salary account statement: its terms allow this: use for Salary account change; share for Salary account change.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:052beabcc537ea3f8e1b689e9cd10b3a757f6d8188f3c6e44bd254651d122c6c"
+      ]
     },
     {
       "seq": 33,
@@ -1271,7 +1299,10 @@
       "messageId": "urn:awp:engine-salary-account-change-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:08a2a12c32a984e971d2c8a4bb32d4cc73acbca2e19f85510f32376a3e892d5b",
       "caption": "The invoke message goes to The employer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:73ba4c79bf193bf9716829cf4bb2a91ec85f7deb9a36a4eeab0caa71008b8c3f"
+      ]
     },
     {
       "seq": 36,
@@ -1719,6 +1750,9 @@
           "suite": "fixed-vocabulary",
           "id": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1"
         }
+      ],
+      "linked": [
+        "sha-256:4a409d31e4e8688dd9e2c6056ab1d563c9102cb65dc6345dbca8a74297dfcbbe"
       ]
     },
     {
@@ -1817,7 +1851,11 @@
       "outcome": "stop",
       "reason": "evidence-invalid",
       "caption": "Unaccepted support cannot authorize an action.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:8c7ea64df81bf4d8c728b8fa29e958f04f114835bd8d3178d5dc1934f747d107"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/salary-account-change--baseline.json"
 }

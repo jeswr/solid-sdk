@@ -98,7 +98,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -204,7 +204,10 @@
       "outcome": "refuse",
       "reason": "source-not-authoritative",
       "caption": "An unverified email sender's bank account owner statement is refused and kept out of memory.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5ae921511e551af09ddc91196b024485dabd37284546a8c8d6fc8f40a9016f0d"
+      ]
     },
     {
       "seq": 5,
@@ -267,7 +270,11 @@
         "answer": "Accepted, for organization role claims only."
       },
       "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:013fd3576bd08c6511668d69a0a692c5979c10539916d0d34629d8b78da4758e",
+        "sha-256:24cc3bb51863aa82cbcf46dca0098531bce0ab96063d9d227deb91ad1be13b2b"
+      ]
     },
     {
       "seq": 7,
@@ -358,7 +365,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The staff directory's organization role statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4a53160da5847bbc080cbc7e39815dd6b64970825fe5fd871c13c31f077e432e"
+      ]
     },
     {
       "seq": 11,
@@ -377,7 +387,10 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "provenance": "signed by The staff directory"
       },
-      "caption": "The staff directory's organization role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The staff directory's organization role statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:9967a6bb0bc610d19988ddde0f7968c4819401ac947a744e84d7e9f3662be34b"
+      ]
     },
     {
       "seq": 12,
@@ -440,7 +453,11 @@
         "answer": "Accepted, for organization role claims only."
       },
       "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:013fd3576bd08c6511668d69a0a692c5979c10539916d0d34629d8b78da4758e",
+        "sha-256:24cc3bb51863aa82cbcf46dca0098531bce0ab96063d9d227deb91ad1be13b2b"
+      ]
     },
     {
       "seq": 14,
@@ -531,7 +548,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The staff directory's organization role statement is admitted.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:463bd2b04049f74ead3096c0c05a477980de1480246cdf29b8985ac325c5d08d"
+      ]
     },
     {
       "seq": 18,
@@ -550,7 +570,10 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "provenance": "signed by The staff directory"
       },
-      "caption": "The staff directory's organization role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The staff directory's organization role statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:7e338974b4b4448a960f604e176900af19d21cfc5f7830c6cd041c1ac1cb40d4"
+      ]
     },
     {
       "seq": 19,
@@ -613,7 +636,11 @@
         "answer": "Accepted, for organization role claims only."
       },
       "caption": "The staff directory's organization role statement: The staff directory is an accepted source for this kind of claim.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:013fd3576bd08c6511668d69a0a692c5979c10539916d0d34629d8b78da4758e",
+        "sha-256:24cc3bb51863aa82cbcf46dca0098531bce0ab96063d9d227deb91ad1be13b2b"
+      ]
     },
     {
       "seq": 21,
@@ -704,7 +731,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The staff directory's organization role statement is admitted.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:e3d6773c492be0a129bda2d8c24d76f14ed2fe09ebb5860d2b3ab8e4da7c9b0b"
+      ]
     },
     {
       "seq": 25,
@@ -723,7 +753,10 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "provenance": "signed by The staff directory"
       },
-      "caption": "The staff directory's organization role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The staff directory's organization role statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:e1c36006bf68fd6d9c49b11e6e0c33c3773ad1110d1a7f8979096a6a1d940d60"
+      ]
     },
     {
       "seq": 26,
@@ -769,7 +802,10 @@
       },
       "reason": "within-mandate",
       "caption": "The business's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ecab66a7822e546d5afa516981a07c4f583d2d4c9965c982d04531410dd3a942"
+      ]
     },
     {
       "seq": 28,
@@ -825,7 +861,11 @@
       "outcome": "stop",
       "reason": "source-not-authoritative",
       "caption": "Unaccepted support cannot authorize an action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:66d1f380bb7f9b8c4e05a964230da4ee9426a13443325efdb9e6e3a1e6931e11"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/master-data-change--baseline.json"
 }

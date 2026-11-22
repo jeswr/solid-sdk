@@ -159,7 +159,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted",
     "method": "sparq-aggregate/1",
     "package": "sparq-verifiable-aggregate",
@@ -243,7 +243,11 @@
         "answer": "Accepted, for income platform list claims only."
       },
       "caption": "The self-employed worker's income platform list statement: The self-employed worker is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:22098003600281f9928d62f0d63108fd6f0cd85d8a0832376e89ad39bb057514",
+        "sha-256:22903eb3e10944e289d719c9f553c5d8d8f166d5c059aac0d78eca73350ae4d2"
+      ]
     },
     {
       "seq": 3,
@@ -290,7 +294,10 @@
         "text": "Its terms allow this: use for Platform income; share for Platform income."
       },
       "caption": "The self-employed worker's income platform list statement: its terms allow this: use for Platform income; share for Platform income.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bf31adb60dad8ea8762e3be99a6ff9eb9561b83d8ee1b18cfc532eaccce80449"
+      ]
     },
     {
       "seq": 5,
@@ -354,7 +361,11 @@
       "outcome": "ask-more",
       "reason": "completeness-not-established",
       "caption": "The self-employed worker's income platform list statement is refused and kept out of memory.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1ef066a6eb3d19e83fb76ec909b4adaff61e739add9dc719075765626ee84f73"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/platform-income--baseline.json"
 }

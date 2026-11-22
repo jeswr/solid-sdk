@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -142,7 +142,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The first fictional company's unstructured content statement: The first fictional company is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:55cb3a1d476ff2ae3f5d4dd889472b55b949bb92d239043e07e8df3d88b9d889",
+        "sha-256:30d245d92d1936c92c79f85424dc4603ea3984d9e6c6f69139f7551b9a05726c"
+      ]
     },
     {
       "seq": 3,
@@ -189,7 +193,10 @@
         "text": "Its terms allow this: use for Contract wording; share for Contract wording."
       },
       "caption": "The first fictional company's unstructured content statement: its terms allow this: use for Contract wording; share for Contract wording.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:68410362eadaac5321ab56402decfdfb5a706d15ccbd3deeeeca750b3735d457"
+      ]
     },
     {
       "seq": 5,
@@ -233,7 +240,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The first fictional company's unstructured content statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:235a27f70eb7361b65f22b104b1d017b6f38990fb4aad26da47eea804f50ced9"
+      ]
     },
     {
       "seq": 7,
@@ -256,7 +266,10 @@
         },
         "provenance": "signed by The first fictional company"
       },
-      "caption": "The first fictional company's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The first fictional company's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:7def5c76d1f81fbd3f60210891d64faa4f09d25bd2257aa12c535cb395f62b08"
+      ]
     },
     {
       "seq": 8,
@@ -343,7 +356,10 @@
       },
       "reason": "recipient-established",
       "caption": "The first fictional company: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2828aae99ae0027afb79b5f0d93814b2da6b24eda073d2c8ea42e5476824e455"
+      ]
     },
     {
       "seq": 11,
@@ -520,7 +536,10 @@
       "messageId": "urn:awp:engine-contract-wording-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:dc627dd2f3aa9df3db8483c6d888ed3dfce069bd74068ec857649967fc6493b4",
       "caption": "The invoke message goes to The first fictional company’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:841084399b4f1d4cf3425fb8cf3cf9f3de8d80e8f5ee8567fc8700eed3fbe95d"
+      ]
     },
     {
       "seq": 17,
@@ -935,7 +954,10 @@
       "messageId": "urn:awp:engine-contract-wording-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:dc627dd2f3aa9df3db8483c6d888ed3dfce069bd74068ec857649967fc6493b4",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:506228194f332920e3e38b08b9b05eb2e401d1ade9d55930064e4a696f039dfd"
+      ]
     },
     {
       "seq": 25,
@@ -1022,7 +1044,10 @@
       },
       "reason": "recipient-established",
       "caption": "The second fictional company: Accepted, for Negotiating the wording of a contract only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4d512afa05c6bba23617b6d7ca6974b0b1e2423e6b1df58c81fb43132150dc73"
+      ]
     },
     {
       "seq": 28,
@@ -1171,7 +1196,10 @@
       },
       "reason": "terms-allow",
       "caption": "The first fictional company's unstructured content statement: its terms allow this: use for Contract wording; share for Contract wording.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:68410362eadaac5321ab56402decfdfb5a706d15ccbd3deeeeca750b3735d457"
+      ]
     },
     {
       "seq": 33,
@@ -1358,7 +1386,10 @@
       "outcome": "ask-principal",
       "reason": "context-not-clear",
       "caption": "The task context is not clear for this text, recipient and purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:24b3452fb586fea2fec2a2a9f6f8bc2e0b2ed504740b74d5a9be4c97e71bef57"
+      ]
     },
     {
       "seq": 39,
@@ -1464,7 +1495,10 @@
       },
       "reason": "recipient-established",
       "caption": "The second fictional company: Accepted, for Negotiating the wording of a contract only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4d512afa05c6bba23617b6d7ca6974b0b1e2423e6b1df58c81fb43132150dc73"
+      ]
     },
     {
       "seq": 43,
@@ -1613,7 +1647,10 @@
       },
       "reason": "terms-allow",
       "caption": "The first fictional company's unstructured content statement: its terms allow this: use for Contract wording; share for Contract wording.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:68410362eadaac5321ab56402decfdfb5a706d15ccbd3deeeeca750b3735d457"
+      ]
     },
     {
       "seq": 48,
@@ -1897,7 +1934,10 @@
       "messageId": "urn:awp:engine-contract-wording-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:0e31158e1d5c5a11346dcdc8365ba0696c11e5158f9e827e0e1095283458f96b",
       "caption": "The invoke message goes to The second fictional company’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:916835f6e9867346daadeb2a2090a75377d000e21eab763eae6b778c7d3046d2"
+      ]
     },
     {
       "seq": 57,
@@ -2398,7 +2438,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The first fictional company's unstructured content statement: The first fictional company is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ae7a43ed4b559e6c0bb1e0d36460d3586cfe8c4eefd0e8e5c2f445a4f7dd6636",
+        "sha-256:83a736c37ae52588d41e9181b740a298cf154a43b69adc6816d11832ef6d2cb7"
+      ]
     },
     {
       "seq": 61,
@@ -2449,7 +2493,10 @@
         "text": "Its terms allow this: use for Contract wording; share for Contract wording."
       },
       "caption": "The first fictional company's unstructured content statement: its terms allow this: use for Contract wording; share for Contract wording.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:68410362eadaac5321ab56402decfdfb5a706d15ccbd3deeeeca750b3735d457"
+      ]
     },
     {
       "seq": 63,
@@ -2490,7 +2537,10 @@
       "messageId": "urn:awp:engine-contract-wording-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:0e31158e1d5c5a11346dcdc8365ba0696c11e5158f9e827e0e1095283458f96b",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ce35f642eb360557f7819772c73a878c150d2b7a2e1282e057e94237c308629b"
+      ]
     },
     {
       "seq": 65,
@@ -2513,7 +2563,10 @@
         },
         "provenance": "signed by The first fictional company"
       },
-      "caption": "The first fictional company's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The first fictional company's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:d9745abe8028108d8e07561d78dbbe80f0b7c097aacb3d9644e31f374634aa63"
+      ]
     },
     {
       "seq": 66,
@@ -2528,6 +2581,9 @@
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:contract-wording:owner"
         }
+      ],
+      "linked": [
+        "sha-256:40769eafc55c2ab811f871fe32c48ba76d34f29429b3ca6af238b1f188c2a963"
       ]
     },
     {
@@ -2536,7 +2592,10 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:953355b5544819a7d2dfb690bb0a1d3cb61b31675c454f26781549076fe2d5b0; claim content opinion."
+      "caption": "Model-output reading of unstructured data sha-256:953355b5544819a7d2dfb690bb0a1d3cb61b31675c454f26781549076fe2d5b0; claim content opinion.",
+      "linked": [
+        "sha-256:5a294105a95c3e8470b13502889aeee1b47dd1a6a1dd3d11959f8eb46e123a5b"
+      ]
     },
     {
       "seq": 68,
@@ -2623,7 +2682,10 @@
       },
       "reason": "recipient-established",
       "caption": "The second fictional company: Accepted, for A person decides on the original content only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:8b9ba76d6e8d406b5bfb384eb10bf44cc95aca0ad5255a775a3ab69f8e8385bc"
+      ]
     },
     {
       "seq": 71,
@@ -2736,7 +2798,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The action is held for the named decision makers.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:6a1a8d986487fc51a06b62c0f0e14fb6af5b783b36d7bed01f4f9762f90bcffc"
+      ]
     },
     {
       "seq": 75,
@@ -2785,7 +2850,11 @@
       "outcome": "stop",
       "reason": "approval-denied",
       "caption": "The second fictional company declined; the action is stopped.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:40f8427c58dd89b0a43a228c8b0401e1d5072ed9cc28f79cc6dd8c2efac77895"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/contract-wording--baseline.json"
 }

@@ -73,7 +73,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -168,7 +168,10 @@
       },
       "reason": "recipient-established",
       "caption": "The school: Accepted, for A parent consents for a child only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b7ebf2d4bf34d7fd73201822e7d43981f7d0809fceebed83be9798b558fb6862"
+      ]
     },
     {
       "seq": 4,
@@ -345,7 +348,10 @@
       "messageId": "urn:awp:engine-consent-for-a-child-main:owner-agent:0002",
       "messageDigest": "sha-256:a41672f202026c99895ecbeafdfbff62beb7e7c73218eac88f9513fb971bdbc3",
       "caption": "The invoke message goes to The receiving agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:991b7ba68b2304e98bb9f85c619a4098c2ae659620477a65880692c62fc54e21"
+      ]
     },
     {
       "seq": 10,
@@ -810,7 +816,11 @@
       "messageId": "urn:awp:engine-consent-for-a-child-main:owner-agent:0002",
       "messageDigest": "sha-256:a41672f202026c99895ecbeafdfbff62beb7e7c73218eac88f9513fb971bdbc3",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8da5d89178515bae03966f78c05db3020044971fe2247fc6218d7c6c22cf364a"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/consent-for-a-child--baseline.json"
 }

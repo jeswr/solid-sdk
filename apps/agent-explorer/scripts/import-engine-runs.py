@@ -7,6 +7,7 @@
 # 1. copies the run manifest to data/scenario-runs.json and regenerates data/use-cases.json;
 # 2. copies each trace into traces/, giving it the catalogue's title for its use case and
 #    path, readable agent names and readable step titles. Recorded event text is never rewritten.
+# 3. removes explorer traces and linked tables no longer referenced by imported runs.
 # Explorer copy policy: attachment base64 `bytes` longer than 2048 bytes become null,
 # with bytesOmitted: true. digest, mediaType and byteLength stay unchanged. Smaller
 # attachments, packet jsonld/rdf, checks, decisions, reasons, captions, settlement
@@ -15,10 +16,76 @@
 # explorerCopy.values; explorerCopy.refs holds [path, value index] in dependency order.
 # The bundle reader and browser's async trace accessor restore independent copies
 # before using any events. This is lossless, including packet JSON-LD and RDF strings.
-import json, os, re, subprocess, sys
+# Shared linked tables keep their original keys and view text.
+import json, os, re, stat, subprocess, sys
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, '..')
+MAX_LINKED_TABLE_BYTES = 12_000_000
+
+def traces_directory(directory):
+    root = Path(directory)
+    if not stat.S_ISDIR(root.lstat().st_mode):
+        raise ValueError(f'{root}: traces must be a regular directory')
+    return root.resolve(strict=True)
+
+def linked_directory(root, *, create=False):
+    linked = root / 'linked'
+    if create:
+        try:
+            linked.mkdir()
+        except FileExistsError:
+            pass
+    if not stat.S_ISDIR(linked.lstat().st_mode) or linked.resolve(strict=True) != linked:
+        raise ValueError(f'{linked}: linked must be a regular directory inside traces')
+    return linked
+
+def linked_table_path(directory, reference, *, create=False):
+    root = traces_directory(directory)
+    linked = linked_directory(root, create=create)
+    path = root / reference
+    if path.parent != linked:
+        raise ValueError(f'{path}: linked table must be directly inside traces/linked')
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        if create:
+            return path
+        raise
+    if not stat.S_ISREG(mode) or path.resolve(strict=True) != path:
+        raise ValueError(f'{path}: linked table must be a regular file inside traces/linked')
+    return path
+
+def existing_trace_files(root):
+    directories = [root]
+    try:
+        directories.append(linked_directory(root))
+    except FileNotFoundError:
+        pass
+    files = set()
+    for directory in directories:
+        for path in directory.glob('*.json'):
+            if not stat.S_ISREG(path.lstat().st_mode):
+                raise ValueError(f'{path}: expected a regular file inside traces')
+            files.add(path)
+    return files
+
+def validate_linked_reference(row, reference):
+    scenario, configuration = row['scenario'], row.get('configuration', 'baseline')
+    if (not isinstance(reference, str)
+            or not re.fullmatch(r'linked/[a-z0-9]+(?:-[a-z0-9]+)*--[a-z0-9]+(?:-[a-z0-9]+)*\.json', reference)
+            or reference != f'linked/{scenario}--{configuration}.json'):
+        raise ValueError(f'{scenario}/{configuration}: invalid linked table reference')
+
+def copy_linked_table(src, dest, reference):
+    with linked_table_path(src, reference).open(encoding='utf-8') as source:
+        table = json.load(source)
+    text = json.dumps(table, ensure_ascii=False, separators=(',', ':')) + '\n'
+    data = text.encode('utf-8')
+    if len(data) > MAX_LINKED_TABLE_BYTES:
+        raise ValueError(f'{reference}: linked table is {len(data)} bytes; limit is {MAX_LINKED_TABLE_BYTES} bytes')
+    linked_table_path(dest, reference, create=True).write_bytes(data)
 
 def readable(agent_id):
     words = agent_id.replace('-', ' ').split()
@@ -77,8 +144,23 @@ def intern_event_values(trace):
 
 def main():
     src, manifest = sys.argv[1], sys.argv[2]
+    src = traces_directory(src)
+    dest = traces_directory(os.path.join(ROOT, 'traces'))
+    stale = existing_trace_files(dest)
 
     m = json.load(open(manifest))
+    # Check every source trace before replacing the manifest, so a bad source leaves the
+    # previous import (manifest and traces) in place rather than a half-written one.
+    sources = {}
+    for p in m['paths']:
+        if p['status'] == 'blocked': continue
+        file = p['trace']
+        if not isinstance(file, str) or not re.fullmatch(r'[a-zA-Z0-9_-]+\.json', file):
+            raise ValueError(f'{file}: invalid trace filename')
+        source = src / file
+        if not stat.S_ISREG(source.lstat().st_mode):
+            raise ValueError(f'{source}: expected a regular trace file')
+        sources[file] = source
     json.dump(dict(note='Copied from packages/agent-reference/scenario-runs.json by scripts/import-engine-runs.py.',
                    paths=m['paths']), open(os.path.join(ROOT, 'data', 'scenario-runs.json'), 'w'), indent=1)
     subprocess.check_call([sys.executable, os.path.join(HERE, 'use-cases.src.py')])
@@ -86,9 +168,19 @@ def main():
 
     commit = sys.argv[3] if len(sys.argv) > 3 else None
     n = 0
+    tables = set()
     for p in m['paths']:
         if p['status'] == 'blocked': continue
-        t = json.load(open(os.path.join(src, p['trace'])))
+        file = p['trace']
+        source = sources[file]
+        t = json.loads(source.read_text(encoding='utf-8'))
+        if 'linkedTable' in t:
+            reference = t['linkedTable']
+            validate_linked_reference(p, reference)
+            if reference not in tables:
+                copy_linked_table(src, dest, reference)
+                tables.add(reference)
+                stale.discard(dest / reference)
         u = U.get(p.get('useCase') or p['scenario'])
         if u and not t.get('useCase'):
             run = [r for r in u.get('runs', []) if r['path'] == p['path']][0]
@@ -102,8 +194,11 @@ def main():
         omit_attachment_bytes(t)
         intern_event_values(t)
         text = json.dumps(t, ensure_ascii=False, separators=(',', ':'))
-        open(os.path.join(ROOT, 'traces', p['trace']), 'w').write(text + '\n')
+        (dest / file).write_text(text + '\n', encoding='utf-8')
+        stale.discard(dest / file)
         n += 1
+    for path in sorted(stale):
+        path.unlink()
     print(n, 'traces imported')
     subprocess.check_call(['node', os.path.join(HERE, 'bundle-data.mjs')])
 

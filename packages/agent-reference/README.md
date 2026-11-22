@@ -59,6 +59,24 @@ Traces carry outcomes, trust-resolution paths, labelled facts and declared stand
 cases use the core reason registry; the public pilot extension-code union remains available
 for compatibility. A signature establishes attribution, not truth or permission.
 
+The trace generators add optional RDF views of stored facts, record entries,
+policies and trust entries. Each event's `linked` list contains keys into a
+view table. Library runs with `{ linked: true }` include the table inline as
+`linked`. Generated traces use `linkedTable` to refer to
+`linked/<scenario>--<configuration>.json` relative to `traces/`.
+The main path and branches of a scenario share one table for each configuration,
+using `baseline` for the default. Each table stores the JSON-LD, context and
+Turtle under the SHA-256 of the JSON-LD text. Use
+`node scripts/run-scenarios.mjs --scenario=<id> --no-linked` to regenerate
+the original trace format.
+The runtime builds the view graphs only when requested, and the recorder
+serialises them after the run.
+
+Publishing a trace group takes an exclusive `linked/<scenario>--<configuration>.json.lock`
+file and removes it when publishing finishes. If a process is killed
+and leaves a lock, confirm the writer has stopped, remove the lock, and rerun
+the group. A concurrent writer for the same group can retry once the lock clears.
+
 Experimental. Synthetic parties and data only; both sides of every exchange run this code.
 
 <!-- AUTHORED-BY Codex GPT-6 -->

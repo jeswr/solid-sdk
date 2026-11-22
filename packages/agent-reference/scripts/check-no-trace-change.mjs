@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { spawnSync } from "child_process";
 import {
@@ -56,10 +57,14 @@ try {
     const output = openSync(log, "wx");
     let run;
     try {
-      run = spawnSync(process.execPath, ["scripts/run-scenarios.mjs", `--scenario=${scenario}`], {
-        cwd: copy,
-        stdio: ["ignore", output, "inherit"],
-      });
+      run = spawnSync(
+        process.execPath,
+        ["scripts/run-scenarios.mjs", `--scenario=${scenario}`, "--no-linked"],
+        {
+          cwd: copy,
+          stdio: ["ignore", output, "inherit"],
+        },
+      );
     } finally {
       closeSync(output);
     }
@@ -75,10 +80,12 @@ try {
   }
   const before = json(root, manifestFile);
   const after = json(copy, manifestFile);
-  const selected = new Set(
-    before.paths
-      .filter((row) => row.trace && scenarios.has(row.scenario))
-      .map((row) => join("traces", row.trace)),
+  const selectedRows = before.paths.filter((row) => row.trace && scenarios.has(row.scenario));
+  const selected = new Set(selectedRows.map((row) => join("traces", row.trace)));
+  const selectedTables = new Set(
+    selectedRows.map(
+      (row) => `traces/linked/${row.scenario}--${row.configuration ?? "baseline"}.json`,
+    ),
   );
   const compare = (name, actual, expected) => {
     if (!isDeepStrictEqual(actual, expected)) differences.push(`${name}: content differs`);
@@ -86,7 +93,7 @@ try {
   const { paths: oldPaths, ...oldMeta } = before;
   const { paths: newPaths, ...newMeta } = after;
   compare(manifestFile + " metadata", newMeta, oldMeta);
-  compare(manifestFile + " paths", multiset(newPaths), multiset(oldPaths));
+  compare(`${manifestFile} paths and order`, newPaths, oldPaths);
   compare(indexFile, multiset(json(copy, indexFile)), multiset(json(root, indexFile)));
 
   for (const dir of ["traces", "outlines"]) {
@@ -94,12 +101,20 @@ try {
     const regenerated = new Set(files(copy, dir));
     for (const file of new Set([...committed, ...regenerated])) {
       if (file === indexFile) continue;
+      // --no-linked replaces the selected scenarios' linked traces with plain traces.
+      if (selectedTables.has(file)) {
+        if (regenerated.has(file)) differences.push(`${file}: table retained after plain runs`);
+        continue;
+      }
       if (!committed.has(file) || !regenerated.has(file)) {
         differences.push(`${file}: ${committed.has(file) ? "missing from copy" : "added in copy"}`);
       } else if (selected.has(file)) {
         const expected = json(root, file);
         const actual = json(copy, file);
         delete expected.generated?.commit;
+        delete expected.linked;
+        delete expected.linkedTable;
+        for (const event of expected.events) delete event.linked;
         delete actual.generated?.commit;
         compare(file, actual, expected);
       } else if (!readFileSync(join(root, file)).equals(readFileSync(join(copy, file)))) {

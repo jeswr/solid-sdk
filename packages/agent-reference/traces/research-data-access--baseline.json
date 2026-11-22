@@ -62,7 +62,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -161,7 +161,10 @@
       },
       "reason": "recipient-established",
       "caption": "A data holder: Accepted, for Answer an approved research question only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f1e08fe65914a251b57f68d7f2be0f0b8b7e3cae061eb0c1a17932874d47b631"
+      ]
     },
     {
       "seq": 4,
@@ -308,7 +311,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Answer an approved research question with A data holder.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0c6a3ca7f3a62cc0a44048b5652a7b6edf81575a5408ffa692f7dbbd553aa910"
+      ]
     },
     {
       "seq": 9,
@@ -491,7 +497,10 @@
         "answer": "Accepted, for research measurement claims only."
       },
       "caption": "The receiver checks each original input issuer for the claim the rule read.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4cef6c0af1fd84923ec31210647a1a143529f46149ab2139607d04035a46fcea"
+      ]
     },
     {
       "seq": 22,
@@ -530,7 +539,11 @@
         "answer": "Accepted, for research count claims only."
       },
       "caption": "A data holder's research count statement: A data holder is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c25e9599949da9ede11ab193fc3fce541d631d0846051716fc772bf6ca1bd976",
+        "sha-256:4cef6c0af1fd84923ec31210647a1a143529f46149ab2139607d04035a46fcea"
+      ]
     },
     {
       "seq": 23,
@@ -577,7 +590,10 @@
         "text": "Its terms allow this: use for Approved research; share for Approved research."
       },
       "caption": "A data holder's research count statement: its terms allow this: use for Approved research; share for Approved research.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f5e4796b148e674577720a97262ea0cf702e842fd7db898fdb02151d11efad5b"
+      ]
     },
     {
       "seq": 25,
@@ -621,7 +637,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "A data holder's research count statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:28db10a686bff6cfe5da7d1fbf4a1edbebcbc8e3cb4b7b6472895f90b8ead721"
+      ]
     },
     {
       "seq": 27,
@@ -644,7 +663,11 @@
         },
         "provenance": "signed by A data holder"
       },
-      "caption": "A data holder's research count statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "A data holder's research count statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c10ac0b7d3c5ff9ab43b76b8eaf7439c86ca387f29075aaef62a0bf467ab6bd8"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/research-data-access--baseline.json"
 }

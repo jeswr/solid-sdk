@@ -80,7 +80,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -159,7 +159,11 @@
         "answer": "Accepted, for invoice claims only."
       },
       "caption": "The merchant's invoice statement: The merchant is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0223a3805054e6c221f4eb81b7aca87c6d40564b84daa0cf6f9ec5bfcc203c67",
+        "sha-256:21e3ab2f284e2fbe17a3e9c9879f04fcd0e6c7315e631bcec2fd68562a2fc79d"
+      ]
     },
     {
       "seq": 3,
@@ -206,7 +210,10 @@
         "text": "Its terms allow this: use for Expenses; share for Expenses."
       },
       "caption": "The merchant's invoice statement: its terms allow this: use for Expenses; share for Expenses.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0bdad6efc43fa21c204b7dfd0faba38056f56dc8a3ff76e104e7149f795da850"
+      ]
     },
     {
       "seq": 5,
@@ -250,7 +257,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The merchant's invoice statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:eae1ee27bb1ef3c5afbcf1fbcbf827a2a87e5a01cf21877d23e1aa88c6c0f2a9"
+      ]
     },
     {
       "seq": 7,
@@ -273,7 +283,10 @@
         },
         "provenance": "signed by The merchant"
       },
-      "caption": "The merchant's invoice statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The merchant's invoice statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:427cff02cbe1073bbc1f052945f0bed81d93e9bb56947bb5e0aa2a6c555840de"
+      ]
     },
     {
       "seq": 8,
@@ -360,7 +373,10 @@
       },
       "reason": "recipient-established",
       "caption": "The employer: Accepted, for File and agree an expense claim only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:56b01ab9369b51a3a9ec91166405a9a4a79f5814ad39f3cffdefb0e52099c1f1"
+      ]
     },
     {
       "seq": 11,
@@ -599,7 +615,10 @@
           "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:0bdad6efc43fa21c204b7dfd0faba38056f56dc8a3ff76e104e7149f795da850"
+      ]
     },
     {
       "seq": 16,
@@ -824,7 +843,10 @@
           "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:3d5f05e8653f87ad4e79844f8cee1e296e62695b6398dc102f8a25e089b07027"
+      ]
     },
     {
       "seq": 19,
@@ -1222,7 +1244,11 @@
         "answer": "Accepted, for invoice claims only."
       },
       "caption": "The merchant's invoice statement: The merchant is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d8cfe9a1da5a06b07681505f6fa44e0d22370da090841e7a78a4dc29361cc3b0",
+        "sha-256:96c0b7fdcc69ca6843dbf42c1813103befe67b292ed48e05f412097c5890346a"
+      ]
     },
     {
       "seq": 22,
@@ -1269,7 +1295,10 @@
         "text": "Its terms allow this: use for Expenses; share for Expenses."
       },
       "caption": "The merchant's invoice statement: its terms allow this: use for Expenses; share for Expenses.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0bdad6efc43fa21c204b7dfd0faba38056f56dc8a3ff76e104e7149f795da850"
+      ]
     },
     {
       "seq": 24,
@@ -1313,7 +1342,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The merchant's invoice statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cd93a7b069ba4fe02a96e76fffd66dc04bbc61b57f866e0c20bd8a5dd682f089"
+      ]
     },
     {
       "seq": 26,
@@ -1336,7 +1368,10 @@
         },
         "provenance": "signed by The merchant"
       },
-      "caption": "The merchant's invoice statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The merchant's invoice statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:427cff02cbe1073bbc1f052945f0bed81d93e9bb56947bb5e0aa2a6c555840de"
+      ]
     },
     {
       "seq": 27,
@@ -1936,7 +1971,11 @@
           "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:d8cfe9a1da5a06b07681505f6fa44e0d22370da090841e7a78a4dc29361cc3b0",
+        "sha-256:96c0b7fdcc69ca6843dbf42c1813103befe67b292ed48e05f412097c5890346a"
+      ]
     },
     {
       "seq": 30,
@@ -2077,7 +2116,10 @@
           "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:0bdad6efc43fa21c204b7dfd0faba38056f56dc8a3ff76e104e7149f795da850"
+      ]
     },
     {
       "seq": 32,
@@ -2208,7 +2250,10 @@
           "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:5d91fb8003a52941d483268e13a8277b885e107da70e77b11a876f166deefc4e"
+      ]
     },
     {
       "seq": 34,
@@ -2254,7 +2299,10 @@
       },
       "reason": "within-mandate",
       "caption": "The employer's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:eed7ce3f65877b2312be4fce772f887fbf6d98d432aad7d33ce03b0fd09a6f48"
+      ]
     },
     {
       "seq": 36,
@@ -2299,7 +2347,10 @@
       },
       "reason": "recipient-established",
       "caption": "The employee: Accepted, for File and agree an expense claim only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9982349c7ffc6916fca7cafdfbccffd881f46e79a0132734fc4e7a93fa11e37a"
+      ]
     },
     {
       "seq": 37,
@@ -2447,7 +2498,10 @@
       "messageId": "urn:awp:engine-expenses-main:business-agent:0001",
       "messageDigest": "sha-256:9fa6d4b188f1d69f12f68fe06b55c48543e2897574619846b31426b99ea4a70d",
       "caption": "The accept message goes to The employee’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:eebcc7ff5d7318e7ef2d194edfcc5ff3303f2d2246454447a426b3cfb82d9416"
+      ]
     },
     {
       "seq": 42,
@@ -2876,7 +2930,10 @@
       "messageId": "urn:awp:engine-expenses-main:business-agent:0001",
       "messageDigest": "sha-256:9fa6d4b188f1d69f12f68fe06b55c48543e2897574619846b31426b99ea4a70d",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:96f3b1277dc3507b8fba0317a2879473abc85724334ba8dcb9516f6d5a428999"
+      ]
     },
     {
       "seq": 50,
@@ -2955,7 +3012,10 @@
       },
       "reason": "recipient-established",
       "caption": "The employer: Accepted, for File and agree an expense claim only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:56b01ab9369b51a3a9ec91166405a9a4a79f5814ad39f3cffdefb0e52099c1f1"
+      ]
     },
     {
       "seq": 52,
@@ -3103,7 +3163,10 @@
       "messageId": "urn:awp:engine-expenses-main:employee-agent:0003",
       "messageDigest": "sha-256:fa544be4c2828e4d16456d7c1862f1853909eab2153c7236d37f9b75b49f444f",
       "caption": "The receipt message goes to The finance agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:99a297e8e521952f9d9a62537e911525cf75e7725c83028b1a04d4a6eb69cd40"
+      ]
     },
     {
       "seq": 57,
@@ -3452,7 +3515,10 @@
       "messageId": "urn:awp:engine-expenses-main:employee-agent:0003",
       "messageDigest": "sha-256:fa544be4c2828e4d16456d7c1862f1853909eab2153c7236d37f9b75b49f444f",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:19e89495ac0b490e766a68ef2132230c74326a0ce6556a5c89d4a1a34b92746c"
+      ]
     },
     {
       "seq": 65,
@@ -3529,7 +3595,10 @@
       },
       "reason": "within-mandate",
       "caption": "The employee's mandate covers this action.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:74223b21da10a43ec1e8330e91a762589c642a6ca19320cd009b99dfea257fc5"
+      ]
     },
     {
       "seq": 68,
@@ -3574,7 +3643,10 @@
       },
       "reason": "recipient-established",
       "caption": "The employer: Accepted, for Request payment only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:56b01ab9369b51a3a9ec91166405a9a4a79f5814ad39f3cffdefb0e52099c1f1"
+      ]
     },
     {
       "seq": 69,
@@ -3751,7 +3823,10 @@
       "messageId": "urn:awp:engine-expenses-main:employee-agent:0005",
       "messageDigest": "sha-256:9b92caed889264f169598a5dc125b4ebfe6d217b5bcd3f78ab1845ce3b5d85e6",
       "caption": "The invoke message goes to The finance agent.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:353222c65c84e4e891a084cbe996776c1d37b7e8b5f196ec78a42708ea13f940"
+      ]
     },
     {
       "seq": 75,
@@ -4188,7 +4263,11 @@
         "answer": "Accepted, for reimbursement-invoice claims only."
       },
       "caption": "The employee's reimbursement invoice statement: The employee is an accepted source for this kind of claim.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:2fd584325a317a1e37c78eb453f72153b210968b465482e79b7f9c39186de609",
+        "sha-256:ed0458fbbf534877b4debb9a986551f8c1622a6fbb166c5df696603ed6e65a6f"
+      ]
     },
     {
       "seq": 79,
@@ -4280,7 +4359,10 @@
       "messageId": "urn:awp:engine-expenses-main:employee-agent:0005",
       "messageDigest": "sha-256:9b92caed889264f169598a5dc125b4ebfe6d217b5bcd3f78ab1845ce3b5d85e6",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:3d3d446eef06ab1fd493a09c8463422be00af569b26cb6f62ec37bdbe64adcf1"
+      ]
     },
     {
       "seq": 83,
@@ -4299,7 +4381,10 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "provenance": "signed by The employee"
       },
-      "caption": "The employee's reimbursement invoice statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The employee's reimbursement invoice statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:e57336841eab07249a5f16829d70b314fa67b4c43a8706367cb3ea955a97d304"
+      ]
     },
     {
       "seq": 84,
@@ -4362,7 +4447,11 @@
         "answer": "Accepted, for payee-account claims only."
       },
       "caption": "The reimbursement bank's payee account statement: The reimbursement bank is an accepted source for this kind of claim.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:419a25a060e2a54ca2b6cc02e87e7e85616c6ae070a0f847e36880db3019b60a",
+        "sha-256:b499f752d61034cb15a9c9703df9c6792a46e120bf37b490e970343baf1e96c6"
+      ]
     },
     {
       "seq": 86,
@@ -4409,7 +4498,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The reimbursement bank's payee account statement: its terms allow this: .",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:cd31e41b410ed42fe41e44884b3fc6dcf75574bcde5e8d170eb43f43e162c16b"
+      ]
     },
     {
       "seq": 88,
@@ -4453,7 +4545,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The reimbursement bank's payee account statement is admitted.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:0e825b1ba10f731396d263c9e0b4ee066663e5864ecd5ba07ea7ae91e5c280f7"
+      ]
     },
     {
       "seq": 90,
@@ -4476,7 +4571,10 @@
         },
         "provenance": "signed by The reimbursement bank"
       },
-      "caption": "The reimbursement bank's payee account statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The reimbursement bank's payee account statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:fd361b86c89a6e96eeefc72ef35a105c43f8a33374dc87702bc0f39ae330ae19"
+      ]
     },
     {
       "seq": 91,
@@ -4539,7 +4637,11 @@
         "answer": "Accepted, for payee-account claims only."
       },
       "caption": "The reimbursement bank's payee account statement: The reimbursement bank is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f2d7377d8fe81a8a5dff122e711c53045197051951e604c242af14216e140b26",
+        "sha-256:f7d5e60378e7d3563abf14b5d7ab01b074e6aa4bbcfea8c10f6d5df379aa2df2"
+      ]
     },
     {
       "seq": 93,
@@ -4586,7 +4688,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The reimbursement bank's payee account statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cd31e41b410ed42fe41e44884b3fc6dcf75574bcde5e8d170eb43f43e162c16b"
+      ]
     },
     {
       "seq": 95,
@@ -4630,7 +4735,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The reimbursement bank's payee account statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:79c11d85a80d826ff7ffd556147a417caf4f86b56799f5bb0aa054cc8b1a13a0"
+      ]
     },
     {
       "seq": 97,
@@ -4653,7 +4761,10 @@
         },
         "provenance": "signed by The reimbursement bank"
       },
-      "caption": "The reimbursement bank's payee account statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The reimbursement bank's payee account statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:fd361b86c89a6e96eeefc72ef35a105c43f8a33374dc87702bc0f39ae330ae19"
+      ]
     },
     {
       "seq": 98,
@@ -5271,7 +5382,10 @@
           ]
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:945e4e77436b5c75f5fdbc24496c98bc4252348b81a93c1ca3052a8bad482197"
+      ]
     },
     {
       "seq": 108,
@@ -5351,7 +5465,10 @@
           ]
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:c8f9780f6d12c51fba795498f3e1a89a639b18f618c15f9f61b14085a730e88a"
+      ]
     },
     {
       "seq": 109,
@@ -6314,7 +6431,10 @@
           ]
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:945e4e77436b5c75f5fdbc24496c98bc4252348b81a93c1ca3052a8bad482197"
+      ]
     },
     {
       "seq": 124,
@@ -6394,7 +6514,10 @@
           ]
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:c8f9780f6d12c51fba795498f3e1a89a639b18f618c15f9f61b14085a730e88a"
+      ]
     },
     {
       "seq": 125,
@@ -6717,7 +6840,10 @@
           ]
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:4130ae3b00ba2e999df42a7cf8da4059cd5b53387d2b8b8d1bb5cfeb10735569"
+      ]
     },
     {
       "seq": 130,
@@ -8315,7 +8441,10 @@
           "settles": "sha-256:56b70407747025c8e0f40a5b5f29b83d4b614f3d39d4467451ee3d6d1b17dc0b"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:d7b5abf1acd6df8886ad4f7ad3b9dcc092f570d1edde21ad927c4ac0477d7142"
+      ]
     },
     {
       "seq": 138,
@@ -8361,7 +8490,10 @@
       },
       "reason": "within-mandate",
       "caption": "The reimbursement bank's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8b1c87c57128d248ae39117b0e0b97372a930f8239f528544c15537f0df7d36e"
+      ]
     },
     {
       "seq": 140,
@@ -8406,7 +8538,10 @@
       },
       "reason": "recipient-established",
       "caption": "The reimbursement bank: Accepted, for Settle the checked payment only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0799066d92cd10d94ff029b614a56eabe4c760d9dab3475a630c99506b1b3d81"
+      ]
     },
     {
       "seq": 141,
@@ -8553,7 +8688,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Settle the checked payment with The reimbursement bank.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6fae8e0cd77f1009aa480a379ffbc3a22356f36f8b39702ed8ef76ead06f7954"
+      ]
     },
     {
       "seq": 146,
@@ -8599,7 +8737,10 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:90979bc1bde3adf2063704070efc0413c5345a60ce46ffe2058b8ff081544380"
+      ]
     },
     {
       "seq": 147,
@@ -8754,7 +8895,10 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:e5e4178612420bf3ed722af8ee7839d5cd75a634f1bbf71be4f79519d815fc7a"
+      ]
     },
     {
       "seq": 149,
@@ -9092,7 +9236,10 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:d40c96e4fef726aa3878db6db785d2727d14bc822fe3ed276df0bde2a728ecbd"
+      ]
     },
     {
       "seq": 154,
@@ -9721,7 +9868,11 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:303fc2c4c84ac615f66d0d0f5c9fc5299a1d0df320bd418fbfd33b6463157d16",
+        "sha-256:04ac7a38b1f3e5381b4000e6aa207543907c04d147e5478e27162008f9e3095b"
+      ]
     },
     {
       "seq": 158,
@@ -9844,7 +9995,10 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:6c8539c74a702bcbd20be32fd795b958436fb63a83a72e3f9e72cf8718d98370"
+      ]
     },
     {
       "seq": 160,
@@ -10023,7 +10177,10 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:53c98a4a72f6f8a9feb79bc54ca4cdb84cd125d0a07ceb2a4ece104368fdfd75"
+      ]
     },
     {
       "seq": 163,
@@ -10084,7 +10241,10 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:0f4a647c0fa62b8b8d3a4e5fd8765029fbbe2acbd73035bbc6a61971b230667c"
+      ]
     },
     {
       "seq": 164,
@@ -10239,7 +10399,10 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:9982349c7ffc6916fca7cafdfbccffd881f46e79a0132734fc4e7a93fa11e37a"
+      ]
     },
     {
       "seq": 166,
@@ -10377,7 +10540,10 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:6c8539c74a702bcbd20be32fd795b958436fb63a83a72e3f9e72cf8718d98370"
+      ]
     },
     {
       "seq": 168,
@@ -10515,7 +10681,10 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:6c8539c74a702bcbd20be32fd795b958436fb63a83a72e3f9e72cf8718d98370"
+      ]
     },
     {
       "seq": 170,
@@ -10719,7 +10888,10 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:91fcb6252a9773fbd73485720327b4a186de89e02c167d8e7c1a18a98d6159b0"
+      ]
     },
     {
       "seq": 173,
@@ -11348,7 +11520,11 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:a23898d67fbdc1f4131158554d29383ae87987db795ef66a98e366c009b48d27",
+        "sha-256:45e1dbae9647db122e83be64798edfed27eecb31077192d5818585f722ace95c"
+      ]
     },
     {
       "seq": 177,
@@ -11475,7 +11651,10 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:6c8539c74a702bcbd20be32fd795b958436fb63a83a72e3f9e72cf8718d98370"
+      ]
     },
     {
       "seq": 179,
@@ -11654,7 +11833,10 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:a68ed89f18357d093a498f6c2f9b92c49fa04e9f1352a38e4d375a566dee67e0"
+      ]
     },
     {
       "seq": 182,
@@ -11715,7 +11897,10 @@
           "source": "urn:fictional:bank"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:0f4a647c0fa62b8b8d3a4e5fd8765029fbbe2acbd73035bbc6a61971b230667c"
+      ]
     },
     {
       "seq": 183,
@@ -11794,7 +11979,10 @@
       },
       "reason": "recipient-established",
       "caption": "The employer: Accepted, for File and agree an expense claim only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:56b01ab9369b51a3a9ec91166405a9a4a79f5814ad39f3cffdefb0e52099c1f1"
+      ]
     },
     {
       "seq": 185,
@@ -11942,7 +12130,10 @@
       "messageId": "urn:awp:engine-expenses-main:employee-agent:0006",
       "messageDigest": "sha-256:1f60beb4d9db36f71471ea7f9fb28cda6499896709ebb2f1323eae67e8d4f05b",
       "caption": "The receipt message goes to The finance agent.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:ae4c956124c2a14db231a6df1e7b7e7cb4264a565cb203e65ccfdd112ee95de4"
+      ]
     },
     {
       "seq": 190,
@@ -12301,7 +12492,10 @@
       "messageId": "urn:awp:engine-expenses-main:employee-agent:0006",
       "messageDigest": "sha-256:1f60beb4d9db36f71471ea7f9fb28cda6499896709ebb2f1323eae67e8d4f05b",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 7
+      "gateRun": 7,
+      "linked": [
+        "sha-256:fc1371288206bff3d7fef2ec687710a1569f549c53ebf0aa9a50f1686717297a"
+      ]
     },
     {
       "seq": 198,
@@ -12309,7 +12503,10 @@
       "agent": "business-agent",
       "part": "record",
       "kind": "record",
-      "caption": "127 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "127 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:bfbda683d5ce638c00f7ce4c1e065eaf49b1c5bbcf2ba186c0e14e2c4f8cf0b4"
+      ]
     },
     {
       "seq": 199,
@@ -12317,7 +12514,11 @@
       "agent": "bank-agent",
       "part": "record",
       "kind": "record",
-      "caption": "40 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "40 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:d40c96e4fef726aa3878db6db785d2727d14bc822fe3ed276df0bde2a728ecbd"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/expenses--baseline.json"
 }

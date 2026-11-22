@@ -405,7 +405,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -476,7 +476,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ae31c564856caf6f5584ff7f30940655dc167705abd83e2e5172bd5365e177cb",
+        "sha-256:d4e524f82991895c9eb78aafb27d70d3b328242fa0819c7cbad456bd80371e16"
+      ]
     },
     {
       "seq": 3,
@@ -523,7 +527,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 5,
@@ -567,7 +574,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional address register's contact address statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bd3e91061f79d256481c873bb3b1ac5a3aac263f46c076fa9c9ce361911384eb"
+      ]
     },
     {
       "seq": 7,
@@ -590,7 +600,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:387a08809c41193e6d94adc2c4f100e25bc21151db0fdb2c2d76e12811b42ea7"
+      ]
     },
     {
       "seq": 8,
@@ -677,7 +690,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 1: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7b6467abecdea63efcebc4084a61e82e4fe0e26de9fffecef631b2b0f7340c8d"
+      ]
     },
     {
       "seq": 11,
@@ -826,7 +842,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 16,
@@ -916,7 +935,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0002",
       "messageDigest": "sha-256:056334afee4dbab1bda6e92bf657d2559d65872bbe4e5d04e8ce44ea7b8b2e9d",
       "caption": "The invoke message goes to Fictional organization 1’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a3ebac77b4b88110ff814721d0e60aac91589818a5da99f28a198a1f86424416"
+      ]
     },
     {
       "seq": 19,
@@ -1369,7 +1391,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c300664a6e16bb44550540e1b6d47312819c648f9813b0adb2a374731e0e59fc",
+        "sha-256:4cf4147c0e94ae21589627c49df5bc2fe5fc716bba385f24299787b1207ed8e1"
+      ]
     },
     {
       "seq": 23,
@@ -1420,7 +1446,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 25,
@@ -1461,7 +1490,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0002",
       "messageDigest": "sha-256:056334afee4dbab1bda6e92bf657d2559d65872bbe4e5d04e8ce44ea7b8b2e9d",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e0596f3fdce7ca0c106f0825cbb421f2e02d5671cc1ae3005b7c17432dc2f1c2"
+      ]
     },
     {
       "seq": 27,
@@ -1484,7 +1516,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 28,
@@ -1563,7 +1598,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e4ddd4719803bfbc36c724feb61b6940f7d4f242c175c1599cc17b41d5330cbb"
+      ]
     },
     {
       "seq": 30,
@@ -1711,7 +1749,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-1-agent:0001",
       "messageDigest": "sha-256:2fe76fda52cd75ffd770538e984fe93bbadcca6d64e03bc56bf7f11128f79768",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6727b5aeb9d0fd3cf9bb3fabee57a4c37bc99040a8ab3d8cacc4cbd739b01cc6"
+      ]
     },
     {
       "seq": 35,
@@ -2086,7 +2127,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-1-agent:0001",
       "messageDigest": "sha-256:2fe76fda52cd75ffd770538e984fe93bbadcca6d64e03bc56bf7f11128f79768",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:623f55dfa6d8dbe12cf5d966fd0cbac0211fcb21214a6bcf233b37a391b9d4a0"
+      ]
     },
     {
       "seq": 43,
@@ -2173,7 +2217,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 2: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:761c14635f3e45c0724411554dc0b65c19bf96796de1c66e58542480c52fd9a7"
+      ]
     },
     {
       "seq": 46,
@@ -2322,7 +2369,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 51,
@@ -2412,7 +2462,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0004",
       "messageDigest": "sha-256:11049e2513e8f5f11b1bd9c9cc5d499b6c5b09aa679c0a7d98eaa1754a8caf54",
       "caption": "The invoke message goes to Fictional organization 2’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:bd34139d5f5edd480d08aeca0f12cc8f91a929576b7fd588b6d2d861522b5be0"
+      ]
     },
     {
       "seq": 54,
@@ -2865,7 +2918,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:eb91e6046b9bd48d409900741490381c5527877e26ee9e8519ac698c3949c786",
+        "sha-256:0f178e620e8db3995385770aba9b7f9239f1a6afdd0b4853e45810dafffbd795"
+      ]
     },
     {
       "seq": 58,
@@ -2916,7 +2973,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 60,
@@ -2957,7 +3017,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0004",
       "messageDigest": "sha-256:11049e2513e8f5f11b1bd9c9cc5d499b6c5b09aa679c0a7d98eaa1754a8caf54",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:182ba8a1c1bf7731cef552eb9abd15cd8fba799142f81d3e37104bc4b83e1ff8"
+      ]
     },
     {
       "seq": 62,
@@ -2980,7 +3043,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 63,
@@ -3059,7 +3125,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bed190e72a3720d7570f5dd1b9ccab97131813bce687e54234a568aa85da4f98"
+      ]
     },
     {
       "seq": 65,
@@ -3207,7 +3276,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-2-agent:0001",
       "messageDigest": "sha-256:1ef13e513207abf1c97dfa9cb9244c30ac094502cf7f8910ebcc2739f249f939",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:adccbda948fa51b0f816dd62e2934e122f01a259b72b730ca142be8666fcb7a2"
+      ]
     },
     {
       "seq": 70,
@@ -3582,7 +3654,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-2-agent:0001",
       "messageDigest": "sha-256:1ef13e513207abf1c97dfa9cb9244c30ac094502cf7f8910ebcc2739f249f939",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:a8aedcf6ec00725d3cfe4b4603876716981b0c1bae1b0d0b428c158525124c79"
+      ]
     },
     {
       "seq": 78,
@@ -3669,7 +3744,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 3: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:ae504d79e80fa0fc5f2d7b8b24db9a1009ccb1b2fdbc04f07ff345fcf48eee31"
+      ]
     },
     {
       "seq": 81,
@@ -3818,7 +3896,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 86,
@@ -3908,7 +3989,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0006",
       "messageDigest": "sha-256:50386feeaeb6cb182094cb175b9d4e26dc5f4e081a46239dba0f64fa7c7a2abf",
       "caption": "The invoke message goes to Fictional organization 3’s agent.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:7673ce636020a4f5c75921ab1c180a07b536c63b85efd982ef3514105d5eea66"
+      ]
     },
     {
       "seq": 89,
@@ -4361,7 +4445,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7136db0bd8a817706af8fa517d5f3234e47000cfe61031830ad9984df7b696dc",
+        "sha-256:4a2dbba287e1041a49c5aeabc684236704ba1e076ce60336a7ac3acbb367bb79"
+      ]
     },
     {
       "seq": 93,
@@ -4412,7 +4500,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 95,
@@ -4453,7 +4544,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0006",
       "messageDigest": "sha-256:50386feeaeb6cb182094cb175b9d4e26dc5f4e081a46239dba0f64fa7c7a2abf",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5a4b5a5e635204b335514c68bb44113b6d75eab69fa8b09f7fc3d1dd5603ad7d"
+      ]
     },
     {
       "seq": 97,
@@ -4476,7 +4570,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 98,
@@ -4555,7 +4652,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b84567ae27f73b71a70584b59268b95865ef1c27f4adf132b54aca5ce42a93f3"
+      ]
     },
     {
       "seq": 100,
@@ -4703,7 +4803,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-3-agent:0001",
       "messageDigest": "sha-256:cd72500d12c8fc8a0a6b478e3ae0ac39f68a2a91adc919d3c6d9917e342fa192",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f82aa8f0d413a6856bbf030b933674752c77fb9e7b19606f9ba6f8782b442557"
+      ]
     },
     {
       "seq": 105,
@@ -5078,7 +5181,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-3-agent:0001",
       "messageDigest": "sha-256:cd72500d12c8fc8a0a6b478e3ae0ac39f68a2a91adc919d3c6d9917e342fa192",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:c013e3046042158d966aea3259eea01207d55f19b376b7cb9b3a7caa638db901"
+      ]
     },
     {
       "seq": 113,
@@ -5165,7 +5271,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 4: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:087d91f88c502ca02ad8b6484a693ae3052e1936aaee12456020ddc7cfb0387f"
+      ]
     },
     {
       "seq": 116,
@@ -5314,7 +5423,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 121,
@@ -5404,7 +5516,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0008",
       "messageDigest": "sha-256:085c7743acde3faba1c8291ecffdd946680820be91c9dfa58e8695eac878c96c",
       "caption": "The invoke message goes to Fictional organization 4’s agent.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:ccc20b041fafb4557ee6c9a3e79697e79facf8af1231f25e250e765fc984cf5a"
+      ]
     },
     {
       "seq": 124,
@@ -5857,7 +5972,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a4cca6245a4c76ca1e8f99a56699b0e2642116938c61592a8245cc3162bc0b4d",
+        "sha-256:757f1bac573c08e1004ee184a7bb8d229bfb637d7b4c955560d00c28294306d3"
+      ]
     },
     {
       "seq": 128,
@@ -5908,7 +6027,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 130,
@@ -5949,7 +6071,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0008",
       "messageDigest": "sha-256:085c7743acde3faba1c8291ecffdd946680820be91c9dfa58e8695eac878c96c",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6be6bb26234b01c9467c20184bdd926952a1f4c34b29cb32c67c110d32c5edea"
+      ]
     },
     {
       "seq": 132,
@@ -5972,7 +6097,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 133,
@@ -6051,7 +6179,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:44c9b2796472a90c4cca03945f0a3630fe77bef52a5d45bc3cb25719d8e3f18e"
+      ]
     },
     {
       "seq": 135,
@@ -6199,7 +6330,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-4-agent:0001",
       "messageDigest": "sha-256:5bec479e2b0005fbceb92f7dbb9d18ac5634cedfffc51e13c46f89d889854102",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:90a077615574fbb9ad75623a6802fdb32834c912bfc98b6431a40b0f749ea209"
+      ]
     },
     {
       "seq": 140,
@@ -6574,7 +6708,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-4-agent:0001",
       "messageDigest": "sha-256:5bec479e2b0005fbceb92f7dbb9d18ac5634cedfffc51e13c46f89d889854102",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:fadf7b89bc5c8636bc1f1452d004cfa948206e3b4851ab8a8a37a4d1a80af4cd"
+      ]
     },
     {
       "seq": 148,
@@ -6661,7 +6798,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 5: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:c82d2007cbf4826d5435cdc9890aa73839bbda9e8960153f5a5ce3e3571143f7"
+      ]
     },
     {
       "seq": 151,
@@ -6810,7 +6950,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 156,
@@ -6900,7 +7043,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0010",
       "messageDigest": "sha-256:eeb9220311598b4861ae6e9ca58ba015d5e8273d1b52b680d800491296af2069",
       "caption": "The invoke message goes to Fictional organization 5’s agent.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:b0ba498f62f262a9ef718f77de947b3ce4bfd3d8fbdbde8a792ad9df6f6e0542"
+      ]
     },
     {
       "seq": 159,
@@ -7353,7 +7499,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:03572e3567cfaf41658d048cdb0a7695b01fd4cf8ca9b1cfff839314ee9912e4",
+        "sha-256:caf3776e9a8c65b0a88424ba17d58e51a490ba535b14027a60eb30dd2a0b661e"
+      ]
     },
     {
       "seq": 163,
@@ -7404,7 +7554,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 165,
@@ -7445,7 +7598,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0010",
       "messageDigest": "sha-256:eeb9220311598b4861ae6e9ca58ba015d5e8273d1b52b680d800491296af2069",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2570be54892315077524d037de21361e8638fc39eeea46b3fa2d3ee5dded628b"
+      ]
     },
     {
       "seq": 167,
@@ -7468,7 +7624,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 168,
@@ -7547,7 +7706,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fadeceaed98ce9dadeca4a35bef282dd9c41d010defa4c6ecfb0b0db070105ce"
+      ]
     },
     {
       "seq": 170,
@@ -7695,7 +7857,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-5-agent:0001",
       "messageDigest": "sha-256:4e0507380e32fd1066741d92ab20e4f27238bd8ccf4c734cee416a1301d24d02",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a63c2a7205ef6364120ecf604023fb931cd009a23921e24a88b9dcb936a821cc"
+      ]
     },
     {
       "seq": 175,
@@ -8070,7 +8235,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-5-agent:0001",
       "messageDigest": "sha-256:4e0507380e32fd1066741d92ab20e4f27238bd8ccf4c734cee416a1301d24d02",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:a351739857590de077cc0d7e90f4f19e28be92c98cbdca74ddafed42d3eb1de3"
+      ]
     },
     {
       "seq": 183,
@@ -8157,7 +8325,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 6: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:59452c01f34ab0deec23e7dbe34a4f3af5c326639436970573b19039aa359066"
+      ]
     },
     {
       "seq": 186,
@@ -8306,7 +8477,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 191,
@@ -8396,7 +8570,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0012",
       "messageDigest": "sha-256:958d4ec91a117db781822789e376770d69681e6796e6f74d6d6f45c2982a3715",
       "caption": "The invoke message goes to Fictional organization 6’s agent.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:c66fecdb100d571811ce462584537c404c225a88e4604a4cdf43582214a1f64f"
+      ]
     },
     {
       "seq": 194,
@@ -8849,7 +9026,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7d1c4abbc992c5aa44700d888b9a8b5fbd1dad2911bae644dfac090d550b4af6",
+        "sha-256:938218e761ca187a107cb20e7c7dacbfe3db21cff4e010530baacc288d557048"
+      ]
     },
     {
       "seq": 198,
@@ -8900,7 +9081,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 200,
@@ -8941,7 +9125,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0012",
       "messageDigest": "sha-256:958d4ec91a117db781822789e376770d69681e6796e6f74d6d6f45c2982a3715",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5e03b317996a9edba4b3bc8cec1e7a59aa693b1d894d8708acac3e297116e2ac"
+      ]
     },
     {
       "seq": 202,
@@ -8964,7 +9151,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 203,
@@ -9043,7 +9233,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:016434f650cc27fd957e1d06dd366f7087ed2413a15789a5064431c64a0406d2"
+      ]
     },
     {
       "seq": 205,
@@ -9191,7 +9384,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-6-agent:0001",
       "messageDigest": "sha-256:a64f200e24fbe97b45f9725829535be7abe07198dd215633f32349b1a5c6f691",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:22f634064762721bbbc855b8e391f3f471d8826ff1cae8f8af3574fa0aba3ff6"
+      ]
     },
     {
       "seq": 210,
@@ -9566,7 +9762,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-6-agent:0001",
       "messageDigest": "sha-256:a64f200e24fbe97b45f9725829535be7abe07198dd215633f32349b1a5c6f691",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 7
+      "gateRun": 7,
+      "linked": [
+        "sha-256:790cc402d247c09e59531996a68ea55e49b2ad3a4d000dbbcbf1b5733105a4c1"
+      ]
     },
     {
       "seq": 218,
@@ -9653,7 +9852,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 7: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 7
+      "gateRun": 7,
+      "linked": [
+        "sha-256:717a6514609a9ab1a4a321f9160b4e7c1f5257062a6c61c550debd56923054b8"
+      ]
     },
     {
       "seq": 221,
@@ -9802,7 +10004,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 7
+      "gateRun": 7,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 226,
@@ -9892,7 +10097,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0014",
       "messageDigest": "sha-256:022bef76a683108e43dfedc113c45e3a45b3aa4273bb1b92c760664b6437fb16",
       "caption": "The invoke message goes to Fictional organization 7’s agent.",
-      "gateRun": 7
+      "gateRun": 7,
+      "linked": [
+        "sha-256:fc75ab858c0f5f337edb45204136976da0df354217fbdd419a0f5f0031318a03"
+      ]
     },
     {
       "seq": 229,
@@ -10345,7 +10553,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:79dff495f8c6477df3553f11c8aad805e3ae0840aa2d50c3e98d841df1640cb9",
+        "sha-256:52f4a9fd46076ba898517b43594b9c3327795ce9fec0641d2f526b7a4f90db1c"
+      ]
     },
     {
       "seq": 233,
@@ -10396,7 +10608,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 235,
@@ -10437,7 +10652,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0014",
       "messageDigest": "sha-256:022bef76a683108e43dfedc113c45e3a45b3aa4273bb1b92c760664b6437fb16",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c43dd16098655e9524784b021a1ddecf73d122bd940e780ad5d255809278965e"
+      ]
     },
     {
       "seq": 237,
@@ -10460,7 +10678,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 238,
@@ -10539,7 +10760,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bd21a9e4815f260614cc7550434b1afd4d27646e3d7bde0e01dc686af410f3a3"
+      ]
     },
     {
       "seq": 240,
@@ -10687,7 +10911,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-7-agent:0001",
       "messageDigest": "sha-256:840e53131ccd1dff81bb01c56465016b18da4c1ea8f7ee58ce80527ef129667a",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d62c14932db42b46542edecba4dfd11bc8c99b64a45693cd15d5af88739df174"
+      ]
     },
     {
       "seq": 245,
@@ -11062,7 +11289,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-7-agent:0001",
       "messageDigest": "sha-256:840e53131ccd1dff81bb01c56465016b18da4c1ea8f7ee58ce80527ef129667a",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 8
+      "gateRun": 8,
+      "linked": [
+        "sha-256:b80df3c5808ccd17efa94332fda05a06728417e7ad2e3f22920db6a6f45ceff9"
+      ]
     },
     {
       "seq": 253,
@@ -11149,7 +11379,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 8: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 8
+      "gateRun": 8,
+      "linked": [
+        "sha-256:c01a88c7a3e0859f4930c05672535303b39078a99eee2e2169acf94bbb51afe0"
+      ]
     },
     {
       "seq": 256,
@@ -11298,7 +11531,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 8
+      "gateRun": 8,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 261,
@@ -11388,7 +11624,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0016",
       "messageDigest": "sha-256:0858d09bac8e5c35fc35a23a8fea409452e58afcdb805b9dd6c388611dfe7933",
       "caption": "The invoke message goes to Fictional organization 8’s agent.",
-      "gateRun": 8
+      "gateRun": 8,
+      "linked": [
+        "sha-256:9a0130693da280f3b22b59442622b5e7543eef941eb85832e58539b968d48b23"
+      ]
     },
     {
       "seq": 264,
@@ -11841,7 +12080,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ed199e5384ad941cd6684c6b0dfbd690fb0f1896299d035bebb9d9fadf350456",
+        "sha-256:6a02599892fec7495998911e57d382cf96e1fee47f76058a849f6ee75ca6491e"
+      ]
     },
     {
       "seq": 268,
@@ -11892,7 +12135,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 270,
@@ -11933,7 +12179,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0016",
       "messageDigest": "sha-256:0858d09bac8e5c35fc35a23a8fea409452e58afcdb805b9dd6c388611dfe7933",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bc65a16046c3e58718772f70f333d71f0e90837b2618c79c712a2229046b41c9"
+      ]
     },
     {
       "seq": 272,
@@ -11956,7 +12205,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 273,
@@ -12035,7 +12287,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:74127c79707052d9f1c044c08b7724eb5490209351ff4f07ccb66f2754ea6199"
+      ]
     },
     {
       "seq": 275,
@@ -12183,7 +12438,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-8-agent:0001",
       "messageDigest": "sha-256:e6b4bfab26abb63335b72ca5575ab65136da33ac8fc2d8768e4396e7e5f2cec4",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:af16d6220909ce2936a05e216e22847abe1c60ab2cd0a7f4659add23e3e9ede7"
+      ]
     },
     {
       "seq": 280,
@@ -12558,7 +12816,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-8-agent:0001",
       "messageDigest": "sha-256:e6b4bfab26abb63335b72ca5575ab65136da33ac8fc2d8768e4396e7e5f2cec4",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 9
+      "gateRun": 9,
+      "linked": [
+        "sha-256:d91fb93ddf08198f6f2b4a7b51448807266a6b8b1759fa58960b277aa33eb1a1"
+      ]
     },
     {
       "seq": 288,
@@ -12645,7 +12906,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 9: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 9
+      "gateRun": 9,
+      "linked": [
+        "sha-256:9ce2fd3ee47e0fd3b112628490e2683678be336e8decbbd3242f1982e87e9ecb"
+      ]
     },
     {
       "seq": 291,
@@ -12794,7 +13058,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 9
+      "gateRun": 9,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 296,
@@ -12884,7 +13151,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0018",
       "messageDigest": "sha-256:fac5adad345b31597a3ad8ea9424f920727be016abd35547a88aa872ff1262b0",
       "caption": "The invoke message goes to Fictional organization 9’s agent.",
-      "gateRun": 9
+      "gateRun": 9,
+      "linked": [
+        "sha-256:c4a1b98cef789ad1919ce0cc3a3cb84e47339903a8188b398c11b7102ad609b0"
+      ]
     },
     {
       "seq": 299,
@@ -13337,7 +13607,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fc8c2ef342b55bde5be43f08dbe0bd2f0d8b79dfc48ad099c41c8ccd061edc93",
+        "sha-256:5688f946d6d3e21e1996be8b6253ee285ae3e384b546439c3ad0e125c114279b"
+      ]
     },
     {
       "seq": 303,
@@ -13388,7 +13662,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 305,
@@ -13429,7 +13706,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0018",
       "messageDigest": "sha-256:fac5adad345b31597a3ad8ea9424f920727be016abd35547a88aa872ff1262b0",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3a9bb8d0e89738bdb85ee832c79539654f5278301c1380ab9bb6a910d11cc94f"
+      ]
     },
     {
       "seq": 307,
@@ -13452,7 +13732,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 308,
@@ -13531,7 +13814,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2177c44f6c936ed9eca4e5e7815b28dd4dba53541d5e5f682227f6fa18a28760"
+      ]
     },
     {
       "seq": 310,
@@ -13679,7 +13965,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-9-agent:0001",
       "messageDigest": "sha-256:c2437bbdff4879b900040d40d9ebca38fb3733ab40046409fa67de954bb1e088",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:24c62273dfe1bb646ceca6f256d919a3611c8602516e754c554d75dbd7a99adf"
+      ]
     },
     {
       "seq": 315,
@@ -14054,7 +14343,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-9-agent:0001",
       "messageDigest": "sha-256:c2437bbdff4879b900040d40d9ebca38fb3733ab40046409fa67de954bb1e088",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 10
+      "gateRun": 10,
+      "linked": [
+        "sha-256:cbb2d469b2654f31d82b3e7c37478ac675c16739446888ab3b6cd2c2807eba4c"
+      ]
     },
     {
       "seq": 323,
@@ -14141,7 +14433,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 10: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 10
+      "gateRun": 10,
+      "linked": [
+        "sha-256:f74d6743bff1d002784ae905d23b150ab03d8383018a4ddfd3528481a2cda3e2"
+      ]
     },
     {
       "seq": 326,
@@ -14290,7 +14585,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 10
+      "gateRun": 10,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 331,
@@ -14380,7 +14678,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0020",
       "messageDigest": "sha-256:e039b49a7a74335ee56a8bd5c474178af3237c09fa21a40fb094cdeb027a3fa5",
       "caption": "The invoke message goes to Fictional organization 10’s agent.",
-      "gateRun": 10
+      "gateRun": 10,
+      "linked": [
+        "sha-256:097b2fb691cfc0f6631ff9d6ad702823ebec2df7a5f7fe2625f7b3a6e7d32625"
+      ]
     },
     {
       "seq": 334,
@@ -14833,7 +15134,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:60def33e69fbb7bcde6f2744e359d9d25e71483b5d7ccd1b68a10d6bb38c3834",
+        "sha-256:529a720aa450fd6208447e2dce64ef8c5d33bc7f88cb064179e117ad71978300"
+      ]
     },
     {
       "seq": 338,
@@ -14884,7 +15189,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 340,
@@ -14925,7 +15233,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0020",
       "messageDigest": "sha-256:e039b49a7a74335ee56a8bd5c474178af3237c09fa21a40fb094cdeb027a3fa5",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:014bee23a6957df548071a45b694432a3d5ea67c79d0a7a3bb39dbfa98cbe3f3"
+      ]
     },
     {
       "seq": 342,
@@ -14948,7 +15259,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 343,
@@ -15027,7 +15341,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8646dd527c4fa0de6d04b161a1c4031d9bf3556e5a897e62e10bb3416a3ebafd"
+      ]
     },
     {
       "seq": 345,
@@ -15175,7 +15492,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-10-agent:0001",
       "messageDigest": "sha-256:63df72897023c9180e6d509d6b2c86b227561580fffc8c146c41ae5529cba870",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:44f2603b16464f67216644c2e405952ac4dde22af630bfa01eb9fc3e4af9ea3d"
+      ]
     },
     {
       "seq": 350,
@@ -15550,7 +15870,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-10-agent:0001",
       "messageDigest": "sha-256:63df72897023c9180e6d509d6b2c86b227561580fffc8c146c41ae5529cba870",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 11
+      "gateRun": 11,
+      "linked": [
+        "sha-256:b2035de2b7311d3f3facae1839abce51c03da3cc8169c601d59c3150913c77a4"
+      ]
     },
     {
       "seq": 358,
@@ -15637,7 +15960,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 11: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 11
+      "gateRun": 11,
+      "linked": [
+        "sha-256:1522a9f13bb1a765ca25baa4dd176aa586b970c172e091dbf9471f720aa8bbe3"
+      ]
     },
     {
       "seq": 361,
@@ -15786,7 +16112,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 11
+      "gateRun": 11,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 366,
@@ -15876,7 +16205,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0022",
       "messageDigest": "sha-256:ee99a80e24b87eab0b703cf60132a13ececc920eb408f88d41ce1da161678d54",
       "caption": "The invoke message goes to Fictional organization 11’s agent.",
-      "gateRun": 11
+      "gateRun": 11,
+      "linked": [
+        "sha-256:73f911beeeb89e07f6f52b539acfceca3f3947a3d2f19e10a2f14ff01cd07995"
+      ]
     },
     {
       "seq": 369,
@@ -16329,7 +16661,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ebfa434dd3490f992857d6e67768c0d8170367b1f4956d0a00225ec43f9b1902",
+        "sha-256:249ca1286fe15729643276e1098e3bfabe7e6199ff8491a3fd0a6b661fbe4547"
+      ]
     },
     {
       "seq": 373,
@@ -16380,7 +16716,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 375,
@@ -16421,7 +16760,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0022",
       "messageDigest": "sha-256:ee99a80e24b87eab0b703cf60132a13ececc920eb408f88d41ce1da161678d54",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9d6aedc7694111c04adb7b8b129257e76a3e204d51de637bd2bb98c4412e5263"
+      ]
     },
     {
       "seq": 377,
@@ -16444,7 +16786,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 378,
@@ -16523,7 +16868,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ff514c1278bc5cabb9dafb75a4e55d9713e823321e6dc87af4d92c204cda54aa"
+      ]
     },
     {
       "seq": 380,
@@ -16671,7 +17019,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-11-agent:0001",
       "messageDigest": "sha-256:377c4377cf47885be97f9bd9eabaeb8c252a0f6eb1ffc721ba815f258f1dd15a",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:93d28496edc5737d724029234dd90b6820909f61945d87b8b7e2fbd860ad1f0b"
+      ]
     },
     {
       "seq": 385,
@@ -17046,7 +17397,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-11-agent:0001",
       "messageDigest": "sha-256:377c4377cf47885be97f9bd9eabaeb8c252a0f6eb1ffc721ba815f258f1dd15a",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 12
+      "gateRun": 12,
+      "linked": [
+        "sha-256:140c511c978d2f858160a53abe5c20a3806b0331a336bfbf6df84aae51b07bf0"
+      ]
     },
     {
       "seq": 393,
@@ -17133,7 +17487,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 12: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 12
+      "gateRun": 12,
+      "linked": [
+        "sha-256:971984ee5e1eb516953960cddb5f950dcffc1702ad3018ea716df9af22ecdb7d"
+      ]
     },
     {
       "seq": 396,
@@ -17282,7 +17639,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 12
+      "gateRun": 12,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 401,
@@ -17372,7 +17732,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0024",
       "messageDigest": "sha-256:d2a2a7b0e8c7b6828d277df6c68ba18d540e7754b1ce797bfea30d59359d0232",
       "caption": "The invoke message goes to Fictional organization 12’s agent.",
-      "gateRun": 12
+      "gateRun": 12,
+      "linked": [
+        "sha-256:858ad3cc4101987bda739d7c8cf07a30dfcb01da47a5494fe4e27123fa865773"
+      ]
     },
     {
       "seq": 404,
@@ -17825,7 +18188,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:49f3c9af5942d49cc63ecf972934473b60362cef6d333d9af1013a489f5515e7",
+        "sha-256:c1a7f5bf3a59413f97beb651b04e480af933fce37064128b0c9fae248b9644bf"
+      ]
     },
     {
       "seq": 408,
@@ -17876,7 +18243,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 410,
@@ -17917,7 +18287,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0024",
       "messageDigest": "sha-256:d2a2a7b0e8c7b6828d277df6c68ba18d540e7754b1ce797bfea30d59359d0232",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c7a80f6b1ed8e4a199b3406b129674e213bf0d039b1da016a16e08c0e1c14fd3"
+      ]
     },
     {
       "seq": 412,
@@ -17940,7 +18313,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 413,
@@ -18019,7 +18395,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:66ddd2f6c2fe49a8e4bf430f8744af543389ea46640677365036f85b17f0873d"
+      ]
     },
     {
       "seq": 415,
@@ -18167,7 +18546,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-12-agent:0001",
       "messageDigest": "sha-256:6150fd805379d3c4d844735b114e396c8818d9e32a3e945ea87ebce3ccd48a58",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:885740b5f4de7ea3b5ee7e85965e4dee3ba65b2a5276fb56c90b9354d8822f90"
+      ]
     },
     {
       "seq": 420,
@@ -18542,7 +18924,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-12-agent:0001",
       "messageDigest": "sha-256:6150fd805379d3c4d844735b114e396c8818d9e32a3e945ea87ebce3ccd48a58",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 13
+      "gateRun": 13,
+      "linked": [
+        "sha-256:4be1db4a4292d35c50495993bc645a70db0c4b4480b7e35f15cd855cf3129362"
+      ]
     },
     {
       "seq": 428,
@@ -18629,7 +19014,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 13: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 13
+      "gateRun": 13,
+      "linked": [
+        "sha-256:8b3f72ea43a4068d4b764ab96790459bdec1b729ac631aafdf12685b3f6929b4"
+      ]
     },
     {
       "seq": 431,
@@ -18778,7 +19166,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 13
+      "gateRun": 13,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 436,
@@ -18868,7 +19259,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0026",
       "messageDigest": "sha-256:b9f6d7237dcbc81fd3fe86e13a017b9b7d346d663100ccde33bb98d8706f2c27",
       "caption": "The invoke message goes to Fictional organization 13’s agent.",
-      "gateRun": 13
+      "gateRun": 13,
+      "linked": [
+        "sha-256:f84a8b259f5bbf1bcb891334c0f59e889396325f70b5c8beeb274333e0e586ef"
+      ]
     },
     {
       "seq": 439,
@@ -19321,7 +19715,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c48a6935881c7c530bd712fb4fee52c3e58d75fe76c5e8cd6d740640536f3e88",
+        "sha-256:b703c177a1e9743c24a597b7d6e3c2b78bf555326c982fa380962185eebac639"
+      ]
     },
     {
       "seq": 443,
@@ -19372,7 +19770,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 445,
@@ -19413,7 +19814,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0026",
       "messageDigest": "sha-256:b9f6d7237dcbc81fd3fe86e13a017b9b7d346d663100ccde33bb98d8706f2c27",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:20bb27eb48d5fc0528289731a703399fa7282e81534adb92d5ccf29652ab2e93"
+      ]
     },
     {
       "seq": 447,
@@ -19436,7 +19840,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 448,
@@ -19515,7 +19922,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:37e0c0ae36498f31fe1d21e8cbea0b77809ce9b49adaff8875ed71e8a774375c"
+      ]
     },
     {
       "seq": 450,
@@ -19663,7 +20073,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-13-agent:0001",
       "messageDigest": "sha-256:ac7751021e5cdb1a3e2fa7a80ead97f16162a46e88cbdb74b386e761413559e3",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:17b154b603f7ad71c7dc141a46c7c6ff7d561f832a754ce578046e527c7cfd64"
+      ]
     },
     {
       "seq": 455,
@@ -20038,7 +20451,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-13-agent:0001",
       "messageDigest": "sha-256:ac7751021e5cdb1a3e2fa7a80ead97f16162a46e88cbdb74b386e761413559e3",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 14
+      "gateRun": 14,
+      "linked": [
+        "sha-256:a924891e562558c721f996bd646c497e58b4e3f97a4da29439ad8329390bb1a4"
+      ]
     },
     {
       "seq": 463,
@@ -20125,7 +20541,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 14: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 14
+      "gateRun": 14,
+      "linked": [
+        "sha-256:568ba9b48851c56125aacd7787b5859139af92e75a8119fd0185f65ae23daae2"
+      ]
     },
     {
       "seq": 466,
@@ -20274,7 +20693,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 14
+      "gateRun": 14,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 471,
@@ -20364,7 +20786,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0028",
       "messageDigest": "sha-256:7672f3943878f5b7a6fd9d16f435b58dd310dc9f7dca1be3edc4c2072de12a79",
       "caption": "The invoke message goes to Fictional organization 14’s agent.",
-      "gateRun": 14
+      "gateRun": 14,
+      "linked": [
+        "sha-256:4dd337260316b4343e2eafe6cdd0c0b9c22cae1691868df106caa9a98a8b89ca"
+      ]
     },
     {
       "seq": 474,
@@ -20817,7 +21242,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e9f64cb6f4153e59cd80105d0428cd1ce20712e45572221c092fdb8b7c5871b0",
+        "sha-256:090cbf0852e5e792f1bf5e8912b064120aec17e111404c10f88d103e237f0bb4"
+      ]
     },
     {
       "seq": 478,
@@ -20868,7 +21297,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 480,
@@ -20909,7 +21341,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0028",
       "messageDigest": "sha-256:7672f3943878f5b7a6fd9d16f435b58dd310dc9f7dca1be3edc4c2072de12a79",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0165ecfbe302b470549d5cfc655d6bdcc5a39fb6f2e80778ec5fb0a1791b5738"
+      ]
     },
     {
       "seq": 482,
@@ -20932,7 +21367,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 483,
@@ -21011,7 +21449,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a1a139c807d014e80547dc630e9d0746f2c4ce2295181b567d50d0f7aee62756"
+      ]
     },
     {
       "seq": 485,
@@ -21159,7 +21600,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-14-agent:0001",
       "messageDigest": "sha-256:d7c5b44f179a373317867367acbef343af1011ef27397e328076f468e3c80b9c",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d3115e7a0f43ce53d5d8a8f01ea469c816238bbd9077f7789fdaf69974a1c1d8"
+      ]
     },
     {
       "seq": 490,
@@ -21534,7 +21978,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-14-agent:0001",
       "messageDigest": "sha-256:d7c5b44f179a373317867367acbef343af1011ef27397e328076f468e3c80b9c",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 15
+      "gateRun": 15,
+      "linked": [
+        "sha-256:bae2d2147cec852281e813231e602a406ebf6717375e8385722e82304f483192"
+      ]
     },
     {
       "seq": 498,
@@ -21621,7 +22068,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 15: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 15
+      "gateRun": 15,
+      "linked": [
+        "sha-256:5008abbd827b384bfb6772683bf6a70e4d7abae309ccdb523a1a0264ebd6da60"
+      ]
     },
     {
       "seq": 501,
@@ -21770,7 +22220,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 15
+      "gateRun": 15,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 506,
@@ -21860,7 +22313,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0030",
       "messageDigest": "sha-256:e2ae3b1059d0650be0068ebaa3da156927bdc98d19b6ca6d7b600edd7d840d63",
       "caption": "The invoke message goes to Fictional organization 15’s agent.",
-      "gateRun": 15
+      "gateRun": 15,
+      "linked": [
+        "sha-256:649645dd92ff64b57fbf9ab9e263355b37f74759987df2e679a9eae3649647c4"
+      ]
     },
     {
       "seq": 509,
@@ -22313,7 +22769,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:83b3640b8cadb47d571cbc8a73be7ae9ba100f544f9e3c1b3e6c41b4adeca783",
+        "sha-256:3d860db9d8e000dd3df70c97e957b63ee76f7f466fa5fc14bdacf671975f7210"
+      ]
     },
     {
       "seq": 513,
@@ -22364,7 +22824,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 515,
@@ -22405,7 +22868,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0030",
       "messageDigest": "sha-256:e2ae3b1059d0650be0068ebaa3da156927bdc98d19b6ca6d7b600edd7d840d63",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:60e839d89666d1a707f5bc974ee2721fe31f32dec81a5d4fea6f9dd8eedd8361"
+      ]
     },
     {
       "seq": 517,
@@ -22428,7 +22894,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 518,
@@ -22507,7 +22976,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3a3d917e4ec68128a1f5a8c95692a264bda8a00a021e7d9d933447c58454e035"
+      ]
     },
     {
       "seq": 520,
@@ -22655,7 +23127,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-15-agent:0001",
       "messageDigest": "sha-256:38cae3f94d2f4bec001372029a7ca9eb10f3e5831955013c43aaa92b1181ebe9",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d04d40c1d24c0577e093f612954783381c6a137b94a3ae3c1d574c125fa79e7e"
+      ]
     },
     {
       "seq": 525,
@@ -23030,7 +23505,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-15-agent:0001",
       "messageDigest": "sha-256:38cae3f94d2f4bec001372029a7ca9eb10f3e5831955013c43aaa92b1181ebe9",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 16
+      "gateRun": 16,
+      "linked": [
+        "sha-256:5dd944c781d0f2dc9e6c0c93256278712f079d97d562fcfe916e62f9fd9444cd"
+      ]
     },
     {
       "seq": 533,
@@ -23117,7 +23595,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 16: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 16
+      "gateRun": 16,
+      "linked": [
+        "sha-256:c68a38f15287664aa6f6d06ba61b094aeafe0036e99fc4bb80f9d032a558808f"
+      ]
     },
     {
       "seq": 536,
@@ -23266,7 +23747,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 16
+      "gateRun": 16,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 541,
@@ -23356,7 +23840,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0032",
       "messageDigest": "sha-256:82296d7d56860c863d46e24bf414c3b02f8ce8c3536a6b5014464ff0532e7f71",
       "caption": "The invoke message goes to Fictional organization 16’s agent.",
-      "gateRun": 16
+      "gateRun": 16,
+      "linked": [
+        "sha-256:fc995fe567695412b7f1422226f486e9df7ea385dfe7a11858dd1365bdc95b08"
+      ]
     },
     {
       "seq": 544,
@@ -23809,7 +24296,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fad2fb410a4aa560bb3ce31d8a06e05222d94065caf9e170bb420bb696182ce5",
+        "sha-256:6450cf6266fbf6b6bcf95bd68211a1b99b40500bc10e2e6e609473a36bfa2573"
+      ]
     },
     {
       "seq": 548,
@@ -23860,7 +24351,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 550,
@@ -23901,7 +24395,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0032",
       "messageDigest": "sha-256:82296d7d56860c863d46e24bf414c3b02f8ce8c3536a6b5014464ff0532e7f71",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d841d7b5df324cfd77161e2c3f27b211b9996eaa9fe558a6969058c4479eb99b"
+      ]
     },
     {
       "seq": 552,
@@ -23924,7 +24421,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 553,
@@ -24003,7 +24503,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c89725009a2eb62d1d84065a206c4881ee8cf730ad45f968d1b23de7b7bfc2ba"
+      ]
     },
     {
       "seq": 555,
@@ -24151,7 +24654,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-16-agent:0001",
       "messageDigest": "sha-256:bb7e42cf52c42a37e1f9906a476ad0f985d674b6addc2ea4375ad19dfbb106ae",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a1a642e874c0f190621f54e64eecd21f16d31c1416a3c9e6299cc7611fce8543"
+      ]
     },
     {
       "seq": 560,
@@ -24526,7 +25032,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-16-agent:0001",
       "messageDigest": "sha-256:bb7e42cf52c42a37e1f9906a476ad0f985d674b6addc2ea4375ad19dfbb106ae",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 17
+      "gateRun": 17,
+      "linked": [
+        "sha-256:f9d02a7e0e9a1ac2ee86aff2b9b3d50c89890b8db11fb7f1793bc1b9df1258d8"
+      ]
     },
     {
       "seq": 568,
@@ -24613,7 +25122,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 17: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 17
+      "gateRun": 17,
+      "linked": [
+        "sha-256:ef96a06a8ffa8b289b744da0c6feeb43e04800c2581e599289e9b9eedb7c60a7"
+      ]
     },
     {
       "seq": 571,
@@ -24762,7 +25274,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 17
+      "gateRun": 17,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 576,
@@ -24852,7 +25367,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0034",
       "messageDigest": "sha-256:6804f7c5b2314a03dd46da2b6d8e814ad2594a699aaa3de40adabf475f04b020",
       "caption": "The invoke message goes to Fictional organization 17’s agent.",
-      "gateRun": 17
+      "gateRun": 17,
+      "linked": [
+        "sha-256:a6d249e426d579fad012f9415292d81cb40334d9d6fbf862bf1e5c1955411bab"
+      ]
     },
     {
       "seq": 579,
@@ -25305,7 +25823,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c33a01db5380028ac23875605fd20328356b004b328f579a9fa5fa37a4874755",
+        "sha-256:ea3c4f8cc201913e31e34079cdec2ae12249d8ed23e3d598f560d2e8975f32f4"
+      ]
     },
     {
       "seq": 583,
@@ -25356,7 +25878,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 585,
@@ -25397,7 +25922,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0034",
       "messageDigest": "sha-256:6804f7c5b2314a03dd46da2b6d8e814ad2594a699aaa3de40adabf475f04b020",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bbca04a004bfeb13976a39aa74809309fba249463ef6669be512e0bd9e97a159"
+      ]
     },
     {
       "seq": 587,
@@ -25420,7 +25948,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 588,
@@ -25499,7 +26030,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:339ffe7aa55a9ec51006d661b35b3e443b109b78ea7c1ea73bc1e69366b5a779"
+      ]
     },
     {
       "seq": 590,
@@ -25647,7 +26181,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-17-agent:0001",
       "messageDigest": "sha-256:9db6514784b7acce3a9922f9ad94245fa0900144f3f31a4c2899145a9bbd4bd8",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:20ea6029995a2c3cc866db9df7df5750e2d4ba09881e1fd4aef30a3f07863d9d"
+      ]
     },
     {
       "seq": 595,
@@ -26022,7 +26559,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-17-agent:0001",
       "messageDigest": "sha-256:9db6514784b7acce3a9922f9ad94245fa0900144f3f31a4c2899145a9bbd4bd8",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 18
+      "gateRun": 18,
+      "linked": [
+        "sha-256:63a1fd312395058c5f3aab555359bc72742c1e1080ab345c27ec36ae5120e781"
+      ]
     },
     {
       "seq": 603,
@@ -26109,7 +26649,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 18: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 18
+      "gateRun": 18,
+      "linked": [
+        "sha-256:654dad3b1c7b2100027123541db5b53520bccb613726bb72c14eee53b0cac547"
+      ]
     },
     {
       "seq": 606,
@@ -26258,7 +26801,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 18
+      "gateRun": 18,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 611,
@@ -26348,7 +26894,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0036",
       "messageDigest": "sha-256:64c4d14903602a4b66adbfe9e6741ff21c63d49bf3cf8581c3c80f3000dd5dd1",
       "caption": "The invoke message goes to Fictional organization 18’s agent.",
-      "gateRun": 18
+      "gateRun": 18,
+      "linked": [
+        "sha-256:4426294b2d72f3a8b2c774de741aaec8845c1a911e56e68c58d3589dfe2c7593"
+      ]
     },
     {
       "seq": 614,
@@ -26801,7 +27350,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7fc5fb0644f0a1dc5288b92bc05f4032a3dde08375e3912fca03edc5b4a9ce72",
+        "sha-256:3c3e92e79053631dbe97bef7d155de19a5574c3b03cdd13a894c042a5d1328a1"
+      ]
     },
     {
       "seq": 618,
@@ -26852,7 +27405,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 620,
@@ -26893,7 +27449,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0036",
       "messageDigest": "sha-256:64c4d14903602a4b66adbfe9e6741ff21c63d49bf3cf8581c3c80f3000dd5dd1",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bdd9c35d7346553dcac314b1b2a9acef70ad6f35deb4b620659270a9f3578416"
+      ]
     },
     {
       "seq": 622,
@@ -26916,7 +27475,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 623,
@@ -26995,7 +27557,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5e489dcaf106dc92653c61059342fee04270a5dbbc573fb97065683475ea9dba"
+      ]
     },
     {
       "seq": 625,
@@ -27143,7 +27708,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-18-agent:0001",
       "messageDigest": "sha-256:21bee074da5644866cfd36b13820fac7f3081762f2fe356b841fe44524c99022",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0e9fa714385793c124f3acdf94e53dedb91193eb0a2acd5423e4fc85a5a06aef"
+      ]
     },
     {
       "seq": 630,
@@ -27518,7 +28086,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-18-agent:0001",
       "messageDigest": "sha-256:21bee074da5644866cfd36b13820fac7f3081762f2fe356b841fe44524c99022",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 19
+      "gateRun": 19,
+      "linked": [
+        "sha-256:24766ead516263bde3feed7b1c9eaaaffe738c551d7e8c267ca533188412a0d0"
+      ]
     },
     {
       "seq": 638,
@@ -27605,7 +28176,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 19: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 19
+      "gateRun": 19,
+      "linked": [
+        "sha-256:ca9b46217bc5fabdd2166953531daf4fabc7ddf0dff58a54e977a3d73380a177"
+      ]
     },
     {
       "seq": 641,
@@ -27754,7 +28328,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 19
+      "gateRun": 19,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 646,
@@ -27844,7 +28421,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0038",
       "messageDigest": "sha-256:3655cd91fd32bff42bc0183330fa9098daa280349111c9ede8af18ac92ae63fb",
       "caption": "The invoke message goes to Fictional organization 19’s agent.",
-      "gateRun": 19
+      "gateRun": 19,
+      "linked": [
+        "sha-256:1538113b30785fd1fc2b5839bdad5aebede185e50e2a9f3992d005503b6972e9"
+      ]
     },
     {
       "seq": 649,
@@ -28297,7 +28877,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6b9623daca18bdfd6ab013dc84d8d48985b5388b96ae185d5fd235380a01cac6",
+        "sha-256:c4ba84adb7c5806d9374adf931f8d7d4bc654210aa8f0cae95dccd9e1478e45f"
+      ]
     },
     {
       "seq": 653,
@@ -28348,7 +28932,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 655,
@@ -28389,7 +28976,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0038",
       "messageDigest": "sha-256:3655cd91fd32bff42bc0183330fa9098daa280349111c9ede8af18ac92ae63fb",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8e45812df6b071274861419959f168eb64afb4a5e9079575674ec1213b489c5e"
+      ]
     },
     {
       "seq": 657,
@@ -28412,7 +29002,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 658,
@@ -28491,7 +29084,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:16c9bb0d796b7ec2ec52941a704ce93b3e7ad7de32d902e564cc5d1bc4ca59a8"
+      ]
     },
     {
       "seq": 660,
@@ -28639,7 +29235,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-19-agent:0001",
       "messageDigest": "sha-256:a24f8f3869e898b7ea29e0769ff39db25755d698362fd032a66bd9c51ef6c42f",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8945426eb690fae16c43e2827b0777f169b261212c1be0f567e2c4e0aa496a9d"
+      ]
     },
     {
       "seq": 665,
@@ -29014,7 +29613,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-19-agent:0001",
       "messageDigest": "sha-256:a24f8f3869e898b7ea29e0769ff39db25755d698362fd032a66bd9c51ef6c42f",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 20
+      "gateRun": 20,
+      "linked": [
+        "sha-256:19d5781218c49fde6423522e0c64ccba9fa301541149f7b9aa0a48eda542a6e7"
+      ]
     },
     {
       "seq": 673,
@@ -29101,7 +29703,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 20: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 20
+      "gateRun": 20,
+      "linked": [
+        "sha-256:880bba2a77a85a36e9102fa287ab8c0b5b6be3082d4cebbecf84ea8fc6f9a4ec"
+      ]
     },
     {
       "seq": 676,
@@ -29250,7 +29855,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 20
+      "gateRun": 20,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 681,
@@ -29340,7 +29948,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0040",
       "messageDigest": "sha-256:61d18f2eb9422292738f5717c2f92265014b9b8bb34e7d80b804a798bfcdee34",
       "caption": "The invoke message goes to Fictional organization 20’s agent.",
-      "gateRun": 20
+      "gateRun": 20,
+      "linked": [
+        "sha-256:b55a3ca8414d64b7a17a32679915101b23eff8d8f8540ba715580a885176ba91"
+      ]
     },
     {
       "seq": 684,
@@ -29793,7 +30404,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:00deb00438436655635526227994b968f5749e62248d53107ab93d67941adc59",
+        "sha-256:e42503518f0aec8d02b85062292629d1e41fb3c19c1f01ac4f62a3f271b8ae85"
+      ]
     },
     {
       "seq": 688,
@@ -29844,7 +30459,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 690,
@@ -29885,7 +30503,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:owner-agent:0040",
       "messageDigest": "sha-256:61d18f2eb9422292738f5717c2f92265014b9b8bb34e7d80b804a798bfcdee34",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6f1a54c737b7f4d6a3ecc7358cbc500c3a48edfd2bcadb6e8afc1c769d0abd9f"
+      ]
     },
     {
       "seq": 692,
@@ -29908,7 +30529,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c2246e06bb197cc9efc5718c6709ab87ecf88751cda0d0014706e94fdd05ab12"
+      ]
     },
     {
       "seq": 693,
@@ -29987,7 +30611,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9020aa2e5ed7cdb1df9072736ed5f04cc13019c7c58ca10e3e308ddd59662401"
+      ]
     },
     {
       "seq": 695,
@@ -30135,7 +30762,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-20-agent:0001",
       "messageDigest": "sha-256:c84ac6c695634c8e2d91e6198f61ba88b33e7f4f214c83b5454ad32c9273a47f",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:caa11daf077f44547ac0f87889d03e29ff887927bdb9fbbfc11d917668126307"
+      ]
     },
     {
       "seq": 700,
@@ -30510,7 +31140,10 @@
       "messageId": "urn:awp:engine-change-of-address-main:organization-20-agent:0001",
       "messageDigest": "sha-256:c84ac6c695634c8e2d91e6198f61ba88b33e7f4f214c83b5454ad32c9273a47f",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 21
+      "gateRun": 21,
+      "linked": [
+        "sha-256:b2ba57a81463cebc4907026d72327cc0cd09aba112d2ec36efff700ba5a8f278"
+      ]
     },
     {
       "seq": 708,
@@ -30518,7 +31151,11 @@
       "agent": "owner-agent",
       "part": "record",
       "kind": "record",
-      "caption": "450 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "450 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:b2ba57a81463cebc4907026d72327cc0cd09aba112d2ec36efff700ba5a8f278"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/change-of-address--baseline.json"
 }

@@ -1,29 +1,93 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // Fails when any file of a public site build carries any roadmap text of 40 characters or more, or when
 // the build holds a symbolic link (an upload would follow it). The roadmap is the team's working
 // plan and is never published; checking its text, not a key name, also catches a copy that
 // arrived another way (for example inside a spec or under media/). Usage:
 // node scripts/check-public-bundle.mjs <site-dir or file>
-import { lstatSync, readdirSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { lstatSync, readdirSync, readFileSync } from "node:fs";
+import { dirname, extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const target = process.argv[2];
-if (!target) throw new Error('usage: check-public-bundle.mjs <site-dir or file>');
-const roadmap = JSON.parse(readFileSync(join(root, 'data/roadmap.json'), 'utf8'));
+if (!target) throw new Error("usage: check-public-bundle.mjs <site-dir or file>");
+const roadmap = JSON.parse(readFileSync(join(root, "data/roadmap.json"), "utf8"));
 
-const texts = [];
-(function walk(value) {
-  if (typeof value === 'string') {
-    if (value.length >= 40) texts.push(value);
-  } else if (value && typeof value === 'object') {
-    for (const v of Object.values(value)) walk(v);
+function* strings(value) {
+  const pending = [value];
+  while (pending.length) {
+    const item = pending.pop();
+    if (typeof item === "string") yield item;
+    else if (item && typeof item === "object") {
+      for (const child of Object.values(item)) pending.push(child);
+    }
   }
-})(roadmap);
-const probes = [...new Set(texts)];
-if (probes.length < 3) throw new Error('the roadmap has too few long texts to check against');
-const needles = probes.flatMap((t) => [t, JSON.stringify(t).slice(1, -1)]).map((t) => Buffer.from(t, 'utf8'));
+}
+
+const probes = [...new Set([...strings(roadmap)].filter((text) => text.length >= 40))];
+if (probes.length < 3) throw new Error("the roadmap has too few long texts to check against");
+const pattern = (texts) => new RegExp(texts.map(RegExp.escape).join("|"));
+const plain = pattern(probes);
+const raw = pattern(probes.flatMap((text) => [text, JSON.stringify(text).slice(1, -1)]));
+
+const escapes = { b: "\b", f: "\f", n: "\n", r: "\r", t: "\t" };
+function unescapeLiterals(text) {
+  // JSON-LD and Turtle/TriG share short escapes and \\u escapes. RDF also allows \\U.
+  return text.replaceAll(
+    /\\(?:u([0-9a-fA-F]{4})|U([0-9a-fA-F]{8})|(["'\\/bfnrt]))/g,
+    (escapeSequence, short, long, character) => {
+      if (character) return escapes[character] ?? character;
+      const code = Number.parseInt(short ?? long, 16);
+      return code <= 0x10ffff ? String.fromCodePoint(code) : escapeSequence;
+    },
+  );
+}
+
+const maxDecodeDepth = 8;
+const rdfStrings =
+  /"""((?:\\[\s\S]|(?!""")[^\\])*)"""|'''((?:\\[\s\S]|(?!''')[^\\])*)'''|"((?:\\[\s\S]|[^"\\])*)"|'((?:\\[\s\S]|[^'\\])*)'/g;
+
+function carriesDecodedRoadmap(path, text, depth = 0) {
+  if (depth === maxDecodeDepth)
+    throw new Error(`${path}: reached the roadmap scan decode depth limit (${maxDecodeDepth})`);
+  if (text.length < 40) return false;
+  if (plain.test(text)) return true;
+
+  let json;
+  const first = text.trimStart()[0];
+  if (first === "{" || first === "[" || first === '"') {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      // RDF and ordinary text can also start with these characters.
+    }
+    for (const value of strings(json)) {
+      if (carriesDecodedRoadmap(path, value, depth + 1)) return true;
+    }
+  }
+  if (!text.includes("\\")) return false;
+  if (json === undefined) {
+    // Decode the literals before whole-text unescaping can erase their quote boundaries.
+    for (const [, longDouble, longSingle, double, single] of text.matchAll(rdfStrings)) {
+      const literal = longDouble ?? longSingle ?? double ?? single;
+      if (carriesDecodedRoadmap(path, unescapeLiterals(literal), depth + 1)) return true;
+    }
+  }
+  const decoded = unescapeLiterals(text);
+  return decoded !== text && carriesDecodedRoadmap(path, decoded, depth + 1);
+}
+
+function carriesRoadmap(path, text) {
+  const extension = extname(path).toLowerCase();
+  const json = extension === ".json" || extension === ".jsonld" ? JSON.parse(text) : undefined;
+  if (raw.test(text)) return true;
+  if (extension === ".ttl" || extension === ".trig") return carriesDecodedRoadmap(path, text);
+  for (const value of strings(json)) {
+    if (carriesDecodedRoadmap(path, value)) return true;
+  }
+  return false;
+}
 
 const problems = [];
 let files = 0;
@@ -35,15 +99,15 @@ let files = 0;
     for (const name of readdirSync(path)) scan(join(path, name));
   } else if (stat.isFile()) {
     files += 1;
-    const bytes = readFileSync(path);
-    if (needles.some((n) => bytes.includes(n))) problems.push(`${path} carries roadmap text`);
+    if (carriesRoadmap(path, readFileSync(path, "utf8")))
+      problems.push(`${path} carries roadmap text`);
   } else {
     problems.push(`${path} is not a regular file`);
   }
 })(target);
 if (problems.length) {
   for (const p of problems) console.error(p);
-  console.error('the roadmap must not be published, and the site must hold only regular files');
+  console.error("the roadmap must not be published, and the site must hold only regular files");
   process.exit(1);
 }
 console.log(`${target}: ${files} files, no roadmap text (${probes.length} probes), no links`);

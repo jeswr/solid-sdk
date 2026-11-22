@@ -83,7 +83,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -162,7 +162,11 @@
         "answer": "Accepted, for vehicle keeper claims only."
       },
       "caption": "The fictional vehicle register's vehicle keeper statement: The fictional vehicle register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f53fde719af8d37565f56d73bff4b39e85b208a4b2ff72bb0c05f2e1c6e9acd1",
+        "sha-256:838f55be93f54b9852b5eb965ce34c5cef7ba64f1a96b62fe94a154d33a76fb5"
+      ]
     },
     {
       "seq": 3,
@@ -209,7 +213,10 @@
         "text": "Its terms allow this: use for Sell a car; share for Sell a car."
       },
       "caption": "The fictional vehicle register's vehicle keeper statement: its terms allow this: use for Sell a car; share for Sell a car.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2a3c52510b29c919e86f6ec1f09853b383e007cb5a992bd743b989a76af1ec16"
+      ]
     },
     {
       "seq": 5,
@@ -253,7 +260,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional vehicle register's vehicle keeper statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:79f52e54a8c1ae49a707b31f127108b75df528c4eda69c070631e5db3f88e65b"
+      ]
     },
     {
       "seq": 7,
@@ -276,7 +286,10 @@
         },
         "provenance": "signed by The fictional vehicle register"
       },
-      "caption": "The fictional vehicle register's vehicle keeper statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional vehicle register's vehicle keeper statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:60bbce157ce6a5408ec6e4843b426426e97981b539bb665d7ef27139baee97de"
+      ]
     },
     {
       "seq": 8,
@@ -363,7 +376,10 @@
       },
       "reason": "recipient-established",
       "caption": "The seller: Accepted, for Selling a used car to a stranger only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:556f40997badec8c104eb08c1e4aaf76a979d704a84d609033f2e57838d11623"
+      ]
     },
     {
       "seq": 11,
@@ -652,7 +668,11 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Selling a used car to a stranger with The seller.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:adda77fd0a06ec9f0b866beba0360f88a636580ade1de3b92194d5717ad5cb09"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/sell-a-car--baseline.json"
 }

@@ -82,7 +82,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -189,7 +189,10 @@
       },
       "reason": "recipient-established",
       "caption": "The tenant: Accepted, for Applying to rent a home only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:945c841c3bb17482613320e6df1b5527606d95db6a77cc1e789d37afb80f98df"
+      ]
     },
     {
       "seq": 4,
@@ -366,7 +369,10 @@
       "messageId": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002",
       "messageDigest": "sha-256:a6f686e46c741635ecf5788a9529db66cdf5a5cf5e50a58e6308f4abe16f7e24",
       "caption": "The propose message goes to The tenant’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e1ac037bc3fe2b870fb2acf51740dfec458294177ed1ed9e611e3ee77880ac68"
+      ]
     },
     {
       "seq": 10,
@@ -811,7 +817,10 @@
       "messageId": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0002",
       "messageDigest": "sha-256:a6f686e46c741635ecf5788a9529db66cdf5a5cf5e50a58e6308f4abe16f7e24",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:82465fcaa8563c7f21beb01b64255bc9a65354db4a3156635078747627a9d5a1"
+      ]
     },
     {
       "seq": 18,
@@ -898,7 +907,10 @@
       },
       "reason": "recipient-established",
       "caption": "The letting agency: Accepted, for Applying to rent a home only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7a136b21ec30cf6c14d649ad077059954c85dad0c755d04699101e24bc47a03b"
+      ]
     },
     {
       "seq": 21,
@@ -1075,7 +1087,10 @@
       "messageId": "urn:awp:engine-tenancy-application-branch-2:owner-agent:0001",
       "messageDigest": "sha-256:7f3525b529d76e1b7a7137bcd1546aa3d50dc1a0c14ff85843c720e4671dfe66",
       "caption": "The propose message goes to The letting agency’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:efaa683b75dc4187cbe63b3f839bec3f950f26d2467c53974d52846c55f629de"
+      ]
     },
     {
       "seq": 27,
@@ -1534,7 +1549,10 @@
       "messageId": "urn:awp:engine-tenancy-application-branch-2:owner-agent:0001",
       "messageDigest": "sha-256:7f3525b529d76e1b7a7137bcd1546aa3d50dc1a0c14ff85843c720e4671dfe66",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:83a15df4fb4b7582d53d54175b30ec6fb95da8444c03af97605e5d7c84bfcd21"
+      ]
     },
     {
       "seq": 35,
@@ -1621,7 +1639,10 @@
       },
       "reason": "recipient-established",
       "caption": "The tenant: Accepted, for Applying to rent a home only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:945c841c3bb17482613320e6df1b5527606d95db6a77cc1e789d37afb80f98df"
+      ]
     },
     {
       "seq": 38,
@@ -1798,7 +1819,10 @@
       "messageId": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0003",
       "messageDigest": "sha-256:ef7ca7ef30ddd4291c0504f071f47383f7ed4e60f73c78cf8f6bad3957dcf9a4",
       "caption": "The propose message goes to The tenant’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:53e0b3845670e7da8651dc2d16a11ca13ed9eedf34ba96a0008a95f7e2e21d90"
+      ]
     },
     {
       "seq": 44,
@@ -2257,7 +2281,10 @@
       "messageId": "urn:awp:engine-tenancy-application-branch-2:receiver-agent:0003",
       "messageDigest": "sha-256:ef7ca7ef30ddd4291c0504f071f47383f7ed4e60f73c78cf8f6bad3957dcf9a4",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9469482e1c30e4bc7c30dafa1d851f477dfae78ccd4e4636781f6763486a4af0"
+      ]
     },
     {
       "seq": 52,
@@ -2344,7 +2371,10 @@
       },
       "reason": "recipient-established",
       "caption": "The letting agency: Accepted, for Applying to rent a home only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:7a136b21ec30cf6c14d649ad077059954c85dad0c755d04699101e24bc47a03b"
+      ]
     },
     {
       "seq": 55,
@@ -2511,7 +2541,11 @@
       "outcome": "stop",
       "reason": "round-limit",
       "caption": "The round limit stops the message before release.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:46dc69947d9b8b6cce4b99e1cdc6f177cf0d81d752cd882cc693fde39f988b4f"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/tenancy-application--baseline.json"
 }

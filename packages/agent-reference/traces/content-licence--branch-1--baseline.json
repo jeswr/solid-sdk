@@ -115,7 +115,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -198,7 +198,11 @@
         "answer": "Accepted, for photo licensed asset claims only."
       },
       "caption": "The photographer's photo licensed asset statement: The photographer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cf10b4f4e512daa3cf150039436fab1b8a1a8d3b64a43253afb7d8e35e77f922",
+        "sha-256:dcda1526f1999ad42c8dcd4b17e2dd3704cf6a168b28fced4d8e4da4a0b0c712"
+      ]
     },
     {
       "seq": 3,
@@ -245,7 +249,10 @@
         "text": "Its terms allow this: use for Content licence; share for Content licence; never for The sister company."
       },
       "caption": "The photographer's photo licensed asset statement: its terms allow this: use for Content licence; share for Content licence; never for The sister company.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:dc9ce2d3668ebbbe6182ef9ea9eaec7ea54c396867bd264e226b6ba34d192ed8"
+      ]
     },
     {
       "seq": 5,
@@ -289,7 +296,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The photographer's photo licensed asset statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:db4e67cc32062c6be8557e097deee895bc512ae738ad12f1f0644b66d2a24648"
+      ]
     },
     {
       "seq": 7,
@@ -312,7 +322,10 @@
         },
         "provenance": "signed by The photographer"
       },
-      "caption": "The photographer's photo licensed asset statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The photographer's photo licensed asset statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:1ed498185d3dfa0e02a855b267fd03aca037e4d9685565e16b46b09b9be1bf79"
+      ]
     },
     {
       "seq": 8,
@@ -399,7 +412,10 @@
       },
       "reason": "recipient-established",
       "caption": "The publisher: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fae4527aef5f4ef471933494dce34fc0fad51d14599f5f84412a4ee7ea864ac1"
+      ]
     },
     {
       "seq": 11,
@@ -576,7 +592,10 @@
       "messageId": "urn:awp:engine-content-licence-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:0f369582fc86452a13fea01761317ab336ab783bbbba5d8c935938c4ce89744e",
       "caption": "The invoke message goes to The publisher’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d2b58267dad6e3f776fef19dfea182aa6ee325f07d37b4337fbf94b1190aaea3"
+      ]
     },
     {
       "seq": 17,
@@ -991,7 +1010,10 @@
       "messageId": "urn:awp:engine-content-licence-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:0f369582fc86452a13fea01761317ab336ab783bbbba5d8c935938c4ce89744e",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:cc5ea94c18f0ca31376ec09e884ca6a330abbdac367e36bf48b23ad633c5463a"
+      ]
     },
     {
       "seq": 25,
@@ -1078,7 +1100,10 @@
       },
       "reason": "recipient-established",
       "caption": "The sister company: Accepted, for Licensing a photograph only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:87218a0aa7840548a6932f7c857ed4436a37f34b2853ad767e8a28bfe2eb0db6"
+      ]
     },
     {
       "seq": 28,
@@ -1227,7 +1252,10 @@
         "text": "The issuer's terms: use for Content licence; share for Content licence; never for The sister company. They go out with the data."
       },
       "caption": "The photographer's photo licensed asset statement: its terms forbid this (use for Content licence; share for Content licence; never for The sister company).",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:dc9ce2d3668ebbbe6182ef9ea9eaec7ea54c396867bd264e226b6ba34d192ed8"
+      ]
     },
     {
       "seq": 33,
@@ -1249,7 +1277,11 @@
       "outcome": "stop",
       "reason": "prohibited",
       "caption": "The actual credential's terms prohibit release.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:69295fa44fff52cf7e5c5067fd7bd98a6ed1615b1c95cdef62f40973a0b8dc76"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/content-licence--baseline.json"
 }

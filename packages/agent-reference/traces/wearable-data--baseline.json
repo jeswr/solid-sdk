@@ -70,7 +70,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -141,7 +141,11 @@
         "answer": "Accepted, for activity weekly total claims only."
       },
       "caption": "The device maker's activity weekly total statement: The device maker is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:05830f00eae32a934857437ec1ef8a6e1e446a406a447a9950a2584715b735d0",
+        "sha-256:7ed37bda76e27cefdf005cd07c24419d217b4635f30684f281a635e56dd6c012"
+      ]
     },
     {
       "seq": 3,
@@ -188,7 +192,10 @@
         "text": "Its terms allow this: use for Wearable data; share for Wearable data."
       },
       "caption": "The device maker's activity weekly total statement: its terms allow this: use for Wearable data; share for Wearable data.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:957d90802b69cfe34b416846682ca10f0c24805ebea87da30c04c64785fe95b2"
+      ]
     },
     {
       "seq": 5,
@@ -232,7 +239,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The device maker's activity weekly total statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d331dd1a4d529d27d513f4654e963b820132a67038d4919a2914c143a53c5722"
+      ]
     },
     {
       "seq": 7,
@@ -259,7 +269,10 @@
         },
         "provenance": "signed by The device maker"
       },
-      "caption": "The device maker's activity weekly total statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The device maker's activity weekly total statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:88539583c1da87bd65a613fa167c5bf48a3ee87c596684b095e2fbfb7f718b36"
+      ]
     },
     {
       "seq": 8,
@@ -346,7 +359,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f3d739c8fec9db1ceb1c47a110d748e387aeda0fcc1ee2b70f01d9ea8f37200f"
+      ]
     },
     {
       "seq": 11,
@@ -552,7 +568,10 @@
       "messageId": "urn:awp:engine-wearable-data-main:receiver-agent:0002",
       "messageDigest": "sha-256:09a42012a8c8d313dce2f7e87b532bbdc315855dea26c90f7d54acd6e773a58c",
       "caption": "The invoke message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c38c727e7ec375750b2cbdbf58de80e1edc85ff03a76bbf9101a79c2f35339cc"
+      ]
     },
     {
       "seq": 18,
@@ -1031,7 +1050,10 @@
       "messageId": "urn:awp:engine-wearable-data-main:receiver-agent:0002",
       "messageDigest": "sha-256:09a42012a8c8d313dce2f7e87b532bbdc315855dea26c90f7d54acd6e773a58c",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:179913e14922b505adc9bf7089cf60306698b9b514c15e4ca9b6e1d1aff225a9"
+      ]
     },
     {
       "seq": 26,
@@ -1118,7 +1140,10 @@
       },
       "reason": "recipient-established",
       "caption": "The insurer: Accepted, for Sharing activity data for a discount only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:674f3e1ef3defd23250fab038d059a0230447f36f2f390b9e46e874ef550e71b"
+      ]
     },
     {
       "seq": 29,
@@ -1267,7 +1292,10 @@
       },
       "reason": "terms-allow",
       "caption": "The device maker's activity weekly total statement: its terms allow this: use for Wearable data; share for Wearable data.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:957d90802b69cfe34b416846682ca10f0c24805ebea87da30c04c64785fe95b2"
+      ]
     },
     {
       "seq": 34,
@@ -1357,7 +1385,10 @@
       "messageId": "urn:awp:engine-wearable-data-main:owner-agent:0002",
       "messageDigest": "sha-256:c628956ccb4f6a4fa6f8747b6199f785196b6d07e3d49d2b86c21899ef4d7e25",
       "caption": "The invoke message goes to The insurer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bc59df6b0e18fa3b928045105a8a8c9dfc658ba681d8f62aa3ca4e3bfc9ec58d"
+      ]
     },
     {
       "seq": 37,
@@ -1834,7 +1865,11 @@
         "answer": "Accepted, for activity weekly total claims only."
       },
       "caption": "The device maker's activity weekly total statement: The device maker is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e6a571a4ea6e3b02f7a534f62841f31024fae7ce04716bb8fa08f5ed62005678",
+        "sha-256:f491e68c534be0fcf286839896c675c255d73e5daa61a4e3c133ac52d26a05af"
+      ]
     },
     {
       "seq": 41,
@@ -1885,7 +1920,10 @@
         "text": "Its terms allow this: use for Wearable data; share for Wearable data."
       },
       "caption": "The device maker's activity weekly total statement: its terms allow this: use for Wearable data; share for Wearable data.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:957d90802b69cfe34b416846682ca10f0c24805ebea87da30c04c64785fe95b2"
+      ]
     },
     {
       "seq": 43,
@@ -1926,7 +1964,10 @@
       "messageId": "urn:awp:engine-wearable-data-main:owner-agent:0002",
       "messageDigest": "sha-256:c628956ccb4f6a4fa6f8747b6199f785196b6d07e3d49d2b86c21899ef4d7e25",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9e5eb19d76f592f7b0dfcd0f29f3a3589f6846597ca91ed0dfd7039983c01a3f"
+      ]
     },
     {
       "seq": 45,
@@ -1953,7 +1994,10 @@
         },
         "provenance": "signed by The device maker"
       },
-      "caption": "The device maker's activity weekly total statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The device maker's activity weekly total statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:5d2115ec3e251e0fc8bbb5842502548e6afcc6398508f22902ed93f19d764742"
+      ]
     },
     {
       "seq": 46,
@@ -2032,7 +2076,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Sharing activity data for a discount only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:f3d739c8fec9db1ceb1c47a110d748e387aeda0fcc1ee2b70f01d9ea8f37200f"
+      ]
     },
     {
       "seq": 48,
@@ -2180,7 +2227,10 @@
       "messageId": "urn:awp:engine-wearable-data-main:receiver-agent:0003",
       "messageDigest": "sha-256:00588c7e6c39c7dd6496a60db52bf5fe7da0992d1e37a316ee86ab8758e3a27c",
       "caption": "The deliver message goes to The person’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:86b71e6786cbe057ebecbdefabb7c73ede2e8548f4383e59363f1e2cfd78d8bb"
+      ]
     },
     {
       "seq": 53,
@@ -2555,7 +2605,10 @@
       "messageId": "urn:awp:engine-wearable-data-main:receiver-agent:0003",
       "messageDigest": "sha-256:00588c7e6c39c7dd6496a60db52bf5fe7da0992d1e37a316ee86ab8758e3a27c",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:5c20274a97c73cec23e33e8a2ca8b365bddda63fcdef6d88cb8ce83117642c69"
+      ]
     },
     {
       "seq": 61,
@@ -2563,7 +2616,11 @@
       "agent": "receiver-agent",
       "part": "record",
       "kind": "record",
-      "caption": "33 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "33 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:86b71e6786cbe057ebecbdefabb7c73ede2e8548f4383e59363f1e2cfd78d8bb"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/wearable-data--baseline.json"
 }

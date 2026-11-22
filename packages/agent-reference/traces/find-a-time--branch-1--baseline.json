@@ -87,7 +87,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -170,7 +170,11 @@
         "answer": "Accepted, for calendar busy reason claims only."
       },
       "caption": "The first person's calendar busy reason statement: The first person is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e2a1eb18cf9ffe9a347f1947f068bb4b0940bc55cb13996aee558b877c68bceb",
+        "sha-256:c384247871264eb35b31d7868721c32fb23ead0e28646b47c7f5a4383a096963"
+      ]
     },
     {
       "seq": 3,
@@ -217,7 +221,10 @@
         "text": "Its terms allow this: use for Private calendar."
       },
       "caption": "The first person's calendar busy reason statement: its terms allow this: use for Private calendar.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ece783b7c234ade42b6122fff93b91c079a8992ebf0f2563ca92960f4a93d9c0"
+      ]
     },
     {
       "seq": 5,
@@ -261,7 +268,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The first person's calendar busy reason statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:18a4ef143d8413b449f1f4c5213a7f49eb4b6fd84905bf5ea967169b51ab7227"
+      ]
     },
     {
       "seq": 7,
@@ -284,7 +294,10 @@
         },
         "provenance": "signed by The first person"
       },
-      "caption": "The first person's calendar busy reason statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The first person's calendar busy reason statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:4d52b4ff2d961e4dd36767c42fc2c1b264f1f3f838ca8707e7f811bf92382a79"
+      ]
     },
     {
       "seq": 8,
@@ -371,7 +384,10 @@
       },
       "reason": "recipient-established",
       "caption": "The first person: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5e28bd97410c25087c8e6d78b55f659f26a1fe32164437137d5201435c463292"
+      ]
     },
     {
       "seq": 11,
@@ -548,7 +564,10 @@
       "messageId": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:cb2740594aab86484fd868b44d32e51686dc98cfeb9831af2d35ec9d6b1186d3",
       "caption": "The invoke message goes to The first person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a70e1b1f09a824f51a9035fda7fe80aea80b82ef8c2e5b67be78e84874aa22b9"
+      ]
     },
     {
       "seq": 17,
@@ -963,7 +982,10 @@
       "messageId": "urn:awp:engine-find-a-time-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:cb2740594aab86484fd868b44d32e51686dc98cfeb9831af2d35ec9d6b1186d3",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:391b57a272dc2ea54fedcca65bf6f7057e1ec3268b8c2647c0d1f1e28e9fe173"
+      ]
     },
     {
       "seq": 25,
@@ -1050,7 +1072,10 @@
       },
       "reason": "recipient-established",
       "caption": "The second person: Accepted, for Two people's agents find a time to meet only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:38df3df421065f20c64d277df307cae30768e5a3150af3b408bc4a038e14206b"
+      ]
     },
     {
       "seq": 28,
@@ -1188,7 +1213,11 @@
       "outcome": "stop",
       "reason": "excessive-scope",
       "caption": "The credential is not necessary for this purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6a75ed64be78a5dc92bbea37ec607f9622b9a2516728ac5cb626455d790c2c98"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/find-a-time--baseline.json"
 }

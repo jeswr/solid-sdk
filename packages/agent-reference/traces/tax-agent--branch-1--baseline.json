@@ -76,7 +76,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -171,7 +171,10 @@
       },
       "reason": "recipient-established",
       "caption": "The tax authority: Accepted, for An accountant files a tax return only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9f65b808ba66c99d393301ad9eca9d020843440097ea99d6398db2e88e1aee6d"
+      ]
     },
     {
       "seq": 4,
@@ -348,7 +351,10 @@
       "messageId": "urn:awp:engine-tax-agent-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:68f22d6765350ef78726e79ea1ef703f5f448dfd1be2faac66aedbd0a13c5a5f",
       "caption": "The invoke message goes to The receiving agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:225d2262636ae431ca8252afee097588c8d12ec7a20406824832cd342d59d2e9"
+      ]
     },
     {
       "seq": 10,
@@ -778,7 +784,10 @@
       "messageId": "urn:awp:engine-tax-agent-branch-1:owner-agent:0002",
       "reason": "representation-out-of-scope",
       "caption": "The message is refused (representation-out-of-scope: representation not accepted); the core never sees it.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:21bbbef5dd3b848e598a27e592b119094dffab83fc8c6c6633699e72e88b4f33"
+      ]
     },
     {
       "seq": 16,
@@ -857,7 +866,10 @@
       },
       "reason": "recipient-established",
       "caption": "A taxpayer: Accepted, for An accountant files a tax return only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:53c00feed5d3b1d0a8cdd1eeff49aff776a2f0fe49329ce425045ec0afc28f5d"
+      ]
     },
     {
       "seq": 18,
@@ -1005,7 +1017,10 @@
       "messageId": "urn:awp:engine-tax-agent-branch-1:receiver-agent:0001",
       "messageDigest": "sha-256:86670a61c4d0254c8373179bb432f49ea378b49b06a26d3189853c4a1d8d7e15",
       "caption": "The refuse message goes to The representative’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:535949d7e240556a0728edb261ba4a69c63af462a78cc549bcadb18b01c820bc"
+      ]
     },
     {
       "seq": 23,
@@ -1114,5 +1129,6 @@
       "caption": "The receiving agent sends a refuse message to The representative’s agent.",
       "gateRun": 1
     }
-  ]
+  ],
+  "linkedTable": "linked/tax-agent--baseline.json"
 }

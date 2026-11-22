@@ -58,7 +58,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -169,7 +169,10 @@
       },
       "reason": "recipient-established",
       "caption": "A small business with an email address: Accepted, for Send an approved plain-text email only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:85ec0b869988030adabc338598505ddb178a6913705c0397ab3d8c3b0dd5c225"
+      ]
     },
     {
       "seq": 5,
@@ -282,7 +285,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The action is held for the named decision makers.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2cb3b6e19ba87ed58fb27e8e8147126059a4c6e42ea6272764ed6409c76b48b5"
+      ]
     },
     {
       "seq": 9,
@@ -400,7 +406,10 @@
       },
       "reason": "recipient-established",
       "caption": "A small business with an email address: Accepted, for Send an approved plain-text email only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:85ec0b869988030adabc338598505ddb178a6913705c0397ab3d8c3b0dd5c225"
+      ]
     },
     {
       "seq": 14,
@@ -547,7 +556,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: share Send an approved plain-text email with A small business with an email address.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:f52999f4d345c88097435cb7e96cdd76be850845cf4e8815c51016328cf9dc01"
+      ]
     },
     {
       "seq": 19,
@@ -579,7 +591,10 @@
       "agent": "reader-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Unsigned address-only prose enters the unstructured-content channel; never facts or instructions."
+      "caption": "Unsigned address-only prose enters the unstructured-content channel; never facts or instructions.",
+      "linked": [
+        "sha-256:3d08d5d2ff737859f526b453d3791f5aaa5173157d8663d708aa1cc6d859ab4f"
+      ]
     },
     {
       "seq": 22,
@@ -590,7 +605,10 @@
       "outcome": "admit",
       "reason": "fit-for-use",
       "caption": "Admit labelled unstructured content only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:40493c308c15dd27a3093babbb75fe4f9a96dcebef6ae34c67d3a4295156f062"
+      ]
     },
     {
       "seq": 23,
@@ -747,7 +765,10 @@
       },
       "reason": "recipient-established",
       "caption": "A small business with an email address: Accepted, for Send an approved plain-text email only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:85ec0b869988030adabc338598505ddb178a6913705c0397ab3d8c3b0dd5c225"
+      ]
     },
     {
       "seq": 29,
@@ -860,7 +881,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The action is held for the named decision makers.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:dad6030d13d88744c46881bd35dc8886443f2c5c7d7b73ec3de3eb814b389bb9"
+      ]
     },
     {
       "seq": 33,
@@ -875,5 +899,6 @@
       },
       "caption": "The gate built this request from the action and the approval rule."
     }
-  ]
+  ],
+  "linkedTable": "linked/no-agent-on-the-other-side--baseline.json"
 }

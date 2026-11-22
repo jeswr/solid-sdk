@@ -74,7 +74,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -173,7 +173,10 @@
       },
       "reason": "recipient-established",
       "caption": "The candidate: Accepted, for Request employment evidence only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:779e6f6f8bbf0f4286be099e632695d49c324948139e39d154d61cfb784c5330"
+      ]
     },
     {
       "seq": 4,
@@ -350,7 +353,10 @@
       "messageId": "urn:awp:engine-right-to-work-branch-1:employer-agent:0002",
       "messageDigest": "sha-256:0bf3c919b597b093f4b8e42edfaf8d0def5cb8857431bcddb7a82e74692e5ec5",
       "caption": "The invoke message goes to The candidate’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:11c9610a9b41ba9d335b412377cb57fc888a84f49484ccc93f854f8d154d3237"
+      ]
     },
     {
       "seq": 10,
@@ -775,7 +781,10 @@
       "messageId": "urn:awp:engine-right-to-work-branch-1:employer-agent:0002",
       "messageDigest": "sha-256:0bf3c919b597b093f4b8e42edfaf8d0def5cb8857431bcddb7a82e74692e5ec5",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a03083b7d5ddebaa7ee4a55f6880abb19cc5a2cfcc8e06e2c627358dad7a0c46"
+      ]
     },
     {
       "seq": 18,
@@ -838,7 +847,11 @@
         "answer": "Accepted, for work entitled claims only."
       },
       "caption": "The fictional immigration office's work entitled statement: The fictional immigration office is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:10cace3ff9dd0937f685f6208e5a864948f9dd3f336079ab705e70ad36c60073",
+        "sha-256:bd26da953b2cde5d105805301827337662a47b666bd85b9852487f107295eecc"
+      ]
     },
     {
       "seq": 20,
@@ -885,7 +898,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The fictional immigration office's work entitled statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:0ba94c2d5a1be61b34635586f4272b05a508c3838f461d617ee233ed41b5a9f8"
+      ]
     },
     {
       "seq": 22,
@@ -929,7 +945,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional immigration office's work entitled statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:bdafa7dce56b0e13953d525b3238017e42c174b025b4625ed74f556da41d7795"
+      ]
     },
     {
       "seq": 24,
@@ -952,7 +971,10 @@
         },
         "provenance": "signed by The fictional immigration office"
       },
-      "caption": "The fictional immigration office's work entitled statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional immigration office's work entitled statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:371e65683f0b29a55813968dd8661b7dbff8e9cbcc7dbf730db2ae56d40b9676"
+      ]
     },
     {
       "seq": 25,
@@ -1015,7 +1037,11 @@
         "answer": "Accepted, for degree claims only."
       },
       "caption": "The fictional university's degree statement: The fictional university is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:78959abad437924c4d485642badb7808ca028d50c860eb85e4c4b99410804ef2",
+        "sha-256:08a8d422f7432b7771b4ae876fdd1cb7fefb0597b570235ba0d149c0bc9039dc"
+      ]
     },
     {
       "seq": 27,
@@ -1062,7 +1088,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The fictional university's degree statement: its terms allow this: .",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:4dbdca53d182994407d6b9281ca406516a8dd390cad84d760182f66c7ddef36a"
+      ]
     },
     {
       "seq": 29,
@@ -1106,7 +1135,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional university's degree statement is admitted.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:706c696e90f4dc0d494be825eceee14e7a841ca6077f98e3a4fa7a8281c5e3c2"
+      ]
     },
     {
       "seq": 31,
@@ -1129,7 +1161,10 @@
         },
         "provenance": "signed by The fictional university"
       },
-      "caption": "The fictional university's degree statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional university's degree statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:2a5b8a285dd906fa3a0110738dd9f7081c977f0e5d5c37ccaf22b7f14e43e2a8"
+      ]
     },
     {
       "seq": 32,
@@ -1192,7 +1227,11 @@
         "answer": "Accepted, for passport scan claims only."
       },
       "caption": "The fictional immigration office's passport scan statement: The fictional immigration office is an accepted source for this kind of claim.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:10cace3ff9dd0937f685f6208e5a864948f9dd3f336079ab705e70ad36c60073",
+        "sha-256:bd26da953b2cde5d105805301827337662a47b666bd85b9852487f107295eecc"
+      ]
     },
     {
       "seq": 34,
@@ -1239,7 +1278,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The fictional immigration office's passport scan statement: its terms allow this: .",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:1ca4209080534260029a72d7776521e2ffb67f4a65e85bba1b7d05c3a309350f"
+      ]
     },
     {
       "seq": 36,
@@ -1283,7 +1325,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional immigration office's passport scan statement is admitted.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:5648945423b385c5d70fb8a3e71c4d8d96c734a02bf8583470c67673f2d22aa2"
+      ]
     },
     {
       "seq": 38,
@@ -1306,7 +1351,10 @@
         },
         "provenance": "signed by The fictional immigration office"
       },
-      "caption": "The fictional immigration office's passport scan statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional immigration office's passport scan statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:be697dfd03403383626adeeb822d34f77e969bbc759d25218c5a811f96e0b0ff"
+      ]
     },
     {
       "seq": 39,
@@ -1398,7 +1446,10 @@
       },
       "reason": "recipient-established",
       "caption": "The employer: Accepted, for the unlabelled resource only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b2b14082cc9952af59d04be15a5b3819e64a7aefb78a3c2924ca18b21f2422eb"
+      ]
     },
     {
       "seq": 42,
@@ -1547,7 +1598,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional immigration office's work entitled statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0ba94c2d5a1be61b34635586f4272b05a508c3838f461d617ee233ed41b5a9f8"
+      ]
     },
     {
       "seq": 47,
@@ -1609,7 +1663,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional university's degree statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4dbdca53d182994407d6b9281ca406516a8dd390cad84d760182f66c7ddef36a"
+      ]
     },
     {
       "seq": 49,
@@ -1660,7 +1717,11 @@
       "outcome": "stop",
       "reason": "excessive-scope",
       "caption": "The credential is not necessary for this purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0acaf4db013f1dcee4c0051408c9d00b10315c04d9f2d48e849e70b37dc62126"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/right-to-work--baseline.json"
 }

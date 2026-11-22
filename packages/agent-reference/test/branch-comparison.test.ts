@@ -407,8 +407,14 @@ it("preserves the fee acceptance and the P4 stop in the recorded invoice branch"
   expect(branch?.trace?.events[35]).toMatchObject({ seq: 36, kind: "decision", outcome: "go" });
   expect(released?.[0]?.seq).toBe(37);
   expect(JSON.stringify(released)).not.toContain("urn:account:supplier");
+  // The committed trace carries linked-view keys (written with the linked switch on); this
+  // run has the switch off, so compare every other byte.
+  const { linkedTable: _table, ...committed } = JSON.parse(traceBytes);
+  committed.events = committed.events.map(
+    ({ linked: _keys, ...event }: { linked?: unknown }) => event,
+  );
   expect(`${JSON.stringify({ "x-authored-by": "Codex GPT-6", ...branch?.trace }, null, 2)}\n`).toBe(
-    traceBytes,
+    `${JSON.stringify(committed, null, 2)}\n`,
   );
 }, 120_000);
 

@@ -118,7 +118,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -225,7 +225,10 @@
       },
       "reason": "recipient-established",
       "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:13d8c1461a2fb6ef0d2d0b9fe64e3b3a93c8b2627ca3b9f0c7b7fcb7de634e4a"
+      ]
     },
     {
       "seq": 4,
@@ -372,7 +375,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c7c2ac8adaeda07a802dd36575acf9a4443babcf66007fec91ab711db33f70ea"
+      ]
     },
     {
       "seq": 9,
@@ -524,7 +530,10 @@
       },
       "reason": "recipient-established",
       "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fc40e786db73f69fd00325f35e545d4f1ab660a83567dd95fa88b3785a5e0106"
+      ]
     },
     {
       "seq": 18,
@@ -671,7 +680,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4ad49ad2bcf119c6c795bf898ac9c5ae57549bae5f5d8cb871e0e471bf6c6f96"
+      ]
     },
     {
       "seq": 23,
@@ -823,7 +835,10 @@
       },
       "reason": "recipient-established",
       "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2b70f6367406f3b80f94df5f4889a193c42692025a530f75c6c9c9cea6ebf964"
+      ]
     },
     {
       "seq": 32,
@@ -970,7 +985,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:08df92950a47b50d726636480085a091186fb20396af11ba53f600c8b2fb8a77"
+      ]
     },
     {
       "seq": 37,
@@ -1122,7 +1140,10 @@
       },
       "reason": "recipient-established",
       "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:13d8c1461a2fb6ef0d2d0b9fe64e3b3a93c8b2627ca3b9f0c7b7fcb7de634e4a"
+      ]
     },
     {
       "seq": 46,
@@ -1269,7 +1290,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:61525beb9ed68d8d710dec4a2f6e3824fe17281e6dc1f36d3d42e29fc4ae8f9a"
+      ]
     },
     {
       "seq": 51,
@@ -1421,7 +1445,10 @@
       },
       "reason": "recipient-established",
       "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:13d8c1461a2fb6ef0d2d0b9fe64e3b3a93c8b2627ca3b9f0c7b7fcb7de634e4a"
+      ]
     },
     {
       "seq": 60,
@@ -1568,7 +1595,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:ec963044925f4093d1b76653054e5827fb3f11b7584be64742442d2b6abddcec"
+      ]
     },
     {
       "seq": 65,
@@ -1786,7 +1816,10 @@
       },
       "reason": "recipient-established",
       "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:fc40e786db73f69fd00325f35e545d4f1ab660a83567dd95fa88b3785a5e0106"
+      ]
     },
     {
       "seq": 80,
@@ -1933,7 +1966,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:6d8f3c385d01a90188d2619b5322f07b6a529ec2181f64b961efe1979a06fd99"
+      ]
     },
     {
       "seq": 85,
@@ -2085,7 +2121,10 @@
       },
       "reason": "recipient-established",
       "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:2b70f6367406f3b80f94df5f4889a193c42692025a530f75c6c9c9cea6ebf964"
+      ]
     },
     {
       "seq": 94,
@@ -2232,7 +2271,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:e579891bbd346e68e65f3cb7c1b9e42cc8f710d4e98a38e8bbec010753716b2b"
+      ]
     },
     {
       "seq": 99,
@@ -2384,7 +2426,10 @@
       },
       "reason": "recipient-established",
       "caption": "The licence registrar: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:13d8c1461a2fb6ef0d2d0b9fe64e3b3a93c8b2627ca3b9f0c7b7fcb7de634e4a"
+      ]
     },
     {
       "seq": 108,
@@ -2531,7 +2576,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The licence registrar.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:104cf17562118033dac7fef8ba2ef6d174e3fe55d54d8a202e7eaeb94058aad2"
+      ]
     },
     {
       "seq": 113,
@@ -2683,7 +2731,10 @@
       },
       "reason": "recipient-established",
       "caption": "The publishing platform: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:0af722c173c4e7adfb7c5b4e0c68756638aefd9de760bd0cd89505bb8f9274ff"
+      ]
     },
     {
       "seq": 122,
@@ -2830,7 +2881,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: share Accepting the same agreement terms with The publishing platform.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:2bd9ee8eca1dfd3ddea3531898a1e7ace2458e08769e1b0c567f9626cb7da282"
+      ]
     },
     {
       "seq": 127,
@@ -2952,5 +3006,6 @@
       "reason": "authority-valid",
       "caption": "The service admits the signed request."
     }
-  ]
+  ],
+  "linkedTable": "linked/content-licence--baseline.json"
 }

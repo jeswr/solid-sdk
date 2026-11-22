@@ -83,7 +83,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -162,7 +162,11 @@
         "answer": "Accepted, for invoice claims only."
       },
       "caption": "The merchant's invoice statement: The merchant is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0223a3805054e6c221f4eb81b7aca87c6d40564b84daa0cf6f9ec5bfcc203c67",
+        "sha-256:21e3ab2f284e2fbe17a3e9c9879f04fcd0e6c7315e631bcec2fd68562a2fc79d"
+      ]
     },
     {
       "seq": 3,
@@ -209,7 +213,10 @@
         "text": "Its terms allow this: use for Expenses; share for Expenses."
       },
       "caption": "The merchant's invoice statement: its terms allow this: use for Expenses; share for Expenses.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0bdad6efc43fa21c204b7dfd0faba38056f56dc8a3ff76e104e7149f795da850"
+      ]
     },
     {
       "seq": 5,
@@ -253,7 +260,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The merchant's invoice statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4e6efdcdb362a673ee2cc4b4d83003aa70b3cdc974e4f66cd3945c7c124816cb"
+      ]
     },
     {
       "seq": 7,
@@ -276,7 +286,10 @@
         },
         "provenance": "signed by The merchant"
       },
-      "caption": "The merchant's invoice statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The merchant's invoice statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:dd0d93542b134e44e12f707d85a2512953bf6ad47c6ab9a84b0f16118403537d"
+      ]
     },
     {
       "seq": 8,
@@ -363,7 +376,10 @@
       },
       "reason": "recipient-established",
       "caption": "The employer: Accepted, for File and agree an expense claim only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:56b01ab9369b51a3a9ec91166405a9a4a79f5814ad39f3cffdefb0e52099c1f1"
+      ]
     },
     {
       "seq": 11,
@@ -602,7 +618,10 @@
           "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:0bdad6efc43fa21c204b7dfd0faba38056f56dc8a3ff76e104e7149f795da850"
+      ]
     },
     {
       "seq": 16,
@@ -827,7 +846,10 @@
           "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:4742ca667bb0adb08456cb0dc233a78f0cd53812532da485eb5015f7ff2a434a"
+      ]
     },
     {
       "seq": 19,
@@ -1225,7 +1247,11 @@
         "answer": "Accepted, for invoice claims only."
       },
       "caption": "The merchant's invoice statement: The merchant is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d8cfe9a1da5a06b07681505f6fa44e0d22370da090841e7a78a4dc29361cc3b0",
+        "sha-256:96c0b7fdcc69ca6843dbf42c1813103befe67b292ed48e05f412097c5890346a"
+      ]
     },
     {
       "seq": 22,
@@ -1272,7 +1298,10 @@
         "text": "Its terms allow this: use for Expenses; share for Expenses."
       },
       "caption": "The merchant's invoice statement: its terms allow this: use for Expenses; share for Expenses.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0bdad6efc43fa21c204b7dfd0faba38056f56dc8a3ff76e104e7149f795da850"
+      ]
     },
     {
       "seq": 24,
@@ -1316,7 +1345,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The merchant's invoice statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f79c4e8561016583c51efab74bbf3ca0083c96175139d235d39bfdab2b5c2de4"
+      ]
     },
     {
       "seq": 26,
@@ -1339,7 +1371,10 @@
         },
         "provenance": "signed by The merchant"
       },
-      "caption": "The merchant's invoice statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The merchant's invoice statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:dd0d93542b134e44e12f707d85a2512953bf6ad47c6ab9a84b0f16118403537d"
+      ]
     },
     {
       "seq": 27,
@@ -1939,7 +1974,11 @@
           "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:d8cfe9a1da5a06b07681505f6fa44e0d22370da090841e7a78a4dc29361cc3b0",
+        "sha-256:96c0b7fdcc69ca6843dbf42c1813103befe67b292ed48e05f412097c5890346a"
+      ]
     },
     {
       "seq": 30,
@@ -2080,7 +2119,10 @@
           "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:0bdad6efc43fa21c204b7dfd0faba38056f56dc8a3ff76e104e7149f795da850"
+      ]
     },
     {
       "seq": 32,
@@ -2211,7 +2253,10 @@
           "purpose": "urn:purpose:expenses"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:1457485fe1cc74f5a8cbc4c2ac6ad0ad370cb8fc6f86ee866e593d0eafedd771"
+      ]
     },
     {
       "seq": 34,
@@ -2257,7 +2302,10 @@
       },
       "reason": "within-mandate",
       "caption": "The employer's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:eed7ce3f65877b2312be4fce772f887fbf6d98d432aad7d33ce03b0fd09a6f48"
+      ]
     },
     {
       "seq": 36,
@@ -2302,7 +2350,10 @@
       },
       "reason": "recipient-established",
       "caption": "The employee: Accepted, for File and agree an expense claim only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9982349c7ffc6916fca7cafdfbccffd881f46e79a0132734fc4e7a93fa11e37a"
+      ]
     },
     {
       "seq": 37,
@@ -2415,7 +2466,10 @@
       "outcome": "ask-principal",
       "reason": "limit-exceeded",
       "caption": "The gate holds the action and asks The employer.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f1e144065d5dba2ee49aae1c2141871b1c1859389c036c81bbb1742db097d739"
+      ]
     },
     {
       "seq": 41,
@@ -2429,5 +2483,6 @@
       },
       "caption": "The employer is asked to approve this exact action; the approval will be bound to its digest."
     }
-  ]
+  ],
+  "linkedTable": "linked/expenses--baseline.json"
 }

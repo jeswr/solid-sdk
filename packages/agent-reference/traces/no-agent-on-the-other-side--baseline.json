@@ -55,7 +55,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -166,7 +166,10 @@
       },
       "reason": "recipient-established",
       "caption": "A small business with an email address: Accepted, for Send an approved plain-text email only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:85ec0b869988030adabc338598505ddb178a6913705c0397ab3d8c3b0dd5c225"
+      ]
     },
     {
       "seq": 5,
@@ -279,7 +282,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The action is held for the named decision makers.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2cb3b6e19ba87ed58fb27e8e8147126059a4c6e42ea6272764ed6409c76b48b5"
+      ]
     },
     {
       "seq": 9,
@@ -397,7 +403,10 @@
       },
       "reason": "recipient-established",
       "caption": "A small business with an email address: Accepted, for Send an approved plain-text email only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:85ec0b869988030adabc338598505ddb178a6913705c0397ab3d8c3b0dd5c225"
+      ]
     },
     {
       "seq": 14,
@@ -544,7 +553,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: share Send an approved plain-text email with A small business with an email address.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:15a2379be29ea08647305c3ef680a3ac7b88a506e17382f14efe53a091a1e62d"
+      ]
     },
     {
       "seq": 19,
@@ -576,7 +588,10 @@
       "agent": "reader-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Unsigned address-only prose enters the unstructured-content channel; never facts or instructions."
+      "caption": "Unsigned address-only prose enters the unstructured-content channel; never facts or instructions.",
+      "linked": [
+        "sha-256:75f5280f544b1315f3e91ad836806c8ac06f70c242283953a0f0c13c4b4890e9"
+      ]
     },
     {
       "seq": 22,
@@ -587,7 +602,10 @@
       "outcome": "admit",
       "reason": "fit-for-use",
       "caption": "Admit labelled unstructured content only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e548b282de6b398f4905ed2d8ff509b2725aa1788ecb58400246d1166bd733b4"
+      ]
     },
     {
       "seq": 23,
@@ -595,7 +613,11 @@
       "agent": "reader-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:578622feee73c8e80a67dc03c50bab440784f7efb87c6f6c84628675f2226986; claim email reading."
+      "caption": "Model-output reading of unstructured data sha-256:578622feee73c8e80a67dc03c50bab440784f7efb87c6f6c84628675f2226986; claim email reading.",
+      "linked": [
+        "sha-256:d2e90d56fa32022a131d55f7891cbeb4e970cf06056d1ed0cf85970db9b07484"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/no-agent-on-the-other-side--baseline.json"
 }

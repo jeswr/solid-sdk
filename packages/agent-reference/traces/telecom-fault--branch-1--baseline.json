@@ -70,7 +70,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -157,7 +157,11 @@
         "answer": "Accepted, for router light claims only."
       },
       "caption": "The customer's router light statement: The customer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ef5e6fd1d167678174bf7fc87e27200ef00a95f41405a70f04d0f308d907ad0d",
+        "sha-256:2f77988ca947d087f64bd8b9ed1a3339ae6d19fe8246f5802caff2deab096011"
+      ]
     },
     {
       "seq": 4,
@@ -204,7 +208,10 @@
         "text": "Its terms allow this: use for Telecom fault; share for Telecom fault."
       },
       "caption": "The customer's router light statement: its terms allow this: use for Telecom fault; share for Telecom fault.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a64eb40a871743ce9525081841b7e69f238de34686a224df72304cfc2b8be5be"
+      ]
     },
     {
       "seq": 6,
@@ -248,7 +255,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The customer's router light statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:be1024dbc2dbc0ac711703133f34e6f07adeb2caa26e8cafdd865fdf30b78d0b"
+      ]
     },
     {
       "seq": 8,
@@ -271,7 +281,10 @@
         },
         "provenance": "signed by The customer"
       },
-      "caption": "The customer's router light statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The customer's router light statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:3d651e2e1ed475d341d2e0bab6c2ff094a16896d40703ae0f29b7c64c0e297bf"
+      ]
     },
     {
       "seq": 9,
@@ -358,7 +371,10 @@
       },
       "reason": "recipient-established",
       "caption": "The customer: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:91b17b102b11160e8ef08e07f2821499667e8f9507334652c045f4a07a5f6513"
+      ]
     },
     {
       "seq": 12,
@@ -535,7 +551,10 @@
       "messageId": "urn:awp:engine-telecom-fault-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:743a3fe98373183229e629d00cb3e9a8ca2ef6ebe49241811a290a770382d636",
       "caption": "The invoke message goes to The customer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:938f2f1da75feb5454d91bd1b6f0de7a191a816bf619f017c46e44602148ae69"
+      ]
     },
     {
       "seq": 18,
@@ -950,7 +969,10 @@
       "messageId": "urn:awp:engine-telecom-fault-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:743a3fe98373183229e629d00cb3e9a8ca2ef6ebe49241811a290a770382d636",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:f8a8543e1c3ba5a34f357fcbae982fd1c99c985288cddd3c3ec0f04453383414"
+      ]
     },
     {
       "seq": 26,
@@ -1037,7 +1059,10 @@
       },
       "reason": "recipient-established",
       "caption": "The broadband provider: Accepted, for Change broadband account settings only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a10f6ff40e266a8638e7de18557409a8facf16fb38afa724ace5a927d5f00d03"
+      ]
     },
     {
       "seq": 29,
@@ -1128,7 +1153,10 @@
         "text": ""
       },
       "caption": "The mandate says to ask The customer first.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:82d55efa9a09d2726c9a9d4708a9467f2ee110a049faf6dc7d2d63bf149eaed3"
+      ]
     },
     {
       "seq": 32,
@@ -1150,7 +1178,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The gate holds the action and asks The customer.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a21884b2870b397efba535205e0459cc07a9a86aa3ed13bfe37e1acae6920ffc"
+      ]
     },
     {
       "seq": 33,
@@ -1164,5 +1195,6 @@
       },
       "caption": "The customer is asked to approve this exact action; the approval will be bound to its digest."
     }
-  ]
+  ],
+  "linkedTable": "linked/telecom-fault--baseline.json"
 }

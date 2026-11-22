@@ -70,7 +70,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -149,7 +149,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The publisher's unstructured content statement: The publisher is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8f518cf14651d54ced8be44119b6f1661b7114bd8af55ec1a50c53cb6aa66224",
+        "sha-256:5b05a94bc7a84749b48fb1362fe95d2a20af2a4b2be8748dee8155a5219f2eba"
+      ]
     },
     {
       "seq": 3,
@@ -208,7 +212,10 @@
       "outcome": "refuse",
       "reason": "unsupported-term",
       "caption": "The publisher's unstructured content statement is refused and kept out of memory.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7a32a44a534af87ffbfd4fecae4bfe9d0fd458d18e4de1a9522ced02ceee29ae"
+      ]
     },
     {
       "seq": 6,
@@ -306,7 +313,11 @@
       "outcome": "stop",
       "reason": "unsupported-term",
       "caption": "Unaccepted support cannot authorize an action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ffab2430b0bee70c5784ce6a25041ce3c0668ce9b10c32cf83d69fa86f5e7776"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/no-training-terms--baseline.json"
 }

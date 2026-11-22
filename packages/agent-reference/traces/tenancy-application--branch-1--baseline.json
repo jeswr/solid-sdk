@@ -82,7 +82,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -165,7 +165,11 @@
         "answer": "Accepted, for bank full statements claims only."
       },
       "caption": "The tenant’s bank's bank full statements statement: The tenant’s bank is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2ecfd472c9bbc3f69e90c4717550e6e0cd1f5fc8a910f6779983180d0594ecd1",
+        "sha-256:43b1ef14334ec757ef25a4d13e2e982bad5a412d1351fd583c900395e58ce176"
+      ]
     },
     {
       "seq": 3,
@@ -212,7 +216,10 @@
         "text": "Its terms allow this: use for Tenant finances."
       },
       "caption": "The tenant’s bank's bank full statements statement: its terms allow this: use for Tenant finances.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:303c3fd2932c774ae6973187f2f43a75f3aa78e33a2d9b91c29a9c9a625a1b79"
+      ]
     },
     {
       "seq": 5,
@@ -256,7 +263,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The tenant’s bank's bank full statements statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7d4c77a959fe7d062a4558809c307a8f5afdba44a0822c2e6bcd9217005e4f22"
+      ]
     },
     {
       "seq": 7,
@@ -279,7 +289,10 @@
         },
         "provenance": "signed by The tenant’s bank"
       },
-      "caption": "The tenant’s bank's bank full statements statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The tenant’s bank's bank full statements statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:d471efd9f42f31ae4cf25a9b25d961e5a610309134672db5e5b3f5e47f745005"
+      ]
     },
     {
       "seq": 8,
@@ -366,7 +379,10 @@
       },
       "reason": "recipient-established",
       "caption": "The tenant: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:945c841c3bb17482613320e6df1b5527606d95db6a77cc1e789d37afb80f98df"
+      ]
     },
     {
       "seq": 11,
@@ -543,7 +559,10 @@
       "messageId": "urn:awp:engine-tenancy-application-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:5df5892737eed43284c541ea2a6d04829aba345e744392c372bdd25e620e384e",
       "caption": "The invoke message goes to The tenant’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:41387b448016e8a2f2549cfd32ad651aecd1241cb1feabee6387b7337764bdc3"
+      ]
     },
     {
       "seq": 17,
@@ -964,7 +983,10 @@
       "messageId": "urn:awp:engine-tenancy-application-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:5df5892737eed43284c541ea2a6d04829aba345e744392c372bdd25e620e384e",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:265c2b7a88888d3e4102386be410bd665dda9a50c15d551961977e87b5d310d1"
+      ]
     },
     {
       "seq": 25,
@@ -1010,7 +1032,10 @@
         "text": "No rule in The tenant's mandate lets the agent share Attempt raw-statement disclosure with The letting agency for Tenancy application (no applicable grant in the mandate (deny by default))."
       },
       "caption": "The tenant's mandate does not allow this: share Attempt raw-statement disclosure with The letting agency.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:46c5c432e207359b29aba911d2ee46a91ac2c2e89edd38ab8aa5f6ee34468223"
+      ]
     },
     {
       "seq": 27,
@@ -1032,7 +1057,11 @@
       "outcome": "stop",
       "reason": "not-authorised",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:234887087aaf260f8674628c96b26ae7d86516d3f15a7ec7f7b896fb7975eb70"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/tenancy-application--baseline.json"
 }

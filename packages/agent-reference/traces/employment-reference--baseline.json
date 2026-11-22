@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -142,7 +142,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The former employer's unstructured content statement: The former employer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7eaea0d8e720adbda590642e3be2e4f1de274ed5068b3ed1cadcc14fab775569",
+        "sha-256:13fba4fe0c5ce4da98f18c54c615aa8dfb7073d5b3693fbda86638fa3dd3af7b"
+      ]
     },
     {
       "seq": 3,
@@ -189,7 +193,10 @@
         "text": "Its terms allow this: use for Employment reference; share for Employment reference."
       },
       "caption": "The former employer's unstructured content statement: its terms allow this: use for Employment reference; share for Employment reference.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:68082676e5f7a1ac04b11bcf00f45fa4d2ffc2000a95efb9b7efd81f353450d3"
+      ]
     },
     {
       "seq": 5,
@@ -233,7 +240,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The former employer's unstructured content statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8aed2c369c8558b590b899754965f261bac02e70cd8ac689f094cfaa39f2e9e0"
+      ]
     },
     {
       "seq": 7,
@@ -256,7 +266,10 @@
         },
         "provenance": "signed by The former employer"
       },
-      "caption": "The former employer's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The former employer's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:6a6b75b2bfa603ab932f21b5c3c2b7a9231ea01f96ce1a795a564550ae8e5c60"
+      ]
     },
     {
       "seq": 8,
@@ -343,7 +356,10 @@
       },
       "reason": "recipient-established",
       "caption": "The former employer: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:69428c9f86afe8ec81ddce2bf066b0e86690d36242a952ca25aa74542b01c0cf"
+      ]
     },
     {
       "seq": 11,
@@ -520,7 +536,10 @@
       "messageId": "urn:awp:engine-employment-reference-main:receiver-agent:0002",
       "messageDigest": "sha-256:8cc16d023b0b5ce9abcc10c1ff29a6b7302f627d5d5dc2610b09b20c49394d97",
       "caption": "The invoke message goes to The former employer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:461c64f34cc164624afae97c8da1c308eb88e07e10c18864c59d8364ad6d8589"
+      ]
     },
     {
       "seq": 17,
@@ -935,7 +954,10 @@
       "messageId": "urn:awp:engine-employment-reference-main:receiver-agent:0002",
       "messageDigest": "sha-256:8cc16d023b0b5ce9abcc10c1ff29a6b7302f627d5d5dc2610b09b20c49394d97",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:225da991496e93ee5474b309ee2bf65ca606c85b3aeb2893646c6ecf3ff5f759"
+      ]
     },
     {
       "seq": 25,
@@ -1022,7 +1044,10 @@
       },
       "reason": "recipient-established",
       "caption": "The new employer: Accepted, for A reference from a former employer only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:520aa875bdf5a43fe70d0aae098c9e12eedd410eaf7c3ff9bae010007800f3cc"
+      ]
     },
     {
       "seq": 28,
@@ -1171,7 +1196,10 @@
       },
       "reason": "terms-allow",
       "caption": "The former employer's unstructured content statement: its terms allow this: use for Employment reference; share for Employment reference.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:68082676e5f7a1ac04b11bcf00f45fa4d2ffc2000a95efb9b7efd81f353450d3"
+      ]
     },
     {
       "seq": 33,
@@ -1358,7 +1386,10 @@
       "outcome": "ask-principal",
       "reason": "context-not-clear",
       "caption": "The task context is not clear for this text, recipient and purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fdda3d107c325a804211eaff169c2625b2a6e39d46c8079cba90db0dbafdf564"
+      ]
     },
     {
       "seq": 39,
@@ -1464,7 +1495,10 @@
       },
       "reason": "recipient-established",
       "caption": "The new employer: Accepted, for A reference from a former employer only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:520aa875bdf5a43fe70d0aae098c9e12eedd410eaf7c3ff9bae010007800f3cc"
+      ]
     },
     {
       "seq": 43,
@@ -1613,7 +1647,10 @@
       },
       "reason": "terms-allow",
       "caption": "The former employer's unstructured content statement: its terms allow this: use for Employment reference; share for Employment reference.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:68082676e5f7a1ac04b11bcf00f45fa4d2ffc2000a95efb9b7efd81f353450d3"
+      ]
     },
     {
       "seq": 48,
@@ -1897,7 +1934,10 @@
       "messageId": "urn:awp:engine-employment-reference-main:owner-agent:0002",
       "messageDigest": "sha-256:35a72e440bb23193a71c0c1cfff266bda93646fdc18cd8a53e758b2e1ec4466d",
       "caption": "The invoke message goes to The new employer’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:50326819ebe69664ef13fead4452c2bc573a394bdb8e977f40b3066ac28d078d"
+      ]
     },
     {
       "seq": 57,
@@ -2398,7 +2438,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The former employer's unstructured content statement: The former employer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:83145fea11bea01ff163854641d955a76f37b1f6a79d03217dd70af168d8ddc5",
+        "sha-256:b41965f559c85e1bff3ac76675fac1fd6b7fe2cfbff6be31f93d2243a83bc497"
+      ]
     },
     {
       "seq": 61,
@@ -2449,7 +2493,10 @@
         "text": "Its terms allow this: use for Employment reference; share for Employment reference."
       },
       "caption": "The former employer's unstructured content statement: its terms allow this: use for Employment reference; share for Employment reference.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:68082676e5f7a1ac04b11bcf00f45fa4d2ffc2000a95efb9b7efd81f353450d3"
+      ]
     },
     {
       "seq": 63,
@@ -2490,7 +2537,10 @@
       "messageId": "urn:awp:engine-employment-reference-main:owner-agent:0002",
       "messageDigest": "sha-256:35a72e440bb23193a71c0c1cfff266bda93646fdc18cd8a53e758b2e1ec4466d",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:533f5aa46e20b7735b0b583c0fa7369f223545ec073f4663f44dcfdaa62bb857"
+      ]
     },
     {
       "seq": 65,
@@ -2513,7 +2563,10 @@
         },
         "provenance": "signed by The former employer"
       },
-      "caption": "The former employer's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The former employer's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:883b53d76c7a894c94078aa123f72392c814a43d039ce7dbdb3ebe17151113f0"
+      ]
     },
     {
       "seq": 66,
@@ -2528,6 +2581,9 @@
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:employment-reference:owner"
         }
+      ],
+      "linked": [
+        "sha-256:4dc198eae1d67b3e76c6a55a31c5de1c5da48f434db8a77cb2de84c09f036398"
       ]
     },
     {
@@ -2536,7 +2592,10 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:efe9e8ffdccd652bf21645cc38a86bfd9bcc162eb6ce6dd4b00466c457070e84; claim content opinion."
+      "caption": "Model-output reading of unstructured data sha-256:efe9e8ffdccd652bf21645cc38a86bfd9bcc162eb6ce6dd4b00466c457070e84; claim content opinion.",
+      "linked": [
+        "sha-256:ef59db6dce58474a05b50a956e367331c246aa55834c6a16c8923dac6ca52b20"
+      ]
     },
     {
       "seq": 68,
@@ -2623,7 +2682,10 @@
       },
       "reason": "recipient-established",
       "caption": "The new employer: Accepted, for A person decides on the original content only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:1d9ac8a44df5c05fcb29d341a51846c1ad997f327b697adf873e1307902caef0"
+      ]
     },
     {
       "seq": 71,
@@ -2736,7 +2798,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The action is held for the named decision makers.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4b747261c66239f14945c40019cee053a7b961e1f2e77e98582b0428595b78a2"
+      ]
     },
     {
       "seq": 75,
@@ -2751,5 +2816,6 @@
       },
       "caption": "The gate built this request from the action and the approval rule."
     }
-  ]
+  ],
+  "linkedTable": "linked/employment-reference--baseline.json"
 }

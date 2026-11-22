@@ -2,6 +2,8 @@
 
 # Brief 40 report
 
+Phase 4 (40w) covers step 1. The full regeneration is assigned to the orchestrator.
+
 ## Phase 1
 
 Phase 1 is implemented. The reference-package checks and sampled corpus passed.
@@ -1539,3 +1541,323 @@ cases could not listen on `127.0.0.1` in the sandbox and reported
 Three other cases passed on rerun with subprocess output captured in regular
 temporary files. They cover packaged CLI help and JSON/CSV exports, launchd
 plist validation, and production dependency packaging.
+
+## Phase 4 (40w)
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+Step 1 is complete on `34befa945`. The two hand runs produced four traces.
+The committed engine traces, outlines and run manifest, and the explorer's
+existing traces and data were restored from HEAD. The explorer includes four
+new context documents. The orchestrator runs steps 2–4.
+
+### Trace and inspector
+
+The trace writers opt in to the `linked` table. Library and oracle runs use the
+original format by default. The runtime captures store graphs at the event
+site. The recorder uses the existing store projection and writes JSON-LD and
+Turtle during completion. It serialises each distinct graph once and keeps the
+event's references in display order. Each table key is the SHA-256 of the exact
+JSON-LD text. The runtime trace schema checks that every event reference exists.
+The exported JSON Schema describes the key and value shapes. Checking a dynamic
+key against another part of the document is done by the runtime schema.
+
+The gate decision view uses the actual sealed entry. A verified record summary
+points to a relevant entry, such as the last eligible entry for a chain check
+or the grant entry for a mandate display. An empty record has no entry to show.
+The provider's settlement event uses its own settlement view. The early
+authorization-server grant-lift event precedes the runtime's ledger append and
+keeps its existing fact display. The sampled traces contain no recall events.
+The runtime uses the same held-fact lookup for a recall as for a store event.
+
+The policy and register fixtures include identifiers with a second `#`. The
+suite's JSON-LD reader drops those RDF terms. The view projection escapes the
+extra fragment delimiter in both formats and keeps distinct identifiers
+distinct if the escaped name is already used. The sealed records, policies and
+wire identifiers keep their original spelling. The existing vocabulary,
+context pins and generated models supply the terms for these views.
+
+The explorer shows highlighted JSON-LD and Turtle or TriG together. The context
+fold state follows the reader between events. Bundled contexts open in the same
+wide dialog. The old inspector summaries still work with traces that have no
+linked table. The existing inspector test now checks both packet panes and the
+context fold in place of the old format toggle. The engine's existing trace,
+caption and oracle assertions were kept.
+
+### Verification
+
+Node 24 was first on PATH. The age run used the offline
+`sparq-org-zk-result-0.1.8.tgz` with SHA-256
+`42a52776b3046efab999d8555ea9e815175f1b2ac0dce3f2832e8905748410e0`.
+The archive was extracted to a temporary directory and supplied through
+`ANSWERABLE_SPARQ_ZK_RESULT`. The older archive lacked the required
+`testIssue` export.
+
+| Command from the reference package unless indicated | Result |
+| --- | --- |
+| `npx tsc -p tsconfig.build.json && node scripts/copy-generated.mjs` | Compile and generated-file copy passed. |
+| `npx vitest run test/trace-linked.test.ts test/trace-schema.test.ts test/traces.test.ts test/labels.test.ts test/oracle-snapshot.test.ts test/runtime-packets.test.ts test/record-rdf.test.ts` | 48 tests passed. Includes the identifier-free caption check and byte comparisons for age main, age branch, mortgage baseline and mortgage data integrity. |
+| `npx vitest run test/oracle.test.ts test/recorded-joint.test.ts` | Five passed. The oracle ran with SHA-verified joint recordings. The oracle fixture's SHA-256 is `4f63d12f5e58b1d4a2f085c3d524b671663a1d96dd61c45ee875838d1308922f`. |
+| `node scripts/check-no-trace-change.mjs` | Passed. Its disposable runs of mortgage-core and pay-an-invoice preserved the five traces, outlines and manifest rows. The check uses `--no-linked`. |
+| `node scripts/run-scenarios.mjs --scenario=age-check` and `node scripts/run-scenarios.mjs --scenario=mortgage-core` | Two live paths each. Both reported 278 runs, zero disagreements and five blocked. Recorded outlines were byte-identical. |
+| `node scripts/export-schemas.mjs --check` and `npx tsc -p tsconfig.json --noEmit` | Schema export and typecheck passed. |
+| `node scripts/check-rdf-pipeline.mjs` and `npx biome check src test scripts eval/e0/run.mjs eval/e0/vitest.config.ts --diagnostic-level=error` | Zero RDF failures, with 216 existing allowances. Biome found zero errors. The explorer component and its new test passed Biome too. |
+| `node scripts/bundle-data.mjs` and `node --test --test-isolation=none test/*.test.mjs` in the explorer | The bundle indexed 278 traces and copied all four contexts byte for byte. Its largest trace was 3,483,992 bytes against the 12,000,000-byte limit. All 53 tests passed with the four new sample copies and with the committed traces restored. |
+
+`test/trace-linked.test.ts` runs each switch setting in a fresh process with
+the recorded generation commit. With the switch off, the entire UTF-8 trace
+matches the committed file. With it on, removing the table and event references
+gives exactly the same bytes, including packet JSON-LD, packet RDF, attachment
+digests, outlines, captions, rule texts and chat lines. The same test expands
+every view with the offline context loader and compares it to its Turtle
+quad for quad. It checks all four view categories and rejects any gate-check
+entry attached as a record view.
+
+A fresh age proof is randomised. To compare the same inputs, the test replays
+the committed prover output at the prover boundary and runs the real receiver
+verification. Replaying through the proof cache would change the caption to
+describe an earlier proof. The hand run generates a fresh proof as usual.
+
+The six recorded joint engine traces matched the SHA-256 values in the
+manifest. The scenario writer retains those baseline recordings whether or
+not the optional aggregate adapter is installed. The final
+`git diff --exit-code` on engine traces, outlines, the run manifest and the
+oracle fixture, and on explorer traces and tracked data, returned zero.
+`git checkout` could not take the index lock in this worktree. The changed
+artifacts were restored from `git show HEAD:<path>` and checked again. The
+restored manifest has 283 paths and SHA-256
+`7b490268f90bd3c0541322fc27e4902531383aa1abdcf0b54ca50a63f2e78f53`.
+
+### Speed and trace size
+
+`node scripts/profile-journey.mjs --iterations=3 --main-only` ran with the
+library default. The baseline median went from 8,688 ms to 7,800 ms. The
+data-integrity median went from 8,831 ms to 8,259 ms. The recorder performs no
+linked RDF work in either default run.
+
+Explorer `traces/` is 164,576,968 bytes after restoration. Applying the
+existing explorer copy rules to the four hand-run traces increased their
+combined size from 991,754 to 2,725,137 bytes. With just those samples replaced,
+the directory was 166,310,351 bytes. Scaling the measured increase to the
+other live traces while holding the six recordings fixed gives an estimate of
+429 MB after regeneration. The sample is small and each journey adds a different
+mix of store views. The full bundle step will measure the actual size.
+
+The browser layout still needs a visual check at 360, 700 and 1280 pixels.
+Open an inspector view with long lines, scroll each pane with the keyboard,
+toggle the context, move to another event and open the wide dialog. Check that
+Escape and Close restore focus to the opener.
+
+## Shared tables (40x)
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Both corpus writers now put a scenario's linked views in `traces/linked/<scenario>.json`.
+The trace keeps `linkedTable` and the event key lists. Keys are still SHA-256
+digests of the JSON-LD text. The runtime schema validates inline tables and
+uses a caller-supplied lookup for shared tables. The corpus test checks every
+trace reference, table digest, and unused key. The writer sorts the keys and
+keeps the entries still used when a run replaces just one configuration.
+
+Each view keeps JSON-LD and Turtle. JSON-LD uses the bundled store and, when
+needed, ODRL context IRIs. The legacy generator exposed a protected-term
+conflict when it combined the credential and store contexts. The store
+context supplies its existing credential aliases, and other credential
+terms keep their full IRIs. The RDF round-trip test covers that case.
+
+| Hand-run file | Engine bytes before | Engine bytes with shared tables |
+| --- | ---: | ---: |
+| `age-check--baseline.json` | 281,049 | 283,737 |
+| `age-check--branch-1--baseline.json` | 80,773 | 81,889 |
+| `mortgage-core--baseline.json` | 783,379 | 790,471 |
+| `mortgage-core--authenticity-data-integrity.json` | 574,061 | 581,153 |
+| `linked/age-check.json` (31 keys) | — | 403,438 |
+| `linked/mortgage-core.json` (67 keys) | — | 819,497 |
+
+The two mortgage traces reference 43 keys each and share 19. The engine
+directory starts at 678,116,725 bytes, including its index. The four samples
+and two tables add 1,240,923 bytes. Applying the sample's average trace
+increase to 272 live traces and its average table size to 72 scenarios gives
+about **723 MB** for the engine and **209 MB** for the explorer. The six
+joint recordings are held fixed. Both estimates use decimal MB and two
+scenarios, so the size depends on the mix of views in the full corpus.
+
+Both `run-scenarios.mjs` hand runs produced two paths and reported 278 runs,
+zero disagreements, and five blocked paths. The live age run used
+`ANSWERABLE_SPARQ_ZK_RESULT` with the extracted offline 0.1.8 package from
+40w. The byte comparison replays the recorded prover output at the boundary
+so it compares the same inputs. With linked views off, the four traces match
+the committed bytes. With views on, stripping the table reference and event
+keys gives the same bytes. The linked table's keys resolve and cover all
+entries. Repeating just the mortgage baseline configuration left both table
+hashes and both mortgage trace files byte-identical.
+
+`check-no-trace-change.mjs` passed with the mortgage table present and after
+restoration. All six joint traces matched their recorded SHA-256 digests.
+The tracked outlines and run manifest matched HEAD. The worktree's Git index
+is read-only, so `git checkout` could not take its lock. Changed tracked
+artifacts were restored from `git show HEAD:<path>` and the two temporary
+tables were removed. The final artifact diff was empty.
+
+On Node 24, the library compile and generated-file copy, schema export
+check, and typecheck passed. The seven requested Vitest files passed all 50
+tests. Vitest used a temporary `.sparq` symlink to resolve the same offline
+package at its literal import path. Biome and the agent layer guard passed.
+The RDF pipeline reported zero failures and 216 existing allowances.
+`generate-traces.mjs` also wrote all five reference traces with their tables
+in a disposable directory.
+
+## Review 40r10 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The projection escapes percent signs and additional fragment delimiters in
+every IRI fragment. Separate views rooted at `#entry#two` and `#entry%23two`
+produce distinct RDF identifiers and recorder keys. JSON-LD carries each
+`rdf:JSON` value as a typed string with the stored lexical form. The
+quad-for-quad test covers nested key order and unpaired surrogates.
+
+The grant-lift event links the sealed grant entry returned by the runtime
+append. The provider settlement event links the transfer selected by the
+receipt's ledger reference. The payment test reconstructs the transfer from
+its RDF view and verifies the digest against the receipt. The grant test
+compares the event's sequence, caption and fact with the committed trace.
+
+The scenario runner replaces matching manifest rows in place. The manifest
+matches `origin/main` byte for byte. Disposable hand runs of `age-check`,
+`mortgage-core` and the mortgage baseline configuration each kept those
+manifest bytes. The no-trace-change guard now compares the rows in order
+and passed for all five paths in its two scenarios with and without the
+sample shared tables.
+
+The Node 24 library compile, schema check, typecheck and Biome error check
+passed. All 75 focused engine tests passed, including the linked-switch byte
+comparisons and the six joint-recording digest checks. All 57 explorer tests
+passed on the committed corpus and again with four hand-run traces and their
+shared tables in a disposable copy. The bundle copied both sample tables
+byte for byte. The tracked traces and outlines match their original bytes.
+
+Fresh-process checks also matched the committed trace bytes for the grant
+and payment runs after removing the linked fields. Repeating `pay-an-invoice`
+in one process varies three existing packets. The same variation reproduced
+on the starting commit `e3796a576` with linked views off. The linked run's
+stripped bytes matched the corresponding repeated switch-off run exactly.
+
+## Review 40r11 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The runner stages and publishes one table per manifest scenario and
+configuration, with `baseline` as the default suffix. Branches in that group
+share the file. Publishing takes an exclusive lock through the table and
+trace replacements, retains keys still used by branches outside the write,
+and prunes superseded keys. The README describes recovery from a stale lock.
+
+The schema rejects invalid paths before invoking a table resolver. The writer
+and corpus check require regular files and directories inside the canonical
+`traces/` directory. The corpus check verifies the expected group, content
+digests and exact set of referenced keys. JSON-LD, Turtle and TriG use the
+same canonical quad order. The regression test compares bytes from two
+insertion orders and reads both RDF renderings back into quads.
+
+The representative runs exposed a linked-view failure in `flat-share`.
+Scenario own-list entries can carry purposes for identity pins. The view now
+projects the fields used by recipient trust, with a regression test for an
+own-list entry that also carries a pin purpose.
+
+The isolated `mortgage-main` run covered all 38 configuration groups and
+113 live paths. Its largest table was
+`linked/mortgage-main--accountability-reputation-post.json`, with 417 keys
+and **4,172,563 engine bytes**. The compact explorer copy was **4,157,963
+bytes**, about 35% of its limit. The 38 tables totalled 95,827,452 bytes
+in the engine and 95,514,367 bytes in compact form.
+
+The projected full trace directories are **809 MB for the engine** and
+**294 MB for the explorer**. The estimate uses those 38 measured table
+sizes and extrapolates from 12 other groups. It weights those groups by
+whether their existing engine traces total at least 1 MB, includes event
+keys and table references, and holds the six joint recordings at their
+original sizes. All sizes use decimal MB.
+
+The Node 24 library compile, schema export check, typecheck and Biome error
+check passed. The focused and compatibility suites passed 97 tests across
+11 files. The corpus check also passed with all 50 measured tables in a
+disposable copy. `check-no-trace-change.mjs` passed on the committed fixtures
+and with the mortgage-core and pay-an-invoice group tables present. All six joint
+recording digests verified. The worktree's traces, outlines and run manifest
+matched HEAD after the runs.
+
+## Review 40r12 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The public bundle checker decodes nested RDF and JSON strings until they stop
+changing or reach eight decoding levels. It scans parsed JSON string values and
+the unescaped text. Regression fixtures put roadmap text with quotes and a
+newline in an `rdf:JSON` literal, in standalone JSON-LD and Turtle and in both
+linked table renderings.
+
+Scenario runs use the table writer's exclusive file lock for the manifest and
+trace index. Publication rereads the manifest under the lock, replaces rows in
+place, and replaces each file atomically. A regression test starts two processes
+for different configurations from the same manifest snapshot and verifies that
+both rows and both index entries survive. When a path becomes blocked, the
+publisher removes its old trace and index entry and prunes the group table to
+the keys still referenced. The regression also covers removal of the last
+trace and table in a group. The corpus check rejects any trace file that the
+manifest does not name.
+
+On Node 24, all 50 focused engine tests and all 60 explorer tests passed. The
+library compile, schema export check, typecheck, Biome, and disposable
+`check-no-trace-change.mjs` runs passed. The RDF pipeline reported zero failures
+and 216 existing allowances. The agent layer guard reported two existing
+nonliteral imports in `test/trace-linked.test.ts`. The tracked traces, outlines
+and run manifest match HEAD, and no linked test files remain in the worktree.
+
+## Review round 4 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The scenario runner stages trace files and each group's linked views on disk.
+Full and selected runs take the same corpus-wide `scenario-runs.json.lock`
+before publishing any trace or shared table. The lock stays held through
+blocked-trace removal, linked-table pruning, and index and manifest replacement.
+A two-process test in a temporary directory pauses a runnable writer after its
+trace is published and verifies that a blocked writer for the same group waits
+and then removes the trace, table, and index entry.
+
+The explorer importer prunes unreferenced trace JSON and shared table JSON from
+its trace directory after copying the runnable paths. It refuses symlinked
+trace files, linked tables, and trace directories. The bundler checks filenames
+against the runnable rows in the copied run manifest before reading trace data.
+The public bundle checker fails at its eighth decode level and names the file
+that reached the limit. Temporary fixtures cover a branch becoming blocked, a
+fully blocked group, symlink refusal, an unindexed trace, and nested
+`rdf:JSON` at the decode limit.
+
+Node 24 verification passed the explorer's 13 selected tests, the engine
+typecheck, and Biome's error-level check. The selected engine suites passed 16
+tests and skipped nine committed-corpus comparisons. The in-memory mortgage-core
+reproducibility test failed on RDF ordering and reproduced in a temporary
+copy of unmodified HEAD. The committed corpus was left untouched.
+
+## Review 40r14 fixes
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+The explorer's `pnpm run import` command refuses standalone runtime traces
+before writing files. A recording does not carry the scenario result needed
+for a manifest row. The command and README direct users to the manifest-backed
+engine importer. The bundler checks each indexed trace with `lstat` before
+reading it and names any entry that fails the regular-file check.
+
+Reference trace generation uses the same exclusive `scenario-runs.json.lock`
+as scenario publication. It holds the lock through trace writes, linked table
+publication, and the trace index update. A regression holds that lock in a
+temporary fixture, verifies that the generator waits without writing, and
+checks the trace and index after release.
+
+On Node 24, all 65 explorer tests and 12 focused engine tests passed in
+temporary directories. The focused engine run excluded three comparisons
+against the committed recordings. The engine typecheck and the error-level
+Biome check on changed code passed.

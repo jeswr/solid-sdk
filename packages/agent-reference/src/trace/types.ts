@@ -111,6 +111,11 @@ export interface TraceRef {
   readonly clause?: string;
 }
 
+export const LINKED_KINDS = ["memory-item", "record-entry", "policy", "trust-entry"] as const;
+export type TraceLinkedKind = (typeof LINKED_KINDS)[number];
+
+export type TraceLinkedView = import("../wire/store-document.js").LinkedStoreView<TraceLinkedKind>;
+
 export interface TraceEvent {
   /** Logical clock: position in the trace. No wall-clock time. */
   readonly seq: number;
@@ -165,14 +170,16 @@ export interface TraceEvent {
   };
   /** A fact written to or read from memory (on `store` / `recall` events). */
   readonly fact?: MemoryFact;
+  readonly linked?: readonly string[];
   readonly caption: string;
 }
 
 /** What a gate or runtime hands to its trace sink; the recorder adds seq, step and agent. */
-export type TraceEventInput = Omit<TraceEvent, "seq" | "step" | "agent"> & {
+export type TraceEventInput = Omit<TraceEvent, "seq" | "step" | "agent" | "linked"> & {
   /** Recorder-only inputs; resolved through the wire writer before publishing a trace. */
   readonly settlementFacts?: import("../model/payment.js").PaymentFacts;
   readonly settlementDocument?: unknown;
+  readonly linkedInputs?: readonly import("./linked.js").TraceLinkedInput[];
 };
 
 export interface TraceAgent {
@@ -207,6 +214,9 @@ export interface TraceFile {
     readonly notice?: string;
   };
   readonly events: readonly TraceEvent[];
+  readonly linked?: Readonly<Record<string, TraceLinkedView>>;
+  /** Relative path from the trace directory to the scenario and configuration's shared views. */
+  readonly linkedTable?: string;
 }
 
 /** One entry of an expected outline. */
