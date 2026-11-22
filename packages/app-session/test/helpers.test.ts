@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-6.1 Sol
+// AUTHORED-BY Codex GPT-6
 import { Agent } from "@solid/object";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -122,4 +123,18 @@ it("the public testing helper supports subscriptions, empty events, transport an
   const pending = deferred<void>();
   pending.resolve();
   await expect(pending.promise).resolves.toBeUndefined();
+});
+
+it("the testing core declines retirement without emitting logout or clearing its identity seam", async () => {
+  const { auth } = fakePodAuth();
+  const logout = vi.fn();
+  auth.on("logout", logout);
+  auth.identity.mockResolvedValue(identity);
+  await expect(auth.retireIfOwnedBy(identity)).resolves.toEqual({
+    retired: false,
+    reason: "no-grant",
+  });
+  expect(logout).not.toHaveBeenCalled();
+  expect(auth.logout).not.toHaveBeenCalled();
+  expect(await auth.identity()).toEqual(identity);
 });

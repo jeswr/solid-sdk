@@ -667,11 +667,7 @@ function orderedValuePlan(plan: FieldPlan): FieldPlan {
 }
 
 /** Undefined means the WHOLE field is invalid, including ambiguous positions. */
-function readOrdered(
-  doc: TermWrapper,
-  plan: FieldPlan,
-  scope?: ParseScope,
-): unknown[] | undefined {
+function readOrdered(doc: TermWrapper, plan: FieldPlan, scope?: ParseScope): unknown[] | undefined {
   const { field } = plan;
   const ordered = field.ordered;
   if (!ordered) return undefined;
@@ -1627,7 +1623,14 @@ function hasDatasetClass(
 ): boolean {
   if (scope !== undefined) {
     if (consume === undefined)
-      return hasScopedDatasetClass(scope, doc.dataset, doc.factory, subject, required, matchObjects);
+      return hasScopedDatasetClass(
+        scope,
+        doc.dataset,
+        doc.factory,
+        subject,
+        required,
+        matchObjects,
+      );
     // Ordered reads retain their own cap even when class traversal uses a shared scope.
     // Throw on truncation so the scope cannot memoise an incomplete walk as a negative.
     const exhausted = {};
