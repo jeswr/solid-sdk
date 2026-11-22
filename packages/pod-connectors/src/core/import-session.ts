@@ -41,6 +41,7 @@ const active = new Set<string>();
 export const MAX_RUN_SOURCES = 1_000;
 
 export interface ImportSessionOptions extends ConnectorStateOptions {
+  readonly signal?: AbortSignal;
   /** Lower the run provenance source ceiling; includes the connector source, minimum 1. */
   readonly maxRunSources?: number;
   /** Retain only this many run activities; polling adapters opt in. */
@@ -83,17 +84,14 @@ export function createImportSession(
   // Retain one counter per document, never identifiers for every imported subject.
   const itemCounts = new Map<string, number>();
   const privateImport = requiresPrivateDestination(id);
-  let privacyRefused: PrivateDestinationError | undefined;
-  function checkPrivacyRefusal() {
-    if (privacyRefused) throw privacyRefused;
-  }
+  let privacyRefused: Promise<PrivateDestinationError> | undefined;
   async function verifyDestination(url: string): Promise<void> {
     if (!privateImport) return;
-    checkPrivacyRefusal();
+    if (privacyRefused) throw await privacyRefused;
     try {
       await requirePrivateDestination(id, writer, url);
     } catch (error) {
-      privacyRefused = error as PrivateDestinationError;
+      privacyRefused ??= Promise.resolve(error as PrivateDestinationError);
       throw error;
     }
   }
@@ -103,12 +101,10 @@ export function createImportSession(
     created: boolean,
     etag?: string,
   ): Promise<void> {
-    try {
-      await requirePrivateWriteConfirmation(id, writer, slug, url, created, etag);
-    } catch (error) {
-      privacyRefused = error as PrivateDestinationError;
-      throw error;
-    }
+    await requirePrivateWriteConfirmation(id, writer, slug, url, created, etag, (refusal) => {
+      privacyRefused ??= refusal;
+    });
+    options.signal?.throwIfAborted();
   }
   const conditionFor = (
     existing: Awaited<ReturnType<PodWriter["read"]>>,
@@ -190,13 +186,10 @@ export function createImportSession(
     await verifyDestination(destination);
     const output = { ...doc, slug, dataset };
     const writeConditions = conditions ?? conditionFor(previous);
-    const { writeEtag, ...result } = await writer.write(output, writeConditions);
-    if (privateImport) {
-      const created =
-        writeConditions?.ifNoneMatch === "*" ||
-        (!previous && writeConditions?.ifMatch === undefined && destination === url);
-      await confirmWrittenDestination(slug, destination, created, writeEtag);
-    }
+    if (privacyRefused) throw await privacyRefused;
+    const { writeEtag, writeCreated, ...result } = await writer.write(output, writeConditions);
+    if (privateImport)
+      await confirmWrittenDestination(slug, destination, writeCreated === true, writeEtag);
     // Take extra classes from the document, not the host writer's result: custom PodWriter
     // ports need not echo them.
     let registered: WrittenDoc = doc.additionalClasses?.length
@@ -228,20 +221,22 @@ export function createImportSession(
     if (url.split(/[?#]/, 1)[0] === writer.resolve(RUNS))
       throw new Error("Reserved connector provenance slug.");
     await verifyDestination(url);
+    if (privacyRefused) throw await privacyRefused;
     const { writeEtag, writeCreated, ...result } = await writer.writeBinary({ ...doc, slug });
     if (privateImport && result.created)
-      await confirmWrittenDestination(slug, url, writeCreated ?? doc.mode !== "replace", writeEtag);
+      await confirmWrittenDestination(slug, url, writeCreated === true, writeEtag);
     return result;
   }
   async function remove(slug: string): Promise<void> {
-    checkPrivacyRefusal();
     if (!writer.remove) throw new IntegrationSyncError(id, "This host cannot delete resources.");
     const url = writer.resolve(slug);
     if (url.split(/[?#]/, 1)[0] === writer.resolve(RUNS))
       throw new Error("Reserved connector provenance slug.");
     const previous = reads.get(url);
     reads.delete(url);
+    if (privacyRefused) throw await privacyRefused;
     await writer.remove(slug, previous?.etag ? { ifMatch: previous.etag } : undefined);
+    if (privateImport) options.signal?.throwIfAborted();
     itemCounts.delete(url);
     const index = written.findIndex((w) => w.url === url);
     if (index !== -1) written.splice(index, 1);
@@ -252,7 +247,7 @@ export function createImportSession(
     if (finalized) return;
     finalized = true;
     try {
-      checkPrivacyRefusal();
+      if (privacyRefused) throw await privacyRefused;
       await recordRun();
       await committed?.();
     } finally {
@@ -314,6 +309,7 @@ export function createImportSession(
     }
     const url = writer.resolve(RUNS);
     await verifyDestination(url);
+    if (privacyRefused) throw await privacyRefused;
     const result = await writer.write(
       {
         slug: RUNS,
@@ -324,7 +320,8 @@ export function createImportSession(
       },
       conditionFor(previous),
     );
-    if (privateImport) await confirmWrittenDestination(RUNS, url, !previous, result.writeEtag);
+    if (privateImport)
+      await confirmWrittenDestination(RUNS, url, result.writeCreated === true, result.writeEtag);
   }
   function state(outcome?: ImportOutcome): ConnectorState {
     const success = outcome !== undefined;
@@ -352,9 +349,9 @@ export function createImportSession(
     itemCounts: itemCounts as ReadonlyMap<string, number>,
     /** Bounded run provenance summary, exposed read-only for diagnostics. */
     used: used as ReadonlySet<string>,
-    registrations() {
-      checkPrivacyRefusal();
-      return [...registrations.values()];
+    async registerTypes() {
+      if (privacyRefused) throw await privacyRefused;
+      return writer.registerType([...registrations.values()]);
     },
     finish,
     release,

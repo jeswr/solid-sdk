@@ -77,6 +77,7 @@ export function createStateStore(options: {
   readonly adapterId: string;
   readonly webId: string;
   readonly fetch: typeof fetch;
+  readonly signal?: AbortSignal;
 }) {
   if (!/^[a-z0-9-]+$/.test(options.adapterId))
     throw new NodeRuntimeError("config", "Invalid connector id.");
@@ -149,11 +150,13 @@ export function createStateStore(options: {
     },
     async write(state: CliConnectorState, privacy?: PodWriter): Promise<void> {
       let writeEtag: string | null;
+      let created: boolean;
       try {
         if (!loaded) throw new PermanentCauseError(); // Read state before writing.
         const headers = new Headers({ "content-type": "application/json" });
         if (exists) headers.set("if-match", etag as string);
         else headers.set("if-none-match", "*");
+        created = headers.get("if-none-match") === "*";
         const response = await fetchSafe(url, {
           method: "PUT",
           headers,
@@ -166,15 +169,18 @@ export function createStateStore(options: {
       } catch (error) {
         throw new StateStoreError("Cannot save connector state.", isTransientCause(error));
       }
-      if (privacy)
+      // A checkpoint with refused confirmation is kept if cleanup cannot safely remove it because its cursor covers confirmed payloads.
+      if (privacy) {
         await requirePrivateWriteConfirmation(
           options.adapterId,
           privacy,
           "state.json",
           url,
-          !exists,
+          created,
           writeEtag,
         );
+        options.signal?.throwIfAborted();
+      }
     },
   };
 }

@@ -17,6 +17,7 @@ import {
   MAX_BANK_ACCOUNT_LABEL_CHARS,
   validateBankOptions,
 } from "../bank-statements/file-adapter.js";
+import { abortableFetch } from "../core/abort.js";
 import { PrivateDestinationError } from "../core/errors.js";
 import {
   type FileImportAdapter,
@@ -94,7 +95,7 @@ export interface CliOptions {
   readonly verifyPrivateDestination?: (options: DestinationContext) => Promise<boolean>;
   /** Override the default confirmation of a successful private write. */
   readonly confirmPrivateWrite?: (
-    options: DestinationContext & PrivateWriteVersion,
+    options: DestinationContext & PrivateWriteVersion & { observeEtag?: (etag: string) => void },
   ) => Promise<boolean>;
   readonly sourceTransport?: typeof fetch;
   readonly sourceAuth?: SourceAuth;
@@ -328,8 +329,7 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
     const file = command.file
       ? await importFile(command.file, fileAdapter as FileImportAdapter)
       : undefined;
-    // Every Pod and source request, including checkpoint reads/writes and the import's own
-    // Pod writes, refuses to send once the command is cancelled.
+    // Source requests, login, and non-private imports retain ordinary run cancellation.
     const withSignal =
       (transport: typeof fetch): typeof fetch =>
       async (input, init) => {
@@ -356,57 +356,72 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
       (privateImport && !opening ? transport : runTransport)(input, init),
     );
     opening = false;
-    // After login, private requests carry the signal of either the run or the cleanup.
-    const podFetch = privateImport ? withSignal(authenticatedFetch) : authenticatedFetch;
-    const stateStore = createStateStore({ ...config, adapterId: command.id, fetch: podFetch });
+    const podFetch =
+      privateImport && options.signal
+        ? abortableFetch(authenticatedFetch, options.signal, true)
+        : authenticatedFetch;
+    const stateStore = createStateStore({
+      ...config,
+      adapterId: command.id,
+      fetch: podFetch,
+      signal: options.signal,
+    });
     const { verifyPrivateDestination, confirmPrivateWrite } = options;
     const createStorage =
       privateImport && (!verifyPrivateDestination || !confirmPrivateWrite)
         ? createWacImportStorage
         : createSolidBackend;
-    const storage = createStorage({ fetch: podFetch, root: config.podRoot });
+    const storage = createStorage({ fetch: authenticatedFetch, root: config.podRoot });
+    const checkingStorage =
+      podFetch === authenticatedFetch
+        ? storage
+        : createStorage({ fetch: podFetch, root: config.podRoot });
     const checks = createOwnerOnlyDestinationChecks({
       podRoot: config.podRoot,
       ownerWebId: config.webId,
       signal: options.signal,
-      async openStorage() {
-        const root = storage.root;
-        const signal = options.signal;
+      async openStorage(signal) {
+        const client = signal ? checkingStorage : storage;
+        const root = client.root;
+        const fetch = signal ? podFetch : authenticatedFetch;
         // ACL links alone are also used by ACP servers. Establish WAC independently.
-        if ((await accessModel({ fetch: podFetch, storage: root, signal })) !== "wac")
+        if ((await accessModel({ fetch, storage: root, signal })) !== "wac")
           throw new PrivateDestinationError(command.id);
-        const head = await storage.head(root, { revalidate: true, signal });
+        const head = await client.head(root, { revalidate: true, signal });
         if (
           !(head.links.get("type") ?? []).some(
             ({ target }) => target === "http://www.w3.org/ns/pim/space#Storage",
           )
         )
           throw new PrivateDestinationError(command.id);
-        return storage;
+        return client;
       },
     });
-    const destinationContext = (url: string): DestinationContext => ({
+    const destinationContext = (url: string, signal?: AbortSignal): DestinationContext => ({
       url,
-      storage,
-      fetch: podFetch,
+      storage: signal ? checkingStorage : storage,
+      fetch: signal ? podFetch : authenticatedFetch,
       ownerWebId: config.webId,
-      signal: options.signal,
+      signal,
     });
     const podWriter = createStoragePodWriter({
       storage,
       container: adapterContainer(command.id, config.podRoot),
       webId: config.webId,
-      verifyPrivateDestination: verifyPrivateDestination
-        ? (url) => verifyPrivateDestination(destinationContext(url))
-        : checks.verifyPrivateDestination,
-      confirmPrivateWrite: confirmPrivateWrite
-        ? (url, version) => confirmPrivateWrite({ ...destinationContext(url), ...version })
-        : checks.confirmPrivateWrite,
-      ...(privateImport && { cleanupFetch: authenticatedFetch }),
+      ...(privateImport && {
+        verifyPrivateDestination: verifyPrivateDestination
+          ? (url) => verifyPrivateDestination(destinationContext(url, options.signal))
+          : checks.verifyPrivateDestination,
+        confirmPrivateWrite: confirmPrivateWrite
+          ? (url, version, observeEtag) =>
+              confirmPrivateWrite({ ...destinationContext(url), ...version, observeEtag })
+          : checks.confirmPrivateWrite,
+        cleanupFetch: authenticatedFetch,
+      }),
       typeIndex: {
         profileDocumentUrl: config.profileDocumentUrl,
         storageFor: (url) =>
-          createSolidBackend({ fetch: podFetch, root: `${new URL(url).origin}/` }),
+          createSolidBackend({ fetch: authenticatedFetch, root: `${new URL(url).origin}/` }),
       },
       ...(options.signal && { signal: options.signal }),
     });
@@ -546,7 +561,7 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
   } catch (error) {
     if (error instanceof PrivateDestinationError && error.phase === "after-write") {
       stderr(`${error.message} ${error.url}\n`);
-      return options.signal?.aborted ? EXIT_CODES.cancelled : EXIT_CODES.import;
+      return EXIT_CODES.import;
     }
     const failure = options.signal?.aborted
       ? new NodeRuntimeError("cancelled", "Import cancelled.")

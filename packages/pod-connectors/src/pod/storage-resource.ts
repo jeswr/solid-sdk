@@ -46,22 +46,33 @@ export async function writeStorageRdf(
   conditions: WriteConditions,
   signal?: AbortSignal,
   prefixes: Record<string, string> = { ...VOCAB_PREFIXES },
+  finishMutation = false,
 ): Promise<WriteResult> {
   signal?.throwIfAborted();
-  if (conditions.ifMatch !== undefined) {
+  if (conditions.ifMatch !== undefined && !finishMutation) {
     return storage.writeRdf(url, dataset, {
       ifMatch: strongEtag(conditions.ifMatch, "storage", url),
       prefixes,
       signal,
     });
-  } else if (conditions.ifNoneMatch === "*") {
-    const quads = [...dataset];
-    if (quads.some((quad) => quad.graph.termType !== "DefaultGraph"))
-      throw new TypeError("Turtle cannot carry named graphs.");
-    const body = await serialize(quads, {
-      format: "text/turtle",
-      prefixes,
+  }
+  if (conditions.ifMatch === undefined && conditions.ifNoneMatch !== "*")
+    throw new TypeError("A conditional RDF write is required.");
+  const quads = [...dataset];
+  if (quads.some((quad) => quad.graph.termType !== "DefaultGraph"))
+    throw new TypeError("Turtle cannot carry named graphs.");
+  const body = await serialize(quads, { format: "text/turtle", prefixes });
+  signal?.throwIfAborted();
+  if (conditions.ifMatch !== undefined)
+    return storage.write(url, body, {
+      contentType: "text/turtle",
+      ifMatch: strongEtag(conditions.ifMatch, "storage", url),
     });
-    return createStorageResource(storage, url, body, "text/turtle", signal);
-  } else throw new TypeError("A conditional RDF write is required.");
+  return createStorageResource(
+    storage,
+    url,
+    body,
+    "text/turtle",
+    finishMutation ? undefined : signal,
+  );
 }

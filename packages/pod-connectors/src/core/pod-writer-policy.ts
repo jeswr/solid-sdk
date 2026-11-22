@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { IntegrationSyncError, PrivateDestinationError } from "./errors.js";
-import type { PodWriter, PrivateWriteVersion } from "./types.js";
+import type { PodWriter } from "./types.js";
 
 /** The health and finance imports that require a host-verified write destination. */
 export function requiresPrivateDestination(id: string): boolean {
@@ -30,48 +30,55 @@ export async function requirePrivateWriteConfirmation(
   url: string,
   created: boolean,
   writeEtag?: string | null,
+  onRefusal?: (refusal: Promise<PrivateDestinationError>) => void,
 ): Promise<void> {
-  const version = isStrongEtag(writeEtag) ? { etag: writeEtag } : {};
+  const version = writeEtag == null ? {} : { etag: writeEtag };
+  let observed: string | undefined;
   try {
-    if ((await writer.confirmPrivateWrite?.(url, version)) === true) return;
+    const confirmed = await writer.confirmPrivateWrite?.(url, version, (etag) => {
+      if (observed === undefined && isStrongEtag(etag)) observed = etag;
+    });
+    if (confirmed === true) return;
   } catch {
     // Keep policy and transport errors out of the host's diagnostics.
   }
-  let removed = false;
-  if (created && writer.cleanupPrivateWrite) {
-    const signal = AbortSignal.timeout(10_000);
-    try {
-      const expired = new Promise<false>((resolve) =>
-        signal.addEventListener("abort", () => resolve(false), { once: true }),
-      );
-      removed =
-        (await Promise.race([
-          writer.cleanupPrivateWrite(slug, { ...version, signal }),
-          expired,
-        ])) === true;
-    } catch {
-      // A failed cleanup leaves the file potentially visible.
+  const etag = writeEtag ?? observed;
+  const refusal = Promise.resolve().then(async () => {
+    let removed = false;
+    if (created && isStrongEtag(etag) && writer.cleanupPrivateWrite) {
+      const signal = AbortSignal.timeout(10_000);
+      try {
+        const expired = new Promise<false>((resolve) =>
+          signal.addEventListener("abort", () => resolve(false), { once: true }),
+        );
+        removed =
+          (await Promise.race([writer.cleanupPrivateWrite(slug, { etag, signal }), expired])) ===
+          true;
+      } catch {
+        // A failed cleanup leaves the file potentially visible.
+      }
     }
-  }
-  throw new PrivateDestinationError(id, { url, removed });
+    return new PrivateDestinationError(id, { url, removed });
+  });
+  onRefusal?.(refusal);
+  throw await refusal;
 }
 
 /** Delete a refused create, then check its exact URL once for absence. */
 export async function cleanupPrivateResource(
   fetch: typeof globalThis.fetch,
   url: string,
-  { etag, signal }: PrivateWriteVersion & { signal: AbortSignal },
+  { etag, signal }: { etag: string; signal: AbortSignal },
 ): Promise<boolean> {
-  // A create-only write established that this run created the file, so it can be
-  // removed even when the server supplied no strong validator.
+  if (!isStrongEtag(etag)) return false;
   const response = await fetch(url, {
     method: "DELETE",
-    headers: etag === undefined ? undefined : { "if-match": etag },
+    headers: { "if-match": etag },
     redirect: "error",
     signal,
   });
   void response.body?.cancel().catch(() => {});
-  if (!response.ok) return false;
+  if (![200, 204, 404, 410].includes(response.status)) return false;
   signal.throwIfAborted();
   const head = await fetch(url, { method: "HEAD", redirect: "error", cache: "no-cache", signal });
   return head.status === 404 || head.status === 410;

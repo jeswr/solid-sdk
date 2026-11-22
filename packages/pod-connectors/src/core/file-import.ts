@@ -135,9 +135,9 @@ export interface RunFileImportOptions extends ConnectorStateOptions {
    * registration or provenance write, and rejects with its reason. The check runs at the
    * PodWriter boundary, immediately before each port call, so a cancel during a pending read
    * still stops the write that follows. Pass the same signal to `createFetchPodWriter`.
-   * A cancelled run advances no state. If cancellation prevents confirmation of an
-   * acknowledged private write, independent cleanup can proceed and the run reports the
-   * privacy refusal.
+   * A cancelled run advances no state. Dispatched private writes finish and run confirmation
+   * before observing cancellation. A refusal still gets independent cleanup and reports the
+   * privacy error.
    */
   signal?: AbortSignal;
 }
@@ -209,7 +209,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
         "No importable records were found in that file. Double-check you selected the right export file.",
       );
     }
-    const { indexUrl } = await podWriter.registerType(session.registrations());
+    const { indexUrl } = await session.registerTypes();
     signal?.throwIfAborted();
     await session.finish();
     // A cancel during the final provenance write is still a cancel: never report success.

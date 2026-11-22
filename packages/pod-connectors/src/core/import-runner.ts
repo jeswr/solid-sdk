@@ -51,10 +51,9 @@ export interface RunImportOptions extends ConnectorStateOptions {
    * at the PodWriter boundary, immediately before each port call, so a cancel during a pending
    * read (a session's implicit read before a write, the provenance read in finalisation) still
    * stops the write that follows. Pass the same signal to `createFetchPodWriter` to check it
-   * before every HTTP request inside a port and to abort requests in flight. A run cancelled
-   * before it resolves is reported as cancelled. If an acknowledged private write cannot
-   * be confirmed after cancellation, its separate cleanup can proceed and the run reports
-   * the privacy refusal. Once the run has reported
+   * before HTTP dispatch and to abort reads in flight. Dispatched private writes finish
+   * and run confirmation before observing cancellation. A refused write still gets its
+   * independent cleanup and reports the privacy error. Once the run has reported
    * its state through `onState`, it resolves successfully; a cancel then only stops the
    * adapter's best-effort `ImportOutcome.commit` cleanup.
    *
@@ -175,7 +174,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     // The adapter has committed its data and checkpoints. The source deadline is not a
     // reason to discard them: only the caller's cancellation stops finalisation now.
     opts.signal?.throwIfAborted();
-    const { indexUrl } = await podWriter.registerType(session.registrations());
+    const { indexUrl } = await session.registerTypes();
     opts.signal?.throwIfAborted();
     let state: ConnectorState | undefined;
     await session.finish(async () => {

@@ -12,6 +12,7 @@ import {
   adapterContainer,
   cleanupPrivateResource,
   containerResolver,
+  requiresPrivateDestination,
   validateBinaryType,
 } from "./pod-writer-policy.js";
 import type { BinaryDoc, PodWriter, WrittenBinary } from "./types.js";
@@ -30,7 +31,7 @@ export interface FetchPodWriterOptions {
   readonly confirmPrivateWrite?: PodWriter["confirmPrivateWrite"];
   /**
    * The run's cancellation signal. Reads, writes and Type Index operations check it immediately
-   * before sending and compose it with the request's own signal. Privacy cleanup has its own deadline.
+   * before sending. Private PUT and DELETE requests can finish after cancellation.
    */
   readonly signal?: AbortSignal;
 }
@@ -43,7 +44,9 @@ export interface FetchPodWriterOptions {
 export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter {
   const { adapterId, webId, podRoot } = options;
   const root = adapterContainer(adapterId, podRoot);
-  const transport = options.signal ? abortableFetch(options.fetch, options.signal) : options.fetch;
+  const transport = options.signal
+    ? abortableFetch(options.fetch, options.signal, requiresPrivateDestination(adapterId))
+    : options.fetch;
   const podFetch = createPodScopedFetch(root, { fetch: transport, allowRoot: false });
   const cleanupFetch = createPodScopedFetch(root, { fetch: options.fetch, allowRoot: false });
   const resolve = containerResolver(root, adapterId);
@@ -66,15 +69,19 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
     },
     async write(doc, conditions = {}) {
       const url = resolve(doc.slug);
+      const createOnly = conditions.ifNoneMatch === "*";
       const { etag } = await writeResource(url, doc.dataset, {
         fetchImpl: podFetch,
         etag: conditions.ifMatch,
-        createOnly: conditions.ifNoneMatch === "*",
+        createOnly,
         prefixes: { ...VOCAB_PREFIXES },
       });
       return {
         url,
-        ...(options.verifyPrivateDestination && etag !== null && { writeEtag: etag }),
+        ...(options.verifyPrivateDestination && {
+          writeCreated: createOnly,
+          ...(etag !== null && { writeEtag: etag }),
+        }),
         category: doc.category,
         forClass: doc.forClass,
         skipRegistration: doc.skipRegistration,

@@ -54,13 +54,13 @@ slugs, so the factory requires a Solid backend.
 `typeIndex.storageFor(url)` can select a separately scoped client for the canonical profile
 or the index validated against the profile's advertised storage. Selection, bootstrap and
 registration logic are shared with the fetch writer, and these reads also use `readRdf`.
-Pass the run's `signal` to the writer to cancel every storage operation inside a port.
+Pass the run's `signal` to the writer to stop new operations and cancel in-flight reads.
 Hosts own cache policy; the Node transport forces revalidation.
 
 Garmin, WHOOP and bank statement runs require both `verifyPrivateDestination(url)` and
 `confirmPrivateWrite(url, { etag })` on their `PodWriter`. Hosts with a storage client can
 pass both checks from `createOwnerOnlyDestinationChecks` into the writer. The client transport
-must honor the run signal during access-policy reads. For the storage-backed writer, also pass
+must honor the run signal during pre-write access-policy reads. For the storage-backed writer, also pass
 an authenticated `cleanupFetch` independent of the run signal. The fetch-backed writer gets
 that transport in its existing `fetch` option and applies the run signal itself.
 
@@ -70,7 +70,7 @@ import { createOwnerOnlyDestinationChecks, createStoragePodWriter } from '@jeswr
 const checks = createOwnerOnlyDestinationChecks({
   podRoot: storage.root,
   ownerWebId: webId,
-  openStorage: () => storage,
+  openStorage: (signal) => openAuthenticatedStorage({ signal }),
   signal,
 });
 const podWriter = createStoragePodWriter({
@@ -82,15 +82,19 @@ const podWriter = createStoragePodWriter({
 The verifier checks the target's pod scope, the containing policy and any existing resource's
 own policy. It creates missing containers empty under verified owner-only defaults, then checks
 them before any payload write. Only an explicit `true` permits the write. Public, unreadable or
-unsupported policies fail closed. After each successful write, confirmation requires an exact
-HEAD 200 for a non-container resource, a matching ETag if the write returned a strong one,
-and owner-only effective policies for both the file and its container. It also covers run
-provenance and CLI checkpoints. The runners report no new cursor or successful checkpoint
-until their preceding writes are confirmed.
+unsupported policies fail closed. A dispatched private mutation finishes even if the run is
+cancelled. Confirmation requires two exact HEAD 200 responses for the same resource with
+the same strong ETag, which must also match the write's ETag if present. Between the HEAD
+requests, the effective policies of both the file and its container must be owner-only.
+Confirmation also covers run provenance and CLI checkpoints. The runners report no new
+cursor or successful checkpoint until their preceding writes are confirmed.
 
-A refused create gets one cleanup attempt with a fresh 10-second timeout, even after
-cancellation. It sends DELETE with `If-Match` when the write returned a strong ETag and
-checks for absence with HEAD. A refused replacement is preserved because deletion would
+A refusal blocks further mutations in the import before cleanup starts. Cleanup applies
+only to a mutation that successfully used a create-only precondition. It gets a fresh
+10-second timeout and sends DELETE with `If-Match` using the write's strong ETag, or the
+first confirmation HEAD's strong ETag if the write supplied none. Without a strong
+validator, the importer skips deletion. A DELETE 200, 204, 404 or 410 followed by a HEAD
+404 or 410 confirms removal. A refused replacement is preserved because deletion would
 erase earlier committed data. The import fails with `PrivateDestinationError` carrying
 `phase: "after-write"`, the destination `url`, and whether removal was confirmed
 (`removed`). The host warns that a file was written and may be visible to others.
@@ -98,6 +102,8 @@ erase earlier committed data. The import fails with `PrivateDestinationError` ca
 The server can change access policy between the pre-write and post-write checks. A grant
 opened and closed between those checks escapes detection, and someone could read the data
 before cleanup.
+
+Type Index registration retains the existing public-index fallback, which is tracked separately.
 
 Suite and Pod Manager use `createSessionPrivateDestinationChecks({ fetch, storageUrl, webId, signal })`.
 It discovers storage with the authenticated session fetch. For a legacy root without a
@@ -974,8 +980,9 @@ using the authenticated Solid client that writes the payload. It checks the chec
 before protecting the checkpoint and verifies every import and checkpoint destination before and
 after writing. The CLI prints the destination URL with an after-write refusal. Node hosts
 can supply `verifyPrivateDestination` and `confirmPrivateWrite` to `runCli`. Both receive the
-exact URL, storage client, authenticated fetch, owner WebID and cancellation signal. The
-confirmation callback also receives the strong ETag when the write returned one.
+exact URL, storage client, authenticated fetch and owner WebID. Pre-write verification
+receives the run signal. Confirmation receives the write ETag when present and can report
+its first HEAD's strong ETag via `observeEtag` for conditional cleanup.
 
 The CLI stores `<podRoot>integrations/<id>/state.json`, including failed outcomes while
 retaining the last successful checkpoint. Before accessing JSON, it discovers the resource's
@@ -983,9 +990,11 @@ retaining the last successful checkpoint. Before accessing JSON, it discovers th
 The ACL must be in the same connector container. Missing ACL discovery or rejected ACL
 writes fail closed; ACP/LWS state protection belongs to later storage integration.
 Conditional JSON PUTs reject stale ETags and concurrent creates. Cancellation stops new
-source requests and regular Pod operations. Cleanup can still run for a refused create.
-The CLI writes a checkpoint only after all payloads and run provenance have been confirmed.
-If checkpoint confirmation fails, a surviving replacement still points to confirmed data.
+source requests and regular Pod operations. A dispatched private PUT or DELETE finishes,
+and checkpoint confirmation and cleanup can continue after cancellation. The CLI writes a
+checkpoint only after all payloads and run provenance have been confirmed. If checkpoint
+confirmation fails, the CLI reports the refusal and intentionally keeps any surviving
+checkpoint because its cursor points to confirmed data and deleting it would force a full re-import.
 State persistence failures fail the command, and deterministic slugs allow retry.
 
 Exit codes: **0** success/help, **1** import/state failure, **2** usage/config/file error,

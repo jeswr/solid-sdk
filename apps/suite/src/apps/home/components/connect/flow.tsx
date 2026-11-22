@@ -315,9 +315,15 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   // A popup can read as closed while still open (COOP), so this is a hint, not a verdict.
   const popupClosedCopy = "If you closed the sign-in window, choose Cancel.";
   const offlineCopy = "Connecting services needs a connection. Reconnect to connect services.";
+  const offlinePrivacyWarning =
+    phase === "error" &&
+    failure instanceof PrivateDestinationError &&
+    failure.phase === "after-write"
+      ? connectorErrorCopy(failure, entry.name)
+      : undefined;
   // One always-mounted live region; its text changes, so every outcome is announced.
   const announcement = !online
-    ? offlineCopy
+    ? [offlineCopy, offlinePrivacyWarning].filter(Boolean).join(" ")
     : phase === "waiting"
       ? popupClosed
         ? popupClosedCopy
@@ -363,6 +369,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
             title="Connecting services needs a connection"
             body="Reconnect to connect services."
           />
+          {offlinePrivacyWarning && <p>{offlinePrivacyWarning}</p>}
         </div>
       ) : (
         <>

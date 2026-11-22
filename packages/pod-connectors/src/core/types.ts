@@ -159,6 +159,8 @@ export interface WrittenBinary {
 /** A doc the runner wrote, with its final URL. */
 export interface WrittenDoc {
   readonly url: string;
+  /** Whether the successful write used a create-only precondition. */
+  readonly writeCreated?: boolean;
   /** ETag from the write response, when available for private-destination cleanup. */
   readonly writeEtag?: string;
   readonly category: string;
@@ -337,11 +339,15 @@ export interface PodWriter {
   /** Verify the exact destination and its containing policy. Required for sensitive imports. */
   verifyPrivateDestination?(url: string): Promise<boolean>;
   /** Confirm that the written resource and its containing policy are owner-only. */
-  confirmPrivateWrite?(url: string, version: PrivateWriteVersion): Promise<boolean>;
+  confirmPrivateWrite?(
+    url: string,
+    version: PrivateWriteVersion,
+    observeEtag?: (etag: string) => void,
+  ): Promise<boolean>;
   /** Remove a refused create and confirm absence, using only the supplied cleanup signal. */
   cleanupPrivateWrite?(
     slug: string,
-    options: PrivateWriteVersion & { signal: AbortSignal },
+    options: { etag: string; signal: AbortSignal },
   ): Promise<boolean>;
   /** Read existing RDF and its ETag; undefined only for a missing document. */
   read(slug: string): Promise<{ dataset: DatasetCore; etag: string | null } | undefined>;

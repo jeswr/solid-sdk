@@ -177,7 +177,7 @@ export function createMemoryPod(): MemoryPod {
         if (ifMatch && ifMatch !== `"v${existing.version}"`)
           return new Response("Precondition failed", { status: 412 });
         resources.delete(url);
-        return new Response(null, { status: 205 });
+        return new Response(null, { status: 204 });
       }
 
       return new Response("Method not allowed", { status: 405 });

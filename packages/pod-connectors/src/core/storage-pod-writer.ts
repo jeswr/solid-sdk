@@ -20,6 +20,7 @@ import {
 import type { PodWriter } from "./types.js";
 
 export interface StoragePodWriterOptions {
+  /** Storage transport should take cancellation from operation options. */
   readonly storage: StorageClient;
   /** Absolute connector container, e.g. <storage.root>integrations/spotify/. */
   readonly container: string;
@@ -54,6 +55,8 @@ export function createWacImportStorage(
 /** Storage-backed PodWriter with deterministic Solid paths and conditional mutations only. */
 export function createStoragePodWriter(options: StoragePodWriterOptions): PodWriter {
   const { storage, container, webId, signal, typeIndex } = options;
+  const privateWrites = !!(options.verifyPrivateDestination || options.confirmPrivateWrite);
+  const mutationSignal = privateWrites ? undefined : signal;
   if (storage.protocol !== "solid")
     throw new TypeError("Connector slugs require a Solid storage backend.");
   const resolve = containerResolver(container, "storage");
@@ -63,9 +66,7 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
     createPodScopedFetch(container, { fetch: options.cleanupFetch, allowRoot: false });
   function writeValidator({ etag, etagSource }: WriteResult) {
     // Some backends fall back to HEAD, which may observe another writer's version.
-    return options.verifyPrivateDestination && etagSource === "response" && etag !== null
-      ? { writeEtag: etag }
-      : {};
+    return privateWrites && etagSource === "response" && etag !== null ? { writeEtag: etag } : {};
   }
   async function currentEtag(url: string): Promise<string | undefined> {
     signal?.throwIfAborted();
@@ -105,9 +106,18 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
           const etag = await currentEtag(url);
           conditional = etag === undefined ? { ifNoneMatch: "*" } : { ifMatch: etag };
         }
-        const result = await writeStorageRdf(storage, url, doc.dataset, conditional, signal);
+        const result = await writeStorageRdf(
+          storage,
+          url,
+          doc.dataset,
+          conditional,
+          signal,
+          undefined,
+          privateWrites,
+        );
         return {
           url,
+          ...(privateWrites && { writeCreated: conditional.ifNoneMatch === "*" }),
           ...writeValidator(result),
           category: doc.category,
           forClass: doc.forClass,
@@ -128,13 +138,13 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
               ? await storage.write(url, body, {
                   contentType: doc.contentType,
                   ifMatch: etag,
-                  signal,
+                  signal: mutationSignal,
                 })
-              : await createStorageResource(storage, url, body, doc.contentType, signal);
+              : await createStorageResource(storage, url, body, doc.contentType, mutationSignal);
           return {
             url,
             created: true,
-            ...(options.verifyPrivateDestination && { writeCreated: etag === undefined }),
+            ...(privateWrites && { writeCreated: etag === undefined }),
             ...writeValidator(result),
           };
         } catch (error) {
@@ -152,7 +162,7 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
         if (etag === undefined) return;
         signal?.throwIfAborted();
         try {
-          await storage.delete(url, { ifMatch: etag, signal });
+          await storage.delete(url, { ifMatch: etag, signal: mutationSignal });
         } catch (error) {
           if (!missingResource(error)) throw error;
         }
@@ -170,6 +180,7 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
           registrations: [...registrations],
           storageFor: typeIndex.storageFor ?? (() => storage),
           signal,
+          finishMutations: privateWrites,
         });
       },
     },

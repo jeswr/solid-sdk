@@ -35,7 +35,7 @@ import { spotifyAdapter } from "../spotify/adapter.js";
 import { createWhoopAdapter, whoopAdapter } from "../whoop/adapter.js";
 import { createWhoopFileAdapter, whoopFileAdapter } from "../whoop/file-adapter.js";
 import { CYCLE } from "../whoop/fixtures.js";
-import { EXIT_CODES, importFile, parseImportArgs, runCli } from "./cli.js";
+import { type CliOptions, EXIT_CODES, importFile, parseImportArgs, runCli } from "./cli.js";
 import type { NodeConfig } from "./config.js";
 import * as loopback from "./loopback.js";
 import { createClientCredentialsFetch } from "./pod-auth.js";
@@ -2336,7 +2336,7 @@ describe("CLI owner-only import destinations", () => {
     }
   });
 
-  it("deletes a refused create without using a follow-up HEAD ETag", async () => {
+  it("uses the confirmation HEAD ETag to delete a refused create whose PUT returned none", async () => {
     const { pod, transport, requests } = fixturePod();
     const path = await configPath();
     const file = join(path, "..", "bank.csv");
@@ -2363,11 +2363,14 @@ describe("CLI owner-only import destinations", () => {
     );
     const deletion = requests.find(({ method }) => method === "DELETE");
     expect(deletion?.url).toBe(statementUrl);
-    expect(deletion?.headers.has("if-match")).toBe(false);
+    expect(deletion?.headers.get("if-match")).toBe('"v1"');
     expect(pod.get(statementUrl)).toBeUndefined();
   });
 
-  it("checks cleanup and prints the privacy refusal after CLI cancellation", async () => {
+  it.each([
+    "PUT",
+    "HEAD",
+  ] as const)("finishes a private write and reports its refusal after CLI cancellation during %s", async (cancelAt) => {
     const { pod, transport, requests } = fixturePod();
     const path = await configPath();
     const file = join(path, "..", "bank.csv");
@@ -2377,12 +2380,13 @@ describe("CLI owner-only import destinations", () => {
     const stdout = vi.fn();
     let payloadWritten = false;
     const podTransport: typeof fetch = async (input, init) => {
+      if (String(input) !== statementUrl) return transport(input, init);
+      if (init?.method === cancelAt && (cancelAt === "PUT" || payloadWritten)) controller.abort();
+      init?.signal?.throwIfAborted();
       const response = await transport(input, init);
-      if (String(input) === statementUrl) {
-        if (init?.method === "PUT") payloadWritten = true;
-        if (init?.method === "HEAD" && payloadWritten && !controller.signal.aborted)
-          controller.abort();
-        if (init?.method === "DELETE") expect(init.signal?.aborted).toBe(false);
+      if (init?.method === "PUT") {
+        payloadWritten = true;
+        await seedPublicRead(pod.fetch, statementUrl, false);
       }
       return response;
     };
@@ -2394,16 +2398,58 @@ describe("CLI owner-only import destinations", () => {
         stderr,
         signal: controller.signal,
       }),
-    ).toBe(EXIT_CODES.cancelled);
+    ).toBe(EXIT_CODES.import);
     expect(stderr).toHaveBeenCalledExactlyOnceWith(
       `${new PrivateDestinationError("bank-statements", { url: statementUrl, removed: true }).message} ${statementUrl}\n`,
     );
     expect(stdout).not.toHaveBeenCalled();
+    expect(requests).toContainEqual(expect.objectContaining({ method: "HEAD", url: statementUrl }));
     expect(requests.slice(-2)).toMatchObject([
       { method: "DELETE", url: statementUrl },
       { method: "HEAD", url: statementUrl },
     ]);
     expect(pod.get(statementUrl)).toBeUndefined();
+  });
+
+  it("finishes confirmation of an owner-private PUT before reporting CLI cancellation", async () => {
+    const { pod, transport, requests } = fixturePod();
+    const path = await configPath();
+    const file = join(path, "..", "bank.csv");
+    await writeFile(file, statement);
+    const controller = new AbortController();
+    const stdout = vi.fn();
+    const stderr = vi.fn();
+    const confirmPrivateWrite = vi.fn<NonNullable<CliOptions["confirmPrivateWrite"]>>(
+      async ({ fetch, url, signal }) => {
+        expect(signal).toBeUndefined();
+        expect(controller.signal.aborted).toBe(true);
+        return (await fetch(url, { method: "HEAD" })).status === 200;
+      },
+    );
+    expect(
+      await runCli(["import", "bank-statements", "--file", file], {
+        configPath: path,
+        podTransport: async (input, init) => {
+          if (String(input) === statementUrl && init?.method === "PUT") controller.abort();
+          init?.signal?.throwIfAborted();
+          return transport(input, init);
+        },
+        signal: controller.signal,
+        async verifyPrivateDestination({ signal }) {
+          expect(signal).toBe(controller.signal);
+          return true;
+        },
+        confirmPrivateWrite,
+        stdout,
+        stderr,
+      }),
+    ).toBe(EXIT_CODES.cancelled);
+    expect(confirmPrivateWrite).toHaveBeenCalledTimes(1);
+    expect(stderr).toHaveBeenCalledExactlyOnceWith("Import cancelled.\n");
+    expect(stdout).not.toHaveBeenCalled();
+    expect(pod.get(statementUrl)).toBeDefined();
+    expect(pod.get(`${bankContainer}state.json`)).toBeUndefined();
+    expect(requests.some(({ method }) => method === "DELETE")).toBe(false);
   });
 
   it.each([

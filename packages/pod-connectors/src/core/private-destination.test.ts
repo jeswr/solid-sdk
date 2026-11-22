@@ -9,8 +9,9 @@ import { garminAdapter } from "../garmin/adapter.js";
 import { whoopAdapter } from "../whoop/adapter.js";
 import { runFileImport } from "./file-import.js";
 import { runImport } from "./import-runner.js";
+import { createImportSession } from "./import-session.js";
 import { createFetchPodWriter } from "./pod-writer.js";
-import { requirePrivateWriteConfirmation } from "./pod-writer-policy.js";
+import { cleanupPrivateResource, requirePrivateWriteConfirmation } from "./pod-writer-policy.js";
 import {
   createOwnerOnlyDestinationChecks,
   createOwnerOnlyDestinationVerifier,
@@ -118,6 +119,7 @@ it("bounds unresponsive cleanup to ten seconds", async () => {
         "new.ttl",
         `${TEST_POD_ROOT}new.ttl`,
         true,
+        '"v1"',
       ),
     ).rejects.toMatchObject({ phase: "after-write", removed: false });
     expect(timeout).toHaveBeenCalledExactlyOnceWith(10_000);
@@ -126,11 +128,24 @@ it("bounds unresponsive cleanup to ten seconds", async () => {
   }
 });
 
+it("rejects a wildcard passed directly to cleanup without sending a DELETE", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  await expect(
+    cleanupPrivateResource(fetch, `${TEST_POD_ROOT}refused.ttl`, {
+      etag: "*",
+      signal: new AbortController().signal,
+    }),
+  ).resolves.toBe(false);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
 it("redacts confirmation and cleanup errors and leaves later API writes and state blocked", async () => {
   const write = vi.fn<PodWriter["write"]>(async ({ slug, category, forClass }) => ({
     url: `${TEST_POD_ROOT}${slug}`,
     category,
     forClass,
+    writeCreated: true,
+    writeEtag: '"v1"',
   }));
   const registerType = vi.fn<PodWriter["registerType"]>();
   const onState = vi.fn();
@@ -144,7 +159,9 @@ it("redacts confirmation and cleanup errors and leaves later API writes and stat
   const adapter = {
     ...whoopAdapter,
     async import(ctx: Parameters<typeof whoopAdapter.import>[0]) {
-      const first = await ctx.write({ ...doc, slug: "first.ttl" }, {}).catch((error) => error);
+      const first = await ctx
+        .write({ ...doc, slug: "first.ttl" }, { ifNoneMatch: "*" })
+        .catch((error) => error);
       await expect(ctx.write({ ...doc, slug: "next.ttl" })).rejects.toBe(first);
       await expect(ctx.remove("earlier.ttl")).rejects.toBe(first);
       return { cursor: "new-cursor" };
@@ -173,8 +190,89 @@ it("redacts confirmation and cleanup errors and leaves later API writes and stat
       "A file was written to your pod and may be visible to other people. Removal of the file could not be confirmed.",
   });
   expect(write).toHaveBeenCalledTimes(1);
+  expect(cleanupPrivateWrite).toHaveBeenCalledTimes(1);
   expect(registerType).not.toHaveBeenCalled();
   expect(onState).not.toHaveBeenCalled();
+});
+
+it("latches a refusal before cleanup and blocks mutations waiting on pre-write checks", async () => {
+  const cleaning = Promise.withResolvers<void>();
+  const cleaned = Promise.withResolvers<boolean>();
+  const checking = Promise.withResolvers<void>();
+  const checked = Promise.withResolvers<boolean>();
+  const resolve = (slug: string) => new URL(slug, TEST_POD_ROOT).href;
+  const preWriteChecks = new Set(["next.ttl", "next.bin", "_provenance.ttl"].map(resolve));
+  const write = vi.fn<PodWriter["write"]>(async ({ slug, category, forClass }) => ({
+    url: resolve(slug),
+    category,
+    forClass,
+    writeCreated: true,
+    writeEtag: '"v1"',
+  }));
+  const registerType = vi.fn<PodWriter["registerType"]>();
+  const remove = vi.fn<NonNullable<PodWriter["remove"]>>();
+  const writeBinary = vi.fn<NonNullable<PodWriter["writeBinary"]>>();
+  const session = createImportSession(
+    {
+      resolve,
+      read: async () => undefined,
+      async verifyPrivateDestination(url) {
+        if (!preWriteChecks.delete(url)) return true;
+        if (preWriteChecks.size === 0) checking.resolve();
+        return checked.promise;
+      },
+      confirmPrivateWrite: async () => false,
+      cleanupPrivateWrite: () => {
+        cleaning.resolve();
+        return cleaned.promise;
+      },
+      write,
+      writeBinary,
+      registerType,
+      remove,
+    },
+    "whoop",
+    "urn:test:source",
+    {},
+  );
+  try {
+    const doc = { dataset: new Store(), category: "health", forClass: "urn:test:Health" };
+    const next = session.write({ ...doc, slug: "next.ttl" }).catch((error) => error);
+    const binary = session
+      .writeBinary({
+        slug: "next.bin",
+        body: Uint8Array.of(1),
+        contentType: "application/octet-stream",
+      })
+      .catch((error) => error);
+    const finished = session.finish().catch((error) => error);
+    await checking.promise;
+    const first = session.write({ ...doc, slug: "first.ttl" }).catch((error) => error);
+    await cleaning.promise;
+    checked.resolve(true);
+    const deletion = session.remove("old.ttl").catch((error) => error);
+    const registration = session.registerTypes().catch((error) => error);
+    await checked.promise;
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(remove).not.toHaveBeenCalled();
+    expect(registerType).not.toHaveBeenCalled();
+    cleaned.resolve(true);
+    const refusal = await first;
+    expect(refusal).toMatchObject({
+      phase: "after-write",
+      url: resolve("first.ttl"),
+      removed: true,
+    });
+    expect(await next).toBe(refusal);
+    expect(await binary).toBe(refusal);
+    expect(await finished).toBe(refusal);
+    expect(await deletion).toBe(refusal);
+    expect(await registration).toBe(refusal);
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(writeBinary).not.toHaveBeenCalled();
+  } finally {
+    session.release();
+  }
 });
 
 it.each([
@@ -427,7 +525,12 @@ describe("owner-only destination verifier", () => {
 
   it.each([
     ["missing ETag", undefined, 204, 404, true],
-    ["weak ETag", 'W/"v1"', 204, 410, true],
+    ["completed DELETE", '"v1"', 200, 410, true],
+    ["missing DELETE target", '"v1"', 404, 404, true],
+    ["gone DELETE target", '"v1"', 410, 410, true],
+    ["missing DELETE target still present", '"v1"', 404, 200, false],
+    ["queued DELETE", '"v1"', 202, 404, false],
+    ["reset-content DELETE", '"v1"', 205, 404, false],
     ["denied DELETE", '"v1"', 403, 404, false],
     ["file still present after DELETE", '"v1"', 204, 200, false],
   ] as const)("reports cleanup with %s", async (_case, etag, deleteStatus, headStatus, removed) => {
@@ -471,11 +574,105 @@ describe("owner-only destination verifier", () => {
       message: `A file was written to your pod and may be visible to other people. ${removed ? "The file was removed." : "Removal of the file could not be confirmed."}`,
     });
     const deletion = fetch.mock.calls.find(([, init]) => init?.method === "DELETE");
-    expect(new Headers(deletion?.[1]?.headers).get("if-match")).toBe(etag === '"v1"' ? etag : null);
+    expect(new Headers(deletion?.[1]?.headers).get("if-match")).toBe('"v1"');
     expect(requests().slice(requests().indexOf(`DELETE ${payload}`))).toEqual(
-      deleteStatus === 204 ? [`DELETE ${payload}`, `HEAD ${payload}`] : [`DELETE ${payload}`],
+      [200, 204, 404, 410].includes(deleteStatus)
+        ? [`DELETE ${payload}`, `HEAD ${payload}`]
+        : [`DELETE ${payload}`],
     );
     expect(pod.get(payload) === undefined).toBe(removed);
+  });
+
+  it.each([
+    ["no validator anywhere", undefined, undefined],
+    ["a weak write validator", 'W/"v1"', '"v1"'],
+  ])("sends no DELETE for a refused create with %s", async (_case, writeEtag, headEtag) => {
+    const payload = `${container}finance/bank-transactions.ttl`;
+    const { pod, fetch, checks, requests } = fixture(async (url, init) => {
+      if (url !== payload || !["PUT", "HEAD"].includes(init?.method ?? "")) return;
+      const response = await pod.fetch(url, init);
+      const etag = init?.method === "PUT" ? writeEtag : headEtag;
+      if (etag === undefined) response.headers.delete("etag");
+      else response.headers.set("etag", etag);
+      return response;
+    });
+    const writer = createFetchPodWriter({
+      adapterId: "bank-statements",
+      webId: ownerWebId,
+      profileDocumentUrl: TEST_PROFILE_DOC,
+      podRoot: root,
+      fetch,
+      ...checks,
+    });
+    await expect(
+      runFileImport({
+        adapter: bankStatementsFileAdapter,
+        file: memoryFile("bank.csv", "Date,Description,Amount,Currency\n2026-06-01,Shop,-5.25,GBP"),
+        podWriter: writer,
+      }),
+    ).rejects.toMatchObject({ phase: "after-write", url: payload, removed: false });
+    expect(requests().at(-1)).toBe(`HEAD ${payload}`);
+    expect(requests().some((request) => request.startsWith("DELETE "))).toBe(false);
+    expect(pod.get(payload)).toBeDefined();
+  });
+
+  it("refuses confirmation when the version changes during otherwise successful policy reads", async () => {
+    let stored = false;
+    let resourceHeads = 0;
+    const { pod, checks, requests } = fixture(async (url, init) => {
+      if (url !== target) return;
+      if (init?.method === "PUT") stored = true;
+      // The first HEAD sees the write, and the policy check sees a different private version.
+      if (stored && init?.method === "HEAD" && ++resourceHeads === 2)
+        await pod.fetch(url, { method: "PUT", body: "Concurrent version" });
+    });
+    expect(await checks.verifyPrivateDestination(target)).toBe(true);
+    await pod.fetch(target, { method: "PUT", body: "Imported version" });
+    stored = true;
+    await expect(checks.confirmPrivateWrite(target, { etag: '"v1"' })).resolves.toBe(false);
+    expect(resourceHeads).toBe(3);
+    expect(requests().at(-1)).toBe(`HEAD ${target}`);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("uses the storage writer's actual mutation after an absent read (concurrent create: %s)", async (replacing) => {
+    const { pod, storage, fetch, requests } = fixture();
+    const verifyPrivateDestination = async (url: string) => {
+      if (replacing) await pod.fetch(url, { method: "PUT", body: "" });
+      return true;
+    };
+    const writer = createStoragePodWriter({
+      storage,
+      container,
+      cleanupFetch: fetch,
+      verifyPrivateDestination,
+      confirmPrivateWrite: async () => false,
+    });
+    const session = createImportSession(writer, "bank-statements", "urn:test:source", {});
+    try {
+      await expect(session.read("statement.ttl")).resolves.toBeUndefined();
+      await expect(
+        session.write(
+          {
+            slug: "statement.ttl",
+            dataset: new Store(),
+            category: "money",
+            forClass: "urn:test:Money",
+          },
+          {},
+        ),
+      ).rejects.toMatchObject({ phase: "after-write", url: target, removed: !replacing });
+      const write = fetch.mock.calls.find(([, init]) => init?.method === "PUT");
+      const headers = new Headers(write?.[1]?.headers);
+      expect(headers.get("if-match")).toBe(replacing ? '"v1"' : null);
+      expect(headers.get("if-none-match")).toBe(replacing ? null : "*");
+      expect(requests().some((request) => request.startsWith("DELETE "))).toBe(!replacing);
+      expect(pod.get(target) !== undefined).toBe(replacing);
+    } finally {
+      session.release();
+    }
   });
 
   it.each([
@@ -515,35 +712,86 @@ describe("owner-only destination verifier", () => {
     ]);
   });
 
-  it("uses a fresh cleanup signal after cancellation at the write response", async () => {
+  it.each([
+    "fetch",
+    "storage",
+  ] as const)("confirms and cleans up a refused in-flight %s PUT after cancellation", async (backend) => {
     const controller = new AbortController();
+    const onWriteAccepted = vi.fn();
     const payload = `${container}finance/bank-transactions.ttl`;
-    const { pod, fetch, checks } = fixture(async (url, init) => {
+    const { pod, fetch, storage, checks } = fixture(async (url, init) => {
       if (url !== payload || init?.method !== "PUT") return;
-      const response = await pod.fetch(url, init);
       controller.abort(new Error("private cancellation reason"));
+      init.signal?.throwIfAborted();
+      const response = await pod.fetch(url, init);
+      await seedPublicRead(pod.fetch, payload, false);
       return response;
     });
-    const writer = createFetchPodWriter({
-      adapterId: "bank-statements",
-      webId: ownerWebId,
-      profileDocumentUrl: TEST_PROFILE_DOC,
-      podRoot: root,
-      fetch,
-      ...checks,
-      signal: controller.signal,
-    });
+    const writer =
+      backend === "storage"
+        ? createStoragePodWriter({
+            storage,
+            container,
+            webId: ownerWebId,
+            cleanupFetch: fetch,
+            ...checks,
+            signal: controller.signal,
+          })
+        : createFetchPodWriter({
+            adapterId: "bank-statements",
+            webId: ownerWebId,
+            profileDocumentUrl: TEST_PROFILE_DOC,
+            podRoot: root,
+            fetch,
+            ...checks,
+            signal: controller.signal,
+          });
     await expect(
       runFileImport({
         adapter: bankStatementsFileAdapter,
         file: memoryFile("bank.csv", "Date,Description,Amount,Currency\n2026-06-01,Shop,-5.25,GBP"),
-        podWriter: writer,
+        podWriter: { ...writer, onWriteAccepted },
         signal: controller.signal,
       }),
     ).rejects.toMatchObject({ phase: "after-write", url: payload, removed: true });
     const deletion = fetch.mock.calls.find(([, init]) => init?.method === "DELETE");
     expect(deletion?.[1]?.signal?.aborted).toBe(false);
     expect(pod.get(payload)).toBeUndefined();
+    expect(onWriteAccepted).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "fetch",
+    "storage",
+  ] as const)("lets an in-flight private %s DELETE finish after cancellation", async (backend) => {
+    const controller = new AbortController();
+    const reason = new Error("cancelled during DELETE");
+    const { pod, fetch, storage, checks } = fixture((url, init) => {
+      if (url !== target || init?.method !== "DELETE") return;
+      controller.abort(reason);
+      init.signal?.throwIfAborted();
+    });
+    const signal = controller.signal;
+    const writer =
+      backend === "storage"
+        ? createStoragePodWriter({ storage, container, signal, ...checks })
+        : createFetchPodWriter({
+            adapterId: "bank-statements",
+            webId: ownerWebId,
+            profileDocumentUrl: TEST_PROFILE_DOC,
+            podRoot: root,
+            fetch,
+            signal,
+          });
+    const session = createImportSession(writer, "bank-statements", "urn:test:source", { signal });
+    try {
+      await pod.fetch(target, { method: "PUT", body: "" });
+      await session.read("statement.ttl");
+      await expect(session.remove("statement.ttl")).rejects.toBe(reason);
+      expect(pod.get(target)).toBeUndefined();
+    } finally {
+      session.release();
+    }
   });
 
   it.each([

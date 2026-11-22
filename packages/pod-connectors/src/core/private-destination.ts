@@ -6,6 +6,7 @@ import { CapabilitiesError } from "@jeswr/storage-capabilities";
 import { createMemoryCache } from "@jeswr/storage-capabilities/cache";
 import { createPodClient, type StorageClient, StorageError } from "@jeswr/storage-client";
 import { abortableFetch } from "./abort.js";
+import { isStrongEtag } from "./pod-writer-policy.js";
 import { createWacImportStorage } from "./storage-pod-writer.js";
 import type { PodWriter } from "./types.js";
 
@@ -26,10 +27,10 @@ export function createSessionPrivateDestinationChecks(
 ): PrivateDestinationChecks {
   const { storageUrl, webId, signal } = options;
   const root = normalizePodBase(storageUrl);
-  const scopedFetch = createPodScopedFetch(root, {
-    fetch: signal ? abortableFetch(options.fetch, signal) : options.fetch,
-  });
-  async function openStorage(): Promise<StorageClient> {
+  async function openStorage(signal?: AbortSignal): Promise<StorageClient> {
+    const scopedFetch = createPodScopedFetch(root, {
+      fetch: signal ? abortableFetch(options.fetch, signal, true) : options.fetch,
+    });
     try {
       const { storage } = await createPodClient({
         storage: root,
@@ -69,28 +70,41 @@ export function createSessionPrivateDestinationVerifier(options: SessionOptions)
 interface DestinationOptions {
   readonly podRoot: string;
   readonly ownerWebId: string;
-  /** Use a client whose transport observes the run signal, including during policy reads. */
-  readonly openStorage: () => StorageClient | Promise<StorageClient>;
+  /** Use the supplied signal for pre-write reads. Confirmation opens without the run signal. */
+  readonly openStorage: (signal?: AbortSignal) => StorageClient | Promise<StorageClient>;
   readonly signal?: AbortSignal;
 }
 
-/** Share a scoped storage client between the distinct pre-write and post-write checks. */
+/** Open scoped storage lazily for pre-write verification and independent confirmation. */
 export function createOwnerOnlyDestinationChecks(
   options: DestinationOptions,
 ): PrivateDestinationChecks {
   const { ownerWebId, openStorage, signal } = options;
   const root = normalizePodBase(options.podRoot);
   let opened: StorageClient | Promise<StorageClient> | undefined;
+  let confirmation: StorageClient | Promise<StorageClient> | undefined;
 
-  async function openFor(url: string) {
+  async function openFor(url: string, forConfirmation = false) {
     assertWithinPodScope(root, url, { allowRoot: false });
-    signal?.throwIfAborted();
-    opened ??= openStorage();
-    const storage = await opened;
+    if (!forConfirmation) signal?.throwIfAborted();
+    let pending: StorageClient | Promise<StorageClient>;
+    if (forConfirmation && signal) {
+      confirmation ??= openStorage();
+      pending = confirmation;
+    } else {
+      opened ??= openStorage(signal);
+      pending = opened;
+    }
+    const storage = await pending;
     if (storage.protocol === "solid" && storage.root === root) return storage;
   }
 
-  async function exactHead(storage: StorageClient, url: string, kind: "container" | "resource") {
+  async function exactHead(
+    storage: StorageClient,
+    url: string,
+    kind: "container" | "resource",
+    signal?: AbortSignal,
+  ) {
     signal?.throwIfAborted();
     const head = await storage.head(url, { revalidate: true, signal });
     if (head.status !== 200 || head.url !== url || head.kind !== kind)
@@ -100,7 +114,7 @@ export function createOwnerOnlyDestinationChecks(
 
   async function exists(storage: StorageClient, url: string, kind: "container" | "resource") {
     try {
-      await exactHead(storage, url, kind);
+      await exactHead(storage, url, kind, signal);
       return true;
     } catch (error) {
       if (error instanceof StorageError && error.status === 404) return false;
@@ -108,7 +122,7 @@ export function createOwnerOnlyDestinationChecks(
     }
   }
 
-  async function privateAccess(storage: StorageClient, url: string) {
+  async function privateAccess(storage: StorageClient, url: string, signal?: AbortSignal) {
     signal?.throwIfAborted();
     return (await checkOwnerOnly({ storage, url, ownerWebId })).private;
   }
@@ -120,12 +134,12 @@ export function createOwnerOnlyDestinationChecks(
       if (!(await ensureContainer(storage, parent))) return false;
       signal?.throwIfAborted();
       try {
-        await storage.create(parent, null, { exactUrl: url, kind: "container", signal });
+        await storage.create(parent, null, { exactUrl: url, kind: "container" });
       } catch (error) {
         if (!(error instanceof StorageError && error.status === 412)) throw error;
       }
     }
-    return privateAccess(storage, url);
+    return privateAccess(storage, url, signal);
   }
 
   return {
@@ -134,21 +148,22 @@ export function createOwnerOnlyDestinationChecks(
       if (!storage || !(await ensureContainer(storage, new URL(".", url).href))) return false;
       // A stored document may have its own policy even in an owner-only container.
       const verified =
-        !(await exists(storage, url, "resource")) || (await privateAccess(storage, url));
+        !(await exists(storage, url, "resource")) || (await privateAccess(storage, url, signal));
       signal?.throwIfAborted();
       return verified;
     },
-    async confirmPrivateWrite(url, { etag }) {
-      const storage = await openFor(url);
+    async confirmPrivateWrite(url, { etag }, observeEtag) {
+      const storage = await openFor(url, true);
       if (!storage) return false;
       const head = await exactHead(storage, url, "resource");
+      if (!isStrongEtag(head.etag)) return false;
+      observeEtag?.(head.etag);
       if (etag !== undefined && head.etag !== etag) return false;
       const container = new URL(".", url).href;
       await exactHead(storage, container, "container");
-      const confirmed =
-        (await privateAccess(storage, url)) && (await privateAccess(storage, container));
-      signal?.throwIfAborted();
-      return confirmed;
+      if (!(await privateAccess(storage, url)) || !(await privateAccess(storage, container)))
+        return false;
+      return (await exactHead(storage, url, "resource")).etag === head.etag;
     },
   };
 }

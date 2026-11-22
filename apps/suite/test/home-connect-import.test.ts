@@ -63,10 +63,19 @@ describe("Connect uses the real package writer against the suite demo pod", () =
     if (!adapter) throw new Error("Missing bank statement adapter");
     const payload = `${session.storageUrl}integrations/bank-statements/finance/bank-transactions.ttl`;
     const controller = new AbortController();
+    let awaitingConfirmation = false;
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
-      const response = await session.fetch(input, init);
-      if (String(input) === payload && init?.method === "PUT") controller.abort();
-      return response;
+      if (String(input) === payload) {
+        if (init?.method === "PUT") {
+          controller.abort();
+          awaitingConfirmation = true;
+        }
+        if (init?.method === "HEAD" && awaitingConfirmation)
+          return new Response(null, { status: 403 });
+        if (init?.method === "DELETE") awaitingConfirmation = false;
+      }
+      init?.signal?.throwIfAborted();
+      return session.fetch(input, init);
     });
     let connection: ConnectorConnection | undefined;
     const update = vi.fn((action: ConnectionAction) => {
@@ -103,7 +112,7 @@ describe("Connect uses the real package writer against the suite demo pod", () =
     ).rejects.toMatchObject({
       phase: "after-write",
       url: payload,
-      removed: true,
+      removed: false,
       message: expect.stringContaining("may be visible to other people"),
     });
     expect(progress).not.toHaveBeenCalled();

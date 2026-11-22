@@ -69,7 +69,7 @@ and binary media-type validation in `core/pod-writer-policy.ts`.
 Registration requires webId and `typeIndex.profileDocumentUrl`; `storageFor` optionally selects
 another client for the pinned profile or validated Type Index. Never widen the document grant.
 The shared Type Index path retains typed wrappers, raw shared vocabulary and conditional bootstrap.
-The writer forwards the run signal before and through every operation, including after awaits.
+The writer checks cancellation before dispatch and aborts reads. Dispatched private mutations finish.
 Storage-client refuses remote JSON-LD contexts by default; preserve this policy. Hosts supply
 freshness policy in their transport; Node requests force revalidation.
 
@@ -282,8 +282,8 @@ browser entry points. Read `src/node/config.ts` and the README's Node CLI sectio
 changing the provisional MCP JSON schema. Never read process environment outside the Node-only VeSync credential reader;
 use the 0600 owner-held config descriptor without following symlinks. Pass the bounded
 `forClientCredentials` fetch to the Solid backend and `createStoragePodWriter`. Require both privacy
-checks for Garmin, WHOOP and bank payloads, provenance and CLI checkpoints. Clean up refused creates
-with a fresh 10-second signal, preserve replacements and publish only confirmed writes and cursors.
+checks for Garmin, WHOOP and bank payloads, provenance and CLI checkpoints. Confirm one strong ETag
+across both HEADs. Latch refusals before conditional cleanup of create-only writes with a fresh 10-second deadline.
 Keep `node/pod-auth.ts` as the adapter for the explicit token URL and exact cross-storage index grant.
 Protocol discovery is cached and byte-capped, and only validated endpoints receive exchange
 credentials. Separate immutable agent boundaries handle external index documents. The adapter

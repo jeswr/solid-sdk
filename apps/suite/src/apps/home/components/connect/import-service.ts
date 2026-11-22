@@ -166,7 +166,7 @@ export function fileWithSignal(file: File, signal: AbortSignal): ImportFile {
 }
 
 /** The same package writer is used by the UI and demo-pod integration tests.
- * Cancellation reaches source requests, document writes and registration. */
+ * Cancellation stops new writes. A dispatched private write still gets confirmed. */
 export function createImportWriter(
   session: Pick<PodSession, "webId" | "storageUrl" | "fetch">,
   adapterId: string,
