@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { issueApproval } from "@jeswr/agent-mandate/approval";
 import { type ActionProposal, digestOf, recordToTurtle } from "@jeswr/agent-model";
 import { afterEach, expect, it, vi } from "vitest";
@@ -168,6 +169,12 @@ it("moves an expired request to Activity on the clock without writing audit reco
   const view = await mount(f.tree(h("div", null, h(ApprovalsScreen), h(ExpiredApprovalRequests))));
   await until(() => Boolean(view.host.querySelector("[data-agent-approval-id]")));
   expect(view.host.querySelector('[aria-label="Expired approvals"]')).toBeNull();
+  // The demo agent writes its startup heartbeat before the proposal expires.
+  const putTargets = () =>
+    writes.mock.calls.flatMap(([url, init]) => (init?.method === "PUT" ? [url] : []));
+  await until(() => putTargets().includes(f.client.paths.heartbeat));
+  expect(putTargets()).toEqual([f.client.paths.heartbeat]);
+  writes.mockClear();
   await act(() => vi.advanceTimersByTime(5000));
   await until(() => Boolean(view.host.querySelector('[aria-label="Expired approvals"]')));
   expect(view.host.querySelector('[aria-label="Expired approvals"]')?.textContent).toContain(
