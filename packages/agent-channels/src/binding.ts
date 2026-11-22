@@ -49,6 +49,8 @@ export interface ChannelBinding<Raw = unknown> {
   };
   /** Send half — exported ONLY from the "./<id>/send" subpath; importable ONLY by @jeswr/agent-executor. */
   readonly send?: {
+    /** Pure, bounded projection of the wire's visible text; throws ChannelParseError on refusal. */
+    preview(wire: Wire): Promise<string>;
     /** Build the exact wire bytes for a proposal. Pure. The digest of `wire` is what the owner approves. */
     render(
       proposal: RenderableProposal,

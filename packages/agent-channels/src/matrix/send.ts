@@ -32,6 +32,7 @@ import {
   type MatrixBridgeChannel,
   matrixBridgeProfile,
 } from "./bridge.js";
+import { preview } from "./preview.js";
 import { identifier, json, MATRIX_LIMITS, matrixRest, record, responseBody } from "./shared.js";
 
 export interface MatrixSendOptions {
@@ -158,6 +159,7 @@ export function createMatrixSend(options: MatrixSendOptions): NonNullable<Channe
   }
   return {
     render,
+    preview,
     async validate(wire, proposal, context) {
       try {
         const snapshot = assertWire(wire);

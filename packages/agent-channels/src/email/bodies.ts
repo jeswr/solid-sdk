@@ -134,11 +134,14 @@ function htmlEscape(s: string): string {
 export function renderBodies(message: AnyMessage, compactJws: string, footer: string) {
   const human = renderHuman(message, footer);
   const carrier = envelope(compactJws);
-  const html = `<!doctype html><html><body><pre>${htmlEscape(human)}</pre><script type="application/ld+json">${carrier
+  return { human, html: renderHtml(human, carrier), carrier };
+}
+/** The HTML alternative: the plain text, escaped, plus the inline signed-message carrier. */
+export function renderHtml(human: string, carrier: string): string {
+  return `<!doctype html><html><body><pre>${htmlEscape(human)}</pre><script type="application/ld+json">${carrier
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
     .replace(/&/g, "\\u0026")
     .replace(/\u2028/g, "\\u2028")
     .replace(/\u2029/g, "\\u2029")}</script></body></html>`;
-  return { human, html, carrier };
 }
