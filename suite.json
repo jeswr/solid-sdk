@@ -120,7 +120,8 @@
     "@jeswr/solid-wallet",
     "@jeswr/solid-events",
     "@jeswr/solid-trips",
-    "@jeswr/excalidraw-scene"
+    "@jeswr/excalidraw-scene",
+    "@jeswr/pod-ask"
   ],
   "applications": [
     {
