@@ -41,6 +41,8 @@ export default defineConfig({
         "src/apps/places/state/**/*.ts",
         "src/apps/trips/lib/**/*.ts",
         "src/apps/trips/state/**/*.ts",
+        "src/apps/publish/lib/**/*.ts",
+        "src/apps/publish/state/*.{ts,tsx}",
         "src/apps/agent/lib/**/*.ts",
         "src/apps/slides/lib/**/*.ts",
         "src/apps/slides/state/**/*.{ts,tsx}",
