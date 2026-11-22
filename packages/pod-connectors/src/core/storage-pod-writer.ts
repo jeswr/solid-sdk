@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
+import { createSolidBackend, type SolidBackendOptions } from "@jeswr/storage-client/solid";
 import {
   createStorageResource,
   missingResource,
@@ -16,12 +18,27 @@ export interface StoragePodWriterOptions {
   /** Absolute connector container, e.g. <storage.root>integrations/spotify/. */
   readonly container: string;
   readonly webId?: string;
+  readonly verifyPrivateDestination?: PodWriter["verifyPrivateDestination"];
   readonly signal?: AbortSignal;
   readonly typeIndex?: {
     readonly profileDocumentUrl: string;
     readonly podRoot?: string;
     /** Select a client for the pinned profile or validated index in another storage. */
     readonly storageFor?: (url: string) => StorageClient;
+  };
+}
+
+/** Connector storage at a known Solid root. The host must independently establish WAC. */
+export function createWacImportStorage(
+  options: Pick<SolidBackendOptions, "root" | "fetch">,
+): StorageClient {
+  const storage = createSolidBackend(options);
+  return {
+    ...storage,
+    features: {
+      ...storage.features,
+      accessControl: { state: "available", evidence: "verified-wac", detail: { model: "wac" } },
+    },
   };
 }
 
@@ -46,6 +63,7 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
     {
       webId,
       resolve,
+      verifyPrivateDestination: options.verifyPrivateDestination,
       async read(slug) {
         try {
           const { dataset, etag } = await storage.readRdf(resolve(slug), { signal });

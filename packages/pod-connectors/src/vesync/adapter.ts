@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import {
   buildObservationDay,
@@ -15,9 +16,10 @@ import {
   sensorDocPath,
 } from "@jeswr/solid-environment";
 import { Store, Writer } from "n3";
-import { RunBudget, readJson } from "../core/budget.js";
+import { RunBudgetExceededError, readJson } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { mergeItems } from "../core/incremental.js";
+import { SourceTimeoutError } from "../core/source-timeout.js";
 import type { IntegrationAdapter } from "../core/types.js";
 import {
   BYPASS,
@@ -116,6 +118,11 @@ export function measurements(
 }
 export function createVeSyncAdapter(options: VeSyncOptions = {}): IntegrationAdapter {
   return {
+    limits: {
+      maxRequests: MAX_DEVICES + 1,
+      maxItems: MAX_DEVICES,
+      maxBytes: 8 * MAX_RESPONSE_BYTES,
+    },
     vocabMap,
     maxRunActivities: 32,
     metadata: {
@@ -133,13 +140,7 @@ export function createVeSyncAdapter(options: VeSyncOptions = {}): IntegrationAda
     },
     fixtures: () => VESYNC_FIXTURES,
     async import(ctx) {
-      const budget = new RunBudget("vesync", {
-        maxRequests: MAX_DEVICES + 1,
-        maxItems: MAX_DEVICES,
-        maxBytes: 8 * MAX_RESPONSE_BYTES,
-      });
       const post = async (path: string, body: object) => {
-        budget.request();
         const signal = AbortSignal.any([
           AbortSignal.timeout(SOURCE_CALL_TIMEOUT_MS),
           ...(ctx.signal ? [ctx.signal] : []),
@@ -172,7 +173,7 @@ export function createVeSyncAdapter(options: VeSyncOptions = {}): IntegrationAda
                   "vesync",
                   VESYNC_API + path,
                   MAX_RESPONSE_BYTES,
-                  budget,
+                  undefined,
                   signal,
                 ),
               );
@@ -182,7 +183,13 @@ export function createVeSyncAdapter(options: VeSyncOptions = {}): IntegrationAda
             aborted,
           ]);
         } catch (error) {
-          if (error instanceof VeSyncAuthError) throw error;
+          if (ctx.signal?.aborted) ctx.signal.throwIfAborted();
+          if (
+            error instanceof VeSyncAuthError ||
+            error instanceof RunBudgetExceededError ||
+            error instanceof SourceTimeoutError
+          )
+            throw error;
           // Source transport errors may contain credentials or provider-controlled strings.
           throw new VeSyncSourceError();
         } finally {
@@ -203,7 +210,7 @@ export function createVeSyncAdapter(options: VeSyncOptions = {}): IntegrationAda
           "vesync",
           "VeSync device list is invalid or exceeds the device cap.",
         );
-      budget.items(answer.list.length);
+      ctx.budget.items(answer.list.length);
       let skipped = 0,
         observations = 0;
       const seen = new Set<string>();

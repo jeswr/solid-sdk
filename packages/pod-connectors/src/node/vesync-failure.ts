@@ -1,5 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { PreconditionUnsupportedError } from "../core/errors.js";
+import { SourceTimeoutError } from "../core/source-timeout.js";
 import { VeSyncAuthError, VeSyncSourceError } from "../vesync/errors.js";
 import {
   httpStatus,
@@ -31,7 +33,7 @@ export class VeSyncRunFailure extends NodeRuntimeError {
 export function classifyVeSyncFailure(error: unknown): VeSyncRunFailure {
   if (error instanceof VeSyncRunFailure) return error;
   if (error instanceof VeSyncAuthError) return new VeSyncRunFailure("auth", error.message, false);
-  if (error instanceof VeSyncSourceError)
+  if (error instanceof VeSyncSourceError || error instanceof SourceTimeoutError)
     return new VeSyncRunFailure(
       "import",
       "VeSync reading failed; the last successful checkpoint was retained.",

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 /**
  * Cancellation at the Pod I/O boundary. A run checks its signal immediately before each
  * PodWriter port call, so an abort during an earlier await (an import session's implicit
@@ -35,10 +36,15 @@ export function unlessAborted<A extends unknown[], R>(
  * signal immediately before it is invoked. Optional ports stay absent when the writer has none.
  */
 export function abortablePodWriter(writer: PodWriter, signal: AbortSignal | undefined): PodWriter {
-  const { writeBinary, remove } = writer;
+  const { verifyPrivateDestination, writeBinary, remove } = writer;
   return {
     webId: writer.webId,
     resolve: (slug) => writer.resolve(slug),
+    ...(verifyPrivateDestination && {
+      verifyPrivateDestination: unlessAborted(signal, (url: string) =>
+        verifyPrivateDestination.call(writer, url),
+      ),
+    }),
     read: unlessAborted(signal, (slug: string) => writer.read(slug)),
     write: unlessAborted(signal, (doc: NormalisedDoc, conditions?: WriteConditions) =>
       writer.write(doc, conditions),

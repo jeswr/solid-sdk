@@ -4238,6 +4238,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
       '@jeswr/pod-auth':
         specifier: workspace:*
         version: link:../pod-auth

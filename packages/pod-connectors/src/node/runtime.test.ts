@@ -8,6 +8,7 @@ import { get } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stderr as nodeStderr, stdout as nodeStdout } from "node:process";
+import { ownerPolicy, writeWac } from "@jeswr/pod-access";
 import * as podAuth from "@jeswr/pod-auth/node";
 import { HEALTH } from "@jeswr/solid-health";
 import { AclResource, Agent } from "@solid/object";
@@ -15,6 +16,7 @@ import { strToU8, zipSync } from "fflate";
 import { DataFactory } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HSBC, MONZO } from "../bank-statements/fixtures.js";
+import { PrivateDestinationError } from "../core/errors.js";
 import * as importRunner from "../core/import-runner.js";
 import { TOKEN_REQUEST_TIMEOUT_MS } from "../core/oauth.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
@@ -132,6 +134,7 @@ function fixturePod() {
 function store(fetch: typeof globalThis.fetch, id = "spotify") {
   return createStateStore({ ...config, adapterId: id, fetch });
 }
+const verifyPrivateDestination = async () => true; // The CLI tests use an isolated fixture Pod.
 
 describe("owner-only checkpoint", () => {
   it("finds an ACL relation after other parameters and ignores unrelated or absent rels", async () => {
@@ -1289,7 +1292,13 @@ describe("CLI import", () => {
           .join("\n"),
     );
     const stderr = vi.fn();
-    const opts = { configPath: path, podTransport: transport, stdout: vi.fn(), stderr };
+    const opts = {
+      configPath: path,
+      podTransport: transport,
+      stdout: vi.fn(),
+      stderr,
+      verifyPrivateDestination,
+    };
     expect(await runCli(["import", "whoop", "--file", file], opts)).toBe(0);
     expect(stderr).toHaveBeenCalledWith("WHOOP import partial, re-run to continue.\n");
     stderr.mockClear();
@@ -1309,6 +1318,7 @@ describe("CLI import", () => {
     const opts = {
       configPath: await configPath(),
       podTransport: transport,
+      verifyPrivateDestination,
       stdout: vi.fn(),
       stderr,
       sourceAuth: {
@@ -1342,6 +1352,7 @@ describe("CLI import", () => {
       const opts = {
         configPath: path,
         podTransport: transport,
+        verifyPrivateDestination,
         stdout: vi.fn(),
         stderr: vi.fn(),
         sourceAuth: {
@@ -2162,6 +2173,131 @@ describe("VeSync watch failure classification", () => {
   });
 });
 
+describe("CLI owner-only import destinations", () => {
+  const parent = `${TEST_POD_ROOT}integrations/`;
+  const bankContainer = `${parent}bank-statements/`;
+  const statement = "Date,Description,Amount,Currency\n2026-06-01,Synthetic shop,-5.25,GBP";
+  const statementSlug = "finance/bank-transactions.ttl";
+  const statementUrl = `${bankContainer}${statementSlug}`;
+
+  async function seedPublicRead(fetch: typeof globalThis.fetch, url: string, members: boolean) {
+    const policy = ownerPolicy(TEST_WEBID, members);
+    const [owner] = policy.grants;
+    if (!owner) throw new Error("Expected an owner grant");
+    policy.grants.push({ ...owner, modes: new Set(["read"]), who: [[{ kind: "public" }]] });
+    await fetch(`${url}.acl`, {
+      method: "PUT",
+      body: await writeWac(policy, url, `${url}.acl`),
+    });
+  }
+
+  it.each([
+    ["bank-statements", "bank.csv", statement, statementSlug],
+    [
+      "garmin",
+      "garmin.zip",
+      zipSync({
+        "account@example.test/DI_CONNECT/DI-Connect-Fitness/123_summarizedActivities_20260601.json":
+          strToU8(
+            JSON.stringify([
+              {
+                activityId: 123,
+                activityType: "running",
+                name: "Morning run",
+                beginTimestamp: Date.parse("2026-06-01T06:30:00Z"),
+                duration: 1_985_000,
+              },
+            ]),
+          ),
+      }),
+      "health/activities.ttl",
+    ],
+    [
+      "whoop",
+      "sleeps.csv",
+      "Sleep onset,Wake onset,Asleep duration (min)\n2026-06-01T22:00:00Z,2026-06-02T06:00:00Z,450",
+      "health/observations/2026-06.ttl",
+    ],
+  ] as const)("imports %s with the default verifier", async (id, name, contents, slug) => {
+    const { pod, transport, requests } = fixturePod();
+    const path = await configPath();
+    const file = join(path, "..", name);
+    await writeFile(file, contents);
+    const stdout = vi.fn();
+    const stderr = vi.fn();
+    const container = `${parent}${id}/`;
+    expect(
+      await runCli(["import", id, "--file", file], {
+        configPath: path,
+        podTransport: transport,
+        stdout,
+        stderr,
+      }),
+    ).toBe(EXIT_CODES.success);
+    const firstWrite = requests.findIndex(({ method }) => method === "PUT");
+    expect(requests.slice(0, firstWrite)).toContainEqual(
+      expect.objectContaining({ url: `${TEST_POD_ROOT}.acl`, method: "GET" }),
+    );
+    expect(requests[firstWrite]).toMatchObject({ url: parent, body: new Uint8Array() });
+    expect(
+      requests.filter(({ method, url }) => method === "PUT" && url === `${container}${slug}`),
+    ).toHaveLength(1);
+    expect(pod.dataset(`${container}${slug}`).size).toBeGreaterThan(0);
+    expect(JSON.parse(pod.get(`${container}state.json`) ?? "null")).toMatchObject({
+      lastOutcome: "success",
+    });
+    expect(stdout).toHaveBeenCalledWith(expect.stringContaining(`Imported ${id}:`));
+    expect(stderr).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "public parent",
+    "public resource",
+    "unavailable root ACL",
+    "untyped root",
+    "no access model",
+  ])("refuses a bank import with %s before sending any payload", async (problem) => {
+    const { pod, transport, requests } = fixturePod();
+    if (problem === "public parent") await seedPublicRead(pod.fetch, parent, true);
+    if (problem === "public resource") {
+      await pod.fetch(statementUrl, { method: "PUT", body: "" });
+      await seedPublicRead(pod.fetch, statementUrl, false);
+    }
+    const path = await configPath();
+    const file = join(path, "..", "bank.csv");
+    await writeFile(file, statement);
+    const stderr = vi.fn();
+    const stdout = vi.fn();
+    expect(
+      await runCli(["import", "bank-statements", "--file", file], {
+        configPath: path,
+        podTransport: async (input, init) => {
+          const response = await transport(input, init);
+          if (String(input) === `${TEST_POD_ROOT}.acl` && problem === "unavailable root ACL")
+            return new Response(null, { status: 403 });
+          if (String(input) === TEST_POD_ROOT && problem === "untyped root")
+            response.headers.set("link", `<${TEST_POD_ROOT}.acl>; rel="acl"`);
+          if (String(input) === TEST_POD_ROOT && problem === "no access model")
+            response.headers.delete("link");
+          return response;
+        },
+        stdout,
+        stderr,
+      }),
+    ).toBe(EXIT_CODES.import);
+    expect(stderr).toHaveBeenCalledExactlyOnceWith(
+      `${new PrivateDestinationError("bank-statements").message}\n`,
+    );
+    expect(stdout).not.toHaveBeenCalled();
+    const writes = requests.filter(({ method }) => method === "PUT");
+    expect(writes.map(({ url }) => url)).toEqual(
+      problem === "public resource" ? [`${bankContainer}state.json.acl`] : [],
+    );
+    if (problem === "public resource")
+      expect(requests.at(-1)).toMatchObject({ url: `${statementUrl}.acl`, method: "GET" });
+  });
+});
+
 describe("CLI bank statement options", () => {
   const Bank = `${TEST_POD_ROOT}integrations/bank-statements/finance/bank/`;
   /** Account folders under finance/bank/, e.g. `hsbc-uk-<sha256>`. */
@@ -2199,7 +2335,7 @@ describe("CLI bank statement options", () => {
           "--account-label",
           "Everyday HSBC",
         ],
-        { configPath: path, podTransport: transport, stdout, stderr },
+        { configPath: path, podTransport: transport, stdout, stderr, verifyPrivateDestination },
       ),
     ).toBe(0);
     expect(stderr).not.toHaveBeenCalled();
@@ -2223,6 +2359,7 @@ describe("CLI bank statement options", () => {
     await runCli(["import", "bank-statements", "--file", file], {
       configPath: path,
       podTransport: transport,
+      verifyPrivateDestination,
       stdout: vi.fn(),
       stderr: vi.fn(),
     });
@@ -2232,7 +2369,13 @@ describe("CLI bank statement options", () => {
   it("keeps two Monzo exports in separate account folders when their labels differ", async () => {
     const { pod, transport } = fixturePod();
     const path = await configPath();
-    const options = { configPath: path, podTransport: transport, stdout: vi.fn(), stderr: vi.fn() };
+    const options = {
+      configPath: path,
+      podTransport: transport,
+      stdout: vi.fn(),
+      stderr: vi.fn(),
+      verifyPrivateDestination,
+    };
     for (const [name, label] of [
       ["joint.csv", "Joint account"],
       ["personal.csv", "Personal account"],

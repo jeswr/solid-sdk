@@ -172,6 +172,7 @@ export function createBankStatementsFileAdapter(
           forClass: CLASSES.Invoice,
           dataset,
           writeMode: "replace",
+          requirePrecondition: true,
         });
       }
       // Reads, plans and budget-checks every account/month document before the first write.

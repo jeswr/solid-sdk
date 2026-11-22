@@ -21,6 +21,7 @@ export interface FetchPodWriterOptions {
   readonly podRoot: string;
   /** Host's authenticated Pod transport; resolved at call time by the host. */
   readonly fetch: typeof fetch;
+  readonly verifyPrivateDestination?: PodWriter["verifyPrivateDestination"];
   /**
    * The run's cancellation signal. Every Pod request this writer sends (reads, PUT/DELETE,
    * the binary HEAD and Type Index/profile updates) checks it immediately before sending and
@@ -43,6 +44,7 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
   return {
     webId,
     resolve,
+    verifyPrivateDestination: options.verifyPrivateDestination,
     async read(slug) {
       const url = resolve(slug);
       try {

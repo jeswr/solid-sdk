@@ -196,8 +196,9 @@ export interface ImportContext {
   /**
    * Read a previously-written document back (for incremental imports that
    * merge new items into an existing collection). `undefined` when absent.
+   * An optional inspection can reject the stored dataset before the session retains a copy.
    */
-  read(slug: string): Promise<DatasetCore | undefined>;
+  read(slug: string, inspect?: (dataset: DatasetCore) => void): Promise<DatasetCore | undefined>;
   /** Write RDF; defaults to the precondition retained by a preceding read of this URL. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
   /**
@@ -328,6 +329,8 @@ export interface PodWriter {
   readonly webId?: string;
   /** Resolve an adapter-relative slug within its container. */
   resolve(slug: string): string;
+  /** Verify the exact destination and its containing policy. Required for sensitive imports. */
+  verifyPrivateDestination?(url: string): Promise<boolean>;
   /** Read existing RDF and its ETag; undefined only for a missing document. */
   read(slug: string): Promise<{ dataset: DatasetCore; etag: string | null } | undefined>;
   /** Write RDF, preserving the caller's conditional-write precondition. */

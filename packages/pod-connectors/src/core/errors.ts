@@ -78,6 +78,13 @@ export class IntegrationSyncError extends IntegrationError {
   }
 }
 
+export class PrivateDestinationError extends IntegrationSyncError {
+  constructor(adapterId: string) {
+    super(adapterId, "Could not verify an owner-private import destination.");
+    this.name = "PrivateDestinationError";
+  }
+}
+
 // AUTHORED-BY Claude Opus 5.5
 /** The Pod cannot support a safe conditional update (no strong ETag); retrying cannot help. */
 export class PreconditionUnsupportedError extends IntegrationSyncError {

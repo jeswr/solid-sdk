@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory, Parser, Store, Writer } from "n3";
@@ -561,6 +562,7 @@ it.each(
     profileDocumentUrl: TEST_PROFILE_DOC,
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
+    verifyPrivateDestination: async () => true,
   });
   expect(writer.webId).toBe(TEST_WEBID);
   const report = await runFileImport({

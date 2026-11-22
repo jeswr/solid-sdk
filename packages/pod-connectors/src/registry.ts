@@ -228,12 +228,7 @@ export const TIER_C: readonly CatalogEntry[] = [
 
 /** All catalog entries, A → B → C, in display order. */
 export function allCatalogEntries(): CatalogEntry[] {
-  return [
-    ...ADAPTERS.map(catalogEntry),
-    ...TIER_B,
-    { ...vesyncAdapter.metadata },
-    ...TIER_C,
-  ];
+  return [...ADAPTERS.map(catalogEntry), ...TIER_B, { ...vesyncAdapter.metadata }, ...TIER_C];
 }
 
 function catalogEntry(adapter: IntegrationAdapter): CatalogEntry {

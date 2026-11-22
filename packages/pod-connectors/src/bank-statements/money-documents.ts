@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 /**
  * Known-bank CSV imports write Suite Money's generated wire format (`@jeswr/solid-money`)
  * inside the connector container, sharded per account and month under a per-document budget:
@@ -26,6 +27,7 @@ import { Provenance } from "../core/provenance.js";
 
 /** fetch-rdf's DEFAULT_MAX_BYTES (16 MiB) bounds every reader of these documents. */
 const READER_MAX_BYTES = 16 * 1024 * 1024;
+const MAX_STORED_BANK_BYTES = 2 * READER_MAX_BYTES;
 export interface BankDocumentBudget {
   /** Transactions per month document. */
   readonly transactions: number;
@@ -37,6 +39,8 @@ export interface BankDocumentBudget {
   readonly accounts: number;
   /** Documents read per import: account documents, month documents and their parts. */
   readonly documents: number;
+  /** Lower the cumulative stored RDF allowance across all planning reads. */
+  readonly retainedBytes?: number;
 }
 export const BANK_DOCUMENT_BUDGET: BankDocumentBudget = Object.freeze({
   transactions: 2_000,
@@ -121,6 +125,7 @@ export class BankMoneyPlan {
   /** Account plus account-month documents so far: a lower bound on the documents read. */
   private documents = 0;
   private loaded = 0;
+  private retainedBytes = 0;
   constructor(private readonly budget: BankDocumentBudget = BANK_DOCUMENT_BUDGET) {}
 
   /**
@@ -163,6 +168,7 @@ export class BankMoneyPlan {
    */
   async write(ctx: FileImportContext): Promise<void> {
     this.loaded = 0;
+    this.retainedBytes = 0;
     const planned: PlannedDocument[] = [];
     const runs = ctx.resolve(RUNS).length;
     // Session provenance adds wasDerivedFrom/wasGeneratedBy to each new subject.
@@ -264,6 +270,7 @@ export class BankMoneyPlan {
         forClass: doc.forClass,
         dataset: doc.document.dataset,
         writeMode: "replace",
+        requirePrecondition: true,
         registrationContainer: ROOT,
         // Suite Money validates wasDerivedFrom as an http(s) IRI: name the account document
         // rather than the session's file-export URN.
@@ -281,7 +288,18 @@ export class BankMoneyPlan {
       throw new BankDocumentBudgetError(
         `more than ${this.budget.documents} documents to read in one import`,
       );
-    const stored = await ctx.read(slug);
+    const stored = await ctx.read(slug, (dataset) => {
+      const bytes = nTriplesBytes(dataset);
+      if (bytes > this.budget.bytes)
+        throw new BankDocumentBudgetError(`${slug} exceeds ${this.budget.bytes} bytes`);
+      this.retainedBytes += bytes;
+      const limit = Math.min(
+        this.budget.retainedBytes ?? MAX_STORED_BANK_BYTES,
+        MAX_STORED_BANK_BYTES,
+      );
+      if (this.retainedBytes > limit)
+        throw new BankDocumentBudgetError(`stored RDF exceeds ${limit} bytes in one import`);
+    });
     ctx.signal?.throwIfAborted();
     const document = new MoneyDocument(stored ? compactBlankNodes(stored) : undefined);
     const url = ctx.resolve(slug);

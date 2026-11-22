@@ -1,13 +1,20 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { parseMoney } from "@jeswr/solid-money";
 import { describe, expect, it, vi } from "vitest";
-import type { FileImportAdapter, FileImportContext } from "../core/file-import.js";
+import {
+  type FileImportAdapter,
+  type FileImportContext,
+  runFileImport,
+} from "../core/file-import.js";
 import {
   createMemoryPod,
+  createStorageMemoryPod,
   fileImport,
   type MemoryPod,
   memoryFile,
   TEST_POD_ROOT,
+  testPodWriter,
 } from "../core/testing.js";
 import { parseBankCsv } from "./csv.js";
 import {
@@ -424,5 +431,39 @@ describe("per-import budget", () => {
     // Re-running again changes nothing but provenance.
     await fileImport(plannedAdapter(records, {}), FILE, { pod });
     expect(await transactions(pod)).toHaveLength(3);
+  });
+
+  it("refuses to retain more stored RDF across shards than the cumulative byte budget", async () => {
+    const records = [record(1, "July ".repeat(640)), record(2, "August ".repeat(460), "2026-08")];
+    const { pod } = await fileImport(plannedAdapter(records, {}), FILE);
+    const before = bankDocuments(pod).map((url) => [url, pod.get(url)]);
+    await expect(
+      fileImport(plannedAdapter(records, { retainedBytes: 6_500 }), FILE, { pod }),
+    ).rejects.toThrow(/stored RDF exceeds 6500 bytes in one import/);
+    expect(bankDocuments(pod).map((url) => [url, pod.get(url)])).toEqual(before);
+  });
+
+  it.each([
+    createMemoryPod,
+    createStorageMemoryPod,
+  ])("requires an ETag from the planning read before replacing an existing bank document (%#)", async (makePod) => {
+    const pod = await makePod();
+    const adapter = plannedAdapter([record(1)], {});
+    await fileImport(adapter, FILE, { pod });
+    const writer = testPodWriter(pod, adapter.metadata.id);
+    const write = vi.spyOn(writer, "write");
+    const result = runFileImport({
+      adapter,
+      file: FILE,
+      podWriter: {
+        ...writer,
+        async read(slug) {
+          const stored = await writer.read(slug);
+          return stored && slug.endsWith("account.ttl") ? { ...stored, etag: null } : stored;
+        },
+      },
+    });
+    await expect(result).rejects.toMatchObject({ name: "PreconditionUnsupportedError" });
+    expect(write.mock.calls.map(([doc]) => doc.slug)).toEqual(["_provenance.ttl"]);
   });
 });

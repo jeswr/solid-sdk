@@ -1,6 +1,26 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
-import { IntegrationSyncError } from "./errors.js";
+import { IntegrationSyncError, PrivateDestinationError } from "./errors.js";
+import type { PodWriter } from "./types.js";
+
+/** The health and finance imports that require a host-verified write destination. */
+export function requiresPrivateDestination(id: string): boolean {
+  return id === "garmin" || id === "whoop" || id === "bank-statements";
+}
+
+export async function requirePrivateDestination(
+  id: string,
+  writer: Pick<PodWriter, "verifyPrivateDestination">,
+  url: string,
+): Promise<void> {
+  try {
+    if ((await writer.verifyPrivateDestination?.(url)) === true) return;
+  } catch {
+    // Transport and policy errors may contain sensitive values. Refuse without echoing them.
+  }
+  throw new PrivateDestinationError(id);
+}
 
 /** Resolve connector slugs identically for every transport. */
 export function containerResolver(container: string, adapterId: string) {

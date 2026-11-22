@@ -60,6 +60,31 @@ registration logic are shared with the fetch writer, and these reads also use `r
 Pass the run's `signal` to the writer to cancel every storage operation inside a port.
 Hosts own cache policy; the Node transport forces revalidation.
 
+Garmin, WHOOP and bank statement runs require a `PodWriter.verifyPrivateDestination(url)`
+port. The runner invokes it for each destination, including run provenance. The Suite and CLI
+use `createOwnerOnlyDestinationVerifier` from `@jeswr/pod-connectors`. Hosts supply the pod root,
+owner WebID, a lazy `openStorage` callback and the run signal. The storage transport must also
+honor cancellation during access-policy reads.
+
+```ts
+import { createOwnerOnlyDestinationVerifier } from '@jeswr/pod-connectors';
+
+const verifyPrivateDestination = createOwnerOnlyDestinationVerifier({
+  podRoot: storage.root,
+  ownerWebId: webId,
+  openStorage: () => storage,
+  signal,
+});
+```
+
+The verifier checks the target's pod scope, the containing policy and any existing resource's
+own policy. It creates missing containers empty under verified owner-only defaults, then checks
+them before any payload write. Only an explicit `true` permits the write. Public, unreadable or
+unsupported policies fail closed. The check observes current policy without binding it to the PUT.
+For a legacy root without storage-description discovery, Suite detects WAC via pod-access
+and uses `createWacImportStorage({ root, fetch })` with the advertised storage root. This
+client still needs a successful `checkOwnerOnly` proof of the actual destination.
+
 Live imports take `sourceAuth: { fetch: authenticatedSourceFetch }`. The optional
 `createSourceAuth(id, adapter, token, sourceFetch)` helper adds bearer and adapter headers.
 The helper binds credentials to an HTTPS-only origin allowlist (default: static fixture route origins)
@@ -105,7 +130,7 @@ writer contracts for both writers, and the environment-read regression test with
 
 ## Run limits
 
-`runImport` owns one shared `RunBudget` for all 23 network adapters and wraps `ctx.api`:
+`runImport` owns one shared `RunBudget` for every network adapter and wraps `ctx.api`:
 requests are charged before dispatch, response bodies are metered as bytes stream, and
 source calls receive the combined run, response-deadline and caller signals. Adapters
 charge returned records through `ctx.budget.items()`. Pagination, retries, profile lookups
@@ -601,6 +626,20 @@ are discarded and counted as skipped; no destructive reconciliation occurs.
 `GARMIN_ARCHIVE_LIMITS` and `GarminArchiveLimits` expose the ceilings. Legacy text remains
 capped at 64 MiB despite ZIP's `streaming: true`. Tests use only synthetic archives;
 maintainer validation with real account exports remains necessary.
+
+Maintenance constraints: read `src/garmin/archive.ts` and `health-vocab.ts`; reuse Takeout's
+ZIP validation and `core/file-json.ts`. Never recurse into Uploaded-Files FIT ZIPs, fetch
+source URLs or fall back to whole-archive text. Preserve the existing CSV/GPX/TCX units
+policy and rides/indoor-cycling split. Use only existing sector terms, never invented
+HRV/VO2max subclasses or IRIs. Catch entry parse failures separately from Pod writes;
+writer failures and decoder exceptions must propagate. Keep cap/FIT skips separate from
+unrecognised files, and preserve model limits for observations including duplicate rows.
+The Apple connector is workouts-only; use the separate suite Health model's
+Observation/CodeableConcept/Instant mapping for metrics. Do not claim automatic connector
+chart discovery or HRV/VO2max charts without app support.
+The range signature check leaves the full legacy stream for `fileText`, which enforces the
+actual byte cap independently of the supplied file size.
+
 ## Bank statements
 
 `./adapters/bank-statements` exports `bankStatementsFileAdapter` and
@@ -726,8 +765,8 @@ truncated.
 **Per-import budget**: at most 50 accounts and 600 documents per import. A statement export
 covers one account; Revolut splits it into one account per Product and currency pocket, and
 50 covers every pocket an export can hold. 600 documents is 50 years of monthly documents for
-one account, or 12 accounts over 4 years, while bounding Pod reads and the documents held in
-memory (each at most 4 MiB). The parser fails as soon as a 51st account, or the 601st account
+one account, or 12 accounts over 4 years. Planning also caps cumulative stored RDF at
+32 MiB of N-Triples before retaining shard copies. The parser fails as soon as a 51st account, or the 601st account
 plus account-month document, appears, before any Pod read. Planning then counts every
 document it reads (account documents, stored month documents and parts, and the one absent
 part probed after the last stored part, which is reused if the month needs a new part) and
@@ -737,7 +776,9 @@ fails before the 601st read; a re-import over stored months costs about two read
 is written. Writes then happen one document at a time (account document first, then months
 in order). A failed write, such as a 412 from a concurrent change or a network error, stops
 the import with the earlier documents already written; re-running the same import converges,
-because every write re-reads the document and upserts by transaction ID.
+because every write re-reads the document and upserts by transaction ID. Every replacement
+uses a strong ETag from the planning read. When that read has no strong validator the
+replacement is refused. New documents use create-only writes.
 
 **Posting-date window.** Known-bank rows must post between 1970-01-01 and one year after
 the import (date-only values at UTC midnight). Rows outside the window are skipped and
@@ -931,6 +972,13 @@ falling back to the generic bearer transport. Spotify refreshes expired access t
 memory through this factory. With a vault configured, the CLI uses the shared OAuth source
 session so every rotation is persisted. An explicit `options.sourceAuth` bypasses login,
 the factory and vault wiring.
+
+The standalone CLI verifies owner-only WAC for Garmin, WHOOP and bank imports by default,
+using the authenticated Solid client that writes the payload. It checks the checkpoint destination
+before protecting the checkpoint and checks every import destination before writing it. A refused
+destination reports an import error. Node hosts can override the verifier through
+`runCli(args, { verifyPrivateDestination })`. The callback receives the exact URL, storage client,
+authenticated fetch, owner WebID and cancellation signal.
 
 The CLI stores `<podRoot>integrations/<id>/state.json`, including failed outcomes while
 retaining the last successful checkpoint. Before accessing JSON, it discovers the resource's

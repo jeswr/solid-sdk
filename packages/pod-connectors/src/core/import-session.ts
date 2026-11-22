@@ -8,6 +8,7 @@ import { canonicalizeJeswrDataset } from "./canonical-vocab.js";
 import { IntegrationSyncError, PreconditionUnsupportedError } from "./errors.js";
 import { copyDataset, mergeItems } from "./incremental.js";
 import { registrationsFor } from "./pod-writer.js";
+import { requirePrivateDestination, requiresPrivateDestination } from "./pod-writer-policy.js";
 import { PROV, Provenance } from "./provenance.js";
 import type {
   BinaryDoc,
@@ -75,12 +76,27 @@ export function createImportSession(
   const registrations = new Map<string, TypeRegistrationRequest>();
   // Retain one counter per document, never identifiers for every imported subject.
   const itemCounts = new Map<string, number>();
+  const privateImport = requiresPrivateDestination(id);
+  let privacyRefused = false;
+  async function verifyDestination(url: string): Promise<void> {
+    if (!privateImport) return;
+    try {
+      await requirePrivateDestination(id, writer, url);
+    } catch (error) {
+      privacyRefused = true;
+      throw error;
+    }
+  }
   const conditionFor = (
     existing: Awaited<ReturnType<PodWriter["read"]>>,
   ): WriteConditions | undefined =>
     !existing ? { ifNoneMatch: "*" } : existing.etag ? { ifMatch: existing.etag } : undefined;
-  async function read(slug: string): Promise<DatasetCore | undefined> {
+  async function read(
+    slug: string,
+    inspect?: (dataset: DatasetCore) => void,
+  ): Promise<DatasetCore | undefined> {
     const stored = await writer.read(slug);
+    if (stored) inspect?.(stored.dataset);
     const existing = stored
       ? { ...stored, dataset: canonicalizeJeswrDataset(stored.dataset) }
       : undefined;
@@ -146,6 +162,7 @@ export function createImportSession(
       item.generatedBy.add(activityUrl);
       if (used.size < maxRunSources) used.add(origin);
     }
+    await verifyDestination(url);
     const result = await writer.write({ ...doc, dataset }, conditions ?? conditionFor(previous));
     // Take extra classes from the document, not the host writer's result: custom PodWriter
     // ports need not echo them.
@@ -175,6 +192,7 @@ export function createImportSession(
     const url = writer.resolve(doc.slug);
     if (url.split(/[?#]/, 1)[0] === writer.resolve(RUNS))
       throw new Error("Reserved connector provenance slug.");
+    await verifyDestination(url);
     return writer.writeBinary(doc);
   }
   async function remove(slug: string): Promise<void> {
@@ -195,7 +213,7 @@ export function createImportSession(
     if (finalized) return;
     finalized = true;
     try {
-      await recordRun();
+      if (!privacyRefused) await recordRun();
       await committed?.();
     } finally {
       active.delete(claim);
@@ -254,6 +272,7 @@ export function createImportSession(
       for (const { subject } of previousActivities.slice(options.maxRunActivities - 1))
         dataset.removeQuads(dataset.getQuads(subject, null, null, null));
     }
+    await verifyDestination(writer.resolve(RUNS));
     await writer.write(
       {
         slug: RUNS,
