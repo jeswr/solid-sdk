@@ -1,0 +1,51 @@
+{
+  "shapesBase": "https://jeswr.org/ns/slides/shapes#",
+  "prefixes": {
+    "schema": "http://schema.org/",
+    "slides": "https://jeswr.org/ns/slides#",
+    "dct": "http://purl.org/dc/terms/"
+  },
+  "entities": [
+    {
+      "name": "Presentation",
+      "targetClass": "http://schema.org/PresentationDigitalDocument",
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": {
+        "name": {},
+        "description": {},
+        "theme": {},
+        "aspectRatio": {},
+        "created": {},
+        "modified": {},
+        "slideUrls": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "name": "Slide",
+      "targetClass": "https://jeswr.org/ns/slides#Slide",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "position": {},
+        "layout": {},
+        "title": {},
+        "body": {},
+        "secondBody": {},
+        "image": {
+          "iriScheme": "http-https"
+        },
+        "imageAlt": {},
+        "notes": {},
+        "hidden": {},
+        "drawing": {
+          "iriScheme": "http-https"
+        }
+      }
+    }
+  ]
+}

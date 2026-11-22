@@ -25,6 +25,8 @@ export default defineConfig({
       provider: "v8",
       include: [
         "src/apps/agent/lib/**/*.ts",
+        "src/apps/slides/lib/**/*.ts",
+        "src/apps/slides/state/**/*.{ts,tsx}",
         "src/shell/lib/**/*.ts",
         "src/shell/settings/assistants/{read,copy}.ts",
         "src/shell/sync/connection-state.ts",

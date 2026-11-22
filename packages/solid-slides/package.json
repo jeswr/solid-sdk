@@ -1,0 +1,51 @@
+{
+  "name": "@jeswr/solid-slides",
+  "version": "0.1.0",
+  "description": "Generated presentation and slide RDF models, Markdown interchange and atomic pod storage.",
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "codegen",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/slides.ontology.ttl --shapes codegen/slides.shapes.ttl --config codegen/codegen.config.json --out src/generated",
+    "lint": "biome check src scripts test codegen/codegen.config.json package.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*",
+    "@rdfjs/wrapper": "^0.34.0",
+    "n3": "2.0.3",
+    "marked": "17.0.6",
+    "sanitize-html": "2.18.1"
+  },
+  "devDependencies": {
+    "@jeswr/federation-codegen": "workspace:*",
+    "@types/n3": "1.26.1",
+    "@types/sanitize-html": "2.16.2",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "@rdfjs/types": "^2.0.1",
+    "@biomejs/biome": "^2.5.1"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
