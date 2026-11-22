@@ -8,7 +8,12 @@ import { ResourceWriteError, writeResource } from "../pod/resource.js";
 import { ensureTypeRegistrations } from "../pod/type-index-write.js";
 import { abortableFetch } from "./abort.js";
 import { IntegrationSyncError } from "./errors.js";
-import { adapterContainer, containerResolver, validateBinaryType } from "./pod-writer-policy.js";
+import {
+  adapterContainer,
+  cleanupPrivateResource,
+  containerResolver,
+  validateBinaryType,
+} from "./pod-writer-policy.js";
 import type { BinaryDoc, PodWriter, WrittenBinary } from "./types.js";
 import { VOCAB_PREFIXES } from "./vocab.js";
 
@@ -19,13 +24,13 @@ export interface FetchPodWriterOptions {
   /** Canonical profile document URL resolved by the host when loading the WebID. */
   readonly profileDocumentUrl: string;
   readonly podRoot: string;
-  /** Host's authenticated Pod transport; resolved at call time by the host. */
+  /** Host's authenticated Pod transport. Pass the run signal separately so cleanup can outlive it. */
   readonly fetch: typeof fetch;
   readonly verifyPrivateDestination?: PodWriter["verifyPrivateDestination"];
+  readonly confirmPrivateWrite?: PodWriter["confirmPrivateWrite"];
   /**
-   * The run's cancellation signal. Every Pod request this writer sends (reads, PUT/DELETE,
-   * the binary HEAD and Type Index/profile updates) checks it immediately before sending and
-   * carries it, composed with the request's own signal.
+   * The run's cancellation signal. Reads, writes and Type Index operations check it immediately
+   * before sending and compose it with the request's own signal. Privacy cleanup has its own deadline.
    */
   readonly signal?: AbortSignal;
 }
@@ -40,11 +45,15 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
   const root = adapterContainer(adapterId, podRoot);
   const transport = options.signal ? abortableFetch(options.fetch, options.signal) : options.fetch;
   const podFetch = createPodScopedFetch(root, { fetch: transport, allowRoot: false });
+  const cleanupFetch = createPodScopedFetch(root, { fetch: options.fetch, allowRoot: false });
   const resolve = containerResolver(root, adapterId);
   return {
     webId,
     resolve,
     verifyPrivateDestination: options.verifyPrivateDestination,
+    confirmPrivateWrite: options.confirmPrivateWrite,
+    cleanupPrivateWrite: (slug, cleanup) =>
+      cleanupPrivateResource(cleanupFetch, resolve(slug), cleanup),
     async read(slug) {
       const url = resolve(slug);
       try {
@@ -130,7 +139,14 @@ async function writeBinaryResource(
     return { url, created: false };
   if (!response.ok) throw new ResourceWriteError(url, response.status);
   const etag = response.headers.get("etag");
-  return { url, created: true, ...(keepWriteEtag && etag !== null && { writeEtag: etag }) };
+  return {
+    url,
+    created: true,
+    ...(keepWriteEtag && {
+      writeCreated: headers.has("if-none-match"),
+      ...(etag !== null && { writeEtag: etag }),
+    }),
+  };
 }
 
 /** Distinct class/container registrations for written documents. */

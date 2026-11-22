@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { serializeTurtle } from "@/lib/pod-data";
 import { readProfile } from "@/lib/profile";
 import { useSession } from "./session-provider";
+import { errorMessage } from "./states";
 import { useConnect } from "./use-connect";
 import { useFileImport } from "./use-file-import";
 
@@ -31,20 +32,24 @@ const { JSDOM } = createRequire(import.meta.url)("jsdom") as {
   JSDOM: new (html: string) => { window: Window & typeof globalThis };
 };
 
-async function grantPublicRead(pod: ReturnType<typeof createMemoryPod>) {
-  const aclUrl = `${parent}.acl`;
+async function grantPublicRead(pod: ReturnType<typeof createMemoryPod>, target = parent) {
+  const aclUrl = `${target}.acl`;
   const dataset = new Store();
   const auth = new Authorization(DataFactory.namedNode(`${aclUrl}#public`), dataset, DataFactory);
   auth.type.add("http://www.w3.org/ns/auth/acl#Authorization");
-  auth.accessTo = parent;
-  auth.default = parent;
+  auth.accessTo = target;
+  if (target === parent) auth.default = target;
   auth.agentClass.add("http://xmlns.com/foaf/0.1/Agent");
   auth.canRead = true;
   await pod.fetch(aclUrl, { method: "PUT", body: await serializeTurtle(dataset) });
 }
 
 describe.each(["bank file", "WHOOP API"] as const)("%s import destination", (flow) => {
-  it.each(["owner-only", "public parent"] as const)("handles %s storage", async (policy) => {
+  it.each([
+    "owner-only",
+    "public parent",
+    "public after write",
+  ] as const)("handles %s storage", async (policy) => {
     // Mount React in a DOM while keeping fetch and its byte streams in the Node realm.
     const { window } = new JSDOM("<!doctype html><html><body></body></html>");
     vi.stubGlobal("window", window);
@@ -52,7 +57,19 @@ describe.each(["bank file", "WHOOP API"] as const)("%s import destination", (flo
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const pod = createMemoryPod();
     if (policy === "public parent") await grantPublicRead(pod);
-    const podFetch = vi.fn(pod.fetch);
+    const podFetch = vi.fn<typeof fetch>(async (input, init) => {
+      const response = await pod.fetch(input, init);
+      const url = String(input);
+      if (
+        policy === "public after write" &&
+        init?.method === "PUT" &&
+        url.startsWith(parent) &&
+        url.endsWith(".ttl")
+      ) {
+        await grantPublicRead(pod, url);
+      }
+      return response;
+    });
     const unrelatedFetch = vi.fn<typeof fetch>(() => {
       throw new Error("The import should use the authenticated Pod transport");
     });
@@ -89,7 +106,7 @@ describe.each(["bank file", "WHOOP API"] as const)("%s import destination", (flo
         expect(state?.report?.written.length).toBeGreaterThan(0);
         expect(writes.length).toBeGreaterThan(0);
         expect(writes.every(([url]) => String(url).startsWith(TEST_POD_ROOT))).toBe(true);
-      } else {
+      } else if (policy === "public parent") {
         expect(state).toMatchObject({ phase: "error", error: { name: "PrivateDestinationError" } });
         expect(writes).toEqual([]);
         expect(
@@ -97,6 +114,16 @@ describe.each(["bank file", "WHOOP API"] as const)("%s import destination", (flo
             ([url, init]) => url === `${parent}.acl` && (init?.method ?? "GET") === "GET",
           ),
         ).toBe(true);
+      } else {
+        expect(state).toMatchObject({
+          phase: "error",
+          error: { name: "PrivateDestinationError", phase: "after-write", removed: true },
+        });
+        if (!state?.error) throw new Error("Expected an import error");
+        expect(errorMessage(state.error)).toBe(
+          "A file was written to your pod and may be visible to other people. The file was removed.",
+        );
+        expect(writes.filter(([, init]) => init?.method === "DELETE")).toHaveLength(1);
       }
       expect(unrelatedFetch).not.toHaveBeenCalled();
     } finally {

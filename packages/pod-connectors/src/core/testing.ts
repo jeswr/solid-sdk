@@ -327,13 +327,14 @@ export function createStorageMemoryPod(): Promise<MemoryPod> {
 
 /** Keep legacy HTTP fault-injection fixtures available alongside the storage backend. */
 export function testPodWriter(pod: MemoryPod, adapterId: string) {
-  const verifyPrivateDestination = async () => true; // No other principal can access this fixture.
+  const ownerOnly = async () => true; // No other principal can access this fixture.
+  const privacy = { verifyPrivateDestination: ownerOnly, confirmPrivateWrite: ownerOnly };
   return pod.storage
     ? createStoragePodWriter({
         storage: pod.storage,
         container: new URL(`integrations/${adapterId}/`, TEST_POD_ROOT).href,
         webId: TEST_WEBID,
-        verifyPrivateDestination,
+        ...privacy,
         typeIndex: { profileDocumentUrl: TEST_PROFILE_DOC },
       })
     : createFetchPodWriter({
@@ -342,6 +343,6 @@ export function testPodWriter(pod: MemoryPod, adapterId: string) {
         profileDocumentUrl: TEST_PROFILE_DOC,
         podRoot: TEST_POD_ROOT,
         fetch: pod.fetch,
-        verifyPrivateDestination,
+        ...privacy,
       });
 }

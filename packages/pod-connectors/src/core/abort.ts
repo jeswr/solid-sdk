@@ -36,7 +36,14 @@ export function unlessAborted<A extends unknown[], R>(
  * signal immediately before it is invoked. Optional ports stay absent when the writer has none.
  */
 export function abortablePodWriter(writer: PodWriter, signal: AbortSignal | undefined): PodWriter {
-  const { verifyPrivateDestination, writeBinary, remove } = writer;
+  const {
+    verifyPrivateDestination,
+    confirmPrivateWrite,
+    cleanupPrivateWrite,
+    onWriteAccepted,
+    writeBinary,
+    remove,
+  } = writer;
   return {
     webId: writer.webId,
     resolve: (slug) => writer.resolve(slug),
@@ -45,6 +52,14 @@ export function abortablePodWriter(writer: PodWriter, signal: AbortSignal | unde
         verifyPrivateDestination.call(writer, url),
       ),
     }),
+    ...(confirmPrivateWrite && {
+      confirmPrivateWrite: unlessAborted(signal, (url, version) =>
+        confirmPrivateWrite.call(writer, url, version),
+      ),
+    }),
+    // Cleanup has its own deadline and must run after cancellation.
+    ...(cleanupPrivateWrite && { cleanupPrivateWrite: cleanupPrivateWrite.bind(writer) }),
+    ...(onWriteAccepted && { onWriteAccepted: onWriteAccepted.bind(writer) }),
     read: unlessAborted(signal, (slug: string) => writer.read(slug)),
     write: unlessAborted(signal, (doc: NormalisedDoc, conditions?: WriteConditions) =>
       writer.write(doc, conditions),

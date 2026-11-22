@@ -7,8 +7,8 @@ import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { readJson } from "../core/budget.js";
-import { verifyPrivateWrite } from "../core/pod-writer-policy.js";
-import type { ConnectorState } from "../core/types.js";
+import { requirePrivateWriteConfirmation } from "../core/pod-writer-policy.js";
+import type { ConnectorState, PodWriter } from "../core/types.js";
 import { writeResource } from "../pod/resource.js";
 import {
   httpsUrl,
@@ -147,7 +147,7 @@ export function createStateStore(options: {
         );
       }
     },
-    async write(state: CliConnectorState, verifyDestination?: () => Promise<void>): Promise<void> {
+    async write(state: CliConnectorState, privacy?: PodWriter): Promise<void> {
       let writeEtag: string | null;
       try {
         if (!loaded) throw new PermanentCauseError(); // Read state before writing.
@@ -166,9 +166,14 @@ export function createStateStore(options: {
       } catch (error) {
         throw new StateStoreError("Cannot save connector state.", isTransientCause(error));
       }
-      if (verifyDestination)
-        await verifyPrivateWrite(verifyDestination, writeEtag, (ifMatch) =>
-          fetchSafe(url, { method: "DELETE", headers: { "if-match": ifMatch } }),
+      if (privacy)
+        await requirePrivateWriteConfirmation(
+          options.adapterId,
+          privacy,
+          "state.json",
+          url,
+          !exists,
+          writeEtag,
         );
     },
   };

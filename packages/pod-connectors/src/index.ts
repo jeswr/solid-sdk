@@ -13,7 +13,9 @@ export * from "./core/import-runner.js";
 /** Fetch-backed Pod writer factory. */
 export * from "./core/pod-writer.js";
 export {
+  createOwnerOnlyDestinationChecks,
   createOwnerOnlyDestinationVerifier,
+  createSessionPrivateDestinationChecks,
   createSessionPrivateDestinationVerifier,
 } from "./core/private-destination.js";
 /** Conditional storage-client-backed Pod writer. */

@@ -280,11 +280,11 @@ interrupted relabeling cannot strand memberships. Preserve one run per connector
 CON-03 implements `./node` and the `pod-connectors` bin. Keep its imports separate from
 browser entry points. Read `src/node/config.ts` and the README's Node CLI section before
 changing the provisional MCP JSON schema. Never read process environment outside the Node-only VeSync credential reader;
-use the 0600 owner-held config descriptor, with no symlink following. Use `@jeswr/pod-auth/node`'s `forClientCredentials` for Pod credentials; pass its bounded fetch
-to storage-client's Solid backend and `createStoragePodWriter`. Suite and CLI wire Garmin, WHOOP and bank
-imports to `createOwnerOnlyDestinationVerifier` before payload, provenance and CLI checkpoint writes.
-Keep `node/pod-auth.ts` only as
-an adapter for the explicit token URL and exact profile-selected cross-storage index grant.
+use the 0600 owner-held config descriptor without following symlinks. Pass the bounded
+`forClientCredentials` fetch to the Solid backend and `createStoragePodWriter`. Require both privacy
+checks for Garmin, WHOOP and bank payloads, provenance and CLI checkpoints. Clean up refused creates
+with a fresh 10-second signal, preserve replacements and publish only confirmed writes and cursors.
+Keep `node/pod-auth.ts` as the adapter for the explicit token URL and exact cross-storage index grant.
 Protocol discovery is cached and byte-capped, and only validated endpoints receive exchange
 credentials. Separate immutable agent boundaries handle external index documents. The adapter
 supplies local DPoP challenges for explicitly authorised requests so the engine authenticates
@@ -308,11 +308,10 @@ if missing. Register `http://127.0.0.1:<callbackPort>/oauth-callback` with the p
 fall back to another port if binding fails. Validate Host, path, state,
 and code before S256 exchange. Reserved OAuth parameters cannot be overridden. Always
 close the listener on completion, timeout, cancellation, and errors. Never persist tokens.
-The state store requires an advertised in-container WAC ACL and installs owner-only grants
-before accessing JSON. Keep ETags and create-only writes; a failed import retains its prior
-successful cursor/counts/time, and failed state persistence must produce a nonzero exit.
-CLI tests use fixture source transports and a memory Pod; only callback tests open loopback
-sockets. Never include arbitrary server/exception text in CLI diagnostics.
+The state store installs owner-only grants from an advertised in-container WAC ACL before
+accessing JSON. Keep ETags and create-only writes. Write a checkpoint after confirming its
+payloads, and exit nonzero if saving or confirming it fails. CLI tests use fixtures and a
+memory Pod. Only callbacks open loopback sockets. Keep raw server and exception text out of diagnostics.
 
 Google Contacts (CON-05) writes the SolidOS vCard address book under `contacts/`, with
 `index.ttl#this`, `people.ttl`, and `Person/<pathId>/index.ttl#this`. Use its typed wrappers;

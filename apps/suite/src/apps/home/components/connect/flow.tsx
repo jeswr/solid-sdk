@@ -7,6 +7,7 @@ import {
   fileAdapterById,
   type ImportProgress,
   type ImportReport,
+  PrivateDestinationError,
   runFileImport,
   runImport,
   type SourceAuth,
@@ -294,7 +295,9 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
         );
       } else {
         setFailure(error);
-        setPhase(abort.signal.aborted ? "cancelled" : "error");
+        const privacyRefused =
+          error instanceof PrivateDestinationError && error.phase === "after-write";
+        setPhase(abort.signal.aborted && !privacyRefused ? "cancelled" : "error");
       }
     } finally {
       running.current = false;

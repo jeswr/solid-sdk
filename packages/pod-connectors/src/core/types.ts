@@ -150,6 +150,8 @@ export interface BinaryDoc {
 export interface WrittenBinary {
   readonly url: string;
   readonly created: boolean;
+  /** Whether a successful binary write used a create-only precondition. */
+  readonly writeCreated?: boolean;
   /** ETag from the write response, when available for private-destination cleanup. */
   readonly writeEtag?: string;
 }
@@ -287,7 +289,7 @@ export interface ConnectorState {
 
 export interface ConnectorStateOptions {
   readonly state?: ConnectorState;
-  /** Called after completion or failure; failures retain the previous checkpoint. */
+  /** Reports confirmed success or the previous state on failure. After-write privacy refusals report no state. */
   readonly onState?: (state: ConnectorState) => void;
 }
 
@@ -315,6 +317,11 @@ export type WriteConditions =
   | { readonly ifMatch?: string; readonly ifNoneMatch?: never }
   | { readonly ifMatch?: never; readonly ifNoneMatch: "*" };
 
+/** Validators from the write response only. */
+export interface PrivateWriteVersion {
+  readonly etag?: string;
+}
+
 /** One class-to-container Type Index registration. */
 export interface TypeRegistrationRequest {
   readonly forClass: string;
@@ -329,10 +336,19 @@ export interface PodWriter {
   resolve(slug: string): string;
   /** Verify the exact destination and its containing policy. Required for sensitive imports. */
   verifyPrivateDestination?(url: string): Promise<boolean>;
+  /** Confirm that the written resource and its containing policy are owner-only. */
+  confirmPrivateWrite?(url: string, version: PrivateWriteVersion): Promise<boolean>;
+  /** Remove a refused create and confirm absence, using only the supplied cleanup signal. */
+  cleanupPrivateWrite?(
+    slug: string,
+    options: PrivateWriteVersion & { signal: AbortSignal },
+  ): Promise<boolean>;
   /** Read existing RDF and its ETag; undefined only for a missing document. */
   read(slug: string): Promise<{ dataset: DatasetCore; etag: string | null } | undefined>;
   /** Write RDF, preserving the caller's conditional-write precondition. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
+  /** Notify the host after the runner accepts a payload write. */
+  onWriteAccepted?(url: string, doc: NormalisedDoc): void;
   /**
    * Optional binary port with the same container confinement as `write`. `"create"` sends
    * `If-None-Match: *` and reports a 412 as an existing resource; `"replace"` reads the

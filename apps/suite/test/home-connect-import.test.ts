@@ -25,6 +25,7 @@ import { withRequiredScopes, withSelectedScopes } from "../src/apps/home/compone
 import { isDemoImport } from "../src/apps/home/lib/connect";
 import {
   type ConnectionAction,
+  type ConnectorConnection,
   connectionReducer,
 } from "../src/apps/home/lib/connect/connection-state";
 import { provenanceOf } from "../src/apps/home/lib/model/provenance";
@@ -54,6 +55,63 @@ describe("Connect uses the real package writer against the suite demo pod", () =
     expect(report.written.map(({ url }) => url)).toEqual([
       `${session.storageUrl}integrations/bank-statements/finance/bank-transactions.ttl`,
     ]);
+  });
+
+  it("keeps a refused bank write out of the connection and progress even when cancelled", async () => {
+    const { session, pod } = await setup();
+    const adapter = fileAdapterById("bank-statements");
+    if (!adapter) throw new Error("Missing bank statement adapter");
+    const payload = `${session.storageUrl}integrations/bank-statements/finance/bank-transactions.ttl`;
+    const controller = new AbortController();
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const response = await session.fetch(input, init);
+      if (String(input) === payload && init?.method === "PUT") controller.abort();
+      return response;
+    });
+    let connection: ConnectorConnection | undefined;
+    const update = vi.fn((action: ConnectionAction) => {
+      connection = connectionReducer(connection, action);
+      return connection;
+    });
+    const progress = vi.fn();
+    await expect(
+      runSavedImport(
+        session.storageUrl,
+        "bank-statements",
+        "file",
+        controller.signal,
+        update,
+        async () =>
+          runFileImport({
+            adapter,
+            file: memoryFile(
+              "bank.csv",
+              "Date,Description,Amount,Currency\n2026-06-01,Shop,-5,GBP",
+            ),
+            podWriter: createImportWriter(
+              { ...session, fetch },
+              "bank-statements",
+              controller.signal,
+              (url) => {
+                update({ type: "written", url });
+                progress();
+              },
+            ),
+            signal: controller.signal,
+          }),
+      ),
+    ).rejects.toMatchObject({
+      phase: "after-write",
+      url: payload,
+      removed: true,
+      message: expect.stringContaining("may be visible to other people"),
+    });
+    expect(progress).not.toHaveBeenCalled();
+    expect(connection).toMatchObject({ resourceUrls: [], lastOutcome: "error" });
+    expect(pod.has(payload)).toBe(false);
+    expect(
+      fetch.mock.calls.filter(([url, init]) => url === payload && init?.method === "DELETE"),
+    ).toHaveLength(1);
   });
 
   it.each([

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { type StorageClient, StorageError, type WriteResult } from "@jeswr/storage-client";
 import { createSolidBackend, type SolidBackendOptions } from "@jeswr/storage-client/solid";
 import {
@@ -10,7 +11,12 @@ import {
 import { ensureTypeRegistrations } from "../pod/type-index-write.js";
 import { abortablePodWriter } from "./abort.js";
 import { IntegrationSyncError } from "./errors.js";
-import { containerResolver, strongEtag, validateBinaryType } from "./pod-writer-policy.js";
+import {
+  cleanupPrivateResource,
+  containerResolver,
+  strongEtag,
+  validateBinaryType,
+} from "./pod-writer-policy.js";
 import type { PodWriter } from "./types.js";
 
 export interface StoragePodWriterOptions {
@@ -19,6 +25,9 @@ export interface StoragePodWriterOptions {
   readonly container: string;
   readonly webId?: string;
   readonly verifyPrivateDestination?: PodWriter["verifyPrivateDestination"];
+  readonly confirmPrivateWrite?: PodWriter["confirmPrivateWrite"];
+  /** Authenticated transport independent of the run signal for refused creates. */
+  readonly cleanupFetch?: typeof fetch;
   readonly signal?: AbortSignal;
   readonly typeIndex?: {
     readonly profileDocumentUrl: string;
@@ -49,6 +58,9 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
     throw new TypeError("Connector slugs require a Solid storage backend.");
   const resolve = containerResolver(container, "storage");
   if (!storage.isWithinStorage(container)) throw new TypeError("Container is outside storage.");
+  const cleanupFetch =
+    options.cleanupFetch &&
+    createPodScopedFetch(container, { fetch: options.cleanupFetch, allowRoot: false });
   function writeValidator({ etag, etagSource }: WriteResult) {
     // Some backends fall back to HEAD, which may observe another writer's version.
     return options.verifyPrivateDestination && etagSource === "response" && etag !== null
@@ -70,6 +82,11 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
       webId,
       resolve,
       verifyPrivateDestination: options.verifyPrivateDestination,
+      confirmPrivateWrite: options.confirmPrivateWrite,
+      ...(cleanupFetch && {
+        cleanupPrivateWrite: (slug, cleanup) =>
+          cleanupPrivateResource(cleanupFetch, resolve(slug), cleanup),
+      }),
       async read(slug) {
         try {
           const { dataset, etag } = await storage.readRdf(resolve(slug), { signal });
@@ -114,7 +131,12 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
                   signal,
                 })
               : await createStorageResource(storage, url, body, doc.contentType, signal);
-          return { url, created: true, ...writeValidator(result) };
+          return {
+            url,
+            created: true,
+            ...(options.verifyPrivateDestination && { writeCreated: etag === undefined }),
+            ...writeValidator(result),
+          };
         } catch (error) {
           if (mode === "create" && error instanceof StorageError && error.status === 412)
             return { url, created: false };
