@@ -33,8 +33,10 @@ Preserve the existing live adapter, transport isolation and PKCE refresh behavio
 
 Read README.md and src/core/types.ts before changing the public contract. The package was
 moved from apps/pod-manager/src/lib/integrations; retain registry/types exports and the
-app's compatibility shims. Hosts create an isolated createRegistry(config); never read
-process environment outside the Node-only VeSync credential reader, or install host-specific global configuration here.
+app's compatibility shims. Hosts create an isolated createRegistry(config). Never install
+host-specific global configuration here. Environment access is confined to the Node-only
+VeSync credential reader and the CLI host's CONNECTOR_VAULT_KEY for explicit --vault
+opt-in (CON-A1). The CLI deletes the key from process.env right after reading it.
 
 Runners receive PodWriter and SourceAuth explicitly. Every adapter uses ctx.api for source
 I/O and ctx.write for Pod I/O. Keep credentials on their own transport. Fetch-backed and storage-backed writes
@@ -287,8 +289,9 @@ interrupted relabeling cannot strand memberships. Preserve one run per connector
 
 CON-03 implements `./node` and the `pod-connectors` bin. Keep its imports separate from
 browser entry points. Read `src/node/config.ts` and the README's Node CLI section before
-changing the provisional MCP JSON schema. Never read process environment outside the Node-only VeSync credential reader;
-use the 0600 owner-held config descriptor, with no symlink following. Use `@jeswr/pod-auth/node`'s `forClientCredentials` for Pod credentials; pass its bounded fetch
+changing the provisional MCP JSON schema. Environment access is confined to the Node-only
+VeSync credential reader and CONNECTOR_VAULT_KEY in the CLI host. Use the 0600 owner-held
+config descriptor, with no symlink following. Use `@jeswr/pod-auth/node`'s `forClientCredentials` for Pod credentials; pass its bounded fetch
 to storage-client's Solid backend and `createStoragePodWriter`. Keep `node/pod-auth.ts` only as
 an adapter for the explicit token URL and exact profile-selected cross-storage index grant.
 Protocol discovery is cached and byte-capped, and only validated endpoints receive exchange
@@ -313,7 +316,8 @@ direct and proxy exchange: fail with a clear configuration error before opening 
 if missing. Register `http://127.0.0.1:<callbackPort>/oauth-callback` with the provider; never
 fall back to another port if binding fails. Validate Host, path, state,
 and code before S256 exchange. Reserved OAuth parameters cannot be overridden. Always
-close the listener on completion, timeout, cancellation, and errors. Never persist tokens.
+close the listener on completion, timeout, cancellation, and errors. Access tokens remain
+memory-only; refresh credentials may use the injected CON-A1 encrypted vault.
 The state store requires an advertised in-container WAC ACL and installs owner-only grants
 before accessing JSON. Keep ETags and create-only writes; a failed import retains its prior
 successful cursor/counts/time, and failed state persistence must produce a nonzero exit.
@@ -500,8 +504,8 @@ claim automatic connector chart discovery or HRV/VO2max charts without app suppo
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 VeSync is a CLI-only Tier B account adapter (`src/vesync/`), not OAuth. Read the
 README's "Connect your Levoit purifiers" section and `src/node/vesync-auth.ts` before
-changing its protocol. The Node-only credential reader is the explicit exception to
-the environment-free rule: only VESYNC_EMAIL / VESYNC_PASSWORD, consumed once, deleted
+changing its protocol. The Node-only credential reader accepts only VESYNC_EMAIL /
+VESYNC_PASSWORD, consumed once, deleted
 from the process environment, password immediately MD5-hashed. Hidden prompts never
 echo. No credentials, hashes, account IDs or tokens enter reports, errors, pod RDF or
 state. Keep Node auth out of browser entry points and keep all source exceptions
@@ -560,3 +564,59 @@ Dedup lookup is five bounded second buckets, at most 32 entries each, with confi
 activity targets. Source histories also cap at 32. Files are add/update imports with
 no deletion snapshot or cursor. Conditional writes, cancellation, run provenance and
 failed-state retention remain shared runner responsibilities.
+
+CON-A1 exposes `./vault`: ConnectorTokenVault, key helpers, MemoryVaultStore and
+IndexedDbVaultStore. Keep it browser-safe and independent of mcp-oauth. Only `./node`
+exports FileVaultStore. Read the README's encrypted refresh vault contract before changes.
+Use WebCrypto AES-256-GCM, fresh 96-bit IVs, canonical `[1, connectorId, account]` AAD and
+strict version/base64url parsing. Never expose underlying errors/causes, tokens or key bytes.
+Preserve record, metadata, depth, node, ciphertext and store/list caps. Validate before
+stringifying untrusted input; project plain data without invoking custom getters/toJSON.
+Unknown record fields and credential-shaped metadata are refused. Files require private
+owner-held directories/files, no symlinks/hardlinks, bounded descriptor reads, exclusive
+temp + fsync + rename + directory fsync. IndexedDB elects/stores its non-extractable key
+transactionally alongside ciphertexts; wait for commit. That key is usable by a copied profile or
+same-origin script (non-extractable only blocks export); getOrCreateKey({ passphrase }) stores
+only a PBKDF2-SHA-256 (600,000 iterations, 16-byte salt) AES-GCM-wrapped key, never mixes modes,
+and fails generically on a wrong passphrase. The vault constructor refuses extractable keys. Tests use a minimal structured-cloning
+IDB fake without dependencies.
+
+OAuth exchange/refresh accepts `{ vault, account, signal? }`; persist rotation before returning
+access tokens. `getOAuthToken` restores on later runs; `createOAuthSourceAuth` shares refresh
+and retries a GET once. Token requests never use the caller's signal: run them on a private
+controller with TOKEN_REQUEST_TIMEOUT_MS (30 s); a pre-send abort prevents sending, a later one
+is honored with a generic AbortError only after the response is validated and persisted (the
+CLI exempts token/revocation URLs from its signal merge). A code exchange without a refresh
+token deletes the account's record. Disconnect best-effort revokes stored and session refresh
+tokens at an RFC 7009 `revocationEndpoint` (Google declares one; others are manual), ignoring
+failures, before deleting locally. Accept string scope or string-array
+scope normalized with join(" "); drop other scope types. Token endpoints/proxies require
+HTTPS except HTTP on localhost, 127.0.0.1 or [::1] for development. Request JSON (including
+GitHub); form token responses are unsupported. Spotify's legacy factory refuses a vault;
+vault hosts use createOAuthSourceAuth.
+
+Hold optional VaultStore/ConnectorTokenVault.withLock across reread + refresh + put/delete.
+Use the newest saved credential; on invalid_grant compare before deletion and retry once
+with a newer credential, never loop. Current invalid grants raise typed reauthorise;
+other failures retain records. Unreadable refresh records raise UnreadableCredentialError
+(reason reauthorise), but fresh code exchange may replace them without decrypting the previous
+ciphertext; the interactive CLI falls through to loopback login, interactiveLogin false exits 3.
+With a vault a missing record means disconnected: an in-memory refresh token raises
+reauthorise; only vault-less sessions fall back to it. Disconnect
+waits for its in-flight refresh then deletes under the account lock. Memory uses a bounded
+per-key mutex; IndexedDB uses navigator.locks or a shared in-process fallback. Clear the
+IDB handle on versionchange. Custom stores without locks require host serialization.
+
+File stores canonicalize ancestor aliases once at construction, check the real path and
+refuse final-directory/record symlinks. Windows construction throws the POSIX requirement.
+get/put refuse unsafe records; list skips them; delete unlinks any current-uid regular record
+file regardless of mode, never a symlink or foreign-owned file.
+Per-record O_EXCL 0600 locks break after 60 seconds by mtime, renew while active, wait at
+most 65 seconds and always release in finally. Stale takeover renames to `<lock>.<uuid>.stale`,
+unlinks only on a dev+ino match, otherwise restores via link() (EEXIST: leave it to age out)
+and retries. Unlink a new lock failing its safety check (dev+ino verified). Release failure
+never masks the callback outcome. Clean only own-pattern regular current-uid temps and claimed `.stale` locks older
+than ten minutes at construction and before list/put budgets; exclude them from the name budget
+and retain a separate bounded scan. CLI --vault without CONNECTOR_VAULT_KEY exits 2 naming the variable; a key alone warns on stderr and continues
+in memory. connectors[id].account defaults to default. Use fixtures for hostile/error
+paths and assert secret-free errors.

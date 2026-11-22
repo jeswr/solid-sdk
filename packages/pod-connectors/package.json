@@ -349,6 +349,10 @@
     "./whoop/*": {
       "types": "./dist/whoop/*.d.ts",
       "default": "./dist/whoop/*.js"
+    },
+    "./vault": {
+      "types": "./dist/vault.d.ts",
+      "default": "./dist/vault.js"
     }
   },
   "files": [

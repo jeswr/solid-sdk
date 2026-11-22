@@ -55,7 +55,13 @@ its env var at build time:
 adding the client secret, for the platforms that refuse secretless public clients. Each
 platform's full registration checklist is in its adapter's `metadata.requirements`
 (rendered on the app's connect page). Register `<origin>/oauth-callback.html` as the
-redirect URI everywhere. OAuth tokens live in memory only — never persisted.
+redirect URI everywhere. `*_TOKEN_PROXY` URLs require HTTPS, except HTTP on `localhost`,
+`127.0.0.1` or `[::1]` for local development proxies. Proxies must return JSON token
+responses: `scope` may be a string or an array of strings (Twitch), joined with spaces;
+other scope types are ignored. GitHub exchanges request JSON; form responses are unsupported.
+Access tokens live in memory. Hosts may inject the SDK encrypted refresh vault; Node CLI
+`--vault` requires `CONNECTOR_VAULT_KEY` (missing key exits 2); a key alone warns and stays
+in memory. Never expose that key through `NEXT_PUBLIC_*` variables.
 
 ## Getting Started
 
