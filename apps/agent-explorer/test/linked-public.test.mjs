@@ -113,6 +113,26 @@ test("public bundle checks nested rdf:JSON literals with quotes and a newline", 
   }
 });
 
+test("public bundle rejects a deeply encoded rdf:JSON value and names its file", (t) => {
+  const file = join(fixture(t), "deep-view.jsonld");
+  const datatype = "http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON";
+  const detail = "A public fixture with no matching roadmap text.";
+  const writeView = (lexical) =>
+    writeFileSync(
+      file,
+      JSON.stringify({ "@id": "urn:s", "urn:p": { "@type": datatype, "@value": lexical } }),
+    );
+  writeView(JSON.stringify({ detail }));
+  const shallow = check(checker, file);
+  assert.equal(shallow.status, 0, shallow.log);
+  let lexical = detail;
+  for (let depth = 0; depth < 8; depth++) lexical = JSON.stringify({ nested: lexical });
+  writeView(lexical);
+  const deep = check(checker, file);
+  assert.equal(deep.status, 1, deep.log);
+  assert.match(deep.log, /deep-view\.jsonld: reached the roadmap scan decode depth limit/);
+});
+
 test("importer checks the run group and refuses symlinked tables and linked directories", async (t) => {
   await run("python3", [
     "-B",

@@ -92,6 +92,99 @@ it("merges rows and index entries from overlapping writers for different configu
   expect(existsSync(lock)).toBe(false);
 });
 
+it("serializes a blocked publication behind a runnable writer in the same group", async () => {
+  const { root, traces, manifest, index } = fixture();
+  const module = new URL("../scripts/publish-scenario-runs.mjs", import.meta.url).href;
+  const trace = "test--baseline.json";
+  const reference = "linked/test--baseline.json";
+  const group = { scenario, configuration: "baseline" };
+  const main = { ...group, path: "main", status: "runs", trace };
+  const blocked = { ...group, path: "main", status: "blocked" };
+  const key = digestBytes('{"@id":"urn:test"}');
+  using writer = new ScenarioTraceWriter(traces, scenario, group.configuration);
+  writer.write(trace, {
+    schema: TRACE_SCHEMA,
+    events: [{ linked: [key] }],
+    linked: {
+      [key]: {
+        what: "record-entry",
+        context: STORE_CONTEXT,
+        jsonld: '{"@id":"urn:test"}',
+        turtle: "<urn:test> a <urn:test:Type> .",
+      },
+    },
+  });
+  writer.stageViews();
+  // Seed a prior runnable row so the blocked writer would remove the trace if it
+  // could merge while the replacement trace is visible and its row is pending.
+  const previous = { ...main, actual: "previous" };
+  const previousIndex = [{ file: trace, events: 0 }];
+  writeFileSync(manifest, JSON.stringify({ paths: [previous] }));
+  writeFileSync(index, JSON.stringify(previousIndex));
+  writeFileSync(join(traces, trace), '{"events":[]}');
+  const script = `
+    import fs from "fs";
+    import { syncBuiltinESMExports } from "module";
+    const [, , root, blocked, manifest, ready] = process.argv;
+    const open = fs.openSync;
+    fs.openSync = (path, ...args) => {
+      try {
+        return open(path, ...args);
+      } catch (error) {
+        if (path === manifest + ".lock" && error.code === "EEXIST") fs.writeFileSync(ready, "");
+        throw error;
+      }
+    };
+    syncBuiltinESMExports();
+    const { publishScenarioRuns } = await import(process.argv[1]);
+    const row = JSON.parse(blocked);
+    publishScenarioRuns(root, { paths: [row] }, [], row);
+  `;
+  const ready = join(root, "blocked.ready");
+  let done: ReturnType<typeof once> | undefined;
+  try {
+    const publish = writer.publish.bind(writer);
+    writer.publish = () => {
+      publish();
+      const child = spawn(
+        process.execPath,
+        [
+          "--input-type=module",
+          "--eval",
+          script,
+          module,
+          root,
+          JSON.stringify(blocked),
+          manifest,
+          ready,
+        ],
+        { stdio: ["ignore", "inherit", "inherit"] },
+      );
+      done = once(child, "close");
+      // Wait until the blocked writer has tried to acquire the lock while this
+      // writer is between trace and manifest publication.
+      const waiter = new Int32Array(new SharedArrayBuffer(4));
+      const deadline = performance.now() + 5_000;
+      while (!existsSync(ready) && performance.now() < deadline) Atomics.wait(waiter, 0, 0, 10);
+      expect(existsSync(ready)).toBe(true);
+      expect(read(manifest).paths).toEqual([previous]);
+      expect(read(index)).toEqual(previousIndex);
+      expect(read(join(traces, trace)).events).toEqual([{ linked: [key] }]);
+      expect(existsSync(join(traces, reference))).toBe(true);
+    };
+    publishScenarioRuns(root, { paths: [main] }, [{ file: trace, events: 1 }], {
+      ...group,
+      writers: [writer],
+    });
+  } finally {
+    if (done) expect(await done).toEqual([0, null]);
+  }
+  expect(read(manifest).paths).toEqual([blocked]);
+  expect(read(index)).toEqual([]);
+  expect(existsSync(join(traces, trace))).toBe(false);
+  expect(existsSync(join(traces, reference))).toBe(false);
+});
+
 it("removes traces and unused table keys when formerly runnable paths become blocked", () => {
   const { root, traces, manifest, index } = fixture();
   const reference = join(traces, "linked", "test--baseline.json");
@@ -118,12 +211,12 @@ it("removes traces and unused table keys when formerly runnable paths become blo
         },
       });
     }
-    writer.publish();
+    publishScenarioRuns(root, { paths: [main, branch] }, [indexEntry, { file: branch.trace }], {
+      scenario,
+      configuration: "baseline",
+      writers: [writer],
+    });
   }
-  publishScenarioRuns(root, { paths: [main, branch] }, [indexEntry, { file: branch.trace }], {
-    scenario,
-    configuration: "baseline",
-  });
   expect(Object.keys(read(reference)).sort()).toEqual([keyFor("main"), keyFor("branch")].sort());
   const mainBytes = readFileSync(join(traces, main.trace));
   const blocked = (path: string) => ({ ...base, path, status: "blocked", reason: "Unavailable" });

@@ -265,7 +265,13 @@ function bundleFixture(t) {
   for (const file of ["v1.jsonld", "store-v1.jsonld", "odrl-v1.jsonld", "scenario-v1.jsonld"]) {
     copyFileSync(join(root, "../..", contextPath, file), join(repo, contextPath, file));
   }
+  writeTraceIndex(dir, []);
   return dir;
+}
+
+function writeTraceIndex(dir, files) {
+  const paths = files.map((trace) => ({ status: "runs", trace }));
+  writeFileSync(join(dir, "data/scenario-runs.json"), JSON.stringify({ paths }));
 }
 
 function buildPublicBundle(dir) {
@@ -350,6 +356,7 @@ test("bundler rejects oversized traces, unsafe keys and duplicate keys before re
   };
   const input = join(dir, "traces/a.json");
   const output = join(dir, "data/bundle.js");
+  writeTraceIndex(dir, ["a.json", "b.json"]);
   writeFileSync(output, "previous valid bundle");
   async function fails(pattern) {
     await assert.rejects(
@@ -368,6 +375,93 @@ test("bundler rejects oversized traces, unsafe keys and duplicate keys before re
   writeFileSync(input, JSON.stringify(trace));
   writeFileSync(join(dir, "traces/b.json"), JSON.stringify(trace));
   await fails(/duplicate trace key/);
+});
+
+test("bundler refuses a trace file missing from the run index", async (t) => {
+  const dir = bundleFixture(t);
+  const file = "formerly-runnable--baseline.json";
+  writeFileSync(join(dir, "traces", file), "not read");
+  await assert.rejects(
+    promisify(execFile)(process.execPath, [join(dir, "scripts/bundle-data.mjs")]),
+    /formerly-runnable--baseline\.json.*not in the run index/,
+  );
+});
+
+test("engine reimport removes blocked traces and wholly unreferenced tables", async (t) => {
+  const dir = bundleFixture(t);
+  const script = "scripts/import-engine-runs.py";
+  for (const name of [script, "scripts/use-cases.src.py"]) {
+    copyFileSync(join(root, name), join(dir, name));
+  }
+  const specs = join(dir, "../../docs/specs/agent");
+  mkdirSync(specs, { recursive: true });
+  copyFileSync(join(root, "../../docs/specs/agent/01-core.md"), join(specs, "01-core.md"));
+  const source = join(dir, "source");
+  mkdirSync(join(source, "linked"), { recursive: true });
+  const manifest = join(dir, "source-runs.json");
+  const importRuns = () => promisify(execFile)("python3", [join(dir, script), source, manifest]);
+  const key = `sha-256:${"a".repeat(64)}`;
+  const table = {
+    [key]: {
+      what: "record-entry",
+      context: "urn:context",
+      jsonld: "{}",
+      turtle: "<urn:s> a <urn:t> .",
+    },
+  };
+  const makeRow = (scenario, path) => {
+    const id = path === "main" ? scenario : `${scenario}--${path}`;
+    const trace = `${id}--baseline.json`;
+    const linkedTable = `linked/${scenario}--baseline.json`;
+    writeFileSync(
+      join(source, trace),
+      JSON.stringify({
+        schema: "agent-trace/0.1",
+        scenario: { id },
+        configuration: { id: "baseline" },
+        linkedTable,
+        agents: [],
+        events: [{ step: 1, kind: "record", linked: [key] }],
+      }),
+    );
+    writeFileSync(join(source, linkedTable), JSON.stringify(table));
+    return { scenario, path, trace, status: "runs" };
+  };
+  const keep = makeRow("sample", "main");
+  const branch = makeRow("sample", "branch-1");
+  const whole = makeRow("whole", "main");
+  const writeRuns = (paths) => writeFileSync(manifest, JSON.stringify({ paths }));
+  writeRuns([keep, branch, whole]);
+  await importRuns();
+
+  const traces = join(dir, "traces");
+  const linked = join(traces, "linked");
+  assert.deepEqual(readdirSync(traces).sort(), ["linked", keep.trace, branch.trace, whole.trace]);
+  assert.deepEqual(readdirSync(linked).sort(), ["sample--baseline.json", "whole--baseline.json"]);
+  // A blocked row never authorizes a trace, even if it still includes its old filename.
+  writeRuns([keep, { ...branch, status: "blocked" }, { ...whole, status: "blocked" }]);
+  await importRuns();
+  assert.deepEqual(readdirSync(traces).sort(), ["linked", keep.trace]);
+  assert.deepEqual(readdirSync(linked), ["sample--baseline.json"]);
+  assert.deepEqual(readdirSync(join(dir, "data/traces")).sort(), ["linked", keep.trace]);
+  assert.deepEqual(readdirSync(join(dir, "data/traces/linked")), ["sample--baseline.json"]);
+  assert.deepEqual(readdirSync(join(source, "linked")).sort(), [
+    "sample--baseline.json",
+    "whole--baseline.json",
+  ]);
+
+  const outside = join(dir, "outside.json");
+  writeFileSync(outside, "keep");
+  for (const path of [join(traces, branch.trace), join(linked, "whole--baseline.json")]) {
+    symlinkSync(outside, path);
+    await assert.rejects(importRuns(), /expected a regular file inside traces/);
+    assert.equal(readFileSync(path, "utf8"), "keep");
+    rmSync(path);
+  }
+  rmSync(linked, { recursive: true });
+  symlinkSync(source, linked, "dir");
+  await assert.rejects(importRuns(), /linked must be a regular directory inside traces/);
+  assert.equal(readFileSync(outside, "utf8"), "keep");
 });
 
 test("the bundle copies only referenced tables and validates their size and event keys", async (t) => {
@@ -394,6 +488,7 @@ test("the bundle copies only referenced tables and validates their size and even
   const source = join(dir, "traces", reference);
   const output = join(dir, "data/traces", reference);
   mkdirSync(join(dir, "traces/linked"));
+  writeTraceIndex(dir, ["a.json"]);
   writeFileSync(input, JSON.stringify(trace));
   writeFileSync(source, table);
   writeFileSync(join(dir, "traces/linked/unused.json"), "{}");
@@ -530,6 +625,7 @@ test("Explore keeps the inspector open when a shared table is unavailable", asyn
   delete trace.linked;
   delete trace.linkedTable;
   const dir = bundleFixture(t);
+  writeTraceIndex(dir, [file]);
   writeFileSync(join(dir, "traces", file), JSON.stringify(trace));
   const bundle = { window: {} };
   vm.runInNewContext(buildPublicBundle(dir).output, bundle);
@@ -616,6 +712,10 @@ test("Explore uses one step count, shows recorded branch decisions and keeps the
     "mortgage-injected-fee--baseline",
     "mortgage-main--fee-payee-differs--baseline",
   ];
+  writeTraceIndex(
+    dir,
+    keys.map((key) => `${key}.json`),
+  );
   for (const key of keys) {
     const source = join(root, "traces", key + ".json");
     copyFileSync(source, join(dir, "traces", key + ".json"));

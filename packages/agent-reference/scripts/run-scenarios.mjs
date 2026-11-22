@@ -35,6 +35,8 @@ if (selectedConfiguration && !selected)
 const status = { "x-authored-by": "Codex GPT-6", schema: "agent-scenario-runs/0.1", paths: [] };
 const recordedPaths = readScenarioRuns(root);
 const index = [];
+const writers = [];
+using stages = new DisposableStack();
 let retained = 0;
 let executed = 0;
 const registry = await availableAdapters();
@@ -44,7 +46,7 @@ try {
 } catch {}
 mkdirSync(join(root, "traces"), { recursive: true });
 mkdirSync(join(root, "outlines"), { recursive: true });
-// Stage each configuration before running the next. The full matrix includes large traces.
+// Stage each configuration on disk before running the next. The full matrix includes large traces.
 async function* pathsFor(profile, scenario) {
   const configurations =
     selectedConfiguration === "baseline"
@@ -54,10 +56,8 @@ async function* pathsFor(profile, scenario) {
         : [undefined, ...scenario.configurations.map((entry) => entry.id)];
   const proofCache = new ProofCache(join(root, "proofs"));
   for (const configuration of configurations) {
-    using writer = new ScenarioTraceWriter(
-      join(root, "traces"),
-      scenario.id,
-      configuration ?? "baseline",
+    const writer = stages.use(
+      new ScenarioTraceWriter(join(root, "traces"), scenario.id, configuration ?? "baseline"),
     );
     const paths = await runScenario(profile, scenario, {
       commit,
@@ -69,7 +69,8 @@ async function* pathsFor(profile, scenario) {
       proofCache,
     });
     for (const path of paths) yield { path, writer };
-    writer.publish();
+    writer.stageViews();
+    writers.push(writer);
   }
 }
 for (const file of readdirSync(join(root, "scenarios"))
@@ -172,6 +173,7 @@ for (const file of readdirSync(join(root, "scenarios"))
 const paths = publishScenarioRuns(root, status, index, {
   scenario: selected,
   configuration: selectedConfiguration,
+  writers,
 });
 console.log(
   `${executed} live data paths ran; manifest: ${paths.filter((p) => p.status === "runs").length} runs, ${paths.filter((p) => p.status === "disagrees").length} disagree, ${paths.filter((p) => p.status === "blocked").length} blocked`,

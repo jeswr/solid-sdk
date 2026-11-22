@@ -69,6 +69,7 @@ export class ScenarioTraceWriter {
   #views = new Map();
   #stage;
   #reference;
+  #stagedViews;
 
   constructor(directory, scenario, configuration) {
     if (
@@ -113,6 +114,14 @@ export class ScenarioTraceWriter {
     this.#removed.add(file);
   }
 
+  // Release a finished group's view strings while the rest of the corpus runs.
+  stageViews() {
+    if (!this.#views.size) return;
+    this.#stagedViews = join(this.#stage, ".views.json");
+    writeFileSync(this.#stagedViews, sortedTable(this.#views));
+    this.#views.clear();
+  }
+
   publish() {
     if (!this.#files.size && !this.#removed.size) return;
     const linked = join(this.directory, "linked");
@@ -132,6 +141,9 @@ export class ScenarioTraceWriter {
     if (stat && (!stat.isFile() || realpathSync(target) !== target))
       throw new Error(`${this.#reference} must be a regular file inside traces/linked`);
     const prior = stat ? traceLinkedTableSchema.parse(readJson(target)) : {};
+    const views = this.#stagedViews
+      ? new Map(Object.entries(readJson(this.#stagedViews)))
+      : this.#views;
     for (const file of this.#removed) {
       const entry = lstatSync(join(this.directory, file), { throwIfNoEntry: false });
       if (entry && !entry.isFile()) throw new Error(`${file} must be a regular trace file`);
@@ -151,7 +163,7 @@ export class ScenarioTraceWriter {
         const trace = readJson(join(this.directory, file));
         if (trace.linkedTable !== this.#reference) continue;
         for (const event of trace.events)
-          for (const key of event.linked ?? []) addView(this.#views, key, prior[key]);
+          for (const key of event.linked ?? []) addView(views, key, prior[key]);
       }
     }
     const writeTable = (views) => {
@@ -159,16 +171,16 @@ export class ScenarioTraceWriter {
       writeFileSync(staged, sortedTable(views));
       renameSync(staged, target);
     };
-    if (this.#files.size && this.#views.size) {
+    if (this.#files.size && views.size) {
       // Publish the union first so that even an interrupted run leaves every visible
       // trace resolvable. Drop the superseded keys after replacing the trace files.
-      const combined = new Map(this.#views);
+      const combined = new Map(views);
       for (const [key, view] of Object.entries(prior)) addView(combined, key, view);
       writeTable(combined);
     }
     for (const file of this.#files) renameSync(join(this.#stage, file), join(this.directory, file));
     for (const file of this.#removed) rmSync(join(this.directory, file), { force: true });
-    if (this.#views.size) writeTable(this.#views);
+    if (views.size) writeTable(views);
     else rmSync(target, { force: true });
   }
 

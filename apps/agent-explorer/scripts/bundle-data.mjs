@@ -119,9 +119,14 @@ function storyEvent(e, i) {
 function target(e) {
   return e ? { step: e.step, seq: e.seq } : null;
 }
+const runIndex = readJson(join(root, "data/scenario-runs.json"));
+const indexedFiles = new Set(
+  runIndex.paths.filter(({ status }) => status !== "blocked").map(({ trace }) => trace),
+);
 for (const file of readdirSync(join(root, "traces"))
   .filter((f) => f.endsWith(".json"))
   .sort()) {
+  if (!indexedFiles.has(file)) throw new Error(`${file}: trace file is not in the run index`);
   const packed = readJson(join(root, "traces", file));
   if (packed.schema !== "agent-trace/0.1") {
     console.warn(`skip ${file}: schema is ${packed.schema}, expected agent-trace/0.1`);

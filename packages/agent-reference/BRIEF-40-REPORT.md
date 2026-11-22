@@ -1813,3 +1813,30 @@ library compile, schema export check, typecheck, Biome, and disposable
 and 216 existing allowances. The agent layer guard reported two existing
 nonliteral imports in `test/trace-linked.test.ts`. The tracked traces, outlines
 and run manifest match HEAD, and no linked test files remain in the worktree.
+
+## Review round 4 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The scenario runner stages trace files and each group's linked views on disk.
+Full and selected runs take the same corpus-wide `scenario-runs.json.lock`
+before publishing any trace or shared table. The lock stays held through
+blocked-trace removal, linked-table pruning, and index and manifest replacement.
+A two-process test in a temporary directory pauses a runnable writer after its
+trace is published and verifies that a blocked writer for the same group waits
+and then removes the trace, table, and index entry.
+
+The explorer importer prunes unreferenced trace JSON and shared table JSON from
+its trace directory after copying the runnable paths. It refuses symlinked
+trace files, linked tables, and trace directories. The bundler checks filenames
+against the runnable rows in the copied run manifest before reading trace data.
+The public bundle checker fails at its eighth decode level and names the file
+that reached the limit. Temporary fixtures cover a branch becoming blocked, a
+fully blocked group, symlink refusal, an unindexed trace, and nested
+`rdf:JSON` at the decode limit.
+
+Node 24 verification passed the explorer's 13 selected tests, the engine
+typecheck, and Biome's error-level check. The selected engine suites passed 16
+tests and skipped nine committed-corpus comparisons. The in-memory mortgage-core
+reproducibility test failed on RDF ordering and reproduced in a temporary
+copy of unmodified HEAD. The committed corpus was left untouched.

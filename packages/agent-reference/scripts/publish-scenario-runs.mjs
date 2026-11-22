@@ -63,10 +63,17 @@ function replaceJson(target, value) {
   }
 }
 
-export function publishScenarioRuns(root, status, index, { scenario, configuration }) {
+export function publishScenarioRuns(
+  root,
+  status,
+  index,
+  { scenario, configuration, writers = [] },
+) {
   const manifestPath = join(root, "scenario-runs.json");
   const directory = join(root, "traces");
   const indexPath = join(directory, "index.json");
+  // One lock covers the whole corpus so full and selected runs publish in the same order.
+  // Run and stage each scenario before taking the lock.
   return withExclusiveFileLock(
     manifestPath,
     () => {
@@ -79,6 +86,7 @@ export function publishScenarioRuns(root, status, index, { scenario, configurati
         ...index.map((item) => item.file),
         ...removed.map((row) => row.trace),
       ]);
+      for (const writer of writers) writer.publish();
       removeUnlistedTraces(directory, removed);
       replaceJson(indexPath, [
         ...existing.filter((item) => !replacedFiles.has(item.file)),
