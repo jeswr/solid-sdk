@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { calendarDay, type Series, shiftDay } from "@jeswr/suite-insights";
+import { boundedRead } from "@/lib/session/bounded-read";
 import type { PodSession } from "@/lib/session/pod-session";
 import { readCalendarEvents } from "../../sources/adapters/calendar";
 import { readHealthMeasurements } from "../../sources/adapters/health";
@@ -20,6 +22,7 @@ export interface SourceContext {
   session: PodSession;
   now: Date;
   timeZone: string;
+  signal?: AbortSignal;
 }
 export interface SourceAdapter {
   id: string;
@@ -36,8 +39,8 @@ function bounds(now: Date, paddingDays = 0) {
 export const healthSource: SourceAdapter = {
   id: "health",
   label: "Health",
-  async read({ session, now }) {
-    const rows = await readHealthMeasurements(session, bounds(now));
+  async read({ session, now, signal }) {
+    const rows = await readHealthMeasurements(session, bounds(now), signal);
     return (
       [
         ["steps", "Steps", "steps", "sum", 1],
@@ -114,7 +117,7 @@ export const calendarSource: SourceAdapter = {
   id: "calendar",
   label: "Calendar",
   async read({ session, now, timeZone }) {
-    const events = await readCalendarEvents(session, bounds(now), timeZone);
+    const events = await readCalendarEvents(session, bounds(now, 1), timeZone);
     return [
       {
         id: "calendar.events",
@@ -127,6 +130,40 @@ export const calendarSource: SourceAdapter = {
   },
 };
 export const adapters = [healthSource, moneySource, musicSource, tasksSource, calendarSource];
+
+const SOURCE_TIMEOUT_MS = 15_000;
+
+function cancellableFetch(fetch: typeof globalThis.fetch, signal: AbortSignal): typeof fetch {
+  return async (input, init) => {
+    const requestSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    const combined = requestSignal ? AbortSignal.any([signal, requestSignal]) : signal;
+    combined.throwIfAborted();
+    const response = await fetch(input, { ...init, signal: combined });
+    if (combined.aborted) {
+      void response.body?.cancel().catch(() => {});
+      combined.throwIfAborted();
+    }
+    return response;
+  };
+}
+
+async function readSource(reader: SourceAdapter, context: SourceContext) {
+  const controller = new AbortController();
+  const signal = controller.signal;
+  const session = { ...context.session, fetch: cancellableFetch(context.session.fetch, signal) };
+  if (session.mode !== "demo") session.publicFetch = cancellableFetch(session.publicFetch, signal);
+  try {
+    return await boundedRead(
+      () => reader.read({ ...context, session, signal }),
+      SOURCE_TIMEOUT_MS,
+      context.signal,
+      globalThis,
+    );
+  } finally {
+    controller.abort();
+  }
+}
+
 /** Each source fails independently; denied data is never presented as an empty source. */
 export async function loadSources(
   context: SourceContext,
@@ -139,7 +176,7 @@ export async function loadSources(
       try {
         let droppedPoints = 0;
         const days = new Set<string>();
-        const series = (await reader.read(context)).map((s) => ({
+        const series = (await readSource(reader, context)).map((s) => ({
           ...s,
           points: s.points.filter((p) => {
             let day: string;

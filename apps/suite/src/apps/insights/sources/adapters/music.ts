@@ -1,16 +1,16 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import { loadHistory } from "@/apps/music/lib/model/io";
+// AUTHORED-BY Codex GPT-6
+import { loadHistory } from "@/apps/music/lib/data/history";
 import type { PodSession } from "@/lib/session/pod-session";
 
-export function readMusicHistory(session: PodSession, range: { start: Date; end: Date }) {
-  const months: Date[] = [];
-  for (
-    let at = new Date(Date.UTC(range.start.getUTCFullYear(), range.start.getUTCMonth(), 1));
-    at <= range.end;
-    at = new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 1))
-  )
-    months.push(at);
-  return loadHistory(session.fetch, new URL("music/", session.storageUrl).href, months);
+export async function readMusicHistory(session: PodSession, range: { start: Date; end: Date }) {
+  const months =
+    (range.end.getUTCFullYear() - range.start.getUTCFullYear()) * 12 +
+    range.end.getUTCMonth() -
+    range.start.getUTCMonth() +
+    1;
+  const history = await loadHistory(session.fetch, session.storageUrl, range.end, months);
+  return [...new Map(history.map((play) => [play.iri, play])).values()];
 }
 export { ensureSample as seedMusic } from "@/apps/music/demo/sample";
 export { loadMusic, saveMusic } from "@/apps/music/lib/model/io";

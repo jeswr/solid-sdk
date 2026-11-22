@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { dailySeries, insights } from "@jeswr/suite-insights";
 import { describe, expect, it, vi } from "vitest";
 import { ensureSample as seedHealth } from "../src/apps/health/demo/sample";
@@ -10,6 +11,8 @@ import {
   moneySource,
   musicSource,
 } from "../src/apps/insights/lib/sources";
+import { createHealthDataStore } from "../src/apps/insights/sources/adapters/health";
+import { readMusicHistory } from "../src/apps/insights/sources/adapters/music";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import type { PodSession } from "../src/lib/session/pod-session";
 
@@ -83,6 +86,27 @@ describe("Insights demo pod", { timeout: 90_000 }, () => {
     expect((await session.fetch(new URL("music/sample-complete.ttl", session.storageUrl))).ok).toBe(
       true,
     );
+  });
+  it("uses bounded fictional inputs for scrobbles even with an extreme saved step total", async () => {
+    const { session } = setup();
+    const day = sampleDays(now).at(-1);
+    if (!day) throw new Error("Expected fictional sample days");
+    await seedHealth(session, now);
+    const health = createHealthDataStore(session.fetch, session.storageUrl, session.webId);
+    await health.addObservation("extreme-steps", {
+      kind: "steps",
+      value: 140_000,
+      at: day.at,
+      source: "Test observation",
+    });
+    await ensureSample(session, now);
+    const plays = await readMusicHistory(session, { start: day.at, end: now });
+    const generated = plays.filter((play) =>
+      play.iri.startsWith(`${session.storageUrl}music/insights-${day.day}-`),
+    );
+    expect(generated).toHaveLength(day.listens);
+    expect(generated.length).toBeGreaterThan(0);
+    expect(generated.length).toBeLessThanOrEqual(11);
   });
   it("never seeds real or extension sessions", async () => {
     const { session } = setup();

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { buildTask, Task, taskSubject } from "@jeswr/solid-task-model";
 import { DataFactory } from "n3";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,14 +14,15 @@ const mock = vi.hoisted(() => ({
   range: vi.fn(),
 }));
 vi.mock("@/apps/health/lib/data/metrics", () => ({ loadMeasurements: mock.health }));
-vi.mock("@/apps/health/lib/data/store", () => ({ createHealthDataStore: vi.fn() }));
+vi.mock("@/apps/health/lib/data/store", () => ({
+  createHealthDataStore: () => ({ base: "https://insights.test/health/" }),
+}));
 vi.mock("@/apps/insights/sources/adapters/money", () => ({
   readMoneyTransactions: mock.money,
 }));
-vi.mock("@/apps/music/lib/model/io", () => ({ loadHistory: mock.music }));
+vi.mock("@/apps/music/lib/data/history", () => ({ loadHistory: mock.music }));
 vi.mock("@/apps/tasks/lib/model/store", () => ({
   TaskStore: class {
-    projects = "https://insights.test/tasks/projects/";
     listProjects = mock.projects;
     listTasks = mock.tasks;
   },
@@ -95,15 +97,15 @@ describe("source adapters", () => {
     expect(result[0]?.points).toEqual([{ at: "2026-11-02", value: 8 }]);
     expect(result[1]?.points).toEqual([{ at: "2026-11-01", value: 12.5 }]);
   });
-  it("reads explicit month shards, de-duplicates playback identity in the shared reader, and counts listens", async () => {
+  it("requests the overlapping months from Music and counts each playback identity once", async () => {
     mock.music.mockResolvedValue([
-      { startTime: now },
-      { startTime: new Date(now.getTime() - 30000) },
+      { iri: "one", startTime: now },
+      { iri: "two", startTime: new Date(now.getTime() - 30000) },
+      { iri: "one", startTime: now },
     ]);
     const result = await musicSource.read(context);
     expect(result[0]?.points.map((p) => p.value)).toEqual([1, 1]);
-    expect(mock.music.mock.calls[0]?.[1]).toBe("https://insights.test/music/");
-    expect(mock.music.mock.calls[0]?.[2].every((d: Date) => d.getUTCDate() === 1)).toBe(true);
+    expect(mock.music).toHaveBeenCalledWith(session.fetch, session.storageUrl, now, 6);
   });
   it("counts only completed tasks with a completion date, once per document", async () => {
     mock.projects.mockResolvedValue([
@@ -144,9 +146,7 @@ describe("source adapters", () => {
     expect(result[0]?.points).toEqual([{ at: now, value: 1 }]);
     expect(mock.tasks).toHaveBeenCalledTimes(2);
   });
-  it("maps absent Tasks to empty and propagates denied or corrupt resources", async () => {
-    mock.projects.mockRejectedValue(new ModelError(404, "https://insights.test/tasks/projects/"));
-    expect((await tasksSource.read(context))[0]?.points).toEqual([]);
+  it("propagates denied, stale, or corrupt task resources", async () => {
     mock.projects.mockRejectedValue(new ModelError(403, "https://insights.test/tasks/projects/"));
     await expect(tasksSource.read(context)).rejects.toThrow();
     mock.projects.mockRejectedValue(new ModelError(404, "https://insights.test/a-task.ttl"));
@@ -167,6 +167,22 @@ describe("source adapters", () => {
     await expect(calendarSource.read(context)).rejects.toThrow("events");
     mock.discover.mockResolvedValue({ calendars: [], warnings: [{}] });
     await expect(calendarSource.read(context)).rejects.toThrow("calendars");
+  });
+  it("queries across civil date boundaries and retains only the intended local days", async () => {
+    const now = new Date("2026-11-30T12:30:00Z");
+    mock.range.mockImplementation((_session, _calendars, from: Date, to: Date) => ({
+      warnings: [],
+      events: ["2026-07-04", "2026-07-05", "2026-12-01", "2026-12-01T12:00:00Z"]
+        .filter((day) => new Date(day) >= from && new Date(day) <= to)
+        .map((start) => ({ data: { start } })),
+    }));
+    const [calendar] = await loadSources({ session, now, timeZone: "Pacific/Auckland" }, [
+      calendarSource,
+    ]);
+    expect(calendar?.series[0]?.points).toEqual([
+      { at: "2026-07-05", value: 1 },
+      { at: "2026-12-01", value: 1 },
+    ]);
   });
   it("isolates failures, filters date bounds/non-finite values and counts distinct local days", async () => {
     const reader = {
@@ -222,5 +238,60 @@ describe("source adapters", () => {
       "empty",
       "unavailable",
     ]);
+  });
+  it("bounds a stalled source, cancels both transports, and publishes completed sources", async () => {
+    vi.useFakeTimers();
+    try {
+      const late = Promise.withResolvers<Response>();
+      const fetch = vi.fn<typeof globalThis.fetch>((input) =>
+        String(input).endsWith("/fast") ? Promise.resolve(new Response()) : new Promise(() => {}),
+      );
+      fetch.mockImplementationOnce(() => late.promise);
+      const publicFetch = vi.fn<typeof globalThis.fetch>(() => new Promise(() => {}));
+      const read = vi.fn(async ({ session, signal }: Parameters<typeof loadSources>[0]) => {
+        if (session.mode !== "solid") throw new Error("Expected a Solid session");
+        await Promise.all([
+          session.fetch(session.storageUrl),
+          session.fetch(new Request(session.storageUrl)),
+          session.publicFetch(session.webId, { signal: signal ?? null }),
+        ]);
+        return [];
+      });
+      const fast = {
+        id: "fast",
+        label: "Fast",
+        read: async ({ session }: Parameters<typeof loadSources>[0]) => {
+          await session.fetch(`${session.storageUrl}fast`);
+          return [
+            {
+              id: "s",
+              label: "S",
+              unit: "u",
+              aggregation: "sum" as const,
+              points: [{ at: now, value: 1 }],
+            },
+          ];
+        },
+      };
+      const load = loadSources(
+        { ...context, session: { ...session, mode: "solid", fetch, publicFetch } },
+        [{ id: "stalled", label: "Stalled", read }, fast],
+      );
+      expect(fetch).toHaveBeenCalledTimes(3);
+      expect(publicFetch).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect((await load).map(({ status }) => status)).toEqual(["error", "found", "unavailable"]);
+      for (const [, init] of [...fetch.mock.calls, ...publicFetch.mock.calls])
+        expect(init?.signal?.aborted).toBe(true);
+      const cancel = vi.fn(() => Promise.reject(new Error("Transport already closed")));
+      late.resolve(new Response(new ReadableStream({ cancel })));
+      await Promise.resolve();
+      expect(cancel).toHaveBeenCalledOnce();
+      const timedOutSession = read.mock.calls[0]?.[0].session;
+      await expect(timedOutSession?.fetch(session.storageUrl)).rejects.toThrow();
+      expect(fetch).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

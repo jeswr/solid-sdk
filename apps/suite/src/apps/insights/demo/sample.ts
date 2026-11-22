@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { buildScrobble } from "@jeswr/solid-listening";
-import { calendarDay, dailySeries, shiftDay } from "@jeswr/suite-insights";
+import { calendarDay, shiftDay } from "@jeswr/suite-insights";
 import { Store } from "n3";
 import type { PodSession } from "@/lib/session/pod-session";
 import {
@@ -18,6 +19,8 @@ import {
   type Transaction,
 } from "../sources/adapters/money";
 import { loadMusic, saveMusic, seedMusic } from "../sources/adapters/music";
+
+const MAX_SAMPLE_LISTENS_PER_DAY = 11;
 export function sampleDays(now: Date) {
   const last = shiftDay(now.toISOString().slice(0, 10), -1);
   return Array.from({ length: 120 }, (_, i) => {
@@ -30,7 +33,7 @@ export function sampleDays(now: Date) {
       steps,
       sleep: Math.round(355 + steps / 185 + ((i * 13) % 17) - 8),
       spending: 12 + (weekday === 0 || weekday === 6 ? 28 : 0) + ((i * 7) % 13),
-      listens: Math.round(steps / 1400) + (i % 3),
+      listens: Math.min(MAX_SAMPLE_LISTENS_PER_DAY, Math.round(steps / 1400) + (i % 3)),
     };
   });
 }
@@ -115,15 +118,6 @@ async function seed(session: PodSession, now: Date) {
     description: "Fictional daily spending",
   }));
   await money.saveTransactions(transactions);
-  const stepTotals = new Map(
-    dailySeries(
-      [...existingHealth, ...measurements]
-        .filter((p) => p.kind === "steps")
-        .map((p) => ({ at: p.at, value: p.value })),
-      "UTC",
-      "sum",
-    ).map((p) => [p.day, p.value as number]),
-  );
   const music = new URL("music/", session.storageUrl).href;
   for (const month of new Set(days.map((d) => d.day.slice(0, 7)))) {
     const url = `${music}history/${month}.ttl`;
@@ -133,9 +127,7 @@ async function seed(session: PodSession, now: Date) {
     const document = existing.ok ? await loadMusic(session.fetch, url) : null;
     const quads = [...(document?.dataset ?? [])];
     for (const day of days.filter((d) => d.day.startsWith(month))) {
-      const listens =
-        Math.round((stepTotals.get(day.day) ?? day.steps) / 1400) + (days.indexOf(day) % 3);
-      for (let play = 0; play < listens; play++) {
+      for (let play = 0; play < day.listens; play++) {
         // Unique document-shaped bases keep every generated composite's nodes disjoint.
         const base = `${music}insights-${day.day}-${play}`;
         quads.push(
