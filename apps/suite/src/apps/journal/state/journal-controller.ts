@@ -14,7 +14,7 @@ type Edit = {
   existing?: JournalEntry;
   overwrite?: boolean;
 };
-type FailedEdit = Omit<Edit, "overwrite"> & { conflict: boolean };
+type FailedEdit = Omit<Edit, "overwrite"> & { conflict: boolean; privacyMessage?: string };
 export interface JournalSnapshot {
   entries: JournalEntry[];
   loading: boolean;
@@ -196,6 +196,7 @@ export class JournalController {
               data: edit.data,
               photos: edit.photos ?? [],
               ...(current ? { existing: current } : {}),
+              ...(error instanceof JournalPrivacyError ? { privacyMessage: error.message } : {}),
               conflict:
                 edit.overwrite === true ||
                 (typeof error === "object" &&

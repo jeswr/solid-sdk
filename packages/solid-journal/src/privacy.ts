@@ -49,20 +49,24 @@ export function isOwnerOnlyPolicy(policy: EffectivePolicy, owner: string): boole
   );
 }
 async function ownPolicy(storage: StorageClient, url: string) {
-  const head = await storage.head(url);
+  const head = await storage.head(url, { revalidate: true });
   const endpoints = head.links.get("acl");
   if (endpoints?.length !== 1)
     throw new JournalPrivacyError("Couldn't verify private journal access");
   const endpoint = endpoints[0]?.target as string;
   if (!storage.isWithinStorage(endpoint))
     throw new JournalPrivacyError("Couldn't verify private journal access");
+  let validator: string | null;
   try {
-    const read = await storage.readRdf(endpoint);
-    return readWac(read.dataset, url, endpoint, "css", true);
+    validator = (await storage.head(endpoint, { revalidate: true })).etag;
   } catch (error) {
-    if (error instanceof StorageError && error.code === "not-found") return null;
+    if (error instanceof StorageError && error.status === 404) return null;
     throw error;
   }
+  const read = await storage.readRdf(endpoint, { maxBytes: 1024 * 1024 });
+  if (!validator || read.etag !== validator)
+    throw new JournalPrivacyError("Couldn't verify private journal access");
+  return readWac(read.dataset, url, endpoint, "css", true);
 }
 
 /** Nearest WAC defaults govern a missing own ACL; resource-only parent rules do not. */
@@ -141,7 +145,7 @@ export async function verifyJournalResource(
   const policy = await ownPolicy(storage, url);
   if (policy && !isOwnerOnlyPolicy(policy, owner))
     throw new JournalPrivacyError(
-      "This journal entry is shared. Make it private before opening it.",
+      "This journal entry is shared. Review its permissions in Drive and make it private.",
     );
   // Existing overrides must also pass the SDK's model/placement checks. Missing ACLs
   // inherit the already verified folder and need no repeated ancestor discovery.

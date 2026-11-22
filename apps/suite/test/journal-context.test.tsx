@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // @vitest-environment jsdom
-import { JournalPrivacyError, type JournalStore } from "@jeswr/solid-journal";
+import { type JournalEntry, JournalPrivacyError, type JournalStore } from "@jeswr/solid-journal";
+import { toast } from "@jeswr/suite-ui";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToString } from "react-dom/server";
@@ -50,7 +51,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
 });
-async function render() {
+async function render(probe = <Probe />) {
   await act(async () =>
     root.render(
       <JournalProvider
@@ -61,12 +62,12 @@ async function render() {
           </button>
         )}
       >
-        <Probe />
+        {probe}
       </JournalProvider>,
     ),
   );
 }
-it("initialises, seeds and loads, subscribes only to journal changes, and cleans up", async () => {
+it("initialises, seeds and loads, rechecks on journal and storage-root changes, and cleans up", async () => {
   await render();
   expect(host.textContent).toBe("0 entries");
   expect(ensureSample).toHaveBeenCalledWith(session, store);
@@ -75,9 +76,47 @@ it("initialises, seeds and loads, subscribes only to journal changes, and cleans
   expect(store.list).toHaveBeenCalledOnce();
   await act(async () => notify?.("https://pod.example/journal/change.ttl"));
   expect(store.list).toHaveBeenCalledTimes(2);
+  vi.mocked(store.list).mockResolvedValueOnce([
+    { created: new Date(), url: `${store.container}one.ttl`, etag: '"1"', text: "Private words" },
+  ]);
+  await act(async () => notify?.(session.storageUrl));
+  expect(host.textContent).toBe("1 entries");
+  vi.mocked(store.list).mockImplementationOnce(async (options) => {
+    options?.onPrivacySkip?.(`${store.container}one.ttl`);
+    return [];
+  });
+  await act(async () => notify?.(session.storageUrl));
+  expect(host.textContent).toBe("0 entries");
+  expect(store.list).toHaveBeenCalledTimes(4);
   await act(async () => root.unmount());
   expect(vi.mocked(session.subscribe).mock.results[0]?.value).toHaveBeenCalledOnce();
   root = createRoot(host);
+});
+
+it("rechecks access after a pending save settles when focus returns mid-save", async () => {
+  let rejectSave!: (error: Error) => void;
+  vi.mocked(store.save).mockReturnValueOnce(
+    new Promise((_, reject) => {
+      rejectSave = reject;
+    }),
+  );
+  function SaveProbe() {
+    const { controller } = useJournal();
+    return (
+      <button type="button" onClick={() => controller.save({ created: new Date(), text: "Draft" })}>
+        Save
+      </button>
+    );
+  }
+  await render(<SaveProbe />);
+  await act(async () => host.querySelector("button")?.click());
+  expect(store.save).toHaveBeenCalledOnce();
+  const notify = vi.mocked(session.subscribe).mock.calls[0]?.[0];
+  await act(async () => notify?.(session.storageUrl));
+  expect(store.list).toHaveBeenCalledOnce();
+  await act(async () => rejectSave(new Error("offline")));
+  expect(store.list).toHaveBeenCalledTimes(2);
+  expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("kept here for retry"));
 });
 it("shows a recoverable setup error and retries", async () => {
   vi.mocked(openJournalData).mockRejectedValueOnce(new Error("offline"));
@@ -97,6 +136,36 @@ it("doesn't install subscriptions after unmounting during setup", async () => {
   expect(host.textContent).toBe("Opening");
   await act(async () => root.unmount());
   await act(async () => resolve(store));
+  expect(session.subscribe).not.toHaveBeenCalled();
+  root = createRoot(host);
+});
+
+it("doesn't subscribe after unmounting during the first journal load", async () => {
+  let resolve!: (entries: JournalEntry[]) => void;
+  vi.mocked(store.list).mockReturnValueOnce(
+    new Promise((yes) => {
+      resolve = yes;
+    }),
+  );
+  await render();
+  expect(host.textContent).toBe("Loading");
+  await act(async () => root.unmount());
+  await act(async () => resolve([]));
+  expect(session.subscribe).not.toHaveBeenCalled();
+  root = createRoot(host);
+});
+
+it("ignores a startup rejection after unmounting", async () => {
+  let reject!: (error: Error) => void;
+  vi.mocked(openJournalData).mockReturnValueOnce(
+    new Promise((_, no) => {
+      reject = no;
+    }),
+  );
+  await render();
+  await act(async () => root.unmount());
+  await act(async () => reject(new Error("offline")));
+  expect(host.textContent).toBe("");
   expect(session.subscribe).not.toHaveBeenCalled();
   root = createRoot(host);
 });
@@ -146,4 +215,39 @@ it("passes the actionable privacy explanation to the boot screen", async () => {
   expect(host.textContent).toBe(message);
   expect(store.makePrivate).not.toHaveBeenCalled();
   expect(store.list).not.toHaveBeenCalled();
+});
+
+it("updates the privacy explanation when repair is refused", async () => {
+  vi.mocked(store.initialize).mockRejectedValueOnce(
+    new JournalPrivacyError("Shared journal", undefined, true),
+  );
+  vi.mocked(store.makePrivate).mockRejectedValueOnce(
+    new JournalPrivacyError("Review both permission scopes in Drive."),
+  );
+  await act(async () =>
+    root.render(
+      <JournalProvider
+        session={session}
+        fallback={(_error, _retry, repair, explanation) => (
+          <button type="button" onClick={repair}>
+            {explanation}
+          </button>
+        )}
+      >
+        <Probe />
+      </JournalProvider>,
+    ),
+  );
+  expect(host.textContent).toBe("Shared journal");
+  await act(async () => host.querySelector("button")?.click());
+  expect(host.textContent).toBe("Review both permission scopes in Drive.");
+});
+
+it("offers a reload when setup refuses privacy before it has a store to repair", async () => {
+  vi.mocked(openJournalData).mockRejectedValueOnce(
+    new JournalPrivacyError("Open the journal first", undefined, true),
+  );
+  await render();
+  expect(host.textContent).toBe("Retry opening");
+  expect(store.makePrivate).not.toHaveBeenCalled();
 });

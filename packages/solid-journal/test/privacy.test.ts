@@ -176,10 +176,10 @@ it("refuses shared, incomplete, absent or unreadable folder privacy instead of w
   });
 });
 it("checks per-entry overrides without resolving container inheritance again", async () => {
-  const storage = await fixture();
+  const storage = await fixture(false);
   const read = vi.spyOn(storage, "readRdf");
-  read.mockRejectedValueOnce(new StorageError("not-found", { url: container, method: "GET" }));
   await verifyJournalResource(storage, container, owner, vi.fn());
+  expect(read).not.toHaveBeenCalled();
   expect(readGrants).not.toHaveBeenCalled();
   const shared: EffectivePolicy = {
     ...policy,
@@ -193,9 +193,9 @@ it("checks per-entry overrides without resolving container inheritance again", a
     ],
   };
   const acl = `${container}.acl`;
-  await storage.write(acl, await writeWac(shared, container, acl), {
+  await storage.create(container, await writeWac(shared, container, acl), {
+    name: ".acl",
     contentType: "text/turtle",
-    ifMatch: (await storage.head(acl)).etag ?? "missing",
   });
   await expect(verifyJournalResource(storage, container, owner, vi.fn())).rejects.toThrow("shared");
   read.mockRejectedValueOnce(new StorageError("forbidden", { url: acl, method: "GET" }));
@@ -322,7 +322,7 @@ it("fails closed on absent inherited policies, foreign ACL links and failed post
   await expect(protectJournal(storage, container, owner, vi.fn(), true)).rejects.toThrow("verify");
 });
 
-it("loads with three requests per entry at most and six concurrent reads, skipping widened overrides", async () => {
+it("loads entries with fresh ACL checks and six concurrent reads, skipping widened overrides", async () => {
   const storage = await fixture();
   const count = 13;
   const sharedUrl = `${container}shared.ttl`;
@@ -385,8 +385,17 @@ it("loads with three requests per entry at most and six concurrent reads, skippi
   expect(peak).toBe(6);
   expect(skipped).toHaveBeenCalledExactlyOnceWith(sharedUrl);
   expect(read.mock.calls.some(([url]) => url === sharedUrl)).toBe(false);
-  expect(head).toHaveBeenCalledTimes(count + 1);
-  expect(read).toHaveBeenCalledTimes(2 * count);
+  expect(head).toHaveBeenCalledTimes(2 * (count + 1));
+  expect(read).toHaveBeenCalledTimes(count + 1);
   expect(readGrants).toHaveBeenCalledOnce(); // Container proof only, never repeated per entry.
   await expect(store.list()).rejects.toThrow("shared");
+});
+
+it("refuses an ACL representation with a stale validator", async () => {
+  const storage = await fixture();
+  const acl = `${container}.acl`;
+  const read = await storage.readRdf(acl);
+  vi.spyOn(storage, "readRdf").mockResolvedValueOnce({ ...read, etag: '"stale"' });
+  await expect(verifyJournalResource(storage, container, owner, vi.fn())).rejects.toThrow("verify");
+  expect(readGrants).not.toHaveBeenCalled();
 });

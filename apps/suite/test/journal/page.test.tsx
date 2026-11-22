@@ -36,7 +36,15 @@ beforeEach(() => {
     skipped: 0,
     needsPrivacy: false,
     privacyMessage: null,
-    controller: { makePrivate: vi.fn(), discardFailed: vi.fn(), retryFailed: vi.fn() },
+    controller: {
+      makePrivate: vi.fn(),
+      discardFailed: vi.fn(),
+      retryFailed: vi.fn(),
+      remove: vi.fn(),
+      save: vi.fn(),
+      overwriteFailed: vi.fn(),
+    },
+    store: {},
   } as unknown as ReturnType<typeof useJournal>;
 });
 afterEach(async () => {
@@ -124,4 +132,56 @@ it("protects editor preview links and the retained draft after closing the edito
   await click("Close");
   await click("A good day");
   expect(document.querySelector('[role="dialog"] a')?.getAttribute("target")).toBe("_blank");
+});
+
+it("confirms deletion against the version shown when the user chose to delete", async () => {
+  await render();
+  await click("A good day");
+  await click("Delete entry");
+  state.entries = [{ ...entry, etag: '"2"', text: "An edit from another tab" }];
+  await render();
+  await click("Delete permanently");
+  expect(state.controller.remove).toHaveBeenCalledExactlyOnceWith(entry);
+});
+
+it("keeps new draft text and photos while saving an edit to another entry", async () => {
+  await render();
+  await click("New entry");
+  const textarea = document.querySelector("textarea");
+  const input = document.querySelector('input[type="file"]');
+  if (!textarea || !input) throw new Error("Missing editor fields");
+  const text = "A separate draft";
+  const photo = new File(["photo"], "draft.png", { type: "image/png" });
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+      textarea,
+      text,
+    );
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    Object.defineProperty(input, "files", { value: [photo] });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await click("Close");
+  await click("A good day");
+  await click("Edit entry");
+  expect(document.querySelector("textarea")?.value).toBe(entry.text);
+  await click("Save entry");
+  await click("New entry");
+  expect(document.querySelector("textarea")?.value).toBe(text);
+  await click("Save entry");
+  expect(state.controller.save).toHaveBeenLastCalledWith(
+    expect.objectContaining({ text }),
+    undefined,
+    [photo],
+  );
+});
+
+it("offers a fresh save for a conflicted new draft and shows registration refusals", async () => {
+  state.failed = [{ id: 7, key: "draft:one", data: entry, conflict: true }];
+  state.store = { ...state.store, registrationWarning: "Review Type Index permissions in Drive." };
+  await render();
+  expect(host.textContent).toContain("Review Type Index permissions in Drive.");
+  expect(host.textContent).toContain("The space reserved for this draft changed");
+  await click("Save as new entry");
+  expect(state.controller.overwriteFailed).toHaveBeenCalledExactlyOnceWith(7);
 });

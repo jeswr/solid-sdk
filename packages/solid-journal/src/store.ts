@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import { assertWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
 import { createTypeIndex, type TypeIndex } from "@jeswr/pod-type-index";
 import { createPodClient, type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
@@ -11,6 +11,7 @@ import {
   validateEntry,
 } from "./model.js";
 import { JournalPrivacyError, protectJournal, verifyJournalResource } from "./privacy.js";
+import { privateJournalIndex } from "./registration.js";
 
 export interface JournalEntry extends EntryData {
   url: string;
@@ -18,6 +19,7 @@ export interface JournalEntry extends EntryData {
 }
 export interface JournalStore {
   readonly container: string;
+  readonly registrationWarning?: string | undefined;
   initialize(): Promise<void>;
   makePrivate(): Promise<void>;
   list(options?: { onPrivacySkip?: (url: string) => void }): Promise<JournalEntry[]>;
@@ -28,20 +30,23 @@ export interface JournalStore {
   photo(url: string): Promise<Blob>;
 }
 const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
+const ENTRY_MAX_BYTES = 16 * 1024 * 1024;
 export function validatePhoto(file: Blob): void {
-  if (!PHOTO_TYPES.has(file.type) || file.size === 0 || file.size > 10 * 1024 * 1024)
+  if (!PHOTO_TYPES.has(file.type) || file.size === 0 || file.size > PHOTO_MAX_BYTES)
     throw new TypeError("Choose a JPG, PNG, WebP or GIF photo up to 10 MB");
 }
 
 /** Accepts public storage/index interfaces so consumers can test without HTTP or authentication. */
 export function createJournalStore(
   storage: StorageClient,
-  index: TypeIndex,
+  index: TypeIndex | null,
   owner: string,
   fetch: typeof globalThis.fetch,
 ): JournalStore {
-  const interrupted = new WeakMap<EntryData, string>();
+  const interrupted = new WeakMap<EntryData, { url: string; etag: string | null }>();
   let container = new URL("journal/", storage.root).href;
+  let registrationWarning: string | undefined;
   const privacy = (created = false) => protectJournal(storage, container, owner, fetch, created);
   const owned = (url: string) => {
     const canonical = assertWithinPodScope(container, url, { allowRoot: false });
@@ -56,7 +61,7 @@ export function createJournalStore(
   const readEntry = async (url: string): Promise<JournalEntry | null> => {
     owned(url);
     await verifyJournalResource(storage, url, owner, fetch);
-    const read = await storage.readRdf(url);
+    const read = await storage.readRdf(url, { maxBytes: ENTRY_MAX_BYTES });
     if (read.dataset.size === 0) return null;
     const data = entryEntity.parse(url, read.dataset);
     if (!data) throw new Error("A journal entry couldn't be read. Your data has not been changed.");
@@ -65,6 +70,9 @@ export function createJournalStore(
   return {
     get container() {
       return container;
+    },
+    get registrationWarning() {
+      return registrationWarning;
     },
     async initialize() {
       let created = false;
@@ -83,7 +91,16 @@ export function createJournalStore(
         }
       }
       await privacy(created);
-      await index.register(ENTRY_CLASS, { container }, { index: "private" });
+      registrationWarning = undefined;
+      try {
+        await index?.register(ENTRY_CLASS, { container }, { index: "private" });
+      } catch (error) {
+        if (error instanceof JournalPrivacyError) registrationWarning = error.message;
+        else if (error instanceof StorageError && error.code === "invalid-response")
+          registrationWarning =
+            "Journal registration needs a valid private Type Index and preferences document.";
+        else throw error;
+      }
     },
     async makePrivate() {
       await privacy(true);
@@ -144,31 +161,56 @@ export function createJournalStore(
       }
       // Retain the returned URL after an interrupted write so retry cannot duplicate a
       // committed entry whose response was lost. Successful saves release this identity.
-      let url = interrupted.get(data);
-      if (!url) {
+      let reservation = interrupted.get(data);
+      if (!reservation) {
         const created = await storage.create(container, "", {
           name: `${crypto.randomUUID()}.ttl`,
           contentType: "text/turtle",
         });
         owned(created.url);
-        url = created.url;
-        interrupted.set(data, url);
+        reservation = {
+          url: created.url,
+          etag: created.etagSource === "response" ? created.etag : null,
+        };
+        interrupted.set(data, reservation);
       }
-      owned(url);
-      const empty = await storage.read(url);
-      const body = await empty.text();
+      const { url } = reservation;
+      const changed = (cause?: unknown) =>
+        new StorageError("precondition-failed", {
+          url,
+          method: "PUT",
+          message: "The interrupted journal entry changed. Save your draft as a new entry.",
+          cause,
+        });
+      await verifyJournalResource(storage, url, owner, fetch);
+      const { body, etag, contentType } = await storage
+        .read(url, { maxBytes: ENTRY_MAX_BYTES, headers: { "Cache-Control": "no-cache" } })
+        .then(async (read) => ({
+          body: await read.text(),
+          etag: read.etag,
+          contentType: read.contentType,
+        }))
+        .catch((error: unknown) => {
+          if (error instanceof StorageError && error.code === "payload-too-large")
+            throw changed(error);
+          throw error;
+        });
       const turtle = await serializeEntry(url, clean);
-      if (!empty.etag) throw new Error("Couldn't create an empty journal entry safely");
+      if (!etag) throw new Error("Couldn't create an empty journal entry safely");
       if (body.length) {
-        const recovered = await entryEntity.parseDocument(url, body, empty.contentType);
-        if (!recovered || (await serializeEntry(url, recovered)) !== turtle)
-          throw new Error("The interrupted journal entry changed. Reload before trying again.");
+        const recovered = await entryEntity
+          .parseDocument(url, body, contentType)
+          .catch(() => undefined);
+        if (!recovered || (await serializeEntry(url, recovered)) !== turtle) throw changed();
         interrupted.delete(data);
-        return { ...recovered, url, etag: empty.etag };
+        return { ...recovered, url, etag };
       }
+      if (reservation.etag && reservation.etag !== etag) throw changed();
+      reservation.etag = etag;
+      await verifyJournalResource(storage, url, owner, fetch);
       const result = await storage.write(url, turtle, {
         contentType: "text/turtle",
-        ifMatch: empty.etag,
+        ifMatch: etag,
       });
       interrupted.delete(data);
       return {
@@ -200,9 +242,11 @@ export function createJournalStore(
       owned(url);
       await privacy();
       await verifyJournalResource(storage, url, owner, fetch);
-      const read = await storage.read(url);
-      if (!PHOTO_TYPES.has(read.contentType?.split(";")[0] ?? ""))
+      const read = await storage.read(url, { maxBytes: PHOTO_MAX_BYTES });
+      if (!PHOTO_TYPES.has(read.contentType?.split(";")[0] ?? "")) {
+        void read.body?.cancel().catch(() => {});
         throw new Error("This attachment isn't a supported photo");
+      }
       const blob = await read.blob();
       validatePhoto(blob);
       return blob;
@@ -216,24 +260,33 @@ export async function openJournal(
   owner: string,
   options: { solidFixture?: boolean } = {},
 ): Promise<JournalStore> {
-  // Explicit fixture mode: the browser demo implements LDP but no discovery document.
+  const root = normalizePodBase(storageUrl);
+  let storage: StorageClient;
   if (options.solidFixture) {
-    const storage = createSolidBackend({ fetch, root: storageUrl });
-    return createJournalStore(
-      storage,
-      createTypeIndex({ storage, features: storage.features, profile: owner, fetch }),
-      owner,
-      fetch,
-    );
+    // The browser demo implements WAC but has no discovery document.
+    const fixture = createSolidBackend({ fetch, root });
+    storage = {
+      ...fixture,
+      features: {
+        ...fixture.features,
+        accessControl: { state: "available", evidence: "demo", detail: { model: "wac" } },
+      },
+    };
+  } else {
+    const client = await createPodClient({ fetch, storage: root });
+    if (client.description.protocol !== "solid")
+      throw new Error("Private journal provisioning currently needs a Solid pod");
+    if (client.storage.root !== root)
+      throw new JournalPrivacyError("The selected pod does not match the discovered storage root.");
+    storage = client.storage;
   }
-  const client = await createPodClient({ fetch, storage: storageUrl });
-  if (client.description.protocol !== "solid")
-    throw new Error("Private journal provisioning currently needs a Solid pod");
-  const index = createTypeIndex({
-    storage: client.storage,
-    features: client.features,
-    profile: owner,
-    fetch,
-  });
-  return createJournalStore(client.storage, index, owner, fetch);
+  let index: TypeIndex | null = null;
+  try {
+    const guarded = privateJournalIndex(storage, owner);
+    index = createTypeIndex({ storage: guarded, features: guarded.features, profile: owner });
+  } catch (error) {
+    // A profile on a separate host cannot be registered through this pod.
+    if (!(error instanceof StorageError) || error.code !== "scope") throw error;
+  }
+  return createJournalStore(storage, index, owner, fetch);
 }

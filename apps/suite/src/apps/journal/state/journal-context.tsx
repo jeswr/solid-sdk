@@ -61,7 +61,10 @@ export function JournalProvider({
       await controller.load();
       if (!live) return;
       stop = session.subscribe((url) => {
-        if (url.startsWith(store.container) && !controller.getSnapshot().saving)
+        if (
+          (url === session.storageUrl || url.startsWith(store.container)) &&
+          !controller.getSnapshot().saving
+        )
           void controller.load();
       });
     })().catch((cause) => {

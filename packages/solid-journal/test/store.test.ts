@@ -161,6 +161,38 @@ it("uses discovery for real pods and refuses unsupported private provisioning on
     `${root}journal/`,
   );
 });
+
+it("refuses to provision when the discovered Solid root differs from the selected pod", async () => {
+  const { storage } = fixture();
+  const create = vi.spyOn(storage, "create");
+  vi.mocked(createPodClient).mockResolvedValue({
+    storage,
+    features: storage.features,
+    description: { protocol: "solid" },
+  } as PodClient);
+  await expect(openJournal(vi.fn(), `${root}alice/`, owner)).rejects.toThrow(
+    "does not match the discovered storage root",
+  );
+  expect(create).not.toHaveBeenCalled();
+});
+
+it("opens and provisions a journal with a WebID hosted outside the selected pod", async () => {
+  const { storage } = fixture();
+  vi.mocked(createPodClient).mockResolvedValue({
+    storage,
+    features: storage.features,
+    description: { protocol: "solid" },
+  } as PodClient);
+  const fetch = vi.fn();
+  const foreignOwner = "https://identity.example/profile#me";
+  const store = await openJournal(fetch, root, foreignOwner);
+  await store.initialize();
+  expect(store.container).toBe(`${root}journal/`);
+  expect(protectJournal).toHaveBeenCalledWith(storage, store.container, foreignOwner, fetch, true);
+  expect(fetch).not.toHaveBeenCalled();
+  expect(await store.save(data)).toMatchObject({ text: data.text });
+});
+
 it("retries a lost write response without creating a second entry", async () => {
   const { storage, store } = fixture();
   await store.initialize();
@@ -175,6 +207,35 @@ it("retries a lost write response without creating a second entry", async () => 
   expect(await store.list()).toHaveLength(1);
 });
 
+it("refuses to reuse a reserved empty entry after its ETag changes", async () => {
+  const { storage, store } = fixture();
+  await store.initialize();
+  const write = vi.spyOn(storage, "write").mockRejectedValueOnce(new Error("offline"));
+  await expect(store.save(data)).rejects.toThrow("offline");
+  const [url, , options] = write.mock.calls[0] ?? [];
+  if (!url || !options) throw new Error("Missing reserved entry");
+  await storage.write(url, "", options);
+  await expect(store.save(data)).rejects.toMatchObject({ code: "precondition-failed" });
+  expect(write).toHaveBeenCalledTimes(2);
+});
+
+it("classifies an oversized reserved entry body as a create conflict", async () => {
+  const { storage, store } = fixture();
+  await store.initialize();
+  const write = vi.spyOn(storage, "write").mockRejectedValueOnce(new Error("offline"));
+  await expect(store.save(data)).rejects.toThrow("offline");
+  const url = write.mock.calls[0]?.[0];
+  if (!url) throw new Error("Missing reserved entry");
+  vi.spyOn(storage, "read").mockRejectedValueOnce(
+    new StorageError("payload-too-large", { method: "GET", url }),
+  );
+  await expect(store.save(data)).rejects.toMatchObject({
+    code: "precondition-failed",
+    cause: { code: "payload-too-large" },
+  });
+  expect(write).toHaveBeenCalledOnce();
+});
+
 it("reads one private entry with its ETag without listing unrelated shared entries", async () => {
   const { storage, store } = fixture();
   await store.initialize();
@@ -187,7 +248,10 @@ it("reads one private entry with its ETag without listing unrelated shared entri
   const reads = vi.spyOn(storage, "readRdf");
   expect(await store.read(saved.url)).toEqual(saved);
   expect(listing).not.toHaveBeenCalled();
-  expect(reads).toHaveBeenCalledExactlyOnceWith(saved.url);
+  expect(reads).toHaveBeenCalledExactlyOnceWith(
+    saved.url,
+    expect.objectContaining({ maxBytes: expect.any(Number) }),
+  );
   await expect(store.read(other.url)).rejects.toThrow("shared");
   expect(reads).toHaveBeenCalledOnce();
   await expect(store.read("https://foreign.example/one.ttl")).rejects.toThrow("escapes");

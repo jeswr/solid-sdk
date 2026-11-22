@@ -45,10 +45,11 @@ export function JournalPage() {
     needsPrivacy,
     privacyMessage,
     controller,
+    store,
   } = useJournal();
   const connection = useConnectionState();
   const [now, setNow] = useState(() => new Date());
-  const newDraftStarted = useRef(false);
+  const [newDraftStarted, setNewDraftStarted] = useState(false);
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(timer);
@@ -59,13 +60,13 @@ export function JournalPage() {
   const [limit, setLimit] = useState(20);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<JournalEntry>();
-  const [editorKey, setEditorKey] = useState(0);
   const [reading, setReading] = useState<string>();
-  const [deleting, setDeleting] = useState(false);
+  const [deleting, setDeleting] = useState<JournalEntry>();
   const focusReturn = useRef<HTMLElement | null>(null);
   const openEntry = (url: string | undefined) => {
     focusReturn.current = document.activeElement as HTMLElement;
     setReading(url);
+    setDeleting(undefined);
   };
   const sentinel = useRef<HTMLDivElement>(null);
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -73,7 +74,7 @@ export function JournalPage() {
   const memories = onThisDay(entries, now, timeZone);
   const selected = entries.find((entry) => entry.url === reading);
   const linkTarget =
-    saving > 0 || failed.length > 0 || newDraftStarted.current || editing ? "_blank" : "_self";
+    saving > 0 || failed.length > 0 || newDraftStarted || editing ? "_blank" : "_self";
   const filtered = useMemo(() => {
     const search = query.trim().toLocaleLowerCase("en-GB");
     return entries.filter(
@@ -102,9 +103,7 @@ export function JournalPage() {
   }, []);
   const newEntry = () => {
     focusReturn.current = document.activeElement as HTMLElement;
-    if (editing || !newDraftStarted.current) setEditorKey((value) => value + 1);
-    newDraftStarted.current = true;
-    setEditing(undefined);
+    setNewDraftStarted(true);
     setEditorOpen(true);
   };
   const download = () => {
@@ -150,6 +149,11 @@ export function JournalPage() {
           </Button>
         </div>
       </header>
+      {store.registrationWarning && (
+        <p className="jn-notice" role="status">
+          {store.registrationWarning}
+        </p>
+      )}
       {connection !== "online" && (
         <div className="jn-notice" role="status">
           You're offline. You can keep writing here. Keep this tab open and retry any unsaved
@@ -176,8 +180,11 @@ export function JournalPage() {
             >
               <p>
                 {edit.conflict
-                  ? "This entry changed on another device. Your version is kept below."
-                  : "This change couldn't be saved. You can retry or discard it."}
+                  ? edit.key.startsWith("draft:")
+                    ? "The space reserved for this draft changed. You can save it as a new entry."
+                    : "This entry changed on another device. Your version is kept below."
+                  : (edit.privacyMessage ??
+                    "This change couldn't be saved. You can retry or discard it.")}
               </p>
               {edit.data && (
                 <SafeMarkdown className="jn-prose" linkTarget="_blank">
@@ -186,7 +193,9 @@ export function JournalPage() {
               )}
               {!edit.data && <p>Your change: delete this entry.</p>}
               {edit.conflict && (
-                <Button onClick={() => controller.overwriteFailed(edit.id)}>Overwrite</Button>
+                <Button onClick={() => controller.overwriteFailed(edit.id)}>
+                  {edit.key.startsWith("draft:") ? "Save as new entry" : "Overwrite"}
+                </Button>
               )}
               <Button variant="outline" onClick={() => controller.discardFailed(edit.id)}>
                 Discard mine
@@ -411,26 +420,30 @@ export function JournalPage() {
       <p className="jn-footnote">
         A private space in your pod. No sharing, no audience — just you.
       </p>
-      <Editor
-        key={editorKey}
-        returnFocus={() => focusReturn.current?.focus()}
-        {...(editing ? { entry: editing } : {})}
-        open={editorOpen}
-        close={(saved) => {
-          setEditorOpen(false);
-          if (saved) {
-            newDraftStarted.current = false;
-            setEditing(undefined);
-            setEditorKey((value) => value + 1);
-          }
-        }}
-      />
+      {newDraftStarted && (
+        <Editor
+          returnFocus={() => focusReturn.current?.focus()}
+          open={editorOpen}
+          close={(saved) => {
+            setEditorOpen(false);
+            if (saved) setNewDraftStarted(false);
+          }}
+        />
+      )}
+      {editing && (
+        <Editor
+          entry={editing}
+          open
+          close={() => setEditing(undefined)}
+          returnFocus={() => focusReturn.current?.focus()}
+        />
+      )}
       <Dialog
         open={!!selected}
         onOpenChange={(open) => {
           if (!open) {
             setReading(undefined);
-            setDeleting(false);
+            setDeleting(undefined);
           }
         }}
       >
@@ -438,7 +451,7 @@ export function JournalPage() {
           className="jn-reader"
           onCloseAutoFocus={(event) => {
             event.preventDefault();
-            if (!editorOpen) focusReturn.current?.focus();
+            if (!editorOpen && !editing) focusReturn.current?.focus();
           }}
         >
           <DialogHeader>
@@ -466,15 +479,15 @@ export function JournalPage() {
                 {deleting ? (
                   <>
                     <p>Delete this entry? This cannot be undone.</p>
-                    <Button variant="outline" onClick={() => setDeleting(false)}>
+                    <Button variant="outline" onClick={() => setDeleting(undefined)}>
                       Keep entry
                     </Button>
                     <Button
                       variant="destructive"
                       onClick={() => {
-                        controller.remove(selected);
+                        controller.remove(deleting);
                         setReading(undefined);
-                        setDeleting(false);
+                        setDeleting(undefined);
                       }}
                     >
                       Delete permanently
@@ -485,7 +498,7 @@ export function JournalPage() {
                     <Button
                       variant="ghost"
                       disabled={!selected.etag}
-                      onClick={() => setDeleting(true)}
+                      onClick={() => setDeleting(selected)}
                     >
                       Delete entry
                     </Button>
@@ -493,9 +506,7 @@ export function JournalPage() {
                       disabled={!selected.etag}
                       onClick={() => {
                         setEditing(selected);
-                        setEditorKey((value) => value + 1);
                         setReading(undefined);
-                        setEditorOpen(true);
                       }}
                     >
                       Edit entry

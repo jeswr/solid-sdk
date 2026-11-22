@@ -51,6 +51,20 @@ function fixture() {
   const controller = new JournalController(store, failed);
   return { store, failed, controller, server };
 }
+it("keeps a draft and explains a privacy refusal so the user can safely retry", async () => {
+  const { store, controller } = fixture();
+  const message = "This journal entry is shared. Review its permissions in Drive.";
+  vi.mocked(store.save).mockRejectedValueOnce(new JournalPrivacyError(message));
+  controller.save(data);
+  await controller.settled();
+  expect(controller.getSnapshot().failed).toMatchObject([
+    { data, conflict: false, privacyMessage: message },
+  ]);
+  controller.retryFailed();
+  await controller.settled();
+  expect(controller.getSnapshot().failed).toEqual([]);
+});
+
 it("loads, notifies subscribers and stops notifying after unsubscribe", async () => {
   const { controller } = fixture();
   const changed = vi.fn();
@@ -115,6 +129,27 @@ it("re-resolves a missing validator on each non-conflict Retry and permits Disca
   expect(failure?.conflict).toBe(false);
   controller.discardFailed(failure?.id ?? -1);
   expect(controller.getSnapshot().failed).toEqual([]);
+});
+
+it.each([
+  "save",
+  "delete",
+] as const)("handles a queued %s when the initial draft save fails", async (action) => {
+  const { store, controller } = fixture();
+  vi.mocked(store.save).mockRejectedValueOnce(new Error("offline"));
+  controller.save(data);
+  const pending = controller.getSnapshot().entries[0];
+  if (!pending) throw new Error("Missing draft");
+  expect(pending.url).toMatch(/^draft:/);
+  const revised = { ...data, text: "More words" };
+  if (action === "save") controller.save(revised, pending);
+  else controller.remove(pending);
+  await controller.settled();
+  expect(store.read).not.toHaveBeenCalled();
+  expect(store.remove).not.toHaveBeenCalled();
+  expect(controller.getSnapshot().failed).toMatchObject([{ data, conflict: false }]);
+  if (action === "save") expect(store.save).toHaveBeenLastCalledWith(revised, undefined);
+  else expect(store.save).toHaveBeenCalledOnce();
 });
 
 it("re-reads after a failed save still lacks a validator, instead of retrying it forever", async () => {
