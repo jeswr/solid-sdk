@@ -195,15 +195,17 @@ export interface StorageClient {
       accept?: string;
       ifNoneMatch?: string;
       range?: { start: number; end?: number };
+      /** Maximum bytes consumed from the body or buffered accessors. Unbounded when omitted. */
+      maxBytes?: number;
       signal?: AbortSignal;
       /** Additional HTTP headers; Accept, Range and If-None-Match remain option-controlled. */
       headers?: RequestInit["headers"];
     },
   ): Promise<ReadResult>;
-  /** read + parseRdf (fetch-rdf). Accept: text/turtle, application/ld+json. Throws 'not-rdf' when the body is not RDF. */
+  /** Read and parse RDF with a 16 MiB default body cap. Throws 'not-rdf' for non-RDF. */
   readRdf(
     url: string,
-    opts?: { ifNoneMatch?: string; signal?: AbortSignal },
+    opts?: { ifNoneMatch?: string; signal?: AbortSignal; maxBytes?: number },
   ): Promise<RdfReadResult>;
   write(url: string, body: Body, opts: WriteOptions): Promise<WriteResult>;
   /** Serialise with rdf-serialize (Turtle) and write. `ifMatch` mandatory. */

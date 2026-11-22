@@ -95,6 +95,13 @@ describe("LWS access services", () => {
           { headers: { "content-type": MEDIA } },
         );
       const record = records.get(url);
+      if (method === "HEAD" && record)
+        return new Response(null, {
+          headers: {
+            link: `<${record.endpoint}>; rel="up", <https://www.w3.org/ns/lws#DataResource>; rel="type"`,
+            etag: '"record"',
+          },
+        });
       if (method === "GET" && record)
         return new Response(record.body, { headers: { "content-type": MEDIA, etag: '"record"' } });
       if (method === "DELETE" && record) {
@@ -116,9 +123,11 @@ describe("LWS access services", () => {
     expect(await client.requests()).toEqual([{ ...request, id: submitted.url }]);
     expect(fetch.mock.calls.map(([url, init]) => [init?.method, String(url)])).toEqual([
       ["POST", requests],
+      ["HEAD", submitted.url],
       ["GET", requests],
       ["GET", submitted.url],
       ["POST", grants],
+      ["HEAD", shared.id],
       ["GET", grants],
       ["GET", shared.id],
       ["GET", grants],

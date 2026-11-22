@@ -34,7 +34,10 @@ async function setup(body = "") {
     ifMatch: "*",
     contentType: "text/turtle",
   });
-  await storage.write(INDEX, body, { ifMatch: "*", contentType: "text/turtle" });
+  await storage.write(INDEX, `<> a <${SOLID}TypeIndex>. ${body}`, {
+    ifMatch: "*",
+    contentType: "text/turtle",
+  });
   return {
     storage,
     index: createTypeIndex({ storage, features: storage.features, profile: WEBID }),
@@ -120,7 +123,7 @@ it.each([
   ).rejects.toMatchObject({ code: "scope" });
   expect(write).not.toHaveBeenCalled();
   expect(create).not.toHaveBeenCalled();
-  if (state === "existing") expect((await storage.readRdf(INDEX)).dataset.size).toBe(0);
+  if (state === "existing") expect((await storage.readRdf(INDEX)).dataset.size).toBe(1);
   else await expect(storage.head(INDEX)).rejects.toMatchObject({ code: "not-found" });
 });
 

@@ -3,6 +3,7 @@
 import type { Quad, Term } from "@jeswr/fetch-rdf";
 import { escapeIri } from "@jeswr/rdf-serialize";
 import { DataFactory, Store } from "n3";
+import { isAuxiliaryResource } from "./auxiliary.js";
 import { StorageError, storageErrorFrom } from "./errors.js";
 import { discard, mediaTypeOf, readResultFrom, scoped, send } from "./http.js";
 import { paginate, throwIfAborted } from "./internal.js";
@@ -368,13 +369,55 @@ export function lwsWrites(
       try {
         if (location === null || location.trim() === "") throw new TypeError("Missing Location");
         dest = target("POST", new URL(location, parent).href);
-        if (dest === parent || dest === root) throw new TypeError("Not a new resource");
+        if (dest === parent || dest === root || isAuxiliaryResource(dest))
+          throw new TypeError("Location is not a new data resource");
       } catch {
         discard(response.body);
         // Never retain credentials or foreign URLs from an untrusted Location in the cause.
         throw invalid("POST", parent, "Invalid Location");
       }
-      return result(dest, response, opts.signal);
+      discard(response.body);
+      const unverified = () => invalid("POST", parent, "Could not verify created Location");
+      const advertised = inspect("POST", parent, response);
+      if (
+        isAuxiliaryResource(dest, {
+          url: parent,
+          links: advertised,
+          metadataUrl: null,
+          contentType: null,
+        })
+      )
+        throw unverified();
+      let head: ReadResult;
+      try {
+        head = await client().head(dest, { signal: opts.signal, revalidate: true });
+        throwIfAborted("POST", parent, opts.signal);
+      } catch {
+        throwIfAborted("POST", parent, opts.signal);
+        throw unverified();
+      }
+      const typeLinks = head.links.get("type") ?? [];
+      const types = new Set(typeLinks.map((link) => link.target));
+      if (
+        head.parent !== parent ||
+        head.links.get("up")?.length !== 1 ||
+        head.kind !== kind ||
+        !types.has(`${LWS}${kind === "container" ? "Container" : "DataResource"}`) ||
+        types.has(`${LWS}${kind === "container" ? "DataResource" : "Container"}`) ||
+        isAuxiliaryResource(dest, head)
+      )
+        throw unverified();
+      const own = response.headers.get("etag");
+      return {
+        url: dest,
+        etag: own ?? head.etag,
+        created: true,
+        ...(own !== null
+          ? { etagSource: "response" as const }
+          : head.etag !== null
+            ? { etagSource: "follow-up" as const }
+            : {}),
+      };
     },
     async patch(url, patch, opts) {
       const dest = target("PATCH", url);

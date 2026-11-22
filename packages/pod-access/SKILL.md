@@ -41,6 +41,13 @@ through `storage.read` and the roles 1 MiB bounded reader; refuse targets equal 
 only after URL normalisation. Preserve 100% coverage
 and document read-time races; this check neither locks policies nor proves caller write access.
 
+For nominal Solid document destinations whose parents may be missing, use root
+`createOwnerOnlyDestinationVerifier({ podRoot, ownerWebId, openStorage, signal? })`.
+It returns an async boolean verifier, lazily opens the selected storage, and may create
+empty parents at exact URLs before checking each parent and an existing target's own policy.
+Treat false or rejection as a refusal. Keep policy reads on the signal-aware run transport.
+For already existing resources and containers, use `checkOwnerOnly` directly.
+
 Use [storage-capabilities](../storage-capabilities/SKILL.md) to inspect access-control models
 and request/grant service features. Availability describes server support, not caller permission.
 `ReadResult.allow === null` means no usable hint; it establishes neither denial nor access.

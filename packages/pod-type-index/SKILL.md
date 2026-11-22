@@ -19,7 +19,11 @@ pointers for older clients. Bootstrap only confirmed 404s with exact-name create
 strong ETags for edits. Re-read and reconcile on conflict with at most two retries. New writes use
 suite-vocab canonical classes and the generated entities in `src/generated/model.js`.
 Do not overwrite an unreadable document or grant permissions implicitly. The caller's access layer
-must provision owner-only private destinations. Preserve profile readability and unrelated RDF.
+must provision owner-only private destinations. Preserve profile readability and unrelated RDF. Before mutations, reject known auxiliary URLs and
+targets advertised by HTTP metadata on the inspected documents and parents. Every existing
+index needs `solid:TypeIndex` on its document URL. Discovery still reads legacy untyped indexes.
+A Solid profile outside storage throws `StorageError('scope')` at construction. Construct the
+client inside optional registration/discovery handling and keep conventional container fallback.
 
 Find all requested classes with one request per Solid document. Accept legacy namespace aliases,
 return scoped instances and containers, and avoid container crawling. Unregister requires an exact
@@ -54,7 +58,7 @@ values. Closed admission has no `sh:xone`; the public mutation contract enforces
 and exact removal checks raw values. Use Profile's generated wrapper on an untyped WebID rather
 than asserting an Agent type. Keep scope/credentials/container policy in the existing facade.
 See README "Exact divergences" and `test/compatibility.test.ts` for the strict subject and
-serialization changes; preserve the original tests verbatim and all four 100% coverage gates.
+serialization changes; keep all four 100% coverage gates.
 
 <!-- AUTHORED-BY Codex GPT-6 -->
 

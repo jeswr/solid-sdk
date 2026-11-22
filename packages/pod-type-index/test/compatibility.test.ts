@@ -22,7 +22,10 @@ async function setup(body: string, contentType = "text/turtle") {
     ifMatch: "*",
     contentType: "text/turtle",
   });
-  await storage.write(INDEX, PREFIX + body, { ifMatch: "*", contentType });
+  await storage.write(INDEX, `${PREFIX}<> a solid:TypeIndex. ${body}`, {
+    ifMatch: "*",
+    contentType,
+  });
   return {
     storage,
     index: createTypeIndex({ storage, features: storage.features, profile: WEBID }),
@@ -103,6 +106,7 @@ it.each([
   expect(
     [...document.dataset].map((q) => [q.subject.termType, q.predicate.value, q.object.value]),
   ).toEqual([
+    ["NamedNode", TYPE, `${SOLID}TypeIndex`],
     ["BlankNode", TYPE, "urn:OtherType"],
     ["BlankNode", "urn:annotation", "keep"],
   ]);

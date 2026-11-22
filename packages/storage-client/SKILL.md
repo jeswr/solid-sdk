@@ -78,7 +78,11 @@ and scoped to `description.root`; an LWS storage id never authorises a foreign f
 - With `create(container, body, { name })`, Solid PUTs an exact encoded child name with `If-None-Match: *`;
   a taken name gives `conflict`. LWS POSTs with `Slug` as a hint, and the server decides the
   identifier. Without a name, both use POST. Always use the returned `url`, including after
-  moves; never construct a resource URL from a hint. LWS move ignores `name`.
+  moves; never construct a resource URL from a hint. LWS move ignores `name`. POST create
+  revalidates the returned Location by HEAD even when the response has an ETag. It requires
+  the requested kind and direct parent (single logical `up` on LWS, path on Solid). Auxiliary
+  or unverifiable destinations give `invalid-response` after POST. Use the pure root helper
+  `isAuxiliaryResource(url, ...observations)` with available Link and metadata evidence.
 - Fixed Solid URLs use `createAt(client, url, body, options?)` from `./helpers`, returning
   the backend's `WriteResult`. Options omit `name`; set `kind: 'container'` for a trailing-slash
   container. Before calling `create`, it verifies parent + `encodeURIComponent(decodedName)`
@@ -190,6 +194,10 @@ Solid read side (ADR-003 §6):
   conditional 304 succeed; any other 2xx/3xx is `invalid-response`. `body` is the live stream;
   `bytes()/text()/blob()` buffer that same stream once (use one or the other). A body failing
   mid-transfer is a `network` error on both paths (non-retryable once the signal aborted).
+  `read(url, { maxBytes })` caps both paths, and `readRdf(url, { maxBytes })` defaults to
+  16 MiB. Caps are non-negative safe integers. Count actual bytes, cancel oversized bodies
+  and return non-retryable `payload-too-large`. Memory can reject within `read` itself.
+  Raw reads without a cap remain unbounded. Pass a deadline signal for stalled responses.
 - Scope errors redact embedded credentials of the target and the root in every authority
   spelling (backslashes included). `list()` refuses a URL with a query or fragment
   (`bad-request`), except a query matching the advertised version-history template for a scoped

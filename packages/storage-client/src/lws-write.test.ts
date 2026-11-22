@@ -27,6 +27,8 @@ const raw: Patch = { kind: "raw", mediaType: "text/plain", body: "update" };
 const tag = '"resource"';
 const mtag = '"metadata"';
 const options = { contentType: "text/plain", ifMatch: tag };
+const childLinks = (parent = NOTES, kind = "DataResource") =>
+  `<${parent}>; rel="up", <https://www.w3.org/ns/lws#${kind}>; rel="type"`;
 interface Call {
   url: string;
   method: string;
@@ -155,7 +157,7 @@ describe("LWS PUT and POST fixture replay", () => {
   test("POST uses Slug as hint, forwards initial Link metadata and HEADs Location for ETag", async () => {
     const { storage, calls } = backend({
       [`POST ${NOTES}`]: reply(201, { location: "../opaque-id" }),
-      [`HEAD ${ROOT}opaque-id`]: reply(200, { etag: '"created"' }),
+      [`HEAD ${ROOT}opaque-id`]: reply(200, { etag: '"created"', link: childLinks() }),
     });
     expect(
       await storage.create(NOTES, "body", {
@@ -180,7 +182,12 @@ describe("LWS PUT and POST fixture replay", () => {
     expect(calls[0]?.headers.has("if-match")).toBe(false);
   });
   test("container POST accepts null and emits Container type; absent name emits no Slug", async () => {
-    const { storage, calls } = backend();
+    const folder = `${ROOT}folder`;
+    const { storage, calls } = backend({
+      [`POST ${NOTES}`]: ({ headers }) =>
+        reply(201, { location: headers.get("link")?.includes("#Container") ? folder : URL }),
+      [`HEAD ${folder}`]: reply(200, { link: childLinks(NOTES, "Container") }),
+    });
     await storage.create(NOTES, null, { kind: "container" });
     expect(calls[0]?.body).toBe("");
     expect(calls[0]?.headers.get("link")).toBe('<https://www.w3.org/ns/lws#Container>; rel="type"');
@@ -200,6 +207,7 @@ describe("LWS PUT and POST fixture replay", () => {
   ])("POST encodes the decoded name hint %s once and retains the server's identifier", async (name) => {
     const { storage, calls } = backend({
       [`POST ${NOTES}`]: reply(201, { location: "../opaque-id", etag: tag }),
+      [`HEAD ${ROOT}opaque-id`]: reply(200, { link: childLinks() }),
     });
     expect(await storage.create(NOTES, "body", { name, contentType: "text/plain" })).toEqual({
       url: `${ROOT}opaque-id`,
@@ -207,7 +215,7 @@ describe("LWS PUT and POST fixture replay", () => {
       created: true,
       etagSource: "response",
     });
-    expect(calls).toHaveLength(1);
+    expect(calls.map(({ method }) => method)).toEqual(["POST", "HEAD"]);
     expect(calls[0]?.headers.get("slug")).toBe(encodeURIComponent(name));
   });
   test("a slashless container Location can be reused as a create parent", async () => {
@@ -216,6 +224,8 @@ describe("LWS PUT and POST fixture replay", () => {
     const { storage, calls } = backend({
       [`POST ${NOTES}`]: reply(201, { location: parentUrl, etag: tag }),
       [`POST ${parentUrl}`]: reply(201, { location: childUrl, etag: '"child"' }),
+      [`HEAD ${parentUrl}`]: reply(200, { link: childLinks(NOTES, "Container") }),
+      [`HEAD ${childUrl}`]: reply(200, { link: childLinks(parentUrl) }),
     });
     const parent = await storage.create(NOTES, null, { kind: "container" });
     expect(await storage.create(parent.url, "child", { contentType: "text/plain" })).toEqual({
@@ -226,7 +236,9 @@ describe("LWS PUT and POST fixture replay", () => {
     });
     expect(calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
       `POST ${NOTES}`,
+      `HEAD ${parentUrl}`,
       `POST ${parentUrl}`,
+      `HEAD ${childUrl}`,
     ]);
   });
   test("the server validates a slashless create parent's kind", async () => {
@@ -243,6 +255,7 @@ describe("LWS PUT and POST fixture replay", () => {
     ROOT,
     "?q",
     "new#",
+    "policy.ACR",
     "http://[",
   ])("untrusted Location is rejected before a follow-up request: %s", async (location) => {
     const { storage, calls } = backend({
@@ -271,7 +284,7 @@ describe("LWS PUT and POST fixture replay", () => {
     const { storage, calls } = backend({ [`PUT ${URL}`]: reply(), [`HEAD ${URL}`]: reply(503) });
     expect((await storage.write(URL, "", options)).etag).toBeNull();
     expect(calls.map(({ method }) => method)).toEqual(["PUT", "HEAD"]);
-    const post = backend({ [`HEAD ${URL}`]: reply(200) });
+    const post = backend({ [`HEAD ${URL}`]: reply(200, { link: childLinks() }) });
     expect((await post.storage.create(NOTES, "", { contentType: "text/plain" })).etag).toBeNull();
   });
 });
@@ -1761,4 +1774,47 @@ test("PUT never infers a container kind from a non-root identifier's trailing sl
   const { storage, calls } = backend({ [`PUT ${NOTES}`]: reply(204, { etag: tag }) });
   expect((await storage.write(NOTES, "content", options)).etag).toBe(tag);
   expect(calls[0]?.method).toBe("PUT");
+});
+
+describe("verifying server-assigned LWS destinations", () => {
+  test.each([
+    ["sibling collection", childLinks(`${ROOT}sibling/`)],
+    ["missing parent", '<https://www.w3.org/ns/lws#DataResource>; rel="type"'],
+    ["ambiguous parents", `${childLinks()}, <${ROOT}>; rel="up"`],
+    ["wrong kind", childLinks(NOTES, "Container")],
+    ["unadvertised kind", `<${NOTES}>; rel="up"`],
+    ["ambiguous kinds", `${childLinks()}, <https://www.w3.org/ns/lws#Container>; rel="type"`],
+    ["opaque auxiliary resource", `${childLinks()}, <${NOTES}>; rel="describes"`],
+    ["unavailable metadata", null],
+  ])("refuses %s even with a create ETag", async (_scenario, link) => {
+    const dest = `${ROOT}opaque-resource`;
+    const { storage, calls } = backend({
+      [`POST ${NOTES}`]: reply(201, { location: dest, etag: tag }),
+      [`HEAD ${dest}`]: link === null ? reply(404) : reply(200, { link }),
+    });
+    await expect(storage.create(NOTES, "", { contentType: "text/plain" })).rejects.toMatchObject({
+      code: "invalid-response",
+      url: NOTES,
+    });
+    expect(calls.map(({ method, url }) => [method, url])).toEqual([
+      ["POST", NOTES],
+      ["HEAD", dest],
+    ]);
+    expect(calls[1]?.init?.cache).toBe("no-cache");
+  });
+
+  test("rejects a Location advertised as auxiliary before fetching it", async () => {
+    const dest = `${ROOT}opaque-resource`;
+    const { storage, calls } = backend({
+      [`POST ${NOTES}`]: reply(201, {
+        location: dest,
+        etag: tag,
+        link: `<${dest}>; rel="linkset"`,
+      }),
+    });
+    await expect(storage.create(NOTES, "", { contentType: "text/plain" })).rejects.toMatchObject({
+      code: "invalid-response",
+    });
+    expect(calls.map(({ method }) => method)).toEqual(["POST"]);
+  });
 });

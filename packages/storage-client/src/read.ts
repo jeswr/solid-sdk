@@ -11,15 +11,17 @@ import {
   mediaTypeOf,
   type ReadShape,
   readResultFrom,
+  readTooLarge,
   scoped,
   send,
 } from "./http.js";
-import { listingTooLarge, throwIfAborted } from "./internal.js";
+import { listingTooLarge, throwIfAborted, validateMaxBytes } from "./internal.js";
 import type { AuthFetch, RdfReadResult, ReadResult, StorageClient } from "./types.js";
 
 /** RFC 6838 type/subtype without parameters. */
 export const MEDIA_TYPE = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/i;
 export const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
+export const DEFAULT_RDF_MAX_BYTES = 16 * 1024 * 1024;
 const RDF_READABLE: ReadonlySet<string> = new Set(SUPPORTED_RDF_MEDIA_TYPES);
 
 /** Preserve protocol headers while allowing request-local transport markers. */
@@ -85,15 +87,17 @@ export async function rdfBody(
       message: `${result.url} is ${result.contentType ?? "untyped"}, not RDF`,
     });
   }
-  // Body transport failures surface as `network` (from bytes()), not as a parse error.
-  const text =
-    maxBytes === undefined
-      ? await result.text()
-      : await boundedText(result, maxBytes, listingTooLarge(result.url, maxBytes), signal);
+  const cap = maxBytes ?? DEFAULT_RDF_MAX_BYTES;
+  const overflow =
+    code === "not-rdf"
+      ? readTooLarge(result.url, cap)
+      : maxBytes === undefined
+        ? new StorageError(code, { method: "GET", url: result.url })
+        : listingTooLarge(result.url, cap);
+  const text = await boundedText(result, cap, overflow, signal);
   try {
-    // fetch-rdf caps parsing at its own default budget, so a caller's larger byte cap must reach
-    // it. boundedText already enforced the cap on raw bytes; decoding can turn each invalid byte
-    // into U+FFFD (3 UTF-8 bytes), so fetch-rdf, which re-measures the decoded text, gets 3x room.
+    // Enforce the raw-byte cap above. An explicit parser budget allows decoded U+FFFD
+    // (up to three UTF-8 bytes for each invalid input byte) without charging it twice.
     const parseBytes =
       maxBytes === undefined ? undefined : Math.min(maxBytes * 3, Number.MAX_SAFE_INTEGER);
     const options = {
@@ -122,6 +126,7 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
     range = false,
     revalidate = false,
     extraHeaders?: RequestInit["headers"],
+    maxBytes?: number,
   ): Promise<ReadResult> {
     const target = scoped(root, "GET", url);
     const response = await send(
@@ -138,7 +143,7 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
       conditional: "If-None-Match" in headers,
       signal,
     });
-    return readResultFrom(response, target, shape, signal);
+    return readResultFrom(response, target, shape, signal, maxBytes);
   }
   const operations = {
     get,
@@ -161,6 +166,7 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
       return readResultFrom(response, target, shape, opts.signal);
     },
     async read(url: string, opts: Parameters<StorageClient["read"]>[1] = {}) {
+      validateMaxBytes(opts.maxBytes);
       const headers: Record<string, string> = { Accept: opts.accept ?? "*/*" };
       if (opts.ifNoneMatch !== undefined) headers["If-None-Match"] = opts.ifNoneMatch;
       if (opts.range) {
@@ -174,13 +180,22 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
         }
         headers.Range = `bytes=${start}-${end ?? ""}`;
       }
-      return get(url, headers, opts.signal, opts.range !== undefined, false, opts.headers);
+      return get(
+        url,
+        headers,
+        opts.signal,
+        opts.range !== undefined,
+        false,
+        opts.headers,
+        opts.maxBytes,
+      );
     },
 
     async readRdf(
       url: string,
       opts: Parameters<StorageClient["readRdf"]>[1] = {},
     ): Promise<RdfReadResult> {
+      validateMaxBytes(opts.maxBytes);
       const headers: Record<string, string> = { Accept: RDF_ACCEPT };
       if (opts.ifNoneMatch !== undefined) headers["If-None-Match"] = opts.ifNoneMatch;
       const result = await get(url, headers, opts.signal).catch((error: unknown) => {
@@ -204,7 +219,7 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
           notModified: true,
         };
       }
-      const { type, dataset } = await rdfBody(result, "not-rdf", undefined, opts.signal);
+      const { type, dataset } = await rdfBody(result, "not-rdf", opts.maxBytes, opts.signal);
       return { url: result.url, etag: result.etag, contentType: type, dataset };
     },
   };

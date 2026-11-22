@@ -41,6 +41,9 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
   Location is invalid-response; its URL is never fetched or retained in the error, including its
   cause chain. The error names only the scoped container. `opts.links` is ignored: Solid types
   belong in RDF; metadata is never written implicitly (ADR's writable-describedby qualification).
+  POST also refuses auxiliary destinations and requires a revalidated HEAD with the requested
+  kind. That verification runs even when the POST supplies an ETag or ETag follow-up is disabled.
+  Failure gives `invalid-response` even if the POST already committed.
 - RDF patches use `buildN3Patch`'s fixed InsertDeletePatch envelope; formula order is nonempty
   where, deletes, inserts. Every triple line is serialized through rdf-serialize/n3.Writer in
   N-Triples style; the final semicolon is followed by `.\n`. Serialization reuses rdf.ts IRI

@@ -20,6 +20,7 @@ export {
   subjectKey,
   unionPolicies,
 } from "./policy.js";
+export { createOwnerOnlyDestinationVerifier } from "./private-destination.js";
 export {
   ACL,
   ACP,

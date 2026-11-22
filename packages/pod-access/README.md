@@ -63,6 +63,15 @@ permissions, before the lossy roles projection. Its result is `{ private: true }
 `unsupported-model`, or `not-storage-root`). No policy text, principal identifiers or error messages are returned.
 The only allowed owner is the exact supplied WebID; listing another owner is non-owner access.
 
+Use `createOwnerOnlyDestinationVerifier({ podRoot, ownerWebId, openStorage, signal? })`
+when a Solid document's parent containers may need provisioning. The factory returns
+`(url: string) => Promise<boolean>`. It lazily opens storage, creates missing containers
+parent-first at their exact URLs, and verifies each resulting container and the policy of
+an existing target. It never sends the document body. Use a storage transport that observes
+the run signal throughout policy reads. A failed privacy proof resolves to `false`; a scope
+violation, abort, or failure while probing or creating a destination can reject. Use
+`checkOwnerOnly` directly for an existing resource or container.
+
 The function uses the same public `storage` and optional trusted `acpDialect: 'css' | 'ess'`
 inputs as `createAccessClient`, plus `url` and `ownerWebId`. It follows advertised access
 links within `storage.root`, including ESS query-addressed ACRs. WAC uses the resource's own

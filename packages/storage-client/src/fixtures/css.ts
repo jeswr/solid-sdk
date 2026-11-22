@@ -108,6 +108,7 @@ export const cssWriteExchanges: RecordedExchanges = {
   [`PUT ${notes}new%20note.ttl`]: { status: 201, headers: { etag: '"created"' } },
   [`PUT ${notes}folder/`]: { status: 201, headers: { etag: '"folder"' } },
   [`POST ${notes}`]: { status: 201, headers: { location: "generated.ttl", etag: '"created"' } },
+  [`HEAD ${notes}generated.ttl`]: { status: 200, headers: {} },
   [`PATCH ${notes}today.ttl`]: { status: 205, headers: { etag: '"patched"' } },
   [`PATCH ${notes}today.ttl.meta`]: { status: 205, headers: { etag: '"metadata"' } },
   [`DELETE ${notes}today.ttl`]: { status: 205, headers: {} },

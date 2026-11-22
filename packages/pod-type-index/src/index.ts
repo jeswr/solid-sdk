@@ -12,7 +12,10 @@ export type {
   TypeLocation,
 } from "./types.js";
 
-/** Create an account-scoped Solid Type Index or LWS service client. No I/O at construction. */
+/**
+ * Create a storage-scoped Solid Type Index or LWS service client without I/O.
+ * On Solid, a profile outside the selected storage throws StorageError with code "scope".
+ */
 export function createTypeIndex(options: TypeIndexOptions): TypeIndex {
   const { storage, features, profile } = options;
   if (storage.protocol !== features.protocol)

@@ -62,6 +62,9 @@ Read with [storage-client guidance](../SKILL.md) for shared contracts and Solid 
   `invalid-response`; the exact limit is accepted. This also stops page-by-page cursor growth before
   short Link targets can amplify an oversized response URL. `listAll` uses shared paginate: loop guard,
   10,000 pages maximum, abort between entries. No client sorting or cursor reconstruction.
+- `read` caps its live and buffered body paths with `maxBytes`; `readRdf` applies a 16 MiB
+  default and accepts a caller cap. Both cancel oversized bodies and throw `payload-too-large`
+  based on actual streamed bytes. Pass a deadline signal to bound stalled reads.
 - HEAD/read/readRdf share status, GET/HEAD headers, range validation, conditional 304, body buffering,
   transport/abort mapping and RDF parsing with Solid (`src/read.ts`, `src/http.ts`). Accept defaults
   to */*, readRdf to `text/turtle, application/ld+json;q=0.9`; 304 gives an empty dataset and
