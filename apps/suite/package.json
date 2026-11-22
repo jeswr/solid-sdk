@@ -55,6 +55,7 @@
     "@jeswr/solid-money": "workspace:*",
     "@jeswr/solid-task-model": "workspace:*",
     "@jeswr/solid-vc": "workspace:*",
+    "@jeswr/solid-wallet": "workspace:*",
     "@jeswr/storage-capabilities": "workspace:*",
     "@jeswr/storage-client": "workspace:*",
     "@jeswr/suite-charts": "workspace:*",

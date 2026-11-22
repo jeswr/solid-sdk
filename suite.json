@@ -114,7 +114,8 @@
     "@jeswr/solid-recipe",
     "@jeswr/solid-journal",
     "@jeswr/suite-insights",
-    "@jeswr/solid-media-log"
+    "@jeswr/solid-media-log",
+    "@jeswr/solid-wallet"
   ],
   "applications": [
     {

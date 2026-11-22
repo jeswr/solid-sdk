@@ -38,6 +38,8 @@ export default defineConfig({
         "src/apps/agent/lib/**/*.ts",
         "src/apps/slides/lib/**/*.ts",
         "src/apps/slides/state/**/*.{ts,tsx}",
+        "src/apps/wallet/lib/**/*.ts",
+        "src/apps/wallet/state/**/*.{ts,tsx}",
         "src/shell/lib/**/*.ts",
         "src/shell/settings/assistants/{read,copy}.ts",
         "src/shell/sync/connection-state.ts",
