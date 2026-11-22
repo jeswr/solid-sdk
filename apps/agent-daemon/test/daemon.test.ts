@@ -78,7 +78,7 @@ import {
   issue,
   publishVerificationMethod,
 } from "@jeswr/solid-vc";
-import { copyFile, mkdtemp, readFile, rm, writeFile } from "fs/promises";
+import { copyFile, mkdtemp, rm, writeFile } from "fs/promises";
 import { Server } from "net";
 import { tmpdir } from "os";
 import { join } from "path";
