@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createGithubAdapter } from "../github/adapter.js";
@@ -31,6 +32,7 @@ function run(adapter: IntegrationAdapter, limits: Partial<RunLimits> = {}, api?:
       profileDocumentUrl: TEST_PROFILE_DOC,
       podRoot: TEST_POD_ROOT,
       fetch: pod.fetch,
+      verifyPrivateDestination: async () => true,
     }),
     limits,
   });
@@ -61,6 +63,7 @@ function records(id: string, url: string, body: unknown): number {
   if (id === "spotify")
     return path === "/v1/me" ? 1 : length(value.items ?? get(value.artists, "items"));
   if (id === "google-drive") return length(value.files ?? value.changes);
+  if (id === "vesync") return length(get(value.result, "list"));
   if (["strava", "garmin"].includes(id)) return length(body);
   const fields: Record<string, string> = {
     dropbox: "entries",
@@ -74,6 +77,7 @@ function records(id: string, url: string, body: unknown): number {
     notion: "results",
     pinterest: "items",
     twitch: "data",
+    whoop: "records",
     "x-twitter": "data",
     youtube: "items",
   };

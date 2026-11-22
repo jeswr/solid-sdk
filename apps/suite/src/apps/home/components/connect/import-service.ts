@@ -15,6 +15,7 @@ import type {
   ConnectorConnection,
 } from "../../lib/connect/connection-state";
 import { withConnectorLock } from "../../lib/connect/import-lock";
+import { privateDestinationVerifier } from "./private-destination";
 
 /** A sign-in that expired while waiting for another sync; nothing was recorded. */
 export class SignInExpiredError extends Error {
@@ -173,12 +174,14 @@ export function createImportWriter(
   const demos = new Set(demoResourceUrls);
   const profile = new URL(session.webId);
   profile.hash = "";
+  const fetch = fetchWithSignal(session.fetch, signal);
   const writer = createFetchPodWriter({
     adapterId,
     webId: session.webId,
     profileDocumentUrl: profile.href,
     podRoot: session.storageUrl,
-    fetch: fetchWithSignal(session.fetch, signal),
+    fetch,
+    verifyPrivateDestination: privateDestinationVerifier({ ...session, fetch }, signal),
     signal,
   });
   return {

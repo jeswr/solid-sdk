@@ -357,6 +357,7 @@
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/pod-access": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-health": "workspace:*",

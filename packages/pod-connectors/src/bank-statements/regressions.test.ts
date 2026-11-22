@@ -7,7 +7,13 @@ import { NS } from "@jeswr/suite-vocab";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { parseCsv } from "../core/csv.js";
-import { fileImport, type MemoryPod, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
+import {
+  createMemoryPod,
+  fileImport,
+  type MemoryPod,
+  memoryFile,
+  TEST_POD_ROOT,
+} from "../core/testing.js";
 import { CLASSES, Invoice } from "../core/vocab.js";
 import { normaliseAccountLabel, transactionKey } from "./csv.js";
 import {
@@ -183,7 +189,9 @@ describe("isolated bank account documents", () => {
         });
       },
     } satisfies typeof bankStatementsFileAdapter;
-    const { pod } = await fileImport(previousRelease, memoryFile("old.csv", text));
+    const { pod } = await fileImport(previousRelease, memoryFile("old.csv", text), {
+      pod: createMemoryPod(),
+    });
     const before = pod.get(DOC);
     const etag = (await pod.fetch(DOC)).headers.get("etag");
     const read = vi.spyOn(pod, "fetch");

@@ -7,6 +7,8 @@ import { open } from "node:fs/promises";
 import { basename } from "node:path";
 import { stderr as nodeStderr, stdout as nodeStdout } from "node:process";
 import { Readable } from "node:stream";
+import { accessModel } from "@jeswr/pod-access/requests-solid";
+import type { StorageClient } from "@jeswr/storage-client";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
 import {
   BANK_CSV_FORMATS,
@@ -15,6 +17,7 @@ import {
   MAX_BANK_ACCOUNT_LABEL_CHARS,
   validateBankOptions,
 } from "../bank-statements/file-adapter.js";
+import { PrivateDestinationError } from "../core/errors.js";
 import {
   type FileImportAdapter,
   type ImportFile,
@@ -22,8 +25,13 @@ import {
   runFileImport,
 } from "../core/file-import.js";
 import { createSourceAuth, runImport } from "../core/import-runner.js";
-import { adapterContainer } from "../core/pod-writer-policy.js";
-import { createStoragePodWriter } from "../core/storage-pod-writer.js";
+import {
+  adapterContainer,
+  requirePrivateDestination,
+  requiresPrivateDestination,
+} from "../core/pod-writer-policy.js";
+import { createOwnerOnlyDestinationVerifier } from "../core/private-destination.js";
+import { createStoragePodWriter, createWacImportStorage } from "../core/storage-pod-writer.js";
 import type { ConnectorState, SourceAuth } from "../core/types.js";
 import { fileAdapterById } from "../file-adapters.js";
 import { createRegistry } from "../registry.js";
@@ -74,6 +82,14 @@ export interface CliOptions {
   readonly stdout?: (message: string) => void;
   readonly stderr?: (message: string) => void;
   readonly podTransport?: typeof fetch;
+  /** Override the default owner-only destination verifier. */
+  readonly verifyPrivateDestination?: (options: {
+    url: string;
+    storage: StorageClient;
+    fetch: typeof fetch;
+    ownerWebId: string;
+    signal?: AbortSignal;
+  }) => Promise<boolean>;
   readonly sourceTransport?: typeof fetch;
   readonly sourceAuth?: SourceAuth;
   readonly openAuthorizationUrl?: (url: string) => void | Promise<void>;
@@ -302,6 +318,7 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
         "config",
         "Unknown connector or unsupported import mode; file connectors require --file.",
       );
+    const privateImport = requiresPrivateDestination(command.id);
     const file = command.file
       ? await importFile(command.file, fileAdapter as FileImportAdapter)
       : undefined;
@@ -330,12 +347,42 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
       withSignal(options.podTransport ?? globalThis.fetch),
     );
     const stateStore = createStateStore({ ...config, adapterId: command.id, fetch: podFetch });
-    let previous = await stateStore.read();
-    const storage = createSolidBackend({ fetch: podFetch, root: config.podRoot });
+    const verifier = options.verifyPrivateDestination;
+    const createStorage = privateImport && !verifier ? createWacImportStorage : createSolidBackend;
+    const storage = createStorage({ fetch: podFetch, root: config.podRoot });
     const podWriter = createStoragePodWriter({
       storage,
       container: adapterContainer(command.id, config.podRoot),
       webId: config.webId,
+      verifyPrivateDestination: verifier
+        ? (url) =>
+            verifier({
+              url,
+              storage,
+              fetch: podFetch,
+              ownerWebId: config.webId,
+              signal: options.signal,
+            })
+        : createOwnerOnlyDestinationVerifier({
+            podRoot: config.podRoot,
+            ownerWebId: config.webId,
+            signal: options.signal,
+            async openStorage() {
+              const root = storage.root;
+              const signal = options.signal;
+              // ACL links alone are also used by ACP servers. Establish WAC independently.
+              if ((await accessModel({ fetch: podFetch, storage: root, signal })) !== "wac")
+                throw new PrivateDestinationError(command.id);
+              const head = await storage.head(root, { revalidate: true, signal });
+              if (
+                !(head.links.get("type") ?? []).some(
+                  ({ target }) => target === "http://www.w3.org/ns/pim/space#Storage",
+                )
+              )
+                throw new PrivateDestinationError(command.id);
+              return storage;
+            },
+          }),
       typeIndex: {
         profileDocumentUrl: config.profileDocumentUrl,
         storageFor: (url) =>
@@ -343,6 +390,13 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
       },
       ...(options.signal && { signal: options.signal }),
     });
+    // Check before the state store writes its ACL, which can create missing ancestors.
+    if (privateImport) await requirePrivateDestination(command.id, podWriter, stateStore.url);
+    let previous = await stateStore.read();
+    const writeState = async (state: CliConnectorState) => {
+      if (privateImport) await requirePrivateDestination(command.id, podWriter, stateStore.url);
+      await stateStore.write(state);
+    };
     let sourceAuth = options.sourceAuth;
     if (command.id === "vesync" && !sourceAuth) {
       const credentials = await (options.vesyncCredentials?.() ??
@@ -420,9 +474,10 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
             }
           throw failure;
         }
+        if (error instanceof PrivateDestinationError) throw error;
         if (next) {
           // A full import still preserves the last successful checkpoint on failure.
-          await stateStore.write(previous ? { ...previous, lastOutcome: "error" } : next);
+          await writeState(previous ? { ...previous, lastOutcome: "error" } : next);
         }
         if (error instanceof VeSyncAuthError) throw new NodeRuntimeError("auth", error.message);
         throw new NodeRuntimeError(
@@ -434,7 +489,7 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
       const { cursor, ...rest } = next;
       const api = file ? slots.api : cursor;
       const fileCursor = file ? cursor : slots.file;
-      await stateStore.write({
+      await writeState({
         ...rest,
         ...(api === undefined ? {} : { cursor: api }),
         ...(fileCursor === undefined ? {} : { fileCursor }),
@@ -475,7 +530,10 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
         ? new NodeRuntimeError("auth", error.message)
         : error instanceof NodeRuntimeError
           ? error
-          : new NodeRuntimeError("import", "Import failed.");
+          : new NodeRuntimeError(
+              "import",
+              error instanceof PrivateDestinationError ? error.message : "Import failed.",
+            );
     stderr(`${failure.message}\n`);
     return EXIT_CODES[failure.kind];
   }

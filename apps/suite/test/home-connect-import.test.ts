@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { ownerPolicy, writeWac } from "@jeswr/pod-access";
 import {
   createRegistry,
   fileAdapterById,
@@ -40,6 +41,49 @@ async function setup() {
   return { pod, session };
 }
 describe("Connect uses the real package writer against the suite demo pod", () => {
+  it.each([
+    "public parent",
+    "unavailable ACL",
+  ])("refuses a bank import with a %s before sending a payload", async (issue) => {
+    const { session } = await setup();
+    const parent = `${session.storageUrl}integrations/`;
+    const parentAcl = `${parent}.acl`;
+    if (issue === "public parent") {
+      const policy = ownerPolicy(session.webId, true);
+      const [owner] = policy.grants;
+      if (!owner) throw new Error("Expected an owner grant");
+      policy.grants.push({ ...owner, modes: new Set(["read"]), who: [[{ kind: "public" }]] });
+      const seed = await session.fetch(parentAcl, {
+        method: "PUT",
+        headers: { "content-type": "text/turtle" },
+        body: await writeWac(policy, parent, parentAcl),
+      });
+      expect(seed.ok).toBe(true);
+    }
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) =>
+      issue === "unavailable ACL" && String(input) === parentAcl
+        ? new Response(null, { status: 403 })
+        : session.fetch(input, init),
+    );
+    const podWriter = createImportWriter(
+      { ...session, fetch },
+      "bank-statements",
+      new AbortController().signal,
+    );
+    const adapter = fileAdapterById("bank-statements");
+    if (!adapter) throw new Error("Missing bank statement adapter");
+    await expect(
+      runFileImport({
+        adapter,
+        file: memoryFile("bank.csv", "Date,Description,Amount,Currency\n2026-06-01,Shop,-5,GBP"),
+        podWriter,
+      }),
+    ).rejects.toMatchObject({ name: "PrivateDestinationError" });
+    const requests = fetch.mock.calls.map(([url, init]) => `${init?.method ?? "GET"} ${url}`);
+    expect(requests.at(-1)).toBe(`${issue === "public parent" ? "GET" : "HEAD"} ${parentAcl}`);
+    expect(requests.filter((request) => request.startsWith("PUT "))).toEqual([]);
+  });
+
   it.each([
     ["playlist-read-private", "Focus Flow", "Sunday Morning", "5ABHKGoOzxkaa28ttQV9sE"],
     ["playlist-read-collaborative", "Sunday Morning", "Focus Flow", "37i9dQZF1DXcBWIGoYBM5M"],

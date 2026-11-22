@@ -96,6 +96,7 @@ const writer = (pod: MemoryPod) =>
     profileDocumentUrl: TEST_PROFILE_DOC,
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
+    verifyPrivateDestination: async () => true,
   });
 const typed = (pod: MemoryPod, url: string, type: string) =>
   [...pod.dataset(url)]

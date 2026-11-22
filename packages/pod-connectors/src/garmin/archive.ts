@@ -74,14 +74,14 @@ export function garminProduct(name: string): Product | undefined {
   return undefined;
 }
 
-/** Reopen non-archive text through the shared 64 MiB cap; archives never call text(). */
+/** Sniff via a bounded range, leaving the full legacy stream for the shared 64 MiB reader. */
 export async function garminInput(
   file: ImportFile,
   signal?: AbortSignal,
 ): Promise<{ zip: true } | { zip: false; text: string }> {
   signal?.throwIfAborted();
-  if (file.stream) {
-    const reader = file.stream().getReader();
+  if (file.stream && file.slice) {
+    const reader = file.slice(0, 4).stream().getReader();
     const signature: number[] = [];
     try {
       while (signature.length < 4) {
@@ -99,23 +99,25 @@ export async function garminInput(
       }
     }
     if (signature.join(",") === "80,75,3,4") {
-      if (!file.slice) throw new Error("Garmin ZIP imports require file.slice().");
       return { zip: true };
     }
-  } else if (/\.zip$/i.test(file.name) || file.type === "application/zip") {
+  } else if (!file.stream && (/\.zip$/i.test(file.name) || file.type === "application/zip")) {
     throw new Error("Garmin ZIP imports require file.stream() and file.slice().");
   }
   if (file.size > MAX_FILE_BYTES)
     throw new Error("Garmin text export exceeds the 64 MiB import limit.");
   const chunks: string[] = [];
+  let prefix = "";
   for await (const chunk of fileText(file)) {
     signal?.throwIfAborted();
+    if (prefix.length < 4) {
+      prefix += chunk.slice(0, 4 - prefix.length);
+      if (prefix === "PK\x03\x04")
+        throw new Error("Garmin ZIP imports require file.stream() and file.slice().");
+    }
     chunks.push(chunk);
   }
-  const text = chunks.join("");
-  if (text.startsWith("PK\x03\x04"))
-    throw new Error("Garmin ZIP imports require file.stream() and file.slice().");
-  return { zip: false, text };
+  return { zip: false, text: chunks.join("") };
 }
 
 type Row = Record<string, unknown>;

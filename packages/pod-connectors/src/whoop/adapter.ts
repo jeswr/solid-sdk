@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
-import { RunBudget, type RunLimits } from "../core/budget.js";
+import type { RunLimits } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, IntegrationAdapter } from "../core/types.js";
@@ -29,7 +29,9 @@ const DEFAULT_LIMITS: RunLimits = {
 const LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function createWhoopAdapter(limits: RunLimits = DEFAULT_LIMITS): IntegrationAdapter {
+  limits = { ...limits };
   return {
+    limits,
     vocabMap,
     metadata: {
       id: "whoop",
@@ -56,7 +58,6 @@ export function createWhoopAdapter(limits: RunLimits = DEFAULT_LIMITS): Integrat
     },
     fixtures: () => WHOOP_FIXTURES,
     async import(ctx) {
-      const budget = new RunBudget("whoop", limits);
       const saved = apiCursor(ctx.cursor);
       const previous = saved.newest ? timestamp(saved.newest) : undefined;
       const start = saved.start;
@@ -66,6 +67,7 @@ export function createWhoopAdapter(limits: RunLimits = DEFAULT_LIMITS): Integrat
       const itemLimit = Math.min(limits.maxItems, MAX_RECORDS);
       if (!Number.isSafeInteger(limits.maxItems) || itemLimit < 1)
         throw new IntegrationSyncError("whoop", "WHOOP item budget must be positive.");
+      // Factory limits stop at a resumable batch boundary. The runner also meters host limits.
       let consumed = 0;
       let requests = 0;
       let position = saved.position;
@@ -101,7 +103,7 @@ export function createWhoopAdapter(limits: RunLimits = DEFAULT_LIMITS): Integrat
           requests++;
           let page: Awaited<ReturnType<typeof collection>>;
           try {
-            page = await collection(kind, start, token, ctx, budget, seen);
+            page = await collection(kind, start, token, ctx, seen);
           } catch (error) {
             if (
               !resumed ||
@@ -125,7 +127,7 @@ export function createWhoopAdapter(limits: RunLimits = DEFAULT_LIMITS): Integrat
               partial = true;
               break traversal;
             }
-            budget.items(1);
+            ctx.budget.items(1);
             consumed++;
             const raw = page.rows[rowIndex];
             ctx.signal?.throwIfAborted();
@@ -140,17 +142,12 @@ export function createWhoopAdapter(limits: RunLimits = DEFAULT_LIMITS): Integrat
                 break traversal;
               }
               requests++;
-              budget.request();
               let cycle: Record<string, unknown>;
               try {
                 cycle = object(
-                  await getJson<unknown>(
-                    "whoop",
-                    ctx.api,
-                    `${sourceUrl("cycle")}/${id}`,
-                    { signal: ctx.signal },
-                    budget,
-                  ),
+                  await getJson<unknown>("whoop", ctx.api, `${sourceUrl("cycle")}/${id}`, {
+                    signal: ctx.signal,
+                  }),
                 );
               } catch (error) {
                 if (!(error instanceof IntegrationSyncError) || error.status !== 404) throw error;
@@ -273,7 +270,7 @@ export interface ApiCursor {
 function apiCursor(cursor: string | undefined): ApiCursor {
   // No cursor, a completed empty traversal, or a file-import batch cursor from a host that
   // shares one checkpoint between paths: all start a fresh API traversal.
-  if (cursor === undefined || cursor === COMPLETE_CURSOR || cursor.startsWith('{"file":'))
+  if (!cursor || cursor === COMPLETE_CURSOR || cursor.startsWith('{"file":'))
     return { v: 1, position: { index: 0, offset: 0 } };
   const previous = timestamp(cursor);
   if (previous)
@@ -331,18 +328,14 @@ async function collection(
   start: string | undefined,
   token: string | undefined,
   ctx: ImportContext,
-  budget: RunBudget,
   seen: Set<string>,
 ): Promise<{ rows: unknown[]; next?: string }> {
   ctx.signal?.throwIfAborted();
-  budget.request();
   const url = new URL(sourceUrl(kind));
   url.searchParams.set("limit", "25");
   if (start) url.searchParams.set("start", start);
   if (token) url.searchParams.set("nextToken", token);
-  const answer = object(
-    await getJson<unknown>("whoop", ctx.api, url.href, { signal: ctx.signal }, budget),
-  );
+  const answer = object(await getJson<unknown>("whoop", ctx.api, url.href, { signal: ctx.signal }));
   if (!Array.isArray(answer.records) || answer.records.length > 25)
     throw new IntegrationSyncError("whoop", "Invalid WHOOP collection envelope.");
   const next = answer.next_token ?? answer.nextToken;

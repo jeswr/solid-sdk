@@ -14,11 +14,11 @@ import {
 } from "./registry.js";
 
 describe("integrations registry", () => {
-  it("exposes exactly 34 catalog entries with unique, URL-safe ids", () => {
+  it("exposes exactly 35 catalog entries with unique, URL-safe ids", () => {
     const entries = allCatalogEntries();
-    expect(entries).toHaveLength(34);
+    expect(entries).toHaveLength(35);
     const ids = entries.map((e) => e.id);
-    expect(new Set(ids).size).toBe(34);
+    expect(new Set(ids).size).toBe(35);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9-]+$/);
   });
 
@@ -44,7 +44,7 @@ describe("integrations registry", () => {
     }
   });
 
-  it("ships the 14 Tier-B adapters, each demoable now with an honest blocker", () => {
+  it("ships the 15 Tier-B adapters, each demoable now with an honest blocker", () => {
     expect(TIER_B_ADAPTERS.map((a) => a.metadata.id).sort()).toEqual([
       "facebook",
       "fitbit",
@@ -209,7 +209,7 @@ describe("injected public configuration", () => {
     expect(first.statusOf(TIER_C[0]!)).toBe("export-file");
     expect(first.statusOf({ ...ADAPTERS[0]!.metadata, id: "unknown" })).toBe("demo");
     expect(first.adapterById("unknown")).toBeUndefined();
-    expect(first.allCatalogEntries()).toHaveLength(34);
+    expect(first.allCatalogEntries()).toHaveLength(35);
   });
 });
 

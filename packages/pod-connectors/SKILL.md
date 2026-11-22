@@ -8,8 +8,7 @@ description: Use when maintaining source adapters, injected PodWriter/SourceAuth
 
 # Maintain Pod connectors
 
-Spotify file import shares the `spotify` catalog id with its live adapter. Route it through
-`fileAdapterById('spotify')`; see README's Spotify section and `src/spotify/file-adapter.ts`.
+Spotify file import shares the live `spotify` id: use `fileAdapterById('spotify')`; read README's Spotify section and `src/spotify/file-adapter.ts`.
 Reuse the streaming JSON scanner and Takeout ZIP reader, retaining their grammar, byte,
 CRC/range and inflation checks. Stage only allowlisted history fields before any writes.
 Never persist IP, country, device, raw export or filename, and skip
@@ -78,8 +77,7 @@ All tests use recorded fixtures and memory Pods. Shared `demoImport`, `sparseImp
 helpers default to the strict storage-client memory backend, retaining synchronous snapshots for
 existing adapter assertions. `createMemoryPod` remains available for HTTP fault injection;
 `createStorageMemoryPod` exposes the real memory StorageClient. Run the shared writer contract
-against fetch, Solid HTTP and strict memory backends. Use ./testing for consumers. Run lint,
-build, typecheck and test, then the workspace gates before completing a change.
+against fetch, Solid HTTP and strict memory backends. Use ./testing for consumers; run lint, build, typecheck, test and workspace gates.
 
 The runner owns one shared-core `RunBudget` per import (20,000 requests, 2,000,000 records,
 512 MiB JSON/inspected response bytes and `maxDurationMs: 1_800_000` by default). It wraps
@@ -209,13 +207,13 @@ index (overlapping exports rely on row order). Preserve balances in fallback ide
 (MoneyDocument/putAccount/putTransaction; never hand-written accessors or triples) to
 `finance/bank/<bank>-<account-slug>/account.ttl` and `<YYYY-MM>.ttl` (+ `-part-<n>.ttl`),
 months from solid-money's `monthKey`. Read each document, upsert by `#txn-<sha256>` and
-replace under its precondition; compact stored blank labels on read; pass the account
+replace under the strong ETag from that read; compact stored blank labels on read; pass the account
 document as `sourceUrl` (Suite Money rejects a non-http `prov:wasDerivedFrom`). Plan and
 measure every document before the first write: `BANK_DOCUMENT_BUDGET` (2,000 transactions,
 4 MiB N-Triples + provenance allowance, 1,000 parts) splits into parts, and otherwise
 throws `BankDocumentBudgetError` with nothing written; never truncate. Per import, at most
 50 accounts and 600 documents: `BankMoneyPlan.add` fails while parsing (before any read),
-and every planning read counts (reuse the absent probed part; never read it twice). Skip
+and every planning read counts (reuse the absent probe); cap retained stored RDF at 32 MiB. Skip
 and count known-bank rows posted before 1970-01-01 or over a year ahead. Writes are
 sequential; a failed write leaves earlier documents and a re-run converges. Account/month read
 errors fail the import; only the legacy comparison read is advisory. No migration or
@@ -249,16 +247,10 @@ policies diverge and must not be merged. Contract tests cover layout, escaping, 
 IRIs, address groups, hostile HTML search bounds and a fresh public-entry import that
 refuses framework/Node-only modules. Build before testing that published entry.
 
-HTML keyword matching must fold ASCII only and preserve offsets; never lowercase Unicode
-input then reuse original offsets. `htmlToTextResult` reports `{ text, truncated }`, scanning
-at most `MAX_HTML_INPUT_CHARS` (8,388,608 UTF-16 code units), then normalizing whitespace and
-capping visible text at `MAX_HTML_CHARS` (1,048,576 UTF-16 code units). Preserve surrogate
-pairs at both boundaries. Keep work and intermediate storage linear in the bounded window;
-leading comments/skipped blocks must not consume the visible allowance. Stored HTML-derived
-bodies append `HTML_TEXT_TRUNCATION_NOTICE` as a separate paragraph when truncated; Suite's
-per-message results also expose `bodyTruncated: true`. Keep full HTML/raw bytes and prefer
-plain MIME text. Regressions must cover Unicode around/inside skipped blocks, both bounds
-and a long leading comment through Suite's parseEmail/importMbox and connector MailWriter.
+Keep the bounded ASCII-only `htmlToText`/`htmlToTextResult` scanner, surrogate-safe limits
+and `HTML_TEXT_TRUNCATION_NOTICE` contract documented in [README's Mail section](./README.md#mail-gmail-and-the-shared-mailwriter).
+Cover Unicode/skipped-block offsets, both bounds and long leading comments through
+Suite's parseEmail/importMbox and connector MailWriter.
 
 Mail sources (Gmail, Takeout mbox) go through `src/mail/writer.ts` so the pod-mail layout and
 vocabulary (`http://schema.org/`, matching apps/suite's mail model) stay identical. Gmail supplies
@@ -289,7 +281,9 @@ CON-03 implements `./node` and the `pod-connectors` bin. Keep its imports separa
 browser entry points. Read `src/node/config.ts` and the README's Node CLI section before
 changing the provisional MCP JSON schema. Never read process environment outside the Node-only VeSync credential reader;
 use the 0600 owner-held config descriptor, with no symlink following. Use `@jeswr/pod-auth/node`'s `forClientCredentials` for Pod credentials; pass its bounded fetch
-to storage-client's Solid backend and `createStoragePodWriter`. Keep `node/pod-auth.ts` only as
+to storage-client's Solid backend and `createStoragePodWriter`. Suite and CLI wire Garmin, WHOOP and bank
+imports to `createOwnerOnlyDestinationVerifier` before payload, provenance and CLI checkpoint writes.
+Keep `node/pod-auth.ts` only as
 an adapter for the explicit token URL and exact profile-selected cross-storage index grant.
 Protocol discovery is cached and byte-capped, and only validated endpoints receive exchange
 credentials. Separate immutable agent boundaries handle external index documents. The adapter
@@ -354,8 +348,7 @@ where `<v>` is 24 SHA-256 hex characters of checksum, else modified time, else d
 (the first representation for exports). Without source version fields, download on every import. Commit
 their links through the conditional metadata write before deleting previous versions; on
 failure, best-effort roll back staging without deleting currently linked representations.
-Rely on the shared runner's per-container claim to refuse overlapping in-process imports;
-hosts sharing a pod across processes must serialize runs. After every store,
+After every store,
 reconcile canonical representation children through an @solid/object Container listing,
 including legacy paths and orphaned exports regardless of previous encoding links.
 For deletions, conditionally rewrite existing metadata first: clear all encoding links, set
@@ -468,34 +461,11 @@ for API adapters too). Keep journal entries unsupported. See the README for curr
 container discovery and cross-month timestamp-correction limitations. Tests are synthetic only;
 never call WHOOP or add dependencies. Preserve byte/row/record/quad caps and cancellation.
 
-Garmin's existing `garmin` file adapter also accepts full account ZIPs. Read
-`src/garmin/archive.ts` and `health-vocab.ts` before changing archive behavior. Reuse
-Takeout's ZIP validation and `core/file-json.ts`; never recurse into Uploaded-Files FIT
-ZIPs, fetch source URLs or fall back to whole-archive text. Detect products by safe entry
-components, accepting account prefixes and filename suffixes. Activity distance/elevation
-are cm, duration ms; retain the CSV/GPX/TCX units policy and rides/indoor-cycling split.
-IDs come from activityId; daily measurements use metric/day fragments in per-metric monthly
-documents. Merge under session ETags so overlapping exports keep earlier observations;
-file imports have no cursors or deletion reconciliation. Use only existing sector terms:
-stress, Body Battery and intensity minutes currently require counted vocabulary-gap notes.
-Sleep totals exclude awake time; source stages/window/score stay labelled notes. Generic
-HRV/VO2max observations use UCUM units and source codes, never invented subclasses/IRIs.
-
-`createGarminFileAdapter` may lower GARMIN_ARCHIVE_LIMITS, never raise the ceilings.
-Bound entry count, declared/actual inflation, ratio, JSON bytes/tokens/depth/records and total
-observations (including duplicate rows). Charge malformed/oversized records to the shared
-run row budget too, so invalid input cannot reset its work allowance at each entry.
-Keep metadata directory validation before dispatch,
-entry CRC validation before JSON parsing, small inflater input pieces, and staging of
-recognised entries before the single final write. Catch entry parse failures separately from Pod writes; propagate writer failures
-and decoder exceptions. Count cap/FIT skips separately from unrecognised files; group
-vocabulary gaps once per file with distinct affected-day counts, without treating them as
-skipped records. Return static grouped run-report notes without source account paths.
-Keep legacy text capped despite `streaming: true`.
-The connector's Apple adapter is workouts-only: use the separate suite Health model's
-Observation/CodeableConcept/Instant mapping for metrics, and keep the README candid that
-current Health charts read native shards rather than connector metric directories. Do not
-claim automatic connector chart discovery or HRV/VO2max charts without app support.
+Garmin's `garmin` file adapter accepts full account ZIPs. Read `src/garmin/archive.ts`,
+`health-vocab.ts` and [README's Garmin contract and maintenance constraints](./README.md#garmin-account-export)
+before changing it; preserve its shared Takeout/file-json readers, limits, staging,
+ETag merges and existing sector vocabulary. `createGarminFileAdapter` may only lower
+`GARMIN_ARCHIVE_LIMITS`. Keep the README candid about connector chart-discovery gaps.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 VeSync is a CLI-only Tier B account adapter (`src/vesync/`), not OAuth. Read the
