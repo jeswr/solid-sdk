@@ -64,6 +64,11 @@ export class UnsupportedPublishAccessError extends PublicationError {
   }
 }
 class InvalidDocumentError extends PublicationError {}
+function occupiedSlug() {
+  return new PublicationError(
+    "This public URL already has a page and some sources couldn't be read. Fix or remove the unreadable sources, then retry.",
+  );
+}
 function missing(error: unknown): boolean {
   return error instanceof StorageError && error.code === "not-found";
 }
@@ -417,19 +422,31 @@ export function publishRepository(
     });
     return { url: page.url, etag: writtenVersion(saved), data: valid };
   }
-  async function output(url: string, body: string, type: string) {
+  async function exists(url: string): Promise<boolean> {
     try {
-      const current = await storage.head(url);
-      await storage.write(url, body, { ifMatch: validator(current.etag), contentType: type });
+      await storage.head(url);
+      return true;
     } catch (error) {
       if (!missing(error)) throw error;
-      const parent = new URL("./", url).href;
-      const made = await storage.create(parent, body, {
-        name: url.slice(parent.length),
-        contentType: type,
-      });
-      if (made.url !== url) throw new PublicationError("The pod returned a different output path.");
+      return false;
     }
+  }
+  async function output(url: string, body: string, type: string, createOnly = false) {
+    if (!createOnly) {
+      try {
+        const current = await storage.head(url);
+        await storage.write(url, body, { ifMatch: validator(current.etag), contentType: type });
+        return;
+      } catch (error) {
+        if (!missing(error)) throw error;
+      }
+    }
+    const parent = new URL("./", url).href;
+    const made = await storage.create(parent, body, {
+      name: url.slice(parent.length),
+      contentType: type,
+    });
+    if (made.url !== url) throw new PublicationError("The pod returned a different output path.");
   }
   async function remove(url: string) {
     try {
@@ -457,12 +474,7 @@ export function publishRepository(
   async function cleanStaleOutput(site: StoredSite, pages: readonly PageData[]) {
     const root = publicUrl(site);
     const live = new Set(pages.filter((p) => p.status === "published").map((p) => p.slug));
-    try {
-      await storage.head(root);
-    } catch (error) {
-      if (missing(error)) return;
-      throw error;
-    }
+    if (!(await exists(root))) return;
     for await (const entry of storage.listAll(root)) {
       if (entry.kind !== "container") continue;
       const slug = entry.url.slice(root.length, -1);
@@ -482,12 +494,14 @@ export function publishRepository(
       `Publish couldn't read these page sources: ${sources}. It left existing public page folders in place. Fix or remove those sources, then update the site to remove stale pages.`,
     );
   }
-  async function rebuild(site: StoredSite): Promise<StoredSite> {
+  async function rebuild(site: StoredSite, publishingSlug?: string): Promise<StoredSite> {
     const listing = await listPages(site);
     const pages = listing.items.map((p) => p.data).filter((p) => p.status === "published");
-    // An unreadable page may still be live; never treat it as unpublished and delete its folder.
-    if (listing.invalid.length) unreadableWarning(listing.invalid);
-    else await cleanStaleOutput(site, pages);
+    const incomplete = listing.invalid.length > 0;
+    if (incomplete) {
+      unreadableWarning(listing.invalid);
+      if (!pages.length) return site;
+    } else await cleanStaleOutput(site, pages);
     const root = publicUrl(site);
     if (!pages.length) {
       await remove(new URL("index.html", root).href);
@@ -505,27 +519,34 @@ export function publishRepository(
     await container(sites, siteKey(site));
     const renderSite: RenderSite = { ...site.data, publicUrl: root };
     for (const page of pages) {
+      const url = new URL(`${page.slug}/index.html`, root).href;
+      // A readable source alone cannot establish ownership of existing public HTML.
+      if (incomplete && (await exists(url))) {
+        if (page.slug === publishingSlug) throw occupiedSlug();
+        continue;
+      }
       const directory = await container(root, page.slug);
       const access = await currentGrants(directory);
       if (access.grants.some((grant) => !grant.inherited)) {
         // An own ACL without public Read means an earlier unpublish kept extra files private.
-        const wasPrivate = !access.grants.some((grant) => grant.agent.type === "public");
-        await permissions(directory, true);
-        // Some pods list the folder's own access document; it is not a retained file.
-        const policies = new Set(access.grants.map((grant) => grant.source));
-        if (wasPrivate)
+        let retainedFiles = false;
+        if (!access.grants.some((grant) => grant.agent.type === "public")) {
+          // Some pods list the folder's own access document.
+          const policies = new Set(access.grants.map((grant) => grant.source));
           for await (const entry of storage.listAll(directory))
-            if (!policies.has(entry.url)) {
-              onWarning(
-                `Publish reused ${directory}. Files left in this folder by an earlier unpublish are public again.`,
-              );
-              break;
-            }
+            if (!policies.has(entry.url)) retainedFiles = true;
+        }
+        await permissions(directory, true);
+        if (retainedFiles)
+          onWarning(
+            `Publish reused ${directory}. Files left in this folder by an earlier unpublish are public again.`,
+          );
       }
       await output(
-        new URL("index.html", directory).href,
+        url,
         renderPage(renderSite, page, pages),
         "text/html; charset=utf-8",
+        incomplete,
       );
     }
     await output(
@@ -549,6 +570,7 @@ export function publishRepository(
     await assertOwnerOnly(new URL("pages/", site.url).href);
     for (const page of listing.items)
       if (page.data.status === "published") await assertOwnerOnly(page.url);
+    return listing;
   }
   async function refreshPublic(site: StoredSite): Promise<StoredSite> {
     if (!site.data.publicUrl)
@@ -562,15 +584,20 @@ export function publishRepository(
     if (!site.data.publicUrl && !confirmed)
       throw new PublicationError("Confirm that anyone may read this site before publishing.");
     await requireCurrent(site);
-    await verifySources(site);
+    const listing = await verifySources(site);
     await assertOwnerOnly(page.url);
+    if (listing.invalid.length) {
+      assertSlug(data.slug);
+      if (await exists(new URL(`${data.slug}/index.html`, publicUrl(site)).href))
+        throw occupiedSlug();
+    }
     const saved = await savePage(site, page, {
       ...data,
       status: "published",
       published: data.published ?? page.data.published ?? new Date(),
     });
     try {
-      return { page: saved, site: await rebuild(site) };
+      return { page: saved, site: await rebuild(site, saved.data.slug) };
     } catch (cause) {
       throw new PublicationError(
         "Your source was saved, but publishing did not finish. Reload and publish again to repair the public files.",
@@ -584,13 +611,14 @@ export function publishRepository(
     await requireCurrent(page);
     // Remove public bytes before recording draft status; a failed delete never claims privacy.
     const listing = await listPages(site);
-    // With unreadable pages, remove only this page's folder; theirs may still be live.
-    if (listing.invalid.length) await removePageOutput(site, page.data.slug);
-    else
-      await cleanStaleOutput(
-        site,
-        listing.items.filter((p) => p.url !== page.url).map((p) => p.data),
+    if (listing.invalid.length)
+      throw new PublicationError(
+        "Some page sources couldn't be read, so Publish couldn't verify all public URLs for this page. Fix or remove the unreadable sources before unpublishing.",
       );
+    await cleanStaleOutput(
+      site,
+      listing.items.filter((p) => p.url !== page.url).map((p) => p.data),
+    );
     const saved = await savePage(site, page, { ...page.data, status: "draft" });
     return { page: saved, site: await rebuild(site) };
   }
