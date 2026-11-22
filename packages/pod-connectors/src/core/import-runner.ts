@@ -61,9 +61,9 @@ export interface RunImportOptions extends ConnectorStateOptions {
    * checkpoint writes after it expires, and once the adapter has resolved it no longer fails
    * the run: registration and provenance still complete so the new cursor is reported.
    *
-   * A cancelled run records no activity. Documents and items it already wrote keep
-   * `prov:wasGeneratedBy` naming its activity IRI, which `_provenance.ttl` never describes:
-   * for adapters without bounded history, a missing activity indicates an incomplete run.
+   * A dispatched private provenance PUT can complete after cancellation. If cancellation
+   * stops it before dispatch, documents and items already written still name its activity IRI
+   * via `prov:wasGeneratedBy`, and `_provenance.ttl` has no description of that activity.
    * Polling adapters may prune completed summaries with `maxRunActivities`, so absence alone
    * then does not establish cancellation. The next rewrite links items to its own activity.
    */
@@ -171,6 +171,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       limits,
     });
     imported = true;
+    await session.waitForPrivateWrites();
     // The adapter has committed its data and checkpoints. The source deadline is not a
     // reason to discard them: only the caller's cancellation stops finalisation now.
     opts.signal?.throwIfAborted();
@@ -204,10 +205,15 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       state,
     };
   } catch (error) {
+    try {
+      await session.waitForPrivateWrites();
+    } catch (refusal) {
+      session.release();
+      throw refusal;
+    }
     // Partial writes already link to this run. Record it when storage is available and the
     // run was not cancelled, preserving the original failure if the provenance write fails.
-    // A cancelled run starts no further Pod I/O, so its writes name an unrecorded activity
-    // (documented on RunImportOptions.signal).
+    // Cancellation stops this attempt to record provenance.
     if (opts.signal?.aborted) session.release();
     else
       try {

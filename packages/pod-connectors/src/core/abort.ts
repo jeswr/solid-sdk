@@ -8,13 +8,7 @@
  * session entry, which can await a read before the write it guards.
  */
 import { snapshotFetchInput } from "@jeswr/guarded-fetch";
-import type {
-  BinaryDoc,
-  NormalisedDoc,
-  PodWriter,
-  TypeRegistrationRequest,
-  WriteConditions,
-} from "./types.js";
+import type { PodWriter } from "./types.js";
 
 /** Wrap an async step so it rejects with the abort reason instead of starting once aborted. */
 export function unlessAborted<A extends unknown[], R>(
@@ -48,8 +42,11 @@ export function abortablePodWriter(writer: PodWriter, signal: AbortSignal | unde
     webId: writer.webId,
     resolve: (slug) => writer.resolve(slug),
     ...(verifyPrivateDestination && {
-      verifyPrivateDestination: unlessAborted(signal, (url: string) =>
-        verifyPrivateDestination.call(writer, url),
+      verifyPrivateDestination: Object.assign(
+        unlessAborted(signal, verifyPrivateDestination.bind(writer)),
+        verifyPrivateDestination.beforeWrite && {
+          beforeWrite: unlessAborted(signal, verifyPrivateDestination.beforeWrite.bind(writer)),
+        },
       ),
     }),
     // Acknowledged writes still need confirmation and possibly cleanup after cancellation.
@@ -57,19 +54,17 @@ export function abortablePodWriter(writer: PodWriter, signal: AbortSignal | unde
     ...(cleanupPrivateWrite && { cleanupPrivateWrite: cleanupPrivateWrite.bind(writer) }),
     ...(onWriteAccepted && { onWriteAccepted: onWriteAccepted.bind(writer) }),
     read: unlessAborted(signal, (slug: string) => writer.read(slug)),
-    write: unlessAborted(signal, (doc: NormalisedDoc, conditions?: WriteConditions) =>
-      writer.write(doc, conditions),
+    write: unlessAborted(signal, (...args: Parameters<PodWriter["write"]>) =>
+      writer.write(...args),
     ),
     ...(writeBinary && {
-      writeBinary: unlessAborted(signal, (doc: BinaryDoc) => writeBinary.call(writer, doc)),
+      writeBinary: unlessAborted(signal, writeBinary.bind(writer)),
     }),
     ...(remove && {
-      remove: unlessAborted(signal, (slug: string, conditions?: { readonly ifMatch?: string }) =>
-        remove.call(writer, slug, conditions),
-      ),
+      remove: unlessAborted(signal, remove.bind(writer)),
     }),
-    registerType: unlessAborted(signal, (registrations: readonly TypeRegistrationRequest[]) =>
-      writer.registerType(registrations),
+    registerType: unlessAborted(signal, (...args: Parameters<PodWriter["registerType"]>) =>
+      writer.registerType(...args),
     ),
   };
 }

@@ -8,7 +8,7 @@ import { createPodClient, type StorageClient, StorageError } from "@jeswr/storag
 import { abortableFetch } from "./abort.js";
 import { isStrongEtag } from "./pod-writer-policy.js";
 import { createWacImportStorage } from "./storage-pod-writer.js";
-import type { PodWriter } from "./types.js";
+import type { MutationGuard, PodWriter } from "./types.js";
 
 type PrivateDestinationChecks = Required<
   Pick<PodWriter, "verifyPrivateDestination" | "confirmPrivateWrite">
@@ -127,12 +127,18 @@ export function createOwnerOnlyDestinationChecks(
     return (await checkOwnerOnly({ storage, url, ownerWebId })).private;
   }
 
-  async function ensureContainer(storage: StorageClient, url: string): Promise<boolean> {
+  async function ensureContainer(
+    storage: StorageClient,
+    url: string,
+    guard?: MutationGuard,
+  ): Promise<boolean> {
     if (!(await exists(storage, url, "container"))) {
       if (url === root) return false;
       const parent = new URL("../", url).href;
-      if (!(await ensureContainer(storage, parent))) return false;
+      if (!(await ensureContainer(storage, parent, guard))) return false;
       signal?.throwIfAborted();
+      const refused = guard?.();
+      if (refused) return refused;
       try {
         await storage.create(parent, null, { exactUrl: url, kind: "container" });
       } catch (error) {
@@ -142,16 +148,20 @@ export function createOwnerOnlyDestinationChecks(
     return privateAccess(storage, url, signal);
   }
 
+  async function verifyPrivateDestination(url: string, guard?: MutationGuard) {
+    const storage = await openFor(url);
+    if (!storage || !(await ensureContainer(storage, new URL(".", url).href, guard))) return false;
+    // A stored document may have its own policy even in an owner-only container.
+    const verified =
+      !(await exists(storage, url, "resource")) || (await privateAccess(storage, url, signal));
+    signal?.throwIfAborted();
+    return verified;
+  }
+
   return {
-    async verifyPrivateDestination(url) {
-      const storage = await openFor(url);
-      if (!storage || !(await ensureContainer(storage, new URL(".", url).href))) return false;
-      // A stored document may have its own policy even in an owner-only container.
-      const verified =
-        !(await exists(storage, url, "resource")) || (await privateAccess(storage, url, signal));
-      signal?.throwIfAborted();
-      return verified;
-    },
+    verifyPrivateDestination: Object.assign((url: string) => verifyPrivateDestination(url), {
+      beforeWrite: verifyPrivateDestination,
+    }),
     async confirmPrivateWrite(url, { etag }, observeEtag) {
       const storage = await openFor(url, true);
       if (!storage) return false;

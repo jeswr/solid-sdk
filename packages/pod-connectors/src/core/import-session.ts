@@ -24,6 +24,7 @@ import type {
   ConnectorState,
   ConnectorStateOptions,
   ImportOutcome,
+  MutationGuard,
   NormalisedDoc,
   PodWriter,
   TypeRegistrationRequest,
@@ -85,14 +86,37 @@ export function createImportSession(
   const itemCounts = new Map<string, number>();
   const privateImport = requiresPrivateDestination(id);
   let privacyRefused: Promise<PrivateDestinationError> | undefined;
+  let afterWriteRefused: Promise<PrivateDestinationError> | undefined;
+  const guardMutation: MutationGuard = () =>
+    privacyRefused?.then((error) => {
+      throw error;
+    });
+  const guards: [] | [MutationGuard] = privateImport ? [guardMutation] : [];
+  const pendingWrites = new Set<Promise<unknown>>();
+  function trackPrivateWrite<Args extends unknown[], Result>(
+    operation: (...args: Args) => Promise<Result>,
+  ) {
+    if (!privateImport) return operation;
+    return (...args: Args) => {
+      const pending = operation(...args);
+      pendingWrites.add(pending);
+      const settled = () => pendingWrites.delete(pending);
+      void pending.then(settled, settled);
+      return pending;
+    };
+  }
+  async function waitForPrivateWrites() {
+    while (pendingWrites.size) await Promise.allSettled(pendingWrites);
+    if (afterWriteRefused) throw await afterWriteRefused;
+  }
   async function verifyDestination(url: string): Promise<void> {
     if (!privateImport) return;
     if (privacyRefused) throw await privacyRefused;
     try {
-      await requirePrivateDestination(id, writer, url);
+      await requirePrivateDestination(id, writer, url, guardMutation);
     } catch (error) {
       privacyRefused ??= Promise.resolve(error as PrivateDestinationError);
-      throw error;
+      throw await privacyRefused;
     }
   }
   async function confirmWrittenDestination(
@@ -103,6 +127,7 @@ export function createImportSession(
   ): Promise<void> {
     await requirePrivateWriteConfirmation(id, writer, slug, url, created, etag, (refusal) => {
       privacyRefused ??= refusal;
+      afterWriteRefused ??= refusal;
     });
     options.signal?.throwIfAborted();
   }
@@ -187,7 +212,11 @@ export function createImportSession(
     const output = { ...doc, slug, dataset };
     const writeConditions = conditions ?? conditionFor(previous);
     if (privacyRefused) throw await privacyRefused;
-    const { writeEtag, writeCreated, ...result } = await writer.write(output, writeConditions);
+    const { writeEtag, writeCreated, ...result } = await writer.write(
+      output,
+      writeConditions,
+      ...guards,
+    );
     if (privateImport)
       await confirmWrittenDestination(slug, destination, writeCreated === true, writeEtag);
     // Take extra classes from the document, not the host writer's result: custom PodWriter
@@ -222,7 +251,10 @@ export function createImportSession(
       throw new Error("Reserved connector provenance slug.");
     await verifyDestination(url);
     if (privacyRefused) throw await privacyRefused;
-    const { writeEtag, writeCreated, ...result } = await writer.writeBinary({ ...doc, slug });
+    const { writeEtag, writeCreated, ...result } = await writer.writeBinary(
+      { ...doc, slug },
+      ...guards,
+    );
     if (privateImport && result.created)
       await confirmWrittenDestination(slug, url, writeCreated === true, writeEtag);
     return result;
@@ -235,7 +267,7 @@ export function createImportSession(
     const previous = reads.get(url);
     reads.delete(url);
     if (privacyRefused) throw await privacyRefused;
-    await writer.remove(slug, previous?.etag ? { ifMatch: previous.etag } : undefined);
+    await writer.remove(slug, previous?.etag ? { ifMatch: previous.etag } : undefined, ...guards);
     if (privateImport) options.signal?.throwIfAborted();
     itemCounts.delete(url);
     const index = written.findIndex((w) => w.url === url);
@@ -250,12 +282,14 @@ export function createImportSession(
       if (privacyRefused) throw await privacyRefused;
       await recordRun();
       await committed?.();
+      await waitForPrivateWrites();
     } finally {
       active.delete(claim);
     }
   }
   /** End a cancelled run without further Pod I/O, freeing the connector for the next run. */
   function release() {
+    if (finalized) return;
     finalized = true;
     active.delete(claim);
   }
@@ -319,6 +353,7 @@ export function createImportSession(
         skipRegistration: true,
       },
       conditionFor(previous),
+      ...guards,
     );
     if (privateImport)
       await confirmWrittenDestination(RUNS, url, result.writeCreated === true, result.writeEtag);
@@ -341,8 +376,8 @@ export function createImportSession(
   }
   return {
     read,
-    write,
-    writeBinary,
+    write: trackPrivateWrite(write),
+    writeBinary: trackPrivateWrite(writeBinary),
     remove,
     written,
     /** Document-level accounting, exposed read-only for diagnostics. */
@@ -351,8 +386,9 @@ export function createImportSession(
     used: used as ReadonlySet<string>,
     async registerTypes() {
       if (privacyRefused) throw await privacyRefused;
-      return writer.registerType([...registrations.values()]);
+      return writer.registerType([...registrations.values()], ...guards);
     },
+    waitForPrivateWrites,
     finish,
     release,
     state,

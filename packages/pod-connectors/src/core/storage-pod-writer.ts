@@ -68,6 +68,25 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
     // Some backends fall back to HEAD, which may observe another writer's version.
     return privateWrites && etagSource === "response" && etag !== null ? { writeEtag: etag } : {};
   }
+  async function acceptWrite(url: string, pending: Promise<WriteResult>): Promise<WriteResult> {
+    try {
+      return await pending;
+    } catch (error) {
+      // Solid rejects unfamiliar 2xx responses. Confirm the destination without a create receipt.
+      if (
+        privateWrites &&
+        error instanceof StorageError &&
+        error.code === "invalid-response" &&
+        error.method === "PUT" &&
+        error.url === url &&
+        error.status !== null &&
+        error.status >= 200 &&
+        error.status < 300
+      )
+        return { url, etag: null, created: false };
+      throw error;
+    }
+  }
   async function currentEtag(url: string): Promise<string | undefined> {
     signal?.throwIfAborted();
     try {
@@ -97,7 +116,7 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
           throw error;
         }
       },
-      async write(doc, conditions = {}) {
+      async write(doc, conditions = {}, guard) {
         const url = resolve(doc.slug);
         if (conditions.ifMatch !== undefined && conditions.ifNoneMatch !== undefined)
           throw new TypeError("Supply only one write precondition.");
@@ -106,25 +125,29 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
           const etag = await currentEtag(url);
           conditional = etag === undefined ? { ifNoneMatch: "*" } : { ifMatch: etag };
         }
-        const result = await writeStorageRdf(
-          storage,
+        const result = await acceptWrite(
           url,
-          doc.dataset,
-          conditional,
-          signal,
-          undefined,
-          privateWrites,
+          writeStorageRdf(
+            storage,
+            url,
+            doc.dataset,
+            conditional,
+            signal,
+            undefined,
+            privateWrites,
+            guard,
+          ),
         );
         return {
           url,
-          ...(privateWrites && { writeCreated: conditional.ifNoneMatch === "*" }),
+          ...(privateWrites && { writeCreated: conditional.ifNoneMatch === "*" && result.created }),
           ...writeValidator(result),
           category: doc.category,
           forClass: doc.forClass,
           skipRegistration: doc.skipRegistration,
         };
       },
-      async writeBinary(doc) {
+      async writeBinary(doc, guard) {
         const url = resolve(doc.slug);
         validateBinaryType(doc.contentType, "storage");
         const body = new Blob([doc.body as Uint8Array<ArrayBuffer>], { type: doc.contentType });
@@ -132,19 +155,23 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
         if (mode !== "create" && mode !== "replace") throw new TypeError("Invalid binary mode.");
         const etag = mode === "replace" ? await currentEtag(url) : undefined;
         signal?.throwIfAborted();
+        const refused = guard?.();
+        if (refused) return refused;
         try {
-          const result =
+          const result = await acceptWrite(
+            url,
             etag !== undefined
-              ? await storage.write(url, body, {
+              ? storage.write(url, body, {
                   contentType: doc.contentType,
                   ifMatch: etag,
                   signal: mutationSignal,
                 })
-              : await createStorageResource(storage, url, body, doc.contentType, mutationSignal);
+              : createStorageResource(storage, url, body, doc.contentType, mutationSignal),
+          );
           return {
             url,
             created: true,
-            ...(privateWrites && { writeCreated: etag === undefined }),
+            ...(privateWrites && { writeCreated: etag === undefined && result.created }),
             ...writeValidator(result),
           };
         } catch (error) {
@@ -153,7 +180,7 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
           throw error;
         }
       },
-      async remove(slug, conditions = {}) {
+      async remove(slug, conditions = {}, guard) {
         const url = resolve(slug);
         const etag =
           conditions.ifMatch === undefined
@@ -161,13 +188,15 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
             : strongEtag(conditions.ifMatch, "storage", url);
         if (etag === undefined) return;
         signal?.throwIfAborted();
+        const refused = guard?.();
+        if (refused) return refused;
         try {
           await storage.delete(url, { ifMatch: etag, signal: mutationSignal });
         } catch (error) {
           if (!missingResource(error)) throw error;
         }
       },
-      async registerType(registrations) {
+      async registerType(registrations, guard) {
         if (!webId || !typeIndex)
           throw new IntegrationSyncError(
             "storage",
@@ -181,6 +210,7 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
           storageFor: typeIndex.storageFor ?? (() => storage),
           signal,
           finishMutations: privateWrites,
+          guard,
         });
       },
     },

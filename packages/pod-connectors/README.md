@@ -90,9 +90,9 @@ Confirmation also covers run provenance and CLI checkpoints. The runners report 
 cursor or successful checkpoint until their preceding writes are confirmed.
 
 A refusal blocks further mutations in the import before cleanup starts. Cleanup applies
-only to a mutation that successfully used a create-only precondition. It gets a fresh
+only to a completed mutation that used a create-only precondition. It gets a fresh
 10-second timeout and sends DELETE with `If-Match` using the write's strong ETag, or the
-first confirmation HEAD's strong ETag if the write supplied none. Without a strong
+first confirmation HEAD's strong ETag if the write supplied no strong ETag. Without a strong
 validator, the importer skips deletion. A DELETE 200, 204, 404 or 410 followed by a HEAD
 404 or 410 confirms removal. A refused replacement is preserved because deletion would
 erase earlier committed data. The import fails with `PrivateDestinationError` carrying
@@ -102,6 +102,7 @@ erase earlier committed data. The import fails with `PrivateDestinationError` ca
 The server can change access policy between the pre-write and post-write checks. A grant
 opened and closed between those checks escapes detection, and someone could read the data
 before cleanup.
+Confirmation cannot detect an intervening revision if the server reuses a strong ETag for different states between the two HEADs.
 
 Type Index registration retains the existing public-index fallback, which is tracked separately.
 

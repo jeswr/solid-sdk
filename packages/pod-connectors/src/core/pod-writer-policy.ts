@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { IntegrationSyncError, PrivateDestinationError } from "./errors.js";
-import type { PodWriter } from "./types.js";
+import type { MutationGuard, PodWriter } from "./types.js";
 
 /** The health and finance imports that require a host-verified write destination. */
 export function requiresPrivateDestination(id: string): boolean {
@@ -13,9 +13,14 @@ export async function requirePrivateDestination(
   id: string,
   writer: Pick<PodWriter, "verifyPrivateDestination">,
   url: string,
+  guard?: MutationGuard,
 ): Promise<void> {
   try {
-    if ((await writer.verifyPrivateDestination?.(url)) === true) return;
+    const verified =
+      guard && writer.verifyPrivateDestination?.beforeWrite
+        ? await writer.verifyPrivateDestination.beforeWrite(url, guard)
+        : await writer.verifyPrivateDestination?.(url);
+    if (verified === true) return;
   } catch {
     // Transport and policy errors may contain sensitive values. Refuse without echoing them.
   }
@@ -42,7 +47,7 @@ export async function requirePrivateWriteConfirmation(
   } catch {
     // Keep policy and transport errors out of the host's diagnostics.
   }
-  const etag = writeEtag ?? observed;
+  const etag = isStrongEtag(writeEtag) ? writeEtag : observed;
   const refusal = Promise.resolve().then(async () => {
     let removed = false;
     if (created && isStrongEtag(etag) && writer.cleanupPrivateWrite) {

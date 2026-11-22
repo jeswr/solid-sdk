@@ -9,7 +9,7 @@ import { DataFactory, Store } from "n3";
 import { readJson } from "../core/budget.js";
 import { requirePrivateWriteConfirmation } from "../core/pod-writer-policy.js";
 import type { ConnectorState, PodWriter } from "../core/types.js";
-import { writeResource } from "../pod/resource.js";
+import { isCompletedPut, writeResource } from "../pod/resource.js";
 import {
   httpsUrl,
   isTransientCause,
@@ -154,15 +154,16 @@ export function createStateStore(options: {
       try {
         if (!loaded) throw new PermanentCauseError(); // Read state before writing.
         const headers = new Headers({ "content-type": "application/json" });
-        if (exists) headers.set("if-match", etag as string);
-        else headers.set("if-none-match", "*");
-        created = headers.get("if-none-match") === "*";
+        const createOnly = !exists;
+        if (createOnly) headers.set("if-none-match", "*");
+        else headers.set("if-match", etag as string);
         const response = await fetchSafe(url, {
           method: "PUT",
           headers,
           body: JSON.stringify(connectorState(state)),
         });
         if (!response.ok) throw new StateHttpError(response.status);
+        created = createOnly && isCompletedPut(response.status);
         writeEtag = response.headers.get("etag");
         // Force a fresh read (and ETag) before another write.
         loaded = false;

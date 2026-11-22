@@ -308,6 +308,89 @@ it.each([
   expect(onState).not.toHaveBeenCalled();
 });
 
+it.each([
+  "API",
+  "file",
+] as const)("waits for a refused private PUT after a concurrent %s failure", async (mode) => {
+  const pod = createMemoryPod();
+  const controller = new AbortController();
+  const dispatched = Promise.withResolvers<void>();
+  const acknowledge = Promise.withResolvers<void>();
+  const cleaning = Promise.withResolvers<void>();
+  const clean = Promise.withResolvers<void>();
+  const reason = new Error("concurrent source failure");
+  const podWriter = createFetchPodWriter({
+    adapterId: mode === "API" ? "whoop" : "bank-statements",
+    webId: TEST_WEBID,
+    profileDocumentUrl: TEST_PROFILE_DOC,
+    podRoot: TEST_POD_ROOT,
+    signal: controller.signal,
+    verifyPrivateDestination: async () => true,
+    confirmPrivateWrite: async () => false,
+    async fetch(input, init) {
+      if (init?.method === "PUT" && String(input) === payload) {
+        dispatched.resolve();
+        await acknowledge.promise;
+      }
+      if (init?.method === "DELETE" && String(input) === payload) {
+        cleaning.resolve();
+        await clean.promise;
+      }
+      return pod.fetch(input, init);
+    },
+  });
+  const payload = podWriter.resolve("payload.ttl");
+  async function importConcurrently(ctx: Pick<Parameters<typeof whoopAdapter.import>[0], "write">) {
+    const write = ctx.write({
+      slug: "payload.ttl",
+      dataset: new Store(),
+      category: "health",
+      forClass: "urn:test:Health",
+    });
+    const fail = dispatched.promise.then(() => {
+      if (mode === "API") controller.abort(reason);
+      throw reason;
+    });
+    await Promise.all([write, fail]);
+    return {};
+  }
+  const onState = vi.fn();
+  const options = { podWriter, signal: controller.signal, onState };
+  const run =
+    mode === "API"
+      ? runImport({
+          ...options,
+          adapter: { ...whoopAdapter, import: importConcurrently },
+          mode: "demo",
+        })
+      : runFileImport({
+          ...options,
+          adapter: {
+            ...bankStatementsFileAdapter,
+            importFile: (_file, ctx) => importConcurrently(ctx),
+          },
+          file: memoryFile("bank.csv", ""),
+        });
+  const settled = vi.fn();
+  const result = run.then(settled, (error) => {
+    settled();
+    return error;
+  });
+  try {
+    await dispatched.promise;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(settled).not.toHaveBeenCalled();
+    acknowledge.resolve();
+    await cleaning.promise;
+    expect(settled).not.toHaveBeenCalled();
+  } finally {
+    acknowledge.resolve();
+    clean.resolve();
+  }
+  expect(await result).toMatchObject({ phase: "after-write", url: payload, removed: true });
+  expect(onState).not.toHaveBeenCalled();
+});
+
 describe("owner-only destination verifier", () => {
   const root = TEST_POD_ROOT;
   const parent = `${root}integrations/`;
@@ -525,6 +608,7 @@ describe("owner-only destination verifier", () => {
 
   it.each([
     ["missing ETag", undefined, 204, 404, true],
+    ["weak write ETag with a strong first HEAD ETag", 'W/"v1"', 204, 404, true],
     ["completed DELETE", '"v1"', 200, 410, true],
     ["missing DELETE target", '"v1"', 404, 404, true],
     ["gone DELETE target", '"v1"', 410, 410, true],
@@ -584,8 +668,122 @@ describe("owner-only destination verifier", () => {
   });
 
   it.each([
+    "fetch",
+    "storage",
+  ] as const)("never cleans up a queued create-only %s PUT", async (backend) => {
+    const payload = `${container}finance/bank-transactions.ttl`;
+    const { pod, fetch, storage, checks, requests } = fixture(async (url, init) => {
+      if (url !== payload || init?.method !== "PUT") return;
+      expect(new Headers(init.headers).get("if-none-match")).toBe("*");
+      // Another writer stores the file before the queued request runs.
+      await pod.fetch(url, { method: "PUT", body: "Concurrent file" });
+      await seedPublicRead(pod.fetch, payload, false);
+      return new Response(null, { status: 202 });
+    });
+    const podWriter =
+      backend === "fetch"
+        ? createFetchPodWriter({
+            adapterId: "bank-statements",
+            webId: ownerWebId,
+            profileDocumentUrl: TEST_PROFILE_DOC,
+            podRoot: root,
+            fetch,
+            ...checks,
+          })
+        : createStoragePodWriter({
+            storage,
+            container,
+            webId: ownerWebId,
+            cleanupFetch: fetch,
+            ...checks,
+          });
+    await expect(
+      runFileImport({
+        adapter: bankStatementsFileAdapter,
+        file: memoryFile("bank.csv", "Date,Description,Amount,Currency\n2026-06-01,Shop,-5.25,GBP"),
+        podWriter,
+      }),
+    ).rejects.toMatchObject({ phase: "after-write", url: payload, removed: false });
+    expect(requests().slice(requests().indexOf(`PUT ${payload}`) + 1)).toContain(`HEAD ${payload}`);
+    expect(requests().filter((request) => request.startsWith("DELETE "))).toEqual([]);
+    expect(pod.get(payload)).toBe("Concurrent file");
+  });
+
+  it.each([
+    "fetch",
+    "storage",
+  ] as const)("blocks a %s mutation already waiting for its ETag HEAD", async (backend) => {
+    const preflight = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    const cleaning = Promise.withResolvers<void>();
+    const clean = Promise.withResolvers<void>();
+    const payload = `${container}refused.ttl`;
+    const { pod, storage, fetch, requests } = fixture(async (url, init) => {
+      if (url === target && init?.method === "HEAD") {
+        preflight.resolve();
+        await resume.promise;
+      }
+      if (url === payload && init?.method === "DELETE") {
+        cleaning.resolve();
+        await clean.promise;
+      }
+    });
+    const privacy = {
+      verifyPrivateDestination: async () => true,
+      confirmPrivateWrite: async () => false,
+    };
+    const writer =
+      backend === "fetch"
+        ? createFetchPodWriter({
+            adapterId: "bank-statements",
+            webId: ownerWebId,
+            profileDocumentUrl: TEST_PROFILE_DOC,
+            podRoot: root,
+            fetch,
+            ...privacy,
+          })
+        : createStoragePodWriter({ storage, container, cleanupFetch: fetch, ...privacy });
+    await pod.fetch(target, { method: "PUT", body: "Earlier file" });
+    const session = createImportSession(writer, "bank-statements", "urn:test:source", {});
+    try {
+      const waiting = (
+        backend === "fetch"
+          ? session.writeBinary({
+              slug: "statement.ttl",
+              body: Uint8Array.of(1),
+              contentType: "application/octet-stream",
+              mode: "replace",
+            })
+          : session.remove("statement.ttl")
+      ).catch((error) => error);
+      await preflight.promise;
+      const refused = session
+        .write({
+          slug: "refused.ttl",
+          dataset: new Store(),
+          category: "money",
+          forClass: "urn:test:Money",
+        })
+        .catch((error) => error);
+      await cleaning.promise;
+      resume.resolve();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(requests()).not.toContain(`${backend === "fetch" ? "PUT" : "DELETE"} ${target}`);
+      clean.resolve();
+      const error = await refused;
+      expect(error).toMatchObject({ phase: "after-write", url: payload, removed: true });
+      expect(await waiting).toBe(error);
+      expect(pod.get(target)).toBe("Earlier file");
+    } finally {
+      resume.resolve();
+      clean.resolve();
+      session.release();
+    }
+  });
+
+  it.each([
     ["no validator anywhere", undefined, undefined],
-    ["a weak write validator", 'W/"v1"', '"v1"'],
+    ["only weak validators", 'W/"v1"', 'W/"v1"'],
   ])("sends no DELETE for a refused create with %s", async (_case, writeEtag, headEtag) => {
     const payload = `${container}finance/bank-transactions.ttl`;
     const { pod, fetch, checks, requests } = fixture(async (url, init) => {
