@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@jeswr/fetch-rdf";
 import { LiteralAs, NamedNodeAs, OptionalAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
@@ -181,7 +182,9 @@ export function parseReservations(
               (term) => (term.termType === "Literal" ? LiteralAs.string(term) : undefined),
             );
             const valid = parseReservationTime(lexical);
-            return valid ? new Date(valid).toISOString() : undefined;
+            if (!valid || (valid.length > 10 && isAllDay(valid))) return undefined;
+            const date = new Date(valid);
+            return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
           })(),
         // Connector records without a trust flag fail closed to unverified. A manual
         // record claims no email trust unless one was stated explicitly.

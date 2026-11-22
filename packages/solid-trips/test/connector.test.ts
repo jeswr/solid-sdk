@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { readFile } from "node:fs/promises";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, it } from "vitest";
@@ -129,6 +130,21 @@ it("accepts string modification times and handles missing receiver time determin
     ),
   );
   expect(data[0]?.modified).toBe("2026-12-01T09:00:00.000Z");
+});
+
+it.each([
+  ["2026-12-01+01:00", undefined],
+  ["2026-12-01-05:00", undefined],
+  ["2026-12-01Z", undefined],
+  ["2026-12-01", "2026-12-01T00:00:00.000Z"],
+])("keeps a connector booking with date-only modification time %s", async (value, modified) => {
+  const ttl = (await fixture()).replace('"2026-12-01T09:00:00Z"^^x:dateTime', `"${value}"`);
+  const reservations = parseReservations(await parseRdf(ttl, "text/turtle"), doc);
+  expect(reservations).toHaveLength(7);
+  expect(reservations.find((item) => item.kind === "FlightReservation")).toMatchObject({
+    start: "2026-12-01T09:00:00Z",
+    modified,
+  });
 });
 
 it("retains ISO times with minute precision from connector strings", async () => {
