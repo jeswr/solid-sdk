@@ -326,6 +326,8 @@ handler)` reports completed add, remove, switch and restore operations. Unknown 
 preserves the account list and active pointer. Repeating a WebID replaces only that account,
 preserving its position. Additions can authorize concurrently, each with a fresh DPoP key and
 credential boundary. Removal selects the first remaining account when the active account is removed.
+`add()` and the anonymous adapter's `login()` reject `expectRemembered` and `reauthorize: true`
+before authorization. Use a direct core for ownership-guarded login.
 
 The sessions store holds a public list of WebIDs and opaque session scopes beside the active
 WebID. These pointers never establish identity: `restoreAll()` asks each core to validate its own

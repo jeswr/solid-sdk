@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { afterEach, expect, test, vi } from "vitest";
 import { createPodAuth, type PodAuthOptions } from "./index.js";
 import { createMemoryStore, createMockOp } from "./testing.js";
@@ -48,6 +49,30 @@ function fixture(config: Parameters<typeof createMockOp>[0] = {}) {
 function storedKey(f: ReturnType<typeof fixture>, name: string) {
   return [...f.values.keys()].find((key) => JSON.parse(key)[1] === name)!;
 }
+
+test("a disposed core refuses retirement without revoking or forgetting its grant", async () => {
+  const f = fixture();
+  const auth = f.load();
+  const identity = await auth.login();
+  const saved = structuredClone([...f.values]);
+  const logout = vi.fn();
+  auth.on("logout", logout);
+  auth.dispose?.();
+  await expect(auth.retireIfOwnedBy(identity)).rejects.toThrow("disposed");
+  expect([...f.values]).toEqual(saved);
+  expect(f.op.stats.revocations).toBe(0);
+  expect(logout).not.toHaveBeenCalled();
+  const restored = f.load();
+  try {
+    await expect(restored.restore()).resolves.toMatchObject({
+      webId: identity.webId,
+      grantId: identity.grantId,
+    });
+    expect((await restored.fetch(f.op.root + "private")).status).toBe(200);
+  } finally {
+    restored.dispose?.();
+  }
+});
 
 test.each([
   false,

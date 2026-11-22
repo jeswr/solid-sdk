@@ -207,7 +207,12 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     if (expired && !pending) return true;
     const identity = current;
     const unchanged = () =>
-      started === epoch && current === identity && !pending && !restoring && !loggingOut && !retiring;
+      started === epoch &&
+      current === identity &&
+      !pending &&
+      !restoring &&
+      !loggingOut &&
+      !retiring;
     if (identity === null || !durableSession || !unchanged()) return false;
     const account = await providers.persistence.active();
     const present =

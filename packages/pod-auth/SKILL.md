@@ -176,6 +176,8 @@ first; storage failures are harmless. Providers use monograms by default; host-s
 `createAccountManager(options)` from `./accounts` owns one fresh core per account. Its synchronous
 `accounts()` / `active()` snapshots contain public Identity values only. `add(hint?, { signal }?)`
 uses a fresh session scope, DPoP key and boundary; failed/cancelled adds preserve existing state.
+`add()` and the anonymous adapter's login reject `expectRemembered` and `reauthorize: true`
+before authorization. Ownership-guarded login requires a direct core.
 Duplicate WebIDs replace only their old scope and retain ordering. `switchTo(webId)` persists
 the active WebID without network/navigation; `fetch` resolves the current active core at call time,
 while `fetchFor(webId)` stays bound to that account. Unknown WebIDs throw `UnknownAccountError`.
