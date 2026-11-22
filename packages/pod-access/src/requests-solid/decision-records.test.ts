@@ -760,3 +760,324 @@ describe("races on the decision record", () => {
     );
   });
 });
+
+describe("recorded choices", () => {
+  const TwoTypes = () =>
+    `${PREFIXES}<${ID}> a odrl:Offer; odrl:uid <${ID}>; accm:dataClass <${CONTACTS_CLASS}>, <${CALENDAR}>;
+  odrl:permission [ odrl:assignee <${REQUESTER}>; odrl:action odrl:read; odrl:target <${CONTACTS_CLASS}> ],
+    [ odrl:assignee <${REQUESTER}>; odrl:action odrl:read; odrl:target <${CALENDAR}> ].`;
+  const Both: Asked = { [CONTACTS_CLASS]: ["read"], [CALENDAR]: ["read"] };
+  const writes = (pod: PodStub, from: number) =>
+    pod.log.slice(from).filter(({ method }) => method !== "GET" && method !== "HEAD");
+
+  it("returns what an approval recorded", async () => {
+    const pod = buildPod();
+    pod.seed(ID, readWrite());
+    const plain = await decide({ id: ID }, { approve: true }, opts(pod));
+    expect(plain.recorded).toEqual({
+      dataTypes: [CONTACTS_CLASS],
+      grantedTypes: [CONTACTS_CLASS],
+      role: "editor",
+    });
+    const narrowed = buildPod();
+    narrowed.seed(ID, readWrite());
+    const expiresAt = new Date("2028-01-01Z");
+    const result = await decide(
+      { id: ID },
+      { approve: true, role: "viewer", expiresAt },
+      opts(narrowed),
+    );
+    expect(result.recorded).toEqual({
+      dataTypes: [CONTACTS_CLASS],
+      grantedTypes: [CONTACTS_CLASS],
+      role: "viewer",
+      expiresAt,
+    });
+    const denied = await decide({ id: ID }, { approve: false }, opts(buildPod()));
+    expect(denied).not.toHaveProperty("recorded");
+    // A type that only asked to change data is chosen but not granted under a Viewer approval.
+    const writeOnly = buildPod();
+    writeOnly.seed(
+      ID,
+      `${PREFIXES}<${ID}> a odrl:Offer; odrl:uid <${ID}>;
+  odrl:permission [ odrl:assignee <${REQUESTER}>; odrl:action odrl:read; odrl:target <${CONTACTS_CLASS}> ],
+    [ odrl:assignee <${REQUESTER}>; odrl:action odrl:write; odrl:target <${CALENDAR}> ].`,
+    );
+    const viewer = await decide({ id: ID }, { approve: true, role: "viewer" }, opts(writeOnly));
+    expect(viewer.recorded).toEqual({
+      dataTypes: [CALENDAR, CONTACTS_CLASS].sort(),
+      grantedTypes: [CONTACTS_CLASS],
+      role: "viewer",
+    });
+  });
+
+  it("reports the recorded choices, not this call's, when another tab already approved", async () => {
+    const pod = buildPod();
+    pod.seed(ID, readWrite());
+    const expiresAt = new Date("2028-01-01Z");
+    const first = await decide({ id: ID }, { approve: true, role: "viewer", expiresAt }, opts(pod));
+    const before = pod.log.length;
+    // This tab's frozen payload asks for until-revoked editor access: the request is already
+    // approved, so nothing new is granted and the result says what the other tab applied.
+    const again = await decide(
+      { id: ID },
+      { approve: true, dataTypes: [CONTACTS_CLASS], role: "editor" },
+      opts(pod),
+    );
+    expect(again).toMatchObject({ status: "approved", grantUrl: first.grantUrl });
+    expect(again.recorded).toEqual({
+      dataTypes: [CONTACTS_CLASS],
+      grantedTypes: [CONTACTS_CLASS],
+      role: "viewer",
+      expiresAt,
+    });
+    expect(puts(pod, before).filter(({ url }) => url.endsWith(".acl"))).toEqual([]);
+    expect(await modesOf(pod, `${ALICE}.acl`)).toEqual([ACL.Read]);
+  });
+
+  it("refuses a payload that omits an end date or role the pin recorded", async () => {
+    const expiresAt = new Date("2028-01-01Z");
+    const dated = buildPod();
+    dated.seed(ID, readWrite());
+    await pinOnly(dated, { approve: true, dataTypes: [CONTACTS_CLASS], expiresAt });
+    for (const frozen of [
+      { dataTypes: [CONTACTS_CLASS] },
+      { dataTypes: [CONTACTS_CLASS], grantedTypes: [CONTACTS_CLASS], role: "editor" as const },
+    ]) {
+      const before = dated.log.length;
+      await expect(decide({ id: ID }, { approve: true, ...frozen }, opts(dated))).rejects.toThrow(
+        "still finishing",
+      );
+      expect(puts(dated, before)).toEqual([]);
+    }
+    const resumed = await decide(
+      { id: ID },
+      { approve: true, dataTypes: [CONTACTS_CLASS], expiresAt },
+      opts(dated),
+    );
+    expect(resumed.recorded).toEqual({
+      dataTypes: [CONTACTS_CLASS],
+      grantedTypes: [CONTACTS_CLASS],
+      role: "editor",
+      expiresAt,
+    });
+
+    const viewer = buildPod();
+    viewer.seed(ID, readWrite());
+    await pinOnly(viewer, { approve: true, role: "viewer" });
+    const before = viewer.log.length;
+    await expect(
+      decide({ id: ID }, { approve: true, dataTypes: [CONTACTS_CLASS] }, opts(viewer)),
+    ).rejects.toThrow("still finishing");
+    expect(puts(viewer, before)).toEqual([]);
+    expect(viewer.has(`${ALICE}.acl`)).toBe(false);
+    const finished = await decide(
+      { id: ID },
+      { approve: true, dataTypes: [CONTACTS_CLASS], role: "viewer" },
+      opts(viewer),
+    );
+    expect(finished.recorded).toEqual({
+      dataTypes: [CONTACTS_CLASS],
+      grantedTypes: [CONTACTS_CLASS],
+      role: "viewer",
+    });
+    expect(await modesOf(viewer, `${ALICE}.acl`)).toEqual([ACL.Read]);
+  });
+
+  it("reads omitted data types as every requested type once any choice is passed", async () => {
+    const pod = buildPod();
+    pod.seed(ID, TwoTypes());
+    await pinOnly(pod, { approve: true, dataTypes: [CONTACTS_CLASS] });
+    await expect(decide({ id: ID }, { approve: true, role: "editor" }, opts(pod))).rejects.toThrow(
+      "still finishing",
+    );
+    // Passing no choices at all still resumes the pin as recorded.
+    const result = await decide({ id: ID }, { approve: true }, opts(pod));
+    expect(result.recorded).toEqual({
+      dataTypes: [CONTACTS_CLASS],
+      grantedTypes: [CONTACTS_CLASS],
+      role: "editor",
+    });
+    expect((await record(pod, await decisionUrl(pod, { asked: Both }))).outcome).toBe("approved");
+  });
+
+  it("lists a pinned approval's recorded choices, read-only, so it can be finished as recorded", async () => {
+    const pod = buildPod();
+    pod.seed(ID, readWrite());
+    const expiresAt = new Date("2028-01-01Z");
+    await pinOnly(pod, { approve: true, role: "viewer", expiresAt });
+    const denied = `${POD}inbox/request-2.ttl`;
+    pod.seed(denied, `${accessRequestTurtle(denied)}<${denied}> accm:status accm:Denied .`);
+    const before = pod.log.length;
+    // Storage given without its trailing slash names the same records folder.
+    const listed = await listRequests({ ...opts(pod), storage: POD.slice(0, -1) });
+    expect(writes(pod, before)).toEqual([]);
+    const pending = listed.find((entry) => entry.id === ID);
+    expect(pending).toMatchObject({
+      status: "pending",
+      recorded: {
+        dataTypes: [CONTACTS_CLASS],
+        grantedTypes: [CONTACTS_CLASS],
+        role: "viewer",
+        expiresAt,
+      },
+    });
+    expect(listed.find((entry) => entry.id === denied)).not.toHaveProperty("recorded");
+    // An approval that stopped after the Approving CAS lists its recorded choices too.
+    pod.intercept = (method, url) =>
+      method === "PUT" && url.includes("/grant-") ? new Response(null, { status: 500 }) : undefined;
+    await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow("500");
+    pod.intercept = undefined;
+    const approving = (await listRequests(opts(pod))).find((entry) => entry.id === ID);
+    expect(approving).toMatchObject({ status: "approving", recorded: pending?.recorded });
+    const recorded = (approving as { recorded: Parameters<typeof decide>[1] }).recorded;
+    const result = await decide({ id: ID }, { ...recorded, approve: true }, opts(pod));
+    expect(result.recorded).toEqual(pending?.recorded);
+    // Finished requests carry no recorded choices.
+    expect((await listRequests(opts(pod))).find((entry) => entry.id === ID)).not.toHaveProperty(
+      "recorded",
+    );
+  });
+
+  it("lists no recorded choices without a sealed, private records folder or a valid record", async () => {
+    // No records folder at all.
+    const fresh = buildPod();
+    const before = fresh.log.length;
+    expect((await listRequests(opts(fresh)))[0]).not.toHaveProperty("recorded");
+    expect(writes(fresh, before)).toEqual([]);
+    // A folder still marked unverified, or private but never given a key: nothing is sealed.
+    for (const acl of [
+      ownerOnly(`<${RECORDS}.acl> accm:unverifiedRecords "true"; accm:recordsKey "k".`),
+      ownerOnly(),
+    ]) {
+      const pod = buildPod();
+      pod.seed(RECORDS, "");
+      pod.seed(`${RECORDS}.acl`, acl);
+      const from = pod.log.length;
+      expect((await listRequests(opts(pod)))[0]).not.toHaveProperty("recorded");
+      expect(writes(pod, from)).toEqual([]);
+      expect(pod.body(`${RECORDS}.acl`)).toBe(acl);
+    }
+    // A shared records folder is not trusted; the listing itself still succeeds.
+    const shared = buildPod();
+    await pinOnly(shared);
+    shared.seed(
+      `${RECORDS}.acl`,
+      `${shared.body(`${RECORDS}.acl`)}\n<${RECORDS}.acl#public> a acl:Authorization; acl:agentClass foaf:Agent; acl:accessTo <${RECORDS}>; acl:mode acl:Read.`,
+    );
+    const [entry] = await listRequests(opts(shared));
+    expect(entry).toMatchObject({ status: "pending" });
+    expect(entry).not.toHaveProperty("recorded");
+    // A record whose end date is not one we wrote is refused, by listing and by decide alike.
+    for (const expiresAt of ["soon", "2028-01-01Z", 1830297600000]) {
+      const pod = buildPod();
+      await pinOnly(pod, { approve: true, expiresAt: new Date("2028-01-01Z") });
+      const slot = await decisionUrl(pod);
+      const { snapshot } = await record(pod, slot);
+      pod.seed(
+        slot,
+        await recordTurtle(slot, { outcome: "approving", snapshot: { ...snapshot, expiresAt } }),
+      );
+      expect((await listRequests(opts(pod)))[0]).not.toHaveProperty("recorded");
+      await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
+        "Invalid persisted approval snapshot",
+      );
+    }
+  });
+
+  it("refuses a pinned record whose data type lists are not the ones decide() writes", async () => {
+    // Calendar is named but has no permission of its own: chosen, never granted.
+    const unnamed = `${PREFIXES}<${ID}> a odrl:Offer; odrl:uid <${ID}>; accm:dataClass <${CONTACTS_CLASS}>, <${CALENDAR}>;
+  odrl:permission [ odrl:assignee <${REQUESTER}>; odrl:action odrl:read; odrl:target <${CONTACTS_CLASS}> ].`;
+    for (const change of [
+      { chosen: { dataTypes: [CONTACTS_CLASS, CALENDAR], viewer: false } },
+      { chosen: { dataTypes: [CALENDAR, CALENDAR, CONTACTS_CLASS], viewer: false } },
+      { chosen: { dataTypes: [CALENDAR, 7], viewer: false } },
+      { chosen: { dataTypes: [CALENDAR, CONTACTS_CLASS, "urn:x"], viewer: false } },
+      { chosen: { dataTypes: "nope", viewer: false } },
+      // Granted but never chosen.
+      { chosen: { dataTypes: [CALENDAR], viewer: false } },
+      { dataTypes: "nope" },
+    ]) {
+      const pod = buildPod();
+      pod.seed(ID, unnamed);
+      await pinOnly(pod);
+      const slot = await decisionUrl(pod);
+      const { snapshot } = await record(pod, slot);
+      expect(snapshot.chosen.dataTypes).toEqual([CALENDAR, CONTACTS_CLASS].sort());
+      expect((await listRequests(opts(pod)))[0]).toMatchObject({
+        recorded: { dataTypes: [CALENDAR, CONTACTS_CLASS].sort(), grantedTypes: [CONTACTS_CLASS] },
+      });
+      pod.seed(
+        slot,
+        await recordTurtle(slot, { outcome: "approving", snapshot: { ...snapshot, ...change } }),
+      );
+      expect((await listRequests(opts(pod)))[0]).not.toHaveProperty("recorded");
+      await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
+        "Invalid persisted approval snapshot",
+      );
+    }
+  });
+
+  it("lists no recorded choices from a record or folder it can't trust", async () => {
+    // A record at the slot that names another request.
+    const other = buildPod();
+    await pinOnly(other);
+    const slot = await decisionUrl(other);
+    const { snapshot } = await record(other, slot);
+    other.seed(
+      slot,
+      await recordTurtle(slot, { id: `${POD}inbox/other.ttl`, outcome: "approving", snapshot }),
+    );
+    const [entry] = await listRequests(opts(other));
+    expect(entry).toMatchObject({ status: "pending" });
+    expect(entry).not.toHaveProperty("recorded");
+    // An owner-only folder ACL without Control.
+    const noControl = buildPod();
+    await pinOnly(noControl);
+    noControl.seed(
+      `${RECORDS}.acl`,
+      `${PREFIXES}<${RECORDS}.acl#owner> a acl:Authorization; acl:agent <${OWNER}>;
+  acl:accessTo <${RECORDS}>; acl:default <${RECORDS}>; acl:mode acl:Read, acl:Write.
+<${RECORDS}.acl> accm:recordsKey "${sealedKey(noControl)}".`,
+    );
+    expect((await listRequests(opts(noControl)))[0]).not.toHaveProperty("recorded");
+    // A folder whose own Link header shows it is not WAC is not probed further.
+    for (const link of [
+      `<${RECORDS}.acr>; rel="http://www.w3.org/ns/solid/acp#accessControl", <${RECORDS}.acl>; rel="acl"`,
+      `<${RECORDS}meta>; rel="describedby"`,
+      undefined,
+    ]) {
+      const pod = buildPod();
+      await pinOnly(pod);
+      pod.intercept = (method, url) =>
+        method === "HEAD" && url === RECORDS
+          ? new Response(null, { status: 200, headers: link === undefined ? {} : { link } })
+          : undefined;
+      const before = pod.log.length;
+      expect((await listRequests(opts(pod)))[0]).not.toHaveProperty("recorded");
+      expect(pod.log.slice(before).filter(({ url }) => url.startsWith(RECORDS))).toEqual([
+        expect.objectContaining({ method: "HEAD", url: RECORDS }),
+      ]);
+    }
+  });
+
+  it("propagates cancellation during the records lookup", async () => {
+    for (const at of [
+      (method: string, url: string) => method === "HEAD" && url === RECORDS,
+      (method: string, url: string) => method === "GET" && url.includes("/decision-"),
+    ]) {
+      const pod = buildPod();
+      await pinOnly(pod);
+      const controller = new AbortController();
+      pod.intercept = (method, url) => {
+        if (!at(method, url)) return undefined;
+        controller.abort();
+        return new Response(null, { status: 500 });
+      };
+      await expect(listRequests({ ...opts(pod), signal: controller.signal })).rejects.toMatchObject(
+        { name: "AbortError" },
+      );
+    }
+  });
+});

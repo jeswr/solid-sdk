@@ -4,6 +4,7 @@ import { termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
+import type { RecordedChoices } from "./approval.js";
 import { accmTerm } from "./canonical-vocab.js";
 import {
   httpUrl,
@@ -40,6 +41,11 @@ export type AccessRequestEntry =
       expiresAt?: string;
       created?: string;
       decidedAt?: string;
+      /**
+       * The choices of an approval the owner's own records hold for this pending or Approving
+       * request (pinned, possibly by another tab, and not finished yet). Absent when there is none.
+       */
+      recorded?: RecordedChoices;
     };
 
 export interface ListRequestsOptions {
@@ -191,7 +197,7 @@ export function members(dataset: DatasetCore, container: string): string[] {
 }
 
 /** Discover ldp:inbox and list at most MAX_MEMBERS, each bounded to MAX_NOTIFICATION_BYTES. */
-export async function listRequests(options: ListRequestsOptions): Promise<AccessRequestEntry[]> {
+export async function listInbox(options: ListRequestsOptions): Promise<AccessRequestEntry[]> {
   const fetchFn = transport(options.fetch, options.signal);
   let inbox = options.inbox;
   if (inbox === undefined) {

@@ -2,6 +2,7 @@
 // Port of access-manager's own/nearest-ancestor ACL, create-only materialisation,
 // set-semantics grants and bounded If-Match retry logic.
 import { parseLinkHeaders } from "@jeswr/storage-capabilities";
+import type { DatasetCore } from "@rdfjs/types";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { addGrant, planAddGrant } from "../roles/client.js";
@@ -196,6 +197,45 @@ const UNVERIFIED = `${ACCM.ns}unverifiedRecords`;
 const RECORDS_KEY = `${ACCM.ns}recordsKey`;
 
 /**
+ * Check that a records folder ACL names only the owner and gives them Read, Write and Control over
+ * the folder and everything in it, throwing otherwise. Returns the records key once the folder is
+ * sealed (a key and no unverified mark), else undefined.
+ */
+function sealedKey(
+  dataset: DatasetCore,
+  url: string,
+  container: string,
+  owner: string,
+): string | undefined {
+  const acl = new AclResource(dataset, DataFactory);
+  const own = new Set<string>();
+  const inherited = new Set<string>();
+  for (const auth of acl.authorizations) {
+    const subject = authSubject(auth);
+    const agents = values(dataset, subject, ACL.agent);
+    if (
+      agents.some((agent) => agent !== owner) ||
+      values(dataset, subject, ACL.agentClass).length > 0 ||
+      values(dataset, subject, ACL.agentGroup).length > 0
+    ) {
+      throw new Error("The access records folder is shared; make it private first");
+    }
+    if (!agents.includes(owner)) continue;
+    const modes = values(dataset, subject, ACL.mode);
+    if (values(dataset, subject, ACL.accessTo).includes(container))
+      for (const mode of modes) own.add(mode);
+    if (values(dataset, subject, ACL.default).includes(container))
+      for (const mode of modes) inherited.add(mode);
+  }
+  const full = (modes: Set<string>) =>
+    [ACL.Read, ACL.Write, ACL.Control].every((mode) => modes.has(mode));
+  if (!full(own) || !full(inherited))
+    throw new Error("The access records folder does not give you full control");
+  if (values(dataset, url, UNVERIFIED).length > 0) return undefined;
+  return values(dataset, url, RECORDS_KEY)[0];
+}
+
+/**
  * Make sure a records container is readable and writable by the owner alone before anything is
  * written into, or trusted from, it. An existing ACL must name no one but the owner, and give the
  * owner Read, Write and Control over the folder and everything in it; otherwise the decision
@@ -231,33 +271,9 @@ export async function ensureOwnerOnlyContainer(
       await put(url, await ownerOnlyAcl(url, container, owner), fetchFn, null, true);
       continue;
     }
-    const acl = new AclResource(existing.dataset, DataFactory);
-    const own = new Set<string>();
-    const inherited = new Set<string>();
-    for (const auth of acl.authorizations) {
-      const subject = authSubject(auth);
-      const agents = values(existing.dataset, subject, ACL.agent);
-      if (
-        agents.some((agent) => agent !== owner) ||
-        values(existing.dataset, subject, ACL.agentClass).length > 0 ||
-        values(existing.dataset, subject, ACL.agentGroup).length > 0
-      ) {
-        throw new Error("The access records folder is shared; make it private first");
-      }
-      if (!agents.includes(owner)) continue;
-      const modes = values(existing.dataset, subject, ACL.mode);
-      if (values(existing.dataset, subject, ACL.accessTo).includes(container))
-        for (const mode of modes) own.add(mode);
-      if (values(existing.dataset, subject, ACL.default).includes(container))
-        for (const mode of modes) inherited.add(mode);
-    }
-    const full = (modes: Set<string>) =>
-      [ACL.Read, ACL.Write, ACL.Control].every((mode) => modes.has(mode));
-    if (!full(own) || !full(inherited))
-      throw new Error("The access records folder does not give you full control");
-    const key = values(existing.dataset, url, RECORDS_KEY)[0];
+    const key = sealedKey(existing.dataset, url, container, owner);
+    if (key !== undefined) return key;
     const unverified = values(existing.dataset, url, UNVERIFIED).length > 0;
-    if (!unverified && key !== undefined) return key;
     // Anything that arrived before the folder became private is untrusted. The key is minted only
     // now, after the folder is known to be private, so nothing written earlier can sit at a name
     // derived from it (a key found next to the unverified mark was not written by us). A private
@@ -282,20 +298,33 @@ export async function ensureOwnerOnlyContainer(
 /**
  * The records key of an already private records folder, sealing it first if needed; undefined
  * while the folder or its ACL does not exist yet (so no decision record can exist either). Writes
- * nothing to a pod without a records folder ACL.
+ * nothing to a pod without a records folder ACL. With `seal` false it writes nothing at all: a
+ * folder not sealed yet has no key (and so no trusted record) and gives undefined, and so does a
+ * folder whose own Link header already shows it is not WAC (an ACP `accessControl` link, or no
+ * `acl` link), without probing further.
  */
 export async function recordsKey(
   container: string,
   storage: string,
   owner: string,
   fetchFn: typeof fetch,
+  seal = true,
 ): Promise<string | undefined> {
   scoped(storage, container);
   const head = await fetchFn(container, { method: "HEAD" });
   if (head.status === 404) return undefined;
   if (!head.ok) throw new Error(`Records folder check failed (${head.status})`);
-  if (!(await read(await aclUrl(container, storage, fetchFn), fetchFn))) return undefined;
-  return ensureOwnerOnlyContainer(container, storage, owner, fetchFn);
+  if (!seal) {
+    const links = head.headers.get("link") ?? "";
+    if (link(links, ACP_ACCESS_CONTROL, container) || !link(links, "acl", container))
+      return undefined;
+  }
+  const url = await aclUrl(container, storage, fetchFn);
+  const existing = await read(url, fetchFn);
+  if (!existing) return undefined;
+  return seal
+    ? ensureOwnerOnlyContainer(container, storage, owner, fetchFn)
+    : sealedKey(existing.dataset, url, container, owner);
 }
 
 async function ownerOnlyAcl(url: string, container: string, owner: string): Promise<string> {
