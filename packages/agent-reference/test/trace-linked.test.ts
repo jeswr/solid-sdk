@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
+import type { OdrlAction } from "@jeswr/solid-odrl";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { spawnSync } from "child_process";
 import {
@@ -288,7 +289,9 @@ it("leaves out the policy view for peer terms whose rule has no ODRL form", () =
   const terms = (action: string) => ({
     policy: {
       id: "urn:test:terms",
-      permissions: [{ type: "permission" as const, action, target: "urn:test:item" }],
+      permissions: [
+        { type: "permission" as const, action: action as OdrlAction, target: "urn:test:item" },
+      ],
     },
   });
   // A clean rule gets its view; a rule action that is neither an ODRL name nor a clean IRI
