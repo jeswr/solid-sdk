@@ -31,6 +31,7 @@ export {
   serializeBookmark,
   storeToTurtle,
 } from "./bookmark.js";
+export { httpIriOrUndefined } from "./iri.js";
 // NOTE: the Node-only shape/ontology readers (bookmarkShapeTtl,
 // bookmarkOntologyTtl, *_PATH) are intentionally NOT re-exported here — they
 // statically import node:fs/node:url, so re-exporting them from the root would

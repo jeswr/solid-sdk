@@ -48,6 +48,35 @@ comes from SHACL, never facade string matching. Use typed wrapper accessors and 
 runtime; no hand-built triples or LDO. Consult the package-local model-runtime and
 federation-codegen skills before changing generation or guard behavior.
 
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+The `/netscape` subpath owns inert browser HTML import/export. Keep platform-DOM and
+tokenizer-only paths tested, including entities, malformed nesting, bounds and unsafe URLs.
+`/pod` owns one-resource-per-bookmark CRUD and private Type Index registration. Use
+`createBookmarkRepository` with the storage client returned by SDK `createPodClient`;
+the Solid-only factory has been removed. Do not import storage-client's backend subpaths.
+`list()` returns `{ items, skipped: [{ url, reason }] }` (`BookmarkListing`); individual
+child failures must not hide healthy siblings, except `unauthenticated`, which fails the
+whole listing for the session-expiry path. On the first `rate-limited` child, stop reading
+and return the bookmarks already read; the `skipped` entry with reason `rate-limited`
+marks this collection incomplete, including unvisited children. Container failures still propagate.
+Both `create` and `update` canonicalise target URLs with the importer's `httpIriOrUndefined`
+guard (so `http://example.org` becomes `http://example.org/`) before pod I/O, returning canonical
+hrefs without mutating input objects. Reject everything that guard rejects, including relative,
+non-HTTP(S) and obfuscated schemes.
+`repository.registration` is a live `BookmarkRegistrationStatus` (`pending`, `registered`,
+`failed`). Registration failure is non-fatal, logs only a fixed message/error code, and
+retries at most once on a later initialise per repository lifetime. Initialisers share
+in-flight attempts. Failed creates re-read and conditionally delete only empty orphans
+with safe validators. `readRdf` currently has no per-resource size limit. Conditional
+edits mutate the original graph through generated accessors; missing validators require a
+refresh. The W3C `http://www.w3.org/2002/01/bookmark#` ontology is not a supported alias.
+
+The browser-safe root now exports `httpIriOrUndefined` for canonicalising typed/imported
+HTTP(S) URLs; `isHttpIri` remains the strict already-canonical guard. The importer uses
+canonical hrefs, preserves raw `<` in text, and returns `NetscapeImport.error` =
+`file-too-large` with no partial results on byte/token overflow. Excessive nesting still
+throws. Keep the app's 5,000-bookmark and byte/token limit messages consistent.
+
 The `tsc` build copies the generated JS and precise declarations into `dist/generated/`.
 The mirror must retain `@jeswr/model-runtime` and receive a `--dep-sha` pin for its
 `jeswr/model-runtime` mirror; declarations import runtime types, so it cannot be listed

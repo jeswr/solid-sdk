@@ -44,6 +44,7 @@
     "@jeswr/rdf-engine": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-chat-interop": "workspace:*",
+    "@jeswr/solid-bookmark": "workspace:*",
     "@jeswr/solid-dav-bridge": "workspace:*",
     "@jeswr/solid-journal": "workspace:*",
     "@jeswr/solid-listening": "workspace:*",
