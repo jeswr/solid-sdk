@@ -11,6 +11,8 @@ export * from "./core/import-runner.js";
 export * from "./core/pod-writer.js";
 /** Conditional storage-client-backed Pod writer. */
 export { createStoragePodWriter, type StoragePodWriterOptions } from "./core/storage-pod-writer.js";
+/** Opt-in two-way sync contracts, host ports and runner. */
+export * from "./core/sync/index.js";
 export * from "./core/types.js";
 /** File adapter registry. */
 export * from "./file-adapters.js";
