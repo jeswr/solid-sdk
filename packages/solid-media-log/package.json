@@ -1,0 +1,44 @@
+{
+  "name": "@jeswr/solid-media-log",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Generated media log model, export mappings and pod repository for films, television, books and games.",
+  "license": "MIT",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "codegen",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/media.ontology.ttl --shapes codegen/media.shapes.ttl --config codegen/codegen.config.json --out src/generated",
+    "build": "../../node_modules/.bin/tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "lint": "../../node_modules/.bin/biome check src test scripts *.json codegen/*.json",
+    "typecheck": "../../node_modules/.bin/tsc --noEmit",
+    "test": "../../node_modules/.bin/vitest run"
+  },
+  "dependencies": {
+    "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/pod-connectors": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
+    "n3": "^2.0.3"
+  },
+  "devDependencies": {
+    "@jeswr/federation-codegen": "workspace:*",
+    "@types/n3": "^1.26.1"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

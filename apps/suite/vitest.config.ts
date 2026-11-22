@@ -31,6 +31,8 @@ export default defineConfig({
         "src/apps/journal/demo/**/*.ts",
         "src/apps/recipes/lib/**/*.ts",
         "src/apps/recipes/state/*.{ts,tsx}",
+        "src/apps/media/lib/**/*.ts",
+        "src/apps/media/state/**/*.ts",
         "src/apps/agent/lib/**/*.ts",
         "src/apps/slides/lib/**/*.ts",
         "src/apps/slides/state/**/*.{ts,tsx}",

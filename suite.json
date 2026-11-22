@@ -113,7 +113,8 @@
     "@jeswr/solid-slides",
     "@jeswr/solid-recipe",
     "@jeswr/solid-journal",
-    "@jeswr/suite-insights"
+    "@jeswr/suite-insights",
+    "@jeswr/solid-media-log"
   ],
   "applications": [
     {

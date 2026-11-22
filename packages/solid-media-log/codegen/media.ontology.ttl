@@ -1,0 +1,22 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+@prefix log: <https://jeswr.org/ns/media-log#> .
+@prefix media: <https://jeswr.org/ns/sectors/media#> .
+@prefix core: <https://jeswr.org/ns/core#> .
+@prefix schema: <http://schema.org/> .
+@prefix dc: <http://purl.org/dc/elements/1.1/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Minimal projection of the canonical media sector, plus a personal record extension.
+<https://jeswr.org/ns/media-log> a owl:Ontology .
+log:LogEntry a owl:Class ; rdfs:subClassOf core:Record ; rdfs:label "Media log entry"@en ; skos:definition "A person's shelf, progress and reflection about one creative work."@en .
+log:status a owl:DatatypeProperty ; rdfs:domain log:LogEntry ; rdfs:range xsd:string ; rdfs:label "status"@en ; skos:definition "The personal consumption shelf, independent of publication status."@en .
+log:repeatCount a owl:DatatypeProperty ; rdfs:domain log:LogEntry ; rdfs:range xsd:integer ; rdfs:label "repeat count"@en ; skos:definition "Additional completions after the first watch, read or play."@en .
+log:progress a owl:DatatypeProperty ; rdfs:domain log:LogEntry ; rdfs:range xsd:integer ; rdfs:label "progress"@en ; skos:definition "Current page or episode reached."@en .
+log:progressUnit a owl:DatatypeProperty ; rdfs:domain log:LogEntry ; rdfs:range xsd:string ; rdfs:label "progress unit"@en ; skos:definition "Whether progress counts pages or episodes."@en .
+log:sourceLabel a owl:DatatypeProperty ; rdfs:domain log:LogEntry ; rdfs:range xsd:string ; rdfs:label "source label"@en ; skos:definition "Display name of the import origin, independent of its provenance IRI."@en .
+# Borrowed classes and properties are NOT re-declared; their constraints are local to the SHACL profile.
