@@ -41,6 +41,7 @@ export type {
   UsernameAvailability,
 } from "./use-registration.js";
 export { RegistrationError, useRegistration } from "./use-registration.js";
+export { useUndoStack } from "./use-undo-stack.js";
 
 /** Deliver a template using the current actor, or a complete activity with an explicit actor. */
 export type NotifyAction = (

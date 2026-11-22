@@ -88,6 +88,19 @@ export function createLocalNotificationStore(
     queue = operation.catch(() => {});
     return operation;
   };
+  const setRead = (ids: string[], read: boolean) =>
+    mutate(() => {
+      const changed: SuiteNotification[] = [];
+      for (const id of ids) {
+        const item = memory.get(id);
+        if (item && item.read !== read) {
+          const next = { ...item, read };
+          memory.set(id, next);
+          changed.push(next);
+        }
+      }
+      return changed;
+    });
   return {
     id: `local:${accountId}`,
     list(signal) {
@@ -109,19 +122,8 @@ export function createLocalNotificationStore(
         memory.set(copy.id, copy);
         return [copy];
       }),
-    markRead: (ids) =>
-      mutate(() => {
-        const changed: SuiteNotification[] = [];
-        for (const id of ids) {
-          const item = memory.get(id);
-          if (item) {
-            const next = { ...item, read: true };
-            memory.set(id, next);
-            changed.push(next);
-          }
-        }
-        return changed;
-      }),
+    markRead: (ids) => setRead(ids, true),
+    markUnread: (ids) => setRead(ids, false),
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

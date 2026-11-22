@@ -27,6 +27,10 @@
     "./offline": {
       "types": "./dist/offline.d.ts",
       "default": "./dist/offline.js"
+    },
+    "./undo": {
+      "types": "./dist/undo.d.ts",
+      "default": "./dist/undo.js"
     }
   },
   "files": [
