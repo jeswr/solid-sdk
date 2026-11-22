@@ -60,7 +60,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -131,7 +131,11 @@
         "answer": "Accepted, for health allergy claims only."
       },
       "caption": "The patient's health allergy statement: The patient is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:719852c271041e839876b506026baf0c9c9c76783652c3d0c1f14f75760e1c80",
+        "sha-256:9df46cc47a7b59611f38efe19c5571976db3d4c5b94d76b7cb0f6ee7e08cac72"
+      ]
     },
     {
       "seq": 3,
@@ -178,7 +182,10 @@
         "text": "Its terms allow this: use for Health record."
       },
       "caption": "The patient's health allergy statement: its terms allow this: use for Health record.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:837d155376047a859c3ced348b44f20b95fb7dfa014bb5ac57a7d8dbc0de2594"
+      ]
     },
     {
       "seq": 5,
@@ -227,7 +234,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The patient's health allergy statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0b15d756c9eb972f59472e1039350430fbdc6cf151561573aa0ffbe1bcdd1d82"
+      ]
     },
     {
       "seq": 7,
@@ -250,7 +260,10 @@
         },
         "provenance": "signed by The patient"
       },
-      "caption": "The patient's health allergy statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The patient's health allergy statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:9bd021460827b2f9db5617777da5440955107cd67f9cfa8cecfcd03362bc4deb"
+      ]
     },
     {
       "seq": 8,
@@ -313,7 +326,11 @@
         "answer": "Accepted, for health allergy claims only."
       },
       "caption": "The clinician's health allergy statement: The clinician is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9e8511f716264c2eb297f3f73dbd7e5fc8d0779b0b06f2a6255d68871444bb15",
+        "sha-256:96611f3f143c73c7bd0d58860aa29d74d87211a0edc1d87a33011247bd61a4d0"
+      ]
     },
     {
       "seq": 10,
@@ -360,7 +377,10 @@
         "text": "Its terms allow this: use for Health record."
       },
       "caption": "The clinician's health allergy statement: its terms allow this: use for Health record.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:dcbb8a904f8e3506e036d2e496272385fe57cda18a98b22fb542440cb2d94989"
+      ]
     },
     {
       "seq": 12,
@@ -409,7 +429,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The clinician's health allergy statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:de95370f6fa75ed12bbfef2b9860ccf11ea043971569d9f91b163114d379fa49"
+      ]
     },
     {
       "seq": 14,
@@ -432,7 +455,10 @@
         },
         "provenance": "signed by The clinician"
       },
-      "caption": "The clinician's health allergy statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The clinician's health allergy statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:40e128ad3266c3851084e1c620bc6ea4cb380b26ccebb912e8366643ec5a31a1"
+      ]
     },
     {
       "seq": 15,
@@ -495,7 +521,11 @@
         "answer": "Accepted, for old estimate claims only."
       },
       "caption": "The old practice holding original statements's old estimate statement: The old practice holding original statements is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:d348cc36ea86a630744eb217b354d46947e194144d20cb3fb4e5d88f08ecb5d1",
+        "sha-256:7cb16f4abad26d0fe5f6dcac7bc3a00bc6ff185d5023f1751e5fc2fe7e433ea6"
+      ]
     },
     {
       "seq": 17,
@@ -542,7 +572,10 @@
         "text": "Its terms allow this: use for Health record."
       },
       "caption": "The old practice holding original statements's old estimate statement: its terms allow this: use for Health record.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:16a6859d634634886438c1dc95a2d5c97c7cf7aa8861b842cf3c7f871ae7da29"
+      ]
     },
     {
       "seq": 19,
@@ -586,7 +619,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The old practice holding original statements's old estimate statement is admitted.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:a1f7ce8d613f9e2ad58d55b7dbfa42a7f27db68b9c679eafbf66aff2402955d1"
+      ]
     },
     {
       "seq": 21,
@@ -609,7 +645,11 @@
         },
         "provenance": "signed by The old practice holding original statements"
       },
-      "caption": "The old practice holding original statements's old estimate statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The old practice holding original statements's old estimate statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:ec874847214b8061836868e67dcc11d2dbcef45b159b5a518b0ed0ba9d2066ce"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/records-to-new-practice--baseline.json"
 }

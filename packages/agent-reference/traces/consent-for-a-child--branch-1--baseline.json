@@ -76,7 +76,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -171,7 +171,10 @@
       },
       "reason": "recipient-established",
       "caption": "The school: Accepted, for A parent consents for a child only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b7ebf2d4bf34d7fd73201822e7d43981f7d0809fceebed83be9798b558fb6862"
+      ]
     },
     {
       "seq": 4,
@@ -348,7 +351,10 @@
       "messageId": "urn:awp:engine-consent-for-a-child-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:405878d91f1e4541867e80978af22c77e148ce5be765a5163bf3fff1f45f6a80",
       "caption": "The invoke message goes to The receiving agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:40df87edf33bef9a89552dff21979c264d553d56ff9a1b708950024a295094d7"
+      ]
     },
     {
       "seq": 10,
@@ -800,7 +806,11 @@
           "suite": "fixed-vocabulary",
           "id": "urn:op:consent-for-a-child"
         }
+      ],
+      "linked": [
+        "sha-256:3d6097bd5517c8b2d882a263d6facd13bd666365b610862c9448a8ddf24c00a2"
       ]
     }
-  ]
+  ],
+  "linkedTable": "linked/consent-for-a-child--baseline.json"
 }

@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -189,7 +189,11 @@
           "suite": "fixed-vocabulary",
           "id": "urn:fictional:visa-application:bank"
         }
+      ],
+      "linked": [
+        "sha-256:784dc964a3ee71a8bbf7d37deb5ef06208fe65a872783d3545b09af44f4c51cb"
       ]
     }
-  ]
+  ],
+  "linkedTable": "linked/visa-application--baseline.json"
 }

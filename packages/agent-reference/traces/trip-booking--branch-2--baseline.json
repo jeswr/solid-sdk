@@ -108,7 +108,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -191,7 +191,11 @@
         "answer": "Accepted, for identity passport claims only."
       },
       "caption": "The identity issuer's identity passport statement: The identity issuer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:27172c8f884e662674c59400fda78e22fe967379ad7a71ac0e01c77f93163099",
+        "sha-256:a39a13871f7b5343836c7c79962f1d33df44af21c025321424152cbbf4fe05c6"
+      ]
     },
     {
       "seq": 3,
@@ -238,7 +242,10 @@
         "text": "Its terms allow this: use for Passport management or Ticketing; share for Passport management or Ticketing."
       },
       "caption": "The identity issuer's identity passport statement: its terms allow this: use for Passport management or Ticketing; share for Passport management or Ticketing.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8e8d1a4f27c908fc86c685a1cf2ed486ff81250c052626ebf3cd9ca56af05e01"
+      ]
     },
     {
       "seq": 5,
@@ -282,7 +289,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The identity issuer's identity passport statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1109c31a1ec961ac29efd161e6e79e2ddb035a18db6d9a4a633e919571a8ed62"
+      ]
     },
     {
       "seq": 7,
@@ -305,7 +315,10 @@
         },
         "provenance": "signed by The identity issuer"
       },
-      "caption": "The identity issuer's identity passport statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The identity issuer's identity passport statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:54768549142fb838617f69d102a1276fc6fbf3a7205237fef1a28620eb99edc5"
+      ]
     },
     {
       "seq": 8,
@@ -392,7 +405,10 @@
       },
       "reason": "recipient-established",
       "caption": "The traveller: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c956f6729180ef92581114b72691dc85a309d554714de3c1d1db92f941d4aa74"
+      ]
     },
     {
       "seq": 11,
@@ -569,7 +585,10 @@
       "messageId": "urn:awp:engine-trip-booking-branch-2:owner-agent:0002",
       "messageDigest": "sha-256:8843c5d5522ba7cae3a5da90b389d263cc43abdeeec5550f7fcfe51510a07e33",
       "caption": "The invoke message goes to The traveller’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b162b9fbcdbe04335c9b835b29f73dd96f520df4e97095109363d09b0155dbc3"
+      ]
     },
     {
       "seq": 17,
@@ -990,7 +1009,10 @@
       "messageId": "urn:awp:engine-trip-booking-branch-2:owner-agent:0002",
       "messageDigest": "sha-256:8843c5d5522ba7cae3a5da90b389d263cc43abdeeec5550f7fcfe51510a07e33",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:5e4e97687d6735b58abc32b82e85276f5fc8b1fd9630f22d653412db3191b87e"
+      ]
     },
     {
       "seq": 25,
@@ -1077,7 +1099,10 @@
       },
       "reason": "recipient-established",
       "caption": "The hotel: Accepted, for Attempt passport release while searching only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0fc0255e29b32992f3b88004e55ece7ce1c704afbcfb623daacb80d2e4b003ab"
+      ]
     },
     {
       "seq": 28,
@@ -1215,7 +1240,11 @@
       "outcome": "stop",
       "reason": "excessive-scope",
       "caption": "The credential is not necessary for this purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e30f4499aeb39a1cccdcfca961db67686a213aec221d7201090634b589dfab5e"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/trip-booking--baseline.json"
 }

@@ -76,7 +76,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -151,7 +151,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:13a1a349b0d5eb14601524e426805062042fd4f1573c4db345856cd09c13e846",
+        "sha-256:7a1026a5a2d0f0f54f51cebd26939b1e467333f81d39c856d4db1d0e3e4b6f30"
+      ]
     },
     {
       "seq": 3,
@@ -198,7 +202,10 @@
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
       "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3ba803736566b10cc77c23e8059255c88f5e15a25ff92a2eec0062e6c4dff039"
+      ]
     },
     {
       "seq": 5,
@@ -252,7 +259,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The policyholder's unstructured content statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:64f66b0e61df17d2f10eed2feffab2778715c7a1331304bd0adecae62f58d478"
+      ]
     },
     {
       "seq": 7,
@@ -275,7 +285,10 @@
         },
         "provenance": "signed by The policyholder"
       },
-      "caption": "The policyholder's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The policyholder's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:a949698745cdedcec9aef57219dbd270b8b7594d8c6c8bad435150880e7e8be7"
+      ]
     },
     {
       "seq": 8,
@@ -338,7 +351,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:13a1a349b0d5eb14601524e426805062042fd4f1573c4db345856cd09c13e846",
+        "sha-256:7a1026a5a2d0f0f54f51cebd26939b1e467333f81d39c856d4db1d0e3e4b6f30"
+      ]
     },
     {
       "seq": 10,
@@ -385,7 +402,10 @@
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
       "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:db857ac3258feec189828dd819c9ef10444cca2e6c43409b1de5e74a09ee2f34"
+      ]
     },
     {
       "seq": 12,
@@ -439,7 +459,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The policyholder's unstructured content statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:8abf072f2b89d074f229fe3425f600b56e098bbd91d4de71387952ad5cdb840a"
+      ]
     },
     {
       "seq": 14,
@@ -462,7 +485,10 @@
         },
         "provenance": "signed by The policyholder"
       },
-      "caption": "The policyholder's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The policyholder's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:d5744488fb416b6336c3c9b2e309e462e92df08add169c71ed5d267734e08d3d"
+      ]
     },
     {
       "seq": 15,
@@ -525,7 +551,11 @@
         "answer": "Accepted, for repair estimate claims only."
       },
       "caption": "The accepted repair garage's repair estimate statement: The accepted repair garage is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:a3d53cbcdadbd50164f534156dcc32f1e76c0b877fc10d5a8f1af75cfb536998",
+        "sha-256:26abb8df6d866ab2c4d1d7e3c77fd3e2931519c3c0694970f2d2d44392deca2a"
+      ]
     },
     {
       "seq": 17,
@@ -572,7 +602,10 @@
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
       "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:4169d8d3ae71e4079ded3d2f034c45e9c8a5f01bded8da2de29ef62bacf8b30f"
+      ]
     },
     {
       "seq": 19,
@@ -621,7 +654,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The accepted repair garage's repair estimate statement is admitted.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:803a091f77a13ea0fc5488c686ed8a7b15b130844736ce9f5e9329f5f5179935"
+      ]
     },
     {
       "seq": 21,
@@ -644,7 +680,10 @@
         },
         "provenance": "signed by The accepted repair garage"
       },
-      "caption": "The accepted repair garage's repair estimate statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The accepted repair garage's repair estimate statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:f76c6f7293c46e1052ae78545a179a47fe9b153beb7eb06738b7eaec5ed08435"
+      ]
     },
     {
       "seq": 22,
@@ -731,7 +770,10 @@
       },
       "reason": "recipient-established",
       "caption": "The policyholder: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:77fb576bf8295227c1fa623edc6587ba3ef64c1ff976843ed186d5ec83f011ef"
+      ]
     },
     {
       "seq": 25,
@@ -908,7 +950,10 @@
       "messageId": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0002",
       "messageDigest": "sha-256:732291fe460e44633094d7c463e20adb0201996c4131cf92abb0d8585f137296",
       "caption": "The invoke message goes to The policyholder’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:26cc80c02ec9ee929fdafc5a16714bfa8c53271c53c478e2b0f1917b1852f011"
+      ]
     },
     {
       "seq": 31,
@@ -1323,7 +1368,10 @@
       "messageId": "urn:awp:engine-insurance-claim-photos-main:receiver-agent:0002",
       "messageDigest": "sha-256:732291fe460e44633094d7c463e20adb0201996c4131cf92abb0d8585f137296",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:55901de8fbc35aee0d4cd8e71c76c410c9633afbc6a05df226f5bfb51e693a8f"
+      ]
     },
     {
       "seq": 39,
@@ -1410,7 +1458,10 @@
       },
       "reason": "recipient-established",
       "caption": "The insurer: Accepted, for An insurance claim with photographs only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:69eab20c06f6478fb2344118131275fa9bb6a3b9d43e522389a24fa8f294bf3c"
+      ]
     },
     {
       "seq": 42,
@@ -1559,7 +1610,10 @@
       },
       "reason": "terms-allow",
       "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3ba803736566b10cc77c23e8059255c88f5e15a25ff92a2eec0062e6c4dff039"
+      ]
     },
     {
       "seq": 47,
@@ -1621,7 +1675,10 @@
       },
       "reason": "terms-allow",
       "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:db857ac3258feec189828dd819c9ef10444cca2e6c43409b1de5e74a09ee2f34"
+      ]
     },
     {
       "seq": 49,
@@ -1683,7 +1740,10 @@
       },
       "reason": "terms-allow",
       "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4169d8d3ae71e4079ded3d2f034c45e9c8a5f01bded8da2de29ef62bacf8b30f"
+      ]
     },
     {
       "seq": 51,
@@ -1996,7 +2056,10 @@
       "outcome": "ask-principal",
       "reason": "context-not-clear",
       "caption": "The task context is not clear for this text, recipient and purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:57ec755463fe8c5c5b943d10908b6e4f2fe1d068355f23a12aad62d16078b476"
+      ]
     },
     {
       "seq": 61,
@@ -2102,7 +2165,10 @@
       },
       "reason": "recipient-established",
       "caption": "The insurer: Accepted, for An insurance claim with photographs only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:69eab20c06f6478fb2344118131275fa9bb6a3b9d43e522389a24fa8f294bf3c"
+      ]
     },
     {
       "seq": 65,
@@ -2251,7 +2317,10 @@
       },
       "reason": "terms-allow",
       "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:3ba803736566b10cc77c23e8059255c88f5e15a25ff92a2eec0062e6c4dff039"
+      ]
     },
     {
       "seq": 70,
@@ -2313,7 +2382,10 @@
       },
       "reason": "terms-allow",
       "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:db857ac3258feec189828dd819c9ef10444cca2e6c43409b1de5e74a09ee2f34"
+      ]
     },
     {
       "seq": 72,
@@ -2375,7 +2447,10 @@
       },
       "reason": "terms-allow",
       "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4169d8d3ae71e4079ded3d2f034c45e9c8a5f01bded8da2de29ef62bacf8b30f"
+      ]
     },
     {
       "seq": 74,
@@ -2785,7 +2860,10 @@
       "messageId": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0002",
       "messageDigest": "sha-256:8be2f777d6f001971525f97aa97181f11e436a40c92ea85823ace971db8f4e54",
       "caption": "The invoke message goes to The insurer’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:cbf3e9465e0440526675616f252e8c79d21e30e88bab3200a43bd61fbd42b304"
+      ]
     },
     {
       "seq": 87,
@@ -3662,7 +3740,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0d12c9f44354becf41933c9304d597765b59ebabfe83f1198a6cf9c82088c886",
+        "sha-256:5528837c982f583905d0da1aadafedb2f47ff4f90562c1818c650bb4eeeeddaf"
+      ]
     },
     {
       "seq": 91,
@@ -3701,7 +3783,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The policyholder's unstructured content statement: The policyholder is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0d12c9f44354becf41933c9304d597765b59ebabfe83f1198a6cf9c82088c886",
+        "sha-256:5528837c982f583905d0da1aadafedb2f47ff4f90562c1818c650bb4eeeeddaf"
+      ]
     },
     {
       "seq": 92,
@@ -3740,7 +3826,11 @@
         "answer": "Accepted, for repair estimate claims only."
       },
       "caption": "The accepted repair garage's repair estimate statement: The accepted repair garage is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6138a5216d168acd742f6f62d7edbe3cfbd1ab09285ca30931de26fe5bbf80fd",
+        "sha-256:eae122d0d59974c67cd931ea817e580b17a4037212442ee5af803ae49aaaf7cc"
+      ]
     },
     {
       "seq": 93,
@@ -3791,7 +3881,10 @@
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
       "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3ba803736566b10cc77c23e8059255c88f5e15a25ff92a2eec0062e6c4dff039"
+      ]
     },
     {
       "seq": 95,
@@ -3819,7 +3912,10 @@
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
       "caption": "The policyholder's unstructured content statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:db857ac3258feec189828dd819c9ef10444cca2e6c43409b1de5e74a09ee2f34"
+      ]
     },
     {
       "seq": 96,
@@ -3847,7 +3943,10 @@
         "text": "Its terms allow this: use for Insurance claim photos; share for Insurance claim photos."
       },
       "caption": "The accepted repair garage's repair estimate statement: its terms allow this: use for Insurance claim photos; share for Insurance claim photos.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4169d8d3ae71e4079ded3d2f034c45e9c8a5f01bded8da2de29ef62bacf8b30f"
+      ]
     },
     {
       "seq": 97,
@@ -3986,7 +4085,10 @@
       "messageId": "urn:awp:engine-insurance-claim-photos-main:owner-agent:0002",
       "messageDigest": "sha-256:8be2f777d6f001971525f97aa97181f11e436a40c92ea85823ace971db8f4e54",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9399693f21ed1372e13ec0c2025f5d912dc8afbd7a02f58be96ec78a3025ecc3"
+      ]
     },
     {
       "seq": 102,
@@ -4009,7 +4111,10 @@
         },
         "provenance": "signed by The policyholder"
       },
-      "caption": "The policyholder's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The policyholder's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:6f95ab053baa0101ca780ab30fca9afca1a994c2be0c9e90320944dad9cd3906"
+      ]
     },
     {
       "seq": 103,
@@ -4032,7 +4137,10 @@
         },
         "provenance": "signed by The policyholder"
       },
-      "caption": "The policyholder's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The policyholder's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:e194a7667d3d8d250cb947770e0640c985bd3e822eab67279e6784bd32b644d4"
+      ]
     },
     {
       "seq": 104,
@@ -4055,7 +4163,10 @@
         },
         "provenance": "signed by The accepted repair garage"
       },
-      "caption": "The accepted repair garage's repair estimate statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The accepted repair garage's repair estimate statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:956a4c4a884347c4047248727682f71b52442febbfc44c3c36f3f95b2bee6000"
+      ]
     },
     {
       "seq": 105,
@@ -4070,6 +4181,9 @@
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:insurance-claim-photos:owner"
         }
+      ],
+      "linked": [
+        "sha-256:ede80e792749cbe71ae1455987a732070fb36432ecb3c268641e3934b8d53982"
       ]
     },
     {
@@ -4085,6 +4199,9 @@
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:insurance-claim-photos:owner"
         }
+      ],
+      "linked": [
+        "sha-256:05704b32b43a6f3c6c9a799469ee9643477911f8daa91540b64eed75b17e0312"
       ]
     },
     {
@@ -4093,7 +4210,10 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14; claim content opinion."
+      "caption": "Model-output reading of unstructured data sha-256:fed3ce36457a1e922877cb27e5c3f652c386d710e5d620dce2a1362341dbda14; claim content opinion.",
+      "linked": [
+        "sha-256:3a505dadf1a31aa395a38f3dca12d875d29bb8167fc6fc5871d739c602a7b166"
+      ]
     },
     {
       "seq": 108,
@@ -4101,7 +4221,10 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2; claim damage severity."
+      "caption": "Model-output reading of unstructured data sha-256:7f01583e24e64ecacb690ca6bee958fb5d677e74c91e653e2d3ffdc27180dce2; claim damage severity.",
+      "linked": [
+        "sha-256:6a2ccbcb8744adcaf87abebb21f5bcb005f05128a32f4e3f7ef0ab41f8a6be22"
+      ]
     },
     {
       "seq": 109,
@@ -4188,7 +4311,10 @@
       },
       "reason": "recipient-established",
       "caption": "The insurer: Accepted, for A person decides on the original content only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:991766204e80b101399b39e4eca14a047ffff3b67bb74c9cfb14cdaa6596c777"
+      ]
     },
     {
       "seq": 112,
@@ -4301,7 +4427,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The action is held for the named decision makers.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:16c746f52d1db4e7e6b0078bf3ea261fb85cfba1d41f896950a954ef3d5dee34"
+      ]
     },
     {
       "seq": 116,
@@ -4316,5 +4445,6 @@
       },
       "caption": "The gate built this request from the action and the approval rule."
     }
-  ]
+  ],
+  "linkedTable": "linked/insurance-claim-photos--baseline.json"
 }

@@ -82,7 +82,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -184,7 +184,10 @@
       "outcome": "refuse",
       "reason": "source-not-authoritative",
       "caption": "An unverified email sender's payee account statement is refused and kept out of memory.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:aafda17a36713f9003c859aba22f438389e6cf4b5c2d97dabfdfa616573dcf8e"
+      ]
     },
     {
       "seq": 5,
@@ -247,7 +250,11 @@
         "answer": "Accepted, for invoice claims only."
       },
       "caption": "The supplier's invoice statement: The supplier is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:3f010654c3962cf465c7249407505500febe34280638276a39be31e2fa85098a",
+        "sha-256:53193f6671ec56726c437ffe195654fc55ce4213e5d92baae162507b1a24d111"
+      ]
     },
     {
       "seq": 7,
@@ -338,7 +345,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The supplier's invoice statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:d4922039e5bf108682b05b89e029088be36c2b3e7aba3981e6131ee469c47070"
+      ]
     },
     {
       "seq": 11,
@@ -357,7 +367,10 @@
         "asOf": "2026-11-13T09:00:00.000Z",
         "provenance": "signed by The supplier"
       },
-      "caption": "The supplier's invoice statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The supplier's invoice statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:88ef19d0ce45d58d97c3d8d73ac31251b53c21af65e7540390859f1f0b5d9d85"
+      ]
     },
     {
       "seq": 12,
@@ -403,7 +416,10 @@
       },
       "reason": "within-mandate",
       "caption": "The supplier's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:04e278787b4c5ee3913b7cb7287bc8556ca5e49baabd3f260dec4016b198159f"
+      ]
     },
     {
       "seq": 14,
@@ -448,7 +464,10 @@
       },
       "reason": "recipient-established",
       "caption": "The business: Accepted, for Agree the service only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0515834905c2403079c38ecb542ca5c1d6c5093a82b56418317d70f142488bc4"
+      ]
     },
     {
       "seq": 15,
@@ -760,7 +779,10 @@
           "purpose": "urn:purpose:pay-an-invoice"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:39973d2ed94fc94eed342042839bf56cf62caa1bc4005318dd30622cbc41c0b9"
+      ]
     },
     {
       "seq": 21,
@@ -1815,7 +1837,10 @@
           "purpose": "urn:purpose:pay-an-invoice"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:5c5760cd5123c99659ee924fb6b64ea233cc1708dfbb1d0b3ccbeb789b137cb4"
+      ]
     },
     {
       "seq": 29,
@@ -1861,7 +1886,10 @@
       },
       "reason": "within-mandate",
       "caption": "The business's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:90dd3bc4f19334c7d58df76c40d2b2f55a1a785f550f5139f3f55551535444f7"
+      ]
     },
     {
       "seq": 31,
@@ -1906,7 +1934,10 @@
       },
       "reason": "recipient-established",
       "caption": "The supplier: Accepted, for Agree the service only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d892d9ea8c68881ddc2b507db0da9f1f12c07d72c28944de4b41533df9f22780"
+      ]
     },
     {
       "seq": 32,
@@ -2054,7 +2085,10 @@
       "messageId": "urn:awp:engine-pay-an-invoice-branch-1:business-agent:0001",
       "messageDigest": "sha-256:f324b1dcdd4d3a88385d07aad859cf0d51843628b708a008f99d016cbb00d7fb",
       "caption": "The accept message goes to The supplier’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c6ddf83db650b94ed3b26b6a704c81347de58f6bcc0565c8ccd5c990a33c3cff"
+      ]
     },
     {
       "seq": 37,
@@ -2473,7 +2507,10 @@
       "messageId": "urn:awp:engine-pay-an-invoice-branch-1:business-agent:0001",
       "messageDigest": "sha-256:f324b1dcdd4d3a88385d07aad859cf0d51843628b708a008f99d016cbb00d7fb",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:19ed7ad90c919667e1cc6fed1ef188e17820e093cf7165ce3cd3627b3a150ce7"
+      ]
     },
     {
       "seq": 45,
@@ -2552,7 +2589,10 @@
       },
       "reason": "recipient-established",
       "caption": "The business: Accepted, for Agree the service only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:0515834905c2403079c38ecb542ca5c1d6c5093a82b56418317d70f142488bc4"
+      ]
     },
     {
       "seq": 47,
@@ -2700,7 +2740,10 @@
       "messageId": "urn:awp:engine-pay-an-invoice-branch-1:supplier-agent:0003",
       "messageDigest": "sha-256:4ac6cba0d805b89705cb2b311e419bb039a33365b67b638795351b8762949471",
       "caption": "The receipt message goes to The business’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4549132a1afde53745fa46c44ca692b1f82145e2adcd9962100d9f77f038d0d3"
+      ]
     },
     {
       "seq": 52,
@@ -3049,7 +3092,10 @@
       "messageId": "urn:awp:engine-pay-an-invoice-branch-1:supplier-agent:0003",
       "messageDigest": "sha-256:4ac6cba0d805b89705cb2b311e419bb039a33365b67b638795351b8762949471",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:d3b439d951b242cdb569ea0a6071193f36f66820bfb5473730f0b3918ac5478b"
+      ]
     },
     {
       "seq": 60,
@@ -3126,7 +3172,10 @@
       },
       "reason": "within-mandate",
       "caption": "The supplier's mandate covers this action.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:eb2122352bd5622d32f9077eda35c766f96fa9a0ca7ccbbfd27b9419ca10910e"
+      ]
     },
     {
       "seq": 63,
@@ -3171,7 +3220,10 @@
       },
       "reason": "recipient-established",
       "caption": "The business: Accepted, for Request payment only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:0515834905c2403079c38ecb542ca5c1d6c5093a82b56418317d70f142488bc4"
+      ]
     },
     {
       "seq": 64,
@@ -3417,7 +3469,10 @@
           "totalPaymentDue": "300.00"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:b86f515ab1a631971b6bc438255876a0d5a6ce1d773d1ab68bf8dd0b7f2b777d"
+      ]
     },
     {
       "seq": 70,
@@ -3946,7 +4001,11 @@
           "totalPaymentDue": "300.00"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:3f010654c3962cf465c7249407505500febe34280638276a39be31e2fa85098a",
+        "sha-256:53193f6671ec56726c437ffe195654fc55ce4213e5d92baae162507b1a24d111"
+      ]
     },
     {
       "seq": 74,
@@ -4130,7 +4189,10 @@
           "totalPaymentDue": "300.00"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:f6e5223ca89c3e12584df3b9e3af3b686af55c7680dcf3c90d87fcb6fa23cc2e"
+      ]
     },
     {
       "seq": 78,
@@ -4172,7 +4234,10 @@
           "totalPaymentDue": "300.00"
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:e51b51cc9fa401cf56c883166ebdd6675a1ea796cc11eb6979846fa2a5cc3d05"
+      ]
     },
     {
       "seq": 79,
@@ -4508,7 +4573,11 @@
           ]
         },
         "sameDocument": "The protocol object and lifted facts are the same RDF document."
-      }
+      },
+      "linked": [
+        "sha-256:70f152eb6cd6f7b59ac6c155e20c7042b1c4a88582775449f6ae593600be7ba0"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/pay-an-invoice--baseline.json"
 }

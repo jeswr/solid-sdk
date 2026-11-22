@@ -103,7 +103,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -178,7 +178,11 @@
         "answer": "Accepted, for organization role claims only."
       },
       "caption": "The professional register's organization role statement: The professional register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:28e71352356115bdc51089dc118a26fc59bcffdd8f182d127fb2a9aa5626ab20",
+        "sha-256:be5d10ad9301a697d8361a614a52a5a712c7882a3da2de3178734f84cded872a"
+      ]
     },
     {
       "seq": 3,
@@ -225,7 +229,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The professional register's organization role statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:15d9fdc2cc8efbb4daf86c1542417ebbf32c5ff4c3f1ee6a0677c05bf13bbf2e"
+      ]
     },
     {
       "seq": 5,
@@ -269,7 +276,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The professional register's organization role statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f6942719862e1ffb18293fa2852b6daabdcf6410984ed636fe5302b285302382"
+      ]
     },
     {
       "seq": 7,
@@ -292,7 +302,10 @@
         },
         "provenance": "signed by The professional register"
       },
-      "caption": "The professional register's organization role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The professional register's organization role statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:3513240bab067b10d3e019ce1a58083c87a9b58a85204b61cd30d9e3b68960bf"
+      ]
     },
     {
       "seq": 8,
@@ -355,7 +368,11 @@
         "answer": "Accepted, for emergency declaration claims only."
       },
       "caption": "The clinician's emergency declaration statement: The clinician is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:15c0181d05a54a300e54acf13695ed482a5b7d59819a275ca27ea19d97133fb8",
+        "sha-256:6731ce41511b2139a63541cbd46eaa2b1d05e9073c1b11e0c6ef950ddd99fe9e"
+      ]
     },
     {
       "seq": 10,
@@ -402,7 +419,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The clinician's emergency declaration statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:1953973596eb4255e01f47e0961e2e08e2226568b7ce24e948bacabab77c3dde"
+      ]
     },
     {
       "seq": 12,
@@ -446,7 +466,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The clinician's emergency declaration statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4dd5b8ecafb610e43f2c1e213c64c7c51f1556695cd6658436ff02988ad77f52"
+      ]
     },
     {
       "seq": 14,
@@ -469,7 +492,10 @@
         },
         "provenance": "signed by The clinician"
       },
-      "caption": "The clinician's emergency declaration statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The clinician's emergency declaration statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:88244014844312b7d4580bdee95728c0bf66a3aa0c53ed386effec6cb5c0379e"
+      ]
     },
     {
       "seq": 15,
@@ -532,7 +558,11 @@
         "answer": "Accepted, for clinical summary claims only."
       },
       "caption": "The family practice's clinical summary statement: The family practice is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:908d72377f1579eb4441718766241c5c62c5c20f7e908f7a2ed259f14015741a",
+        "sha-256:475fde59bc69325c4ea8248d5bb9ef19712ce75e5f330d67dbe4aa69df280f14"
+      ]
     },
     {
       "seq": 17,
@@ -579,7 +609,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The family practice's clinical summary statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3b70c02963d63c6a48650ed1ea31edac800e4ad238d738f6b8c8ece85f217533"
+      ]
     },
     {
       "seq": 19,
@@ -623,7 +656,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The family practice's clinical summary statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d3e3573b07dbd9d99b82ccb1e396c57b7ae95747f6778b3084641e18d193c939"
+      ]
     },
     {
       "seq": 21,
@@ -646,7 +682,10 @@
         },
         "provenance": "signed by The family practice"
       },
-      "caption": "The family practice's clinical summary statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The family practice's clinical summary statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:cb4ba47e3a99e9ea7c5c9ece921e747f5efdbacb8dbf5066eaed80c93df16359"
+      ]
     },
     {
       "seq": 22,
@@ -738,7 +777,10 @@
       },
       "reason": "recipient-established",
       "caption": "The patient: Accepted, for the unlabelled resource only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:847c11015b9223f22a3b801bfedd9e137e9bcb2a768b810a39df40b39f21ab68"
+      ]
     },
     {
       "seq": 25,
@@ -887,7 +929,10 @@
       },
       "reason": "terms-allow",
       "caption": "The professional register's organization role statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:15d9fdc2cc8efbb4daf86c1542417ebbf32c5ff4c3f1ee6a0677c05bf13bbf2e"
+      ]
     },
     {
       "seq": 30,
@@ -949,7 +994,10 @@
       },
       "reason": "terms-allow",
       "caption": "The clinician's emergency declaration statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1953973596eb4255e01f47e0961e2e08e2226568b7ce24e948bacabab77c3dde"
+      ]
     },
     {
       "seq": 32,
@@ -1039,7 +1087,10 @@
       "messageId": "urn:awp:engine-emergency-access-main:clinician-agent:0002",
       "messageDigest": "sha-256:9a5088fee09696183d4f6314e9574f0cdd32796c6f945e307890dd89715523ea",
       "caption": "The invoke message goes to The patient’s record agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a1d0e26225edebfb2bd8c868bf21189598f3062eb416024c91ff61b72040c058"
+      ]
     },
     {
       "seq": 35,
@@ -1562,7 +1613,11 @@
         "answer": "Accepted, for organization role claims only."
       },
       "caption": "The professional register's organization role statement: The professional register is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:d0f6dcac0ccc3b8f7c2fe1053256e000c7a60ddbdeb86babbce3de0fc5967a49",
+        "sha-256:47e750bd8c403ff5b76a2d3bc7218c42eb73db52355cbc8b33a8fb16972d7f9c"
+      ]
     },
     {
       "seq": 39,
@@ -1601,7 +1656,11 @@
         "answer": "Accepted, for emergency declaration claims only."
       },
       "caption": "The clinician's emergency declaration statement: The clinician is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:99ab9540377743584babc87acd63be599c3cbbed8325b7e5180b1dcd3ff7de86",
+        "sha-256:bfc18d7db299cbb2a6af329e98bc168ae1017f0076cc259d60a1c786885c208f"
+      ]
     },
     {
       "seq": 40,
@@ -1652,7 +1711,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The professional register's organization role statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:15d9fdc2cc8efbb4daf86c1542417ebbf32c5ff4c3f1ee6a0677c05bf13bbf2e"
+      ]
     },
     {
       "seq": 42,
@@ -1680,7 +1742,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The clinician's emergency declaration statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:1953973596eb4255e01f47e0961e2e08e2226568b7ce24e948bacabab77c3dde"
+      ]
     },
     {
       "seq": 43,
@@ -1759,7 +1824,10 @@
       "messageId": "urn:awp:engine-emergency-access-main:clinician-agent:0002",
       "messageDigest": "sha-256:9a5088fee09696183d4f6314e9574f0cdd32796c6f945e307890dd89715523ea",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4b5a43f6e2fff8db507bcbf14fcbc6c06276e030500d6749d7ce24bc1cacb0a8"
+      ]
     },
     {
       "seq": 46,
@@ -1782,7 +1850,10 @@
         },
         "provenance": "signed by The professional register"
       },
-      "caption": "The professional register's organization role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The professional register's organization role statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:0282204fdc35778d060f90ccd4a185d7b2e1e6238c08387e1d1a9471704d1d34"
+      ]
     },
     {
       "seq": 47,
@@ -1805,7 +1876,10 @@
         },
         "provenance": "signed by The clinician"
       },
-      "caption": "The clinician's emergency declaration statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The clinician's emergency declaration statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:2e4e6ff03ef94ae19221dc58d0062643ff66e1ba8ef01ee6075fd1414ff41136"
+      ]
     },
     {
       "seq": 48,
@@ -1897,7 +1971,10 @@
       },
       "reason": "recipient-established",
       "caption": "The clinician: Accepted, for the unlabelled resource only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:568bb67c9761e04dd545124e2f60b768d269303a8e54876a13949defdf5565be"
+      ]
     },
     {
       "seq": 51,
@@ -2103,7 +2180,10 @@
       "messageId": "urn:awp:engine-emergency-access-main:record-agent:0001",
       "messageDigest": "sha-256:aa2191d8404a817516ff77b843a92eeb52d95f11a9980915c174403ae81f08dc",
       "caption": "The deliver message goes to The clinician’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b60de61f6dd42b5792718c3956139c673b63cd5a3bb4bbc114868ae230374efe"
+      ]
     },
     {
       "seq": 58,
@@ -2480,7 +2560,10 @@
       "messageId": "urn:awp:engine-emergency-access-main:record-agent:0001",
       "messageDigest": "sha-256:aa2191d8404a817516ff77b843a92eeb52d95f11a9980915c174403ae81f08dc",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:22e4f0b96000b3ec78134ac507ebd9de1b0dd03707d6e827cf6c84cee27b6c1f"
+      ]
     },
     {
       "seq": 66,
@@ -2564,7 +2647,10 @@
       },
       "reason": "recipient-established",
       "caption": "The patient: Accepted, for the unlabelled resource only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:c0992147860b544d6c1974c3e8cbea0faacd066aa88b5d862a22299d96c6d909"
+      ]
     },
     {
       "seq": 68,
@@ -2712,7 +2798,10 @@
       "messageId": "urn:awp:engine-emergency-access-main:record-agent:0002",
       "messageDigest": "sha-256:e8d4a47d7f54e55e2a7fa92c9c92db4bbec9a113098f1c3d5faac7bd753d8bd4",
       "caption": "The describe message goes to The patient’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:1afb4261fe24bef5f72d569334ebac5d9f3644d8b8837b74cec60c5aa435ff68"
+      ]
     },
     {
       "seq": 73,
@@ -2829,6 +2918,9 @@
           "suite": "fixed-vocabulary",
           "id": "urn:awp:engine-emergency-access-main:record-agent:0002"
         }
+      ],
+      "linked": [
+        "sha-256:89cf6738bd153b020e2bdbf6e9f32a465f430ae4786add861df7a5494df483a9"
       ]
     },
     {
@@ -2913,7 +3005,10 @@
       },
       "reason": "recipient-established",
       "caption": "The trusted contact: Accepted, for the unlabelled resource only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:0ed31c1a863f3779d3cda6c34f23a5eb93d636d3093e73c769ba1655d6fbda69"
+      ]
     },
     {
       "seq": 77,
@@ -3061,7 +3156,10 @@
       "messageId": "urn:awp:engine-emergency-access-main:record-agent:0003",
       "messageDigest": "sha-256:d664a9ccc87011fe01be0679792c118f7e28a45926bab783b84c377a49e01fb3",
       "caption": "The describe message goes to The trusted contact’s agent.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:6c184dcb57823efe3e5de2f4db9f326c3827c2a7583153c39c7db0c84d1c147e"
+      ]
     },
     {
       "seq": 82,
@@ -3178,6 +3276,9 @@
           "suite": "fixed-vocabulary",
           "id": "urn:awp:engine-emergency-access-main:record-agent:0003"
         }
+      ],
+      "linked": [
+        "sha-256:2662e195c4adb9e018f883f0796006cdfc40faab726dfd3367117f348e4fb689"
       ]
     },
     {
@@ -3397,7 +3498,10 @@
       "messageId": "urn:awp:engine-emergency-access-main:record-agent:0002",
       "messageDigest": "sha-256:e8d4a47d7f54e55e2a7fa92c9c92db4bbec9a113098f1c3d5faac7bd753d8bd4",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7ddffad4108978d1f0482e080813f8a931d00a673d5dc24d13d6eb8b646f8660"
+      ]
     },
     {
       "seq": 91,
@@ -3606,7 +3710,10 @@
       "messageId": "urn:awp:engine-emergency-access-main:patient-agent:0001",
       "messageDigest": "sha-256:d6a755ab6bbb15ae10b0f2b738be2d292ef41dff355f1586aa63b4f871530cad",
       "caption": "The description message goes to The patient’s record agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d63eb88f0e1817f6cd8bb76e4917e9f719ac7228d7a87545ba2a41a8115fe406"
+      ]
     },
     {
       "seq": 98,
@@ -4088,7 +4195,10 @@
       "messageId": "urn:awp:engine-emergency-access-main:record-agent:0003",
       "messageDigest": "sha-256:d664a9ccc87011fe01be0679792c118f7e28a45926bab783b84c377a49e01fb3",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7b22f8b8bc0fa0f830a808dcbefe10d733c5977223b70a10d4a0cef3e2a27dec"
+      ]
     },
     {
       "seq": 106,
@@ -4297,7 +4407,10 @@
       "messageId": "urn:awp:engine-emergency-access-main:contact-agent:0001",
       "messageDigest": "sha-256:f3c494d1290a67b27140e3821b9c902d61171b5ba330f2c77562fbf88117bf8b",
       "caption": "The description message goes to The patient’s record agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d6cb5fa36d302602be77f3fb2f20e55ce12fe51a34c5e4a83927c69d66bd0b61"
+      ]
     },
     {
       "seq": 113,
@@ -4562,5 +4675,6 @@
       "caption": "The trusted contact’s agent sends a description message to The patient’s record agent.",
       "gateRun": 1
     }
-  ]
+  ],
+  "linkedTable": "linked/emergency-access--baseline.json"
 }

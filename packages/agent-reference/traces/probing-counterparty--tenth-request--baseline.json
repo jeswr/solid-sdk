@@ -95,7 +95,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [],
@@ -185,7 +185,10 @@
       },
       "reason": "recipient-established",
       "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:292d0ef17a80007b71e8d76af9a222e37eb408fbce9cedda66f474d1ae185e07"
+      ]
     },
     {
       "seq": 4,
@@ -362,7 +365,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0002",
       "messageDigest": "sha-256:b339497d1839ad5a66bde9ac731c3980ac708ee86ef5088e2096abbea506df6c",
       "caption": "The propose message goes to Rowan’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7d384a00ace94a13caaa50607480347ad5e83ce75e11480db607cdbcc8f50cf8"
+      ]
     },
     {
       "seq": 10,
@@ -785,7 +791,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0002",
       "messageDigest": "sha-256:b339497d1839ad5a66bde9ac731c3980ac708ee86ef5088e2096abbea506df6c",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:92a137f884e28d53fb49239ae5f02da8f9dd6559063210ebea370e4f888cfcfb"
+      ]
     },
     {
       "seq": 18,
@@ -872,7 +881,10 @@
       },
       "reason": "recipient-established",
       "caption": "The fictional service: Accepted, for A bounded request for contact details only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6497dd6f6866ddefe7568e4f5b2b4345904f3a8594862367805c8d60da3e24c4"
+      ]
     },
     {
       "seq": 21,
@@ -1020,7 +1032,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:person-agent:0001",
       "messageDigest": "sha-256:11e3b5d9c0998c33489860351aaa64f9df51526b56c50cd58d0f162410372bee",
       "caption": "The accept message goes to The service’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:162809aec0622062d42a1d0b23f808ab9b25e57945e0ac9e0b9ddb7ef5d20ac8"
+      ]
     },
     {
       "seq": 26,
@@ -1411,7 +1426,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:person-agent:0001",
       "messageDigest": "sha-256:11e3b5d9c0998c33489860351aaa64f9df51526b56c50cd58d0f162410372bee",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6549f4a4ed95920bb8273020433c483451c83e650ea3fc69af57f3422c54f28e"
+      ]
     },
     {
       "seq": 34,
@@ -1498,7 +1516,10 @@
       },
       "reason": "recipient-established",
       "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:292d0ef17a80007b71e8d76af9a222e37eb408fbce9cedda66f474d1ae185e07"
+      ]
     },
     {
       "seq": 37,
@@ -1675,7 +1696,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0003",
       "messageDigest": "sha-256:36882bbbdb9bef126f2dcb5ab60d4326b101544f2cf907dcf4c2df779762c2b9",
       "caption": "The invoke message goes to Rowan’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:129d670cd55990c4abddbaa6c8c8847b92cc90d66c3ef0f285b619bde719136f"
+      ]
     },
     {
       "seq": 43,
@@ -2088,7 +2112,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0003",
       "messageDigest": "sha-256:36882bbbdb9bef126f2dcb5ab60d4326b101544f2cf907dcf4c2df779762c2b9",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:64e24e8ee6838f5338d55f79a33f6c8cba69b5c972717d6c27a7487c961df551"
+      ]
     },
     {
       "seq": 51,
@@ -2134,7 +2161,10 @@
         "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
       },
       "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:2ec95158e5bd7899a50f9316ad6615df40f3fe7c8fb802773923ec6be92173aa"
+      ]
     },
     {
       "seq": 53,
@@ -2156,7 +2186,10 @@
       "outcome": "stop",
       "reason": "not-authorised",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:cbb2658e3da60dc014c985fa509afbd1ac3df011cb08fb02891b097c1edd82cb"
+      ]
     },
     {
       "seq": 54,
@@ -2243,7 +2276,10 @@
       },
       "reason": "recipient-established",
       "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:292d0ef17a80007b71e8d76af9a222e37eb408fbce9cedda66f474d1ae185e07"
+      ]
     },
     {
       "seq": 57,
@@ -2420,7 +2456,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0004",
       "messageDigest": "sha-256:d3b1a292ae66e880e8750f7e72d47bfb96d546da817e0209364d64b7713f7980",
       "caption": "The invoke message goes to Rowan’s agent.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:6d84239bd1615690f1f7730479d3c54ddd27832c886c68e905693e380ab671d0"
+      ]
     },
     {
       "seq": 63,
@@ -2833,7 +2872,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0004",
       "messageDigest": "sha-256:d3b1a292ae66e880e8750f7e72d47bfb96d546da817e0209364d64b7713f7980",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:0e674caf39ac2cd60c90bb2b700fc00441b460a378cfe3dde7839d9799cdc842"
+      ]
     },
     {
       "seq": 71,
@@ -2879,7 +2921,10 @@
         "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
       },
       "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:2ec95158e5bd7899a50f9316ad6615df40f3fe7c8fb802773923ec6be92173aa"
+      ]
     },
     {
       "seq": 73,
@@ -2901,7 +2946,10 @@
       "outcome": "stop",
       "reason": "not-authorised",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:7ffa3e6756131a1174ce5505ccc36e9ed9d66cb0f5fb0a0c4b051ef1d151332e"
+      ]
     },
     {
       "seq": 74,
@@ -2988,7 +3036,10 @@
       },
       "reason": "recipient-established",
       "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:292d0ef17a80007b71e8d76af9a222e37eb408fbce9cedda66f474d1ae185e07"
+      ]
     },
     {
       "seq": 77,
@@ -3165,7 +3216,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0005",
       "messageDigest": "sha-256:056f0b0783b7aa356f1a7c55b5202b2bd13d25a58ab2da4313c4aafe37b31dde",
       "caption": "The invoke message goes to Rowan’s agent.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:ec0e35efb5c84e60600b6accf508e1da13efb2ae6282c5fab9311d20b02fe798"
+      ]
     },
     {
       "seq": 83,
@@ -3578,7 +3632,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0005",
       "messageDigest": "sha-256:056f0b0783b7aa356f1a7c55b5202b2bd13d25a58ab2da4313c4aafe37b31dde",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:ad8e00dd96533a9c45c88253d166c754401c37231eecf9d108732f69432d2851"
+      ]
     },
     {
       "seq": 91,
@@ -3624,7 +3681,10 @@
         "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
       },
       "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:2ec95158e5bd7899a50f9316ad6615df40f3fe7c8fb802773923ec6be92173aa"
+      ]
     },
     {
       "seq": 93,
@@ -3646,7 +3706,10 @@
       "outcome": "stop",
       "reason": "not-authorised",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:f3a94d446905bcd387d202bc1ee8b0139ac8cf7158ab061da1b0026833322732"
+      ]
     },
     {
       "seq": 94,
@@ -3733,7 +3796,10 @@
       },
       "reason": "recipient-established",
       "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:292d0ef17a80007b71e8d76af9a222e37eb408fbce9cedda66f474d1ae185e07"
+      ]
     },
     {
       "seq": 97,
@@ -3910,7 +3976,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0006",
       "messageDigest": "sha-256:cead95d05003f21b94c99b2784da5986b8c0b5015cfcb23301339e11c82a6d63",
       "caption": "The invoke message goes to Rowan’s agent.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:148e9c8fb7a4707c6b5bac1f8990777162d1af6ecd60716676936ecc2791d40d"
+      ]
     },
     {
       "seq": 103,
@@ -4323,7 +4392,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0006",
       "messageDigest": "sha-256:cead95d05003f21b94c99b2784da5986b8c0b5015cfcb23301339e11c82a6d63",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:90ec73922ba86584cee3532720693a16f42f739215037d53af726b613a3388dc"
+      ]
     },
     {
       "seq": 111,
@@ -4369,7 +4441,10 @@
         "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
       },
       "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:2ec95158e5bd7899a50f9316ad6615df40f3fe7c8fb802773923ec6be92173aa"
+      ]
     },
     {
       "seq": 113,
@@ -4391,7 +4466,10 @@
       "outcome": "stop",
       "reason": "not-authorised",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:a4fe746f09cf42d494a374f100dd6a71ea295b6835059dc43d8680aace29226e"
+      ]
     },
     {
       "seq": 114,
@@ -4478,7 +4556,10 @@
       },
       "reason": "recipient-established",
       "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:292d0ef17a80007b71e8d76af9a222e37eb408fbce9cedda66f474d1ae185e07"
+      ]
     },
     {
       "seq": 117,
@@ -4655,7 +4736,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0007",
       "messageDigest": "sha-256:f37aa56d0e49841d1a8570bb9a2e24de86fa6b14bd15a03c3e273755e0b869dd",
       "caption": "The invoke message goes to Rowan’s agent.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:545fea48adc643b7c1fa0d295324ff8465c55a8f0ef0dd1e32951316dd412813"
+      ]
     },
     {
       "seq": 123,
@@ -5068,7 +5152,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0007",
       "messageDigest": "sha-256:f37aa56d0e49841d1a8570bb9a2e24de86fa6b14bd15a03c3e273755e0b869dd",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:ec87bf985e29d0249ebdc54c8379d2c1cb7b02e8a5ebd9a1f7c11467694ce485"
+      ]
     },
     {
       "seq": 131,
@@ -5114,7 +5201,10 @@
         "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
       },
       "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:2ec95158e5bd7899a50f9316ad6615df40f3fe7c8fb802773923ec6be92173aa"
+      ]
     },
     {
       "seq": 133,
@@ -5136,7 +5226,10 @@
       "outcome": "stop",
       "reason": "not-authorised",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:7f443c2da6b33609503141ce438caf86b77cabd27b4e8043f56497bab989501c"
+      ]
     },
     {
       "seq": 134,
@@ -5223,7 +5316,10 @@
       },
       "reason": "recipient-established",
       "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only.",
-      "gateRun": 7
+      "gateRun": 7,
+      "linked": [
+        "sha-256:292d0ef17a80007b71e8d76af9a222e37eb408fbce9cedda66f474d1ae185e07"
+      ]
     },
     {
       "seq": 137,
@@ -5400,7 +5496,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0008",
       "messageDigest": "sha-256:175d8bf536fa17475305c0b41b1fea20f2f35f726bc51fa87ff4d7182db61bc8",
       "caption": "The invoke message goes to Rowan’s agent.",
-      "gateRun": 7
+      "gateRun": 7,
+      "linked": [
+        "sha-256:dc12184e288d2920be48aeca09975576cbadd3d458fb4764d026ef46277490d0"
+      ]
     },
     {
       "seq": 143,
@@ -5813,7 +5912,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0008",
       "messageDigest": "sha-256:175d8bf536fa17475305c0b41b1fea20f2f35f726bc51fa87ff4d7182db61bc8",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 7
+      "gateRun": 7,
+      "linked": [
+        "sha-256:7fd5cf2b507627d6d3ee51c74d4b30e73431e12f71788706cc22b9564399b492"
+      ]
     },
     {
       "seq": 151,
@@ -5859,7 +5961,10 @@
         "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
       },
       "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service.",
-      "gateRun": 7
+      "gateRun": 7,
+      "linked": [
+        "sha-256:2ec95158e5bd7899a50f9316ad6615df40f3fe7c8fb802773923ec6be92173aa"
+      ]
     },
     {
       "seq": 153,
@@ -5881,7 +5986,10 @@
       "outcome": "stop",
       "reason": "not-authorised",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 7
+      "gateRun": 7,
+      "linked": [
+        "sha-256:3dbb2115c659d314b3911bc3eb9bab4cbd0da98e14ce9d04407e9adc3635d35a"
+      ]
     },
     {
       "seq": 154,
@@ -5968,7 +6076,10 @@
       },
       "reason": "recipient-established",
       "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only.",
-      "gateRun": 8
+      "gateRun": 8,
+      "linked": [
+        "sha-256:292d0ef17a80007b71e8d76af9a222e37eb408fbce9cedda66f474d1ae185e07"
+      ]
     },
     {
       "seq": 157,
@@ -6145,7 +6256,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0009",
       "messageDigest": "sha-256:518d2e12bafa6d7365c8ef9553d9e30e560c480766a253e2c711e7202a9c9021",
       "caption": "The invoke message goes to Rowan’s agent.",
-      "gateRun": 8
+      "gateRun": 8,
+      "linked": [
+        "sha-256:02ad9e732afab26e6e7362e4a509431ecbd7dbc140eef81ecf65adb4aee1dc11"
+      ]
     },
     {
       "seq": 163,
@@ -6558,7 +6672,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0009",
       "messageDigest": "sha-256:518d2e12bafa6d7365c8ef9553d9e30e560c480766a253e2c711e7202a9c9021",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 8
+      "gateRun": 8,
+      "linked": [
+        "sha-256:03e6372adaa55a7ee5cc63c4ee731d7513216048b9f49e082f2a860423237370"
+      ]
     },
     {
       "seq": 171,
@@ -6604,7 +6721,10 @@
         "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
       },
       "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service.",
-      "gateRun": 8
+      "gateRun": 8,
+      "linked": [
+        "sha-256:2ec95158e5bd7899a50f9316ad6615df40f3fe7c8fb802773923ec6be92173aa"
+      ]
     },
     {
       "seq": 173,
@@ -6626,7 +6746,10 @@
       "outcome": "stop",
       "reason": "not-authorised",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 8
+      "gateRun": 8,
+      "linked": [
+        "sha-256:983388cc87c6fd4e0d7496f6fcb56bf14c70106f88d213e64570b6cccad4f077"
+      ]
     },
     {
       "seq": 174,
@@ -6713,7 +6836,10 @@
       },
       "reason": "recipient-established",
       "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only.",
-      "gateRun": 9
+      "gateRun": 9,
+      "linked": [
+        "sha-256:292d0ef17a80007b71e8d76af9a222e37eb408fbce9cedda66f474d1ae185e07"
+      ]
     },
     {
       "seq": 177,
@@ -6890,7 +7016,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0010",
       "messageDigest": "sha-256:cecb16aed1f49e410fba7a770bed2df2906263c36005d3d0a96b0daa4cfec912",
       "caption": "The invoke message goes to Rowan’s agent.",
-      "gateRun": 9
+      "gateRun": 9,
+      "linked": [
+        "sha-256:09a3d0552350a7d301a834cb7b81aee3079fdfcaf764689f9f16bf07a0af9d58"
+      ]
     },
     {
       "seq": 183,
@@ -7303,7 +7432,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0010",
       "messageDigest": "sha-256:cecb16aed1f49e410fba7a770bed2df2906263c36005d3d0a96b0daa4cfec912",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 9
+      "gateRun": 9,
+      "linked": [
+        "sha-256:7629103144f59c51158f77a9976edba03cd6a3dbb1793089251b6184c93b8b56"
+      ]
     },
     {
       "seq": 191,
@@ -7349,7 +7481,10 @@
         "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
       },
       "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service.",
-      "gateRun": 9
+      "gateRun": 9,
+      "linked": [
+        "sha-256:2ec95158e5bd7899a50f9316ad6615df40f3fe7c8fb802773923ec6be92173aa"
+      ]
     },
     {
       "seq": 193,
@@ -7371,7 +7506,10 @@
       "outcome": "stop",
       "reason": "not-authorised",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 9
+      "gateRun": 9,
+      "linked": [
+        "sha-256:6d1676e2643111b05d23d9ef5b5406eaac681a298b6dd2361fadb3a0da0444e2"
+      ]
     },
     {
       "seq": 194,
@@ -7458,7 +7596,10 @@
       },
       "reason": "recipient-established",
       "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only.",
-      "gateRun": 10
+      "gateRun": 10,
+      "linked": [
+        "sha-256:292d0ef17a80007b71e8d76af9a222e37eb408fbce9cedda66f474d1ae185e07"
+      ]
     },
     {
       "seq": 197,
@@ -7635,7 +7776,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0011",
       "messageDigest": "sha-256:3767008fdaeceb9edc91e528ca7c654aaeed4bd176bd3be37ee3b043211c4279",
       "caption": "The invoke message goes to Rowan’s agent.",
-      "gateRun": 10
+      "gateRun": 10,
+      "linked": [
+        "sha-256:cab13f2a4df079a29bd7966b83c096efc27d36831f03ca320bb3ac9d3e19b05c"
+      ]
     },
     {
       "seq": 203,
@@ -8048,7 +8192,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0011",
       "messageDigest": "sha-256:3767008fdaeceb9edc91e528ca7c654aaeed4bd176bd3be37ee3b043211c4279",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 10
+      "gateRun": 10,
+      "linked": [
+        "sha-256:31cd7f1c23ce479f24843f43af47a29606848e5f596b1ce59dd8a69c6a4304d8"
+      ]
     },
     {
       "seq": 211,
@@ -8094,7 +8241,10 @@
         "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
       },
       "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service.",
-      "gateRun": 10
+      "gateRun": 10,
+      "linked": [
+        "sha-256:2ec95158e5bd7899a50f9316ad6615df40f3fe7c8fb802773923ec6be92173aa"
+      ]
     },
     {
       "seq": 213,
@@ -8116,7 +8266,10 @@
       "outcome": "stop",
       "reason": "not-authorised",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 10
+      "gateRun": 10,
+      "linked": [
+        "sha-256:86f9084437dd74842d16798a7b6584c672d74246bd7d159a48fd1d6af787297e"
+      ]
     },
     {
       "seq": 214,
@@ -8203,7 +8356,10 @@
       },
       "reason": "recipient-established",
       "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only.",
-      "gateRun": 11
+      "gateRun": 11,
+      "linked": [
+        "sha-256:292d0ef17a80007b71e8d76af9a222e37eb408fbce9cedda66f474d1ae185e07"
+      ]
     },
     {
       "seq": 217,
@@ -8380,7 +8536,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0012",
       "messageDigest": "sha-256:d63b20b1a46bdf9790ce8029adc58e2dac7bc169a919beea153b12f555c2d3b8",
       "caption": "The invoke message goes to Rowan’s agent.",
-      "gateRun": 11
+      "gateRun": 11,
+      "linked": [
+        "sha-256:6548fc7a37ea5c52c90a7e84ba7b30a0c3dbee1f9c100cab12ec88e9b7854526"
+      ]
     },
     {
       "seq": 223,
@@ -8793,7 +8952,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-tenth-request:service-agent:0012",
       "messageDigest": "sha-256:d63b20b1a46bdf9790ce8029adc58e2dac7bc169a919beea153b12f555c2d3b8",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 11
+      "gateRun": 11,
+      "linked": [
+        "sha-256:6b4d269f44756c796c8aff6f2b361f4e3e1aeeead62c999d6e10c2c75e0aafef"
+      ]
     },
     {
       "seq": 231,
@@ -8839,7 +9001,10 @@
         "text": "No rule in Rowan, a fictional customer's mandate lets the agent take the next step in the unlabelled resource with The fictional service for Service query (no applicable grant in the mandate (deny by default))."
       },
       "caption": "Rowan, a fictional customer's mandate does not allow this: take the next step in the unlabelled resource with The fictional service.",
-      "gateRun": 11
+      "gateRun": 11,
+      "linked": [
+        "sha-256:2ec95158e5bd7899a50f9316ad6615df40f3fe7c8fb802773923ec6be92173aa"
+      ]
     },
     {
       "seq": 233,
@@ -8861,7 +9026,11 @@
       "outcome": "stop",
       "reason": "not-authorised",
       "caption": "The action is stopped; nothing leaves.",
-      "gateRun": 11
+      "gateRun": 11,
+      "linked": [
+        "sha-256:cc637d9cca88822af205fba7bfcd9aa3f8a201779b4efd0f820c5538961b7ebd"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/probing-counterparty--baseline.json"
 }

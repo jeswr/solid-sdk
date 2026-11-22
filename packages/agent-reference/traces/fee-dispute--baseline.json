@@ -80,7 +80,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -179,7 +179,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for Form the data-use agreement only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6c55657de2078b48606e25b2fc265b113a18ce04ccef76785ee6ffe27adedff9"
+      ]
     },
     {
       "seq": 4,
@@ -356,7 +359,10 @@
       "messageId": "urn:awp:engine-fee-dispute-main:owner-agent:0002",
       "messageDigest": "sha-256:3ee9f698c9f6256d92cedf194cc66d23518ec65663c4fbc14012ccf7d473a597",
       "caption": "The propose message goes to The lender’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a2107a213dcaee5bc95be5a8cf8a598f78cccf64e1fb5bf488d0e89f9c017d83"
+      ]
     },
     {
       "seq": 10,
@@ -783,7 +789,10 @@
       "messageId": "urn:awp:engine-fee-dispute-main:owner-agent:0002",
       "messageDigest": "sha-256:3ee9f698c9f6256d92cedf194cc66d23518ec65663c4fbc14012ccf7d473a597",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9f685f4c3835ccfe539de4d9ba9217a557bfff2961e8c86911379e07c2dd4b3a"
+      ]
     },
     {
       "seq": 18,
@@ -870,7 +879,10 @@
       },
       "reason": "recipient-established",
       "caption": "Sam: Accepted, for Form the data-use agreement only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d452ec46802e1825906ad4f302a70085738b0ee485b0346404cc90d8e80ce1c5"
+      ]
     },
     {
       "seq": 21,
@@ -1018,7 +1030,10 @@
       "messageId": "urn:awp:engine-fee-dispute-main:lender-agent:0001",
       "messageDigest": "sha-256:c63c352ffc833534fc16ab5a47648e729949b8147f28b0ee3c91e6c65aa6fd1e",
       "caption": "The accept message goes to Sam’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:808d8c0b026a78704cd5efc759993585f16116f81331600ce583723bc7ddc8e3"
+      ]
     },
     {
       "seq": 26,
@@ -1243,7 +1258,10 @@
       },
       "reason": "recipient-established",
       "caption": "Sam: Accepted, for Form the data-use agreement only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:d452ec46802e1825906ad4f302a70085738b0ee485b0346404cc90d8e80ce1c5"
+      ]
     },
     {
       "seq": 30,
@@ -1420,7 +1438,10 @@
       "messageId": "urn:awp:engine-fee-dispute-main:lender-agent:0002",
       "messageDigest": "sha-256:8347ba77a9cbc16018e29612c5366394fcd9d706eb73a38b48470a2026938bfd",
       "caption": "The invoke message goes to Sam’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9627734c45c150384ad34f2561eff7e294f89d2ccf5d3d519e6a0582d5bfcc31"
+      ]
     },
     {
       "seq": 36,
@@ -1839,7 +1860,10 @@
       "messageId": "urn:awp:engine-fee-dispute-main:lender-agent:0001",
       "messageDigest": "sha-256:c63c352ffc833534fc16ab5a47648e729949b8147f28b0ee3c91e6c65aa6fd1e",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cfcb4ad07cebedd910967bb27e8faf08758bd322f273489ebce4111be74045f4"
+      ]
     },
     {
       "seq": 44,
@@ -2124,7 +2148,10 @@
       "messageId": "urn:awp:engine-fee-dispute-main:lender-agent:0002",
       "messageDigest": "sha-256:8347ba77a9cbc16018e29612c5366394fcd9d706eb73a38b48470a2026938bfd",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:677c1281178999bdbc986b168cc38a8c95fb1363f227be50bf1614a19983fbeb"
+      ]
     },
     {
       "seq": 51,
@@ -2214,7 +2241,10 @@
       },
       "reason": "recipient-established",
       "caption": "The independent fictional ombudsman: Accepted, for Release an exact record segment to the forum only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:d63a9e40dc2ac1626a7c75b1444c00ca32d10d2f444d264eeeae1b9c1c8c606c"
+      ]
     },
     {
       "seq": 54,
@@ -2282,7 +2312,10 @@
         "text": ""
       },
       "caption": "The mandate says to ask Sam first.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:70a9b00f4c63e8dc425f2d7b3f3dacd72cb25e9aac96be803ad17c3cd8e29c10"
+      ]
     },
     {
       "seq": 56,
@@ -2305,7 +2338,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The gate holds the action and asks Sam.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:3b57b4b164511be0d96f3edfc2217d0ed39f784c88805f975db5ac9359a1cde7"
+      ]
     },
     {
       "seq": 57,
@@ -2412,7 +2448,10 @@
       },
       "reason": "recipient-established",
       "caption": "The independent fictional ombudsman: Accepted, for Release an exact record segment to the forum only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:d63a9e40dc2ac1626a7c75b1444c00ca32d10d2f444d264eeeae1b9c1c8c606c"
+      ]
     },
     {
       "seq": 61,
@@ -2542,7 +2581,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: share Release an exact record segment to the forum with The independent fictional ombudsman.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:a104cd02e23909e497895c0e5bf5527660122c5830d0086b9cf9bf87fe4996c1"
+      ]
     },
     {
       "seq": 65,
@@ -2710,7 +2752,10 @@
       },
       "reason": "recipient-established",
       "caption": "The independent fictional ombudsman: Accepted, for Release an exact record segment to the forum only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:59a74767b3a571378d243e235d236ff73ec59a9556f2dc75031a6d583a0da063"
+      ]
     },
     {
       "seq": 74,
@@ -2778,7 +2823,10 @@
         "text": ""
       },
       "caption": "The mandate says to ask The lender first.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:250728157f9615b0da301b1ecc30c5b2daaecdf6095797526f1da82b1e1bccee"
+      ]
     },
     {
       "seq": 76,
@@ -2801,7 +2849,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The gate holds the action and asks The lender.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:ff531ccfa516588448285c0aca332fb60b5c5d6dd38708035d654720f85d6483"
+      ]
     },
     {
       "seq": 77,
@@ -2908,7 +2959,10 @@
       },
       "reason": "recipient-established",
       "caption": "The independent fictional ombudsman: Accepted, for Release an exact record segment to the forum only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:59a74767b3a571378d243e235d236ff73ec59a9556f2dc75031a6d583a0da063"
+      ]
     },
     {
       "seq": 81,
@@ -3038,7 +3092,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: share Release an exact record segment to the forum with The independent fictional ombudsman.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:344b97af8ab02ce978b950dd86d075e62a995d83e56bfbfa12729bdaa049eebf"
+      ]
     },
     {
       "seq": 85,
@@ -3184,7 +3241,11 @@
         "answer": "Accepted, for forum decision claims only."
       },
       "caption": "The independent fictional ombudsman's forum decision statement: The independent fictional ombudsman is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:eea3059f2942f45edf77419feb4cdaf1802bf814a473317f1665ce5a2f8e3bb2",
+        "sha-256:d58b35a987bc7c54b80c8c6bfcb5a3ae8a49bc4c4c110ea56dd155679aa1cf74"
+      ]
     },
     {
       "seq": 93,
@@ -3231,7 +3292,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The independent fictional ombudsman's forum decision statement: its terms allow this: .",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:26ced7cd200c2d51631721a352183de719abdb3cc402c1b0207dc565195d8380"
+      ]
     },
     {
       "seq": 95,
@@ -3275,7 +3339,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The independent fictional ombudsman's forum decision statement is admitted.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:1f62ec4001d75471d0398cfedc56b4e970c1a302caeff583f63c53478b2008f8"
+      ]
     },
     {
       "seq": 97,
@@ -3298,7 +3365,11 @@
         },
         "provenance": "signed by The independent fictional ombudsman"
       },
-      "caption": "The independent fictional ombudsman's forum decision statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The independent fictional ombudsman's forum decision statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:1cc87f8acd091227f263df828075581897a0bbaae21fd1fe31720114d96cd44e"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/fee-dispute--baseline.json"
 }

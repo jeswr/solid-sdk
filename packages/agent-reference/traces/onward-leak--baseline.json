@@ -104,7 +104,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -183,7 +183,11 @@
         "answer": "Accepted, for income total claims only."
       },
       "caption": "The person’s bank's income total statement: The person’s bank is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5f37282d14272fe0ddbc2786ca08c9e34fb5fcd2b004dcbcbf85c25eecbc8594",
+        "sha-256:1101b85e273260f6edd5536358fd9be2265fc04bdfb653c62e97d3b77c316f71"
+      ]
     },
     {
       "seq": 3,
@@ -230,7 +234,10 @@
         "text": "Its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company."
       },
       "caption": "The person’s bank's income total statement: its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e0e9051f03bca6f0edaa8f03fa77090c5363f508d30edd50a44ae90e4d06534a"
+      ]
     },
     {
       "seq": 5,
@@ -274,7 +281,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The person’s bank's income total statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ff601d7eef044da0f6b7772b11b8f362fc79391108341c3987c6e9a758c22718"
+      ]
     },
     {
       "seq": 7,
@@ -297,7 +307,10 @@
         },
         "provenance": "signed by The person’s bank"
       },
-      "caption": "The person’s bank's income total statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The person’s bank's income total statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c02c43c9bb7c06488299b8bcee72282dd56337d939b186d5a0fd06910dee67de"
+      ]
     },
     {
       "seq": 8,
@@ -384,7 +397,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for Agree the lender’s restrictions only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:63208da75952d50bd9e8c671fd315724a45c7a10c06aa792dfc4c80058c340cb"
+      ]
     },
     {
       "seq": 11,
@@ -561,7 +577,10 @@
       "messageId": "urn:awp:engine-onward-leak-main:person-agent:0002",
       "messageDigest": "sha-256:911fb80dcbdcfcd202fc703d34903dcfba9ea743bc268e5191040cdb99bcce1e",
       "caption": "The propose message goes to The lender’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:87d7827f9ee975109c16b3154a0d622700b00fb8d7b161b560f76c752a4c8322"
+      ]
     },
     {
       "seq": 17,
@@ -1000,7 +1019,10 @@
       "messageId": "urn:awp:engine-onward-leak-main:person-agent:0002",
       "messageDigest": "sha-256:911fb80dcbdcfcd202fc703d34903dcfba9ea743bc268e5191040cdb99bcce1e",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2577e957fa47a9681d4f50a0c92d1aa17412bac6c4067e61b795374202bded3f"
+      ]
     },
     {
       "seq": 25,
@@ -1087,7 +1109,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Agree the lender’s restrictions only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3d48e2db2abd586c15671236395809cc7c82a0a39077963197ae661907d19bff"
+      ]
     },
     {
       "seq": 28,
@@ -1235,7 +1260,10 @@
       "messageId": "urn:awp:engine-onward-leak-main:owner-agent:0001",
       "messageDigest": "sha-256:9150fd6f15c541a4e3a208f01a34c28c4e2c15a8cbff1eebe1609ce9ce4d6088",
       "caption": "The accept message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:814595c6fa9d481c7c8624edb4ab6282549c8697762dea0a341012941400c87b"
+      ]
     },
     {
       "seq": 33,
@@ -1646,7 +1674,10 @@
       "messageId": "urn:awp:engine-onward-leak-main:owner-agent:0001",
       "messageDigest": "sha-256:9150fd6f15c541a4e3a208f01a34c28c4e2c15a8cbff1eebe1609ce9ce4d6088",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9b2599e6e5b8b85cb102d8d78f48780cf198d4fcefdccf48db7164490b1dce29"
+      ]
     },
     {
       "seq": 41,
@@ -1733,7 +1764,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for Agree the lender’s restrictions only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:63208da75952d50bd9e8c671fd315724a45c7a10c06aa792dfc4c80058c340cb"
+      ]
     },
     {
       "seq": 44,
@@ -1882,7 +1916,10 @@
       },
       "reason": "terms-allow",
       "caption": "The person’s bank's income total statement: its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:e0e9051f03bca6f0edaa8f03fa77090c5363f508d30edd50a44ae90e4d06534a"
+      ]
     },
     {
       "seq": 49,
@@ -1972,7 +2009,10 @@
       "messageId": "urn:awp:engine-onward-leak-main:person-agent:0003",
       "messageDigest": "sha-256:063673d64202865883615a9bc6bbde62d2b88b0a77e40b336436585dbbbe51a1",
       "caption": "The invoke message goes to The lender’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:ed00004361bab8bf5abcd4c2eb3d421b1060c3d9e7fc82e81b99d90502addb31"
+      ]
     },
     {
       "seq": 52,
@@ -2529,7 +2569,11 @@
         "answer": "Accepted, for income total claims only."
       },
       "caption": "The person’s bank's income total statement: The person’s bank is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9ff4a669d945e4be244801c49f0572e1d01239175e17bb7e0a8ce05742b7233b",
+        "sha-256:2db947012798d7f1123273535c185b67a6175ffa9f0fb9e79acb7b390ffaaac0"
+      ]
     },
     {
       "seq": 56,
@@ -2580,7 +2624,10 @@
         "text": "Its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company."
       },
       "caption": "The person’s bank's income total statement: its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:e0e9051f03bca6f0edaa8f03fa77090c5363f508d30edd50a44ae90e4d06534a"
+      ]
     },
     {
       "seq": 58,
@@ -2621,7 +2668,10 @@
       "messageId": "urn:awp:engine-onward-leak-main:person-agent:0003",
       "messageDigest": "sha-256:063673d64202865883615a9bc6bbde62d2b88b0a77e40b336436585dbbbe51a1",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:deadb57d01c144c082815f83ec6810b8d49e6a21a26cc2c7b1c6b07a1ada2ad0"
+      ]
     },
     {
       "seq": 60,
@@ -2644,7 +2694,10 @@
         },
         "provenance": "signed by The person’s bank"
       },
-      "caption": "The person’s bank's income total statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The person’s bank's income total statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:8fd21033d47859e2a17c2422be6e486def2b4776f696e8cd141ac1757d276ad1"
+      ]
     },
     {
       "seq": 61,
@@ -2738,7 +2791,10 @@
       },
       "reason": "recipient-established",
       "caption": "The independent fictional ombudsman: Accepted, for Release an exact record segment to the forum only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:f605e26f52055ed0468bc22c40f4f5edef10558d63f7ff2f3594580c76f93a6e"
+      ]
     },
     {
       "seq": 64,
@@ -2810,7 +2866,10 @@
       },
       "reason": "terms-allow",
       "caption": "The person’s bank's income total statement: its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:e0e9051f03bca6f0edaa8f03fa77090c5363f508d30edd50a44ae90e4d06534a"
+      ]
     },
     {
       "seq": 66,
@@ -2846,7 +2905,10 @@
         "text": ""
       },
       "caption": "The mandate says to ask The person first.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:5f766fa3461f7953a87d5084a8dc682ac3a558b8ef157a154322b961c7e7827c"
+      ]
     },
     {
       "seq": 67,
@@ -2871,7 +2933,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The gate holds the action and asks The person.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:8864bf08ff274e8ed8261b450ef3eb3396c94769b4cba21d203a16687d52e857"
+      ]
     },
     {
       "seq": 68,
@@ -2982,7 +3047,10 @@
       },
       "reason": "recipient-established",
       "caption": "The independent fictional ombudsman: Accepted, for Release an exact record segment to the forum only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:f605e26f52055ed0468bc22c40f4f5edef10558d63f7ff2f3594580c76f93a6e"
+      ]
     },
     {
       "seq": 72,
@@ -3054,7 +3122,10 @@
       },
       "reason": "terms-allow",
       "caption": "The person’s bank's income total statement: its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:e0e9051f03bca6f0edaa8f03fa77090c5363f508d30edd50a44ae90e4d06534a"
+      ]
     },
     {
       "seq": 74,
@@ -3156,7 +3227,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: share The person’s bank's income total statement with The independent fictional ombudsman.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:98a028c153ff1a2c02429997cab3d77758b6febc150bbf1f59e3d7dd5c8adda0"
+      ]
     },
     {
       "seq": 77,
@@ -3328,7 +3402,10 @@
       },
       "reason": "recipient-established",
       "caption": "The independent fictional ombudsman: Accepted, for Release an exact record segment to the forum only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:edc9ede7a9e353b0b4cc5676582745dde699a73e34bff0f80526da709fe97c93"
+      ]
     },
     {
       "seq": 86,
@@ -3400,7 +3477,10 @@
       },
       "reason": "terms-allow",
       "caption": "The person’s bank's income total statement: its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:e0e9051f03bca6f0edaa8f03fa77090c5363f508d30edd50a44ae90e4d06534a"
+      ]
     },
     {
       "seq": 88,
@@ -3436,7 +3516,10 @@
         "text": ""
       },
       "caption": "The mandate says to ask The lender first.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:8f9f6902720af75a4979ea8e53faf5389358f9d7265de41991747c288ed0802c"
+      ]
     },
     {
       "seq": 89,
@@ -3461,7 +3544,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The gate holds the action and asks The lender.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:d81bbc630256bb393ced2ffdd67346b34215f283448e49f81776a5de5e2c7e7b"
+      ]
     },
     {
       "seq": 90,
@@ -3572,7 +3658,10 @@
       },
       "reason": "recipient-established",
       "caption": "The independent fictional ombudsman: Accepted, for Release an exact record segment to the forum only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:edc9ede7a9e353b0b4cc5676582745dde699a73e34bff0f80526da709fe97c93"
+      ]
     },
     {
       "seq": 94,
@@ -3644,7 +3733,10 @@
       },
       "reason": "terms-allow",
       "caption": "The person’s bank's income total statement: its terms allow this: use for Lending; share for Lending or Redress; never for The marketing company.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:e0e9051f03bca6f0edaa8f03fa77090c5363f508d30edd50a44ae90e4d06534a"
+      ]
     },
     {
       "seq": 96,
@@ -3746,7 +3838,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: share The person’s bank's income total statement with The independent fictional ombudsman.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:44ebf613d177eaa604e7f4e994c23391b93182e8aec6f0024478e5aa8788aa5e"
+      ]
     },
     {
       "seq": 99,
@@ -3897,7 +3992,11 @@
         "answer": "Accepted, for forum decision claims only."
       },
       "caption": "The independent fictional ombudsman's forum decision statement: The independent fictional ombudsman is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:f257d8ecd50e54a4fd55b4598c7f5886949d47d1e170be27891fefa4715200f7",
+        "sha-256:444eddf5b59b134ff2186163e2a1fa3651622cb2c3e32923dc96c030d6a24e83"
+      ]
     },
     {
       "seq": 107,
@@ -3944,7 +4043,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The independent fictional ombudsman's forum decision statement: its terms allow this: .",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:2375e15d846adc21ec0bd1655305b37dbcc1efb7422cafeb47af8660b6694dcd"
+      ]
     },
     {
       "seq": 109,
@@ -3988,7 +4090,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The independent fictional ombudsman's forum decision statement is admitted.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:5f728074dc3d09e7f40e5e16be097cfb8ee0104edcbee024c11d67b0a5181c67"
+      ]
     },
     {
       "seq": 111,
@@ -4011,7 +4116,11 @@
         },
         "provenance": "signed by The independent fictional ombudsman"
       },
-      "caption": "The independent fictional ombudsman's forum decision statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The independent fictional ombudsman's forum decision statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c136b03f7d9c9b90c509bff22860d774b0919d39916b09edc4ebc505d507ee31"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/onward-leak--baseline.json"
 }

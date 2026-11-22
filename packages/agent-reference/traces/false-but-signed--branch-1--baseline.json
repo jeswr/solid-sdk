@@ -79,7 +79,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -154,7 +154,11 @@
         "answer": "Accepted, for annual-income claims only."
       },
       "caption": "The employer's annual income statement: The employer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:33a16164e8ce0be8e2e5363662d9f84aa3b3a42dd8a3ea034d0277891f536932",
+        "sha-256:e0ab7868978700654e36bcbcef05f78f863663807b335239166fcb33cce9df30"
+      ]
     },
     {
       "seq": 3,
@@ -201,7 +205,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The employer's annual income statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fed307f3e992bf837ce98dde5d5bdd528568474b2a58017c1a7f6b338d8d1d6b"
+      ]
     },
     {
       "seq": 5,
@@ -250,7 +257,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The employer's annual income statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:156d02c98a78777f94017a453b5fbcf28a9308cd0a49b463c7984e08317683b8"
+      ]
     },
     {
       "seq": 7,
@@ -273,7 +283,10 @@
         },
         "provenance": "signed by The employer"
       },
-      "caption": "The employer's annual income statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The employer's annual income statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:aaf470a87f06ac4594275803eff62f43938a0438007766cff5fe2114d21e984b"
+      ]
     },
     {
       "seq": 8,
@@ -319,7 +332,10 @@
       },
       "reason": "within-mandate",
       "caption": "The lender's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:db5974dc0047f0a957dcf58004dadd654bae517d27d9f314665d3a7f45b1e6f0"
+      ]
     },
     {
       "seq": 10,
@@ -364,7 +380,10 @@
       },
       "reason": "recipient-established",
       "caption": "The employer: Accepted, for false-but-signed only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d05ae3849afdc24bae5f0424027c866c4060fcd27a27bc74bd9d9b4728ec36ab"
+      ]
     },
     {
       "seq": 11,
@@ -541,7 +560,10 @@
       "messageId": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
       "messageDigest": "sha-256:dc99b4d2c3de77a55ce627639b80812532d76c1403f158d99040287cf8a073a6",
       "caption": "The invoke message goes to The employer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:19aa00708b62c2b4f80f5df8df0bb5fa749f84a953091ef705c60030bf7f1e3e"
+      ]
     },
     {
       "seq": 17,
@@ -940,7 +962,10 @@
       "messageId": "urn:awp:engine-false-but-signed-branch-1:lender-agent:0002",
       "messageDigest": "sha-256:dc99b4d2c3de77a55ce627639b80812532d76c1403f158d99040287cf8a073a6",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4bdd7a29c0e5a5f4d0e234e0fdebac8db02053894b8e539bafdc99b5231f10a4"
+      ]
     },
     {
       "seq": 25,
@@ -1019,7 +1044,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for false-but-signed only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c47c5931bad859943d50ef83f3988b7ca81e6f6b983a496fb31883d2336faa07"
+      ]
     },
     {
       "seq": 27,
@@ -1081,7 +1109,10 @@
       },
       "reason": "terms-allow",
       "caption": "The employer's annual income statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fed307f3e992bf837ce98dde5d5bdd528568474b2a58017c1a7f6b338d8d1d6b"
+      ]
     },
     {
       "seq": 29,
@@ -1143,7 +1174,10 @@
       },
       "reason": "terms-allow",
       "caption": "The employer's annual income statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fed307f3e992bf837ce98dde5d5bdd528568474b2a58017c1a7f6b338d8d1d6b"
+      ]
     },
     {
       "seq": 31,
@@ -1233,7 +1267,10 @@
       "messageId": "urn:awp:engine-false-but-signed-branch-1:employer-agent:0001",
       "messageDigest": "sha-256:9e40afdd44eb1984fe7d7660d95e0b36cdf53ae763b0482d76509e1a6b4d6b94",
       "caption": "The deliver message goes to The lender’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3572d61509440277e2639a048c1f4e0627636bdc2db36c0d0a085375ee09225f"
+      ]
     },
     {
       "seq": 34,
@@ -1640,7 +1677,11 @@
         "answer": "Accepted, for annual-income claims only."
       },
       "caption": "The employer's annual income statement: The employer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b6c3919ab203850049c4f569eb4e75afd54271917a757cb087508141112ae1d7",
+        "sha-256:8113a1211c40fb7d10fd2106a19283534598c8537309aef627fb9fb861dc6a54"
+      ]
     },
     {
       "seq": 38,
@@ -1687,7 +1728,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The employer's annual income statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fed307f3e992bf837ce98dde5d5bdd528568474b2a58017c1a7f6b338d8d1d6b"
+      ]
     },
     {
       "seq": 40,
@@ -1733,7 +1777,10 @@
       "messageId": "urn:awp:engine-false-but-signed-branch-1:employer-agent:0001",
       "messageDigest": "sha-256:9e40afdd44eb1984fe7d7660d95e0b36cdf53ae763b0482d76509e1a6b4d6b94",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1637a970c122efbfd4282452a9646a49ac12b9c59b32655103885442c01bc544"
+      ]
     },
     {
       "seq": 42,
@@ -1756,7 +1803,10 @@
         },
         "provenance": "signed by The employer"
       },
-      "caption": "The employer's annual income statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The employer's annual income statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:9a4aca3c37c4878660528dc5c99d6460eaa9b3f550badb65c4041bfda5c2dea5"
+      ]
     },
     {
       "seq": 43,
@@ -1802,7 +1852,10 @@
       },
       "reason": "within-mandate",
       "caption": "The lender's mandate covers this action.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:db5974dc0047f0a957dcf58004dadd654bae517d27d9f314665d3a7f45b1e6f0"
+      ]
     },
     {
       "seq": 45,
@@ -1847,7 +1900,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for false-but-signed only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:6900ec20579cbc1a92b114be25e822cac508d6bb08ac5ad15cc3ff54d8408909"
+      ]
     },
     {
       "seq": 46,
@@ -1994,7 +2050,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in false-but-signed with The lender.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:0b595f92e851ba466de1e7f76b3b9d0f80527c7b5d31fae5c107725c70fb20e9"
+      ]
     },
     {
       "seq": 51,
@@ -2002,7 +2061,10 @@
       "agent": "lender-agent",
       "part": "record",
       "kind": "record",
-      "caption": "32 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "32 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:c41725960c7a94e9aa54b69007e88d801dc18dd24b4f219fdb61c26837d593c4"
+      ]
     },
     {
       "seq": 52,
@@ -2010,7 +2072,11 @@
       "agent": "employer-agent",
       "part": "record",
       "kind": "record",
-      "caption": "32 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "32 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:2cca4468d677b2a8c8205580c29b26b2f2035afd42698326bf60a8e4bc43b09e"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/false-but-signed--baseline.json"
 }

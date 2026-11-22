@@ -76,7 +76,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -187,7 +187,10 @@
       },
       "reason": "recipient-established",
       "caption": "The fictional lender: Accepted, for Mortgage decision in principle only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a8fc918bf6f94a5ade432f48ad509aee616da112cf1ba88d041eb3a1bdb88bd6"
+      ]
     },
     {
       "seq": 4,
@@ -330,7 +333,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:sam-agent:0002",
       "messageDigest": "sha-256:ffbe56aaeade999777409aa0ebe7f3516afdff0fd41b3e327e6d284cb098afed",
       "caption": "The describe message goes to The fictional lender’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ac3d24ec96db56bdec029a65b11c9647bda74d60bcb723c4c3422d122741dee5"
+      ]
     },
     {
       "seq": 9,
@@ -658,7 +664,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:sam-agent:0002",
       "messageDigest": "sha-256:ffbe56aaeade999777409aa0ebe7f3516afdff0fd41b3e327e6d284cb098afed",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6071a9993437d06dbc7dc935388266b7a14c2ca8e72255306335467b58f9d418"
+      ]
     },
     {
       "seq": 17,
@@ -867,7 +876,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:north-agent:0001",
       "messageDigest": "sha-256:fb460e67bdd2760f70367dc9c8b3d7719a583425894ed436f03c1f8dee792d41",
       "caption": "The description message goes to Sam’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a1d7ebb287545b68be05e42e9c71b7df2080eb415c9b7dc2ff1699fbf30f0734"
+      ]
     },
     {
       "seq": 24,
@@ -2015,7 +2027,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:north-agent:0001",
       "messageDigest": "sha-256:fb460e67bdd2760f70367dc9c8b3d7719a583425894ed436f03c1f8dee792d41",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b5887c60f60364b4bdb41569c9e30f82af56a92903e2538d4243ed355536eeac"
+      ]
     },
     {
       "seq": 32,
@@ -2061,7 +2076,10 @@
       },
       "reason": "within-mandate",
       "caption": "Sam, the fictional applicant's mandate covers this action.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:1a8b7bac73de006f1ae954e4546fe6a05d9d77ac7507d9af32919be8b5e6c7b5"
+      ]
     },
     {
       "seq": 34,
@@ -2120,7 +2138,10 @@
       },
       "reason": "recipient-established",
       "caption": "The fictional lender: Accepted, for Mortgage decision in principle only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:a8fc918bf6f94a5ade432f48ad509aee616da112cf1ba88d041eb3a1bdb88bd6"
+      ]
     },
     {
       "seq": 35,
@@ -2297,7 +2318,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:sam-agent:0003",
       "messageDigest": "sha-256:2c90230d4295a8035151e046e71d999655fb4a236f71af05465b0eda35495686",
       "caption": "The propose message goes to The fictional lender’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:28f9fe5d3b5e23057c1175f02ceafe092ba6bee7f66efe3d1dd50c62502b425b"
+      ]
     },
     {
       "seq": 41,
@@ -2746,7 +2770,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:sam-agent:0003",
       "messageDigest": "sha-256:2c90230d4295a8035151e046e71d999655fb4a236f71af05465b0eda35495686",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:10bca4ea26a5d96b68c826542b5329db1a498efd3d6fca1dad98a40857327a4b"
+      ]
     },
     {
       "seq": 49,
@@ -2792,7 +2819,10 @@
       },
       "reason": "within-mandate",
       "caption": "The fictional lender's mandate covers this action.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:2e47b83f066886d23983d0e92f223728b8422e55fc172bfcb60c70f83eae0fcb"
+      ]
     },
     {
       "seq": 51,
@@ -3023,7 +3053,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:north-agent:0002",
       "messageDigest": "sha-256:64f6a010924146a69d8df21e1b0540f5b9a5f14c5a61878cc24708099c79f450",
       "caption": "The propose message goes to Sam’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:afe1f79162653c98cbbe5e4312c9f82623c604b99ff152d620388d521a55676c"
+      ]
     },
     {
       "seq": 58,
@@ -3327,7 +3360,11 @@
         "answer": "Accepted, for income gross monthly series claims only."
       },
       "caption": "The fictional payroll provider's income gross monthly series statement: The fictional payroll provider is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9ee26a2cb1ceb3daaff06cf75c17a3c35d46812d50331d08efea163849bb676e",
+        "sha-256:2c26e1c404c9bd4d06eb97da80581fd68dc2f746dcb9e390a722aa4791d7bbae"
+      ]
     },
     {
       "seq": 61,
@@ -3374,7 +3411,10 @@
         "text": "Its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource."
       },
       "caption": "The fictional payroll provider's income gross monthly series statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:289d8f707608929dc4b090edac5e4b2bd09a58ef60e15171aa0ebaf25ee9d5ac"
+      ]
     },
     {
       "seq": 63,
@@ -3413,7 +3453,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional payroll provider's income gross monthly series statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:af95bfac00379da1354c971e80dc587972de82a657d9bd840ecf3b2cf046f242"
+      ]
     },
     {
       "seq": 65,
@@ -3488,7 +3531,10 @@
         },
         "provenance": "signed by The fictional payroll provider, issued 2026-11-02T09:00:00Z"
       },
-      "caption": "The fictional payroll provider's income gross monthly series statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional payroll provider's income gross monthly series statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:43fe066e69443acb23137191f4b5398667c50bfa1f9b5a5b7bdd87e64489097a"
+      ]
     },
     {
       "seq": 66,
@@ -3551,7 +3597,11 @@
         "answer": "Accepted, for deposit balance claims only."
       },
       "caption": "Sam’s fictional bank's deposit balance statement: Sam’s fictional bank is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:1c02bec85a29a6b20c632bcb9efd33ab43715bff5448a7621992c2135e770012",
+        "sha-256:d642ced20f83b811dd2b4e423fc0c4016e8d8bdcb70e5ed64f826c40ac83079f"
+      ]
     },
     {
       "seq": 68,
@@ -3598,7 +3648,10 @@
         "text": "Its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource."
       },
       "caption": "Sam’s fictional bank's deposit balance statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:f0667281a78910dbbb519b3c44a5c0a2033ca9d17c759713614409583dd339df"
+      ]
     },
     {
       "seq": 70,
@@ -3637,7 +3690,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "Sam’s fictional bank's deposit balance statement is admitted.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:cc14bed68f5ea3ba482796c8f49683af71f731db97204776c4f99c0797da6644"
+      ]
     },
     {
       "seq": 72,
@@ -3664,7 +3720,10 @@
         },
         "provenance": "signed by Sam’s fictional bank, issued 2026-11-01T09:00:00Z"
       },
-      "caption": "Sam’s fictional bank's deposit balance statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Sam’s fictional bank's deposit balance statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:7109188ff0d3dd70e1a81a5518b89597c66b93575a8d8e386269afe2524f7c21"
+      ]
     },
     {
       "seq": 73,
@@ -4076,7 +4135,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:north-agent:0002",
       "messageDigest": "sha-256:64f6a010924146a69d8df21e1b0540f5b9a5f14c5a61878cc24708099c79f450",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:fd378b2979e55a7e72c22eb2df7cf10bb8e55611b90e061df3da7422e371069d"
+      ]
     },
     {
       "seq": 80,
@@ -4126,7 +4188,10 @@
       },
       "reason": "within-mandate",
       "caption": "Sam, the fictional applicant's mandate covers this action, with approval.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:2406cbfd1745284418f6e796424e493a60f44ccbea565db78bcddaa7904d8a16"
+      ]
     },
     {
       "seq": 82,
@@ -4189,7 +4254,10 @@
       },
       "reason": "recipient-established",
       "caption": "The fictional lender: Accepted, for Mortgage decision in principle only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:a8fc918bf6f94a5ade432f48ad509aee616da112cf1ba88d041eb3a1bdb88bd6"
+      ]
     },
     {
       "seq": 83,
@@ -4263,7 +4331,10 @@
       },
       "reason": "terms-allow",
       "caption": "Sam’s fictional bank's deposit balance statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource. The fictional lender is a regulated lender (sector register).",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:f0667281a78910dbbb519b3c44a5c0a2033ca9d17c759713614409583dd339df"
+      ]
     },
     {
       "seq": 85,
@@ -4300,7 +4371,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional payroll provider's income gross monthly series statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource. The fictional lender is a regulated lender (sector register).",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:289d8f707608929dc4b090edac5e4b2bd09a58ef60e15171aa0ebaf25ee9d5ac"
+      ]
     },
     {
       "seq": 86,
@@ -4337,7 +4411,10 @@
         "text": "Sam, the fictional applicant's mandate lets the agent distribute the unlabelled resource for Credit Assessment with The fictional lender or the unlabelled resource, after Sam, the fictional applicant approves."
       },
       "caption": "The mandate says to ask Sam, the fictional applicant first.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:2406cbfd1745284418f6e796424e493a60f44ccbea565db78bcddaa7904d8a16"
+      ]
     },
     {
       "seq": 87,
@@ -4363,7 +4440,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The gate holds the action and asks Sam, the fictional applicant.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:b3d177c4c40443202bd9f8b3baf59c96db51a6f4cf6a3295854a407793ac6ac0"
+      ]
     },
     {
       "seq": 88,
@@ -4431,7 +4511,10 @@
       },
       "reason": "within-mandate",
       "caption": "Sam, the fictional applicant's mandate covers this action, with approval.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:2406cbfd1745284418f6e796424e493a60f44ccbea565db78bcddaa7904d8a16"
+      ]
     },
     {
       "seq": 91,
@@ -4494,7 +4577,10 @@
       },
       "reason": "recipient-established",
       "caption": "The fictional lender: Accepted, for Mortgage decision in principle only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:a8fc918bf6f94a5ade432f48ad509aee616da112cf1ba88d041eb3a1bdb88bd6"
+      ]
     },
     {
       "seq": 92,
@@ -4568,7 +4654,10 @@
       },
       "reason": "terms-allow",
       "caption": "Sam’s fictional bank's deposit balance statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource. The fictional lender is a regulated lender (sector register).",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:f0667281a78910dbbb519b3c44a5c0a2033ca9d17c759713614409583dd339df"
+      ]
     },
     {
       "seq": 94,
@@ -4605,7 +4694,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional payroll provider's income gross monthly series statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource. The fictional lender is a regulated lender (sector register).",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:289d8f707608929dc4b090edac5e4b2bd09a58ef60e15171aa0ebaf25ee9d5ac"
+      ]
     },
     {
       "seq": 95,
@@ -4711,7 +4803,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:sam-agent:0004",
       "messageDigest": "sha-256:6605233a4587ecc335db932422307ecc0e1bb2cce96f3d0fdaa8209f00ed025d",
       "caption": "The accept message goes to The fictional lender’s agent.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:94e12d35c48837cbbc5a9054924609846373b87478a25de9a8b19d913129803b"
+      ]
     },
     {
       "seq": 98,
@@ -4898,7 +4993,10 @@
       },
       "reason": "within-mandate",
       "caption": "Sam, the fictional applicant's mandate covers this action, with approval.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:2406cbfd1745284418f6e796424e493a60f44ccbea565db78bcddaa7904d8a16"
+      ]
     },
     {
       "seq": 100,
@@ -4961,7 +5059,10 @@
       },
       "reason": "recipient-established",
       "caption": "The fictional lender: Accepted, for Mortgage decision in principle only.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:a8fc918bf6f94a5ade432f48ad509aee616da112cf1ba88d041eb3a1bdb88bd6"
+      ]
     },
     {
       "seq": 101,
@@ -5035,7 +5136,10 @@
       },
       "reason": "terms-allow",
       "caption": "Sam’s fictional bank's deposit balance statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource. The fictional lender is a regulated lender (sector register).",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:f0667281a78910dbbb519b3c44a5c0a2033ca9d17c759713614409583dd339df"
+      ]
     },
     {
       "seq": 103,
@@ -5072,7 +5176,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional payroll provider's income gross monthly series statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource. The fictional lender is a regulated lender (sector register).",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:289d8f707608929dc4b090edac5e4b2bd09a58ef60e15171aa0ebaf25ee9d5ac"
+      ]
     },
     {
       "seq": 104,
@@ -5179,7 +5286,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional payroll provider's income gross monthly series statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource. The fictional lender is a regulated lender (sector register).",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:289d8f707608929dc4b090edac5e4b2bd09a58ef60e15171aa0ebaf25ee9d5ac"
+      ]
     },
     {
       "seq": 107,
@@ -5249,7 +5359,10 @@
       },
       "reason": "terms-allow",
       "caption": "Sam’s fictional bank's deposit balance statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource. The fictional lender is a regulated lender (sector register).",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:f0667281a78910dbbb519b3c44a5c0a2033ca9d17c759713614409583dd339df"
+      ]
     },
     {
       "seq": 109,
@@ -5351,7 +5464,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:sam-agent:0005",
       "messageDigest": "sha-256:b4bc3a779fd4b671522555590881c1ac7c82f5469240c357864e0122e3687d2f",
       "caption": "The deliver message goes to The fictional lender’s agent.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:3964c249deb1a5c95aa8ad1739096e7192dc7b9283d844e0ffbc0e4cb3738e10"
+      ]
     },
     {
       "seq": 112,
@@ -6022,7 +6138,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:sam-agent:0004",
       "messageDigest": "sha-256:6605233a4587ecc335db932422307ecc0e1bb2cce96f3d0fdaa8209f00ed025d",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:51c7e133f59a7d54bd9026b81a7662e6c5db3b297059ecac9fcbc1f45a39775b"
+      ]
     },
     {
       "seq": 120,
@@ -6484,7 +6603,11 @@
         "answer": "Accepted, for income gross monthly series claims only."
       },
       "caption": "The fictional payroll provider's income gross monthly series statement: The fictional payroll provider is an accepted source for this kind of claim.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:1a6215604ad2afc85c76b631cb2ccd103b59fbd39f5bb41c4a72bf9cfa3d42e3",
+        "sha-256:954ad61cb76656427e1ee3b9d931daf963ef4bc2be96c887168b0bf05dda8fab"
+      ]
     },
     {
       "seq": 123,
@@ -6523,7 +6646,11 @@
         "answer": "Accepted, for deposit balance claims only."
       },
       "caption": "Sam’s fictional bank's deposit balance statement: Sam’s fictional bank is an accepted source for this kind of claim.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:dfd1b6e3df32cdb033c64c6086902f536ea283d4bcbd4e98ccfa6e28d1eba0e7",
+        "sha-256:76d02a633b96b45dcc25eb0e207a3232520f8dd256b6176af57c7d4e4cd26ec3"
+      ]
     },
     {
       "seq": 124,
@@ -6574,7 +6701,10 @@
         "text": "Its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource."
       },
       "caption": "The fictional payroll provider's income gross monthly series statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:289d8f707608929dc4b090edac5e4b2bd09a58ef60e15171aa0ebaf25ee9d5ac"
+      ]
     },
     {
       "seq": 126,
@@ -6602,7 +6732,10 @@
         "text": "Its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource."
       },
       "caption": "Sam’s fictional bank's deposit balance statement: its terms allow this: use for Mortgage Application or Credit Assessment; share with a regulated lender for Mortgage Application or Credit Assessment; delete within 90 days; never for the unlabelled resource.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:f0667281a78910dbbb519b3c44a5c0a2033ca9d17c759713614409583dd339df"
+      ]
     },
     {
       "seq": 127,
@@ -6661,7 +6794,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:sam-agent:0005",
       "messageDigest": "sha-256:b4bc3a779fd4b671522555590881c1ac7c82f5469240c357864e0122e3687d2f",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:3c7388ca1e835dbedb0c89c8b779127871501ff60ca3bf9150a6c134bbadaad3"
+      ]
     },
     {
       "seq": 130,
@@ -6736,7 +6872,10 @@
         },
         "provenance": "signed by The fictional payroll provider, issued 2026-11-02T09:00:00Z"
       },
-      "caption": "The fictional payroll provider's income gross monthly series statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional payroll provider's income gross monthly series statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c923939159edd7f1c92a21877a2016ff3ea6b6ff989d426dbb26da7864128133"
+      ]
     },
     {
       "seq": 131,
@@ -6763,7 +6902,10 @@
         },
         "provenance": "signed by Sam’s fictional bank, issued 2026-11-01T09:00:00Z"
       },
-      "caption": "Sam’s fictional bank's deposit balance statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Sam’s fictional bank's deposit balance statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:3845d1c0512dfe09585141b51bec71271eb336e4158c4ce201e710fbdd942747"
+      ]
     },
     {
       "seq": 132,
@@ -6999,7 +7141,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:north-agent:0003",
       "messageDigest": "sha-256:feb2c8f539eab3fb87dc9b23dc49b494713d918859befe08041c8df47c289258",
       "caption": "The receipt message goes to Sam’s agent.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:d22a8bbb0ace60931487e0a6a42c7e71b733361b34f55b7179034736f041e191"
+      ]
     },
     {
       "seq": 139,
@@ -7478,7 +7623,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:north-agent:0003",
       "messageDigest": "sha-256:feb2c8f539eab3fb87dc9b23dc49b494713d918859befe08041c8df47c289258",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:300f3b6b1f5b956cc7e53bcf031d467545982312675115e1026ad23ba3b31f80"
+      ]
     },
     {
       "seq": 147,
@@ -7524,7 +7672,10 @@
       },
       "reason": "within-mandate",
       "caption": "Sam, the fictional applicant's mandate covers this action.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:1a8b7bac73de006f1ae954e4546fe6a05d9d77ac7507d9af32919be8b5e6c7b5"
+      ]
     },
     {
       "seq": 149,
@@ -7583,7 +7734,10 @@
       },
       "reason": "recipient-established",
       "caption": "The fictional lender: Accepted, for Mortgage decision in principle only.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:a8fc918bf6f94a5ade432f48ad509aee616da112cf1ba88d041eb3a1bdb88bd6"
+      ]
     },
     {
       "seq": 150,
@@ -7760,7 +7914,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:sam-agent:0006",
       "messageDigest": "sha-256:8ae74421d43aafb96b3f85bf066e468d2ab125acfde84a07dbd59ddc61318a26",
       "caption": "The invoke message goes to The fictional lender’s agent.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:c178610ab04d7340542d42996104968651e10c9a8ac53d7886f7ed24226dc4ef"
+      ]
     },
     {
       "seq": 156,
@@ -8197,7 +8354,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:sam-agent:0006",
       "messageDigest": "sha-256:8ae74421d43aafb96b3f85bf066e468d2ab125acfde84a07dbd59ddc61318a26",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:984bd13dadb2b80159a9154865828d1fcf1395c562eb4fb4f0d001e08386889b"
+      ]
     },
     {
       "seq": 164,
@@ -8243,7 +8403,10 @@
       },
       "reason": "within-mandate",
       "caption": "The fictional lender's mandate covers this action.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:2e47b83f066886d23983d0e92f223728b8422e55fc172bfcb60c70f83eae0fcb"
+      ]
     },
     {
       "seq": 166,
@@ -8474,7 +8637,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:north-agent:0005",
       "messageDigest": "sha-256:11d1c3efc126133fa2f2962b04f5068d483f5d18ec0f6beb0ee596a4cf54faac",
       "caption": "The deliver message goes to Sam’s agent.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:b4e96509beafd404d794cc0fac5613839b205662803251f993d61630936b5a3b"
+      ]
     },
     {
       "seq": 173,
@@ -8877,7 +9043,10 @@
         "answer": "Accepted, for mortgage decision in principle claims only."
       },
       "caption": "The fictional lender's mortgage decision in principle statement: The fictional lender is an accepted source for this kind of claim.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:a8fc918bf6f94a5ade432f48ad509aee616da112cf1ba88d041eb3a1bdb88bd6"
+      ]
     },
     {
       "seq": 177,
@@ -8969,7 +9138,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:north-agent:0005",
       "messageDigest": "sha-256:11d1c3efc126133fa2f2962b04f5068d483f5d18ec0f6beb0ee596a4cf54faac",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:bfeb301a6d593c0a8c4ab90e97064389f67a6c00a66d2d5057d0c0279769b5fd"
+      ]
     },
     {
       "seq": 181,
@@ -8993,7 +9165,10 @@
         "method": "decided-by-authority",
         "provenance": "signed by The fictional lender, issued 2026-11-13T09:02:00.000Z"
       },
-      "caption": "The fictional lender's mortgage decision in principle statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional lender's mortgage decision in principle statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:6aa62c9eb08c4e68b7494db03bfac7ee8432f186e92f695b160010367d1f5700"
+      ]
     },
     {
       "seq": 182,
@@ -9229,7 +9404,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:north-agent:0007",
       "messageDigest": "sha-256:33aae320adf0761f7d88b6021f7541c2f5b85ae49f361c516fd403e81c681c13",
       "caption": "The receipt message goes to Sam’s agent.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:6eb36614e6d122593087a2d1c6fbd688261d03eabf43f906d1ddb7e0426fbb32"
+      ]
     },
     {
       "seq": 189,
@@ -9616,7 +9794,10 @@
       "messageId": "urn:awp:engine-mortgage-core-main:north-agent:0007",
       "messageDigest": "sha-256:33aae320adf0761f7d88b6021f7541c2f5b85ae49f361c516fd403e81c681c13",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 7
+      "gateRun": 7,
+      "linked": [
+        "sha-256:125339fe3ac31a0600475fd3a7dcae58757dd045b055a9c52efc4396c1b45481"
+      ]
     },
     {
       "seq": 197,
@@ -9624,7 +9805,10 @@
       "agent": "sams-agent",
       "part": "record",
       "kind": "record",
-      "caption": "134 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "134 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:8f8f87da524b22169910f44d483a804d4265611ad86dcbddbd0a845d05eb209a"
+      ]
     },
     {
       "seq": 198,
@@ -9632,7 +9816,11 @@
       "agent": "lender",
       "part": "record",
       "kind": "record",
-      "caption": "108 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "108 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:6eb36614e6d122593087a2d1c6fbd688261d03eabf43f906d1ddb7e0426fbb32"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/mortgage-core--authenticity-data-integrity.json"
 }

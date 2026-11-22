@@ -66,7 +66,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -141,7 +141,11 @@
         "answer": "Accepted, for salary team total claims only."
       },
       "caption": "The finance department's salary team total statement: The finance department is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0787e1ef425dc48e14411824f21959b7df00edabd26de9cfc172e6e670186bd7",
+        "sha-256:e0250728754f2451f1293e5d0efc1c2cb9ff365dd77ed2bbda1ea9e511600ef5"
+      ]
     },
     {
       "seq": 3,
@@ -188,7 +192,10 @@
         "text": "Its terms allow this: use for Cross department request; share for Cross department request."
       },
       "caption": "The finance department's salary team total statement: its terms allow this: use for Cross department request; share for Cross department request.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:83396453e1b73e541ffcd0db6a2cbfa6f36698dfe60e3c6bf02e7625323f319b"
+      ]
     },
     {
       "seq": 5,
@@ -232,7 +239,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The finance department's salary team total statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cff3042683165a78169b1e1109dcee5c1389ea1f7116092971c6ed3cb7cc05e9"
+      ]
     },
     {
       "seq": 7,
@@ -255,7 +265,10 @@
         },
         "provenance": "signed by The finance department"
       },
-      "caption": "The finance department's salary team total statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The finance department's salary team total statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:a14e5d3c2daae790896839cbfff8cc277e32d212e37ddd1c0aff8506d8a6b3e6"
+      ]
     },
     {
       "seq": 8,
@@ -342,7 +355,10 @@
       },
       "reason": "recipient-established",
       "caption": "The finance department: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:027aaf0fd6d48743730211a9e08b73a09c4c269cab44d0170be4ea6243c938ae"
+      ]
     },
     {
       "seq": 11,
@@ -519,7 +535,10 @@
       "messageId": "urn:awp:engine-cross-department-request-main:receiver-agent:0002",
       "messageDigest": "sha-256:8f75de189f242fcada8179dd974567c1832edfefbe817c77c8132c1332d3ad43",
       "caption": "The invoke message goes to The finance department’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7b5bd5869c7e1c81374b942aaba507bf69519e15677b05d36698d815dde5259a"
+      ]
     },
     {
       "seq": 17,
@@ -932,7 +951,10 @@
       "messageId": "urn:awp:engine-cross-department-request-main:receiver-agent:0002",
       "messageDigest": "sha-256:8f75de189f242fcada8179dd974567c1832edfefbe817c77c8132c1332d3ad43",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:28eae2c25256a215b6b7b5752dc7182f2d356b6cf0f3907c8dcdb893ab62af60"
+      ]
     },
     {
       "seq": 25,
@@ -1019,7 +1041,10 @@
       },
       "reason": "recipient-established",
       "caption": "The people team: Accepted, for One department's agent asks another's for data only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f25ea8af9e3df779676bfc1ad43103aecf6a54c57d177f7756219c19bbbaa979"
+      ]
     },
     {
       "seq": 28,
@@ -1168,7 +1193,10 @@
       },
       "reason": "terms-allow",
       "caption": "The finance department's salary team total statement: its terms allow this: use for Cross department request; share for Cross department request.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:83396453e1b73e541ffcd0db6a2cbfa6f36698dfe60e3c6bf02e7625323f319b"
+      ]
     },
     {
       "seq": 33,
@@ -1258,7 +1286,10 @@
       "messageId": "urn:awp:engine-cross-department-request-main:owner-agent:0002",
       "messageDigest": "sha-256:1bca1f3f61d6be79abff4e15c5747966e5ca68d97066a19cfbd68c9b43954734",
       "caption": "The invoke message goes to The people team’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a3851fd81921aab9edaee4f8fc90ad88e4ebce32d69221ef582d05d240a52b63"
+      ]
     },
     {
       "seq": 36,
@@ -1731,7 +1762,11 @@
         "answer": "Accepted, for salary team total claims only."
       },
       "caption": "The finance department's salary team total statement: The finance department is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c85b07f8627d88592e5f5e21fbf6b218f7aede8146006d2079de5edda02e1ca1",
+        "sha-256:c4188f2014369b8060f6bf40463aa8e14e25b9cf76ee6305086e7a79d2bd2943"
+      ]
     },
     {
       "seq": 40,
@@ -1782,7 +1817,10 @@
         "text": "Its terms allow this: use for Cross department request; share for Cross department request."
       },
       "caption": "The finance department's salary team total statement: its terms allow this: use for Cross department request; share for Cross department request.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:83396453e1b73e541ffcd0db6a2cbfa6f36698dfe60e3c6bf02e7625323f319b"
+      ]
     },
     {
       "seq": 42,
@@ -1823,7 +1861,10 @@
       "messageId": "urn:awp:engine-cross-department-request-main:owner-agent:0002",
       "messageDigest": "sha-256:1bca1f3f61d6be79abff4e15c5747966e5ca68d97066a19cfbd68c9b43954734",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e95972cb963fbcd3aea0162f732b730f66d1554c4ed6329a612c5ae985b3a109"
+      ]
     },
     {
       "seq": 44,
@@ -1846,7 +1887,10 @@
         },
         "provenance": "signed by The finance department"
       },
-      "caption": "The finance department's salary team total statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The finance department's salary team total statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:24cecf9a7b61bd90b27dda11b11112c4e5732e9c99a062ffef41d15f5e3ef3a4"
+      ]
     },
     {
       "seq": 45,
@@ -1925,7 +1969,10 @@
       },
       "reason": "recipient-established",
       "caption": "The finance department: Accepted, for One department's agent asks another's for data only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:027aaf0fd6d48743730211a9e08b73a09c4c269cab44d0170be4ea6243c938ae"
+      ]
     },
     {
       "seq": 47,
@@ -2073,7 +2120,10 @@
       "messageId": "urn:awp:engine-cross-department-request-main:receiver-agent:0003",
       "messageDigest": "sha-256:2a49d4e6e67c0e56039fb930b4119db6a5e23f09abd5dcc9dd2dd00ff1a4c5be",
       "caption": "The deliver message goes to The finance department’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:db6580819f65b905a54616ff5f3be5202cc051d8179b92164413a81305df945c"
+      ]
     },
     {
       "seq": 52,
@@ -2448,7 +2498,10 @@
       "messageId": "urn:awp:engine-cross-department-request-main:receiver-agent:0003",
       "messageDigest": "sha-256:2a49d4e6e67c0e56039fb930b4119db6a5e23f09abd5dcc9dd2dd00ff1a4c5be",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:7ea9418123f86c3a423b7d861a4d133d7fef7c1c8de07dd32b3aa18793e91dcd"
+      ]
     },
     {
       "seq": 60,
@@ -2456,7 +2509,11 @@
       "agent": "receiver-agent",
       "part": "record",
       "kind": "record",
-      "caption": "32 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "32 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:db6580819f65b905a54616ff5f3be5202cc051d8179b92164413a81305df945c"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/cross-department-request--baseline.json"
 }

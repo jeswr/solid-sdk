@@ -69,7 +69,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [],
@@ -159,7 +159,10 @@
       },
       "reason": "recipient-established",
       "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:292d0ef17a80007b71e8d76af9a222e37eb408fbce9cedda66f474d1ae185e07"
+      ]
     },
     {
       "seq": 4,
@@ -336,7 +339,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-round-limit:service-agent:0002",
       "messageDigest": "sha-256:84e704f5a90b24bbbcc3477819e516b9348764a74406432c696d676f25dbb171",
       "caption": "The propose message goes to Rowan’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ee8ec17ccfb297fa7208da08629a403d0f400efdc308780c8dcb483c06e767d9"
+      ]
     },
     {
       "seq": 10,
@@ -759,7 +765,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-round-limit:service-agent:0002",
       "messageDigest": "sha-256:84e704f5a90b24bbbcc3477819e516b9348764a74406432c696d676f25dbb171",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b0db22a709651fc122b116b8306de7c29c68c127bfbb2f2495682ea387dea0f8"
+      ]
     },
     {
       "seq": 18,
@@ -846,7 +855,10 @@
       },
       "reason": "recipient-established",
       "caption": "The fictional service: Accepted, for A bounded request for contact details only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6497dd6f6866ddefe7568e4f5b2b4345904f3a8594862367805c8d60da3e24c4"
+      ]
     },
     {
       "seq": 21,
@@ -1023,7 +1035,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-round-limit:person-agent:0001",
       "messageDigest": "sha-256:5ff73f14cfc859917a218f4832541df94b6b9d8e71ffffa1e6eecee389f84b9d",
       "caption": "The propose message goes to The service’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5e5e3359a2fa8e5c92e47e011a1a17150fee51f1d309a968ce05437d1cbe3424"
+      ]
     },
     {
       "seq": 27,
@@ -1460,7 +1475,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-round-limit:person-agent:0001",
       "messageDigest": "sha-256:5ff73f14cfc859917a218f4832541df94b6b9d8e71ffffa1e6eecee389f84b9d",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:dd4a997b4afa77e93eb972dfe858f9c70f7e63735af952a4256d3525dfcaacf7"
+      ]
     },
     {
       "seq": 35,
@@ -1547,7 +1565,10 @@
       },
       "reason": "recipient-established",
       "caption": "Rowan, a fictional customer: Accepted, for A bounded request for contact details only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:292d0ef17a80007b71e8d76af9a222e37eb408fbce9cedda66f474d1ae185e07"
+      ]
     },
     {
       "seq": 38,
@@ -1724,7 +1745,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-round-limit:service-agent:0003",
       "messageDigest": "sha-256:8884b21a9a59477b3f620bef8d662ef774d3ba70c8d5645d1ca1a246d63704da",
       "caption": "The propose message goes to Rowan’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:cffdc1cfd37b4b173969f3e87982bcbc7e6d152235f2a5a764da75ef86db718d"
+      ]
     },
     {
       "seq": 44,
@@ -2161,7 +2185,10 @@
       "messageId": "urn:awp:engine-probing-counterparty-round-limit:service-agent:0003",
       "messageDigest": "sha-256:8884b21a9a59477b3f620bef8d662ef774d3ba70c8d5645d1ca1a246d63704da",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:d4d731db3827a5641553520a3ef2cc6d30f63c669fb5949e94653d91418ed39f"
+      ]
     },
     {
       "seq": 52,
@@ -2248,7 +2275,10 @@
       },
       "reason": "recipient-established",
       "caption": "The fictional service: Accepted, for A bounded request for contact details only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:6497dd6f6866ddefe7568e4f5b2b4345904f3a8594862367805c8d60da3e24c4"
+      ]
     },
     {
       "seq": 55,
@@ -2415,7 +2445,11 @@
       "outcome": "stop",
       "reason": "round-limit",
       "caption": "The round limit stops the message before release.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:19d10597f7a2b6fda3cfb86f31f7c4946ecd64d6f72ac54a270c057722304cf4"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/probing-counterparty--baseline.json"
 }

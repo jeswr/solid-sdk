@@ -88,7 +88,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -159,7 +159,11 @@
         "answer": "Accepted, for invoice valid claims only."
       },
       "caption": "The buyer's invoice valid statement: The buyer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:58fb7b6a0da4a20b87b187d1e15ca78d8b1053cfc302bbb8e1a6a082a10c62e1",
+        "sha-256:8f78bdc29a5fb5358f5487d56a23d0f3dc4709a0d612c886a819b8b5bbf3fad9"
+      ]
     },
     {
       "seq": 3,
@@ -206,7 +210,10 @@
         "text": "Its terms allow this: use for Invoice finance."
       },
       "caption": "The buyer's invoice valid statement: its terms allow this: use for Invoice finance.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:24d594be89a03bb5b7023952d49c4f9aa46c220d207fb80d55fdf95ec1914359"
+      ]
     },
     {
       "seq": 5,
@@ -250,7 +257,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The buyer's invoice valid statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d07d6fca84f4921f340d4a538308bcd0fbcf860396e3ebb373683ec1d35e5aff"
+      ]
     },
     {
       "seq": 7,
@@ -273,7 +283,10 @@
         },
         "provenance": "signed by The buyer"
       },
-      "caption": "The buyer's invoice valid statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The buyer's invoice valid statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c6a1da27e5c693f63a020f1b5a4e86f5aa6a8b6a96b33ed8f426a2118dc22cac"
+      ]
     },
     {
       "seq": 8,
@@ -360,7 +373,10 @@
       },
       "reason": "recipient-established",
       "caption": "The first financier: Accepted, for Financing an invoice once only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cafa9850a2efde6aa6789b0f95dce6c8e26de8651755a2195a6552123d86b0b0"
+      ]
     },
     {
       "seq": 11,
@@ -649,7 +665,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Financing an invoice once with The first financier.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:eccb4bdabbbddb4c6adbe57e9dc6ef0f1fe3b09d6b046ebb3921c6637d2d33a5"
+      ]
     },
     {
       "seq": 28,
@@ -712,7 +731,11 @@
         "answer": "Accepted, for invoice valid claims only."
       },
       "caption": "The buyer's invoice valid statement: The buyer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:82571c28c6f740e6eb595df3aee02ac8d324de0e267507629f7bff480b4f0302",
+        "sha-256:d8a928dfad18e37d51236f974ebc29ac728cfdae87b00b39af7ed35a928bc86d"
+      ]
     },
     {
       "seq": 30,
@@ -759,7 +782,10 @@
         "text": "Its terms allow this: use for Invoice finance."
       },
       "caption": "The buyer's invoice valid statement: its terms allow this: use for Invoice finance.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:24d594be89a03bb5b7023952d49c4f9aa46c220d207fb80d55fdf95ec1914359"
+      ]
     },
     {
       "seq": 32,
@@ -803,7 +829,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The buyer's invoice valid statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f973d539976918347f001729e8197f09f299504a922edc4a42954dc72a9196c4"
+      ]
     },
     {
       "seq": 34,
@@ -826,7 +855,10 @@
         },
         "provenance": "signed by The buyer"
       },
-      "caption": "The buyer's invoice valid statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The buyer's invoice valid statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c6a1da27e5c693f63a020f1b5a4e86f5aa6a8b6a96b33ed8f426a2118dc22cac"
+      ]
     },
     {
       "seq": 35,
@@ -913,7 +945,10 @@
       },
       "reason": "recipient-established",
       "caption": "The second financier: Accepted, for Financing an invoice once only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e930263f8e924f5d13054d93e28538074e032d77d1f126fd6e4a82f992013e41"
+      ]
     },
     {
       "seq": 38,
@@ -1127,7 +1162,11 @@
       "outcome": "stop",
       "reason": "status-withdrawn",
       "caption": "Required effect evidence is unavailable or withdrawn.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4b161c5156d03b6ac69cf8245672cb7b4a72a25c86d9033599759901fbba1cbd"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/invoice-finance--baseline.json"
 }

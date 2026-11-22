@@ -110,7 +110,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -181,7 +181,11 @@
         "answer": "Accepted, for contact data claims only."
       },
       "caption": "The data subject's contact data statement: The data subject is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:aacf56317fae254e61e453af5186e8fdbaa9ee3d31db3b70d11f0f9a51255bf3",
+        "sha-256:81a62bf5306b8801d3b5c213b98d3e1d2c2b21be91360eb3ae2d230a12cd9d5e"
+      ]
     },
     {
       "seq": 3,
@@ -228,7 +232,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The data subject's contact data statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f507e8fc0f68ad1887398c1138559eafe9d3940e110306d93f730562c6fd5c1e"
+      ]
     },
     {
       "seq": 5,
@@ -272,7 +279,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The data subject's contact data statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:09c47ef95b0674eddec8849c882c1cf4843ca79e21e1e5212e8612e15a722a00"
+      ]
     },
     {
       "seq": 7,
@@ -295,7 +305,10 @@
         },
         "provenance": "signed by The data subject"
       },
-      "caption": "The data subject's contact data statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The data subject's contact data statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:f7613c6b9e0a717bb4c30fa992e44b7e77e6138d34dcf148abee4cf40ebc0ad0"
+      ]
     },
     {
       "seq": 8,
@@ -382,7 +395,10 @@
       },
       "reason": "recipient-established",
       "caption": "The company: Accepted, for Form the data-use agreement only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9a19fd4636a4cb7eb549b6350b7eccf384937cecd6b34fd2da8834964c9b9e5c"
+      ]
     },
     {
       "seq": 11,
@@ -559,7 +575,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:subject-agent:0002",
       "messageDigest": "sha-256:3d95dc54be38bf5c43fee1577618f2b50a44bc8ee120f2b4cd0a2f9b94c0e889",
       "caption": "The propose message goes to The company’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:75a8e50cc183101d9c16c57aadf2506b22eef236776ec9a651c06a3bd55c039c"
+      ]
     },
     {
       "seq": 17,
@@ -994,7 +1013,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:subject-agent:0002",
       "messageDigest": "sha-256:3d95dc54be38bf5c43fee1577618f2b50a44bc8ee120f2b4cd0a2f9b94c0e889",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c52d3c6edd82f21651d3d81832ba3fad133e19a31fb82b2b963a202f1e49c8b2"
+      ]
     },
     {
       "seq": 25,
@@ -1081,7 +1103,10 @@
       },
       "reason": "recipient-established",
       "caption": "The data subject: Accepted, for Form the data-use agreement only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2380bc9b57793d4f51b0417129de6ad62092c760ea324bf031d35fbe6805388c"
+      ]
     },
     {
       "seq": 28,
@@ -1229,7 +1254,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:company-agent:0001",
       "messageDigest": "sha-256:67230a0817d8a4503974e8136fb94b9a834e8177de01a4e5261b874d188a078d",
       "caption": "The accept message goes to The data subject’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4c527f50e4c7789dfe23573430244c1c9d6f63a8bb54a25a6ab1126108f677f7"
+      ]
     },
     {
       "seq": 33,
@@ -1636,7 +1664,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:company-agent:0001",
       "messageDigest": "sha-256:67230a0817d8a4503974e8136fb94b9a834e8177de01a4e5261b874d188a078d",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:7e58d1d4ecde75764b8209bf7bd3ec6569d4f6396c19b79908c9261613acaf82"
+      ]
     },
     {
       "seq": 41,
@@ -1723,7 +1754,10 @@
       },
       "reason": "recipient-established",
       "caption": "The company: Accepted, for Form the data-use agreement only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9a19fd4636a4cb7eb549b6350b7eccf384937cecd6b34fd2da8834964c9b9e5c"
+      ]
     },
     {
       "seq": 44,
@@ -1872,7 +1906,10 @@
       },
       "reason": "terms-allow",
       "caption": "The data subject's contact data statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:f507e8fc0f68ad1887398c1138559eafe9d3940e110306d93f730562c6fd5c1e"
+      ]
     },
     {
       "seq": 49,
@@ -1962,7 +1999,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:subject-agent:0003",
       "messageDigest": "sha-256:a8cfcdc84bad9f247b955b54268fd0a564e372312840cef4a2e2585d367c5178",
       "caption": "The invoke message goes to The company’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4262d55fac3a05d6a8d8699c526fcf2012b2b325b4458b00b46e257e9b0a2803"
+      ]
     },
     {
       "seq": 52,
@@ -2413,7 +2453,11 @@
         "answer": "Accepted, for contact data claims only."
       },
       "caption": "The data subject's contact data statement: The data subject is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:a43a291934d198f9e8f518a9e1481bd7cc78faac5f8e08225434babcb4af0c40",
+        "sha-256:d14a335708f6a1404aa855620a7c7787013f16dacff7d0072c86249dca686625"
+      ]
     },
     {
       "seq": 56,
@@ -2464,7 +2508,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The data subject's contact data statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:f507e8fc0f68ad1887398c1138559eafe9d3940e110306d93f730562c6fd5c1e"
+      ]
     },
     {
       "seq": 58,
@@ -2505,7 +2552,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:subject-agent:0003",
       "messageDigest": "sha-256:a8cfcdc84bad9f247b955b54268fd0a564e372312840cef4a2e2585d367c5178",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:f0cf619847b9c52e8b6739da31a7b57628dc980ebdc404e0dfd4c817c17eca0f"
+      ]
     },
     {
       "seq": 60,
@@ -2528,7 +2578,10 @@
         },
         "provenance": "signed by The data subject"
       },
-      "caption": "The data subject's contact data statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The data subject's contact data statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:715a73898cef488c159056f4a6cfd2ac67e2938ae8703bdcf256f80671297155"
+      ]
     },
     {
       "seq": 61,
@@ -2615,7 +2668,10 @@
       },
       "reason": "recipient-established",
       "caption": "The onward recipient: Accepted, for Form the data-use agreement only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:ecd99773463df8aa4bfdcdbca049afdd6378dfd717edef732293ca15c727d4bc"
+      ]
     },
     {
       "seq": 64,
@@ -2792,7 +2848,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:company-agent:0003",
       "messageDigest": "sha-256:2c1bfea21f345712bd9c616d578b975e19d43730e19419160c63cb2679d3bc53",
       "caption": "The propose message goes to The onward recipient’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:af4cfb41b740d89c4d40d9a0194d5dafe571c313ae826f32f73f8b292699a8e1"
+      ]
     },
     {
       "seq": 70,
@@ -3227,7 +3286,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:company-agent:0003",
       "messageDigest": "sha-256:2c1bfea21f345712bd9c616d578b975e19d43730e19419160c63cb2679d3bc53",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:40a50491d4c96b3e8832c86b98483daab7d11f4c0b4f3688b3322464583cf774"
+      ]
     },
     {
       "seq": 78,
@@ -3314,7 +3376,10 @@
       },
       "reason": "recipient-established",
       "caption": "The company: Accepted, for Form the data-use agreement only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:16fead24eee357add7d44178d9cdef9f0253ab5b5635409014c850fddf1d49cc"
+      ]
     },
     {
       "seq": 81,
@@ -3462,7 +3527,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:partner-agent:0001",
       "messageDigest": "sha-256:8fec3814141b13ca5d36f4ea63c14f55320eecb561d536cec4616051df7a3e00",
       "caption": "The accept message goes to The company’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e5bcb6dff13d65c7611c72346d92933f595620fb72fbb15a07cb036250280b1f"
+      ]
     },
     {
       "seq": 86,
@@ -3869,7 +3937,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:partner-agent:0001",
       "messageDigest": "sha-256:8fec3814141b13ca5d36f4ea63c14f55320eecb561d536cec4616051df7a3e00",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:3cd2e4128dc5cad2056f37cc349ef21fab3f73004e00cb2c374d9919ac88ef38"
+      ]
     },
     {
       "seq": 94,
@@ -3956,7 +4027,10 @@
       },
       "reason": "recipient-established",
       "caption": "The onward recipient: Accepted, for Form the data-use agreement only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:ecd99773463df8aa4bfdcdbca049afdd6378dfd717edef732293ca15c727d4bc"
+      ]
     },
     {
       "seq": 97,
@@ -4105,7 +4179,10 @@
       },
       "reason": "terms-allow",
       "caption": "The data subject's contact data statement: its terms allow this: .",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:f507e8fc0f68ad1887398c1138559eafe9d3940e110306d93f730562c6fd5c1e"
+      ]
     },
     {
       "seq": 102,
@@ -4195,7 +4272,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:company-agent:0004",
       "messageDigest": "sha-256:6b5638feffc909434bd9f4177926e50a1637f9dff66a88e671483529a8044464",
       "caption": "The invoke message goes to The onward recipient’s agent.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:ca6447ca92beeb707101a52422f4a742f5ca3b699cb9a9cd8199d771afbbd883"
+      ]
     },
     {
       "seq": 105,
@@ -4646,7 +4726,11 @@
         "answer": "Accepted, for contact data claims only."
       },
       "caption": "The data subject's contact data statement: The data subject is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:aa9bc6c1cd3add2ee304d51590f1699864507e87995f9c2797640481f6a754d7",
+        "sha-256:d7dbba6c07162f826c68df9fdd4e20e60eb7a25dece76382317efad6f8557516"
+      ]
     },
     {
       "seq": 109,
@@ -4697,7 +4781,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The data subject's contact data statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:f507e8fc0f68ad1887398c1138559eafe9d3940e110306d93f730562c6fd5c1e"
+      ]
     },
     {
       "seq": 111,
@@ -4738,7 +4825,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:company-agent:0004",
       "messageDigest": "sha-256:6b5638feffc909434bd9f4177926e50a1637f9dff66a88e671483529a8044464",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:aecce5eb44bbc76eca9b522f8cd72d90f0446fb2f58449ac738db9fd7250f0b9"
+      ]
     },
     {
       "seq": 113,
@@ -4761,7 +4851,10 @@
         },
         "provenance": "signed by The data subject"
       },
-      "caption": "The data subject's contact data statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The data subject's contact data statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:715a73898cef488c159056f4a6cfd2ac67e2938ae8703bdcf256f80671297155"
+      ]
     },
     {
       "seq": 114,
@@ -4848,7 +4941,10 @@
       },
       "reason": "recipient-established",
       "caption": "The second onward recipient: Accepted, for Form the data-use agreement only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:d81b3c468ab9ba2f90827272278d993083d9f4b323c5508c0febf03f4647ea0a"
+      ]
     },
     {
       "seq": 117,
@@ -5025,7 +5121,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:partner-agent:0003",
       "messageDigest": "sha-256:ba118fe46b766fdd33ddd1abd0863b14109f05ac0064fc71b2441de8e4340118",
       "caption": "The propose message goes to The second onward recipient’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:46919df2af5d4a647cbd76a25271139bc3e6a804b6e0177b2c21e708762d6fd6"
+      ]
     },
     {
       "seq": 123,
@@ -5460,7 +5559,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:partner-agent:0003",
       "messageDigest": "sha-256:ba118fe46b766fdd33ddd1abd0863b14109f05ac0064fc71b2441de8e4340118",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:54fa6e1b779c6430d0a6e7a5c2d0e866d28f625f89c0fb76225776e937126950"
+      ]
     },
     {
       "seq": 131,
@@ -5547,7 +5649,10 @@
       },
       "reason": "recipient-established",
       "caption": "The onward recipient: Accepted, for Form the data-use agreement only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f897d70d5c0100a1c5b3a7def938b764da66c407cfd0a5966eb41130cdb89c35"
+      ]
     },
     {
       "seq": 134,
@@ -5695,7 +5800,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:downstream-agent:0001",
       "messageDigest": "sha-256:5c76e40822192fdaed3e399e47adc1436a6e4e8d823757eb4cbe5f9c920cf15d",
       "caption": "The accept message goes to The onward recipient’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f54604ddebdf29caab92a50b07005ab4207828f55148fbedc5888b4a19a60103"
+      ]
     },
     {
       "seq": 139,
@@ -6102,7 +6210,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:downstream-agent:0001",
       "messageDigest": "sha-256:5c76e40822192fdaed3e399e47adc1436a6e4e8d823757eb4cbe5f9c920cf15d",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:e854faa1957dcbc5acdac8162f420650f1eac25577dc4d49704cf13d2e55732d"
+      ]
     },
     {
       "seq": 147,
@@ -6189,7 +6300,10 @@
       },
       "reason": "recipient-established",
       "caption": "The second onward recipient: Accepted, for Form the data-use agreement only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:d81b3c468ab9ba2f90827272278d993083d9f4b323c5508c0febf03f4647ea0a"
+      ]
     },
     {
       "seq": 150,
@@ -6338,7 +6452,10 @@
       },
       "reason": "terms-allow",
       "caption": "The data subject's contact data statement: its terms allow this: .",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:f507e8fc0f68ad1887398c1138559eafe9d3940e110306d93f730562c6fd5c1e"
+      ]
     },
     {
       "seq": 155,
@@ -6428,7 +6545,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:partner-agent:0004",
       "messageDigest": "sha-256:d9cd8602a18b30ece361812d66f96a2a90e93ecfd846b23c8c07fc198d6491f3",
       "caption": "The invoke message goes to The second onward recipient’s agent.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:f686beb726610caba438ff79596b71b2d07783b12d21b532ea2a85e01e0bf319"
+      ]
     },
     {
       "seq": 158,
@@ -6879,7 +6999,11 @@
         "answer": "Accepted, for contact data claims only."
       },
       "caption": "The data subject's contact data statement: The data subject is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:3536f1def714649dad7570f5b2f82ff90600596c3a878aef9040e1c9d268c5ee",
+        "sha-256:d2b221534e646a5eb7eeb674a027ddc1d985b09911198f795a507c4fe1e8154b"
+      ]
     },
     {
       "seq": 162,
@@ -6930,7 +7054,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The data subject's contact data statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:f507e8fc0f68ad1887398c1138559eafe9d3940e110306d93f730562c6fd5c1e"
+      ]
     },
     {
       "seq": 164,
@@ -6971,7 +7098,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:partner-agent:0004",
       "messageDigest": "sha-256:d9cd8602a18b30ece361812d66f96a2a90e93ecfd846b23c8c07fc198d6491f3",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:2b0c6fb6809f87ac59771a964f19602add615c17205ed3cb4576993d47db81a7"
+      ]
     },
     {
       "seq": 166,
@@ -6994,7 +7124,10 @@
         },
         "provenance": "signed by The data subject"
       },
-      "caption": "The data subject's contact data statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The data subject's contact data statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:715a73898cef488c159056f4a6cfd2ac67e2938ae8703bdcf256f80671297155"
+      ]
     },
     {
       "seq": 167,
@@ -7081,7 +7214,10 @@
       },
       "reason": "recipient-established",
       "caption": "The company: Accepted, for Erase subject data only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:9a19fd4636a4cb7eb549b6350b7eccf384937cecd6b34fd2da8834964c9b9e5c"
+      ]
     },
     {
       "seq": 170,
@@ -7258,7 +7394,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:subject-agent:0005",
       "messageDigest": "sha-256:d837f24aac3e14c48bbd0f8cd0071951156a9046dcf7f451b694f6fe90dbd85e",
       "caption": "The invoke message goes to The company’s agent.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:10c146945708d537cc9223ff90acbd963219d4be4eb84c19d2d5a052bd0f1380"
+      ]
     },
     {
       "seq": 176,
@@ -7687,7 +7826,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:subject-agent:0005",
       "messageDigest": "sha-256:d837f24aac3e14c48bbd0f8cd0071951156a9046dcf7f451b694f6fe90dbd85e",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:4279bd4cfe4e683bdd8c4e4d920748ab0d40a0eeec66ea46b57c1c0705ba895f"
+      ]
     },
     {
       "seq": 184,
@@ -7702,6 +7844,9 @@
           "suite": "fixed-vocabulary",
           "id": "urn:scenario:erasure-request:data"
         }
+      ],
+      "linked": [
+        "sha-256:1593856e2e2c42233b74e1efd9f4fed2a92263e830aa301a234293927085d921"
       ]
     },
     {
@@ -7781,7 +7926,10 @@
       },
       "reason": "recipient-established",
       "caption": "The data subject: Accepted, for Erase subject data only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:2380bc9b57793d4f51b0417129de6ad62092c760ea324bf031d35fbe6805388c"
+      ]
     },
     {
       "seq": 187,
@@ -7929,7 +8077,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:company-agent:0005",
       "messageDigest": "sha-256:c12c7b4d1d6ba160109c0ca64f96c864af582c4df6fdf30b4ba4db29e4ab978e",
       "caption": "The deliver message goes to The data subject’s agent.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:f7957c1822218e0d6caf26a2046cccc76bd5e3ab727e7f01457fa35a56e1d5fa"
+      ]
     },
     {
       "seq": 192,
@@ -8342,7 +8493,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:company-agent:0005",
       "messageDigest": "sha-256:c12c7b4d1d6ba160109c0ca64f96c864af582c4df6fdf30b4ba4db29e4ab978e",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:ba9c28fd951422945891d3f10ebfac880f0946c99f7c6c920ddb7771b9ef0561"
+      ]
     },
     {
       "seq": 200,
@@ -8350,7 +8504,10 @@
       "agent": "company-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Duty audit: Deletion pending."
+      "caption": "Duty audit: Deletion pending.",
+      "linked": [
+        "sha-256:c36a5877afbced331df18951eba2a331242270be7f364fd6779de19e0af2d4bf"
+      ]
     },
     {
       "seq": 201,
@@ -8437,7 +8594,10 @@
       },
       "reason": "recipient-established",
       "caption": "The onward recipient: Accepted, for Erase subject data only.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:ecd99773463df8aa4bfdcdbca049afdd6378dfd717edef732293ca15c727d4bc"
+      ]
     },
     {
       "seq": 204,
@@ -8614,7 +8774,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:company-agent:0006",
       "messageDigest": "sha-256:31b58445abaa820f9169869c29afc42940b782b9b47fa0a1df873a79d7c07736",
       "caption": "The invoke message goes to The onward recipient’s agent.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:2ccddf391dac9c76843415418cd99c5b61bf95b31ab85232813fbabab56767d2"
+      ]
     },
     {
       "seq": 210,
@@ -9045,7 +9208,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:company-agent:0006",
       "messageDigest": "sha-256:31b58445abaa820f9169869c29afc42940b782b9b47fa0a1df873a79d7c07736",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:72859714cc62fd6cdb0f552d24e27520bf51090068b8cbe559dd66e90e74c811"
+      ]
     },
     {
       "seq": 218,
@@ -9060,6 +9226,9 @@
           "suite": "fixed-vocabulary",
           "id": "urn:scenario:erasure-request:data"
         }
+      ],
+      "linked": [
+        "sha-256:a83f12237d415b6397b533dc48bccd39becdf03ea663b9231a2e0613b688d072"
       ]
     },
     {
@@ -9139,7 +9308,10 @@
       },
       "reason": "recipient-established",
       "caption": "The company: Accepted, for Erase subject data only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:16fead24eee357add7d44178d9cdef9f0253ab5b5635409014c850fddf1d49cc"
+      ]
     },
     {
       "seq": 221,
@@ -9287,7 +9459,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:partner-agent:0005",
       "messageDigest": "sha-256:0e1aed485c241f24fa33880af99deef7499264e4f6a3409fe87ccecd5af63752",
       "caption": "The deliver message goes to The company’s agent.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:ba01e03d12125e7574a3d91860b9e7d5ffadcab10bfdb888f38c1fadfff4eb03"
+      ]
     },
     {
       "seq": 226,
@@ -9700,7 +9875,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:partner-agent:0005",
       "messageDigest": "sha-256:0e1aed485c241f24fa33880af99deef7499264e4f6a3409fe87ccecd5af63752",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:3c9f0824bc8d16b9eefb5623e2153dabe7e8fedcf6653c47ee2933eef01d286b"
+      ]
     },
     {
       "seq": 234,
@@ -9708,7 +9886,10 @@
       "agent": "partner-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Duty audit: Deletion pending."
+      "caption": "Duty audit: Deletion pending.",
+      "linked": [
+        "sha-256:e7e077ae57cc3d82c849a84b8e6afc1ddfbfb919af40e2d1150abd1112e3c650"
+      ]
     },
     {
       "seq": 235,
@@ -9795,7 +9976,10 @@
       },
       "reason": "recipient-established",
       "caption": "The second onward recipient: Accepted, for Erase subject data only.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:d81b3c468ab9ba2f90827272278d993083d9f4b323c5508c0febf03f4647ea0a"
+      ]
     },
     {
       "seq": 238,
@@ -9972,7 +10156,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:partner-agent:0006",
       "messageDigest": "sha-256:26b71c453ad7cbcf05e637388fd89aaeaf984186ab23e3cd9194be5c2803b8bb",
       "caption": "The invoke message goes to The second onward recipient’s agent.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:0443614dd40ed7ee114cab01936cbe8cc8cb7f663ef4b04a94dd67837d12532e"
+      ]
     },
     {
       "seq": 244,
@@ -10403,7 +10590,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:partner-agent:0006",
       "messageDigest": "sha-256:26b71c453ad7cbcf05e637388fd89aaeaf984186ab23e3cd9194be5c2803b8bb",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:12699f311dbad03553006530a19056eee932db9ee43371c5e4608877784b1cde"
+      ]
     },
     {
       "seq": 252,
@@ -10418,6 +10608,9 @@
           "suite": "fixed-vocabulary",
           "id": "urn:scenario:erasure-request:data"
         }
+      ],
+      "linked": [
+        "sha-256:8b991c4ca27f6c3babe464afba0b6e1e3e687b5a4b3b5346a5900f282e05c9a3"
       ]
     },
     {
@@ -10497,7 +10690,10 @@
       },
       "reason": "recipient-established",
       "caption": "The onward recipient: Accepted, for Erase subject data only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:f897d70d5c0100a1c5b3a7def938b764da66c407cfd0a5966eb41130cdb89c35"
+      ]
     },
     {
       "seq": 255,
@@ -10645,7 +10841,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:downstream-agent:0002",
       "messageDigest": "sha-256:9e093e1dbc96c858d4057b39fe6e6f0b6dd9634bf0b8d03c9a40988c82b36b3c",
       "caption": "The deliver message goes to The onward recipient’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:a7a1afcbe8d181f974c31d6a212e43dadfb0237cf1caac100089101cae895b82"
+      ]
     },
     {
       "seq": 260,
@@ -11040,7 +11239,10 @@
       "messageId": "urn:awp:engine-erasure-request-main:downstream-agent:0002",
       "messageDigest": "sha-256:9e093e1dbc96c858d4057b39fe6e6f0b6dd9634bf0b8d03c9a40988c82b36b3c",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:f4ccbf30953a4fbcb5a7f34485e3fcc8f1a1a57dec2c9c333ac8647caee99215"
+      ]
     },
     {
       "seq": 268,
@@ -11048,7 +11250,11 @@
       "agent": "company-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Duty audit: Deletion acknowledged; acknowledged by its recipient."
+      "caption": "Duty audit: Deletion acknowledged; acknowledged by its recipient.",
+      "linked": [
+        "sha-256:0e47ce835afc35c35d58847cf25d940be65b0094f8f0c3c6aacd7b450927a8f7"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/erasure-request--baseline.json"
 }

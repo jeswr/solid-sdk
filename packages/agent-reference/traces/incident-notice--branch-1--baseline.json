@@ -107,7 +107,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -202,7 +202,10 @@
       },
       "reason": "recipient-established",
       "caption": "The customer: Accepted, for Form the data-use agreement only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6a3c1d840920d36c87540931211a1f4db8e011d118ffc31f4fd904be2dd9e3c3"
+      ]
     },
     {
       "seq": 4,
@@ -379,7 +382,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:provider-agent:0002",
       "messageDigest": "sha-256:5d5bd9b71c687dacd477d8abe9ca0d74e7065007b2276c28486533568f9f8d62",
       "caption": "The propose message goes to The customer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:68694e3c506ef027379b8d5ef7c0287b027a39c63d2f12a76f5480a846ce7a65"
+      ]
     },
     {
       "seq": 10,
@@ -838,7 +844,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:provider-agent:0002",
       "messageDigest": "sha-256:5d5bd9b71c687dacd477d8abe9ca0d74e7065007b2276c28486533568f9f8d62",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:daa3b0b62eb3c33d7be86085af561ed8db788b9c14081ee2337a940ffcc889e3"
+      ]
     },
     {
       "seq": 18,
@@ -925,7 +934,10 @@
       },
       "reason": "recipient-established",
       "caption": "The service provider: Accepted, for Form the data-use agreement only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b5cdad9d53e189e5f1dec6193f85c8414de7114e6d6f01f6b9386e8224f51ddd"
+      ]
     },
     {
       "seq": 21,
@@ -1073,7 +1085,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:customer-agent:0001",
       "messageDigest": "sha-256:35ed85be09b26cb020b62ae502ce1a3697c5d2923454114f0a3d2892e6269c83",
       "caption": "The accept message goes to The service provider’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e738c8689eb367392f6ae8496975fb544d1c17f349533d4d60d7196c102cf74d"
+      ]
     },
     {
       "seq": 26,
@@ -1480,7 +1495,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:customer-agent:0001",
       "messageDigest": "sha-256:35ed85be09b26cb020b62ae502ce1a3697c5d2923454114f0a3d2892e6269c83",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f403140c3d7b50a3cb5d337a98a1d8886f72bdd3d24c113961d6b1afbf293fc0"
+      ]
     },
     {
       "seq": 34,
@@ -1567,7 +1585,10 @@
       },
       "reason": "recipient-established",
       "caption": "The second customer: Accepted, for Form the data-use agreement only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:37d0adfa8fded34bd2a7f078ea307114946e0411b19a6af93470fef7d61bb7b4"
+      ]
     },
     {
       "seq": 37,
@@ -1744,7 +1765,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:provider-agent:0004",
       "messageDigest": "sha-256:e488df343455bceee21af0aa47c8ec1ef28ac081c083570e3d42138a8604b211",
       "caption": "The propose message goes to The second customer’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:7660f78a41fa14d2a10a0803c67cf5d0baa09785cae8d45a674517118345df6c"
+      ]
     },
     {
       "seq": 43,
@@ -2203,7 +2227,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:provider-agent:0004",
       "messageDigest": "sha-256:e488df343455bceee21af0aa47c8ec1ef28ac081c083570e3d42138a8604b211",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e73d2df60ee5562af5e0fcfa5a2e97b093044f093fc0ce4f76d82ce355cb4383"
+      ]
     },
     {
       "seq": 51,
@@ -2290,7 +2317,10 @@
       },
       "reason": "recipient-established",
       "caption": "The service provider: Accepted, for Form the data-use agreement only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4c93b380c387bf7fa23242b92c3618fceacd8853434639a7f9259aabeaf43dca"
+      ]
     },
     {
       "seq": 54,
@@ -2438,7 +2468,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:second-agent:0001",
       "messageDigest": "sha-256:cc3a048d3f1007ff2ac183d3217f354d0b6c34a63d363fc3fab04ae68bb162f7",
       "caption": "The accept message goes to The service provider’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5c037ce068fd7803998ba61474336d0df8900b572ffaf9dae8573496449358cc"
+      ]
     },
     {
       "seq": 59,
@@ -2845,7 +2878,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:second-agent:0001",
       "messageDigest": "sha-256:cc3a048d3f1007ff2ac183d3217f354d0b6c34a63d363fc3fab04ae68bb162f7",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4aa8df89f4380173c1cbbbbd27d633def526c787a529a413185a075f03184c80"
+      ]
     },
     {
       "seq": 67,
@@ -2932,7 +2968,10 @@
       },
       "reason": "recipient-established",
       "caption": "The regulator: Accepted, for Form the data-use agreement only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:dfb807dae6985719bcb004dfa20615bde41892571da2a86903f138a31319dc6d"
+      ]
     },
     {
       "seq": 70,
@@ -3109,7 +3148,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:provider-agent:0006",
       "messageDigest": "sha-256:2799d93b5ed7fc747e08a89bfabcc535d58bbf1587890cbfa2898a51f7435084",
       "caption": "The propose message goes to The regulator’s agent.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:920d734304176ae63d31616855f72ecb348fa2519c7eceeb674e4886ce410835"
+      ]
     },
     {
       "seq": 76,
@@ -3568,7 +3610,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:provider-agent:0006",
       "messageDigest": "sha-256:2799d93b5ed7fc747e08a89bfabcc535d58bbf1587890cbfa2898a51f7435084",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b15e411db4fa7ffd52b6b7486239d79800eaa71307c5c7b9d364ee6509066b0d"
+      ]
     },
     {
       "seq": 84,
@@ -3655,7 +3700,10 @@
       },
       "reason": "recipient-established",
       "caption": "The service provider: Accepted, for Form the data-use agreement only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:67536c55afbe19a869c96d5dac437ecdbf07232ab9154b5019f970a46d6c5427"
+      ]
     },
     {
       "seq": 87,
@@ -3803,7 +3851,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:regulator-agent:0001",
       "messageDigest": "sha-256:baa6fa5febadf934c9c380eb970425bd366d9c2e447b5689cf49c59cf634f80c",
       "caption": "The accept message goes to The service provider’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6a77004d995e940791afad3cdc1644e5b6a2683cd636d637d5fda612874f753f"
+      ]
     },
     {
       "seq": 92,
@@ -4210,7 +4261,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:regulator-agent:0001",
       "messageDigest": "sha-256:baa6fa5febadf934c9c380eb970425bd366d9c2e447b5689cf49c59cf634f80c",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:6d7b3e004b1233fb8939261b34d0385c41882128f4cf8cc4def687a9ae6ff23f"
+      ]
     },
     {
       "seq": 100,
@@ -4218,7 +4272,10 @@
       "agent": "provider-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Duty audit: Notification pending. Notification pending. Notification pending."
+      "caption": "Duty audit: Notification pending. Notification pending. Notification pending.",
+      "linked": [
+        "sha-256:ba160f0625563e8127616400e33b37c2f0a7ff1e92d44e9ca2e9c66b8c008b56"
+      ]
     },
     {
       "seq": 101,
@@ -4226,7 +4283,10 @@
       "agent": "provider-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Duty audit: Notification pending. Notification pending. Notification pending."
+      "caption": "Duty audit: Notification pending. Notification pending. Notification pending.",
+      "linked": [
+        "sha-256:ba160f0625563e8127616400e33b37c2f0a7ff1e92d44e9ca2e9c66b8c008b56"
+      ]
     },
     {
       "seq": 102,
@@ -4313,7 +4373,10 @@
       },
       "reason": "recipient-established",
       "caption": "The customer: Accepted, for Acknowledge an incident notice only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:6a3c1d840920d36c87540931211a1f4db8e011d118ffc31f4fd904be2dd9e3c3"
+      ]
     },
     {
       "seq": 105,
@@ -4490,7 +4553,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:provider-agent:0007",
       "messageDigest": "sha-256:2cda8e9958181d7fde908f4590557a48e025e54a327158ce13d547fbc7879e30",
       "caption": "The invoke message goes to The customer’s agent.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:0043cfae0e5927e611607a11c23674671106f598974b3b9a86b2c43dcc419295"
+      ]
     },
     {
       "seq": 111,
@@ -4720,7 +4786,10 @@
       },
       "reason": "recipient-established",
       "caption": "The second customer: Accepted, for Acknowledge an incident notice only.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:37d0adfa8fded34bd2a7f078ea307114946e0411b19a6af93470fef7d61bb7b4"
+      ]
     },
     {
       "seq": 115,
@@ -4897,7 +4966,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:provider-agent:0008",
       "messageDigest": "sha-256:90488c0cb5e767127902e617d2e281b950a6e8643d60e818310d5fe4e7613cb9",
       "caption": "The invoke message goes to The second customer’s agent.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:68faa1350aa4d68a5192863bf324b9176354b82eb127f3fad2656c7c2c802374"
+      ]
     },
     {
       "seq": 121,
@@ -5127,7 +5199,10 @@
       },
       "reason": "recipient-established",
       "caption": "The regulator: Accepted, for Acknowledge an incident notice only.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:dfb807dae6985719bcb004dfa20615bde41892571da2a86903f138a31319dc6d"
+      ]
     },
     {
       "seq": 125,
@@ -5304,7 +5379,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:provider-agent:0009",
       "messageDigest": "sha-256:c472e0e320e00ba29e88af1698eb9f412c593a9ebb34ef40267ed466e1fca504",
       "caption": "The invoke message goes to The regulator’s agent.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:eb2d42743d7e9f294e32d6dd2c81f99e64874965133771acdf400287739370e4"
+      ]
     },
     {
       "seq": 131,
@@ -5725,7 +5803,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:provider-agent:0008",
       "messageDigest": "sha-256:90488c0cb5e767127902e617d2e281b950a6e8643d60e818310d5fe4e7613cb9",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9a5b80f79cf09289de46089cde510f2f4fa16c3f35f21ba0aa46a6f779bd881e"
+      ]
     },
     {
       "seq": 139,
@@ -5804,7 +5885,10 @@
       },
       "reason": "recipient-established",
       "caption": "The service provider: Accepted, for Acknowledge an incident notice only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4c93b380c387bf7fa23242b92c3618fceacd8853434639a7f9259aabeaf43dca"
+      ]
     },
     {
       "seq": 141,
@@ -5952,7 +6036,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:second-agent:0002",
       "messageDigest": "sha-256:043a6248bd4dd92e478982c2b57bdfe15c67d9b4c5bdd1fdf23181291edaae0a",
       "caption": "The deliver message goes to The service provider’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:3dfada2e6a01e4a12ee6e3a40e77e8d22517c40f02dfa9a02bc4472ab5166dfd"
+      ]
     },
     {
       "seq": 146,
@@ -6331,7 +6418,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:second-agent:0002",
       "messageDigest": "sha-256:043a6248bd4dd92e478982c2b57bdfe15c67d9b4c5bdd1fdf23181291edaae0a",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:0fae91c71ae35c7fd14eaa632c216db0960d0f9ef337a2278948e92efe7fbfb3"
+      ]
     },
     {
       "seq": 154,
@@ -6609,7 +6699,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:provider-agent:0009",
       "messageDigest": "sha-256:c472e0e320e00ba29e88af1698eb9f412c593a9ebb34ef40267ed466e1fca504",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:1c34041fd4f48cbc034b618e176d996337a680620c062cf4044a69a115a85a54"
+      ]
     },
     {
       "seq": 161,
@@ -6688,7 +6781,10 @@
       },
       "reason": "recipient-established",
       "caption": "The service provider: Accepted, for Acknowledge an incident notice only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:67536c55afbe19a869c96d5dac437ecdbf07232ab9154b5019f970a46d6c5427"
+      ]
     },
     {
       "seq": 163,
@@ -6836,7 +6932,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:regulator-agent:0002",
       "messageDigest": "sha-256:c6da956973bd26e62fe2f429e46ff056fb39baf3cfed64f9678342c1b31f4214",
       "caption": "The deliver message goes to The service provider’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:7aa4cddb5333511a7a72db54344bd243e1868982dabff87b889d707998709fe3"
+      ]
     },
     {
       "seq": 168,
@@ -7215,7 +7314,10 @@
       "messageId": "urn:awp:engine-incident-notice-branch-1:regulator-agent:0002",
       "messageDigest": "sha-256:c6da956973bd26e62fe2f429e46ff056fb39baf3cfed64f9678342c1b31f4214",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:1a93f66a826c6ef8c2089d75be037bfb8b40815c9e5e96b9fa51dff39cbad59a"
+      ]
     },
     {
       "seq": 176,
@@ -7238,7 +7340,10 @@
       "outcome": "ask-more",
       "reason": "result-uncertain",
       "caption": "The notice audit retains the missed acknowledgement.",
-      "gateRun": 7
+      "gateRun": 7,
+      "linked": [
+        "sha-256:ae8a4dcf157d87a03e397d2d6090fa2e479c77b610b0d91c4b35e55eb0ffd2da"
+      ]
     },
     {
       "seq": 178,
@@ -7246,7 +7351,11 @@
       "agent": "provider-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Duty audit: Notification missed. Notification acknowledged; acknowledged by its recipient. Notification acknowledged; acknowledged by its recipient."
+      "caption": "Duty audit: Notification missed. Notification acknowledged; acknowledged by its recipient. Notification acknowledged; acknowledged by its recipient.",
+      "linked": [
+        "sha-256:83eac5499613559f94fb7689a5270c21a90ff37e223f713a48334a895b6f1969"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/incident-notice--baseline.json"
 }

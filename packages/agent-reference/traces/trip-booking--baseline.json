@@ -111,7 +111,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -218,7 +218,10 @@
       },
       "reason": "recipient-established",
       "caption": "The reservation service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7eae26ab9a8f87485cb0495f9e4efe9c593fdf938570c7b0318df1460f661307"
+      ]
     },
     {
       "seq": 4,
@@ -365,7 +368,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cb317e682905ca051d5fc1dbea39047a7b41c83eba4824886cafde50709d5265"
+      ]
     },
     {
       "seq": 9,
@@ -517,7 +523,10 @@
       },
       "reason": "recipient-established",
       "caption": "The reservation service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0d50da2a5273e492ea54029b352ab5034a4fbd15276da541ed4340b72bd8ecbb"
+      ]
     },
     {
       "seq": 18,
@@ -664,7 +673,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d67ff4dc883f6334a740000b1f4d3f32c65860fb1ef49bdc18c6e0467d570c8d"
+      ]
     },
     {
       "seq": 23,
@@ -816,7 +828,10 @@
       },
       "reason": "recipient-established",
       "caption": "The reservation service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:835196b7cd1f562a11d145e987a37168f8dba6ac1c32731d845130ae7958163d"
+      ]
     },
     {
       "seq": 32,
@@ -963,7 +978,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1ab4b15bbbc3caa196ff93388af68fb994801f41a2371d1735bef7f53ed56e2f"
+      ]
     },
     {
       "seq": 37,
@@ -1115,7 +1133,10 @@
       },
       "reason": "recipient-established",
       "caption": "The reservation service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:aeb7d0be504a3fa1a3ae4f03f1d38fb92f4cc0b187b3cd3937754e8106d88a8b"
+      ]
     },
     {
       "seq": 46,
@@ -1262,7 +1283,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7f80a7eab27774c16b868bc09ef0520590b38d11cf8c1499215f14f73eea42e3"
+      ]
     },
     {
       "seq": 51,
@@ -1414,7 +1438,10 @@
       },
       "reason": "recipient-established",
       "caption": "The reservation service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:7eae26ab9a8f87485cb0495f9e4efe9c593fdf938570c7b0318df1460f661307"
+      ]
     },
     {
       "seq": 60,
@@ -1561,7 +1588,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:cdb1de053134f78b6e1372762ff738a2892a347a86a34ee4ddfa7a8b9660b032"
+      ]
     },
     {
       "seq": 65,
@@ -1713,7 +1743,10 @@
       },
       "reason": "recipient-established",
       "caption": "The reservation service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:7eae26ab9a8f87485cb0495f9e4efe9c593fdf938570c7b0318df1460f661307"
+      ]
     },
     {
       "seq": 74,
@@ -1860,7 +1893,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:793477c52082060c913f3264952d8d99ac6c8ae0e5dff8388f6cc1c61422f5c3"
+      ]
     },
     {
       "seq": 79,
@@ -2100,7 +2136,10 @@
       },
       "reason": "recipient-established",
       "caption": "The reservation service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:0d50da2a5273e492ea54029b352ab5034a4fbd15276da541ed4340b72bd8ecbb"
+      ]
     },
     {
       "seq": 96,
@@ -2247,7 +2286,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:ecb4a147994690ff017d09612297b67122b66c1e5160248ec156484764b432a1"
+      ]
     },
     {
       "seq": 101,
@@ -2399,7 +2441,10 @@
       },
       "reason": "recipient-established",
       "caption": "The reservation service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:835196b7cd1f562a11d145e987a37168f8dba6ac1c32731d845130ae7958163d"
+      ]
     },
     {
       "seq": 110,
@@ -2546,7 +2591,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:70408bd3cdb69a960f16f572ba06e49bbd16680aa4eb13ebbbad728f1028aeed"
+      ]
     },
     {
       "seq": 115,
@@ -2698,7 +2746,10 @@
       },
       "reason": "recipient-established",
       "caption": "The reservation service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:aeb7d0be504a3fa1a3ae4f03f1d38fb92f4cc0b187b3cd3937754e8106d88a8b"
+      ]
     },
     {
       "seq": 124,
@@ -2845,7 +2896,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:e6e34b022a822b01ec0b591368ffdba6b85b9d37821cf01e45109d4b1193c39a"
+      ]
     },
     {
       "seq": 129,
@@ -2997,7 +3051,10 @@
       },
       "reason": "recipient-established",
       "caption": "The reservation service: Accepted, for Accepting the same agreement terms only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:7eae26ab9a8f87485cb0495f9e4efe9c593fdf938570c7b0318df1460f661307"
+      ]
     },
     {
       "seq": 138,
@@ -3144,7 +3201,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Accepting the same agreement terms with The reservation service.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:53c9445b88b43e7459c972b4cc4106e968bdb9063add4c601d5ae4cf1306b434"
+      ]
     },
     {
       "seq": 143,
@@ -3272,7 +3332,11 @@
         "answer": "Accepted, for identity passport claims only."
       },
       "caption": "The identity issuer's identity passport statement: The identity issuer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:27172c8f884e662674c59400fda78e22fe967379ad7a71ac0e01c77f93163099",
+        "sha-256:a39a13871f7b5343836c7c79962f1d33df44af21c025321424152cbbf4fe05c6"
+      ]
     },
     {
       "seq": 151,
@@ -3319,7 +3383,10 @@
         "text": "Its terms allow this: use for Passport management or Ticketing; share for Passport management or Ticketing."
       },
       "caption": "The identity issuer's identity passport statement: its terms allow this: use for Passport management or Ticketing; share for Passport management or Ticketing.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8e8d1a4f27c908fc86c685a1cf2ed486ff81250c052626ebf3cd9ca56af05e01"
+      ]
     },
     {
       "seq": 153,
@@ -3363,7 +3430,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The identity issuer's identity passport statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8b6502d32aaf254228a3f8529c55fc09e5e3b377b261c7ea84c53bf8a0351516"
+      ]
     },
     {
       "seq": 155,
@@ -3386,7 +3456,10 @@
         },
         "provenance": "signed by The identity issuer"
       },
-      "caption": "The identity issuer's identity passport statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The identity issuer's identity passport statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:f8ac5ad0eace880d495b98a1ed15da66379ff70f0de6957bbc4a2405d6b599cd"
+      ]
     },
     {
       "seq": 156,
@@ -3473,7 +3546,10 @@
       },
       "reason": "recipient-established",
       "caption": "The airline that tickets: Accepted, for Ticketing the confirmed flight only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:3d8db161079a2c17f1e1e6cae9e978712a51646132a615097aaf8ed19414b0a8"
+      ]
     },
     {
       "seq": 159,
@@ -3622,7 +3698,10 @@
       },
       "reason": "terms-allow",
       "caption": "The identity issuer's identity passport statement: its terms allow this: use for Passport management or Ticketing; share for Passport management or Ticketing.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:8e8d1a4f27c908fc86c685a1cf2ed486ff81250c052626ebf3cd9ca56af05e01"
+      ]
     },
     {
       "seq": 164,
@@ -3712,7 +3791,10 @@
       "messageId": "urn:awp:engine-trip-booking-main:receiver-agent:0004",
       "messageDigest": "sha-256:f021181372ee7a6e34be66a229b6cd4e6425a41628cbe81e839b5a94b729e8b0",
       "caption": "The invoke message goes to The airline that tickets’s agent.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:6be09ca495471cae6069a3a9f421863627f91817e2bc027da5d4d26813fa75dc"
+      ]
     },
     {
       "seq": 167,
@@ -4249,7 +4331,11 @@
         "answer": "Accepted, for identity passport claims only."
       },
       "caption": "The identity issuer's identity passport statement: The identity issuer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:01710725389efc002595fe904e5bab5934cb3cc70fbc8a2b3ee0512eab45ae0c",
+        "sha-256:a66c26cb120fc1917ef5ad2bbe41ba239cbdbbe71d1182495a1a83828aff1cbe"
+      ]
     },
     {
       "seq": 171,
@@ -4300,7 +4386,10 @@
         "text": "Its terms allow this: use for Passport management or Ticketing; share for Passport management or Ticketing."
       },
       "caption": "The identity issuer's identity passport statement: its terms allow this: use for Passport management or Ticketing; share for Passport management or Ticketing.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8e8d1a4f27c908fc86c685a1cf2ed486ff81250c052626ebf3cd9ca56af05e01"
+      ]
     },
     {
       "seq": 173,
@@ -4341,7 +4430,10 @@
       "messageId": "urn:awp:engine-trip-booking-main:receiver-agent:0004",
       "messageDigest": "sha-256:f021181372ee7a6e34be66a229b6cd4e6425a41628cbe81e839b5a94b729e8b0",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4c35ce59360d16d507c6e3a91d338ad29e9fb4d0ac70c13facc479fc19666e09"
+      ]
     },
     {
       "seq": 175,
@@ -4364,7 +4456,11 @@
         },
         "provenance": "signed by The identity issuer"
       },
-      "caption": "The identity issuer's identity passport statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The identity issuer's identity passport statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:99c37dd71e4112fb2ae395dd1e6a12527d8cb465d58303d2f73e1927fc449d93"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/trip-booking--baseline.json"
 }

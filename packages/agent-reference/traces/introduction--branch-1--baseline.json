@@ -69,7 +69,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -172,7 +172,10 @@
       },
       "reason": "recipient-established",
       "caption": "The second person: Accepted, for Being introduced to a stranger safely only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8cedf0432bce85a85ce8b07553f33f9a0330ba5524c22f892b99169206bbb5e9"
+      ]
     },
     {
       "seq": 4,
@@ -349,7 +352,10 @@
       "messageId": "urn:awp:engine-introduction-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:506550fa9ac44cef6d5d23451dea8749a5c9479d08e261203203126e98d04057",
       "caption": "The invoke message goes to The second person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1001a85fd80c4037beaf635cde1a257aee3b7b2f4a92c261f71f2016dafd46ca"
+      ]
     },
     {
       "seq": 10,
@@ -842,7 +848,10 @@
       "messageId": "urn:awp:engine-introduction-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:506550fa9ac44cef6d5d23451dea8749a5c9479d08e261203203126e98d04057",
       "caption": "The message is admitted; statements that did not pass are labelled as not admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c602cc8dd5a17ec1394f2ea99419de70ea1d7f073325d67527bd70d7087a2fbb"
+      ]
     },
     {
       "seq": 16,
@@ -1025,7 +1034,10 @@
       "outcome": "ask-principal",
       "reason": "method-not-accepted",
       "caption": "The gate holds this exact action for the person's decision.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e76cdd20877ba4351d0407858244f3081f49893844a5eeb2d39c41406a2e81a3"
+      ]
     },
     {
       "seq": 23,
@@ -1040,5 +1052,6 @@
       },
       "caption": "The gate shows the self-made statement, its author and its lack of anyone vouching for it."
     }
-  ]
+  ],
+  "linkedTable": "linked/introduction--baseline.json"
 }

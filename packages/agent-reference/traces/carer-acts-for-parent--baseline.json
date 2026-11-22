@@ -73,7 +73,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -168,7 +168,10 @@
       },
       "reason": "recipient-established",
       "caption": "A care provider: Accepted, for An adult child acts for a parent only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e46b2098b2fee1f2be654815dd639cda9ca8b321f67cb6b8ae53fb5c0738b517"
+      ]
     },
     {
       "seq": 4,
@@ -345,7 +348,10 @@
       "messageId": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0002",
       "messageDigest": "sha-256:8574f2ff942de6bd25308d4c061b5dfecb686b8f232052516e440db0a4670330",
       "caption": "The invoke message goes to The receiving agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:35c08d23ce48028fd94c7f59d310e852dcb49a6cd9687003d920227b09bc731e"
+      ]
     },
     {
       "seq": 10,
@@ -808,7 +814,11 @@
       "messageId": "urn:awp:engine-carer-acts-for-parent-main:owner-agent:0002",
       "messageDigest": "sha-256:8574f2ff942de6bd25308d4c061b5dfecb686b8f232052516e440db0a4670330",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f11504f0ee5587c79e380afc5d41822f419f7826b5f231a39fa0778bcdc137bd"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/carer-acts-for-parent--baseline.json"
 }

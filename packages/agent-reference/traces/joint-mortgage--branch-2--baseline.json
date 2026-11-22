@@ -105,7 +105,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -188,7 +188,11 @@
         "answer": "Accepted, for income payslip claims only."
       },
       "caption": "The second applicant’s employer's income payslip statement: The second applicant’s employer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5dee7a0fc7449976fe2ee0fce70d727efe5cd0dbf1810c2d0554f1b3f807edab",
+        "sha-256:456f21a1cb1b1438fc0e2270ca9a6534855811cf38c78f25b6829455981326de"
+      ]
     },
     {
       "seq": 3,
@@ -235,7 +239,10 @@
         "text": "Its terms allow this: use for Joint mortgage."
       },
       "caption": "The second applicant’s employer's income payslip statement: its terms allow this: use for Joint mortgage.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:20359a493ae534fc170cb687f208d95231c7809fceb6bb1f06e822af0c3020ec"
+      ]
     },
     {
       "seq": 5,
@@ -279,7 +286,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The second applicant’s employer's income payslip statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:602d2c1f142ea6e6c028e8874eac71c932cb75350341e227a2f1047913e3b7fa"
+      ]
     },
     {
       "seq": 7,
@@ -302,7 +312,10 @@
         },
         "provenance": "signed by The second applicant’s employer"
       },
-      "caption": "The second applicant’s employer's income payslip statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The second applicant’s employer's income payslip statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:53c5b72ba056601114dcc82f5b6f816b33f1c7a28cc68be05f1da6416d1017fe"
+      ]
     },
     {
       "seq": 8,
@@ -389,7 +402,10 @@
       },
       "reason": "recipient-established",
       "caption": "The first applicant: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:75f8da0447e43563e65852442f73ed6a36c80fbaeb0497f4206edd20b144a716"
+      ]
     },
     {
       "seq": 11,
@@ -566,7 +582,10 @@
       "messageId": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0002",
       "messageDigest": "sha-256:0bf3ce28aa1e142bffc0b44997efbbe543f229adcb9c8625814d08ed75279b60",
       "caption": "The invoke message goes to The first applicant’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:017dc0035d7d5d4ecad50b7802d5bc4830aad800a17ad8613a5de0ae72a4f7fc"
+      ]
     },
     {
       "seq": 17,
@@ -981,7 +1000,10 @@
       "messageId": "urn:awp:engine-joint-mortgage-branch-2:receiver-agent:0002",
       "messageDigest": "sha-256:0bf3ce28aa1e142bffc0b44997efbbe543f229adcb9c8625814d08ed75279b60",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:482d8cfe7c857242bd5d73dedef7fe2a30513ea3b746f009ced272ca2c6c88cb"
+      ]
     },
     {
       "seq": 25,
@@ -1068,7 +1090,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for A joint mortgage for two people only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:02dd9a4787340dc3de10c855f6abbf562b3bbebe171ffdb1988c4286b09aea0a"
+      ]
     },
     {
       "seq": 28,
@@ -1217,7 +1242,10 @@
         "text": "The issuer's terms: use for Joint mortgage. They go out with the data."
       },
       "caption": "The second applicant’s employer's income payslip statement: its terms forbid this (use for Joint mortgage).",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:20359a493ae534fc170cb687f208d95231c7809fceb6bb1f06e822af0c3020ec"
+      ]
     },
     {
       "seq": 33,
@@ -1239,7 +1267,11 @@
       "outcome": "stop",
       "reason": "prohibited",
       "caption": "The actual credential's terms prohibit release.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9b2be81c9967bbefcf068d15a0b90174c6e83d62edb18541f276e62fd77a1bc4"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/joint-mortgage--baseline.json"
 }

@@ -105,7 +105,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -188,7 +188,11 @@
         "answer": "Accepted, for energy half hourly claims only."
       },
       "caption": "The meter data service's energy half hourly statement: The meter data service is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c938f5666842ec0aa12c4c855a85a8d47492652c86f98577bb1c17146333a727",
+        "sha-256:c8dca5f78cc975e1f40b3df923eb66d4535208bf990d25e3b2f2def97ddd82fa"
+      ]
     },
     {
       "seq": 3,
@@ -235,7 +239,10 @@
         "text": "Its terms allow this: use for Meter billing."
       },
       "caption": "The meter data service's energy half hourly statement: its terms allow this: use for Meter billing.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d7dd3c2a52bf3ba0ee9a3833cd525017e2780c7dc17a55a6a430d5c721c7f69f"
+      ]
     },
     {
       "seq": 5,
@@ -279,7 +286,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The meter data service's energy half hourly statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7b032804021d0a54e7641bd74dfcd7479a1bba34dbb56510856961364023a39f"
+      ]
     },
     {
       "seq": 7,
@@ -302,7 +312,10 @@
         },
         "provenance": "signed by The meter data service"
       },
-      "caption": "The meter data service's energy half hourly statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The meter data service's energy half hourly statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:b3fade41c220d1e0290814558e190c48ccac74b3dd59b8f4f56209bdeab8282a"
+      ]
     },
     {
       "seq": 8,
@@ -389,7 +402,10 @@
       },
       "reason": "recipient-established",
       "caption": "The household: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5e96dec6709408a7e5c651bcf00e1c4abd98d98b22b2273c9e1d97af6c31a2ee"
+      ]
     },
     {
       "seq": 11,
@@ -566,7 +582,10 @@
       "messageId": "urn:awp:engine-energy-switch-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:a568a6c3f57849bf93c389785d2b6c7c8725a97e4504377dd5a204cde544ad82",
       "caption": "The invoke message goes to The household’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:98fb744183c6e63b03a3dc70953173be49ed10e8693e0e1f87091942a811c117"
+      ]
     },
     {
       "seq": 17,
@@ -981,7 +1000,10 @@
       "messageId": "urn:awp:engine-energy-switch-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:a568a6c3f57849bf93c389785d2b6c7c8725a97e4504377dd5a204cde544ad82",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4cf7023d2d802b4fcc4b51e10a0ba9d723d6069cad4a295154e4c84701eb88c8"
+      ]
     },
     {
       "seq": 25,
@@ -1068,7 +1090,10 @@
       },
       "reason": "recipient-established",
       "caption": "The energy supplier: Accepted, for Switching energy supplier only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:65be69332383ad7cbbeec8db022952658da679e98e194d3237e78cf187553de4"
+      ]
     },
     {
       "seq": 28,
@@ -1206,7 +1231,11 @@
       "outcome": "stop",
       "reason": "excessive-scope",
       "caption": "The credential is not necessary for this purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b4f6e23e57a54ceccc67cfe8af85e22db505468ddd63d74b3f9dfa5f97bd05bb"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/energy-switch--baseline.json"
 }

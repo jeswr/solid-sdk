@@ -73,7 +73,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -168,7 +168,10 @@
       },
       "reason": "recipient-established",
       "caption": "The tax authority: Accepted, for An accountant files a tax return only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9f65b808ba66c99d393301ad9eca9d020843440097ea99d6398db2e88e1aee6d"
+      ]
     },
     {
       "seq": 4,
@@ -345,7 +348,10 @@
       "messageId": "urn:awp:engine-tax-agent-main:owner-agent:0002",
       "messageDigest": "sha-256:e9b7c8917be80a4fd820bc62c05afe0cbfb49ec2f5bc4ecc2d32869885eacde1",
       "caption": "The invoke message goes to The receiving agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:58317506d11e73222ed01d375de44aa658617be57c6cb278dfc2c91dcea61da1"
+      ]
     },
     {
       "seq": 10,
@@ -818,7 +824,11 @@
       "messageId": "urn:awp:engine-tax-agent-main:owner-agent:0002",
       "messageDigest": "sha-256:e9b7c8917be80a4fd820bc62c05afe0cbfb49ec2f5bc4ecc2d32869885eacde1",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7cd47f16cc226c33bf999c014ebfe88f6fc2fa043885010217e293b10a59404f"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/tax-agent--baseline.json"
 }

@@ -65,7 +65,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [],
@@ -114,7 +114,10 @@
       },
       "reason": "within-mandate",
       "caption": "Alex, a fictional flatmate's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0fc568238c35f730ba8845c9c96632ee3dc7d08926ea6a53bf8e171239af326d"
+      ]
     },
     {
       "seq": 3,
@@ -159,7 +162,10 @@
       },
       "reason": "recipient-established",
       "caption": "Blair, a fictional flatmate: Accepted, for flat-share only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3ec5d84970805cbca6af1706beeda35ddf573941500ad215bb5cde750a291cbe"
+      ]
     },
     {
       "seq": 4,
@@ -336,7 +342,10 @@
       "messageId": "urn:awp:engine-flat-share-main:alex-agent:0002",
       "messageDigest": "sha-256:edf58001ea4c7f5d58374e2ec9a4f19c344a932a745b41b515f770250b5beca9",
       "caption": "The propose message goes to Blair’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:edae463d9607dd1981cbb53130f262c8bca5976df16060d455b784075ddea229"
+      ]
     },
     {
       "seq": 10,
@@ -676,7 +685,10 @@
       "outcome": "ask-principal",
       "reason": "source-unknown",
       "caption": "The runtime holds the message without showing it to the core.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7cf1138dc5f58412e05eda4c86533737c8c73b150052b343e65f3247873af544"
+      ]
     },
     {
       "seq": 15,
@@ -960,7 +972,10 @@
       "messageId": "urn:awp:engine-flat-share-main:alex-agent:0002",
       "messageDigest": "sha-256:edf58001ea4c7f5d58374e2ec9a4f19c344a932a745b41b515f770250b5beca9",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9ff4a8250f1f40ed079f338bfc79fa211469c86e4dc7a899b892394a1bebca8a"
+      ]
     },
     {
       "seq": 23,
@@ -1006,7 +1021,10 @@
       },
       "reason": "within-mandate",
       "caption": "Blair, a fictional flatmate's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:fef83f3971411122334c8a5c45000436c12200d5523fc2298853372b6965bcb7"
+      ]
     },
     {
       "seq": 25,
@@ -1203,7 +1221,10 @@
       "messageId": "urn:awp:engine-flat-share-main:blair-agent:0001",
       "messageDigest": "sha-256:265b013d6f1360c7c5db9f3708ad5d6a480837160dc4eb0b23ee6cf2ddd66899",
       "caption": "The accept message goes to Alex’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8cf84762e3d54b60809cb39001258bfb3fc54f6a039e32fcb598e40043f1d9ae"
+      ]
     },
     {
       "seq": 31,
@@ -1594,7 +1615,10 @@
       "messageId": "urn:awp:engine-flat-share-main:blair-agent:0001",
       "messageDigest": "sha-256:265b013d6f1360c7c5db9f3708ad5d6a480837160dc4eb0b23ee6cf2ddd66899",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:910c515f4e959989ad9ef6a243be50a129101bc097b4fd6e6faf166ec88ece9a"
+      ]
     },
     {
       "seq": 39,
@@ -1602,7 +1626,10 @@
       "agent": "blair-agent",
       "part": "record",
       "kind": "record",
-      "caption": "28 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "28 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:4129d57487ed5b7a4207ac3a52972d40dacc336f48ce9260f4bf35a85fc5e082"
+      ]
     },
     {
       "seq": 40,
@@ -1610,7 +1637,11 @@
       "agent": "alex-agent",
       "part": "record",
       "kind": "record",
-      "caption": "23 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "23 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:6d3fb887cf7f5dcf54e11a81d440831221ed8ed89296c75cf0fdcec3182a39f2"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/flat-share--baseline.json"
 }

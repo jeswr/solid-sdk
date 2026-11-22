@@ -65,7 +65,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -164,7 +164,10 @@
       },
       "reason": "recipient-established",
       "caption": "A data holder: Accepted, for Answer an approved research question only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f1e08fe65914a251b57f68d7f2be0f0b8b7e3cae061eb0c1a17932874d47b631"
+      ]
     },
     {
       "seq": 4,
@@ -311,7 +314,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Answer an approved research question with A data holder.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9be109740b195633e2bc5179c3445c3817024aa7d3c45a35ac6c2e2d26f96949"
+      ]
     },
     {
       "seq": 9,
@@ -522,7 +528,10 @@
       },
       "reason": "recipient-established",
       "caption": "A data holder: Accepted, for Answer an approved research question only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:f1e08fe65914a251b57f68d7f2be0f0b8b7e3cae061eb0c1a17932874d47b631"
+      ]
     },
     {
       "seq": 23,
@@ -669,7 +678,10 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Answer an approved research question with A data holder.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:3644ddc7ac2beebe752676b94b8ddaf66ce02f5491691f2cc9fdf65db8a706a1"
+      ]
     },
     {
       "seq": 28,
@@ -771,5 +783,6 @@
       "caption": "The holder stops: limit-exceeded.",
       "gateRun": 2
     }
-  ]
+  ],
+  "linkedTable": "linked/research-data-access--baseline.json"
 }

@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -142,7 +142,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The architect's unstructured content statement: The architect is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:18c0a7db1a76705d21a455f566bb4df72d0cd72c77924e01b71599839a48aac5",
+        "sha-256:6d90f4883f6cc37a3712b75728f4c902d4f8eadf3b89c9c7e56b898b3de642a9"
+      ]
     },
     {
       "seq": 3,
@@ -189,7 +193,10 @@
         "text": "Its terms allow this: use for Permit application; share for Permit application."
       },
       "caption": "The architect's unstructured content statement: its terms allow this: use for Permit application; share for Permit application.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:01ef576c81891d33f10699622213abe06433513b7b018c29a32eb246141ced4e"
+      ]
     },
     {
       "seq": 5,
@@ -233,7 +240,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The architect's unstructured content statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:42f8d62623f5eaefb73fed2d7e10930a1c4d098b5a0fc21caedc82b4bb15dbf6"
+      ]
     },
     {
       "seq": 7,
@@ -256,7 +266,10 @@
         },
         "provenance": "signed by The architect"
       },
-      "caption": "The architect's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The architect's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:5068af3a11bf3bad467e3cc63c4f871769496edd8b5d9b970fe1c641053b7076"
+      ]
     },
     {
       "seq": 8,
@@ -319,7 +332,11 @@
         "answer": "Accepted, for building height claims only."
       },
       "caption": "The architect's building height statement: The architect is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:812a5cbbd15a2064d70c7ab271808c3e435256564be8c2bccc4f89703857a303",
+        "sha-256:1490b713ab64466cbd4f2d52d9319d9d13c18541f520035e5b5aaa791e217fde"
+      ]
     },
     {
       "seq": 10,
@@ -366,7 +383,10 @@
         "text": "Its terms allow this: use for Permit application; share for Permit application."
       },
       "caption": "The architect's building height statement: its terms allow this: use for Permit application; share for Permit application.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:26cf062d3053d3a7af17d6bec23ab6e62a461d4c0b3db1838b4d3fcb6e7926fe"
+      ]
     },
     {
       "seq": 12,
@@ -410,7 +430,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The architect's building height statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:6db336e7f2cfc5eca6caf673442cc14e4e5a4f2b85bc0db6b7d0fb115569dd4e"
+      ]
     },
     {
       "seq": 14,
@@ -433,7 +456,10 @@
         },
         "provenance": "signed by The architect"
       },
-      "caption": "The architect's building height statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The architect's building height statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:bfd0ba0bf537e06550d420acd7592432c66f1f75c052638fbd5f54fce2a4f1fa"
+      ]
     },
     {
       "seq": 15,
@@ -520,7 +546,10 @@
       },
       "reason": "recipient-established",
       "caption": "The architect: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1dcb2a55fe1a0f12757b17ca7dddc31c0e01b2c757632b02933deed50de76dbd"
+      ]
     },
     {
       "seq": 18,
@@ -697,7 +726,10 @@
       "messageId": "urn:awp:engine-permit-application-main:receiver-agent:0002",
       "messageDigest": "sha-256:1fe65085b5601af045718f214bb8b29673768d72d7056712bfa02f3c5751f599",
       "caption": "The invoke message goes to The architect’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:987281f9df622ab9a584875bb0be44aa7f3ddabe5b475b969f283e37d21a3b75"
+      ]
     },
     {
       "seq": 24,
@@ -1112,7 +1144,10 @@
       "messageId": "urn:awp:engine-permit-application-main:receiver-agent:0002",
       "messageDigest": "sha-256:1fe65085b5601af045718f214bb8b29673768d72d7056712bfa02f3c5751f599",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:9abc54b6d71576d85d54dd24bdcd9fa92ac42db00cfd3fa5596b763dccd09cc9"
+      ]
     },
     {
       "seq": 32,
@@ -1199,7 +1234,10 @@
       },
       "reason": "recipient-established",
       "caption": "The planning office: Accepted, for Applying for a building permit only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:852fa77970dafcff72e4b2207b8030717841ed89e8b40e9cdd0e4d6d443e4ed5"
+      ]
     },
     {
       "seq": 35,
@@ -1348,7 +1386,10 @@
       },
       "reason": "terms-allow",
       "caption": "The architect's unstructured content statement: its terms allow this: use for Permit application; share for Permit application.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:01ef576c81891d33f10699622213abe06433513b7b018c29a32eb246141ced4e"
+      ]
     },
     {
       "seq": 40,
@@ -1410,7 +1451,10 @@
       },
       "reason": "terms-allow",
       "caption": "The architect's building height statement: its terms allow this: use for Permit application; share for Permit application.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:26cf062d3053d3a7af17d6bec23ab6e62a461d4c0b3db1838b4d3fcb6e7926fe"
+      ]
     },
     {
       "seq": 42,
@@ -1660,7 +1704,10 @@
       "outcome": "ask-principal",
       "reason": "context-not-clear",
       "caption": "The task context is not clear for this text, recipient and purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1a6136efdc4ed35478be44fe7c5843fc11d7d0c48fb0d0fa527e4e0595eecb9c"
+      ]
     },
     {
       "seq": 50,
@@ -1766,7 +1813,10 @@
       },
       "reason": "recipient-established",
       "caption": "The planning office: Accepted, for Applying for a building permit only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:852fa77970dafcff72e4b2207b8030717841ed89e8b40e9cdd0e4d6d443e4ed5"
+      ]
     },
     {
       "seq": 54,
@@ -1915,7 +1965,10 @@
       },
       "reason": "terms-allow",
       "caption": "The architect's unstructured content statement: its terms allow this: use for Permit application; share for Permit application.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:01ef576c81891d33f10699622213abe06433513b7b018c29a32eb246141ced4e"
+      ]
     },
     {
       "seq": 59,
@@ -1977,7 +2030,10 @@
       },
       "reason": "terms-allow",
       "caption": "The architect's building height statement: its terms allow this: use for Permit application; share for Permit application.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:26cf062d3053d3a7af17d6bec23ab6e62a461d4c0b3db1838b4d3fcb6e7926fe"
+      ]
     },
     {
       "seq": 61,
@@ -2324,7 +2380,10 @@
       "messageId": "urn:awp:engine-permit-application-main:owner-agent:0002",
       "messageDigest": "sha-256:cd9121c7eaefe8cd24b3a7ea16b09adc5832272fff4a39bb35a1d65e79346367",
       "caption": "The invoke message goes to The planning office’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:7738adab7d637c67efc1f0ce76c67f29a5665088f58bab8a3ce2ffd2662706c8"
+      ]
     },
     {
       "seq": 72,
@@ -2929,7 +2988,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The architect's unstructured content statement: The architect is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2ad07b37a7173b9cc40ed0cfe8302ba1c46403781b2b305599911127a1555b12",
+        "sha-256:f67ceaed1a750a04503bc2c0e76ee6516b4a14ca6e232dcb904b3a666b7d61ed"
+      ]
     },
     {
       "seq": 76,
@@ -2968,7 +3031,11 @@
         "answer": "Accepted, for building height claims only."
       },
       "caption": "The architect's building height statement: The architect is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9b432997b4ed9f3664a486920a956f60cfe2fc018eb886e04972a874fbcd80c8",
+        "sha-256:7c1732d7c581a213dc828821a5e30c7f3238be364a016d510c6c6b3b7bb1ad37"
+      ]
     },
     {
       "seq": 77,
@@ -3019,7 +3086,10 @@
         "text": "Its terms allow this: use for Permit application; share for Permit application."
       },
       "caption": "The architect's unstructured content statement: its terms allow this: use for Permit application; share for Permit application.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:01ef576c81891d33f10699622213abe06433513b7b018c29a32eb246141ced4e"
+      ]
     },
     {
       "seq": 79,
@@ -3047,7 +3117,10 @@
         "text": "Its terms allow this: use for Permit application; share for Permit application."
       },
       "caption": "The architect's building height statement: its terms allow this: use for Permit application; share for Permit application.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:26cf062d3053d3a7af17d6bec23ab6e62a461d4c0b3db1838b4d3fcb6e7926fe"
+      ]
     },
     {
       "seq": 80,
@@ -3116,7 +3189,10 @@
       "messageId": "urn:awp:engine-permit-application-main:owner-agent:0002",
       "messageDigest": "sha-256:cd9121c7eaefe8cd24b3a7ea16b09adc5832272fff4a39bb35a1d65e79346367",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ab7123b50d98ab066be08989401b86f575f6daa35b4c42471f7a726d0b67e2d1"
+      ]
     },
     {
       "seq": 83,
@@ -3139,7 +3215,10 @@
         },
         "provenance": "signed by The architect"
       },
-      "caption": "The architect's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The architect's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:3d186c8baeb56d681b51ff498f8fafff952db54b69ab17a4aac89c4b3c524717"
+      ]
     },
     {
       "seq": 84,
@@ -3162,7 +3241,10 @@
         },
         "provenance": "signed by The architect"
       },
-      "caption": "The architect's building height statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The architect's building height statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:bc31c355f4ff58c91328d994f41ed3a6bfa98849edbaeb421be54ff20d04e337"
+      ]
     },
     {
       "seq": 85,
@@ -3177,6 +3259,9 @@
           "suite": "plain-language-upgrade",
           "id": "urn:fictional:permit-application:owner"
         }
+      ],
+      "linked": [
+        "sha-256:1a7f9825bc842a9aedb0f1867d85b6970be7e3beae098867b39820a347c6370d"
       ]
     },
     {
@@ -3185,7 +3270,10 @@
       "agent": "receiver-agent",
       "part": "memory",
       "kind": "store",
-      "caption": "Model-output reading of unstructured data sha-256:2bdd48f988f43e58487d86bd83a86319ced8bc151ce13a173552684c04dffbe6; claim building height."
+      "caption": "Model-output reading of unstructured data sha-256:2bdd48f988f43e58487d86bd83a86319ced8bc151ce13a173552684c04dffbe6; claim building height.",
+      "linked": [
+        "sha-256:f39a05631e437e943462fcc4a0b0bf67d5d7d7beb85bb1e38e785f63eb62861c"
+      ]
     },
     {
       "seq": 87,
@@ -3272,7 +3360,10 @@
       },
       "reason": "recipient-established",
       "caption": "The planning office: Accepted, for A person decides on the original content only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9d165a55a09a1d575718f30b176652663db6848637edc968490dce342bbbcf49"
+      ]
     },
     {
       "seq": 90,
@@ -3385,7 +3476,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The action is held for the named decision makers.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:61c100ac3346815aae5af6a1e5a4cc46c0fd3f4ed42169e978dc9796efb37853"
+      ]
     },
     {
       "seq": 94,
@@ -3400,5 +3494,6 @@
       },
       "caption": "The gate built this request from the action and the approval rule."
     }
-  ]
+  ],
+  "linkedTable": "linked/permit-application--baseline.json"
 }

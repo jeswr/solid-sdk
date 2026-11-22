@@ -69,7 +69,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -144,7 +144,11 @@
         "answer": "Accepted, for salary named person claims only."
       },
       "caption": "The finance department's salary named person statement: The finance department is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:82047fc5817d771d2e8afb98cb77ab30ee48cf2e18d7f0ec42e3369d7c4aaa6a",
+        "sha-256:3b9ea7ba1dd052042c992501fdbd56bc589576205b796410852852d8114d2f1e"
+      ]
     },
     {
       "seq": 3,
@@ -191,7 +195,10 @@
         "text": "Its terms allow this: use for Payroll administration."
       },
       "caption": "The finance department's salary named person statement: its terms allow this: use for Payroll administration.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2b02d3c293729e013b1a5ef5cf734209d9ce851c43d1834ae5c86c4bbfb86c0d"
+      ]
     },
     {
       "seq": 5,
@@ -235,7 +242,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The finance department's salary named person statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:34a79e7e2df3adc045f2746325e873c76aadc4a4d6967b01a72d312a560f557a"
+      ]
     },
     {
       "seq": 7,
@@ -258,7 +268,10 @@
         },
         "provenance": "signed by The finance department"
       },
-      "caption": "The finance department's salary named person statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The finance department's salary named person statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:46ef8bce768fc2e8168c8e8f42a428de6065e44e2ae24951ddcbfc0276d6697b"
+      ]
     },
     {
       "seq": 8,
@@ -345,7 +358,10 @@
       },
       "reason": "recipient-established",
       "caption": "The finance department: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:027aaf0fd6d48743730211a9e08b73a09c4c269cab44d0170be4ea6243c938ae"
+      ]
     },
     {
       "seq": 11,
@@ -522,7 +538,10 @@
       "messageId": "urn:awp:engine-cross-department-request-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:4553872b3d887b7fe702647a3d67954e76619f4751a4252ad8b211401f287c04",
       "caption": "The invoke message goes to The finance department’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c11a8f1e166786cafac7f4770b24885588143792f1405b4c4b39de3f5e2c142c"
+      ]
     },
     {
       "seq": 17,
@@ -935,7 +954,10 @@
       "messageId": "urn:awp:engine-cross-department-request-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:4553872b3d887b7fe702647a3d67954e76619f4751a4252ad8b211401f287c04",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:da25b2185be57d705ae06dfb4ecef43532108ac78aa02c1437588e50b1845ee0"
+      ]
     },
     {
       "seq": 25,
@@ -1022,7 +1044,10 @@
       },
       "reason": "recipient-established",
       "caption": "The people team: Accepted, for One department's agent asks another's for data only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f25ea8af9e3df779676bfc1ad43103aecf6a54c57d177f7756219c19bbbaa979"
+      ]
     },
     {
       "seq": 28,
@@ -1160,7 +1185,11 @@
       "outcome": "stop",
       "reason": "excessive-scope",
       "caption": "The credential is not necessary for this purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2aa5da118daeeeddd653093ddae2421687dfa881c226d5056da5e89b3093782b"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/cross-department-request--baseline.json"
 }

@@ -408,7 +408,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -479,7 +479,11 @@
         "answer": "Accepted, for contact address claims only."
       },
       "caption": "The fictional address register's contact address statement: The fictional address register is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ae31c564856caf6f5584ff7f30940655dc167705abd83e2e5172bd5365e177cb",
+        "sha-256:d4e524f82991895c9eb78aafb27d70d3b328242fa0819c7cbad456bd80371e16"
+      ]
     },
     {
       "seq": 3,
@@ -526,7 +530,10 @@
         "text": "Its terms allow this: use for Change of address; share for Change of address."
       },
       "caption": "The fictional address register's contact address statement: its terms allow this: use for Change of address; share for Change of address.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a51a0176831a4d3809cfc5885d2f960f842c079328701ed9140e393e740355e5"
+      ]
     },
     {
       "seq": 5,
@@ -570,7 +577,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional address register's contact address statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bd3e91061f79d256481c873bb3b1ac5a3aac263f46c076fa9c9ce361911384eb"
+      ]
     },
     {
       "seq": 7,
@@ -593,7 +603,10 @@
         },
         "provenance": "signed by The fictional address register"
       },
-      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional address register's contact address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:387a08809c41193e6d94adc2c4f100e25bc21151db0fdb2c2d76e12811b42ea7"
+      ]
     },
     {
       "seq": 8,
@@ -680,7 +693,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional organization 21: Accepted, for Telling everyone about a new address only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2b48bd5d1f295516732a10282088322feea40cda13ec490dfff391d4f7761376"
+      ]
     },
     {
       "seq": 11,
@@ -771,7 +787,10 @@
         "text": ""
       },
       "caption": "The mandate says to ask The person first.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:585a28b09e01c35e1daf3b7ff7259e8cb57e1156dc4f9661cc07347797873a7c"
+      ]
     },
     {
       "seq": 14,
@@ -793,7 +812,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The gate holds the action and asks The person.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5ca7cd9276e09beb57f6a8c8e8931e3e3b8e3439be09eb6fcfbd74ad12cb4799"
+      ]
     },
     {
       "seq": 15,
@@ -807,5 +829,6 @@
       },
       "caption": "The person is asked to approve this exact action; the approval will be bound to its digest."
     }
-  ]
+  ],
+  "linkedTable": "linked/change-of-address--baseline.json"
 }

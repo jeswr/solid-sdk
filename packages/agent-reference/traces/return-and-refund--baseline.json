@@ -67,7 +67,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -146,7 +146,11 @@
         "answer": "Accepted, for merchant receipt claims only."
       },
       "caption": "The merchant's merchant receipt statement: The merchant is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bd19a4ef71c5d5c8bcf9222235f42c1c66cdafd86cfa38f37c82dbe01f1046e0",
+        "sha-256:2be04eec505479ce246235cbde830664c9fa76e4bb6ccb2cdc701567261f45df"
+      ]
     },
     {
       "seq": 3,
@@ -193,7 +197,10 @@
         "text": "Its terms allow this: use for Return and refund; share for Return and refund."
       },
       "caption": "The merchant's merchant receipt statement: its terms allow this: use for Return and refund; share for Return and refund.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1cf7dd5478a8d886dc1e499a4ed9489590e98f78caf2e42e36a38fd463de5ea7"
+      ]
     },
     {
       "seq": 5,
@@ -237,7 +244,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The merchant's merchant receipt statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:18dc2a932c7ae6f8fd70d3290143d7ff84a591392f317f3f91ef9fb07ae1fe13"
+      ]
     },
     {
       "seq": 7,
@@ -260,7 +270,10 @@
         },
         "provenance": "signed by The merchant"
       },
-      "caption": "The merchant's merchant receipt statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The merchant's merchant receipt statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:34e96c4dbe819ac8dae7b186c081a54a4b19ebda836edbede5232d05af4779e5"
+      ]
     },
     {
       "seq": 8,
@@ -323,7 +336,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The customer's unstructured content statement: The customer is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:04f9cf7809aafbda0a1aeafa75290ed0d4a3a5d3ddc7d92fa3911912c8478646",
+        "sha-256:e5315d12eb81a85431205a6771d77f1a776fa6f2556deb5573aaf9baa424711e"
+      ]
     },
     {
       "seq": 10,
@@ -370,7 +387,10 @@
         "text": "Its terms allow this: use for Return and refund; share for Return and refund."
       },
       "caption": "The customer's unstructured content statement: its terms allow this: use for Return and refund; share for Return and refund.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:67679e6688acd14ae4d4f4cc50641ce8c0e8bb7987e64ddbc0892318922ea189"
+      ]
     },
     {
       "seq": 12,
@@ -414,7 +434,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The customer's unstructured content statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:ce127edf2073cfbc6690b1f4ba0c6e09a3594365afca0866d8e7e349a75a05b0"
+      ]
     },
     {
       "seq": 14,
@@ -437,7 +460,10 @@
         },
         "provenance": "signed by The customer"
       },
-      "caption": "The customer's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The customer's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:2e3ada4dc572ef6a16a87ab0d05dc9032fa7c4a3996bc42408a5c889fcec6aff"
+      ]
     },
     {
       "seq": 15,
@@ -524,7 +550,10 @@
       },
       "reason": "recipient-established",
       "caption": "The customer: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4513f9d31ccb0ef1a938e55cbddcbe9438345b87f23be97e8872dc3e3c0da46f"
+      ]
     },
     {
       "seq": 18,
@@ -701,7 +730,10 @@
       "messageId": "urn:awp:engine-return-and-refund-main:receiver-agent:0002",
       "messageDigest": "sha-256:2fa782e3997d3490929d260eaf8885c3733fd21d70f9f2cfce88ee3a0ba13df4",
       "caption": "The invoke message goes to The customer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:eec5be1b5a3063bbdd3e2e705bf0e78ca5d1e039b3765ea66ce5f497e6c80890"
+      ]
     },
     {
       "seq": 24,
@@ -1114,7 +1146,10 @@
       "messageId": "urn:awp:engine-return-and-refund-main:receiver-agent:0002",
       "messageDigest": "sha-256:2fa782e3997d3490929d260eaf8885c3733fd21d70f9f2cfce88ee3a0ba13df4",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:f9d14d9f7afec85ed5622f6952fd273d25484bd1ad4a47f853657b0322a31ec0"
+      ]
     },
     {
       "seq": 32,
@@ -1201,7 +1236,10 @@
       },
       "reason": "recipient-established",
       "caption": "The merchant: Accepted, for Returning a faulty item only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:32a8748dc307444b5b3b70ac8d62818e3bbc24c3c216f976d1dd845a22093975"
+      ]
     },
     {
       "seq": 35,
@@ -1350,7 +1388,10 @@
       },
       "reason": "terms-allow",
       "caption": "The merchant's merchant receipt statement: its terms allow this: use for Return and refund; share for Return and refund.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1cf7dd5478a8d886dc1e499a4ed9489590e98f78caf2e42e36a38fd463de5ea7"
+      ]
     },
     {
       "seq": 40,
@@ -1412,7 +1453,10 @@
       },
       "reason": "terms-allow",
       "caption": "The customer's unstructured content statement: its terms allow this: use for Return and refund; share for Return and refund.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:67679e6688acd14ae4d4f4cc50641ce8c0e8bb7987e64ddbc0892318922ea189"
+      ]
     },
     {
       "seq": 42,
@@ -1662,7 +1706,10 @@
       "outcome": "ask-principal",
       "reason": "context-not-clear",
       "caption": "The task context is not clear for this text, recipient and purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:14196ed932e94a0db477fd1bc669fceaecccc5bfedc92f520f89c0ddafd0ea08"
+      ]
     },
     {
       "seq": 50,
@@ -1768,7 +1815,10 @@
       },
       "reason": "recipient-established",
       "caption": "The merchant: Accepted, for Returning a faulty item only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:32a8748dc307444b5b3b70ac8d62818e3bbc24c3c216f976d1dd845a22093975"
+      ]
     },
     {
       "seq": 54,
@@ -1917,7 +1967,10 @@
       },
       "reason": "terms-allow",
       "caption": "The merchant's merchant receipt statement: its terms allow this: use for Return and refund; share for Return and refund.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:1cf7dd5478a8d886dc1e499a4ed9489590e98f78caf2e42e36a38fd463de5ea7"
+      ]
     },
     {
       "seq": 59,
@@ -1979,7 +2032,10 @@
       },
       "reason": "terms-allow",
       "caption": "The customer's unstructured content statement: its terms allow this: use for Return and refund; share for Return and refund.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:67679e6688acd14ae4d4f4cc50641ce8c0e8bb7987e64ddbc0892318922ea189"
+      ]
     },
     {
       "seq": 61,
@@ -2326,7 +2382,10 @@
       "messageId": "urn:awp:engine-return-and-refund-main:owner-agent:0002",
       "messageDigest": "sha-256:f6a13770aeee641f6889440f084bed7effed34a8ded6c63dec0d2767e962d07d",
       "caption": "The invoke message goes to The merchant’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:a4d43ee6ab8cf7e316a8d304cb9125e6d749216de966c61f6eb2ddee8b3ee934"
+      ]
     },
     {
       "seq": 72,
@@ -3081,7 +3140,11 @@
         "answer": "Accepted, for merchant receipt claims only."
       },
       "caption": "The merchant's merchant receipt statement: The merchant is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f5f315e57036596451ff16e8160283764f7750c161a155c90861d04e831bbc2d",
+        "sha-256:215f265ddcd1f15722bc8532108820f1aa4f0e4d7a6aeeb28a4a5cf9ddc2387d"
+      ]
     },
     {
       "seq": 76,
@@ -3120,7 +3183,11 @@
         "answer": "Accepted, for unstructured-content claims only."
       },
       "caption": "The customer's unstructured content statement: The customer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5d59bf3326e1f66b14c84afaebf2515ce97ad685263389be9349ef5db141f178",
+        "sha-256:a8f625f8d7e8781fff63e19d885a3b5920eadb0aee5d6b9ada6fa7d25c88d6a7"
+      ]
     },
     {
       "seq": 77,
@@ -3171,7 +3238,10 @@
         "text": "Its terms allow this: use for Return and refund; share for Return and refund."
       },
       "caption": "The merchant's merchant receipt statement: its terms allow this: use for Return and refund; share for Return and refund.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1cf7dd5478a8d886dc1e499a4ed9489590e98f78caf2e42e36a38fd463de5ea7"
+      ]
     },
     {
       "seq": 79,
@@ -3199,7 +3269,10 @@
         "text": "Its terms allow this: use for Return and refund; share for Return and refund."
       },
       "caption": "The customer's unstructured content statement: its terms allow this: use for Return and refund; share for Return and refund.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:67679e6688acd14ae4d4f4cc50641ce8c0e8bb7987e64ddbc0892318922ea189"
+      ]
     },
     {
       "seq": 80,
@@ -3268,7 +3341,10 @@
       "messageId": "urn:awp:engine-return-and-refund-main:owner-agent:0002",
       "messageDigest": "sha-256:f6a13770aeee641f6889440f084bed7effed34a8ded6c63dec0d2767e962d07d",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0c673ac25f9080ba7ccaa8f550de0d836d01e0e84c643b942aced5f7b0a3f34e"
+      ]
     },
     {
       "seq": 83,
@@ -3291,7 +3367,10 @@
         },
         "provenance": "signed by The merchant"
       },
-      "caption": "The merchant's merchant receipt statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The merchant's merchant receipt statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:d9f21c254e741aafbfee6642e7d53c3ec4974d00fb1b9fc8ae7904b09c44440e"
+      ]
     },
     {
       "seq": 84,
@@ -3314,7 +3393,10 @@
         },
         "provenance": "signed by The customer"
       },
-      "caption": "The customer's unstructured content statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The customer's unstructured content statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:4d9f52ba5522c499e1248774162ca6ec7ef959a7a603285d5b13d3ac8414dda0"
+      ]
     },
     {
       "seq": 85,
@@ -3329,6 +3411,9 @@
           "suite": "fixed-vocabulary",
           "id": "urn:fictional:return-and-refund:owner"
         }
+      ],
+      "linked": [
+        "sha-256:53dfaf8921bcb8284602d171dce461ce9453d58ed0c4bc6107c0dc1eb219f6c5"
       ]
     },
     {
@@ -3416,7 +3501,10 @@
       },
       "reason": "recipient-established",
       "caption": "The merchant: Accepted, for Returning a faulty item only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:00cf7c599c1f95025d8037d4d1ff62c1a3fbfc741d7fa863ce56546a6adc6452"
+      ]
     },
     {
       "seq": 89,
@@ -3563,7 +3651,11 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Returning a faulty item with The merchant.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4537e692d7a83f1d1c61a6d1acc1a5aa0b1e49c5c9ab8fa55d53584c86142a83"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/return-and-refund--baseline.json"
 }

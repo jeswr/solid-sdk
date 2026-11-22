@@ -85,7 +85,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -156,7 +156,11 @@
         "answer": "Accepted, for prescription claims only."
       },
       "caption": "The prescriber's prescription statement: The prescriber is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0cbe112163fe1f44f40ee5cabef17901749004815574c05906faf2d4a8c2f508",
+        "sha-256:445b5ea99ebe97340be6070670669ed9f85c50ad6c4a113544396b05eca408bb"
+      ]
     },
     {
       "seq": 3,
@@ -203,7 +207,10 @@
         "text": "Its terms allow this: use for Prescription dispensing."
       },
       "caption": "The prescriber's prescription statement: its terms allow this: use for Prescription dispensing.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:57953b7daa4e600bb0c13a272e1dc472ad83b0610d82834c4116e25af1c09d65"
+      ]
     },
     {
       "seq": 5,
@@ -247,7 +254,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The prescriber's prescription statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9c72053fb4d592650911dbbb8f4819cc750490c97f9a61f9d3ab49ef089db3bd"
+      ]
     },
     {
       "seq": 7,
@@ -270,7 +280,10 @@
         },
         "provenance": "signed by The prescriber"
       },
-      "caption": "The prescriber's prescription statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The prescriber's prescription statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:7c07acb2d8c04909e15e539bd06868e8774dd0af2b42eeef3ba1fa92132c2124"
+      ]
     },
     {
       "seq": 8,
@@ -357,7 +370,10 @@
       },
       "reason": "recipient-established",
       "caption": "The first pharmacy: Accepted, for Dispensing a prescription only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:78def6fd52f76de74b7a03225432230da42707a3c7b520f2044ec5ff11236728"
+      ]
     },
     {
       "seq": 11,
@@ -646,7 +662,11 @@
       "outcome": "go",
       "effectRelease": true,
       "caption": "The action goes: take the next step in Dispensing a prescription with The first pharmacy.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cf137d3ed906ad51383fd6164cd0dae515ea0595ed103b63729c467e64cde531"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/prescription-dispensing--baseline.json"
 }

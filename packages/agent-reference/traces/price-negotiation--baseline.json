@@ -68,7 +68,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -143,7 +143,11 @@
         "answer": "Accepted, for buyer ceiling claims only."
       },
       "caption": "The buyer's buyer ceiling statement: The buyer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:5a457a09586e3a0bbfe43d554464cfb92b90b1bec9880cc009e94fe0fc73c01a",
+        "sha-256:57799fb8e7b6af226a5d952dc2bcf35459865e3af5cbc1c0fdf16e187eed5c57"
+      ]
     },
     {
       "seq": 3,
@@ -190,7 +194,10 @@
         "text": "Its terms allow this: use for Buyer planning."
       },
       "caption": "The buyer's buyer ceiling statement: its terms allow this: use for Buyer planning.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9c5aec1a7b7e1edc47df63d7f13652c9f4869f3232c27ea9d812ac51e16276fb"
+      ]
     },
     {
       "seq": 5,
@@ -234,7 +241,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The buyer's buyer ceiling statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f564d35b518abe64b162faebd84ecf17a92a31a7b07f008cd8f4c00ca466b2c4"
+      ]
     },
     {
       "seq": 7,
@@ -257,7 +267,10 @@
         },
         "provenance": "signed by The buyer"
       },
-      "caption": "The buyer's buyer ceiling statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The buyer's buyer ceiling statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:f4d2bf60220114b18a0b45f2bce6de25702f16ae4dd88fa3148c367c83ae2efb"
+      ]
     },
     {
       "seq": 8,
@@ -344,7 +357,10 @@
       },
       "reason": "recipient-established",
       "caption": "The buyer: Accepted, for Negotiating a price only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c1f081323eae9c18447892d1f0ac326c7802329dfefd8b54c87e763917a57327"
+      ]
     },
     {
       "seq": 11,
@@ -521,7 +537,10 @@
       "messageId": "urn:awp:engine-price-negotiation-main:receiver-agent:0002",
       "messageDigest": "sha-256:53e1cc9c27ea74d6c36182928878b1ab5899a599c9b15bf4b021c824c229e037",
       "caption": "The propose message goes to The buyer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:22d441149b5c1213a5fe34a4848c211ca74311bf3bcd5fbf641fa414c9da82f9"
+      ]
     },
     {
       "seq": 17,
@@ -940,7 +959,10 @@
       "messageId": "urn:awp:engine-price-negotiation-main:receiver-agent:0002",
       "messageDigest": "sha-256:53e1cc9c27ea74d6c36182928878b1ab5899a599c9b15bf4b021c824c229e037",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:a6d7661a0e38300ebdbe0f30f416f989d33140cbb77695257a45e7cdc843b581"
+      ]
     },
     {
       "seq": 25,
@@ -1027,7 +1049,10 @@
       },
       "reason": "recipient-established",
       "caption": "The seller: Accepted, for Negotiating a price only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0d15c0209bd705a263d481ad8f80ca71634f84d71b469ff0561f7ca4fc973ff6"
+      ]
     },
     {
       "seq": 28,
@@ -1175,7 +1200,10 @@
       "messageId": "urn:awp:engine-price-negotiation-main:owner-agent:0001",
       "messageDigest": "sha-256:df9f42d1108ed31368c304f6be1a26f570e5dda56cf61652180f3f2126f2fc53",
       "caption": "The accept message goes to The seller’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4426790426b1da0afbf008a6d856422e22290197e8a575dd94549024cc80f8b2"
+      ]
     },
     {
       "seq": 33,
@@ -1582,7 +1610,10 @@
       "messageId": "urn:awp:engine-price-negotiation-main:owner-agent:0001",
       "messageDigest": "sha-256:df9f42d1108ed31368c304f6be1a26f570e5dda56cf61652180f3f2126f2fc53",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8f460b57a91e360d06704b8c74c35fc917edd26c72f1ecb8a3d33ef155226116"
+      ]
     },
     {
       "seq": 41,
@@ -1590,7 +1621,10 @@
       "agent": "owner-agent",
       "part": "record",
       "kind": "record",
-      "caption": "30 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "30 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:0adc01855b2a33658134b567c34d5e9eaf60c8b50050129d61784935229832cd"
+      ]
     },
     {
       "seq": 42,
@@ -1598,7 +1632,11 @@
       "agent": "receiver-agent",
       "part": "record",
       "kind": "record",
-      "caption": "23 entries in this agent's hash-chained record; the chain verifies."
+      "caption": "23 entries in this agent's hash-chained record; the chain verifies.",
+      "linked": [
+        "sha-256:c002ee7ccb564c07c8adfe08768c7d3be03f15fe605d38d51b6b866cf4df8e4c"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/price-negotiation--baseline.json"
 }

@@ -71,7 +71,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -146,7 +146,11 @@
         "answer": "Accepted, for identity passport claims only."
       },
       "caption": "The identity office's identity passport statement: The identity office is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ce8ac78354976870ff4a81e4e5bce304567ce57337758eaa78ed9411b4539654",
+        "sha-256:3d2f60de56a129dc2255963fa77934277ecbd39cd2bdfefc0050a60091a18764"
+      ]
     },
     {
       "seq": 3,
@@ -193,7 +197,10 @@
         "text": "Its terms allow this: use for Identity management; share for Identity management."
       },
       "caption": "The identity office's identity passport statement: its terms allow this: use for Identity management; share for Identity management.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:b8f4b38a8750571d636864802b7223f7a314777a03cb35e0e1e1af86a0342338"
+      ]
     },
     {
       "seq": 5,
@@ -237,7 +244,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The identity office's identity passport statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:06d753e2d00854fc50e092597ba20af167530f43cbe3077ce5aea30daa054bae"
+      ]
     },
     {
       "seq": 7,
@@ -260,7 +270,10 @@
         },
         "provenance": "signed by The identity office"
       },
-      "caption": "The identity office's identity passport statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The identity office's identity passport statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:fd1df78bbedef62a4f9b6ed71d2ae54e22fd56eebe5584b08c65aa034cd820c4"
+      ]
     },
     {
       "seq": 8,
@@ -347,7 +360,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c20197e5d162febe7c0464cf920c13a78f899856c00f5a8eeb8d077ff4fc9098"
+      ]
     },
     {
       "seq": 11,
@@ -524,7 +540,10 @@
       "messageId": "urn:awp:engine-subject-access-request-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:1551a73ad22ff549e7d6f8e4b235736e7fcdcd501fc465940965be1efd0eafd3",
       "caption": "The invoke message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bc3dd8104d14d5a2e9887465d22351ed2034f785ecbcf6d53e29d00bc59ed911"
+      ]
     },
     {
       "seq": 17,
@@ -937,7 +956,10 @@
       "messageId": "urn:awp:engine-subject-access-request-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:1551a73ad22ff549e7d6f8e4b235736e7fcdcd501fc465940965be1efd0eafd3",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:ec5d9894740c118c3f9bb1db982d446f03b9d6e7cd0f7b9fbba06270adcad7e0"
+      ]
     },
     {
       "seq": 25,
@@ -1024,7 +1046,10 @@
       },
       "reason": "recipient-established",
       "caption": "The company: Accepted, for Asking a company what it holds about you only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3a9126123f2b9461a07f956b33048e1ba5d55a1549a9adce72c0b63e88165f58"
+      ]
     },
     {
       "seq": 28,
@@ -1162,7 +1187,11 @@
       "outcome": "stop",
       "reason": "excessive-scope",
       "caption": "The credential is not necessary for this purpose.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e5a27dfdb93921ac4c86974f64affeaa83087c22441c51472ec5c26854c2da8e"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/subject-access-request--baseline.json"
 }

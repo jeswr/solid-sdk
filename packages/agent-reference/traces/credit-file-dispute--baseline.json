@@ -81,7 +81,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -156,7 +156,11 @@
         "answer": "Accepted, for payment status claims only."
       },
       "caption": "The credit reference agency's payment status statement: The credit reference agency is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f6b8f52b048bc5963410d92c8618c15322a3fee6e15d9bac284490f5e630b753",
+        "sha-256:98b5c364edcc0977fbeb91cedd5d715a893fb9ae9e6f1b3b2df471c05a871c96"
+      ]
     },
     {
       "seq": 3,
@@ -203,7 +207,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The credit reference agency's payment status statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:582648505e8686ca6752b837a5551985fa12e735cd83d8da253ba8eaca96177f"
+      ]
     },
     {
       "seq": 5,
@@ -252,7 +259,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The credit reference agency's payment status statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3a9d5218f073148890c9f2c1587812a720461321bf3042465c0e5b222d97cee9"
+      ]
     },
     {
       "seq": 7,
@@ -279,7 +289,10 @@
         },
         "provenance": "signed by The credit reference agency"
       },
-      "caption": "The credit reference agency's payment status statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The credit reference agency's payment status statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:93697bda16452778a51b5082af8124c2b379d97ee74da9ecc5c9ece07a9787ed"
+      ]
     },
     {
       "seq": 8,
@@ -342,7 +355,11 @@
         "answer": "Accepted, for payment status claims only."
       },
       "caption": "The lender which received the payment's payment status statement: The lender which received the payment is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:639e853f6124217abcbd71ea29f4e772f916479cec0134a57ff8789683d82887",
+        "sha-256:d5bf6925be6c51b35143e6a5cf44a488ab66af52464ce029e95e72f2e0859ffd"
+      ]
     },
     {
       "seq": 10,
@@ -389,7 +406,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The lender which received the payment's payment status statement: its terms allow this: .",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:c143c4f5841b67baa66af55c021fb1bfa55120d4f224ed943cfb0b4611dd852e"
+      ]
     },
     {
       "seq": 12,
@@ -438,7 +458,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The lender which received the payment's payment status statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:ff138cd7821423e0a13293fc1294cb0fc297f181ca79b1b201b364110c0889d4"
+      ]
     },
     {
       "seq": 14,
@@ -465,7 +488,10 @@
         },
         "provenance": "signed by The lender which received the payment"
       },
-      "caption": "The lender which received the payment's payment status statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The lender which received the payment's payment status statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:ecd5655e942b8d288f33b02cc031032a9bedeb33f9b4fa609ecdedfb7c2723c4"
+      ]
     },
     {
       "seq": 15,
@@ -581,7 +607,10 @@
       },
       "reason": "recipient-established",
       "caption": "The credit reference agency: Accepted, for Form the data-use agreement only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:85cdcf945e0625149fb471aada22bff4606634286d8550374eee16782e33e946"
+      ]
     },
     {
       "seq": 19,
@@ -730,7 +759,10 @@
       },
       "reason": "terms-allow",
       "caption": "The lender which received the payment's payment status statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c143c4f5841b67baa66af55c021fb1bfa55120d4f224ed943cfb0b4611dd852e"
+      ]
     },
     {
       "seq": 24,
@@ -820,7 +852,10 @@
       "messageId": "urn:awp:engine-credit-file-dispute-main:owner-agent:0002",
       "messageDigest": "sha-256:4355ccd7794777fa30c7cee86107fa18d416ef99a8bf674e9f130bb889e25940",
       "caption": "The propose message goes to The credit reference agency’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6ce1c951c289c2c164fcb5a8f87b77e51594fc8a506de6259ae0ae69df6e1da4"
+      ]
     },
     {
       "seq": 27,
@@ -1315,7 +1350,11 @@
         "answer": "Accepted, for payment status claims only."
       },
       "caption": "The lender which received the payment's payment status statement: The lender which received the payment is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ed239b658f0076492819a68b10a7632a606e88763bcd528ce4011a772d76e5b2",
+        "sha-256:fbc8aa475a8925e7a475da857637603b467a3bf0d718beff839ada48bea56b81"
+      ]
     },
     {
       "seq": 31,
@@ -1366,7 +1405,10 @@
         "text": "Its terms allow this: ."
       },
       "caption": "The lender which received the payment's payment status statement: its terms allow this: .",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c143c4f5841b67baa66af55c021fb1bfa55120d4f224ed943cfb0b4611dd852e"
+      ]
     },
     {
       "seq": 33,
@@ -1412,7 +1454,10 @@
       "messageId": "urn:awp:engine-credit-file-dispute-main:owner-agent:0002",
       "messageDigest": "sha-256:4355ccd7794777fa30c7cee86107fa18d416ef99a8bf674e9f130bb889e25940",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ac47161bca896a540f88b68b5360b03ff0ec6e44ed382d8dc8fd3ff22cfd70bb"
+      ]
     },
     {
       "seq": 35,
@@ -1439,7 +1484,10 @@
         },
         "provenance": "signed by The lender which received the payment"
       },
-      "caption": "The lender which received the payment's payment status statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The lender which received the payment's payment status statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:766f9ea1aee8c84acaa820394b65d3c8abc9da63846f11e8940e6f1fd6e8fc97"
+      ]
     },
     {
       "seq": 36,
@@ -1526,7 +1574,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Form the data-use agreement only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4bf12870f7fb988e44383908fea381fbae2c671b0a0d5e4d3b0048eb50d685e2"
+      ]
     },
     {
       "seq": 39,
@@ -1674,7 +1725,10 @@
       "messageId": "urn:awp:engine-credit-file-dispute-main:agency-agent:0001",
       "messageDigest": "sha-256:2461b69a843cce926253f18f5b959ab71edf3eb5131ddb255e26d64f3a91e86b",
       "caption": "The accept message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e9806e0d8fdd3a830283967eb9de8fb37fda3b5deb1cd365628f1e079b393101"
+      ]
     },
     {
       "seq": 44,
@@ -2085,7 +2139,10 @@
       "messageId": "urn:awp:engine-credit-file-dispute-main:agency-agent:0001",
       "messageDigest": "sha-256:2461b69a843cce926253f18f5b959ab71edf3eb5131ddb255e26d64f3a91e86b",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:8c83fdabc5837df2a03a4638f8bdba0eca2da34e26e45c6e0abef5e2ce7171c2"
+      ]
     },
     {
       "seq": 52,
@@ -2093,7 +2150,10 @@
       "agent": "agency-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Duty audit: Notification pending."
+      "caption": "Duty audit: Notification pending.",
+      "linked": [
+        "sha-256:67cef9d5482fc80678fe2ca1d7e299abb6fccfdae4fbad1413e0c76fd570303a"
+      ]
     },
     {
       "seq": 53,
@@ -2101,7 +2161,10 @@
       "agent": "agency-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Duty audit: Notification pending."
+      "caption": "Duty audit: Notification pending.",
+      "linked": [
+        "sha-256:67cef9d5482fc80678fe2ca1d7e299abb6fccfdae4fbad1413e0c76fd570303a"
+      ]
     },
     {
       "seq": 54,
@@ -2188,7 +2251,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Acknowledge an incident notice only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4bf12870f7fb988e44383908fea381fbae2c671b0a0d5e4d3b0048eb50d685e2"
+      ]
     },
     {
       "seq": 57,
@@ -2365,7 +2431,10 @@
       "messageId": "urn:awp:engine-credit-file-dispute-main:agency-agent:0002",
       "messageDigest": "sha-256:95bb6e47df615b45dbbb81b8d8d597ace245f240ccc179ae0c2e0f4cde634aec",
       "caption": "The invoke message goes to The person’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:37c7c466c421b48bdb871a6ae549bc5941389573d68f732ca52c7c1052dc4789"
+      ]
     },
     {
       "seq": 63,
@@ -2790,7 +2859,10 @@
       "messageId": "urn:awp:engine-credit-file-dispute-main:agency-agent:0002",
       "messageDigest": "sha-256:95bb6e47df615b45dbbb81b8d8d597ace245f240ccc179ae0c2e0f4cde634aec",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:1a9bce18f707bce6ed9db986484cda8f4a486f62929e6eade19ccda6242990aa"
+      ]
     },
     {
       "seq": 71,
@@ -2869,7 +2941,10 @@
       },
       "reason": "recipient-established",
       "caption": "The credit reference agency: Accepted, for Acknowledge an incident notice only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:85cdcf945e0625149fb471aada22bff4606634286d8550374eee16782e33e946"
+      ]
     },
     {
       "seq": 73,
@@ -3017,7 +3092,10 @@
       "messageId": "urn:awp:engine-credit-file-dispute-main:owner-agent:0003",
       "messageDigest": "sha-256:fb7500c854535a45ec3df09e3b13be7beb3f281287a530474315269b4726c267",
       "caption": "The deliver message goes to The credit reference agency’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:af5cd76fa3948c069658c67f744a9b046508acd6e0892d03e96b4476528510a3"
+      ]
     },
     {
       "seq": 78,
@@ -3396,7 +3474,10 @@
       "messageId": "urn:awp:engine-credit-file-dispute-main:owner-agent:0003",
       "messageDigest": "sha-256:fb7500c854535a45ec3df09e3b13be7beb3f281287a530474315269b4726c267",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:3a3d353b56e824e4b26b850f32e7facb6a5943d28a31e676de68e87e322fb21e"
+      ]
     },
     {
       "seq": 86,
@@ -3404,7 +3485,11 @@
       "agent": "agency-agent",
       "part": "record",
       "kind": "record",
-      "caption": "Duty audit: Notification acknowledged; acknowledged by its recipient."
+      "caption": "Duty audit: Notification acknowledged; acknowledged by its recipient.",
+      "linked": [
+        "sha-256:c27451c22bad1914f786f9e8875e8ea181ec1d9df02916e9d1da266055dd7528"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/credit-file-dispute--baseline.json"
 }

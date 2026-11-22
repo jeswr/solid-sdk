@@ -61,7 +61,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -144,7 +144,11 @@
         "answer": "Accepted, for medicine code claims only."
       },
       "caption": "A home practice's medicine code statement: A home practice is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:48b97c83eef1013df78e19d625432314f45da3b93d96935ba8d28524bb772084",
+        "sha-256:a7d8d081b1eab4d0a1b8562e1d86c3ad0527bde489c4f2dea14db3426769d22b"
+      ]
     },
     {
       "seq": 3,
@@ -191,7 +195,10 @@
         "text": "Its terms allow this: use for Care abroad; share for Care abroad."
       },
       "caption": "A home practice's medicine code statement: its terms allow this: use for Care abroad; share for Care abroad.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:618e37fc29c127d4def625ccb583b475c543f813378467e7dc39e73098291235"
+      ]
     },
     {
       "seq": 5,
@@ -254,7 +261,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "A home practice's medicine code statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:eb009e6d7a8d292339d89f8d202c1c0ce81d620532b41197f8b708bbe7ac0ee3"
+      ]
     },
     {
       "seq": 8,
@@ -318,7 +328,11 @@
         },
         "provenance": "Locally mapped; original signed by A home practice"
       },
-      "caption": "A home practice's medicine code statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "A home practice's medicine code statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:1dea4b675603a97652582f275201a3fbea2c25241b1033fdcaaaed2967882ce6"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/care-abroad--baseline.json"
 }

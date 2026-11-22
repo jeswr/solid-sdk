@@ -141,7 +141,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -212,7 +212,11 @@
         "answer": "Accepted, for quote supplier 1 claims only."
       },
       "caption": "Fictional supplier 1's quote supplier 1 statement: Fictional supplier 1 is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7a5eacfb5d94f36f3bd99bf6e1d8f105e7932bf3ec4ca034a85b09eca1f46f98",
+        "sha-256:894b60077f68ebe0e7d627e2f3b575afa2ac4a08db2a65cfae9211529dc54355"
+      ]
     },
     {
       "seq": 3,
@@ -259,7 +263,10 @@
         "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
       },
       "caption": "Fictional supplier 1's quote supplier 1 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:537c1dfad1ac66b507b0cf431997bcc45f5b257124c45a03aaac684ba68ddfe9"
+      ]
     },
     {
       "seq": 5,
@@ -303,7 +310,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "Fictional supplier 1's quote supplier 1 statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:94018e14d23279141981e2eaaccc72247420c0e4d6a6f7e9a0508194e79dbee8"
+      ]
     },
     {
       "seq": 7,
@@ -326,7 +336,10 @@
         },
         "provenance": "signed by Fictional supplier 1"
       },
-      "caption": "Fictional supplier 1's quote supplier 1 statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Fictional supplier 1's quote supplier 1 statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:501e13de906fde26d2a54f656b3f1209f93852a853a2bceb4a6a5fb6d64daf2a"
+      ]
     },
     {
       "seq": 8,
@@ -413,7 +426,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional supplier 1: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:cbb233877f83f10df47f2d918ae4c60fcac46e5ca56ffe82a856d235add0a96b"
+      ]
     },
     {
       "seq": 11,
@@ -590,7 +606,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:8a1a7efc57feb4f8c86779d9985ee6c5509ad7ea69ec64654a8b0c2929ea66e5",
       "caption": "The invoke message goes to Fictional supplier 1’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9059add9e0a2f953d6a8389018d6c7bb2a088e7cf718d7e617d4e6629287f413"
+      ]
     },
     {
       "seq": 17,
@@ -1005,7 +1024,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0002",
       "messageDigest": "sha-256:8a1a7efc57feb4f8c86779d9985ee6c5509ad7ea69ec64654a8b0c2929ea66e5",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:cc2d60507b471f1cdc5c94bb3b4d3bdf084ff611378883ace86a852e4fc6361b"
+      ]
     },
     {
       "seq": 25,
@@ -1084,7 +1106,10 @@
       },
       "reason": "recipient-established",
       "caption": "The buyer company: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:56e6ca46056ef7785d3a30125a233a0b393e95f6643a5a1bc5fc5038a6e4f311"
+      ]
     },
     {
       "seq": 27,
@@ -1146,7 +1171,10 @@
       },
       "reason": "terms-allow",
       "caption": "Fictional supplier 1's quote supplier 1 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:537c1dfad1ac66b507b0cf431997bcc45f5b257124c45a03aaac684ba68ddfe9"
+      ]
     },
     {
       "seq": 29,
@@ -1208,7 +1236,10 @@
       },
       "reason": "terms-allow",
       "caption": "Fictional supplier 1's quote supplier 1 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:537c1dfad1ac66b507b0cf431997bcc45f5b257124c45a03aaac684ba68ddfe9"
+      ]
     },
     {
       "seq": 31,
@@ -1298,7 +1329,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:supplier-1-agent:0001",
       "messageDigest": "sha-256:d7501e698e188b455694726a54765d038ed46818010d373b18ea8e219ccfc697",
       "caption": "The deliver message goes to The buyer company’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:aeafe829514ec4b9af7ab584d7ee31939b9591d0b0454b6728eb5b01d6caadb4"
+      ]
     },
     {
       "seq": 34,
@@ -1847,7 +1881,11 @@
         "answer": "Accepted, for quote supplier 1 claims only."
       },
       "caption": "Fictional supplier 1's quote supplier 1 statement: Fictional supplier 1 is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bd2c7ec3c9755249ae74de2b567ea9132c6130bb351e63961b86234babfd23b6",
+        "sha-256:a1c45fdc3d5cd79c4f5f5df2fbdd5e77c80c8ac24aa01e87712cea0136ca28d7"
+      ]
     },
     {
       "seq": 38,
@@ -1894,7 +1932,10 @@
         "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
       },
       "caption": "Fictional supplier 1's quote supplier 1 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:537c1dfad1ac66b507b0cf431997bcc45f5b257124c45a03aaac684ba68ddfe9"
+      ]
     },
     {
       "seq": 40,
@@ -1935,7 +1976,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:supplier-1-agent:0001",
       "messageDigest": "sha-256:d7501e698e188b455694726a54765d038ed46818010d373b18ea8e219ccfc697",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0e991c26c8890df921fb33accd1f45a5a2d62228980ddaa6bfd83a484d01aecc"
+      ]
     },
     {
       "seq": 42,
@@ -1958,7 +2002,10 @@
         },
         "provenance": "signed by Fictional supplier 1"
       },
-      "caption": "Fictional supplier 1's quote supplier 1 statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Fictional supplier 1's quote supplier 1 statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:ba6007b23da1971f5e4129107de9bea93c92b9f2ede2cd72deef697a8fae09b7"
+      ]
     },
     {
       "seq": 43,
@@ -2021,7 +2068,11 @@
         "answer": "Accepted, for quote supplier 2 claims only."
       },
       "caption": "Fictional supplier 2's quote supplier 2 statement: Fictional supplier 2 is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0d3aa67ace1ce1cd238291983282292e8babe381de4d144183baaf28ac7ffaae",
+        "sha-256:5ced5b1e7d37ee143e0bfde0488f586dac15e922c1be296f8b7d8f5b4e740675"
+      ]
     },
     {
       "seq": 45,
@@ -2068,7 +2119,10 @@
         "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
       },
       "caption": "Fictional supplier 2's quote supplier 2 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:45fbd46bdeaa853bff4fce51b1a942a3c62a37b8cccb238074f0a9c1f53e46ab"
+      ]
     },
     {
       "seq": 47,
@@ -2112,7 +2166,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "Fictional supplier 2's quote supplier 2 statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:065d249510c11b8050cd3492204f645bbb8bc27d5259a9975e4e97fa339a7b72"
+      ]
     },
     {
       "seq": 49,
@@ -2135,7 +2192,10 @@
         },
         "provenance": "signed by Fictional supplier 2"
       },
-      "caption": "Fictional supplier 2's quote supplier 2 statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Fictional supplier 2's quote supplier 2 statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:71c189ceb159af7d7297a75612489db960d8439b116c7784c9c261dc6d4f3886"
+      ]
     },
     {
       "seq": 50,
@@ -2222,7 +2282,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional supplier 2: Accepted, for Request the needed information only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:09480ee843dab679bf116041d70c077d7facb385b60b4cd9fe9825e558c88c5c"
+      ]
     },
     {
       "seq": 53,
@@ -2399,7 +2462,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0004",
       "messageDigest": "sha-256:4a6fff922444b6343d93f9d3667bf35ae0c9e1b9238b9ba354d21369e8cda6bc",
       "caption": "The invoke message goes to Fictional supplier 2’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:ccc2f1bfd700fc3619ed4b148c910ef888bbad5c8d91a666061d21be5178e8f9"
+      ]
     },
     {
       "seq": 59,
@@ -2814,7 +2880,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0004",
       "messageDigest": "sha-256:4a6fff922444b6343d93f9d3667bf35ae0c9e1b9238b9ba354d21369e8cda6bc",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:22f6f546c433cfb45d61dc398a4b0394656a83b62c6d4521a711ed18b3c11ed8"
+      ]
     },
     {
       "seq": 67,
@@ -2893,7 +2962,10 @@
       },
       "reason": "recipient-established",
       "caption": "The buyer company: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:dd3e2fa5ab0fc430b033f8965a338f11b39c29efe0fa5030105bac47ab0a3486"
+      ]
     },
     {
       "seq": 69,
@@ -2955,7 +3027,10 @@
       },
       "reason": "terms-allow",
       "caption": "Fictional supplier 2's quote supplier 2 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:45fbd46bdeaa853bff4fce51b1a942a3c62a37b8cccb238074f0a9c1f53e46ab"
+      ]
     },
     {
       "seq": 71,
@@ -3017,7 +3092,10 @@
       },
       "reason": "terms-allow",
       "caption": "Fictional supplier 2's quote supplier 2 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:45fbd46bdeaa853bff4fce51b1a942a3c62a37b8cccb238074f0a9c1f53e46ab"
+      ]
     },
     {
       "seq": 73,
@@ -3107,7 +3185,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:supplier-2-agent:0001",
       "messageDigest": "sha-256:a0caaa113229e1beca8325b6a2102f460e6ef1016efb692027503280121900f4",
       "caption": "The deliver message goes to The buyer company’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:439a7b5bcb60e7475772be0820c059a3c4be196ba5b93d16c5b5b98ccf9ba3c4"
+      ]
     },
     {
       "seq": 76,
@@ -3656,7 +3737,11 @@
         "answer": "Accepted, for quote supplier 2 claims only."
       },
       "caption": "Fictional supplier 2's quote supplier 2 statement: Fictional supplier 2 is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:303338102d52d6683fab562141c60f3a02a0f71c28dc88d60534f7aeee5b7886",
+        "sha-256:fd643a0c4f210129c2b425f7312a81f5032878c36bf00cd2d1414f8e94c16c1b"
+      ]
     },
     {
       "seq": 80,
@@ -3703,7 +3788,10 @@
         "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5."
       },
       "caption": "Fictional supplier 2's quote supplier 2 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 3 or Fictional supplier 4 or Fictional supplier 5.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:45fbd46bdeaa853bff4fce51b1a942a3c62a37b8cccb238074f0a9c1f53e46ab"
+      ]
     },
     {
       "seq": 82,
@@ -3744,7 +3832,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:supplier-2-agent:0001",
       "messageDigest": "sha-256:a0caaa113229e1beca8325b6a2102f460e6ef1016efb692027503280121900f4",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:c27d05ba7fdba5963d702607d9650327238bde5ed20b9b09100644d0c970c750"
+      ]
     },
     {
       "seq": 84,
@@ -3767,7 +3858,10 @@
         },
         "provenance": "signed by Fictional supplier 2"
       },
-      "caption": "Fictional supplier 2's quote supplier 2 statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Fictional supplier 2's quote supplier 2 statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:2d234146ff8596432c3f86413088873be725d9df189b0845a7c1afac3e8da96b"
+      ]
     },
     {
       "seq": 85,
@@ -3830,7 +3924,11 @@
         "answer": "Accepted, for quote supplier 3 claims only."
       },
       "caption": "Fictional supplier 3's quote supplier 3 statement: Fictional supplier 3 is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:bd093fe3d373ad285956dafb16fd3597b94ba12389ce9c52a227bd0a3adbbd5f",
+        "sha-256:e4971a1edd7b78d0539d05bb3f70861335c1722c55770f24dfcc37bb319cbf99"
+      ]
     },
     {
       "seq": 87,
@@ -3877,7 +3975,10 @@
         "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5."
       },
       "caption": "Fictional supplier 3's quote supplier 3 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:df9bb56b36ef38db04599f73279fee58c5adb8a47c4d48563f7912a44cfcb884"
+      ]
     },
     {
       "seq": 89,
@@ -3921,7 +4022,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "Fictional supplier 3's quote supplier 3 statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4ba14ddcd93f85a7f52ee04e179f311b674e162150a0f51c9119277eaeefdb3f"
+      ]
     },
     {
       "seq": 91,
@@ -3944,7 +4048,10 @@
         },
         "provenance": "signed by Fictional supplier 3"
       },
-      "caption": "Fictional supplier 3's quote supplier 3 statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Fictional supplier 3's quote supplier 3 statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:0edf0aa9a971fa0efa652c027fe4e34200adc17c4492c8f80662610b273623ef"
+      ]
     },
     {
       "seq": 92,
@@ -4031,7 +4138,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional supplier 3: Accepted, for Request the needed information only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:548121b7ce3f7509e4d2464247d94834da5a50b60c764bed42370c6619058661"
+      ]
     },
     {
       "seq": 95,
@@ -4208,7 +4318,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0006",
       "messageDigest": "sha-256:d140941ad23781c86bc61d60fb2cc8db2d1414a0b3d630ea862777e473317d60",
       "caption": "The invoke message goes to Fictional supplier 3’s agent.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:6ecf6b2b2efd7946ff331ae0a6895a2ac96b3f8c0da2135eec4fe570ff29d853"
+      ]
     },
     {
       "seq": 101,
@@ -4623,7 +4736,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0006",
       "messageDigest": "sha-256:d140941ad23781c86bc61d60fb2cc8db2d1414a0b3d630ea862777e473317d60",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:4555f873f3fe4d149027ea60e83addab9a88d83300c5486437273b9f00ca25e6"
+      ]
     },
     {
       "seq": 109,
@@ -4702,7 +4818,10 @@
       },
       "reason": "recipient-established",
       "caption": "The buyer company: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2a56d4523acc7b8a0aaad4197dfc52a54b90ff403bc7efbeece2e91525355ee4"
+      ]
     },
     {
       "seq": 111,
@@ -4764,7 +4883,10 @@
       },
       "reason": "terms-allow",
       "caption": "Fictional supplier 3's quote supplier 3 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:df9bb56b36ef38db04599f73279fee58c5adb8a47c4d48563f7912a44cfcb884"
+      ]
     },
     {
       "seq": 113,
@@ -4826,7 +4948,10 @@
       },
       "reason": "terms-allow",
       "caption": "Fictional supplier 3's quote supplier 3 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:df9bb56b36ef38db04599f73279fee58c5adb8a47c4d48563f7912a44cfcb884"
+      ]
     },
     {
       "seq": 115,
@@ -4916,7 +5041,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:supplier-3-agent:0001",
       "messageDigest": "sha-256:83af77bcd9ef51b2ac0f2ac60b247da0a3d084e5128961dd8f2feb13fc4295aa",
       "caption": "The deliver message goes to The buyer company’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8135b995eea0dcc17b4fe4dbade120b440cad614f178c765e37b9ae669b53a35"
+      ]
     },
     {
       "seq": 118,
@@ -5465,7 +5593,11 @@
         "answer": "Accepted, for quote supplier 3 claims only."
       },
       "caption": "Fictional supplier 3's quote supplier 3 statement: Fictional supplier 3 is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:9decb7fb4c266d7da3562449eec95c710459c45f0278f71f7ecd0187f8109b3c",
+        "sha-256:8b1d836f2c72741fb45f24d5e93006401e7d54f9f26792ba7682373687b7d217"
+      ]
     },
     {
       "seq": 122,
@@ -5512,7 +5644,10 @@
         "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5."
       },
       "caption": "Fictional supplier 3's quote supplier 3 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:df9bb56b36ef38db04599f73279fee58c5adb8a47c4d48563f7912a44cfcb884"
+      ]
     },
     {
       "seq": 124,
@@ -5553,7 +5688,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:supplier-3-agent:0001",
       "messageDigest": "sha-256:83af77bcd9ef51b2ac0f2ac60b247da0a3d084e5128961dd8f2feb13fc4295aa",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:1fe1c168989c599cdb4d30c27419b59da6846d3afe7ed577f0dfa95acef4b2cc"
+      ]
     },
     {
       "seq": 126,
@@ -5576,7 +5714,10 @@
         },
         "provenance": "signed by Fictional supplier 3"
       },
-      "caption": "Fictional supplier 3's quote supplier 3 statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Fictional supplier 3's quote supplier 3 statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:b5772a3397542d98b80b374b4b3e87a15e5bd1e898f7e0583fa38b0a8af1dea7"
+      ]
     },
     {
       "seq": 127,
@@ -5639,7 +5780,11 @@
         "answer": "Accepted, for quote supplier 4 claims only."
       },
       "caption": "Fictional supplier 4's quote supplier 4 statement: Fictional supplier 4 is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8721a7444789cd5adf836748a366e6689516054ab8c2e51c8ab03974a4918d27",
+        "sha-256:dba2b995ea4dfd09d10e9c2a377c509cc7d5595fff5fcef17bd25346224d247b"
+      ]
     },
     {
       "seq": 129,
@@ -5686,7 +5831,10 @@
         "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5."
       },
       "caption": "Fictional supplier 4's quote supplier 4 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:92d5d6bc10e04a12051eac311b598bfb20e2e3fcd8bb4db6bfd6b506a7d9b150"
+      ]
     },
     {
       "seq": 131,
@@ -5730,7 +5878,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "Fictional supplier 4's quote supplier 4 statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:4ab1c54b80a2478aaf510cfb02159554708eb33b09a030d38be811b969710ad1"
+      ]
     },
     {
       "seq": 133,
@@ -5753,7 +5904,10 @@
         },
         "provenance": "signed by Fictional supplier 4"
       },
-      "caption": "Fictional supplier 4's quote supplier 4 statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Fictional supplier 4's quote supplier 4 statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:c6014bb5b15c0ef4153a5f052dba7048769df560ae896e7a1a9a5d1371af7047"
+      ]
     },
     {
       "seq": 134,
@@ -5840,7 +5994,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional supplier 4: Accepted, for Request the needed information only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:70ad2c55b6e1945210b3216a382998ef8acff59b87e43e405fa89788d51054c2"
+      ]
     },
     {
       "seq": 137,
@@ -6017,7 +6174,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0008",
       "messageDigest": "sha-256:6e279ad8b2c52ef1a42ef466b802388d8957556ce1c91a1100663930a8baa6d8",
       "caption": "The invoke message goes to Fictional supplier 4’s agent.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:55374e19eedde9fb9fb7492cf2b88c2df12d67425c136f388d3134bc0fee8d3a"
+      ]
     },
     {
       "seq": 143,
@@ -6432,7 +6592,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0008",
       "messageDigest": "sha-256:6e279ad8b2c52ef1a42ef466b802388d8957556ce1c91a1100663930a8baa6d8",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:44e4c0273d33b1af0579bf9c163839bc7f8ca69bfacd20d163764c5a7894bb79"
+      ]
     },
     {
       "seq": 151,
@@ -6511,7 +6674,10 @@
       },
       "reason": "recipient-established",
       "caption": "The buyer company: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d4145116c6618f2bd3e3bdfa90a49f9a7181224a112c2fc049da111e573cdd13"
+      ]
     },
     {
       "seq": 153,
@@ -6573,7 +6739,10 @@
       },
       "reason": "terms-allow",
       "caption": "Fictional supplier 4's quote supplier 4 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:92d5d6bc10e04a12051eac311b598bfb20e2e3fcd8bb4db6bfd6b506a7d9b150"
+      ]
     },
     {
       "seq": 155,
@@ -6635,7 +6804,10 @@
       },
       "reason": "terms-allow",
       "caption": "Fictional supplier 4's quote supplier 4 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:92d5d6bc10e04a12051eac311b598bfb20e2e3fcd8bb4db6bfd6b506a7d9b150"
+      ]
     },
     {
       "seq": 157,
@@ -6725,7 +6897,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:supplier-4-agent:0001",
       "messageDigest": "sha-256:f6bc2b1cf02c2c9210fc2cdedb787a008351df858b3f6a6e5046c6e709baba6b",
       "caption": "The deliver message goes to The buyer company’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2ac2fe19c1566dd585e3eab03a1cfce3e44c1564bb42c6c9c69cb428f7cae7fa"
+      ]
     },
     {
       "seq": 160,
@@ -7274,7 +7449,11 @@
         "answer": "Accepted, for quote supplier 4 claims only."
       },
       "caption": "Fictional supplier 4's quote supplier 4 statement: Fictional supplier 4 is an accepted source for this kind of claim.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:e521bfe970477bdd738b4648471bf91e8935c770671515dd68ada40392bbf990",
+        "sha-256:7e0b035bd8ace55627d6a4791f9ee3e74e5b7be77987f10f1ff383ae9f95258f"
+      ]
     },
     {
       "seq": 164,
@@ -7321,7 +7500,10 @@
         "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5."
       },
       "caption": "Fictional supplier 4's quote supplier 4 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 5.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:92d5d6bc10e04a12051eac311b598bfb20e2e3fcd8bb4db6bfd6b506a7d9b150"
+      ]
     },
     {
       "seq": 166,
@@ -7362,7 +7544,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:supplier-4-agent:0001",
       "messageDigest": "sha-256:f6bc2b1cf02c2c9210fc2cdedb787a008351df858b3f6a6e5046c6e709baba6b",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:1567daa1a3d4fa2fbc32cf5f3fd91935a502178446953dee58eae56122991863"
+      ]
     },
     {
       "seq": 168,
@@ -7385,7 +7570,10 @@
         },
         "provenance": "signed by Fictional supplier 4"
       },
-      "caption": "Fictional supplier 4's quote supplier 4 statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Fictional supplier 4's quote supplier 4 statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:9bdee3e93884a5afb6ea85d8098d09a1ce909068324c4a2e50efacf4aaf7194f"
+      ]
     },
     {
       "seq": 169,
@@ -7448,7 +7636,11 @@
         "answer": "Accepted, for quote supplier 5 claims only."
       },
       "caption": "Fictional supplier 5's quote supplier 5 statement: Fictional supplier 5 is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:dcef47b21d001df46abe4bf57fc210f946f8c3372026dbce607914a8d1792044",
+        "sha-256:5bdfc28072651f2da883a351a26445f2bce5a00bab22b9bd8b48259adaa15cac"
+      ]
     },
     {
       "seq": 171,
@@ -7495,7 +7687,10 @@
         "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4."
       },
       "caption": "Fictional supplier 5's quote supplier 5 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1cbb9be2818788085166105ddf252f5b34005dab3bf6db74c906b79b05b1ecb1"
+      ]
     },
     {
       "seq": 173,
@@ -7539,7 +7734,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "Fictional supplier 5's quote supplier 5 statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e5c315ab6aed53c0989a837fd54916159360ce79b94b2b58bcf3cde591c38253"
+      ]
     },
     {
       "seq": 175,
@@ -7562,7 +7760,10 @@
         },
         "provenance": "signed by Fictional supplier 5"
       },
-      "caption": "Fictional supplier 5's quote supplier 5 statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Fictional supplier 5's quote supplier 5 statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:28081eb3dd71ed93a613535deab7fb2e60c3ef6ea1cdceac779416d7486f5648"
+      ]
     },
     {
       "seq": 176,
@@ -7649,7 +7850,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional supplier 5: Accepted, for Request the needed information only.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:49f7c5b9e4680e3ff3f7dc698dd762fcc679680945f4ede53ec5e42a6776020b"
+      ]
     },
     {
       "seq": 179,
@@ -7826,7 +8030,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0010",
       "messageDigest": "sha-256:57c7356cd9aaad6722450b62214e5fe99ee69876954562789e4abab6897401e0",
       "caption": "The invoke message goes to Fictional supplier 5’s agent.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:257a852c939370b985727f616bf53554a0652d064835e6d8fc38a7d0a27b66d3"
+      ]
     },
     {
       "seq": 185,
@@ -8241,7 +8448,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:owner-agent:0010",
       "messageDigest": "sha-256:57c7356cd9aaad6722450b62214e5fe99ee69876954562789e4abab6897401e0",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:cf892bfc90a7d1f574265a751060dd572074f51ea9e9b0f596783a887c5c38fa"
+      ]
     },
     {
       "seq": 193,
@@ -8320,7 +8530,10 @@
       },
       "reason": "recipient-established",
       "caption": "The buyer company: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2a86075fbc6bdd67c1bc835ddc8c7aa0fae9661f444420d0672bdd5b05160a2b"
+      ]
     },
     {
       "seq": 195,
@@ -8382,7 +8595,10 @@
       },
       "reason": "terms-allow",
       "caption": "Fictional supplier 5's quote supplier 5 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1cbb9be2818788085166105ddf252f5b34005dab3bf6db74c906b79b05b1ecb1"
+      ]
     },
     {
       "seq": 197,
@@ -8444,7 +8660,10 @@
       },
       "reason": "terms-allow",
       "caption": "Fictional supplier 5's quote supplier 5 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1cbb9be2818788085166105ddf252f5b34005dab3bf6db74c906b79b05b1ecb1"
+      ]
     },
     {
       "seq": 199,
@@ -8534,7 +8753,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:supplier-5-agent:0001",
       "messageDigest": "sha-256:38b02815b994991b24b5d3365e27f528f5c55be8d9b2d0d1367c1686ae184535",
       "caption": "The deliver message goes to The buyer company’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:91448ae4d37bf364d1352c4f627bc189c92df2cc86dca27dbe712065f808013f"
+      ]
     },
     {
       "seq": 202,
@@ -9083,7 +9305,11 @@
         "answer": "Accepted, for quote supplier 5 claims only."
       },
       "caption": "Fictional supplier 5's quote supplier 5 statement: Fictional supplier 5 is an accepted source for this kind of claim.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:d31f3178665fb7383c048bba5535a96645a3601d21ceefb487d333eb047080be",
+        "sha-256:ad31c01ae17c67c2c8ae4680174c85057c9ee6990ce02d1d11c3220f79f29ac1"
+      ]
     },
     {
       "seq": 206,
@@ -9130,7 +9356,10 @@
         "text": "Its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4."
       },
       "caption": "Fictional supplier 5's quote supplier 5 statement: its terms allow this: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 3 or Fictional supplier 4.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:1cbb9be2818788085166105ddf252f5b34005dab3bf6db74c906b79b05b1ecb1"
+      ]
     },
     {
       "seq": 208,
@@ -9171,7 +9400,10 @@
       "messageId": "urn:awp:engine-request-for-quotes-branch-1:supplier-5-agent:0001",
       "messageDigest": "sha-256:38b02815b994991b24b5d3365e27f528f5c55be8d9b2d0d1367c1686ae184535",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:945028e0a6662f729b2ed3597a35d681326e4ed8360c673c787d2fc25252530f"
+      ]
     },
     {
       "seq": 210,
@@ -9194,7 +9426,10 @@
         },
         "provenance": "signed by Fictional supplier 5"
       },
-      "caption": "Fictional supplier 5's quote supplier 5 statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "Fictional supplier 5's quote supplier 5 statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:2619b4417b60968a929f33496c644fbc90242e729378cd4f0a2575e9d9580f95"
+      ]
     },
     {
       "seq": 211,
@@ -9281,7 +9516,10 @@
       },
       "reason": "recipient-established",
       "caption": "Fictional supplier 1: Accepted, for Attempt to share a quote only.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:cbb233877f83f10df47f2d918ae4c60fcac46e5ca56ffe82a856d235add0a96b"
+      ]
     },
     {
       "seq": 214,
@@ -9430,7 +9668,10 @@
         "text": "The issuer's terms: use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5. They go out with the data."
       },
       "caption": "Fictional supplier 3's quote supplier 3 statement: its terms forbid this (use for Request for quotes; share for Request for quotes; never for Fictional supplier 1 or Fictional supplier 2 or Fictional supplier 4 or Fictional supplier 5).",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:df9bb56b36ef38db04599f73279fee58c5adb8a47c4d48563f7912a44cfcb884"
+      ]
     },
     {
       "seq": 219,
@@ -9452,7 +9693,11 @@
       "outcome": "stop",
       "reason": "prohibited",
       "caption": "The actual credential's terms prohibit release.",
-      "gateRun": 6
+      "gateRun": 6,
+      "linked": [
+        "sha-256:4dbdefe3427f7897345557dbdc086fbc2221b01c362c385e7d64644abf585e33"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/request-for-quotes--baseline.json"
 }

@@ -68,7 +68,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [],
@@ -117,7 +117,10 @@
       },
       "reason": "within-mandate",
       "caption": "Alex, a fictional flatmate's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:0fc568238c35f730ba8845c9c96632ee3dc7d08926ea6a53bf8e171239af326d"
+      ]
     },
     {
       "seq": 3,
@@ -162,7 +165,10 @@
       },
       "reason": "recipient-established",
       "caption": "Blair, a fictional flatmate: Accepted, for flat-share only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3ec5d84970805cbca6af1706beeda35ddf573941500ad215bb5cde750a291cbe"
+      ]
     },
     {
       "seq": 4,
@@ -339,7 +345,10 @@
       "messageId": "urn:awp:engine-flat-share-branch-1:alex-agent:0002",
       "messageDigest": "sha-256:c28035e319bd2cf95f48c503980fe5d27637f53957ec8c62a79552b0b1d53d57",
       "caption": "The propose message goes to Blair’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:e1951d541b4c46dd3273848ee8e20600609e368833c4b25020abda71f35ec366"
+      ]
     },
     {
       "seq": 10,
@@ -679,7 +688,10 @@
       "outcome": "ask-principal",
       "reason": "source-unknown",
       "caption": "The runtime holds the message without showing it to the core.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f9e00989d1c62774627f877d64d300cfb58678eafbc8bdafb21b8b4b4fc08fc9"
+      ]
     },
     {
       "seq": 15,
@@ -728,7 +740,11 @@
       "outcome": "refuse",
       "reason": "source-unknown",
       "caption": "The held message is refused.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:c87d11b97cbcb0b1390f4876da5e1cfd91b43a0dce61376c59ebacec7f446168"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/flat-share--baseline.json"
 }

@@ -91,7 +91,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -166,7 +166,11 @@
         "answer": "Accepted, for business accounts claims only."
       },
       "caption": "The accounting platform's business accounts statement: The accounting platform is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7e06646197fb39d6b874bfb284d8adf09d2f13f1edce956116efd120fbff03bb",
+        "sha-256:06baa338dadca824e15416594b3f77ce2d5e81897aaf476c3ff5f88a10543fb4"
+      ]
     },
     {
       "seq": 3,
@@ -213,7 +217,10 @@
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
       "caption": "The accounting platform's business accounts statement: its terms allow this: use for Small business loan; share for Small business loan.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:72419aaf8ed7a2747b8495e2fca19d828ef0331d537983bda11b94382d2125c2"
+      ]
     },
     {
       "seq": 5,
@@ -257,7 +264,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The accounting platform's business accounts statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:42e332342e657956a2e40aee318d15036fe7bd1e087add9b6474da0fe63bf9cc"
+      ]
     },
     {
       "seq": 7,
@@ -280,7 +290,10 @@
         },
         "provenance": "signed by The accounting platform"
       },
-      "caption": "The accounting platform's business accounts statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The accounting platform's business accounts statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:5c8ad78719e4b9ba6d7ab7d535aa0470542fe700d0c1c54a2630a480e05dffc0"
+      ]
     },
     {
       "seq": 8,
@@ -343,7 +356,11 @@
         "answer": "Accepted, for business tax filing claims only."
       },
       "caption": "The fictional tax authority's business tax filing statement: The fictional tax authority is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:545f3dcd9d2eeffd4ce9c6905b2ee6e5378841c56dffe38d13cbfa2a443680bd",
+        "sha-256:8c64c6ccb4e9ed99f649a49374a7f96bbfd0bc8439aeeb7c71b8b5e7060d9da7"
+      ]
     },
     {
       "seq": 10,
@@ -390,7 +407,10 @@
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
       "caption": "The fictional tax authority's business tax filing statement: its terms allow this: use for Small business loan; share for Small business loan.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:aa938eb404bdb9cd9f844aca23315ff4b20df0c322b726881d6a50de238ce47c"
+      ]
     },
     {
       "seq": 12,
@@ -434,7 +454,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The fictional tax authority's business tax filing statement is admitted.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:bdd596dc61eb1e7ff7ac65dfbec99e94081a4d74d911d765558a18ceb814081e"
+      ]
     },
     {
       "seq": 14,
@@ -457,7 +480,10 @@
         },
         "provenance": "signed by The fictional tax authority"
       },
-      "caption": "The fictional tax authority's business tax filing statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional tax authority's business tax filing statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:8114cd5a086ee0cf821837294d7e084b1f4de494284dbd4daf2f471e46ffd16c"
+      ]
     },
     {
       "seq": 15,
@@ -520,7 +546,11 @@
         "answer": "Accepted, for organization role claims only."
       },
       "caption": "The company register's organization role statement: The company register is an accepted source for this kind of claim.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:004fad1b4f18e23c245dbfe2994e6bffb76ae4f9b63dc0e5b55588916625d742",
+        "sha-256:013359b621d3ce27812c07f17536841adf40ab6755dec5b8e149d3351cc8d492"
+      ]
     },
     {
       "seq": 17,
@@ -567,7 +597,10 @@
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
       "caption": "The company register's organization role statement: its terms allow this: use for Small business loan; share for Small business loan.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:51d6c80ee213c8d15e0b165dc3e15a68aa110f5dd25976a580bdaf895675930d"
+      ]
     },
     {
       "seq": 19,
@@ -611,7 +644,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The company register's organization role statement is admitted.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:82e03975d07ffff0876c22300c495b50e039124ccf9b92e11d802a02bd7b531f"
+      ]
     },
     {
       "seq": 21,
@@ -634,7 +670,10 @@
         },
         "provenance": "signed by The company register"
       },
-      "caption": "The company register's organization role statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The company register's organization role statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:182aedb39d92930bb7ffe0190b9bf5a4d7b64ed12471fee12f6b5c7c62b9aaa6"
+      ]
     },
     {
       "seq": 22,
@@ -680,7 +719,10 @@
       },
       "reason": "within-mandate",
       "caption": "The company's mandate covers this action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f90ea20556068490003456431274e0e1fb76ed5bdbad56bd3e4eb4888724cc23"
+      ]
     },
     {
       "seq": 24,
@@ -725,7 +767,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for A loan for a small company only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:75d4f8ddd4ec28c40ddd193151be1d359c2c10885d6ce77ca456631b3db05fcc"
+      ]
     },
     {
       "seq": 25,
@@ -816,7 +861,10 @@
         "text": "Requires 1 approval(s) from borrowing-director."
       },
       "caption": "The required people must decide this exact action.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f90ea20556068490003456431274e0e1fb76ed5bdbad56bd3e4eb4888724cc23"
+      ]
     },
     {
       "seq": 28,
@@ -838,7 +886,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The action is held for the named decision makers.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:9bc32faa370f22811dde6c1e207463bb89599160bdb7815ed0a724e733de93f6"
+      ]
     },
     {
       "seq": 29,
@@ -897,7 +948,10 @@
       },
       "reason": "within-mandate",
       "caption": "The company's mandate covers this action.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:f90ea20556068490003456431274e0e1fb76ed5bdbad56bd3e4eb4888724cc23"
+      ]
     },
     {
       "seq": 32,
@@ -942,7 +996,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for A loan for a small company only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:75d4f8ddd4ec28c40ddd193151be1d359c2c10885d6ce77ca456631b3db05fcc"
+      ]
     },
     {
       "seq": 33,
@@ -1067,7 +1124,10 @@
       },
       "reason": "within-mandate",
       "caption": "The company's mandate covers this action.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:f90ea20556068490003456431274e0e1fb76ed5bdbad56bd3e4eb4888724cc23"
+      ]
     },
     {
       "seq": 37,
@@ -1112,7 +1172,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for A loan for a small company only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:75d4f8ddd4ec28c40ddd193151be1d359c2c10885d6ce77ca456631b3db05fcc"
+      ]
     },
     {
       "seq": 38,
@@ -1261,7 +1324,10 @@
       },
       "reason": "terms-allow",
       "caption": "The accounting platform's business accounts statement: its terms allow this: use for Small business loan; share for Small business loan.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:72419aaf8ed7a2747b8495e2fca19d828ef0331d537983bda11b94382d2125c2"
+      ]
     },
     {
       "seq": 43,
@@ -1351,7 +1417,10 @@
       "messageId": "urn:awp:engine-small-business-loan-needed-claim-left-out:owner-agent:0002",
       "messageDigest": "sha-256:883e0361642d1da4420ebf80cb779f700320fc21245bef63e63c0c2cd24b3068",
       "caption": "The invoke message goes to The lender’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:7c28a6279a9ebc87150bf9d51787ff9b4562eb913f18428e53c81df889e51b75"
+      ]
     },
     {
       "seq": 46,
@@ -1828,7 +1897,11 @@
         "answer": "Accepted, for business accounts claims only."
       },
       "caption": "The accounting platform's business accounts statement: The accounting platform is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:98fc81f2c4f1d4a747f106058432517c8b5d524941e6a7ae874708948fbe8837",
+        "sha-256:7457fd6ae343c3ed65d6ba49fbe7d1c207bcaabdd63b62b160721213378f849b"
+      ]
     },
     {
       "seq": 50,
@@ -1879,7 +1952,10 @@
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
       "caption": "The accounting platform's business accounts statement: its terms allow this: use for Small business loan; share for Small business loan.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:72419aaf8ed7a2747b8495e2fca19d828ef0331d537983bda11b94382d2125c2"
+      ]
     },
     {
       "seq": 52,
@@ -1959,7 +2035,10 @@
         },
         "provenance": "signed by The accounting platform"
       },
-      "caption": "The accounting platform's business accounts statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The accounting platform's business accounts statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:111df476366ca44f66b3780c05453aad35ee1a580997a270a7817f2181a1ef6b"
+      ]
     },
     {
       "seq": 55,
@@ -1978,6 +2057,9 @@
           "suite": "fixed-vocabulary",
           "id": "urn:fictional:small-business-loan:tax"
         }
+      ],
+      "linked": [
+        "sha-256:b7c49630ec2b7ff0200cf341cfb59465f6382c5a729d1e31d414166bdeec2072"
       ]
     },
     {
@@ -2057,7 +2139,10 @@
       },
       "reason": "recipient-established",
       "caption": "The company: Accepted, for A loan for a small company only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:3391ca2afc04a6f4361b97a2f3824ad442b962a55b2838f837ecf5eeb015cc15"
+      ]
     },
     {
       "seq": 58,
@@ -2210,7 +2295,10 @@
       "messageId": "urn:awp:engine-small-business-loan-needed-claim-left-out:receiver-agent:0003",
       "messageDigest": "sha-256:f2fb218e584e0a1b1df110056d2f847feb9ad6edceff55fa14a5befe872cac81",
       "caption": "The challenge message goes to The company’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:ce6c1756902e1c2910fc5dc2fdd0bfd33e4abc7ca894544e6376eac001647144"
+      ]
     },
     {
       "seq": 63,
@@ -2587,7 +2675,10 @@
       "messageId": "urn:awp:engine-small-business-loan-needed-claim-left-out:receiver-agent:0003",
       "messageDigest": "sha-256:f2fb218e584e0a1b1df110056d2f847feb9ad6edceff55fa14a5befe872cac81",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:1895d39d200caa7acfb936580cb31218db66a786a4b1dfff7ac6a7bd8f93347a"
+      ]
     },
     {
       "seq": 71,
@@ -2633,7 +2724,10 @@
       },
       "reason": "within-mandate",
       "caption": "The company's mandate covers this action.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:f90ea20556068490003456431274e0e1fb76ed5bdbad56bd3e4eb4888724cc23"
+      ]
     },
     {
       "seq": 73,
@@ -2678,7 +2772,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for A loan for a small company only.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:75d4f8ddd4ec28c40ddd193151be1d359c2c10885d6ce77ca456631b3db05fcc"
+      ]
     },
     {
       "seq": 74,
@@ -2769,7 +2866,10 @@
         "text": "Requires 1 approval(s) from borrowing-director."
       },
       "caption": "The required people must decide this exact action.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:f90ea20556068490003456431274e0e1fb76ed5bdbad56bd3e4eb4888724cc23"
+      ]
     },
     {
       "seq": 77,
@@ -2791,7 +2891,10 @@
       "outcome": "ask-principal",
       "reason": "approval-required",
       "caption": "The action is held for the named decision makers.",
-      "gateRun": 3
+      "gateRun": 3,
+      "linked": [
+        "sha-256:3b699bfd5fe952c2e5c5cff2bf57e751f9a0d24301f1449c1f89f79cfcc21623"
+      ]
     },
     {
       "seq": 78,
@@ -2850,7 +2953,10 @@
       },
       "reason": "within-mandate",
       "caption": "The company's mandate covers this action.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:f90ea20556068490003456431274e0e1fb76ed5bdbad56bd3e4eb4888724cc23"
+      ]
     },
     {
       "seq": 81,
@@ -2895,7 +3001,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for A loan for a small company only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:75d4f8ddd4ec28c40ddd193151be1d359c2c10885d6ce77ca456631b3db05fcc"
+      ]
     },
     {
       "seq": 82,
@@ -3020,7 +3129,10 @@
       },
       "reason": "within-mandate",
       "caption": "The company's mandate covers this action.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:f90ea20556068490003456431274e0e1fb76ed5bdbad56bd3e4eb4888724cc23"
+      ]
     },
     {
       "seq": 86,
@@ -3065,7 +3177,10 @@
       },
       "reason": "recipient-established",
       "caption": "The lender: Accepted, for A loan for a small company only.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:75d4f8ddd4ec28c40ddd193151be1d359c2c10885d6ce77ca456631b3db05fcc"
+      ]
     },
     {
       "seq": 87,
@@ -3214,7 +3329,10 @@
       },
       "reason": "terms-allow",
       "caption": "The accounting platform's business accounts statement: its terms allow this: use for Small business loan; share for Small business loan.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:72419aaf8ed7a2747b8495e2fca19d828ef0331d537983bda11b94382d2125c2"
+      ]
     },
     {
       "seq": 92,
@@ -3276,7 +3394,10 @@
       },
       "reason": "terms-allow",
       "caption": "The fictional tax authority's business tax filing statement: its terms allow this: use for Small business loan; share for Small business loan.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:aa938eb404bdb9cd9f844aca23315ff4b20df0c322b726881d6a50de238ce47c"
+      ]
     },
     {
       "seq": 94,
@@ -3366,7 +3487,10 @@
       "messageId": "urn:awp:engine-small-business-loan-needed-claim-left-out:owner-agent:0004",
       "messageDigest": "sha-256:1d4f8a7a4886dc09765e6fa4517134d9c10e9197ff18c891796d1f2eb00f2a32",
       "caption": "The invoke message goes to The lender’s agent.",
-      "gateRun": 4
+      "gateRun": 4,
+      "linked": [
+        "sha-256:37915376893b463bb6a61123d0417d2c201b494962e4d9608b566d65e417608e"
+      ]
     },
     {
       "seq": 97,
@@ -3947,7 +4071,11 @@
         "answer": "Accepted, for business accounts claims only."
       },
       "caption": "The accounting platform's business accounts statement: The accounting platform is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:98fc81f2c4f1d4a747f106058432517c8b5d524941e6a7ae874708948fbe8837",
+        "sha-256:7457fd6ae343c3ed65d6ba49fbe7d1c207bcaabdd63b62b160721213378f849b"
+      ]
     },
     {
       "seq": 101,
@@ -3986,7 +4114,11 @@
         "answer": "Accepted, for business tax filing claims only."
       },
       "caption": "The fictional tax authority's business tax filing statement: The fictional tax authority is an accepted source for this kind of claim.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:9e9feed42fb4093d4a1a080ac4cdb49f30612b161323ffdd9001cfef530a55a3",
+        "sha-256:73c1d1b93e5584bea3cde9f092c15f742e792a7a5da20c99c67c0da05078d3a1"
+      ]
     },
     {
       "seq": 102,
@@ -4037,7 +4169,10 @@
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
       "caption": "The accounting platform's business accounts statement: its terms allow this: use for Small business loan; share for Small business loan.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:72419aaf8ed7a2747b8495e2fca19d828ef0331d537983bda11b94382d2125c2"
+      ]
     },
     {
       "seq": 104,
@@ -4065,7 +4200,10 @@
         "text": "Its terms allow this: use for Small business loan; share for Small business loan."
       },
       "caption": "The fictional tax authority's business tax filing statement: its terms allow this: use for Small business loan; share for Small business loan.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:aa938eb404bdb9cd9f844aca23315ff4b20df0c322b726881d6a50de238ce47c"
+      ]
     },
     {
       "seq": 105,
@@ -4151,7 +4289,10 @@
       "messageId": "urn:awp:engine-small-business-loan-needed-claim-left-out:owner-agent:0004",
       "messageDigest": "sha-256:1d4f8a7a4886dc09765e6fa4517134d9c10e9197ff18c891796d1f2eb00f2a32",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:212cbff650e340c9d05776568dc85cbe9034bdfaea29bc7c3a81b39e514bfe11"
+      ]
     },
     {
       "seq": 109,
@@ -4174,7 +4315,10 @@
         },
         "provenance": "signed by The accounting platform"
       },
-      "caption": "The accounting platform's business accounts statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The accounting platform's business accounts statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:111df476366ca44f66b3780c05453aad35ee1a580997a270a7817f2181a1ef6b"
+      ]
     },
     {
       "seq": 110,
@@ -4197,7 +4341,10 @@
         },
         "provenance": "signed by The fictional tax authority"
       },
-      "caption": "The fictional tax authority's business tax filing statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The fictional tax authority's business tax filing statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:6d98f07f538f045121c65bb2811c597ef3ec5a1e41738562d6b034bd022f4ff4"
+      ]
     },
     {
       "seq": 111,
@@ -4276,7 +4423,10 @@
       },
       "reason": "recipient-established",
       "caption": "The company: Accepted, for A loan for a small company only.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:3391ca2afc04a6f4361b97a2f3824ad442b962a55b2838f837ecf5eeb015cc15"
+      ]
     },
     {
       "seq": 113,
@@ -4424,7 +4574,10 @@
       "messageId": "urn:awp:engine-small-business-loan-needed-claim-left-out:receiver-agent:0004",
       "messageDigest": "sha-256:7354b91232f6453dde6a112948b42897a3ec5e2ef5044544ba0b829fb7ab86bc",
       "caption": "The deliver message goes to The company’s agent.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:8bd3cc0379cbecacc2754f152abc3b8bc2ada7fe03a19be92d7c2d2d06c96ca3"
+      ]
     },
     {
       "seq": 118,
@@ -4797,7 +4950,11 @@
       "messageId": "urn:awp:engine-small-business-loan-needed-claim-left-out:receiver-agent:0004",
       "messageDigest": "sha-256:7354b91232f6453dde6a112948b42897a3ec5e2ef5044544ba0b829fb7ab86bc",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 5
+      "gateRun": 5,
+      "linked": [
+        "sha-256:033f769c210618b0ed6989cee5c288cf52719e0e9c4758838ed324dd22710d74"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/small-business-loan--baseline.json"
 }

@@ -74,7 +74,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -145,7 +145,11 @@
         "answer": "Accepted, for delivery address claims only."
       },
       "caption": "A taxpayer's delivery address statement: A taxpayer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:7afbf02072f9eb1e9d21c632e84b32beee84db24ea2078b8ca579df9144b4eae",
+        "sha-256:2958f6b223c5a0338ae7e7b4bccdaaa26c8a060b9d4892f4e8ab68749b281cc9"
+      ]
     },
     {
       "seq": 3,
@@ -192,7 +196,10 @@
         "text": "Its terms allow this: use for Delivery; share for Delivery; never for Marketing."
       },
       "caption": "A taxpayer's delivery address statement: its terms allow this: use for Delivery; share for Delivery; never for Marketing.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:af7ef06dc0f200b42d052669688a56471675bed3f72f0b02e1370b062dcd6005"
+      ]
     },
     {
       "seq": 5,
@@ -236,7 +243,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "A taxpayer's delivery address statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d0beb61eb9ee839b723359ae5316ee18c0d95adda8acae70e540e11963ab2f9d"
+      ]
     },
     {
       "seq": 7,
@@ -259,7 +269,10 @@
         },
         "provenance": "signed by A taxpayer"
       },
-      "caption": "A taxpayer's delivery address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "A taxpayer's delivery address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:d41afee9878a77b005dd5b554fdb23f51802bfdcf06959a2f7bd544218827ee3"
+      ]
     },
     {
       "seq": 8,
@@ -346,7 +359,10 @@
       },
       "reason": "recipient-established",
       "caption": "The tax authority: Accepted, for A service agent hands a customer to a partner's agent only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c76d9edfd6fe414eaa030958d8f83c0d11d438e4b568ff63d8a4176af6e52236"
+      ]
     },
     {
       "seq": 11,
@@ -495,7 +511,10 @@
       },
       "reason": "terms-allow",
       "caption": "A taxpayer's delivery address statement: its terms allow this: use for Delivery; share for Delivery; never for Marketing.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:af7ef06dc0f200b42d052669688a56471675bed3f72f0b02e1370b062dcd6005"
+      ]
     },
     {
       "seq": 16,
@@ -585,7 +604,10 @@
       "messageId": "urn:awp:engine-agent-handoff-main:owner-agent:0002",
       "messageDigest": "sha-256:63c592039430fe0aaf19b94b6bdda03662e8a8e1b2433d9d39b1ed74ad0d4218",
       "caption": "The invoke message goes to The receiving agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:77534436738232ebc944ef36a872f250145488b4b9b6f568eb63d579ad96b284"
+      ]
     },
     {
       "seq": 19,
@@ -1124,7 +1146,11 @@
         "answer": "Accepted, for delivery address claims only."
       },
       "caption": "A taxpayer's delivery address statement: A taxpayer is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:8efab5a8b7421304bafde82f76d5d63ab7c9853cac3fd463e06951e03d4087c6",
+        "sha-256:c55d6f1cccda8427f653d9157b43421bffd2992da6b1793ad60aef28bd5f5361"
+      ]
     },
     {
       "seq": 23,
@@ -1175,7 +1201,10 @@
         "text": "Its terms allow this: use for Delivery; share for Delivery; never for Marketing."
       },
       "caption": "A taxpayer's delivery address statement: its terms allow this: use for Delivery; share for Delivery; never for Marketing.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:af7ef06dc0f200b42d052669688a56471675bed3f72f0b02e1370b062dcd6005"
+      ]
     },
     {
       "seq": 25,
@@ -1216,7 +1245,10 @@
       "messageId": "urn:awp:engine-agent-handoff-main:owner-agent:0002",
       "messageDigest": "sha-256:63c592039430fe0aaf19b94b6bdda03662e8a8e1b2433d9d39b1ed74ad0d4218",
       "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:a67d10f0d3b33db4b1157ea46587f1055f3abf56c2029322f6ee5dfb94bc19fc"
+      ]
     },
     {
       "seq": 27,
@@ -1239,7 +1271,11 @@
         },
         "provenance": "signed by A taxpayer"
       },
-      "caption": "A taxpayer's delivery address statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "A taxpayer's delivery address statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:5cac7d018b27998dad79ed976c930354398e813d6aa99cef3d5402f709c4a651"
+      ]
     }
-  ]
+  ],
+  "linkedTable": "linked/agent-handoff--baseline.json"
 }

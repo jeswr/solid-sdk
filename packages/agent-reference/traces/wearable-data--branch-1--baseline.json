@@ -73,7 +73,7 @@
     }
   ],
   "generated": {
-    "commit": "1b08e008ab6d11c3d3feb7d7ccb1e0aad7f4c2fa",
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
     "core": "scripted"
   },
   "standIns": [
@@ -144,7 +144,11 @@
         "answer": "Accepted, for activity weekly total claims only."
       },
       "caption": "The device maker's activity weekly total statement: The device maker is an accepted source for this kind of claim.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:05830f00eae32a934857437ec1ef8a6e1e446a406a447a9950a2584715b735d0",
+        "sha-256:7ed37bda76e27cefdf005cd07c24419d217b4635f30684f281a635e56dd6c012"
+      ]
     },
     {
       "seq": 3,
@@ -191,7 +195,10 @@
         "text": "Its terms allow this: use for Wearable data; share for Wearable data."
       },
       "caption": "The device maker's activity weekly total statement: its terms allow this: use for Wearable data; share for Wearable data.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:957d90802b69cfe34b416846682ca10f0c24805ebea87da30c04c64785fe95b2"
+      ]
     },
     {
       "seq": 5,
@@ -235,7 +242,10 @@
       "verdict": "pass",
       "outcome": "admit",
       "caption": "The device maker's activity weekly total statement is admitted.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:d331dd1a4d529d27d513f4654e963b820132a67038d4919a2914c143a53c5722"
+      ]
     },
     {
       "seq": 7,
@@ -262,7 +272,10 @@
         },
         "provenance": "signed by The device maker"
       },
-      "caption": "The device maker's activity weekly total statement is stored with its source, how it was produced, its date and its terms."
+      "caption": "The device maker's activity weekly total statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:88539583c1da87bd65a613fa167c5bf48a3ee87c596684b095e2fbfb7f718b36"
+      ]
     },
     {
       "seq": 8,
@@ -349,7 +362,10 @@
       },
       "reason": "recipient-established",
       "caption": "The person: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:f3d739c8fec9db1ceb1c47a110d748e387aeda0fcc1ee2b70f01d9ea8f37200f"
+      ]
     },
     {
       "seq": 11,
@@ -555,7 +571,10 @@
       "messageId": "urn:awp:engine-wearable-data-branch-1:receiver-agent:0002",
       "messageDigest": "sha-256:02a7539461121c0be8f6ba6570ffa51e3a5619a3ea98d77955665cfd587645d6",
       "caption": "The invoke message goes to The person’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:6bf78e478c1b349c63bb5094490eb0aad8084d3d0acc60ace1adc07dfcb35078"
+      ]
     },
     {
       "seq": 18,
@@ -1015,7 +1034,10 @@
       "messageId": "urn:awp:engine-wearable-data-branch-1:receiver-agent:0002",
       "reason": "terms-not-acceptable",
       "caption": "The message is refused (terms-not-acceptable: no agreement covers this exchange); the core never sees it.",
-      "gateRun": 2
+      "gateRun": 2,
+      "linked": [
+        "sha-256:f26f18e4838bb283a1ca1e76795c324df0ac5366497d5b1a0e5648b31b007ca3"
+      ]
     },
     {
       "seq": 25,
@@ -1094,7 +1116,10 @@
       },
       "reason": "recipient-established",
       "caption": "The insurer: Accepted, for Request the needed information only.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:674f3e1ef3defd23250fab038d059a0230447f36f2f390b9e46e874ef550e71b"
+      ]
     },
     {
       "seq": 27,
@@ -1242,7 +1267,10 @@
       "messageId": "urn:awp:engine-wearable-data-branch-1:owner-agent:0001",
       "messageDigest": "sha-256:1f99bac6d95ae8a2644375ad4bfb5e16dff1600980236e0979dbf93aa2e3c240",
       "caption": "The refuse message goes to The insurer’s agent.",
-      "gateRun": 1
+      "gateRun": 1,
+      "linked": [
+        "sha-256:18c197d236b27e3f315929f32d277f388176d3b93512dd23686b30afa3798f52"
+      ]
     },
     {
       "seq": 32,
@@ -1351,5 +1379,6 @@
       "caption": "The person’s agent sends a refuse message to The insurer’s agent.",
       "gateRun": 1
     }
-  ]
+  ],
+  "linkedTable": "linked/wearable-data--baseline.json"
 }
