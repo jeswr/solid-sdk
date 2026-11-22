@@ -153,12 +153,14 @@ export function SuiteFrame({
   return (
     <div className="ish-frame" data-app={app} data-has-details={details ? "" : undefined}>
       <Rail app={app} apps={apps} />
-      <aside
-        className="ish-sidebar"
-        aria-label={`${appRegistry.find((a) => a.slug === app)?.name} navigation`}
-      >
-        {sidebar}
-      </aside>
+      {sidebar ? (
+        <aside
+          className="ish-sidebar"
+          aria-label={`${appRegistry.find((a) => a.slug === app)?.name} navigation`}
+        >
+          {sidebar}
+        </aside>
+      ) : null}
       <Sheet open={drawer} onOpenChange={setDrawer}>
         <SheetContent
           side="left"
@@ -174,15 +176,17 @@ export function SuiteFrame({
         </SheetContent>
       </Sheet>
       <header className="ish-topbar">
-        <button
-          type="button"
-          className="ish-menu-button"
-          ref={navigationTrigger}
-          aria-label="Open navigation"
-          onClick={() => setDrawer(true)}
-        >
-          <Menu aria-hidden="true" size={20} strokeWidth={1.75} />
-        </button>
+        {sidebar ? (
+          <button
+            type="button"
+            className="ish-menu-button"
+            ref={navigationTrigger}
+            aria-label="Open navigation"
+            onClick={() => setDrawer(true)}
+          >
+            <Menu aria-hidden="true" size={20} strokeWidth={1.75} />
+          </button>
+        ) : null}
         <div className="ish-context">{context}</div>
         {search ? <SearchBox search={search} /> : <div className="ish-spacer" />}
         <div className="ish-actions">
