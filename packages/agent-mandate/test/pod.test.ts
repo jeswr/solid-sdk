@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import * as solidVc from "@jeswr/solid-vc";
 import {
@@ -59,15 +60,17 @@ function options(patch: Partial<PodMandateOptions> = {}): PodMandateOptions {
     agentId: ACTOR,
     now: clock,
     fetch: async (input, init) => {
-      if (String(input) === ID) {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url === ID) {
         expect(new Headers(init?.headers).get("accept")).toBe("application/trig");
         expect(init?.redirect).toBe("manual");
         return new Response(body);
       }
-      if (String(input) === STATUS)
+      if (url === STATUS)
         return new Response(status, { headers: { "content-type": "application/trig" } });
-      return new Response(profile, { headers: { "content-type": "text/turtle" } });
+      throw new Error("Unexpected credential transport request");
     },
+    profileFetch: async () => new Response(profile, { headers: { "content-type": "text/turtle" } }),
     ...patch,
   };
 }
@@ -77,10 +80,14 @@ it("loads a real signed mandate with confirmed-clear signed status and authorita
     issuer: OWNER,
     subject: ACTOR,
   });
-  const opts = options();
-  expect(
-    await createPodMandateVerifier(options({ profileFetch: opts.fetch })).load(),
-  ).toMatchObject({ id: ID, issuer: OWNER, subject: ACTOR });
+});
+it("requires an explicit anonymous transport before doing any I/O", () => {
+  const credentialTransport = vi.fn(options().fetch);
+  const { profileFetch: _profileFetch, ...incomplete } = options({ fetch: credentialTransport });
+  expect(() => Reflect.apply(createPodMandateVerifier, undefined, [incomplete])).toThrow(
+    "An anonymous profileFetch is required",
+  );
+  expect(credentialTransport).not.toHaveBeenCalled();
 });
 it("bypasses HTTP caches for credential, status and profile evidence", async () => {
   const base = options();
@@ -97,7 +104,7 @@ it("bypasses HTTP caches for credential, status and profile evidence", async () 
     };
   expect(
     await createPodMandateVerifier(
-      options({ fetch: record(base.fetch), profileFetch: record(base.fetch) }),
+      options({ fetch: record(base.fetch), profileFetch: record(base.profileFetch) }),
     ).load(),
   ).toBeDefined();
   expect(seen.some((call) => call.url === ID)).toBe(true);
@@ -201,33 +208,40 @@ it("bounds the separate signing key document for a signed status list", async ()
   let oversized = false;
   let consumed = 0;
   const cancelled = vi.fn();
+  const credentialFetch = vi.fn<PodMandateOptions["fetch"]>(
+    async (input) =>
+      new Response(String(input) === ID ? credential : signedStatus, {
+        headers: { "content-type": "application/trig" },
+      }),
+  );
+  const publicFetch = vi.fn<PodMandateOptions["profileFetch"]>(async (input) => {
+    if (String(input) === "https://keys.example/status" && oversized) {
+      return new Response(
+        new ReadableStream<Uint8Array>(
+          {
+            pull(controller) {
+              consumed++;
+              controller.enqueue(new Uint8Array(256 * 1024 + 1));
+            },
+            cancel: cancelled,
+          },
+          { highWaterMark: 0 },
+        ),
+        { headers: { "content-type": "text/turtle" } },
+      );
+    }
+    return new Response(ownerProfile, { headers: { "content-type": "text/turtle" } });
+  });
   const verifier = createPodMandateVerifier(
-    options({
-      fetch: async (input) =>
-        new Response(String(input) === ID ? credential : signedStatus, {
-          headers: { "content-type": "application/trig" },
-        }),
-      profileFetch: async (input) => {
-        if (String(input) === "https://keys.example/status" && oversized) {
-          return new Response(
-            new ReadableStream<Uint8Array>(
-              {
-                pull(controller) {
-                  consumed++;
-                  controller.enqueue(new Uint8Array(256 * 1024 + 1));
-                },
-                cancel: cancelled,
-              },
-              { highWaterMark: 0 },
-            ),
-            { headers: { "content-type": "text/turtle" } },
-          );
-        }
-        return new Response(ownerProfile, { headers: { "content-type": "text/turtle" } });
-      },
-    }),
+    options({ fetch: credentialFetch, profileFetch: publicFetch }),
   );
   expect(await verifier.load()).toMatchObject({ id: ID });
+  expect(credentialFetch.mock.calls.map(([input]) => String(input))).toEqual([ID, STATUS]);
+  expect(publicFetch.mock.calls.map(([input]) => String(input))).toEqual([
+    new URL(OWNER).href.split("#")[0],
+    "https://keys.example/status",
+  ]);
+  for (const [, init] of publicFetch.mock.calls) expect(init?.credentials).toBe("omit");
   oversized = true;
   expect(await verifier.load()).toBeUndefined();
   expect(cancelled).toHaveBeenCalledOnce();
@@ -328,7 +342,7 @@ it("refuses an HTTP controller profile after resolving its HTTPS key document", 
   expect(inner).toHaveBeenCalledOnce();
   expect(String(inner.mock.calls[0]?.[0])).toBe(new URL(key.verificationMethod).href.split("#")[0]);
 });
-it("refuses HTTP status transport requests, including Request inputs, before I/O", async () => {
+it("refuses HTTP and off-list HTTPS status transport requests before I/O", async () => {
   const base = options();
   const inner = vi.fn(base.fetch);
   const checked = vi.fn();
@@ -346,6 +360,13 @@ it("refuses HTTP status transport requests, including Request inputs, before I/O
       ]) {
         await expect(delegated(input)).rejects.toThrow("Evidence requires HTTPS");
       }
+      for (const input of [
+        new URL(`${STATUS}?other=1`),
+        new Request(new URL("/other.ttl", STATUS)),
+        "https://foreign.example/agent/mandates/status.ttl",
+      ]) {
+        await expect(delegated(input)).rejects.toThrow("Unexpected mandate evidence URL");
+      }
       const response = await delegated(new Request(STATUS), {
         cache: "force-cache",
         redirect: "follow",
@@ -355,9 +376,7 @@ it("refuses HTTP status transport requests, including Request inputs, before I/O
       return { status: "unreachable", reason: "Transport exercised" };
     });
   try {
-    expect(
-      await createPodMandateVerifier(options({ fetch: inner, profileFetch: base.fetch })).load(),
-    ).toBeUndefined();
+    expect(await createPodMandateVerifier(options({ fetch: inner })).load()).toBeUndefined();
     expect(resolver).toHaveBeenCalledOnce();
     expect(checked).toHaveBeenCalledOnce();
     expect(

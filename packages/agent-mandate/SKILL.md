@@ -62,7 +62,7 @@ untargeted grant cannot bypass its constraints. Wildcard targets are refused; as
 are never expanded. This projects scope only from an already verified mandate.
 
 `createPodMandateVerifier({ credentialUrl, ownerWebId, agentId, fetch,
-profileFetch?, now? })` is available from the root and `./verify`. `now` is an
+profileFetch, now? })` is available from the root and `./verify`. `now` is an
 optional clock function. The derived sibling `status.ttl` must end in
 `/agent/mandates/status.ttl`, otherwise construction throws a fixed TypeError.
 Key/profile and status resolvers are recreated for every load.
@@ -77,6 +77,7 @@ responses retain their status, headers, URL and redirect evidence after bounding
 It delegates WebID key control and signed,
 confirmed-clear owner-issued status verification to solid-vc and the existing
 VC verifier. Failures return undefined without exposing transport/parser details.
-Inject scoped fetches; `profileFetch` can keep public WebID resolution separate
-from private credential/status access. The helper uses no Node builtins and is
+Pass an explicit anonymous `profileFetch` for WebID and verification-method
+documents. The credential transport `fetch` is scoped to the exact credential and
+status URLs. The helper uses no Node builtins and is
 browser-bundleable. Provision credentials and the status list separately.

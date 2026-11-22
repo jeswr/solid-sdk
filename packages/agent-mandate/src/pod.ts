@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   createBitstringStatusResolver,
   createWebIdKeyResolver,
@@ -17,13 +18,10 @@ export interface PodMandateOptions {
   readonly credentialUrl: string;
   readonly ownerWebId: string;
   readonly agentId: string;
+  /** Credential transport used only for the configured credential and its sibling status list. */
   readonly fetch: NonNullable<ResolveWebIdKeyOptions["fetch"]>;
-  /**
-   * Fetch used for WebID profiles and verification methods. Pass an unauthenticated fetch
-   * when profiles may live outside the pod; omitting it reuses `fetch`, which then may reach
-   * the origin hosting a WebID.
-   */
-  readonly profileFetch?: NonNullable<ResolveWebIdKeyOptions["fetch"]>;
+  /** Anonymous transport for WebID profiles and verification methods, including other origins. */
+  readonly profileFetch: NonNullable<ResolveWebIdKeyOptions["fetch"]>;
   readonly now?: () => Date;
 }
 
@@ -31,10 +29,12 @@ type Fetch = PodMandateOptions["fetch"];
 const MAX_BODY_BYTES = 256 * 1024;
 
 /** Evidence must use HTTPS, bypass caches and refuse redirects. */
-function noStore(inner: Fetch): Fetch {
+function noStore(inner: Fetch, allowedUrls?: readonly string[]): Fetch {
   return (async (input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]) => {
     const url = input instanceof Request ? input.url : String(input);
     if (new URL(url).protocol !== "https:") throw new TypeError("Evidence requires HTTPS");
+    if (allowedUrls && !allowedUrls.includes(url))
+      throw new TypeError("Unexpected mandate evidence URL");
     return inner(input, { ...init, cache: "no-store", redirect: "manual" });
   }) as Fetch;
 }
@@ -66,7 +66,7 @@ async function readBoundedBody(response: Response): Promise<string | undefined> 
 /** The delegated WebID resolver buffers text, so bound its transport first. */
 function boundedProfiles(inner: Fetch): Fetch {
   return (async (input: Parameters<Fetch>[0], init?: Parameters<Fetch>[1]) => {
-    const response = await inner(input, init);
+    const response = await inner(input, { ...init, credentials: "omit" });
     const text = await readBoundedBody(response);
     const bounded = new Response(text === undefined ? null : new TextEncoder().encode(text), {
       status: response.status,
@@ -84,16 +84,19 @@ function boundedProfiles(inner: Fetch): Fetch {
 
 /** Bounded browser-safe transport; parsing alone never establishes authority. */
 export function createPodMandateVerifier(options: PodMandateOptions): MandateVerifier {
-  const evidenceFetch = noStore(options.fetch);
-  const profileFetch = boundedProfiles(noStore(options.profileFetch ?? options.fetch));
+  const { credentialUrl } = options;
   let statusListCredential: string;
   try {
-    statusListCredential = new URL("status.ttl", options.credentialUrl).href;
-    if (new URL(options.credentialUrl).protocol !== "https:") throw new Error();
+    statusListCredential = new URL("status.ttl", credentialUrl).href;
+    if (new URL(credentialUrl).protocol !== "https:") throw new Error();
     if (!statusListCredential.endsWith("/agent/mandates/status.ttl")) throw new Error();
   } catch {
     throw new TypeError("Invalid mandate status location");
   }
+  if (typeof options.profileFetch !== "function")
+    throw new TypeError("An anonymous profileFetch is required");
+  const evidenceFetch = noStore(options.fetch, [credentialUrl, statusListCredential]);
+  const profileFetch = boundedProfiles(noStore(options.profileFetch));
   return {
     async load() {
       try {
@@ -113,20 +116,20 @@ export function createPodMandateVerifier(options: PodMandateOptions): MandateVer
             trustedStatusIssuers: [options.ownerWebId],
           }),
           read: async () => {
-            const response = await evidenceFetch(options.credentialUrl, {
+            const response = await evidenceFetch(credentialUrl, {
               headers: { Accept: "application/trig" },
               redirect: "manual",
             });
             if (
               !response.ok ||
               response.redirected ||
-              (response.url && response.url !== options.credentialUrl)
+              (response.url && response.url !== credentialUrl)
             )
               return undefined;
             const text = await readBoundedBody(response);
             if (text === undefined) return undefined;
             const vc = await parseMandateCredential(text);
-            return vc?.id === options.credentialUrl ? vc : undefined;
+            return vc?.id === credentialUrl ? vc : undefined;
           },
         }).load();
       } catch {
