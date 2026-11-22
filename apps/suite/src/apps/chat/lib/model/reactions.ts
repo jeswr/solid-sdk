@@ -2,9 +2,11 @@
 // AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
+import { documentMember } from "./layout";
 import { type ChatMessage, readMessages } from "./messages";
 import { messageResource } from "./paths";
 import { ChatNode, NS, RDF_TYPE, readDate, readRefs, readText } from "./rdf";
+import type { MemberContainer } from "./rooms";
 import { ChatModelError, httpIri, isoDate, segment, text } from "./validation";
 
 export interface Reaction {
@@ -23,6 +25,11 @@ export interface UndoInput extends Omit<ReactionInput, "emoji"> {
   reaction: string;
 }
 
+export interface ReactionContext {
+  document: string;
+  messages: readonly ChatMessage[];
+  containers: readonly MemberContainer[];
+}
 const PICTOGRAPH = /\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20e3/u;
 const EMOJI_ONLY = /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|\p{Emoji_Presentation})+$/u;
 // Digits, # and * are Emoji_Component but only form an emoji inside a keycap sequence.
@@ -51,6 +58,7 @@ export function readReactions(
   dataset: DatasetCore,
   document?: string,
   known: ReadonlySet<string> = new Set(readMessages(dataset).map((message) => message.id)),
+  containers?: readonly MemberContainer[],
 ): Map<string, Reaction[]> {
   const likes = new Map<string, { message: string; reaction: Reaction }>();
   const undos: { object: string; actor: string }[] = [];
@@ -73,7 +81,14 @@ export function readReactions(
     const object = objects[0] as string;
     const actor = actors[0] as string;
     const sameDocument = id.includes("#") && id.split("#")[0] === object.split("#")[0];
-    if (!sameDocument) continue;
+    if (containers !== undefined) {
+      const source = documentMember(containers, id.split("#")[0] as string);
+      if (!source || source.owner !== actor) continue;
+      if (types.includes(`${NS.AS}Like`)) {
+        const target = documentMember(containers, object.split("#")[0] as string);
+        if (!target || id.split("#")[0]?.slice(-14) !== object.split("#")[0]?.slice(-14)) continue;
+      } else if (!sameDocument) continue;
+    } else if (!sameDocument) continue;
     if (types.includes(`${NS.AS}Like`) && !types.includes(`${NS.AS}Undo`)) {
       const emoji = readText(dataset, id, `${NS.AS}content`);
       if (!known.has(object) || !emoji || !isReactionEmoji(emoji)) continue;
@@ -100,8 +115,10 @@ function event(
   input: Omit<ReactionInput, "emoji">,
   kind: "reaction" | "undo",
   messages: readonly ChatMessage[],
+  context?: ReactionContext,
 ): Store {
-  const resource = messageResource(room, input.message);
+  const target = messageResource(room, input.message);
+  const resource = context?.document ?? target;
   const id = `${resource}#${kind}-${segment(input.id)}`;
   httpIri(input.actor);
   isoDate(input.at);
@@ -119,12 +136,24 @@ function event(
 }
 
 /** Return only the new event, ready for an append-only INSERT DATA. */
-export function appendReaction(dataset: DatasetCore, room: string, input: ReactionInput): Store {
+export function appendReaction(
+  dataset: DatasetCore,
+  room: string,
+  input: ReactionInput,
+  context?: ReactionContext,
+): Store {
   const emoji = text(input.emoji);
   if (!isReactionEmoji(emoji)) throw new ChatModelError("invalid-input");
-  const delta = event(dataset, room, input, "reaction", readMessages(dataset));
+  const delta = event(
+    dataset,
+    room,
+    input,
+    "reaction",
+    context?.messages ?? readMessages(dataset),
+    context,
+  );
   const node = new ChatNode(
-    `${messageResource(room, input.message)}#reaction-${input.id}`,
+    `${context?.document ?? messageResource(room, input.message)}#reaction-${input.id}`,
     delta,
     DataFactory,
   );
@@ -137,11 +166,16 @@ export function appendReaction(dataset: DatasetCore, room: string, input: Reacti
  * Return the Undo event, or `null` when this author already undid the reaction (another tab
  * won the race), so there is nothing left to write.
  */
-export function appendUndo(dataset: DatasetCore, room: string, input: UndoInput): Store | null {
-  const messages = readMessages(dataset);
-  const delta = event(dataset, room, input, "undo", messages);
+export function appendUndo(
+  dataset: DatasetCore,
+  room: string,
+  input: UndoInput,
+  context?: ReactionContext,
+): Store | null {
+  const messages = context?.messages ?? readMessages(dataset);
+  const delta = event(dataset, room, input, "undo", messages, context);
   const known = new Set(messages.map((message) => message.id));
-  const reaction = readReactions(dataset, undefined, known)
+  const reaction = readReactions(dataset, context?.document, known, context?.containers)
     .get(input.message)
     ?.find((reaction) => reaction.id === input.reaction);
   if (!reaction) {
@@ -150,7 +184,7 @@ export function appendUndo(dataset: DatasetCore, room: string, input: UndoInput)
   }
   if (reaction.actorId !== input.actor) throw new ChatModelError("not-author");
   new ChatNode(
-    `${messageResource(room, input.message)}#undo-${input.id}`,
+    `${context?.document ?? messageResource(room, input.message)}#undo-${input.id}`,
     delta,
     DataFactory,
   ).setIri(`${NS.AS}object`, input.reaction);

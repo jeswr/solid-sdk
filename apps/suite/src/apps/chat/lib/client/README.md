@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # Chat client
 
@@ -17,7 +18,8 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   room. Remounting restores their stable IDs and timestamps; sends flush on mount and `online`.
 - Messages expose `reactions` aggregated by distinct actor and emoji, with `reactedByMe`
   for the current WebID. `react(room, messageId, emoji)` reads the current day and toggles
-  one Like on, or appends Undos for all matching active Likes by that WebID. Other
+  one Like on, or appends Undos for all matching active Likes by that WebID (re-reading the
+  document when a PATCH response carries no strong ETag). Other
   participants' Likes remain intact; deleted messages are refused. Timeline chips and
   the keyboard-accessible eight-emoji picker invalidate messages after successful writes.
 - DMs have an empty name, exactly two members and a deterministic SHA-256 slug. Existing
@@ -26,12 +28,15 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   Named rooms fold to ASCII slugs with collision suffixes.
 - `chat.lastRead` lives in `settings/chat-preferences.json`, with schema validation,
   conditional writes and one conflict merge using monotonic markers. Unread counts cover
-  the newest seven-day page, excluding own messages, deletions and edit revisions.
+  the newest seven-day page, excluding own messages, deletions and edit revisions. Rooms
+  are counted concurrently under the shared read limiter, behind the open room's timeline.
   Read markers advance only to confirmed messages rendered in the timeline.
 - Own messages become tasks using the existing same-subject overlay and `wf:dateDue`.
   Somebody else's message becomes a linked personal task under `tasks/`, since room members
   with Read/Append cannot rewrite the original day. Edit/Delete and the composer edit shortcut
-  are available only to the room creator for this cut. Joining records a room locally and
+  are available for own messages to members with a validated v2 container, and only
+  to the room creator in v1. V2 owners have an explicit “Remove message” action
+  (`moderate`) for other members’ messages. Joining records a room locally and
   never grants remote posting rights.
 - Profiles are parsed by the model and cached per client. Profiles outside the storage path
   use the separately injected public transport with credentials omitted and redirects refused.

@@ -314,6 +314,10 @@ export function useChatActions() {
         await client.edit(url, subject, text);
         invalidate();
       },
+      async moderate(url: string, subject: string) {
+        await client.moderate(url, subject);
+        invalidate();
+      },
       async remove(url: string, subject: string) {
         await client.remove(url, subject);
         invalidate();

@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChatClient, type Message, type Room } from "../src/apps/chat/lib/client";
 import { PreferencesStore } from "../src/apps/chat/lib/client/preferences-store";
+import { buildRoom, loadChat, roomIndex, saveChat } from "../src/apps/chat/lib/model";
 import { ChatProvider, type ChatSession, useChat } from "../src/apps/chat/state/chat-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { encodeIdentifierRef, encodeRef } from "../src/lib/refs";
@@ -755,6 +756,19 @@ it("members' message menus explain write access and never offer edit/delete or t
   const pod = createDemoPod({ root: ROOT });
   const owner = new ChatClient(pod.fetch, ROOT, "https://bob.example/#me");
   const room = await owner.createRoom({ name: "Append only", members: [ME] });
+  const index = await loadChat(pod.fetch, ROOT, roomIndex(room.url));
+  await saveChat(
+    pod.fetch,
+    ROOT,
+    index.url,
+    buildRoom(room.url, {
+      name: "Append only",
+      creator: "https://bob.example/#me",
+      members: [ME],
+      created: new Date(),
+    }),
+    { ifMatch: index.etag as string },
+  );
   const member = new ChatClient(pod.fetch, ROOT, ME);
   await member.send(room.url, "Member message");
   const view = await mount(
@@ -774,6 +788,28 @@ it("members' message menus explain write access and never offer edit/delete or t
     [...menu.querySelectorAll('[role="menuitem"]')].map((node) => node.textContent),
   ).not.toContain("Edit");
   expect(menu.textContent).not.toContain("Delete");
+});
+
+it("opens the edit shortcut on a delivered message before the timeline refetches it", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const client = new ChatClient(pod.fetch, ROOT, ME);
+  const room = await client.createRoom({ name: "Shortcut", members: [] });
+  // No change notifications: the timeline only rereads on the 30 s poll, so the delivered
+  // message stays in the outbox while the reader reaches for the shortcut.
+  const { subscribe: _subscribe, ...quiet } = session(pod);
+  const view = await mount(
+    h(ChatProvider, { session: quiet, children: h(RoomView, { url: room.url }) }),
+  );
+  const field = view.host.querySelector("textarea") as HTMLTextAreaElement;
+  await fill(field, "Just delivered");
+  await key(field, "Enter");
+  for (let tick = 0; tick < 100 && view.host.textContent?.includes("Sending…"); tick++)
+    await act(() => new Promise((resolve) => setTimeout(resolve, 5)));
+  expect(view.host.querySelector("article")?.textContent).toContain("Just delivered");
+  expect(view.host.textContent).not.toContain("Sending…");
+  await key(field, "ArrowUp");
+  expect(view.host.querySelector("label")?.textContent).toBe("Edit message");
+  expect(field.value).toBe("Just delivered");
 });
 
 it("advances read receipts only to the newest rendered message, never to the current clock", async () => {
@@ -822,4 +858,65 @@ it("opens a room with no invitees immediately instead of showing the invite step
     `/chat/r/${encodeRef(`${ROOT}chat/rooms/just-me/`)}`,
   );
   expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Invite people");
+});
+
+it("offers own Edit/Delete in v2 member rooms and explicit Remove message to the owner", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const bobId = "https://bob.example/#me";
+  const owner = new ChatClient(pod.fetch, ROOT, bobId);
+  const room = await owner.createRoom({ name: "Member writes", members: [ME] });
+  const member = new ChatClient(pod.fetch, ROOT, ME);
+  await member.send(room.url, "My message");
+  const view = await mount(
+    h(ChatProvider, { session: session(pod), children: h(RoomView, { url: room.url }) }),
+  );
+  const log = view.host.querySelector('[role="log"]') as HTMLElement;
+  await key(log, "Home");
+  await nextFrame();
+  await key(log.querySelector("article") as HTMLElement, "Enter");
+  const menu = document.querySelector('[role="menu"]') as HTMLElement;
+  expect(menu.textContent).toContain("Edit");
+  expect(menu.textContent).toContain("Delete");
+  expect(menu.textContent).not.toContain("Remove message");
+  await click(
+    [...menu.querySelectorAll('[role="menuitem"]')].find(
+      (node) => node.textContent === "Delete",
+    ) as HTMLElement,
+  );
+  const ownTitle = document.querySelector('[role="alertdialog"] h2') as HTMLElement;
+  expect(ownTitle.textContent).toBe("Delete message?");
+  await click(
+    [...document.querySelectorAll('[role="alertdialog"] button')].find(
+      (node) => node.textContent === "Cancel",
+    ) as HTMLElement,
+  );
+  expect(ownTitle.textContent).toBe("Delete message?");
+  await view.unmount();
+  const ownerView = await mount(
+    h(ChatProvider, {
+      session: { ...session(pod), webId: bobId },
+      children: h(RoomView, { url: room.url }),
+    }),
+  );
+  const ownerLog = ownerView.host.querySelector('[role="log"]') as HTMLElement;
+  await key(ownerLog, "Home");
+  await nextFrame();
+  await key(ownerLog.querySelector("article") as HTMLElement, "Enter");
+  const ownerMenu = document.querySelector('[role="menu"]') as HTMLElement;
+  expect(ownerMenu.textContent).toContain("Remove message");
+  expect(
+    [...ownerMenu.querySelectorAll('[role="menuitem"]')].map((node) => node.textContent),
+  ).not.toContain("Edit");
+  await click(
+    [...ownerMenu.querySelectorAll('[role="menuitem"]')].find(
+      (node) => node.textContent === "Remove message",
+    ) as HTMLElement,
+  );
+  expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain("Remove message?");
+  await click(
+    [...document.querySelectorAll('[role="alertdialog"] button')].find(
+      (node) => node.textContent === "Remove message",
+    ) as HTMLElement,
+  );
+  expect(ownerView.host.textContent).toContain("Message deleted");
 });

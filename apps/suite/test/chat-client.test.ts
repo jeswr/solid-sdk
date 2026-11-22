@@ -9,6 +9,7 @@ import {
   ChatNode,
   leaveRoom,
   loadChat,
+  memberContainer,
   NS,
   react,
   readDate,
@@ -72,7 +73,7 @@ it("uses stable IDs, UTC day shards, PATCH append, latest edits, task due dates 
   const fetch = vi.fn(pod.fetch);
   client = new ChatClient(fetch, ROOT, ME);
   const first = await client.send(room.url, "First", { id: "one", at: NOW });
-  expect(first.id).toBe(`${room.url}2026/11/01.ttl#one`);
+  expect(first.id).toBe(`${await memberContainer(room.url, ME)}2026/11/01.ttl#one`);
   const second = await client.send(room.url, "Second", {
     id: "two",
     at: new Date("2026-11-01T23:59:59Z"),
@@ -286,7 +287,7 @@ it("resolves slug collisions, folds to ASCII, caps the slug and propagates nonco
   });
 });
 it("counts the live newest page, excludes tombstones, and advances read markers monotonically", async () => {
-  const room = await client.createRoom({ name: "Unread", members: [] });
+  const room = await client.createRoom({ name: "Unread", members: [BOB] });
   await client.send(room.url, "My own message");
   expect(await client.unreadCounts([room])).toEqual({ [room.url]: 0 });
   const other = new ChatClient(pod.fetch, ROOT, BOB);
@@ -359,10 +360,11 @@ it("encodes share links and caches parsed profile names, including vcard and hos
 });
 it("lists only safe room files for Drive without fetching link previews", async () => {
   const room = await client.createRoom({ name: "Files", members: [] });
-  await pod.fetch(`${room.url}picture.png`, { method: "PUT", body: "image" });
+  const container = await memberContainer(room.url, ME);
+  await pod.fetch(`${container}picture.png`, { method: "PUT", body: "image" });
   await pod.fetch(`${room.url}subdir/`, { method: "PUT" });
   await pod.fetch(`${room.url}data.ttl`, { method: "PUT" });
-  expect(await client.files(room.url)).toEqual([`${room.url}picture.png`]);
+  expect(await client.files(room.url)).toEqual([`${container}picture.png`]);
   const malicious = new Store();
   const members = new ChatNode(room.url, malicious, DataFactory).refs(`${NS.LDP}contains`);
   for (const url of [
@@ -379,8 +381,9 @@ it("lists only safe room files for Drive without fetching link previews", async 
     await loadRoomFiles(
       async () => new Response(body, { headers: { "content-type": "text/turtle" } }),
       room.url,
+      { reader: ME },
     ),
-  ).toEqual([`${room.url}good.png`]);
+  ).toEqual({ files: [`${room.url}good.png`], dropped: 0 });
 });
 it("allows the empty DM name while preserving invalid-name and leave validation", async () => {
   const room = `${ROOT}chat/rooms/dm/`;

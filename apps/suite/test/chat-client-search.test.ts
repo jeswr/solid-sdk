@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ChatClient, type Message, type Room } from "../src/apps/chat/lib/client";
 import { SearchError } from "../src/apps/chat/lib/search";
@@ -102,6 +103,7 @@ it("limits room loads to four at once and reports a failed day without losing ot
     days: 30,
     since: NOW,
     signal: undefined,
+    background: true,
   });
 });
 it("caps rooms and days, respects explicit budgets and limits results to the best 200", async () => {
@@ -114,6 +116,7 @@ it("caps rooms and days, respects explicit budgets and limits results to the bes
     days: 30,
     since: NOW,
     signal: undefined,
+    background: true,
   });
   loads.mockClear();
   expect(
@@ -125,6 +128,7 @@ it("caps rooms and days, respects explicit budgets and limits results to the bes
     days: 60,
     since: NOW,
     signal: undefined,
+    background: true,
   });
   loads.mockClear();
   expect(
@@ -136,6 +140,7 @@ it("caps rooms and days, respects explicit budgets and limits results to the bes
     days: 366,
     since: NOW,
     signal: undefined,
+    background: true,
   });
   loads.mockClear();
   expect((await client.search("hello", { days: 2, maxRooms: 1, timeZone: "UTC" })).truncated).toBe(
@@ -147,6 +152,7 @@ it("caps rooms and days, respects explicit budgets and limits results to the bes
     days: 2,
     since: NOW,
     signal: undefined,
+    background: true,
   });
   vi.mocked(client.joinedRooms).mockResolvedValue([room()]);
   loads.mockResolvedValue({
