@@ -1,11 +1,74 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
+import { createGuardedFetch } from "@jeswr/guarded-fetch";
 import type { MediaRecord } from "@jeswr/solid-media-log";
 import { Button } from "@jeswr/suite-ui";
 import { BookOpen, Clapperboard, Gamepad2, Tv } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { KIND_LABELS, STATUS_LABELS } from "../lib/view";
+
+const fetchCover = createGuardedFetch({
+  fetch: (input, init) => globalThis.fetch(input, init),
+  dnsLookup: null,
+  maxRedirects: 0,
+  maxBytes: 2 * 1024 * 1024,
+  allowedContentTypes: ["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif"],
+});
+
+function Cover({ url, children }: { url: string; children: ReactNode }) {
+  const [requested, setRequested] = useState(false);
+  const [source, setSource] = useState<string>();
+  useEffect(() => {
+    if (!requested) return;
+    const controller = new AbortController();
+    let objectUrl: string | undefined;
+    void (async () => {
+      try {
+        const response = await fetchCover(url, {
+          signal: controller.signal,
+          credentials: "omit",
+          referrerPolicy: "no-referrer",
+          redirect: "error",
+        });
+        if (!response.ok || !response.body) return;
+        const blob = await response.blob();
+        if (controller.signal.aborted || blob.size === 0) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSource(objectUrl);
+      } catch {
+        // Keep the shelf's placeholder when the cover cannot be loaded safely.
+      }
+    })();
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [requested, url]);
+  if (source)
+    return (
+      <Image
+        unoptimized
+        width={400}
+        height={300}
+        src={source}
+        alt=""
+        onError={() => setSource(undefined)}
+      />
+    );
+  return (
+    <>
+      {children}
+      {!requested && (
+        <Button size="sm" variant="ghost" onClick={() => setRequested(true)}>
+          Load cover
+        </Button>
+      )}
+    </>
+  );
+}
+
 export function MediaCard({
   record,
   offline,
@@ -17,7 +80,6 @@ export function MediaCard({
   onEdit: () => void;
   onFinish: () => void;
 }) {
-  const [broken, setBroken] = useState(false);
   const item = record.data;
   const Icon =
     item.kind === "film"
@@ -27,25 +89,21 @@ export function MediaCard({
         : item.kind === "game"
           ? Gamepad2
           : Tv;
+  const placeholder = (
+    <>
+      <Icon size={36} strokeWidth={1.3} aria-hidden="true" />
+      <span>{KIND_LABELS[item.kind]}</span>
+    </>
+  );
   return (
     <article className="media-card">
       <div className="media-cover" data-kind={item.kind}>
-        {item.cover && !broken ? (
-          <Image
-            unoptimized
-            width={400}
-            height={300}
-            src={item.cover}
-            alt=""
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            onError={() => setBroken(true)}
-          />
+        {item.cover ? (
+          <Cover key={item.cover} url={item.cover}>
+            {placeholder}
+          </Cover>
         ) : (
-          <>
-            <Icon size={36} strokeWidth={1.3} aria-hidden="true" />
-            <span>{KIND_LABELS[item.kind]}</span>
-          </>
+          placeholder
         )}
       </div>
       <div className="media-card-body">

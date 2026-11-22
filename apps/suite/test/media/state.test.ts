@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import type {
   MediaEntry,
   MediaListing,
@@ -365,19 +366,31 @@ it("preserves an unconfirmed committed item when a background refresh cannot rea
 it.each([
   "solid",
   "lws",
-] as const)("imports watchlist.csv then diary.csv by updating the same record conditionally (%s)", async (protocol) => {
+] as const)("imports a diary completion by updating the watchlist record conditionally (%s)", async (protocol) => {
   const storage = createMemoryStorage({ root: "https://pod.example/", protocol });
-  const repo = mediaRepository(storage, {
-    find: async () => [],
-    findAll: async () => new Map(),
-    register: async () => undefined,
-    unregister: async () => {},
-    listClasses: async () => [],
-  });
+  const repo = mediaRepository(
+    storage,
+    {
+      find: async () => [],
+      findAll: async () => new Map(),
+      register: async () => undefined,
+      unregister: async () => {},
+      listClasses: async () => [],
+    },
+    async () => true,
+  );
   const store = new MediaStore(Promise.resolve(repo));
   await store.load();
   const watchlist = parseLetterboxdCsv("Name,Year\nThe Copper Shore,2025", "want");
-  expect(await store.importEntries(watchlist.entries)).toMatchObject({ imported: 1, failed: 0 });
+  if (protocol === "solid") {
+    expect(await store.importEntries(watchlist.entries)).toMatchObject({ imported: 1, failed: 0 });
+  } else {
+    expect(await store.importEntries(watchlist.entries)).toMatchObject({ imported: 0, failed: 1 });
+    const [item] = watchlist.entries;
+    if (!item) throw new Error("Expected a watchlist entry");
+    await repo.save(item);
+    await store.load();
+  }
   const record = store.getSnapshot().records[0] as MediaRecord;
   // Another client enriches the item after this store's watchlist snapshot.
   const current = await repo.save(
@@ -459,4 +472,135 @@ it("rolls back a failed optimistic completion import and retains the watchlist i
   write.reject(new Error("Precondition failed"));
   expect(await task).toMatchObject({ failed: 1, imported: 0 });
   expect(store.getSnapshot().records).toEqual([original]);
+});
+
+it("claims one CSV occurrence across tabs that both scanned an empty library", async () => {
+  const storage = createMemoryStorage({ root: "https://pod.example/", protocol: "solid" });
+  const first = mediaRepository(storage, undefined, async () => true);
+  const second = mediaRepository(storage, undefined, async () => true);
+  const bothScanned = deferred<void>();
+  let scans = 0;
+  for (const repo of [first, second]) {
+    const load = repo.load;
+    vi.spyOn(repo, "load").mockImplementation(async (options) => {
+      const listing = await load(options);
+      if (++scans === 2) bothScanned.resolve();
+      await bothScanned.promise;
+      return listing;
+    });
+  }
+  const stores = [first, second].map((repo) => new MediaStore(Promise.resolve(repo)));
+  const [item] = parseLetterboxdCsv("Name,Year,Watched Date\nPaper Moons,2025,2026-01-02").entries;
+  if (!item) throw new Error("Expected a diary row");
+  const jobs = await Promise.all(stores.map((store) => store.importEntries([item])));
+  expect(jobs.map((job) => job.imported).sort()).toEqual([0, 1]);
+  expect(jobs.map((job) => job.skipped).sort()).toEqual([0, 1]);
+  expect(jobs.map((job) => job.failed)).toEqual([0, 0]);
+  const listing = await first.load();
+  expect(listing.records).toHaveLength(1);
+  expect(listing.records[0]?.data).toMatchObject({
+    title: item.title,
+    finished: item.finished,
+    status: item.status,
+  });
+  expect(stores[0]?.getSnapshot().connectorDiscoveryUnavailable).toBe(true);
+});
+
+it("reports import destinations whose owner-only access cannot be verified", async () => {
+  const storage = createMemoryStorage({ root: "https://pod.example/", protocol: "solid" });
+  await storage.create(storage.root, null, { kind: "container", name: "media" });
+  const repo = mediaRepository(storage, undefined, async () => false);
+  const store = new MediaStore(Promise.resolve(repo));
+  const create = vi.spyOn(storage, "create");
+  expect(await store.importEntries([entry])).toMatchObject({
+    error: "owner-only",
+    imported: 0,
+    failed: 1,
+  });
+  expect(create).not.toHaveBeenCalled();
+});
+
+it.each([
+  true,
+  false,
+])("counts a settled import item without publishing into a disposed store (already imported: %s)", async (alreadyImported) => {
+  const { repo, store } = await ready();
+  const write = deferred<MediaRecord>();
+  vi.mocked(repo.save).mockReturnValueOnce(write.promise);
+  const importing = store.importEntries([{ ...entry, title: "Claimed" }]);
+  await tick();
+  store.dispose();
+  write.resolve({ ...original, alreadyImported });
+  expect(await importing).toMatchObject({
+    skipped: alreadyImported ? 1 : 0,
+    imported: alreadyImported ? 0 : 1,
+    cancelled: true,
+  });
+});
+
+it("preserves a draft's record ID across a refresh that supplies the saved URL", async () => {
+  const { repo, store } = await ready();
+  const saved = {
+    ...original,
+    id: "https://pod.example/media/new",
+    url: "https://pod.example/media/new",
+  };
+  vi.mocked(repo.save).mockResolvedValueOnce(saved);
+  await store.save({ ...entry, title: "New work" });
+  const draft = store.getSnapshot().records.find((record) => record.url === saved.url);
+  if (!draft) throw new Error("Expected a saved item");
+  vi.mocked(repo.load).mockResolvedValueOnce({
+    records: [original, { ...saved, etag: '"fresh"' }],
+    incomplete: false,
+  });
+  await store.load();
+  await store.save({ ...draft.data, review: "A draft" }, draft);
+  expect(vi.mocked(repo.save).mock.lastCall?.[1]).toMatchObject({ id: draft.id, etag: '"fresh"' });
+});
+
+it("refreshes connector records that are identified by their projected ID", async () => {
+  const { repo, store } = await ready();
+  const connector = { ...original, id: "connector#book", url: null, etag: null };
+  vi.mocked(repo.load).mockResolvedValue({ records: [connector], incomplete: false });
+  await store.load();
+  await store.load();
+  expect(store.getSnapshot().records).toEqual([connector]);
+  const recentlyDiscovered = {
+    ...connector,
+    id: "connector#new",
+    data: { ...entry, title: "New" },
+  };
+  vi.mocked(repo.load).mockResolvedValueOnce({
+    records: [connector, recentlyDiscovered],
+    incomplete: false,
+  });
+  expect(await store.importEntries([connector.data, recentlyDiscovered.data])).toMatchObject({
+    skipped: 2,
+    imported: 0,
+    failed: 0,
+  });
+  expect(repo.save).not.toHaveBeenCalled();
+});
+
+it("reports an invalid row while importing the rest of the batch", async () => {
+  const { repo, store } = await ready();
+  const valid = { ...entry, title: "Another film" };
+  expect(await store.importEntries([{ ...entry, rating: 3.2 }, valid])).toMatchObject({
+    processed: 2,
+    imported: 1,
+    failed: 1,
+  });
+  expect(repo.save).toHaveBeenCalledExactlyOnceWith(valid, undefined, { importEntry: valid });
+});
+
+it("does not count a rejected, cancelled duplicate scan as an import failure", async () => {
+  const { repo, store } = await ready();
+  const read = deferred<MediaListing>();
+  vi.mocked(repo.load).mockReturnValueOnce(read.promise);
+  const importing = store.importEntries([entry]);
+  await tick();
+  store.cancelImport();
+  read.reject(new DOMException("Cancelled", "AbortError"));
+  expect(await importing).toMatchObject({ cancelled: true, failed: 0, processed: 0, imported: 0 });
+  expect(repo.save).not.toHaveBeenCalled();
 });

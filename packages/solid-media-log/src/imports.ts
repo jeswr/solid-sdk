@@ -1,5 +1,10 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import { parseCsv } from "@jeswr/pod-connectors/core/csv";
+// AUTHORED-BY Codex GPT-6
+import {
+  MAX_CSV_COLUMNS,
+  MAX_CSV_HEADER_CHARS,
+  parseCsvRows,
+} from "@jeswr/pod-connectors/core/csv";
 import { isMediaDate, type MediaEntry, mediaUrl, validateEntry } from "./model.js";
 
 export interface ImportIssue {
@@ -13,9 +18,29 @@ export interface MediaImport {
 export const MAX_IMPORT_CHARS = 4 * 1024 * 1024;
 export const MAX_IMPORT_ROWS = 5000;
 
-/** Identity ignores provider-specific diary/film URLs and presentation whitespace. */
+function normalized(value: string): string {
+  return value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-GB");
+}
+
+/** Use Goodreads book IDs when available. Letterboxd diary URLs identify individual logs. */
 export function mediaImportKey(entry: MediaEntry): string {
-  return `${entry.kind}\u0000${entry.title.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-GB")}\u0000${entry.year ?? ""}`;
+  const id =
+    entry.kind === "book" &&
+    /^https?:\/\/(?:www\.)?goodreads\.com\/book\/show\/([0-9]+)(?=[./?&#-]|$)/i.exec(
+      entry.origin ?? "",
+    )?.[1];
+  if (id) return JSON.stringify(["goodreads", id.replace(/^0+(?=\d)/, "")]);
+  return JSON.stringify([
+    entry.kind,
+    normalized(entry.title),
+    entry.year ?? "",
+    entry.kind === "book" ? normalized(entry.creator ?? "") : "",
+  ]);
+}
+
+/** The same dated occurrence shares a claim across independent imports. */
+export function mediaImportOccurrence(entry: MediaEntry): string {
+  return JSON.stringify([mediaImportKey(entry), entry.status === "finished", entry.finished ?? ""]);
 }
 export interface MediaImportIndex {
   has(entry: MediaEntry): boolean;
@@ -88,34 +113,63 @@ function number(raw: string | undefined): number | undefined {
   if (!/^\d+(?:\.\d+)?$/.test(raw.trim())) throw new TypeError("Invalid number");
   return Number(raw);
 }
+/** Frame one logical record at a time so limits apply before token and object allocation. */
+function* boundedRows(text: string): Generator<string[], void> {
+  const source = text.replace(/^\uFEFF/, "");
+  let start = 0;
+  let quoted = false;
+  let columns = 1;
+  let rows = 0;
+  for (let i = 0; i <= source.length; i++) {
+    const char = source[i];
+    if (char === '"') quoted = !quoted;
+    if (!quoted && char === "," && ++columns > MAX_CSV_COLUMNS)
+      throw new TypeError("The CSV contains too many columns");
+    if (char !== undefined && (quoted || (char !== "\r" && char !== "\n"))) continue;
+    if (rows === 0 && i - start > MAX_CSV_HEADER_CHARS)
+      throw new TypeError("The CSV header exceeds the import limit");
+    const cells = parseCsvRows(source.slice(start, i))[0];
+    if (cells) {
+      if (++rows > MAX_IMPORT_ROWS + 1) throw new TypeError("Import up to 5,000 rows at a time");
+      yield cells;
+    }
+    if (char === "\r" && source[i + 1] === "\n") i++;
+    start = i + 1;
+    columns = 1;
+  }
+}
 function parse(
   text: string,
   required: string[],
   map: (row: Readonly<Record<string, string>>) => MediaEntry,
 ): MediaImport {
   if (text.length > MAX_IMPORT_CHARS) throw new TypeError("Choose a CSV smaller than 4 MiB");
-  const parsed = parseCsv(text);
-  if (required.some((key) => !parsed.headers.includes(key)))
+  const rows = boundedRows(text);
+  const headers = (rows.next().value ?? []).map((header) => header.trim());
+  if (required.some((key) => !headers.includes(key)))
     throw new TypeError(`This export needs these columns: ${required.join(", ")}`);
-  if (new Set(parsed.headers).size !== parsed.headers.length)
+  if (new Set(headers).size !== headers.length)
     throw new TypeError("The CSV contains duplicate columns");
-  if (parsed.rows.length > MAX_IMPORT_ROWS)
-    throw new TypeError("Import up to 5,000 rows at a time");
   const result: MediaImport = { entries: [], issues: [] };
   const known = mediaImportIndex();
 
-  for (const [index, row] of parsed.rows.entries()) {
+  let rowNumber = 1;
+  for (const cells of rows) {
+    const row = Object.fromEntries(
+      cells.slice(0, headers.length).map((cell, i) => [headers[i], cell.trim()]),
+    );
+    rowNumber++;
     try {
       const entry = validateEntry(map(row));
       if (known.has(entry)) {
-        result.issues.push({ row: index + 2, message: "Duplicate item" });
+        result.issues.push({ row: rowNumber, message: "Duplicate item" });
         continue;
       }
       known.add(entry);
       result.entries.push(entry);
     } catch (error) {
       result.issues.push({
-        row: index + 2,
+        row: rowNumber,
         message: error instanceof TypeError ? error.message : "Invalid row",
       });
     }

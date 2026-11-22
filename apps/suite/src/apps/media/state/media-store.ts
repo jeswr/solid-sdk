@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import {
   type MediaEntry,
+  MediaPrivacyError,
   type MediaRecord,
   type MediaRepository,
   type MediaSkip,
@@ -25,13 +27,14 @@ export interface MediaImportJob {
   skipped: number;
   failed: number;
   cancelled: boolean;
-  error?: "incomplete-library";
+  error?: "incomplete-library" | "owner-only";
 }
 export interface MediaSnapshot {
   records: MediaRecord[];
   loading: boolean;
   error: boolean;
   incomplete: boolean;
+  connectorDiscoveryUnavailable: boolean;
   saving: number;
   skipped: MediaSkip[];
   importJob: MediaImportJob | null;
@@ -46,6 +49,7 @@ export class MediaStore {
     loading: true,
     error: false,
     incomplete: false,
+    connectorDiscoveryUnavailable: false,
     saving: 0,
     skipped: [],
     importJob: null,
@@ -92,7 +96,15 @@ export class MediaStore {
         this.importController
       )
         return;
-      const records = new Map(result.records.map((record) => [record.id, record]));
+      const previousIds = new Map(
+        Array.from(this.baseline.values(), (record) => [record.url ?? record.id, record.id]),
+      );
+      const records = new Map(
+        result.records.map((record) => {
+          const id = previousIds.get(record.url ?? record.id) ?? record.id;
+          return [id, { ...record, id }];
+        }),
+      );
       const confirmedUrls = new Set(result.records.map((record) => record.url));
       const skippedUrls = new Set(result.skipped?.map((item) => item.url));
       if (result.incomplete || skippedUrls.size) {
@@ -109,6 +121,7 @@ export class MediaStore {
         loading: false,
         error: false,
         incomplete: result.incomplete,
+        connectorDiscoveryUnavailable: result.connectorDiscoveryUnavailable ?? false,
         skipped: result.skipped ?? [],
       });
     } catch (error) {
@@ -122,7 +135,7 @@ export class MediaStore {
       }
     }
   }
-  save(input: MediaEntry, existing?: MediaRecord): Promise<void> {
+  save(input: MediaEntry, existing?: MediaRecord, attempt?: object): Promise<void> {
     const data = validateEntry(input);
     const patch = existing ? entryPatch(existing.data, data) : data;
     if (!Object.keys(patch).length) return Promise.resolve();
@@ -144,8 +157,12 @@ export class MediaStore {
         ...edit.initial,
         ...edit.patch,
       } as MediaEntry);
-      const saved = await (await this.repository).save(next, current);
-      if (this.active) this.baseline.set(id, { ...saved, id });
+      const repository = await this.repository;
+      const saved = attempt
+        ? await repository.save(next, current, { attempt })
+        : await repository.save(next, current);
+      if (!this.active) return;
+      this.baseline.set(id, { ...saved, id });
     });
     const settled = task.finally(() => {
       this.pending = this.pending.filter((item) => item.generation !== edit.generation);
@@ -180,7 +197,11 @@ export class MediaStore {
       const repository = await this.repository;
       const listing = await repository.load({ complete: true, signal: controller.signal });
       if (controller.signal.aborted || !this.active) return job;
-      scan = { incomplete: listing.incomplete, skipped: listing.skipped ?? [] };
+      scan = {
+        incomplete: listing.incomplete,
+        connectorDiscoveryUnavailable: listing.connectorDiscoveryUnavailable ?? false,
+        skipped: listing.skipped ?? [],
+      };
       if (listing.incomplete) {
         job.error = "incomplete-library";
         throw new Error("Could not check the complete library for duplicates");
@@ -209,7 +230,7 @@ export class MediaStore {
             ? validateEntry({
                 ...target.data,
                 status: data.status,
-                finished: data.finished ?? target.data.finished,
+                finished: data.finished,
                 rating: data.rating ?? target.data.rating,
                 review: data.review ?? target.data.review,
               })
@@ -246,10 +267,17 @@ export class MediaStore {
               const saved = await repository.save(
                 validateEntry({ ...target?.data, ...edit.patch } as MediaEntry),
                 target,
+                edit.initial ? { importEntry: edit.initial } : undefined,
               );
-              if (this.active) this.baseline.set(edit.id, { ...saved, id: edit.id });
-              job.imported++;
-            } catch {
+              if (saved.alreadyImported) {
+                job.skipped++;
+                if (this.active) this.baseline.set(saved.id, saved);
+              } else {
+                if (this.active) this.baseline.set(edit.id, { ...saved, id: edit.id });
+                job.imported++;
+              }
+            } catch (error) {
+              if (error instanceof MediaPrivacyError) job.error = "owner-only";
               job.failed++;
             }
             job.processed++;

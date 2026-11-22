@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { Blob as NodeBlob } from "node:buffer";
 
@@ -125,13 +126,17 @@ it("explains why nothing was imported when the duplicate scan leaves a source un
 it("refuses an import with the explanatory toast when an entry returns 429 during duplicate checking", async () => {
   vi.stubGlobal("Blob", NodeBlob);
   const storage = createMemoryStorage({ root: mocks.session.storageUrl, protocol: "solid" });
-  const repo = mediaRepository(storage, {
-    find: async () => [],
-    findAll: async () => new Map(),
-    register: async () => undefined,
-    unregister: async () => {},
-    listClasses: async () => [],
-  });
+  const repo = mediaRepository(
+    storage,
+    {
+      find: async () => [],
+      findAll: async () => new Map(),
+      register: async () => undefined,
+      unregister: async () => {},
+      listClasses: async () => [],
+    },
+    async () => true,
+  );
   const existing = await repo.save({
     title: "A New Film",
     kind: "film",
@@ -165,13 +170,17 @@ it("refuses an import with the explanatory toast when an entry returns 429 durin
 it("loads a connector WatchAction, non-RDF file and 403 item as a complete scan, reports two rejections and imports", async () => {
   vi.stubGlobal("Blob", NodeBlob);
   const storage = createMemoryStorage({ root: mocks.session.storageUrl, protocol: "solid" });
-  const repo = mediaRepository(storage, {
-    find: async () => [],
-    findAll: async () => new Map(),
-    register: async () => undefined,
-    unregister: async () => {},
-    listClasses: async () => [],
-  });
+  const repo = mediaRepository(
+    storage,
+    {
+      find: async () => [],
+      findAll: async () => new Map(),
+      register: async () => undefined,
+      unregister: async () => {},
+      listClasses: async () => [],
+    },
+    async () => true,
+  );
   const forbidden = await repo.save({ title: "Private", kind: "film", status: "want" });
   await storage.create(`${storage.root}media/`, "notes", { contentType: "text/plain" });
   const dataset = new Store();
@@ -215,13 +224,17 @@ it("leaves the first-load skeleton and shows the existing error copy when initia
     started();
     return new Promise(() => {});
   });
-  const repo = mediaRepository(storage, {
-    find: async () => [],
-    findAll: async () => new Map(),
-    register: async () => undefined,
-    unregister: async () => {},
-    listClasses: async () => [],
-  });
+  const repo = mediaRepository(
+    storage,
+    {
+      find: async () => [],
+      findAll: async () => new Map(),
+      register: async () => undefined,
+      unregister: async () => {},
+      listClasses: async () => [],
+    },
+    async () => true,
+  );
   mocks.load.mockImplementation(repo.load);
   const controller = new AbortController();
   const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(controller.signal);
@@ -236,4 +249,33 @@ it("leaves the first-load skeleton and shows the existing error copy when initia
   } finally {
     timeout.mockRestore();
   }
+});
+
+it("keeps a stale review draft visible and retries it over the refreshed record", async () => {
+  vi.stubGlobal("Blob", NodeBlob);
+  const storage = createMemoryStorage({ root: mocks.session.storageUrl, protocol: "solid" });
+  const repo = mediaRepository(storage, undefined, async () => true);
+  const original = await repo.save({ title: "Paper Moons", kind: "film", status: "want" });
+  mocks.load.mockImplementation(repo.load);
+  mocks.save.mockImplementation(repo.save);
+  render(<MediaApp />);
+  fireEvent.click(await screen.findByRole("button", { name: "Edit & review Paper Moons" }));
+  const draft = screen.getByLabelText<HTMLTextAreaElement>("Your review");
+  fireEvent.change(draft, { target: { value: "Loved the ending" } });
+  await repo.save({ ...original.data, creator: "Another client added this" }, original);
+
+  fireEvent.click(screen.getByRole("button", { name: "Save item" }));
+  expect((await screen.findByRole("alert")).textContent).toContain("This item changed on your pod");
+  expect(draft.value).toBe("Loved the ending");
+  fireEvent.click(screen.getByRole("button", { name: "Save item" }));
+
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  const listing = await repo.load();
+  expect(listing.records).toHaveLength(1);
+  expect(listing.records[0]?.data).toMatchObject({
+    review: "Loved the ending",
+    creator: "Another client added this",
+  });
+  expect(mocks.save.mock.calls[0]?.[2].attempt).toBe(mocks.save.mock.calls[1]?.[2].attempt);
+  expect(screen.getByText(/Connector discovery is unavailable/)).toBeTruthy();
 });

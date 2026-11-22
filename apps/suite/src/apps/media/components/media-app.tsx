@@ -1,10 +1,13 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   createMediaRepository,
+  MediaPrivacyError,
   type MediaRecord,
   type MediaRepository,
 } from "@jeswr/solid-media-log";
+import { StorageError } from "@jeswr/storage-client";
 import { Button, EmptyState, ErrorState, Input, LoadingSkeleton, toast } from "@jeswr/suite-ui";
 import {
   BarChart3,
@@ -103,7 +106,13 @@ function Tracker({ session }: { session: PodSession }) {
     try {
       void store
         .save({ ...record.data, status: "finished", finished: localMediaDate() }, record)
-        .catch(() => toast.error("Couldn't save this change. Please reconnect and try again."));
+        .catch((error) =>
+          toast.error(
+            error instanceof MediaPrivacyError
+              ? error.message
+              : "Couldn't save this change. Please reconnect and try again.",
+          ),
+        );
     } catch (error) {
       toast.error(
         error instanceof TypeError
@@ -222,6 +231,11 @@ function Tracker({ session }: { session: PodSession }) {
         {state.incomplete && (
           <p className="media-notice" role="status">
             This is a partial library. Some items could not be checked yet. Refresh to try again.
+          </p>
+        )}
+        {state.connectorDiscoveryUnavailable && (
+          <p className="media-notice" role="status">
+            Connector discovery is unavailable. Media can still check items in its own container.
           </p>
         )}
         {state.loading ? (
@@ -357,10 +371,15 @@ function Tracker({ session }: { session: PodSession }) {
           record={editor === "new" ? undefined : editor}
           offline={offline}
           onClose={() => setEditor(null)}
-          onSave={(entry) => {
-            const task = store.save(entry, editor === "new" ? undefined : editor);
-            setEditor(null);
-            void task.catch(() => toast.error("Couldn't save this change. Please try again."));
+          onSave={async (entry, attempt) => {
+            try {
+              await store.save(entry, editor === "new" ? undefined : editor, attempt);
+              setEditor(null);
+            } catch (error) {
+              if (error instanceof StorageError && error.code === "precondition-failed")
+                await store.load();
+              throw error;
+            }
           }}
         />
       )}
@@ -380,7 +399,11 @@ function Tracker({ session }: { session: PodSession }) {
                   );
                   return;
                 }
-                const message = `${job.cancelled ? "Import cancelled. " : ""}Imported ${job.imported} · skipped ${job.skipped} · failed ${job.failed}`;
+                const privacy =
+                  job.error === "owner-only"
+                    ? "Owner-only access could not be verified for some destinations. "
+                    : "";
+                const message = `${job.cancelled ? "Import cancelled. " : ""}${privacy}Imported ${job.imported} · skipped ${job.skipped} · failed ${job.failed}`;
                 if (job.failed) toast.error(message);
                 else toast.success(message);
               })

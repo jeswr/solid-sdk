@@ -1,13 +1,16 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   type MediaEntry,
   type MediaKind,
+  MediaPrivacyError,
   type MediaRecord,
   type MediaStatus,
   STATUSES,
   validateEntry,
 } from "@jeswr/solid-media-log";
+import { StorageError } from "@jeswr/storage-client";
 import {
   Button,
   Dialog,
@@ -33,17 +36,19 @@ function Choice({
   value,
   choices,
   onChange,
+  disabled,
 }: {
   id: string;
   label: string;
   value: string;
   choices: Record<string, string>;
   onChange: (value: string) => void;
+  disabled: boolean;
 }) {
   return (
     <div className="media-field">
       <Label htmlFor={id}>{label}</Label>
-      <Select value={value} onValueChange={onChange}>
+      <Select value={value} onValueChange={onChange} disabled={disabled}>
         <SelectTrigger id={id}>
           <SelectValue />
         </SelectTrigger>
@@ -67,13 +72,15 @@ export function MediaEditor({
   record?: MediaRecord | undefined;
   offline: boolean;
   onClose: () => void;
-  onSave: (entry: MediaEntry) => void;
+  onSave: (entry: MediaEntry, attempt: object) => Promise<void>;
 }) {
   const id = useId();
   const item = record?.data;
   const [kind, setKind] = useState<MediaKind>(item?.kind ?? "film");
   const [status, setStatus] = useState<MediaStatus>(item?.status ?? "want");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [attempt] = useState(() => ({}));
   const fields = [
     {
       name: "title",
@@ -138,7 +145,7 @@ export function MediaEditor({
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open) onClose();
+        if (!open && !saving) onClose();
       }}
     >
       <DialogContent className="media-dialog">
@@ -152,8 +159,9 @@ export function MediaEditor({
         </DialogHeader>
         <form
           className="media-form"
-          onSubmit={(event) => {
+          onSubmit={async (event) => {
             event.preventDefault();
+            if (saving || offline) return;
             const form = new FormData(event.currentTarget);
             const text = (key: string) => String(form.get(key) ?? "").trim() || undefined;
             const numeric = (key: string) =>
@@ -181,13 +189,20 @@ export function MediaEditor({
                 source: item?.source ?? "Manual",
                 origin: item?.origin,
               };
-              onSave(validateEntry(entry));
+              const valid = validateEntry(entry);
+              setError("");
+              setSaving(true);
+              await onSave(valid, attempt);
             } catch (error) {
               setError(
-                error instanceof TypeError
+                error instanceof TypeError || error instanceof MediaPrivacyError
                   ? error.message
-                  : "Couldn't prepare this item. Please try again.",
+                  : error instanceof StorageError && error.code === "precondition-failed"
+                    ? "This item changed on your pod. Your draft is kept here. Try saving again."
+                    : "Couldn't save this change. Your draft is kept here. Please try again.",
               );
+            } finally {
+              setSaving(false);
             }
           }}
         >
@@ -197,6 +212,7 @@ export function MediaEditor({
               label="Kind"
               value={kind}
               choices={KIND_LABELS}
+              disabled={saving}
               onChange={(value) => setKind(value as MediaKind)}
             />
             <Choice
@@ -204,6 +220,7 @@ export function MediaEditor({
               label="Shelf"
               value={status}
               choices={Object.fromEntries(STATUSES.map((value) => [value, STATUS_LABELS[value]]))}
+              disabled={saving}
               onChange={(value) => setStatus(value as MediaStatus)}
             />
             {fields.map(({ name, label, value, ...props }) => (
@@ -212,7 +229,13 @@ export function MediaEditor({
                 className={`media-field ${name === "title" || name === "cover" ? "media-field-wide" : ""}`}
               >
                 <Label htmlFor={`${id}-${name}`}>{label}</Label>
-                <Input {...props} id={`${id}-${name}`} name={name} defaultValue={value ?? ""} />
+                <Input
+                  {...props}
+                  disabled={saving || props.disabled}
+                  id={`${id}-${name}`}
+                  name={name}
+                  defaultValue={value ?? ""}
+                />
               </div>
             ))}
           </div>
@@ -223,6 +246,7 @@ export function MediaEditor({
               name="review"
               rows={4}
               maxLength={20000}
+              disabled={saving}
               defaultValue={item?.review ?? ""}
               placeholder="What stayed with you?"
             />
@@ -236,11 +260,11 @@ export function MediaEditor({
             <p role="status">You're offline. Your draft is kept open; reconnect to save it.</p>
           )}
           <div className="media-dialog-actions">
-            <Button type="button" variant="ghost" onClick={onClose}>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
-            <Button type="submit" disabled={offline}>
-              Save item
+            <Button type="submit" disabled={offline || saving}>
+              {saving ? "Saving item…" : "Save item"}
             </Button>
           </div>
         </form>

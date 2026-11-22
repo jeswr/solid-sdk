@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # @jeswr/solid-media-log
 
 Generated personal media records for films, television, books and games. Separate from
@@ -36,21 +37,25 @@ await repository.save({...saved.data, status:'finished', finished:'2026-11-11', 
 const {records, incomplete} = await repository.load();
 ```
 
-The repository best-effort registers `log:LogEntry` once per repository session and uses
-`media/`, one resource per log. Registration failure logs a fixed message without pod data;
-load/save still work. LWS creation hints are cached and passed to each create. Existing
-registered containers win; stale/unreadable registrations are skipped. Creates reserve a
-server-returned URL before writing subject-relative RDF; edits require the observed ETag.
-Failed reservation reads and writes best-effort delete only the empty reservation under its
-observed ETag (or the create response's own ETag). A follow-up HEAD validator is never used
-for cleanup. Without a safe validator, the empty reservation stays and is ignored by loads.
-A successful write with failed read-back returns `unconfirmed: true` and a null ETag; the app
-keeps it visible and asks for refresh before the next edit, rather than reporting a rollback.
+The repository best-effort updates an existing owner-only Type Index and falls back to
+`media/`, one resource per log. Before writing media RDF it verifies effective owner-only
+access on the destination. Pods whose access model cannot be verified can still be browsed.
+Creates reserve a server-returned URL before writing subject-relative RDF. In-place edits
+require an observed ETag and a verified media document in the selected media container.
+Auxiliary and access-control documents are excluded. Solid CSV imports use conditional
+exact-URL creation to claim each new occurrence across clients. LWS assigns its own URLs,
+so the repository refuses new CSV occurrences when it cannot claim an exact URL.
+
+After an ambiguous PUT, the repository checks whether the reserved URL contains the attempted
+entry. If the result remains unclear, reuse the same `save` input object or supply the same
+`{ attempt }` token when retrying a new entry. Definite failures clean up only empty reservations
+under an observed ETag. A confirmed write whose read-back fails returns `unconfirmed: true` and
+a null ETag.
 
 Discovery follows scoped SDK locations and paginated listing. View scans cap source locations
 at 32, use six concurrent resource reads and a 20-second deadline, and return partial records
 with `incomplete` and `skipped: [{url, reason}]`. There is no 1,000-record cap. Only unscanned
-sources (discovery/listing failures, retryable resource reads, source caps or timeouts) set
+sources (discovery/listing failures, retryable or oversized resource reads, source caps or timeouts) set
 `incomplete` and prevent imports. Individual invalid entries and forbidden/non-RDF resources,
 including missing or forbidden registered instances, are rejected and reported in `skipped`
 without making the library incomplete. Empty reservations and WatchAction-only connector
@@ -62,7 +67,9 @@ or saves. Only an unreadable primary container (first page, outside a timeout) f
 never discard readable records. `load({complete: true, signal})` scans every source without the
 view's deadline, still at six reads at a time; imports use it to check duplicates against the
 entire library and refuse to write when that scan is incomplete. Callers can cancel this scan.
-`mediaRepository(storage, index)` is the injected-client seam for other hosts.
+When the WebID is foreign to Solid storage or LWS lacks optional type search,
+`connectorDiscoveryUnavailable` identifies a scan limited to the verified media container.
+`mediaRepository(storage, index, verifyPrivate)` is the injected-client seam for other hosts.
 `knownSolid: true` explicitly selects the SDK Solid transport for demo pods that do not expose
 capability discovery; do not infer this option from arbitrary pod data.
 

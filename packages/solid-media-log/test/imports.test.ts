@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   decodeMediaCsv,
@@ -238,4 +239,33 @@ it("keeps a pending reread as a completion target alongside existing dated histo
     index.add(completion);
     expect(index.completionTarget({ ...completion, finished: "2026-11-11" })).toBeUndefined();
   }
+});
+
+it("rejects over-wide headers and records, even with a small input", () => {
+  const commas = ",".repeat(1024);
+  expect(() => parseLetterboxdCsv(`Name,Year${commas}\nA,2025`)).toThrow(/too many columns/);
+  expect(() => parseLetterboxdCsv(`Name,Year\nA,2025${commas}`)).toThrow(/too many columns/);
+});
+
+it("bounds sparse rows under a wide header before building keyed row objects", () => {
+  const columns = Array.from({ length: 1022 }, (_, i) => `column-${i}`).join(",");
+  const csv = `Name,Year,${columns}\n${"A\n".repeat(MAX_IMPORT_ROWS + 1)}`;
+  expect(() => parseLetterboxdCsv(csv)).toThrow(/5,000 rows/);
+});
+
+it("distinguishes Goodreads editions by ID and unidentified books by normalized author", () => {
+  const result = parseGoodreadsCsv(
+    "Title,Author,Exclusive Shelf,Book Id,Date Read\n" +
+      "Debut,Aster,read,42,2026/2/28\n" +
+      "Debut,Aster,read,43,2026/2/28\n" +
+      "Debut,Aster,read,042,2026/2/28\n" +
+      "Other,Aster,read,,2026/2/28\n" +
+      "Other,Ellis,read,,2026/2/28\n" +
+      "Other,ASTER,read,,2026/2/28",
+  );
+  expect(result.entries).toHaveLength(4);
+  expect(result.issues).toEqual([
+    { row: 4, message: "Duplicate item" },
+    { row: 7, message: "Duplicate item" },
+  ]);
 });
