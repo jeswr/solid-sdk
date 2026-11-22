@@ -4,7 +4,7 @@ import { serialize } from "@jeswr/rdf-serialize";
 import { type StorageClient, StorageError, type WriteResult } from "@jeswr/storage-client";
 import type { DatasetCore } from "@rdfjs/types";
 import { strongEtag } from "../core/pod-writer-policy.js";
-import type { WriteConditions } from "../core/types.js";
+import type { MutationGuard, WriteConditions } from "../core/types.js";
 import { VOCAB_PREFIXES } from "../core/vocab.js";
 
 export function missingResource(error: unknown): boolean {
@@ -47,9 +47,10 @@ export async function writeStorageRdf(
   signal?: AbortSignal,
   prefixes: Record<string, string> = { ...VOCAB_PREFIXES },
   finishMutation = false,
+  guard?: MutationGuard,
 ): Promise<WriteResult> {
   signal?.throwIfAborted();
-  if (conditions.ifMatch !== undefined && !finishMutation) {
+  if (conditions.ifMatch !== undefined && !finishMutation && !guard) {
     return storage.writeRdf(url, dataset, {
       ifMatch: strongEtag(conditions.ifMatch, "storage", url),
       prefixes,
@@ -63,10 +64,13 @@ export async function writeStorageRdf(
     throw new TypeError("Turtle cannot carry named graphs.");
   const body = await serialize(quads, { format: "text/turtle", prefixes });
   signal?.throwIfAborted();
+  const refused = guard?.();
+  if (refused) return refused;
   if (conditions.ifMatch !== undefined)
     return storage.write(url, body, {
       contentType: "text/turtle",
       ifMatch: strongEtag(conditions.ifMatch, "storage", url),
+      ...(finishMutation ? {} : { signal }),
     });
   return createStorageResource(
     storage,

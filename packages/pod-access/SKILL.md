@@ -45,6 +45,8 @@ For nominal Solid document destinations whose parents may be missing, use root
 `createOwnerOnlyDestinationVerifier({ podRoot, ownerWebId, openStorage, signal? })`.
 It returns an async boolean verifier, lazily opens the selected storage, and may create
 empty parents at exact URLs before checking each parent and an existing target's own policy.
+For a session guard, use the verifier's `beforeWrite(url, guard)` variant. It checks
+the guard immediately before each missing container is created and propagates any refusal.
 Treat false or rejection as a refusal. Keep policy reads on the signal-aware run transport.
 For already existing resources and containers, use `checkOwnerOnly` directly.
 

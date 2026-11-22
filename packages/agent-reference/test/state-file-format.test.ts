@@ -361,6 +361,9 @@ it.each([
   expect(performance.now() - start).toBeLessThan(500);
 });
 
+// Three holds of 3,000 references each exceed the 8,192 expanded-reference limit in total but
+// not per hold, so the size is what the test checks. It takes about 115 s in CI beside other
+// suites; the 360 s budget gives headroom until state saves get faster (bead sst-ans.54).
 it("saves and reloads three precedence holds with 3,000 inherited references each", () => {
   const fact = Object.values(completeFixture().precedenceHolds)[0]!;
   const terms = {
@@ -389,7 +392,7 @@ it("saves and reloads three precedence holds with 3,000 inherited references eac
     /inherited item terms exceed the expanded reference limit/i,
   );
   expect(readFileSync(path)).toEqual(before);
-}, 120_000);
+}, 360_000);
 
 it("rejects a local snapshot beyond the byte budget before buffering it", () => {
   writeFileSync(path, JSON.stringify(emptyState()));

@@ -21,6 +21,7 @@ import type { DatasetCore } from "@rdfjs/types";
 import { Agent } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { canonicalJeswrIri } from "../core/canonical-vocab.js";
+import type { MutationGuard } from "../core/types.js";
 import { freshRdf } from "./rdf-read.js";
 import { ResourceWriteError, writeResource } from "./resource.js";
 import { writeStorageRdf } from "./storage-resource.js";
@@ -89,6 +90,7 @@ export async function ensureTypeRegistrations(opts: {
   storageFor?: (url: string) => StorageClient;
   signal?: AbortSignal;
   finishMutations?: boolean;
+  guard?: MutationGuard;
 }): Promise<EnsureRegistrationsResult> {
   const { webId, podRoot, registrations } = opts;
   const profileDocument = documentUrl(opts.profileDocumentUrl ?? webId);
@@ -121,8 +123,9 @@ export async function ensureTypeRegistrations(opts: {
         opts.signal,
         options?.prefixes ?? {},
         opts.finishMutations,
+        opts.guard,
       );
-    } else await writeResource(url, dataset, options);
+    } else await writeResource(url, dataset, { ...options, guard: opts.guard });
   };
   const authenticatedFetch = refuseRedirects(opts.fetchImpl);
   const profileFetch = documentFetch(profileDocument, authenticatedFetch);

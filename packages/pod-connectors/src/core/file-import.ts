@@ -196,6 +196,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       }),
       signal,
     });
+    await session.waitForPrivateWrites();
     signal?.throwIfAborted();
     skipped += outcome?.skipped ?? 0;
     if (
@@ -231,6 +232,12 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       cursor: state.cursor,
     };
   } catch (error) {
+    try {
+      await session.waitForPrivateWrites();
+    } catch (refusal) {
+      session.release();
+      throw refusal;
+    }
     // Partial writes already link to this run. Record it when storage is available and the
     // run was not cancelled, preserving the original failure if the provenance write fails.
     // A cancelled run starts no further Pod I/O (documented on RunImportOptions.signal).

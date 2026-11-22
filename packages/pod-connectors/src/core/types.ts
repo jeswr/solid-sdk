@@ -156,7 +156,7 @@ export interface BinaryDoc {
 export interface WrittenBinary {
   readonly url: string;
   readonly created: boolean;
-  /** Whether a successful binary write used a create-only precondition. */
+  /** Whether a completed binary write used a create-only precondition. */
   readonly writeCreated?: boolean;
   /** ETag from the write response, when available for private-destination cleanup. */
   readonly writeEtag?: string;
@@ -165,7 +165,7 @@ export interface WrittenBinary {
 /** A doc the runner wrote, with its final URL. */
 export interface WrittenDoc {
   readonly url: string;
-  /** Whether the successful write used a create-only precondition. */
+  /** Whether the completed write used a create-only precondition. */
   readonly writeCreated?: boolean;
   /** ETag from the write response, when available for private-destination cleanup. */
   readonly writeEtag?: string;
@@ -336,6 +336,14 @@ export interface TypeRegistrationRequest {
   readonly container: string;
 }
 
+/** Returns a rejection when a session has refused further mutations. Check at dispatch. */
+export type MutationGuard = () => Promise<never> | undefined;
+
+type PrivateDestinationVerifier = ((url: string) => Promise<boolean>) & {
+  /** Verification that can create containers must check the guard before doing so. */
+  readonly beforeWrite?: (url: string, guard: MutationGuard) => Promise<boolean>;
+};
+
 /** Host-owned storage port, bound to one connector's document container. */
 export interface PodWriter {
   /** Importing user's WebID; required for financial subjects and Steam account holders. */
@@ -343,7 +351,7 @@ export interface PodWriter {
   /** Resolve an adapter-relative slug within its container. */
   resolve(slug: string): string;
   /** Verify the exact destination and its containing policy. Required for sensitive imports. */
-  verifyPrivateDestination?(url: string): Promise<boolean>;
+  verifyPrivateDestination?: PrivateDestinationVerifier;
   /** Confirm that the written resource and its containing policy are owner-only. */
   confirmPrivateWrite?(
     url: string,
@@ -358,7 +366,11 @@ export interface PodWriter {
   /** Read existing RDF and its ETag; undefined only for a missing document. */
   read(slug: string): Promise<{ dataset: DatasetCore; etag: string | null } | undefined>;
   /** Write RDF, preserving the caller's conditional-write precondition. */
-  write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
+  write(
+    doc: NormalisedDoc,
+    conditions?: WriteConditions,
+    guard?: MutationGuard,
+  ): Promise<WrittenDoc>;
   /** Notify the host after the runner accepts a payload write. */
   onWriteAccepted?(url: string, doc: NormalisedDoc): void;
   /**
@@ -366,11 +378,18 @@ export interface PodWriter {
    * `If-None-Match: *` and reports a 412 as an existing resource; `"replace"` reads the
    * current ETag first and sends `If-Match` (or `If-None-Match: *` when absent).
    */
-  writeBinary?(doc: BinaryDoc): Promise<WrittenBinary>;
+  writeBinary?(doc: BinaryDoc, guard?: MutationGuard): Promise<WrittenBinary>;
   /** Optional delete port with the same confinement; 404 counts as already deleted. */
-  remove?(slug: string, conditions?: { readonly ifMatch?: string }): Promise<void>;
+  remove?(
+    slug: string,
+    conditions?: { readonly ifMatch?: string },
+    guard?: MutationGuard,
+  ): Promise<void>;
   /** Ensure the distinct class/container registrations and report the index used. */
-  registerType(registrations: readonly TypeRegistrationRequest[]): Promise<{ indexUrl: string }>;
+  registerType(
+    registrations: readonly TypeRegistrationRequest[],
+    guard?: MutationGuard,
+  ): Promise<{ indexUrl: string }>;
 }
 
 /** Host-owned source API transport, already authenticated for this source. */

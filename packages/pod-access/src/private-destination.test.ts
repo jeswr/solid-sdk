@@ -152,6 +152,41 @@ describe("owner-only destination verifier", () => {
     expect(requests().filter((request) => request.startsWith("PUT "))).toHaveLength(2);
   });
 
+  it("checks the guard before creating each missing container", async () => {
+    const { verify, requests } = fixture();
+    const puts = () => requests().filter((request) => request.startsWith("PUT "));
+    const putsBeforeGuard: string[][] = [];
+    const guard = () => {
+      putsBeforeGuard.push(puts());
+      return undefined;
+    };
+
+    await expect(verify.beforeWrite?.(target, guard)).resolves.toBe(true);
+    expect(putsBeforeGuard).toEqual([[], [`PUT ${parent}`]]);
+    expect(puts()).toEqual([`PUT ${parent}`, `PUT ${container}`]);
+  });
+
+  it.each([parent, container])("propagates a refusal before creating %s", async (blocked) => {
+    const { storage, requests } = fixture();
+    const refusal = new Error("The session refused further mutations");
+    const guard = vi.fn(() =>
+      blocked === parent || requests().includes(`PUT ${parent}`)
+        ? Promise.reject(refusal)
+        : undefined,
+    );
+    const { verifyPrivateDestination } = createOwnerOnlyDestinationChecks({
+      podRoot: root,
+      ownerWebId,
+      openStorage: () => storage,
+    });
+
+    await expect(verifyPrivateDestination.beforeWrite?.(target, guard)).rejects.toBe(refusal);
+    expect(requests().filter((request) => request.startsWith("PUT "))).toEqual(
+      blocked === parent ? [] : [`PUT ${parent}`],
+    );
+    expect(requests()).not.toContain(`HEAD ${target}`);
+  });
+
   it.each([
     "owner-only",
     "public",
@@ -363,6 +398,30 @@ describe("owner-only destination verifier", () => {
       openStorage: () => storage,
     });
     expect(await checks.confirmPrivateWrite(target, { etag: '"observed"' })).toBe(false);
+  });
+
+  it("refuses confirmation when the version changes during otherwise successful policy reads", async () => {
+    let stored = false;
+    let resourceHeads = 0;
+    const { pod, storage, requests } = fixture(async (url, init) => {
+      if (!stored || url !== target || init?.method !== "HEAD") return;
+      if (++resourceHeads === 2)
+        await pod.fetch(url, { method: "PUT", body: "Concurrent version" });
+      const response = await pod.fetch(url, init);
+      response.headers.set("etag", resourceHeads === 1 ? '"imported"' : '"concurrent"');
+      return response;
+    });
+    const checks = createOwnerOnlyDestinationChecks({
+      podRoot: root,
+      ownerWebId,
+      openStorage: () => storage,
+    });
+    expect(await checks.verifyPrivateDestination(target)).toBe(true);
+    await pod.fetch(target, { method: "PUT", body: "Imported version" });
+    stored = true;
+    await expect(checks.confirmPrivateWrite(target, { etag: '"imported"' })).resolves.toBe(false);
+    expect(resourceHeads).toBe(3);
+    expect(requests().at(-1)).toBe(`HEAD ${target}`);
   });
 
   it.each([

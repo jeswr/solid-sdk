@@ -23,6 +23,7 @@ export {
 export {
   createOwnerOnlyDestinationChecks,
   createOwnerOnlyDestinationVerifier,
+  type MutationGuard,
 } from "./private-destination.js";
 export {
   ACL,

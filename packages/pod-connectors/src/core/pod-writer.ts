@@ -4,7 +4,7 @@
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { freshRdf } from "../pod/rdf-read.js";
-import { ResourceWriteError, writeResource } from "../pod/resource.js";
+import { isCompletedPut, ResourceWriteError, writeResource } from "../pod/resource.js";
 import { ensureTypeRegistrations } from "../pod/type-index-write.js";
 import { abortableFetch } from "./abort.js";
 import { IntegrationSyncError } from "./errors.js";
@@ -15,7 +15,7 @@ import {
   requiresPrivateDestination,
   validateBinaryType,
 } from "./pod-writer-policy.js";
-import type { BinaryDoc, PodWriter, WrittenBinary } from "./types.js";
+import type { BinaryDoc, MutationGuard, PodWriter, WrittenBinary } from "./types.js";
 import { VOCAB_PREFIXES } from "./vocab.js";
 
 /** Configuration for a fetch-backed writer bound to one connector and active Pod. */
@@ -67,19 +67,20 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
         throw error;
       }
     },
-    async write(doc, conditions = {}) {
+    async write(doc, conditions = {}, guard) {
       const url = resolve(doc.slug);
       const createOnly = conditions.ifNoneMatch === "*";
-      const { etag } = await writeResource(url, doc.dataset, {
+      const { etag, status } = await writeResource(url, doc.dataset, {
         fetchImpl: podFetch,
         etag: conditions.ifMatch,
         createOnly,
         prefixes: { ...VOCAB_PREFIXES },
+        guard,
       });
       return {
         url,
         ...(options.verifyPrivateDestination && {
-          writeCreated: createOnly,
+          writeCreated: createOnly && isCompletedPut(status),
           ...(etag !== null && { writeEtag: etag }),
         }),
         category: doc.category,
@@ -87,29 +88,33 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
         skipRegistration: doc.skipRegistration,
       };
     },
-    writeBinary: async (doc) =>
+    writeBinary: async (doc, guard) =>
       writeBinaryResource(
         adapterId,
         resolve(doc.slug),
         doc,
         podFetch,
         !!options.verifyPrivateDestination,
+        guard,
       ),
-    async remove(slug, conditions = {}) {
+    async remove(slug, conditions = {}, guard) {
       const url = resolve(slug);
       const headers = new Headers();
       if (conditions.ifMatch) headers.set("if-match", conditions.ifMatch);
+      const refused = guard?.();
+      if (refused) return refused;
       const response = await podFetch(url, { method: "DELETE", redirect: "error", headers });
       if (!response.ok && response.status !== 404)
         throw new ResourceWriteError(url, response.status);
     },
-    registerType: (registrations) =>
+    registerType: (registrations, guard) =>
       ensureTypeRegistrations({
         webId,
         profileDocumentUrl: options.profileDocumentUrl,
         podRoot,
         registrations: [...registrations],
         fetchImpl: transport,
+        guard,
       }),
   };
 }
@@ -120,6 +125,7 @@ async function writeBinaryResource(
   doc: BinaryDoc,
   podFetch: typeof fetch,
   keepWriteEtag: boolean,
+  guard?: MutationGuard,
 ): Promise<WrittenBinary> {
   validateBinaryType(doc.contentType, adapterId);
   const headers = new Headers({ "content-type": doc.contentType });
@@ -136,6 +142,8 @@ async function writeBinaryResource(
       headers.set("if-match", etag);
     }
   }
+  const refused = guard?.();
+  if (refused) return refused;
   const response = await podFetch(url, {
     method: "PUT",
     redirect: "error",
@@ -150,7 +158,7 @@ async function writeBinaryResource(
     url,
     created: true,
     ...(keepWriteEtag && {
-      writeCreated: headers.has("if-none-match"),
+      writeCreated: headers.has("if-none-match") && isCompletedPut(response.status),
       ...(etag !== null && { writeEtag: etag }),
     }),
   };

@@ -65,7 +65,7 @@ The only allowed owner is the exact supplied WebID; listing another owner is non
 
 Use `createOwnerOnlyDestinationVerifier({ podRoot, ownerWebId, openStorage, signal? })`
 when a Solid document's parent containers may need provisioning. The factory returns
-`(url: string) => Promise<boolean>`. It lazily opens storage, creates missing containers
+an async boolean verifier callable as `verify(url)`. It lazily opens storage, creates missing containers
 parent-first at their exact URLs, and verifies each resulting container and the policy of
 an existing target. It never sends the document body. Use a storage transport that observes
 the run signal throughout policy reads. A failed privacy proof resolves to `false`; a scope
@@ -75,6 +75,9 @@ violation, abort, or failure while probing or creating a destination can reject.
 Use `createOwnerOnlyDestinationChecks({ podRoot, ownerWebId, openStorage, signal? })` to
 verify before writing and confirm the written version afterward. It returns
 `verifyPrivateDestination(url)` and `confirmPrivateWrite(url, { etag }, observeEtag?)`.
+Both factories expose `beforeWrite(url, guard)` on the verifier. Pass a `MutationGuard`
+(`() => Promise<never> | undefined`) to recheck the session immediately before each
+missing container is created. A returned promise rejects verification with the refusal.
 The factory passes the run signal to `openStorage` for verification and opens storage without
 that signal for confirmation. Confirmation requires an exact HEAD 200 with a strong ETag
 that matches the supplied write ETag, if present. The resource HEAD during policy discovery
