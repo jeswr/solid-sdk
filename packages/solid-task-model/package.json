@@ -56,20 +56,22 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "lint": "biome check src",
-    "lint:fix": "biome check --write src",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "lint": "biome check src scripts test codegen/codegen.config.json package.json vitest.config.ts",
+    "lint:fix": "biome check --write src scripts test codegen/codegen.config.json package.json vitest.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "api:report": "npm run build && npx --yes @microsoft/api-extractor@7 run --local",
-    "api:check": "npm run build && npx --yes @microsoft/api-extractor@7 run"
+    "api:check": "npm run build && npx --yes @microsoft/api-extractor@7 run",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/task.ontology.ttl --shapes codegen/task.shapes.ttl --config codegen/codegen.config.json --out src/generated"
   },
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
-    "n3": "^2.0.3"
+    "n3": "^2.0.3",
+    "@jeswr/model-runtime": "workspace:*"
   },
   "peerDependencies": {
     "@rdfjs/types": "^2.0.1"
@@ -82,7 +84,8 @@
     "esbuild": "^0.25.0",
     "typescript": "^5",
     "vitest": "^4.1.8",
-    "@jeswr/rdf-engine": "workspace:*"
+    "@jeswr/rdf-engine": "workspace:*",
+    "@jeswr/federation-codegen": "workspace:*"
   },
   "engines": {
     "node": ">=20"
