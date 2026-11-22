@@ -1,0 +1,327 @@
+/* AUTHORED-BY Codex (GPT-6.1 Sol) */
+.wb-root {
+  height: 100%;
+  min-height: 0;
+  color: var(--foreground);
+  background: var(--background);
+}
+.wb-page {
+  padding: clamp(20px, 4vw, 48px);
+  max-width: 1500px;
+  margin: 0 auto;
+}
+.wb-page-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+.wb-page h1,
+.wb-page h2 {
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  margin: 8px 0;
+}
+.wb-eyebrow {
+  color: var(--app-whiteboard);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  font-weight: 650;
+}
+.wb-muted {
+  color: var(--foreground-muted);
+  font-size: 14px;
+}
+.wb-sidebar {
+  padding: 24px 16px;
+  display: grid;
+  gap: 20px;
+}
+.wb-sidebar strong {
+  font-size: 22px;
+  letter-spacing: -0.03em;
+}
+.wb-sidebar p {
+  color: var(--foreground-muted);
+  line-height: 1.6;
+}
+.wb-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.wb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 24px;
+}
+.wb-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface);
+  transition: border-color 0.15s;
+}
+.wb-card:hover,
+.wb-card:focus-within {
+  border-color: var(--primary);
+}
+.wb-preview {
+  background: var(--surface-2);
+  display: block;
+  width: 100%;
+  height: 210px;
+  padding: 20px;
+  cursor: pointer;
+}
+.wb-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.wb-card-foot {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.wb-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+.wb-card-actions {
+  display: flex;
+  gap: 2px;
+}
+.wb-offline {
+  background: var(--warning);
+  color: var(--warning-foreground);
+  padding: 10px 20px;
+  font-size: 14px;
+}
+.wb-editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 600px;
+  height: calc(100dvh - 110px);
+}
+.wb-editor-head {
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+.wb-editor-title,
+.wb-exports {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.wb-editor-title h2 {
+  font-size: 17px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.wb-save {
+  color: var(--foreground-muted);
+  font-size: 12px;
+}
+.wb-toolbar {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  padding: 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.wb-toolbar [aria-pressed="true"] {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+.wb-tool-divider {
+  border-left: 1px solid var(--border);
+  margin: 4px 6px;
+}
+.wb-properties {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.wb-properties label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--foreground-muted);
+}
+.wb-properties select {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  border-radius: 6px;
+  height: 32px;
+  padding: 2px 6px;
+  max-width: 110px;
+}
+.wb-properties input[type="range"] {
+  width: 70px;
+  accent-color: var(--primary);
+}
+.wb-selection-actions {
+  display: flex;
+  margin-left: auto;
+}
+.wb-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 300px;
+  overflow: hidden;
+  touch-action: none;
+  background-color: var(--surface);
+  background-image: radial-gradient(var(--border-strong) 0.7px, transparent 0.7px);
+  background-size: 20px 20px;
+  user-select: none;
+}
+.wb-svg {
+  display: block;
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+}
+.wb-canvas:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -3px;
+}
+.wb-tool-hand {
+  cursor: grab;
+}
+.wb-tool-rectangle,
+.wb-tool-ellipse,
+.wb-tool-diamond,
+.wb-tool-line,
+.wb-tool-arrow,
+.wb-tool-freedraw {
+  cursor: crosshair;
+}
+.wb-tool-text {
+  cursor: text;
+}
+.wb-selection {
+  pointer-events: none;
+}
+.wb-selection [data-resize] {
+  pointer-events: all;
+  cursor: nwse-resize;
+}
+.wb-selection [data-resize="ne"],
+.wb-selection [data-resize="sw"] {
+  cursor: nesw-resize;
+}
+.wb-canvas-hint {
+  position: absolute;
+  top: 40%;
+  left: 10%;
+  right: 10%;
+  display: grid;
+  gap: 10px;
+  text-align: center;
+  pointer-events: none;
+  color: var(--foreground-muted);
+}
+.wb-canvas-hint strong {
+  color: var(--foreground);
+  font-size: 22px;
+  font-weight: 500;
+}
+.wb-editor-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 6px 16px;
+}
+.wb-editor-foot p {
+  color: var(--foreground-muted);
+  font-size: 12px;
+}
+.wb-zoom {
+  display: flex;
+  align-items: center;
+}
+.wb-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.wb-sr-only:focus-within {
+  position: static;
+  width: auto;
+  height: auto;
+  clip-path: none;
+  padding: 16px;
+  white-space: normal;
+}
+.wb-root form {
+  display: grid;
+  gap: 12px;
+}
+@media (max-width: 767px) {
+  .wb-editor {
+    height: calc(100dvh - 80px);
+    min-height: 680px;
+  }
+  .wb-editor-head {
+    padding: 8px 12px;
+  }
+  .wb-properties {
+    padding: 8px;
+    gap: 8px;
+  }
+  .wb-toolbar {
+    gap: 1px;
+    padding: 6px;
+  }
+  .wb-selection-actions {
+    margin-left: 0;
+  }
+  .wb-editor-foot p {
+    max-width: 180px;
+  }
+  .wb-tool-divider {
+    display: none;
+  }
+}
+.wb-properties input[type="number"] {
+  width: 56px;
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px;
+}
+.wb-import-note {
+  padding: 10px 16px;
+  color: var(--foreground-muted);
+  background: var(--surface-2);
+  font-size: 13px;
+}

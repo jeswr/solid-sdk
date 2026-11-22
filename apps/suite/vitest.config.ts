@@ -46,6 +46,8 @@ export default defineConfig({
         "src/apps/slides/state/**/*.{ts,tsx}",
         "src/apps/wallet/lib/**/*.ts",
         "src/apps/wallet/state/**/*.{ts,tsx}",
+        "src/apps/whiteboard/lib/**/*.ts",
+        "src/apps/whiteboard/state/**/*.ts",
         "src/shell/lib/**/*.ts",
         "src/shell/settings/assistants/{read,copy}.ts",
         "src/shell/sync/connection-state.ts",

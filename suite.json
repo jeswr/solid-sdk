@@ -118,7 +118,8 @@
     "@jeswr/solid-media-log",
     "@jeswr/solid-wallet",
     "@jeswr/solid-events",
-    "@jeswr/solid-trips"
+    "@jeswr/solid-trips",
+    "@jeswr/excalidraw-scene"
   ],
   "applications": [
     {
