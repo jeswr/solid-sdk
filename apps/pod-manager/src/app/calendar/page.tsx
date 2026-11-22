@@ -27,7 +27,9 @@ import {
 import { useStore, useItems } from "@/components/use-productivity";
 import { EmptyState, ErrorState } from "@/components/states";
 import { ItemRowSkeleton } from "@/components/item-row";
-import { Button } from "@/components/ui/button";
+import {
+  Button,
+} from "@jeswr/suite-ui";
 import { formatTime } from "@/lib/format";
 import { exportICal, importICal } from "@/lib/ical";
 import { downloadText, readFileText } from "@/lib/download";

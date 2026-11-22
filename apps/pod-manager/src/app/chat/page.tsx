@@ -20,10 +20,12 @@ import { useChat } from "@/components/use-chat";
 import { useResourceNotifications } from "@/components/use-resource-notifications";
 import { PeoplePicker } from "@/components/people-picker";
 import { EmptyState, ErrorState } from "@/components/states";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Button,
+  Input,
+  Label,
+  Skeleton,
+} from "@jeswr/suite-ui";
 import { chatContainerUrl } from "@/lib/chat";
 import { sendNotification } from "@/lib/notify-send";
 import { safeLinkHref } from "@/lib/pod-scope";

@@ -43,18 +43,6 @@
       "dest": "src/components/nav-items.ts",
       "note": "Replaced: PM nav items are Pod Manager routes; solid-issues uses issue-tracker-specific destinations (Issues/Board/Backlog/Epics/Timeline/Calendar/Dashboard/Workload).",
       "sha256": "579c67e013611320986170300634b120074f08b2455b6c59ba7e06b6462fb63f"
-    },
-    {
-      "src": "src/components/ui/sheet.tsx",
-      "dest": "src/components/ui/sheet.tsx",
-      "note": "Verbatim.",
-      "sha256": "54e255b2dec4b8ad7c71a571f17700694df1533ad5c78f8b472ddd802c658877"
-    },
-    {
-      "src": "src/components/ui/avatar.tsx",
-      "dest": "src/components/ui/avatar.tsx",
-      "note": "Verbatim (was already identical to PM version — no new AvatarBadge/Group exports used yet).",
-      "sha256": "fd03e439ae00bf718834132df24072b58a6019538329d4db47f874f247d428fc"
     }
   ]
 }

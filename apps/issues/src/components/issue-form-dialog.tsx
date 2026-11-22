@@ -5,24 +5,22 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
+  Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import {
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+  Textarea,
+} from "@jeswr/suite-ui";
 import { Loader2 } from "lucide-react";
 import type { IssueRecord } from "@/lib/use-issues";
 import { ISSUE_TYPES, STATUSES, safeHttpUrl, type ComponentDef, type FieldDef, type FieldValue, type IssueType, type Priority, type StatusSlug, type VersionDef } from "@/lib/issue";
@@ -227,7 +225,7 @@ export function IssueFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg sm:w-lg!">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit issue" : "New issue"}</DialogTitle>
           <DialogDescription>

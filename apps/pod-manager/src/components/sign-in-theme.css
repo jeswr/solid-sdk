@@ -1,23 +1,9 @@
 /* AUTHORED-BY Codex GPT-6.1-Sol */
-/* Map the shared card's theme seam to this app, including its portaled help sheet. */
+/* AUTHORED-BY Claude Opus 5.5 */
+/* The global suite-ui seam (globals.css) supplies the card's tokens; keep only this
+   screen's larger controls and softer shadow, including its portaled help sheet. */
 .su-sign-in-card,
 .su-sign-in-help {
-  --surface: var(--card);
-  --surface-2: var(--muted);
-  --foreground-muted: var(--muted-foreground);
-  --font-ui: var(--font-sans);
   --control-h: 44px;
-  --space-1: calc(var(--spacing) * 1);
-  --space-2: calc(var(--spacing) * 2);
-  --space-3: calc(var(--spacing) * 3);
-  --space-4: calc(var(--spacing) * 4);
-  --space-6: calc(var(--spacing) * 6);
-  --space-8: calc(var(--spacing) * 8);
-  --text-base: 0.875rem;
-  --text-sm: 0.8125rem;
-  --text-xl: 1.375rem;
-  --lh-base: 1.375rem;
-  --lh-sm: 1.25rem;
-  --lh-xl: 1.75rem;
   --shadow-1: var(--shadow-sm);
 }
