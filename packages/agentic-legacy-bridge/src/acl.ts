@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 // AUTHORED-BY Codex GPT-6
 /**
@@ -13,6 +14,7 @@
  * ends in `/`, no query/fragment). Ported from `@jeswr/matrix-chat-to-pod`.
  */
 
+import { ownerPolicy, writeWac } from "@jeswr/pod-access";
 import { DataFactory, Store, Writer } from "n3";
 import { canonicalContainer, safeHttpIri } from "./safe-iri.js";
 import { ACL, RDF_TYPE } from "./vocab.js";
@@ -82,13 +84,9 @@ export async function buildOwnerOnlyAclTurtle(
   if (safeOwner === undefined) {
     throw new Error("owner-only ACL: ownerWebId must be a safe absolute http(s) IRI.");
   }
-  const store = new Store();
-  addAuthorization(store, `${safeContainer}.acl`, "owner", safeOwner, safeContainer, [
-    "Read",
-    "Write",
-    "Control",
-  ]);
-  return serializeAcl(store);
+  const policy = ownerPolicy(safeOwner, true);
+  policy.grants[0]?.modes.delete("append");
+  return writeWac(policy, safeContainer, `${safeContainer}.acl`);
 }
 
 /** Options for {@link buildBridgeAclTurtle}. */

@@ -70,7 +70,8 @@
     "@jeswr/solid-chat-interop": "workspace:*",
     "n3": "^2.0.3",
     "rdf-canonize": "5.0.0",
-    "@jeswr/agent-channels": "workspace:*"
+    "@jeswr/agent-channels": "workspace:*",
+    "@jeswr/pod-access": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
@@ -83,5 +84,6 @@
   },
   "mirrorPublish": {
     "inlined": []
-  }
+  },
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol"
 }

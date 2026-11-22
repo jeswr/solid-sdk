@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Owner-only, fail-closed WAC ACL — the ONE reviewed home for the "every scrobble
@@ -14,15 +15,13 @@
  * permissively). No `acl:agentClass` / `foaf:Agent` / public grant is ever
  * emitted — `src/acl.test.ts` proves that by parsing the output.
  *
- * Built with `n3.Writer` + typed quads — **never hand-concatenated triples**
+ * Built with pod-access policy writers — **never hand-concatenated triples**
  * (house rule). Browser-safe: only `n3` + the WHATWG `URL` global.
  */
 
-import { DataFactory, Store, Writer } from "n3";
+import { ownerPolicy, writeWac } from "@jeswr/pod-access";
+import { makeOwnerOnly, type OwnerOnlyOptions } from "@jeswr/pod-access/roles";
 import { httpIriOrUndefined } from "./iri.js";
-import { ACL, acl, FOAF, RDF_TYPE } from "./vocab.js";
-
-const { namedNode } = DataFactory;
 
 /**
  * Canonicalise + validate a resource/container URL that an ACL will be written
@@ -70,11 +69,12 @@ function assertAclableResource(resourceUrl: string): string {
 /**
  * The ACL resource URL for a Solid resource/container — `${resourceUrl}.acl`
  * (the WAC convention). Not a Link-header discovery (that is the client's job on
- * a real server); this is the conventional default the diary writes to.
+ * a real server). Offline compatibility only; writers use Link discovery.
  *
  * @throws (fail-closed) if `resourceUrl` is not an absolute http(s) URL, or if it
  *   carries a fragment (see {@link assertAclableResource}).
  */
+/** @deprecated Offline naming convention only. Never use it to choose a write URL. */
 export function aclUrlFor(resourceUrl: string): string {
   return `${assertAclableResource(resourceUrl)}.acl`;
 }
@@ -101,26 +101,14 @@ export async function buildOwnerOnlyAcl(resourceUrl: string, ownerWebId: string)
   // fragment-free resource — never a data resource a stripped fragment would hit.
   const aclUrl = aclUrlFor(resourceUrl);
   const resource = aclUrl.slice(0, -".acl".length);
-  const auth = namedNode(`${aclUrl}#owner`);
-  const store = new Store();
-  store.addQuad(auth, namedNode(RDF_TYPE), namedNode(acl("Authorization")));
-  store.addQuad(auth, namedNode(acl("agent")), namedNode(owner));
-  store.addQuad(auth, namedNode(acl("accessTo")), namedNode(resource));
-  store.addQuad(auth, namedNode(acl("default")), namedNode(resource));
-  store.addQuad(auth, namedNode(acl("mode")), namedNode(acl("Read")));
-  store.addQuad(auth, namedNode(acl("mode")), namedNode(acl("Write")));
-  store.addQuad(auth, namedNode(acl("mode")), namedNode(acl("Control")));
-
-  const writer = new Writer({ format: "text/turtle", prefixes: { acl: ACL, foaf: FOAF } });
-  writer.addQuads([...store]);
-  return new Promise<string>((resolve, reject) => {
-    writer.end((error, result) => (error ? reject(error) : resolve(result)));
-  });
+  const policy = ownerPolicy(owner, true);
+  policy.grants[0]?.modes.delete("append");
+  return writeWac(policy, resource, aclUrl);
 }
 
 /**
  * Write an owner-only ACL for `resourceUrl` via an injectable authed `fetch`
- * (PUT `${resourceUrl}.acl`). The fetch seam keeps this unit-testable with a
+ * (server-advertised access document, conditional create/replace). The fetch seam keeps this unit-testable with a
  * stubbed fetch and no server (suite convention). Throws on a non-2xx response
  * (fail-closed — a resource whose ACL write failed must not be treated as
  * protected).
@@ -129,17 +117,11 @@ export async function writeOwnerOnlyAcl(
   resourceUrl: string,
   ownerWebId: string,
   authedFetch: typeof globalThis.fetch,
+  options: Pick<OwnerOnlyOptions, "root" | "implementation" | "replace"> = {},
 ): Promise<void> {
-  const aclUrl = aclUrlFor(resourceUrl);
-  const body = await buildOwnerOnlyAcl(resourceUrl, ownerWebId);
-  const res = await authedFetch(aclUrl, {
-    method: "PUT",
-    headers: { "content-type": "text/turtle" },
-    body,
+  await makeOwnerOnly(resourceUrl, ownerWebId, {
+    ...options,
+    fetch: authedFetch,
+    inherit: new URL(resourceUrl).pathname.endsWith("/"),
   });
-  if (!res.ok) {
-    throw new Error(
-      `owner-only ACL write failed: PUT ${aclUrl} -> ${res.status} ${res.statusText}`,
-    );
-  }
 }

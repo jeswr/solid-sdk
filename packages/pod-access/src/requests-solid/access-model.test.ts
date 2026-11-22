@@ -156,23 +156,30 @@ describe("detection fails closed", () => {
       method === "HEAD" && at === url ? new Response(null, { headers: { link } }) : undefined;
   };
 
-  it("an acl link the roles layer cannot read is unknown, never WAC", async () => {
+  it("a case-variant acl link is refused, never read as WAC", async () => {
     const pod = buildPod();
     headLink(pod, POD, `<${POD}.acl>; rel="ACL"`);
-    expect(await accessModel({ fetch: pod.fetch, storage: POD })).toBe("unknown");
+    await expect(accessModel({ fetch: pod.fetch, storage: POD })).rejects.toThrow("ambiguous");
     const records = buildPod();
     records.seed(RECORDS, "");
     headLink(records, RECORDS, `<${RECORDS}.acl>; rel="ACL"`);
-    await expect(
-      ensureOwnerOnlyContainer(RECORDS, POD, OWNER, records.fetch),
-    ).rejects.toMatchObject({ model: "unknown" });
+    await expect(ensureOwnerOnlyContainer(RECORDS, POD, OWNER, records.fetch)).rejects.toThrow(
+      "ambiguous",
+    );
     expect(records.log.filter(({ method }) => method === "PUT")).toEqual([]);
   });
 
   it("refuses a records ACL the two Link parsers disagree on", async () => {
     const pod = buildPod();
     pod.seed(RECORDS, "");
-    headLink(pod, RECORDS, `<${RECORDS}other.acl>; rel="ACL", <${RECORDS}.acl>; rel="acl"`);
+    // The advertised ACL changes between the sharing layer's read and the roles layer's.
+    let heads = 0;
+    pod.intercept = (method, at) =>
+      method === "HEAD" && at === RECORDS
+        ? new Response(null, {
+            headers: { link: `<${RECORDS}${++heads % 2 === 1 ? "" : "other"}.acl>; rel="acl"` },
+          })
+        : undefined;
     await expect(ensureOwnerOnlyContainer(RECORDS, POD, OWNER, pod.fetch)).rejects.toThrow(
       "ambiguous",
     );

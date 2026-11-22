@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
 /** Role mapping and conditional Solid sharing; the offline root API remains independent. */
@@ -11,6 +12,7 @@ export type {
   MovePreservingAccessResult,
 } from "./move.js";
 export { movePreservingAccess } from "./move.js";
+export { makeOwnerOnly, type OwnerOnlyOptions } from "./owner.js";
 export type {
   AgentRef,
   GrantMutationOptions,
