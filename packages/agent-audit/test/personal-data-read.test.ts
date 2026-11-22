@@ -64,7 +64,8 @@ it("forbids recall fields on every other kind, and refuses unbounded or value-be
   const point = { seq: 1, hash: `sha-256:${"a".repeat(64)}` };
   const otherRecords = [
     ...ENTRY_KINDS.filter(
-      (type) => type !== "personal-data-read" && type !== "gate-decision" && type !== "record-anchor",
+      (type) =>
+        type !== "personal-data-read" && type !== "gate-decision" && type !== "record-anchor",
     ).map((type) => ({ ...identity, type })),
     {
       ...identity,

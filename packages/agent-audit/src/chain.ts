@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { entryGraph, headGraph, turtle } from "./rdf.js";
 import { loadChain, readEntry, readHead } from "./reader.js";
 import {
@@ -10,6 +11,7 @@ import {
   seal,
 } from "./records.js";
 import { type AuditFetch, request, storageRoot } from "./transport.js";
+import { verifyLatestRange } from "./verify.js";
 
 export { loadChain } from "./reader.js";
 
@@ -63,6 +65,14 @@ export class PodChain {
         if (head && (!head.etag || !/^"[^"\r\n]*"$/.test(head.etag))) throw new Error(FAILED);
         const seq = (head?.seq ?? 0) + 1;
         if (seq > MAX_AUDIT_SEQ) throw new Error(FAILED);
+        if (head) {
+          try {
+            const terminal = await readEntry(this.io, this.base, head.seq);
+            if (!verifyLatestRange([terminal], head).ok) throw new Error(INTEGRITY);
+          } catch {
+            throw new Error(INTEGRITY);
+          }
+        }
         const prev = head?.hash ?? GENESIS;
         let entry = seal(seq, at, prev, record);
         const url = new URL(`${seq}.ttl`, this.base).href;

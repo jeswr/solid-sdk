@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { expect, it } from "vitest";
 import { loadChain, PodChain } from "../src/chain.js";
 import { AGENT, entryGraph, headGraph, node, turtle } from "../src/rdf.js";
@@ -41,6 +42,39 @@ it("writes genesis and sequential entries, serializes one instance, and detaches
   expect(new Headers(puts[0]?.init.headers).get("if-none-match")).toBe("*");
   expect(new Headers(puts[1]?.init.headers).get("if-none-match")).toBe("*");
   expect(new Headers(puts[3]?.init.headers).has("if-match")).toBe(true);
+});
+it.each([
+  "missing",
+  "head mismatch",
+  "wrong hash",
+  "projection",
+])("refuses to append after a defective terminal entry: %s", async (defect) => {
+  const pod = createMemoryAuditPod();
+  const chain = new PodChain(pod.fetch, BASE);
+  const entry = await chain.append(record(), AT);
+  const url = `${BASE}1.ttl`;
+  if (defect === "missing") pod.resources.delete(url);
+  if (defect === "head mismatch") {
+    const replacement = seal(1, AT, GENESIS, record("different"));
+    pod.put(url, await turtle(entryGraph(url, replacement)));
+  }
+  if (defect === "wrong hash") {
+    pod.put(url, await turtle(entryGraph(url, { ...entry, record: record("different") })));
+  }
+  if (defect === "projection") {
+    const graph = entryGraph(url, entry);
+    node(graph, url).setText("urn:unexpected", "extra assertion");
+    pod.put(url, await turtle(graph));
+  }
+  const start = pod.calls.length;
+  const originalHead = pod.resources.get(HEAD);
+  await expect(chain.append(record("two"), AT)).rejects.toThrow("Audit chain integrity failure");
+  expect(pod.calls.slice(start).map(({ url, init }) => [url, init.method ?? "GET"])).toEqual([
+    [HEAD, "GET"],
+    [url, "GET"],
+  ]);
+  expect(pod.resources.get(HEAD)).toEqual(originalHead);
+  expect(pod.resources.has(`${BASE}2.ttl`)).toBe(false);
 });
 it("two concurrent writers both succeed with a contiguous chain", async () => {
   const pod = createMemoryAuditPod();
@@ -204,9 +238,10 @@ it("rejects missing/weak ETags, failed writes, exhausted ranges and invalid cont
     `${BASE}#frag`,
   ])
     expect(() => new PodChain(pod.fetch, base)).toThrow("Invalid audit storage root");
-  await expect(
-    new PodChain(pod.fetch, BASE).append({ ...record(), body: "private" } as AuditRecord, AT),
-  ).rejects.toThrow("Invalid audit record");
+  const invalid = { ...record(), body: "private" };
+  await expect(new PodChain(pod.fetch, BASE).append(invalid, AT)).rejects.toThrow(
+    "Invalid audit record",
+  );
 });
 it.each([
   "replaced-history",

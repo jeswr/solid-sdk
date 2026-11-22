@@ -286,8 +286,8 @@ writer whose entry another writer published returns that entry after verifying
 the published chain. Five attempts bound contention. Corrupt collisions fail with
 `Audit chain integrity failure`; redirects and transport failures use fixed
 messages. Provision the container and owner-private ACL separately. A normal
-append checks the head's structure but does not re-verify the whole published
-prefix (one GET per entry); run `loadChain` to verify it. Appends are
+append checks the head's structure and the terminal entry's exact RDF projection
+and recomputed hash. Use `loadChain` to verify the full published prefix. Appends are
 at-least-once, and entries are hashed but not signed, so integrity holds only
 against parties without write access to the container.
 `loadChain(fetch, baseContainerUrl)` verifies the complete published prefix at an

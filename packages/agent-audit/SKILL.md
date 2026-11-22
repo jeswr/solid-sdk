@@ -73,9 +73,8 @@ Appends are at-least-once: a rejected append may still have landed its entry, wh
 the next writer folds into the chain, so a caller retry can record an event twice
 (over-recording is the safe direction). Entries are hashed, not signed: chain
 integrity holds only against parties without write access to the container.
-A normal append checks the head's structure and the immediate predecessor link but
-does not re-verify the whole published prefix (that costs one GET per entry); run
-`loadChain` to verify the full chain.
+A normal append checks the head's structure and the terminal entry's exact RDF
+projection and recomputed hash. Use `loadChain` to verify the full published prefix.
 This heals an interrupted entry creation and supports concurrent writers. A
 writer whose entry another writer published returns that entry after verifying
 the published chain. Five attempts bound contention. Corrupt collisions fail with
