@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
 import type { Term } from "@rdfjs/types";
 import {
@@ -22,6 +23,7 @@ import { V } from "./vocab.js";
 
 const decimalLexical = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
 const floatingLexical = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+const MAX_EXPANDED_AMOUNT_CHARS = 64 * 1024;
 const numericLexicals = new Map([
   [`${NS.XSD}integer`, /^[+-]?\d+$/],
   [`${NS.XSD}decimal`, decimalLexical],
@@ -41,6 +43,10 @@ export function rdfAmount(term: TermWrapper): string {
   const digits = whole + fraction;
   const point = whole.length + Number(exponent);
   if (!Number.isSafeInteger(point)) throw new TypeError("Invalid money amount");
+  const length =
+    point <= 0 ? 2 - point + digits.length : point < digits.length ? digits.length + 1 : point;
+  if (length + Number(text.startsWith("-")) > MAX_EXPANDED_AMOUNT_CHARS)
+    throw new TypeError("Invalid money amount");
   const decimal =
     point <= 0
       ? `0.${"0".repeat(-point)}${digits}`

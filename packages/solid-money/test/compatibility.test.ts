@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
 import { DataFactory } from "n3";
 import { expect, it } from "vitest";
@@ -40,7 +41,7 @@ it.each([
   expect(document.transactions()[0]?.description).toBe("Transaction");
 });
 
-it("drops malformed optional IRI fields instead of coercing them or selecting the first", async () => {
+it("drops malformed optional transaction IRI fields instead of selecting the first", async () => {
   const document = new MoneyDocument();
   putTransaction(document, row);
   const extra = await parseMoney(
@@ -49,11 +50,17 @@ it("drops malformed optional IRI fields instead of coercing them or selecting th
   );
   for (const quad of extra.dataset) document.dataset.add(quad);
   expect(document.transactions()).toEqual([row]);
+});
+
+it.each([
+  '"not an IRI"',
+  "<#parent>, <#other>",
+])("rejects an unprojectable category parent %s", async (parent) => {
   const categories = await parseMoney(
-    `<#root> a <${V.categoryClass}>; <${V.label}> "Root"; <${V.parent}> "not an IRI" .`,
+    `<#root> a <${V.categoryClass}>; <${V.label}> "Root"; <${V.parent}> ${parent} .`,
     base,
   );
-  expect(categories.categories()).toEqual([{ id: `${base}#root`, label: "Root" }]);
+  expect(() => categories.categories()).toThrow("Invalid category parent");
 });
 
 it("rejects ambiguous required account links instead of selecting the first", async () => {
@@ -67,7 +74,9 @@ it("rejects ambiguous required account links instead of selecting the first", as
 it("requires canonical currency to be xsd:string, retaining legacy literal reads", async () => {
   const document = await parseMoney(
     `<#t> a <${V.transactionClass}>; <${V.account}> <${account}>;
-    <${V.postingTime}> "2026-10-24"; <${V.amountNode}> [ <${V.amount}> "1"; <${V.currency}> "GBP"@en ] .`,
+    <${V.postingTime}> "2026-10-24"; <${V.amountNode}> [
+      <${V.amount}> "1"; <${V.currency}> "USD"@en; <${NS.FINANCE}currency> "GBP"
+    ] .`,
     base,
   );
   expect(() => document.transactions()).toThrow("Incomplete money RDF record");
@@ -77,6 +86,20 @@ it("requires canonical currency to be xsd:string, retaining legacy literal reads
     base,
   );
   expect(legacy.transactions()[0]?.currency).toBe("GBP");
+});
+
+it.each([
+  "1e100000000",
+  "1e-100000000",
+])("rejects oversized decimal expansion of %s", async (amount) => {
+  const document = await parseMoney(
+    `<#t> a <${V.transactionClass}>; <${V.account}> <${account}>;
+    <${V.postingTime}> "2026-10-24"; <${V.amountNode}> [
+      <${V.amount}> "${amount}"^^<${NS.XSD}double>; <${V.currency}> "GBP"
+    ] .`,
+    base,
+  );
+  expect(() => document.transactions()).toThrow("Invalid money amount");
 });
 
 it("uses runtime text sanitization for generated builds and public setters, including blank subjects", () => {

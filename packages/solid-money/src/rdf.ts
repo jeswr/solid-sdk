@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { NS } from "@jeswr/suite-vocab";
@@ -35,7 +36,8 @@ export function putAccount(document: MoneyDocument, value: Account): void {
   if (!hasText(value.label)) throw new TypeError("Account label is required");
   writeCore(document, value.id, "Account", entities.Account.build(value.id, value));
 }
-function putMoney(document: MoneyDocument, id: string, value: Money): Term {
+/** Write an isolated amount node; the caller validates its record and links the returned term. */
+export function putMoney(document: MoneyDocument, id: string, value: Money): Term {
   const owner = DataFactory.namedNode(id);
   let amountId = document.node(id).amountNode;
   if (

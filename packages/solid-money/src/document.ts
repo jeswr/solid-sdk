@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
 import type { BlankNode, DatasetCore, Term } from "@rdfjs/types";
-import { LiteralAs, OptionalFrom } from "@rdfjs/wrapper";
+import { LiteralAs, OptionalFrom, TermAs } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { entities } from "./generated/model.js";
 import { categoryTree } from "./helpers.js";
@@ -71,8 +72,9 @@ export class MoneyDocument {
         amount.amount ?? OptionalFrom.subjectPredicate(amount, `${NS.FINANCE}amount`, rdfAmount),
       ),
       currency: required(
-        amount.currency ??
-          OptionalFrom.subjectPredicate(amount, `${NS.FINANCE}currency`, LiteralAs.string),
+        this.dataset.match(TermAs.term(amount), DataFactory.namedNode(V.currency)).size
+          ? amount.currency
+          : OptionalFrom.subjectPredicate(amount, `${NS.FINANCE}currency`, LiteralAs.string),
       ),
     };
     validateMoney(value);
@@ -121,10 +123,15 @@ export class MoneyDocument {
     });
   }
   categories(): Category[] {
-    const categories = this.nodes(V.categoryClass).map((node) => ({
-      id: node.value,
-      ...required(entities.Category.parse(node.value, this.dataset)),
-    }));
+    const categories = this.nodes(V.categoryClass).map((node) => {
+      const category = required(entities.Category.parse(node.value, this.dataset));
+      if (
+        category.parent === undefined &&
+        this.dataset.match(TermAs.term(node), DataFactory.namedNode(V.parent)).size
+      )
+        throw new TypeError("Invalid category parent");
+      return { id: node.value, ...category };
+    });
     categoryTree(categories);
     return categories;
   }

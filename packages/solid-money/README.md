@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # @jeswr/solid-money
 
 Shared, browser-safe finance RDF model extracted from Suite Money. Account, category,
@@ -22,6 +23,9 @@ const back = await parseMoney(turtle, "https://pod.example/money/transactions/20
 Depend on `"@jeswr/solid-money": "workspace:*"`. `MoneyDocument` exposes `accounts()`,
 `balances()`, `transactions()` and `categories()`. `putAccount`, `putBalance`,
 `putTransaction`, `putCategories` and `createTransfer` validate domain policy before writes.
+`putMoney(document, ownerId, money)` is the low-level amount-node writer shared with Suite
+budget assignments. It isolates shared/self-referencing amount nodes and returns their RDF
+term; the caller validates its record and links that term through `amountNode`.
 `MoneyNode` preserves the public partial-edit API using generated property descriptors;
 it implements only the representation gaps below locally. `addAmounts`, `runningBalance`,
 `latestBalance`, category-tree validation, month routing and statement value parsers are
@@ -53,6 +57,7 @@ payers, allocations, instruments or ledger records.
   precision decimal strings and preserves trailing zeros. `MoneyNode.amount` uses typed
   decimal writes and the original lexical numeric reader, including legacy integer,
   decimal, float, double and plain-string values; no significand passes through Number.
+  Typed numeric expansion is capped at 64 Ki characters before allocation.
 - **Dates** (logical datatype unions: sst-ild.4.3.2): closed admission cannot express the date/dateTime/plain-string union with
   exact lexical string projection. `postingTime`/`asOf` stay typed view accessors;
   timestamp validation preserves date-only values and exact UTC instant spellings.
@@ -75,10 +80,11 @@ apart from import paths. The app oracle remains untouched.
 - Generated required labels accept exactly one `xsd:string`; language-tagged, numeric or
   ambiguous labels now reject the snapshot instead of projecting the first literal's text.
 - Malformed or ambiguous optional descriptions drop, using the existing `Transaction`
-  default. Optional IRI fields (including category parents) drop instead of throwing or
-  choosing the first term. Ambiguous required account links reject the record.
+  default. Malformed optional transaction IRIs drop. A present category parent that cannot
+  be projected rejects the category snapshot. Ambiguous required account links reject the record.
 - Canonical `schema:currency` must be one `xsd:string`; language-tagged currencies no longer
-  project. Existing `fin:currency` fallback reads still use their historical literal view.
+  project. When the canonical predicate is absent, `fin:currency` retains its historical
+  literal reads.
 - Generated text builds/setters strip control characters. Required account labels,
   category labels and transaction descriptions are validated after that stripping, so a
   value made only of control characters is rejected before writing. Public `types.add` rejects an
