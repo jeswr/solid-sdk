@@ -191,7 +191,12 @@ for (const [scenario, configuration] of [
   ["mortgage-core", "authenticity-data-integrity"],
 ] as const) {
   it(`adds valid store views to ${scenario} (${configuration}) with the switch and preserves trace bytes`, async () => {
-    const baseline = committed(scenario, configuration);
+    // Without the sparq adapters (as in CI) the build blocks age-check's main path and
+    // removes its committed trace; the main path is skipped below in that case.
+    const baseline = existsSync(new URL(`traces/${scenario}--${configuration}.json`, root))
+      ? committed(scenario, configuration)
+      : undefined;
+    if (!baseline) expect(scenario).toBe("age-check");
     const linked = run(scenario, "linked", configuration);
     const plainRun = run(scenario, "plain", configuration);
     const categories = new Set<string>();
@@ -272,11 +277,13 @@ for (const [scenario, configuration] of [
       expect(outlineOf(trace)).toEqual(outlineOf(plain));
       expect(bytes(withoutLinked(trace))).toBe(bytes(plain));
       const fixture =
-        path.pathKind === "main" ? baseline : committed(`${scenario}--${path.path}`, configuration);
+        path.pathKind === "main" && baseline
+          ? baseline
+          : committed(`${scenario}--${path.path}`, configuration);
       const emitted = { "x-authored-by": fixture["x-authored-by"], ...plain };
       const expected = withoutLinked({
         ...fixture,
-        generated: { ...fixture.generated, commit: baseline.generated.commit },
+        generated: { ...fixture.generated, commit: (baseline ?? fixture).generated.commit },
       });
       expect(bytes(emitted), `${scenario}/${path.path}`).toBe(bytes(expected));
     }
