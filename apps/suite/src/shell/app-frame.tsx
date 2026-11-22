@@ -72,7 +72,11 @@ export function AppFrame(props: Omit<SuiteFrameProps, "app"> & { app: AppSlug })
       <Shell
         app={props.app}
         pageTitle={title}
-        sidebar={{ label: `${title} navigation`, sections: [], header: props.sidebar }}
+        sidebar={
+          props.sidebar === null
+            ? null
+            : { label: `${title} navigation`, sections: [], header: props.sidebar }
+        }
         context={props.context}
         actions={props.actions}
         search={props.search ? <SearchBox search={props.search} /> : undefined}

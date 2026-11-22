@@ -76,10 +76,10 @@ export function NativePushProvider({
             system: "Push notifications are unavailable. Try again after reopening Solid Suite.",
           });
       });
-    const stop = onBeforeSignOut(async (account) => {
+    const stop = onBeforeSignOut(async (account, fetchPod) => {
       const service = await pending.current;
       if (service) {
-        await service.registrar.remove(account.id);
+        await service.removeForSignOut(account, fetchPod);
         if (live) setState(await service.registrar.snapshot());
       }
     });

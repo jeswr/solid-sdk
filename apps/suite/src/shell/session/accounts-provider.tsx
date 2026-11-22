@@ -221,11 +221,12 @@ export function AccountsProvider({
     ++generation.current;
     const account = current.current.accounts.find((item) => item.id === id);
     if (!account) return;
-    const backend = sessions.current.get(id) ?? backends.find((item) => item.kind === account.kind);
+    const liveBackend = sessions.current.get(id);
+    const backend = liveBackend ?? backends.find((item) => item.kind === account.kind);
     retiring.current.add(id);
     const failures: unknown[] = [];
     try {
-      const cleanup = beforeSignOut(account);
+      const cleanup = beforeSignOut(account, liveBackend);
       if (cleanup) await cleanup;
     } catch (error) {
       failures.push(error);
@@ -250,13 +251,17 @@ export function AccountsProvider({
   };
   const signOutAll = async () => {
     ++generation.current;
-    const previous = current.current.accounts.map((account) => ({
-      account,
-      backend: sessions.current.get(account.id) ?? backends.find((b) => b.kind === account.kind),
-    }));
+    const previous = current.current.accounts.map((account) => {
+      const liveBackend = sessions.current.get(account.id);
+      return {
+        account,
+        liveBackend,
+        backend: liveBackend ?? backends.find((b) => b.kind === account.kind),
+      };
+    });
     for (const { account } of previous) retiring.current.add(account.id);
     const cleanups = previous
-      .map(({ account }) => beforeSignOut(account))
+      .map(({ account, liveBackend }) => beforeSignOut(account, liveBackend))
       .filter((value) => value !== undefined);
     const cleanupResults = cleanups.length ? await Promise.allSettled(cleanups) : [];
     sessions.current.clear();

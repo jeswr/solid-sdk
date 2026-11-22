@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { cssStorage, fixtureFetch } from "@jeswr/storage-capabilities/testing";
 import type { PushClient, PushLaunchRoute, PushRegistrarState } from "@jeswr/suite-native/push";
 import { useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -12,13 +13,21 @@ import {
 } from "../src/shell/push/runtime";
 import { NativePushSettings } from "../src/shell/push/settings";
 import { AccountsContext } from "../src/shell/session/accounts-context";
-import type { AccountsContextValue } from "../src/shell/session/accounts-provider";
+import {
+  type AccountsContextValue,
+  AccountsProvider,
+  useAccounts,
+} from "../src/shell/session/accounts-provider";
 import { beforeSignOut } from "../src/shell/session/sign-out-cleanup";
-import type { SuiteAccount } from "../src/shell/session/types";
+import type { SessionBackend, SuiteAccount } from "../src/shell/session/types";
 import { act, click, h, mount } from "./drive-ui-dom";
 
 const navigation = vi.hoisted(() => ({ push: vi.fn(), order: [] as string[] }));
 vi.mock("next/navigation", () => ({ useRouter: () => navigation }));
+vi.mock("../src/shell/session/demo-backend", () => ({
+  DemoBackend: vi.fn(),
+  demoAccount: { id: "demo" },
+}));
 const alice: SuiteAccount = {
   id: "alice",
   kind: "solid",
@@ -113,18 +122,20 @@ function fixture() {
       },
     ],
   };
+  const remove = vi.fn(async (id: string) => {
+    for (const entry of state.registrations) if (entry.accountId === id) entry.removing = true;
+  });
   const runtime: PushRuntime = {
     push,
     registrar: {
       snapshot: vi.fn(async () => structuredClone(state)),
       enable: vi.fn(),
       renew: vi.fn(),
-      remove: vi.fn(async (id) => {
-        for (const entry of state.registrations) if (entry.accountId === id) entry.removing = true;
-      }),
+      remove,
       retryCleanup: vi.fn(),
     },
     enable: vi.fn(),
+    removeForSignOut: (account) => remove(account.id),
     resume: vi.fn(),
   };
   return {
@@ -313,6 +324,100 @@ it("shows per-account controls and the availability notice, and silences before 
   vi.mocked(test.runtime.registrar.remove).mockClear();
   await beforeSignOut(alice);
   expect(test.runtime.registrar.remove).not.toHaveBeenCalled();
+});
+
+it.each([
+  204, 503,
+])("attempts the authenticated pod DELETE before sign-out (pod returns %s)", async (status) => {
+  const test = fixture();
+  const account = { ...bob, storageUrl: cssStorage.root };
+  const channel = "https://css.example/.notifications/WebhookChannel2023/channel";
+  const [entry] = test.state.registrations;
+  const requestTopic = entry?.requestedTopics[0];
+  const boundTopic = entry?.topics[0];
+  if (!entry || !requestTopic || !boundTopic) throw new Error("Missing saved registration");
+  entry.storage = account.storageUrl;
+  entry.inbox = null;
+  requestTopic.topic = cssStorage.resource;
+  entry.topics[0] = { ...boundTopic, topic: cssStorage.resource, channel };
+  const pod = fixtureFetch({
+    ...cssStorage,
+    responses: { ...cssStorage.responses, [`DELETE ${channel}`]: { status, headers: {} } },
+  });
+  const order: string[] = [];
+  const transport = vi.fn<typeof fetch>(async (input, init) => {
+    const request = new Request(input, init);
+    if (request.method === "DELETE") order.push("pod DELETE");
+    return pod(request);
+  });
+  vi.mocked(test.runtime.push.sign).mockResolvedValue({ proof: "device-proof" });
+  const relay = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+  const originalFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", relay);
+  try {
+    const backend: SessionBackend = {
+      kind: "solid",
+      restore: async () => account,
+      signIn: async () => account,
+      signOut: vi.fn(async () => {
+        order.push("sign out");
+      }),
+      fetchFor: vi.fn(() => transport),
+      onExpired: () => () => {},
+    };
+    localStorage.removeItem("suite.accounts.v1");
+    let accounts!: AccountsContextValue;
+    function Probe() {
+      accounts = useAccounts();
+      return null;
+    }
+    let runtime: PushRuntime | null = null;
+    await mount(
+      h(AccountsProvider, {
+        backends: [backend],
+        children: h(NativePushProvider, {
+          createRuntime: async (options) => {
+            runtime = await createPushRuntime({
+              ...options,
+              loadPush: async () => test.runtime.push,
+              store: {
+                load: async () => structuredClone(test.state),
+                save: async () => {},
+              },
+              // Keep startup renewal from changing the saved registration.
+              discoverTopics: async () => {
+                throw new Error("Renewal unavailable");
+              },
+            });
+            return runtime;
+          },
+          children: h(Probe),
+        }),
+      }),
+    );
+    expect(accounts.status).toBe("ready");
+    expect(runtime).not.toBeNull();
+    await act(() => accounts.signOut(account.id));
+
+    expect(order).toEqual(["pod DELETE", "sign out"]);
+    expect(pod.calls).toContain(`DELETE ${channel}`);
+    expect(backend.fetchFor).toHaveBeenLastCalledWith(account);
+    expect(relay).toHaveBeenCalledWith(
+      "https://relay.example/push/registrations/bob-registration",
+      expect.objectContaining({
+        method: "DELETE",
+        headers: { "installation-proof": "device-proof" },
+      }),
+    );
+    expect(accounts.status).toBe("signed-out");
+    expect(accounts.accounts).toEqual([]);
+    const snapshot = await (runtime as PushRuntime | null)?.registrar.snapshot();
+    expect(snapshot?.registrations).toEqual(
+      status === 204 ? [] : [expect.objectContaining({ removing: true, topics: entry.topics })],
+    );
+  } finally {
+    vi.stubGlobal("fetch", originalFetch);
+  }
 });
 
 it("offers Try again after activation failure and renews on resume and reconnection", async () => {

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 
+import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { resolveStorageDescription } from "@jeswr/storage-capabilities";
 import { createMemoryCache } from "@jeswr/storage-capabilities/cache";
 import { isNativeApp } from "@jeswr/suite-native";
@@ -22,6 +23,7 @@ export interface PushRuntime {
   push: PushClient;
   registrar: PushRegistrar;
   enable(account: SuiteAccount): Promise<void>;
+  removeForSignOut(account: SuiteAccount, fetchPod: typeof fetch | undefined): Promise<void>;
   resume(): Promise<void>;
 }
 
@@ -75,14 +77,18 @@ export async function createPushRuntime({
       throw new Error("Sign in to manage push notifications");
     return shell.fetchFor(account, { extraResourceOrigins });
   };
-  const subscriptions = createPushSubscriptions((accountId) => {
-    return fetchFor(accountId);
-  });
+  const subscriptions = createPushSubscriptions(fetchFor);
+  // Only the removal adapter sees the temporary fetch. Subscribing and relay requests
+  // still use the public account guard.
+  const signOutRemoval = new Map<string, typeof subscriptions.remove>();
   const registrar = createPushRegistrar({
     relayUrl: origin,
     push,
     store: store ?? pushStateStore(localStorage, origin),
-    subscriptions,
+    subscriptions: {
+      subscribe: subscriptions.subscribe,
+      remove: (request) => (signOutRemoval.get(request.accountId) ?? subscriptions.remove)(request),
+    },
     fetch: (input, init) => {
       const active = accounts().active;
       if (!active) throw new Error("Sign in to manage push notifications");
@@ -153,6 +159,20 @@ export async function createPushRuntime({
     registrar,
     async enable(account) {
       await registrar.enable(await registrationRequest(account));
+    },
+    async removeForSignOut(account, fetchPod) {
+      if (!fetchPod || signOutRemoval.has(account.id)) return registrar.remove(account.id);
+      const scoped = createPushSubscriptions(() => fetchPod);
+      signOutRemoval.set(account.id, async (request) => {
+        for (const { topic, expiresAt } of request.topics)
+          if (expiresAt > Date.now()) assertWithinPodScope(account.storageUrl, topic);
+        await scoped.remove(request);
+      });
+      try {
+        await registrar.remove(account.id);
+      } finally {
+        signOutRemoval.delete(account.id);
+      }
     },
     resume() {
       resuming ??= resume().finally(() => {

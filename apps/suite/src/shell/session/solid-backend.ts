@@ -36,6 +36,7 @@ import {
 
 // Capture before authentication starts. Discovery and display reads never attach credentials.
 const pristineFetch = globalThis.fetch.bind(globalThis);
+export const nativeNotificationPath = "/.notifications/";
 export interface SolidBackendOptions {
   createAuth?: (options: PodAuthOptions) => PodAuth;
   resolveTarget?: typeof resolveLoginTarget;
@@ -132,7 +133,7 @@ export class SolidBackend implements SessionBackend {
       ...(this.#native ? { nativeRedirect: true as const } : {}),
       // CSS's standard subscription service is outside the pod folder. Pin its path in
       // application policy; service descriptions cannot grant sibling paths or origins.
-      ...(this.#native ? { boundary: { storageEndpoints: ["/.notifications/"] } } : {}),
+      ...(this.#native ? { boundary: { storageEndpoints: [nativeNotificationPath] } } : {}),
       ui: {
         getWebId: async () => {
           throw new SignInError("invalid-url");

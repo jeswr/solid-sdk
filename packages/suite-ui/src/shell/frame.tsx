@@ -30,7 +30,8 @@ const serverSnapshot = () => false;
 export interface ShellFrameProps {
   pageTitle: string;
   topBar: Omit<TopBarProps, "sidebarToggle" | "detailsToggle">;
-  sidebar: SidebarNavProps;
+  /** Pass null for pages without app navigation. */
+  sidebar: SidebarNavProps | null;
   details?: Omit<DetailsPaneProps, "onClose"> & {
     /** Controlled visibility; when omitted, the shell preference owns visibility. */
     open?: boolean;
@@ -88,7 +89,7 @@ export function ShellFrame({
   const desktop = useSyncExternalStore(subscribe, desktopSnapshot, serverSnapshot);
   const sidebarId = useId();
   const detailsId = useId();
-  const sidebarOpen = preferences.sidebarOpen ?? desktop;
+  const sidebarOpen = sidebar !== null && (preferences.sidebarOpen ?? desktop);
   const detailsOpen = Boolean(details) && (details?.open ?? preferences.detailsOpen ?? desktop);
   // Below 1024px the regions are modal sheets, so at most one can be active. Saved
   // preferences may still say both are open (chosen on a wide viewport); the
@@ -151,6 +152,7 @@ export function ShellFrame({
     if (!characterShortcuts) return;
     const onKey = (event: KeyboardEvent) => {
       if (!isShellShortcut(event, event.target)) return;
+      if (event.key === "[" && !sidebar) return;
       // Other dialogs/editors own their keyboard paths; only our shell sheets opt in.
       const dialog =
         event.target instanceof Element
@@ -178,22 +180,28 @@ export function ShellFrame({
         </a>
       )}
       <div className="suite-rail-slot">{rail}</div>
-      <div
-        ref={sidebarRegion}
-        id={desktop ? sidebarId : undefined}
-        className="suite-sidebar-slot"
-        hidden={!desktop || !sidebarOpen}
-      >
-        {desktop && <SidebarNav {...sidebar} />}
-      </div>
+      {sidebar && (
+        <div
+          ref={sidebarRegion}
+          id={desktop ? sidebarId : undefined}
+          className="suite-sidebar-slot"
+          hidden={!desktop || !sidebarOpen}
+        >
+          {desktop && <SidebarNav {...sidebar} />}
+        </div>
+      )}
       <TopBar
         {...topBar}
-        sidebarToggle={{
-          open: sidebarExpanded,
-          controls: sidebarId,
-          onToggle: toggleSidebar,
-          keyShortcut: characterShortcuts,
-        }}
+        {...(sidebar
+          ? {
+              sidebarToggle: {
+                open: sidebarExpanded,
+                controls: sidebarId,
+                onToggle: toggleSidebar,
+                keyShortcut: characterShortcuts,
+              },
+            }
+          : {})}
         {...(details
           ? {
               detailsToggle: {
@@ -242,22 +250,24 @@ export function ShellFrame({
       <div className="suite-tabbar-slot">{tabBar}</div>
       {!desktop && (
         <>
-          <ShellSheet
-            id={sidebarId}
-            open={narrowSheet === "sidebar"}
-            onOpenChange={setSidebar}
-            side="left"
-            title={sidebar.label}
-            restoreFocus={() => restoreFocus("Toggle sidebar")}
-          >
-            <SidebarNav
-              {...sidebar}
-              onNavigate={() => {
-                sidebar.onNavigate?.();
-                setSidebar(false);
-              }}
-            />
-          </ShellSheet>
+          {sidebar && (
+            <ShellSheet
+              id={sidebarId}
+              open={narrowSheet === "sidebar"}
+              onOpenChange={setSidebar}
+              side="left"
+              title={sidebar.label}
+              restoreFocus={() => restoreFocus("Toggle sidebar")}
+            >
+              <SidebarNav
+                {...sidebar}
+                onNavigate={() => {
+                  sidebar.onNavigate?.();
+                  setSidebar(false);
+                }}
+              />
+            </ShellSheet>
+          )}
           {details && (
             <ShellSheet
               id={detailsId}

@@ -27,19 +27,22 @@ describe("welcome app directory", () => {
       expect(card?.description.length).toBeGreaterThan(15);
     }
   });
-  it("keeps implemented routes in the available apps and Health ready to try", () => {
+  it("lists only placeholder routes as planned and keeps implemented routes available", () => {
     const available = visibleApps(false);
+    const placeholders = [];
     for (const app of appRegistry) {
       const page = readFileSync(
         new URL(`../src/app/(suite)${app.basePath}/page.tsx`, import.meta.url),
         "utf8",
       );
       if (page.includes("PlannedApp")) {
+        placeholders.push(app.slug);
         expect(app.status, app.slug).toBe("backlog");
       } else {
         expect(available, app.slug).toContain(app);
       }
     }
+    expect([...plannedApps].sort()).toEqual(placeholders.sort());
     expect(welcomeApps.find((app) => app.slug === "health")?.statusLabel).toBe("Ready to try");
   });
   it("uses the actual Pages slugs and GitHub READMEs for developer tools", () => {

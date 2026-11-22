@@ -133,13 +133,18 @@ it.each([
 ] as const)("silences push before %s revokes credentials and fences sign-in during cleanup", async (action) => {
   const first = backend(one);
   const second = backend(two);
+  const podFetch = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
+  const bindFetch = vi.spyOn(first, "fetchFor");
+  bindFetch.mockReturnValueOnce(fetch).mockReturnValue(podFetch);
   await mount(h(AccountsProvider, { backends: [first, second], children: h(Probe) }));
   const order: string[] = [];
   let finish = () => {};
   const cleanup = new Promise<void>((resolve) => {
     finish = resolve;
   });
-  const stop = onBeforeSignOut(async (account) => {
+  let cleanupFetch: typeof fetch | undefined;
+  const stop = onBeforeSignOut(async (account, fetchPod) => {
+    if (account.id === one.id) cleanupFetch = fetchPod;
     order.push(`silence:${account.id}`);
     await cleanup;
   });
@@ -157,6 +162,24 @@ it.each([
     expect(accounts.isActiveAccount("one")).toBe(false);
     // No account-bound fetch can be minted while beforeSignOut is still pending.
     expect(() => accounts.fetchFor?.(one)).toThrow("Sign in to continue");
+    await expect(accounts.fetch(one.storageUrl)).rejects.toThrow("Sign in to continue");
+    if (!cleanupFetch) throw new Error("Missing sign-out cleanup fetch");
+    await expect(cleanupFetch(two.storageUrl)).rejects.toThrow();
+    await expect(cleanupFetch(one.storageUrl, { method: "POST" })).rejects.toThrow();
+    await expect(cleanupFetch(one.storageUrl, { method: "DELETE" })).rejects.toThrow();
+    const sibling = new URL("/another-pod/file", one.storageUrl).href;
+    await expect(cleanupFetch(sibling, { method: "DELETE" })).rejects.toThrow();
+    expect(podFetch).not.toHaveBeenCalled();
+    const channel = new URL("/.notifications/one", one.storageUrl).href;
+    expect((await cleanupFetch(channel, { method: "DELETE" })).status).toBe(204);
+    const request = podFetch.mock.calls[0]?.[0];
+    expect(request).toMatchObject({
+      url: channel,
+      method: "DELETE",
+      credentials: "omit",
+      redirect: "error",
+    });
+    expect(bindFetch).toHaveBeenLastCalledWith(one);
     if (action === "signOutAll")
       expect(() => accounts.fetchFor?.(two)).toThrow("Sign in to continue");
     else expect(accounts.fetchFor?.(two)).toBe(fetch);
@@ -166,6 +189,8 @@ it.each([
       await pending;
     });
     expect(order.indexOf("revoke:one")).toBeGreaterThan(order.indexOf("silence:one"));
+    await expect(cleanupFetch(channel, { method: "DELETE" })).rejects.toThrow();
+    expect(podFetch).toHaveBeenCalledOnce();
   } finally {
     stop();
     finish();
