@@ -1,0 +1,2450 @@
+# AUTHORED-BY Codex GPT-6.2 Sol
+@prefix awps: <https://w3id.org/jeswr/awp/scenario#>.
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix owl: <http://www.w3.org/2002/07/owl#>.
+
+awps:acceptances a rdf:Property;
+    rdfs:label "acceptances";
+    rdfs:comment "Records acceptances in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:acceptedCodes a rdf:Property;
+    rdfs:label "accepted codes";
+    rdfs:comment "Orders the subject codes a registry-backed meaning fixture accepts.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:acceptedJoint a rdf:Property;
+    rdfs:label "accepted joint";
+    rdfs:comment "Records accepted joint in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:acceptedLists a rdf:Property;
+    rdfs:label "accepted lists";
+    rdfs:comment "Records accepted lists in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:acceptedProofs a rdf:Property;
+    rdfs:label "accepted proofs";
+    rdfs:comment "Records accepted proofs in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:acceptedSnapshots a rdf:Property;
+    rdfs:label "accepted snapshots";
+    rdfs:comment "Records accepted snapshots in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:access a rdf:Property;
+    rdfs:label "access";
+    rdfs:comment "Records access in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:account a rdf:Property;
+    rdfs:label "account";
+    rdfs:comment "Records account in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:accounts a rdf:Property;
+    rdfs:label "accounts";
+    rdfs:comment "Records accounts in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:actionClaims a rdf:Property;
+    rdfs:label "action claims";
+    rdfs:comment "Records action claims in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:actionField a rdf:Property;
+    rdfs:label "action field";
+    rdfs:comment "Records action field in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:actionKinds a rdf:Property;
+    rdfs:label "action kinds";
+    rdfs:comment "Records action kinds in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:activity a rdf:Property;
+    rdfs:label "activity";
+    rdfs:comment "Records activity in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:actsFor a rdf:Property;
+    rdfs:label "acts for";
+    rdfs:comment "Records acts for in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:actual a rdf:Property;
+    rdfs:label "actual";
+    rdfs:comment "Records actual in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:adapter a rdf:Property;
+    rdfs:label "adapter";
+    rdfs:comment "Records an adapter IRI or local adapter name in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:added a rdf:Property;
+    rdfs:label "added";
+    rdfs:comment "Records added in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:address a rdf:Property;
+    rdfs:label "address";
+    rdfs:comment "Records address in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:AdmitDerivedStep a owl:Class;
+    rdfs:label "admit derived step";
+    rdfs:comment "A script step with the authored instruction kind “admit-derived”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:ScriptStep a owl:Class;
+    rdfs:label "script step";
+    rdfs:comment "One instruction in a scenario script.".
+awps:AdmitStep a owl:Class;
+    rdfs:label "admit step";
+    rdfs:comment "A script step with the authored instruction kind “admit”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:AdvanceStep a owl:Class;
+    rdfs:label "advance step";
+    rdfs:comment "A script step with the authored instruction kind “advance”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:agent a rdf:Property;
+    rdfs:label "agent";
+    rdfs:comment "Records agent in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:agreement a rdf:Property;
+    rdfs:label "agreement";
+    rdfs:comment "Records agreement in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:agreementCommand a rdf:Property;
+    rdfs:label "agreement command";
+    rdfs:comment "Records agreement command in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:agreementCredentialFault a rdf:Property;
+    rdfs:label "agreement credential fault";
+    rdfs:comment "Records agreement credential fault in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:agreementDeadlineSeconds a rdf:Property;
+    rdfs:label "agreement deadline seconds";
+    rdfs:comment "Records agreement deadline seconds in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:agreementDefinition a rdf:Property;
+    rdfs:label "agreement definition";
+    rdfs:comment "Records agreement definition in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:agreementDelivery a rdf:Property;
+    rdfs:label "agreement delivery";
+    rdfs:comment "Records agreement delivery in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:agreementPlan a rdf:Property;
+    rdfs:label "agreement plan";
+    rdfs:comment "Records agreement plan in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:AgreementPresentStep a owl:Class;
+    rdfs:label "agreement present step";
+    rdfs:comment "A script step with the authored instruction kind “agreement-present”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:AgreementRequestStep a owl:Class;
+    rdfs:label "agreement request step";
+    rdfs:comment "A script step with the authored instruction kind “agreement-request”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:agreements a rdf:Property;
+    rdfs:label "agreements";
+    rdfs:comment "Records agreements in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:allegation a rdf:Property;
+    rdfs:label "allegation";
+    rdfs:comment "Records allegation in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:allowMissing a rdf:Property;
+    rdfs:label "allow missing";
+    rdfs:comment "Records allow missing in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:alterOriginal a rdf:Property;
+    rdfs:label "alter original";
+    rdfs:comment "Records alter original in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:anchor a rdf:Property;
+    rdfs:label "anchor";
+    rdfs:comment "Records anchor in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:annualRule a rdf:Property;
+    rdfs:label "annual rule";
+    rdfs:comment "Records annual rule in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:answeredRegisters a rdf:Property;
+    rdfs:label "answered registers";
+    rdfs:comment "Groups register identifiers by the local name of the agent allowed to use the answers.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:AnswerPriceStep a owl:Class;
+    rdfs:label "answer price step";
+    rdfs:comment "A script step with the authored instruction kind “answer-price”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:answersFor a rdf:Property;
+    rdfs:label "answers for";
+    rdfs:comment "Records answers for in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:answerThrough a rdf:Property;
+    rdfs:label "answer through";
+    rdfs:comment "Records answer through in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:answerTtlMs a rdf:Property;
+    rdfs:label "answer ttl ms";
+    rdfs:comment "Records answer ttl ms in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:ApproveStep a owl:Class;
+    rdfs:label "approve step";
+    rdfs:comment "A script step with the authored instruction kind “approve”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:approximate a rdf:Property;
+    rdfs:label "approximate";
+    rdfs:comment "Records approximate in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:AssertStep a owl:Class;
+    rdfs:label "assert step";
+    rdfs:comment "A script step with the authored instruction kind “assert”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:assessment a rdf:Property;
+    rdfs:label "assessment";
+    rdfs:comment "Records assessment in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:assessments a rdf:Property;
+    rdfs:label "assessments";
+    rdfs:comment "Records assessments in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:assessor a rdf:Property;
+    rdfs:label "assessor";
+    rdfs:comment "Records assessor in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:AssessStep a owl:Class;
+    rdfs:label "assess step";
+    rdfs:comment "A script step with the authored instruction kind “assess”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:asset a rdf:Property;
+    rdfs:label "asset";
+    rdfs:comment "Records asset in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:assurance a rdf:Property;
+    rdfs:label "assurance";
+    rdfs:comment "Records assurance in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:assurances a rdf:Property;
+    rdfs:label "assurances";
+    rdfs:comment "Records assurances in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:atStep a rdf:Property;
+    rdfs:label "at step";
+    rdfs:comment "Records at step in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:atStepSlug a rdf:Property;
+    rdfs:label "at step slug";
+    rdfs:comment "Records at step slug in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:attachments a rdf:Property;
+    rdfs:label "attachments";
+    rdfs:comment "Records attachments in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:attack a rdf:Property;
+    rdfs:label "attack";
+    rdfs:comment "Records attack in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:attempt a rdf:Property;
+    rdfs:label "attempt";
+    rdfs:comment "Records attempt in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:attestedDerivers a rdf:Property;
+    rdfs:label "attested derivers";
+    rdfs:comment "Records attested derivers in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:audience a rdf:Property;
+    rdfs:label "audience";
+    rdfs:comment "Records audience in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:authoredBy a rdf:Property;
+    rdfs:label "authored by";
+    rdfs:comment "Records the provenance marker supplied by the author of the fixture file.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:authorityChainPaths a rdf:Property;
+    rdfs:label "authority chain paths";
+    rdfs:comment "Records authority chain paths in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:authorityChains a rdf:Property;
+    rdfs:label "authority chains";
+    rdfs:comment "Records authority chains in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:authorityFault a rdf:Property;
+    rdfs:label "authority fault";
+    rdfs:comment "Records authority fault in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:authorityLinks a rdf:Property;
+    rdfs:label "authority links";
+    rdfs:comment "Records authority links in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:authorizedFor a rdf:Property;
+    rdfs:label "authorized for";
+    rdfs:comment "Records authorized for in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:balances a rdf:Property;
+    rdfs:label "balances";
+    rdfs:comment "Records balances in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:bank a rdf:Property;
+    rdfs:label "bank";
+    rdfs:comment "Records bank in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:basis a rdf:Property;
+    rdfs:label "basis";
+    rdfs:comment "Records basis in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:binds a rdf:Property;
+    rdfs:label "binds";
+    rdfs:comment "Records binds in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:block a rdf:Property;
+    rdfs:label "block";
+    rdfs:comment "Records block in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:blocked a rdf:Property;
+    rdfs:label "blocked";
+    rdfs:comment "Records blocked in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:bounds a rdf:Property;
+    rdfs:label "bounds";
+    rdfs:comment "Records bounds in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:branches a rdf:Property;
+    rdfs:label "branches";
+    rdfs:comment "Orders the alternative paths declared by a scenario.";
+    rdfs:domain awps:Scenario;
+    rdfs:range rdf:List.
+awps:Scenario a owl:Class;
+    rdfs:label "scenario";
+    rdfs:comment "An authored fixture describing a fictional world, executable script and expected decisions.".
+awps:budget a rdf:Property;
+    rdfs:label "budget";
+    rdfs:comment "Records budget in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:businessOnly a rdf:Property;
+    rdfs:label "business only";
+    rdfs:comment "Records business only in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:by a rdf:Property;
+    rdfs:label "by";
+    rdfs:comment "Records by in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:dateTime.
+awps:bytes a rdf:Property;
+    rdfs:label "bytes";
+    rdfs:comment "Records bytes in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:carriage a rdf:Property;
+    rdfs:label "carriage";
+    rdfs:comment "Records carriage in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:case a rdf:Property;
+    rdfs:label "case";
+    rdfs:comment "Records case in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:catalogueAssurance a rdf:Property;
+    rdfs:label "catalogue assurance";
+    rdfs:comment "Records catalogue assurance in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:catalogueExpected a rdf:Property;
+    rdfs:label "catalogue expected";
+    rdfs:comment "Records catalogue expected in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:catalogueIndex a rdf:Property;
+    rdfs:label "catalogue index";
+    rdfs:comment "Records catalogue index in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:integer.
+awps:cataloguePath a rdf:Property;
+    rdfs:label "catalogue path";
+    rdfs:comment "Records catalogue path in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:category a rdf:Property;
+    rdfs:label "category";
+    rdfs:comment "Records category in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:certificationPolicy a rdf:Property;
+    rdfs:label "certification policy";
+    rdfs:comment "Records certification policy in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:certifier a rdf:Property;
+    rdfs:label "certifier";
+    rdfs:comment "Records certifier in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:challenge a rdf:Property;
+    rdfs:label "challenge";
+    rdfs:comment "Records challenge in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:change a rdf:Property;
+    rdfs:label "change";
+    rdfs:comment "Carries the JSON patch applied for a branch or configuration.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:check a rdf:Property;
+    rdfs:label "check";
+    rdfs:comment "Records check in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:claimEquals a rdf:Property;
+    rdfs:label "claim equals";
+    rdfs:comment "Records claim equals in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:claims a rdf:Property;
+    rdfs:label "claims";
+    rdfs:comment "Records claims in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:claimTypes a rdf:Property;
+    rdfs:label "claim types";
+    rdfs:comment "Records claim types in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:clauses a rdf:Property;
+    rdfs:label "clauses";
+    rdfs:comment "Records clauses in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:closes a rdf:Property;
+    rdfs:label "closes";
+    rdfs:comment "Records closes in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:codeMappings a rdf:Property;
+    rdfs:label "code mappings";
+    rdfs:comment "Records code mappings in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:cohort a rdf:Property;
+    rdfs:label "cohort";
+    rdfs:comment "Records cohort in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:cohortEquals a rdf:Property;
+    rdfs:label "cohort equals";
+    rdfs:comment "Records cohort equals in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Literal.
+awps:commitments a rdf:Property;
+    rdfs:label "commitments";
+    rdfs:comment "Records commitments in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:comparison a rdf:Property;
+    rdfs:label "comparison";
+    rdfs:comment "Records comparison in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:completeFor a rdf:Property;
+    rdfs:label "complete for";
+    rdfs:comment "Records complete for in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:completeness a rdf:Property;
+    rdfs:label "completeness";
+    rdfs:comment "Records completeness in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:computeOnly a rdf:Property;
+    rdfs:label "compute only";
+    rdfs:comment "Records compute only in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:conditions a rdf:Property;
+    rdfs:label "conditions";
+    rdfs:comment "Records conditions in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:confidenceRules a rdf:Property;
+    rdfs:label "confidence rules";
+    rdfs:comment "Records confidence rules in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:configurations a rdf:Property;
+    rdfs:label "configurations";
+    rdfs:comment "Orders the suite configurations and their scenario overlays.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:configurationSlug a rdf:Property;
+    rdfs:label "configuration slug";
+    rdfs:comment "Names a configuration selected for a fixture step.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:content a rdf:Property;
+    rdfs:label "content";
+    rdfs:comment "Records content in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:contentPart a rdf:Property;
+    rdfs:label "content part";
+    rdfs:comment "Records content part in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:contents a rdf:Property;
+    rdfs:label "contents";
+    rdfs:comment "Records contents in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:continues a rdf:Property;
+    rdfs:label "continues";
+    rdfs:comment "Records continues in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:contributors a rdf:Property;
+    rdfs:label "contributors";
+    rdfs:comment "Records contributors in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:conversation a rdf:Property;
+    rdfs:label "conversation";
+    rdfs:comment "Records conversation in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:ConversationStep a owl:Class;
+    rdfs:label "conversation step";
+    rdfs:comment "A script step with the authored instruction kind “conversation”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:coordinator a rdf:Property;
+    rdfs:label "coordinator";
+    rdfs:comment "Records coordinator in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:corroboration a rdf:Property;
+    rdfs:label "corroboration";
+    rdfs:comment "Records corroboration in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:credential a rdf:Property;
+    rdfs:label "credential";
+    rdfs:comment "Records credential in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:credentialCount a rdf:Property;
+    rdfs:label "credential count";
+    rdfs:comment "Records credential count in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:credentialQuadBounds a rdf:Property;
+    rdfs:label "credential quad bounds";
+    rdfs:comment "Records credential quad bounds in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:dataset a rdf:Property;
+    rdfs:label "dataset";
+    rdfs:comment "Records dataset in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:DatasetQueryStep a owl:Class;
+    rdfs:label "dataset query step";
+    rdfs:comment "A script step with the authored instruction kind “dataset-query”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:datasets a rdf:Property;
+    rdfs:label "datasets";
+    rdfs:comment "Records datasets in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:decider a rdf:Property;
+    rdfs:label "decider";
+    rdfs:comment "Records decider in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:decision a rdf:Property;
+    rdfs:label "decision";
+    rdfs:comment "Records decision in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:decisions a rdf:Property;
+    rdfs:label "decisions";
+    rdfs:comment "Records decisions in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:decisionsForPerson a rdf:Property;
+    rdfs:label "decisions for person";
+    rdfs:comment "Records decisions for person in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:definition a rdf:Property;
+    rdfs:label "definition";
+    rdfs:comment "Records definition in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:definitionText a rdf:Property;
+    rdfs:label "definition text";
+    rdfs:comment "Records definition text in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:delegates a rdf:Property;
+    rdfs:label "delegates";
+    rdfs:comment "Records delegates in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:depth a rdf:Property;
+    rdfs:label "depth";
+    rdfs:comment "Records depth in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:derivedEvidence a rdf:Property;
+    rdfs:label "derived evidence";
+    rdfs:comment "Records derived evidence in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:deriver a rdf:Property;
+    rdfs:label "deriver";
+    rdfs:comment "Records deriver in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:DeriveStep a owl:Class;
+    rdfs:label "derive step";
+    rdfs:comment "A script step with the authored instruction kind “derive”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:digests a rdf:Property;
+    rdfs:label "digests";
+    rdfs:comment "Records digests in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:discardInputsAfter a rdf:Property;
+    rdfs:label "discard inputs after";
+    rdfs:comment "Records discard inputs after in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:discharge a rdf:Property;
+    rdfs:label "discharge";
+    rdfs:comment "Records discharge in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:discover a rdf:Property;
+    rdfs:label "discover";
+    rdfs:comment "Records discover in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:documentFaults a rdf:Property;
+    rdfs:label "document faults";
+    rdfs:comment "Records document faults in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:documents a rdf:Property;
+    rdfs:label "documents";
+    rdfs:comment "Records documents in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:DomainProfile a owl:Class;
+    rdfs:label "domain profile";
+    rdfs:comment "A domain profile declaring the operations, requirements and vocabulary that a scenario engine uses.".
+awps:dueDate a rdf:Property;
+    rdfs:label "due date";
+    rdfs:comment "Records due date in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:dateTime.
+awps:duties a rdf:Property;
+    rdfs:label "duties";
+    rdfs:comment "Records duties in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:DutiesStep a owl:Class;
+    rdfs:label "duties step";
+    rdfs:comment "A script step with the authored instruction kind “duties”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:earliestCreated a rdf:Property;
+    rdfs:label "earliest created";
+    rdfs:comment "Records earliest created in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:EffectStep a owl:Class;
+    rdfs:label "effect step";
+    rdfs:comment "A script step with the authored instruction kind “effect”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:email a rdf:Property;
+    rdfs:label "email";
+    rdfs:comment "Records email in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:EmailInboxStep a owl:Class;
+    rdfs:label "email inbox step";
+    rdfs:comment "A script step with the authored instruction kind “email-inbox”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:emailPins a rdf:Property;
+    rdfs:label "email pins";
+    rdfs:comment "Records email pins in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:EmailReceiveStep a owl:Class;
+    rdfs:label "email receive step";
+    rdfs:comment "A script step with the authored instruction kind “email-receive”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:EmailSendStep a owl:Class;
+    rdfs:label "email send step";
+    rdfs:comment "A script step with the authored instruction kind “email-send”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:entity a rdf:Property;
+    rdfs:label "entity";
+    rdfs:comment "Records entity in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:entryId a rdf:Property;
+    rdfs:label "entry id";
+    rdfs:comment "Records entry id in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:escrow a rdf:Property;
+    rdfs:label "escrow";
+    rdfs:comment "Records escrow in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:event a rdf:Property;
+    rdfs:label "event";
+    rdfs:comment "Records event in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:evidence a rdf:Property;
+    rdfs:label "evidence";
+    rdfs:comment "Records evidence in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:evidenceFaults a rdf:Property;
+    rdfs:label "evidence faults";
+    rdfs:comment "Records evidence faults in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:exchange a rdf:Property;
+    rdfs:label "exchange";
+    rdfs:comment "Records exchange in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:expect a rdf:Property;
+    rdfs:label "expect";
+    rdfs:comment "Orders the expected trace decisions and events on the main path.";
+    rdfs:domain awps:Scenario;
+    rdfs:range rdf:List.
+awps:expected a rdf:Property;
+    rdfs:label "expected";
+    rdfs:comment "Records expected in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:expectedDecision a rdf:Property;
+    rdfs:label "expected decision";
+    rdfs:comment "Describes the check, outcome and reason expected on a branch.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:expired a rdf:Property;
+    rdfs:label "expired";
+    rdfs:comment "Records expired in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:extends a rdf:Property;
+    rdfs:label "extends";
+    rdfs:comment "Names the local configuration whose world is applied first.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:FactsStep a owl:Class;
+    rdfs:label "facts step";
+    rdfs:comment "A script step with the authored instruction kind “facts”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:fault a rdf:Property;
+    rdfs:label "fault";
+    rdfs:comment "Records fault in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:federation a rdf:Property;
+    rdfs:label "federation";
+    rdfs:comment "Records federation in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:field a rdf:Property;
+    rdfs:label "field";
+    rdfs:comment "Names the field inspected by a dataset query.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:fileSchema a rdf:Property;
+    rdfs:label "file schema";
+    rdfs:comment "Names the version of the authoring-file format used by the fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:final a rdf:Property;
+    rdfs:label "final";
+    rdfs:comment "Records final in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:finisher a rdf:Property;
+    rdfs:label "finisher";
+    rdfs:comment "Records finisher in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:fixtureType a rdf:Property;
+    rdfs:label "fixture type";
+    rdfs:comment "Records fixture type in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:fork a rdf:Property;
+    rdfs:label "fork";
+    rdfs:comment "Records fork in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:forum a rdf:Property;
+    rdfs:label "forum";
+    rdfs:comment "Records forum in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:ForumAnswerStep a owl:Class;
+    rdfs:label "forum answer step";
+    rdfs:comment "A script step with the authored instruction kind “forum-answer”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:ForumAuditStep a owl:Class;
+    rdfs:label "forum audit step";
+    rdfs:comment "A script step with the authored instruction kind “forum-audit”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:ForumClaimStep a owl:Class;
+    rdfs:label "forum claim step";
+    rdfs:comment "A script step with the authored instruction kind “forum-claim”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:ForumDecisionStep a owl:Class;
+    rdfs:label "forum decision step";
+    rdfs:comment "A script step with the authored instruction kind “forum-decision”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:freshness a rdf:Property;
+    rdfs:label "freshness";
+    rdfs:comment "Records freshness in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:from a rdf:Property;
+    rdfs:label "from";
+    rdfs:comment "Records from in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:fromList a rdf:Property;
+    rdfs:label "from list";
+    rdfs:comment "Records from list in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:gateFault a rdf:Property;
+    rdfs:label "gate fault";
+    rdfs:comment "Records gate fault in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:GeneralDutiesStep a owl:Class;
+    rdfs:label "general duties step";
+    rdfs:comment "A script step with the authored instruction kind “general-duties”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:grant a rdf:Property;
+    rdfs:label "grant";
+    rdfs:comment "Records grant in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:grants a rdf:Property;
+    rdfs:label "grants";
+    rdfs:comment "Records grants in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:handlerImplementations a rdf:Property;
+    rdfs:label "handler implementations";
+    rdfs:comment "Records handler implementations in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:handlers a rdf:Property;
+    rdfs:label "handlers";
+    rdfs:comment "Records handlers in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:holder a rdf:Property;
+    rdfs:label "holder";
+    rdfs:comment "Records holder in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:holderBinding a rdf:Property;
+    rdfs:label "holder binding";
+    rdfs:comment "Records holder binding in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:holders a rdf:Property;
+    rdfs:label "holders";
+    rdfs:comment "Records holders in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:holderSet a rdf:Property;
+    rdfs:label "holder set";
+    rdfs:comment "Records holder set in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:host a rdf:Property;
+    rdfs:label "host";
+    rdfs:comment "Records host in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:HostFetchStep a owl:Class;
+    rdfs:label "host fetch step";
+    rdfs:comment "A script step with the authored instruction kind “host-fetch”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:HostPublishStep a owl:Class;
+    rdfs:label "host publish step";
+    rdfs:comment "A script step with the authored instruction kind “host-publish”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:identifiers a rdf:Property;
+    rdfs:label "identifiers";
+    rdfs:comment "Records identifiers in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:identity a rdf:Property;
+    rdfs:label "identity";
+    rdfs:comment "Records identity in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:identityNames a rdf:Property;
+    rdfs:label "identity names";
+    rdfs:comment "Records identity names in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:independent a rdf:Property;
+    rdfs:label "independent";
+    rdfs:comment "Records independent in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:index a rdf:Property;
+    rdfs:label "index";
+    rdfs:comment "Records index in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:indexSlug a rdf:Property;
+    rdfs:label "index slug";
+    rdfs:comment "Records index slug in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:inject a rdf:Property;
+    rdfs:label "inject";
+    rdfs:comment "Orders the alterations to make at named fixture steps.";
+    rdfs:domain awps:Scenario;
+    rdfs:range rdf:List.
+awps:injectionTarget a rdf:Property;
+    rdfs:label "injection target";
+    rdfs:comment "Selects the wire, message or body altered by a fixture injection.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:inputs a rdf:Property;
+    rdfs:label "inputs";
+    rdfs:comment "Records inputs in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:inputsFrom a rdf:Property;
+    rdfs:label "inputs from";
+    rdfs:comment "Records inputs from in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:InstructStep a owl:Class;
+    rdfs:label "instruct step";
+    rdfs:comment "A script step with the authored instruction kind “instruct”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:intent a rdf:Property;
+    rdfs:label "intent";
+    rdfs:comment "Records intent in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:interval a rdf:Property;
+    rdfs:label "interval";
+    rdfs:comment "Records interval in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:intervalStart a rdf:Property;
+    rdfs:label "interval start";
+    rdfs:comment "Records interval start in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:introductions a rdf:Property;
+    rdfs:label "introductions";
+    rdfs:comment "Orders pairs of local party names used for trust introductions.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:invoice a rdf:Property;
+    rdfs:label "invoice";
+    rdfs:comment "Records invoice in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:InvokeAgreementStep a owl:Class;
+    rdfs:label "invoke agreement step";
+    rdfs:comment "A script step with the authored instruction kind “invoke-agreement”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:issuer a rdf:Property;
+    rdfs:label "issuer";
+    rdfs:comment "Records issuer in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:issuers a rdf:Property;
+    rdfs:label "issuers";
+    rdfs:comment "Records issuers in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:IssueStep a owl:Class;
+    rdfs:label "issue step";
+    rdfs:comment "A script step with the authored instruction kind “issue”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:item a rdf:Property;
+    rdfs:label "item";
+    rdfs:comment "Records item in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:items a rdf:Property;
+    rdfs:label "items";
+    rdfs:comment "Records items in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:JointActionStep a owl:Class;
+    rdfs:label "joint action step";
+    rdfs:comment "A script step with the authored instruction kind “joint-action”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:jointCommand a rdf:Property;
+    rdfs:label "joint command";
+    rdfs:comment "Records joint command in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:jointInputs a rdf:Property;
+    rdfs:label "joint inputs";
+    rdfs:comment "Records joint inputs in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:JointSendStep a owl:Class;
+    rdfs:label "joint send step";
+    rdfs:comment "A script step with the authored instruction kind “joint-send”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:jointSession a rdf:Property;
+    rdfs:label "joint session";
+    rdfs:comment "Records joint session in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:judgedAgent a rdf:Property;
+    rdfs:label "judged agent";
+    rdfs:comment "Records judged agent in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:jws a rdf:Property;
+    rdfs:label "jws";
+    rdfs:comment "Records jws in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:keep a rdf:Property;
+    rdfs:label "keep";
+    rdfs:comment "Records keep in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:key a rdf:Property;
+    rdfs:label "key";
+    rdfs:comment "Records the property index key supplied by a compact map in a fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:kind a rdf:Property;
+    rdfs:label "kind";
+    rdfs:comment "Records kind in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:labels a rdf:Property;
+    rdfs:label "labels";
+    rdfs:comment "Carries the keyed labels supplied by the author.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:level a rdf:Property;
+    rdfs:label "level";
+    rdfs:comment "Records level in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:levels a rdf:Property;
+    rdfs:label "levels";
+    rdfs:comment "Records levels in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:limits a rdf:Property;
+    rdfs:label "limits";
+    rdfs:comment "Records limits in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:mailbox a rdf:Property;
+    rdfs:label "mailbox";
+    rdfs:comment "Records mailbox in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:mailboxes a rdf:Property;
+    rdfs:label "mailboxes";
+    rdfs:comment "Records mailboxes in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:mandates a rdf:Property;
+    rdfs:label "mandates";
+    rdfs:comment "Records mandates in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:mandateStatus a rdf:Property;
+    rdfs:label "mandate status";
+    rdfs:comment "Records mandate status in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:mandateStatusFault a rdf:Property;
+    rdfs:label "mandate status fault";
+    rdfs:comment "Records mandate status fault in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:mappings a rdf:Property;
+    rdfs:label "mappings";
+    rdfs:comment "Records mappings in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:mappingTable a rdf:Property;
+    rdfs:label "mapping table";
+    rdfs:comment "Records mapping table in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:mappingTables a rdf:Property;
+    rdfs:label "mapping tables";
+    rdfs:comment "Records mapping tables in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:maxAgeDays a rdf:Property;
+    rdfs:label "max age days";
+    rdfs:comment "Records max age days in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:maxAgeSeconds a rdf:Property;
+    rdfs:label "max age seconds";
+    rdfs:comment "Records max age seconds in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:maxAmount a rdf:Property;
+    rdfs:label "max amount";
+    rdfs:comment "Records max amount in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:maxLoanIncomeRatio a rdf:Property;
+    rdfs:label "max loan income ratio";
+    rdfs:comment "Records max loan income ratio in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:maxPresentationBytes a rdf:Property;
+    rdfs:label "max presentation bytes";
+    rdfs:comment "Records max presentation bytes in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:maxResultSize a rdf:Property;
+    rdfs:label "max result size";
+    rdfs:comment "Records max result size in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:maxRetentionDays a rdf:Property;
+    rdfs:label "max retention days";
+    rdfs:comment "Records max retention days in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:maxStatusAgeSeconds a rdf:Property;
+    rdfs:label "max status age seconds";
+    rdfs:comment "Records max status age seconds in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:mayDelegate a rdf:Property;
+    rdfs:label "may delegate";
+    rdfs:comment "Records may delegate in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:MessageStep a owl:Class;
+    rdfs:label "message step";
+    rdfs:comment "A script step with the authored instruction kind “message”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:methodIds a rdf:Property;
+    rdfs:label "method ids";
+    rdfs:comment "Records method ids in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:methods a rdf:Property;
+    rdfs:label "methods";
+    rdfs:comment "Records methods in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:metric a rdf:Property;
+    rdfs:label "metric";
+    rdfs:comment "Records metric in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:milliseconds a rdf:Property;
+    rdfs:label "milliseconds";
+    rdfs:comment "Records milliseconds in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:minimum a rdf:Property;
+    rdfs:label "minimum";
+    rdfs:comment "Records minimum in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:minimumContributors a rdf:Property;
+    rdfs:label "minimum contributors";
+    rdfs:comment "Records minimum contributors in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:minimumGroup a rdf:Property;
+    rdfs:label "minimum group";
+    rdfs:comment "Records minimum group in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:minimumPeople a rdf:Property;
+    rdfs:label "minimum people";
+    rdfs:comment "Records minimum people in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:MintStep a owl:Class;
+    rdfs:label "mint step";
+    rdfs:comment "A script step with the authored instruction kind “mint”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:modelReadings a rdf:Property;
+    rdfs:label "model readings";
+    rdfs:comment "Records model readings in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:models a rdf:Property;
+    rdfs:label "models";
+    rdfs:comment "Records models in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:nativeApprovalRules a rdf:Property;
+    rdfs:label "native approval rules";
+    rdfs:comment "Carries the native mandate rule objects used with principal approval.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:nativeAutonomousRules a rdf:Property;
+    rdfs:label "native autonomous rules";
+    rdfs:comment "Carries the native mandate rule objects used without additional principal approval.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:nativeProhibitions a rdf:Property;
+    rdfs:label "native prohibitions";
+    rdfs:comment "Carries native mandate rule objects that forbid actions.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:nativeStandingRules a rdf:Property;
+    rdfs:label "native standing rules";
+    rdfs:comment "Carries the native mandate conditions, permissions and notification duties.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:negotiatedMeaning a rdf:Property;
+    rdfs:label "negotiated meaning";
+    rdfs:comment "Records negotiated meaning in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:notAfter a rdf:Property;
+    rdfs:label "not after";
+    rdfs:comment "Records not after in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:notBefore a rdf:Property;
+    rdfs:label "not before";
+    rdfs:comment "Records not before in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:note a rdf:Property;
+    rdfs:label "note";
+    rdfs:comment "Records note in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:notificationRecipients a rdf:Property;
+    rdfs:label "notification recipients";
+    rdfs:comment "Records notification recipients in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:NotificationsStep a owl:Class;
+    rdfs:label "notifications step";
+    rdfs:comment "A script step with the authored instruction kind “notifications”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:objectionRole a rdf:Property;
+    rdfs:label "objection role";
+    rdfs:comment "Records objection role in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:observation a rdf:Property;
+    rdfs:label "observation";
+    rdfs:comment "Records observation in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:observed a rdf:Property;
+    rdfs:label "observed";
+    rdfs:comment "Records observed in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:observer a rdf:Property;
+    rdfs:label "observer";
+    rdfs:comment "Records observer in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:observers a rdf:Property;
+    rdfs:label "observers";
+    rdfs:comment "Records observers in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:OffgateCopyStep a owl:Class;
+    rdfs:label "offgate copy step";
+    rdfs:comment "A script step with the authored instruction kind “offgate-copy”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:on a rdf:Property;
+    rdfs:label "on";
+    rdfs:comment "Records on in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:onlyUnder a rdf:Property;
+    rdfs:label "only under";
+    rdfs:comment "Records only under in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:onUnknown a rdf:Property;
+    rdfs:label "on unknown";
+    rdfs:comment "Records on unknown in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:openingProfile a rdf:Property;
+    rdfs:label "opening profile";
+    rdfs:comment "Selects the presentation opening profile of a fixture proof method.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:operationIds a rdf:Property;
+    rdfs:label "operation ids";
+    rdfs:comment "Records operation ids in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:operations a rdf:Property;
+    rdfs:label "operations";
+    rdfs:comment "Records operations in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:OrganisationApproveStep a owl:Class;
+    rdfs:label "organisation approve step";
+    rdfs:comment "A script step with the authored instruction kind “organisation-approve”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:organization a rdf:Property;
+    rdfs:label "organization";
+    rdfs:comment "Records organization in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:organizationCredentials a rdf:Property;
+    rdfs:label "organization credentials";
+    rdfs:comment "Records organization credentials in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:organizations a rdf:Property;
+    rdfs:label "organizations";
+    rdfs:comment "Records organizations in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:origin a rdf:Property;
+    rdfs:label "origin";
+    rdfs:comment "Records origin in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:originalDigest a rdf:Property;
+    rdfs:label "original digest";
+    rdfs:comment "Records original digest in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:originals a rdf:Property;
+    rdfs:label "originals";
+    rdfs:comment "Records originals in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:originHosted a rdf:Property;
+    rdfs:label "origin hosted";
+    rdfs:comment "Records origin hosted in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:originMessage a rdf:Property;
+    rdfs:label "origin message";
+    rdfs:comment "Carries the message expression in the declared origin of a proposed effect.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:outboundAtStep a rdf:Property;
+    rdfs:label "outbound at step";
+    rdfs:comment "Records outbound at step in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:outcome a rdf:Property;
+    rdfs:label "outcome";
+    rdfs:comment "Records outcome in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:outline a rdf:Property;
+    rdfs:label "outline";
+    rdfs:comment "Orders the expected trace decisions and events on a branch.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:outputClaim a rdf:Property;
+    rdfs:label "output claim";
+    rdfs:comment "Names the claim type produced by a derivation rule.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:ownLists a rdf:Property;
+    rdfs:label "own lists";
+    rdfs:comment "Groups own-list entries by the local name of the agent that holds them.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:params a rdf:Property;
+    rdfs:label "params";
+    rdfs:comment "Records params in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:parent a rdf:Property;
+    rdfs:label "parent";
+    rdfs:comment "Records parent in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:part a rdf:Property;
+    rdfs:label "part";
+    rdfs:comment "Names the part of the agent expected to emit a trace event.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:parties a rdf:Property;
+    rdfs:label "parties";
+    rdfs:comment "Orders the participants declared in a scenario.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:party a rdf:Property;
+    rdfs:label "party";
+    rdfs:comment "Records party in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:partyConfigurations a rdf:Property;
+    rdfs:label "party configurations";
+    rdfs:comment "Records party configurations in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:partyIds a rdf:Property;
+    rdfs:label "party ids";
+    rdfs:comment "Records party ids in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:partyLabels a rdf:Property;
+    rdfs:label "party labels";
+    rdfs:comment "Carries the domain profile’s string-to-string map for participant labels.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:partySlugs a rdf:Property;
+    rdfs:label "party slugs";
+    rdfs:comment "Records party slugs in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:path a rdf:Property;
+    rdfs:label "path";
+    rdfs:comment "Records path in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:pathSlug a rdf:Property;
+    rdfs:label "path slug";
+    rdfs:comment "Names the path for which the fixture records an execution blocker.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:pattern a rdf:Property;
+    rdfs:label "pattern";
+    rdfs:comment "Records pattern in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:payee a rdf:Property;
+    rdfs:label "payee";
+    rdfs:comment "Records payee in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:payload a rdf:Property;
+    rdfs:label "payload";
+    rdfs:comment "Records payload in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:PaymentInvoiceStep a owl:Class;
+    rdfs:label "payment invoice step";
+    rdfs:comment "A script step with the authored instruction kind “payment-invoice”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:paymentProviders a rdf:Property;
+    rdfs:label "payment providers";
+    rdfs:comment "Records payment providers in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:payroll a rdf:Property;
+    rdfs:label "payroll";
+    rdfs:comment "Records payroll in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:peer a rdf:Property;
+    rdfs:label "peer";
+    rdfs:comment "Records peer in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:PendingStep a owl:Class;
+    rdfs:label "pending step";
+    rdfs:comment "A script step with the authored instruction kind “pending”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:period a rdf:Property;
+    rdfs:label "period";
+    rdfs:comment "Records period in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:periodEnd a rdf:Property;
+    rdfs:label "period end";
+    rdfs:comment "Records period end in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:periodStart a rdf:Property;
+    rdfs:label "period start";
+    rdfs:comment "Records period start in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:person a rdf:Property;
+    rdfs:label "person";
+    rdfs:comment "Records person in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:personDecisions a rdf:Property;
+    rdfs:label "person decisions";
+    rdfs:comment "Records person decisions in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:personMayRelyOn a rdf:Property;
+    rdfs:label "person may rely on";
+    rdfs:comment "Records person may rely on in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:persons a rdf:Property;
+    rdfs:label "persons";
+    rdfs:comment "Records persons in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:pins a rdf:Property;
+    rdfs:label "pins";
+    rdfs:comment "Orders pairs of local party names used for initial trust pins.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:platform a rdf:Property;
+    rdfs:label "platform";
+    rdfs:comment "Names the fictional platform that records meaning deliberation.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:PodStoreStep a owl:Class;
+    rdfs:label "pod store step";
+    rdfs:comment "A script step with the authored instruction kind “pod-store”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:pointerFault a rdf:Property;
+    rdfs:label "pointer fault";
+    rdfs:comment "Records pointer fault in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:policy a rdf:Property;
+    rdfs:label "policy";
+    rdfs:comment "Records policy in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:precedence a rdf:Property;
+    rdfs:label "precedence";
+    rdfs:comment "Records precedence in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:presenter a rdf:Property;
+    rdfs:label "presenter";
+    rdfs:comment "Records presenter in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:profileChange a rdf:Property;
+    rdfs:label "profile change";
+    rdfs:comment "Carries the JSON patch applied to the loaded domain profile.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:profileSlug a rdf:Property;
+    rdfs:label "profile slug";
+    rdfs:comment "Names the local domain profile a scenario loads.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:proofCredentials a rdf:Property;
+    rdfs:label "proof credentials";
+    rdfs:comment "Records proof credentials in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:proofOwners a rdf:Property;
+    rdfs:label "proof owners";
+    rdfs:comment "Records proof owners in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:proofQuery a rdf:Property;
+    rdfs:label "proof query";
+    rdfs:comment "Contains the host-installed query text used by a fixture proof rule.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:proofRequest a rdf:Property;
+    rdfs:label "proof request";
+    rdfs:comment "Records proof request in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:ProofRequestStep a owl:Class;
+    rdfs:label "proof request step";
+    rdfs:comment "A script step with the authored instruction kind “proof-request”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:proposer a rdf:Property;
+    rdfs:label "proposer";
+    rdfs:comment "Records proposer in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:ProveStep a owl:Class;
+    rdfs:label "prove step";
+    rdfs:comment "A script step with the authored instruction kind “prove”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:provider a rdf:Property;
+    rdfs:label "provider";
+    rdfs:comment "Records provider in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:publication a rdf:Property;
+    rdfs:label "publication";
+    rdfs:comment "Records publication in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:purposeIds a rdf:Property;
+    rdfs:label "purpose ids";
+    rdfs:comment "Orders the identifiers of the purposes that apply in the containing resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:purposes a rdf:Property;
+    rdfs:label "purposes";
+    rdfs:comment "Records purposes in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:quadsPerCredential a rdf:Property;
+    rdfs:label "quads per credential";
+    rdfs:comment "Records quads per credential in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:qualityCertificate a rdf:Property;
+    rdfs:label "quality certificate";
+    rdfs:comment "Records quality certificate in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:queryGrant a rdf:Property;
+    rdfs:label "query grant";
+    rdfs:comment "Records query grant in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:queryGrants a rdf:Property;
+    rdfs:label "query grants";
+    rdfs:comment "Records query grants in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:queryProofOptions a rdf:Property;
+    rdfs:label "query proof options";
+    rdfs:comment "Records query proof options in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:queryProtocol a rdf:Property;
+    rdfs:label "query protocol";
+    rdfs:comment "Records query protocol in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:ratings a rdf:Property;
+    rdfs:label "ratings";
+    rdfs:comment "Records ratings in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:ReadContentStep a owl:Class;
+    rdfs:label "read content step";
+    rdfs:comment "A script step with the authored instruction kind “read-content”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:reader a rdf:Property;
+    rdfs:label "reader";
+    rdfs:comment "Records reader in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:readings a rdf:Property;
+    rdfs:label "readings";
+    rdfs:comment "Orders the claim kinds and value types a profile accepts from a reading.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:ReadingStep a owl:Class;
+    rdfs:label "reading step";
+    rdfs:comment "A script step with the authored instruction kind “reading”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:ReadReferenceStep a owl:Class;
+    rdfs:label "read reference step";
+    rdfs:comment "A script step with the authored instruction kind “read-reference”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:reason a rdf:Property;
+    rdfs:label "reason";
+    rdfs:comment "Records reason in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:ReceiptStep a owl:Class;
+    rdfs:label "receipt step";
+    rdfs:comment "A script step with the authored instruction kind “receipt”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:receivers a rdf:Property;
+    rdfs:label "receivers";
+    rdfs:comment "Records receivers in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:ReceiveStep a owl:Class;
+    rdfs:label "receive step";
+    rdfs:comment "A script step with the authored instruction kind “receive”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:RecordAnchorStep a owl:Class;
+    rdfs:label "record anchor step";
+    rdfs:comment "A script step with the authored instruction kind “record-anchor”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:RecordAuditStep a owl:Class;
+    rdfs:label "record audit step";
+    rdfs:comment "A script step with the authored instruction kind “record-audit”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:recordBacked a rdf:Property;
+    rdfs:label "record backed";
+    rdfs:comment "Records record backed in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:recordedAssurance a rdf:Property;
+    rdfs:label "recorded assurance";
+    rdfs:comment "Records recorded assurance in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:records a rdf:Property;
+    rdfs:label "records";
+    rdfs:comment "Records records in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:recordSegment a rdf:Property;
+    rdfs:label "record segment";
+    rdfs:comment "Records record segment in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:RecordSegmentStep a owl:Class;
+    rdfs:label "record segment step";
+    rdfs:comment "A script step with the authored instruction kind “record-segment”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:RecordStep a owl:Class;
+    rdfs:label "record step";
+    rdfs:comment "A script step with the authored instruction kind “record”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:redeemers a rdf:Property;
+    rdfs:label "redeemers";
+    rdfs:comment "Records redeemers in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:ref a rdf:Property;
+    rdfs:label "ref";
+    rdfs:comment "Records ref in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:reference a rdf:Property;
+    rdfs:label "reference";
+    rdfs:comment "Records reference in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:referenceAction a rdf:Property;
+    rdfs:label "reference action";
+    rdfs:comment "Records reference action in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:ReferenceReadStep a owl:Class;
+    rdfs:label "reference read step";
+    rdfs:comment "A script step with the authored instruction kind “reference-read”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:references a rdf:Property;
+    rdfs:label "references";
+    rdfs:comment "Records references in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:register a rdf:Property;
+    rdfs:label "register";
+    rdfs:comment "Records register in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:registerEntries a rdf:Property;
+    rdfs:label "register entries";
+    rdfs:comment "Records register entries in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:registerItems a rdf:Property;
+    rdfs:label "register items";
+    rdfs:comment "Records register items in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:registerSlug a rdf:Property;
+    rdfs:label "register slug";
+    rdfs:comment "Records register slug in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:registerStatus a rdf:Property;
+    rdfs:label "register status";
+    rdfs:comment "Records register status in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:registrar a rdf:Property;
+    rdfs:label "registrar";
+    rdfs:comment "Records registrar in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:registry a rdf:Property;
+    rdfs:label "registry";
+    rdfs:comment "Records registry in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:registryMeaning a rdf:Property;
+    rdfs:label "registry meaning";
+    rdfs:comment "Records registry meaning in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:relatedQueryCap a rdf:Property;
+    rdfs:label "related query cap";
+    rdfs:comment "Records related query cap in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:relation a rdf:Property;
+    rdfs:label "relation";
+    rdfs:comment "States the relationship between source and destination codes.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:relianceCorroboration a rdf:Property;
+    rdfs:label "reliance corroboration";
+    rdfs:comment "Records reliance corroboration in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:replacedBy a rdf:Property;
+    rdfs:label "replaced by";
+    rdfs:comment "Records replaced by in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:replaces a rdf:Property;
+    rdfs:label "replaces";
+    rdfs:comment "Records replaces in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:replies a rdf:Property;
+    rdfs:label "replies";
+    rdfs:comment "Records replies in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:reply a rdf:Property;
+    rdfs:label "reply";
+    rdfs:comment "Records reply in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:representationOperations a rdf:Property;
+    rdfs:label "representation operations";
+    rdfs:comment "Records representation operations in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:reputation a rdf:Property;
+    rdfs:label "reputation";
+    rdfs:comment "Records reputation in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:request a rdf:Property;
+    rdfs:label "request";
+    rdfs:comment "Records request in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:requestedList a rdf:Property;
+    rdfs:label "requested list";
+    rdfs:comment "Records requested list in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:requester a rdf:Property;
+    rdfs:label "requester";
+    rdfs:comment "Records requester in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:RequestStructuredStep a owl:Class;
+    rdfs:label "request structured step";
+    rdfs:comment "A script step with the authored instruction kind “request-structured”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:required a rdf:Property;
+    rdfs:label "required";
+    rdfs:comment "Records required in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:requiredMethods a rdf:Property;
+    rdfs:label "required methods";
+    rdfs:comment "Orders the methods required to execute the scenario.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:requiredRoles a rdf:Property;
+    rdfs:label "required roles";
+    rdfs:comment "Records required roles in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:requires a rdf:Property;
+    rdfs:label "requires";
+    rdfs:comment "Names the local prerequisite configuration.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:requiresRepresentation a rdf:Property;
+    rdfs:label "requires representation";
+    rdfs:comment "Records requires representation in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:reservations a rdf:Property;
+    rdfs:label "reservations";
+    rdfs:comment "Records reservations in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:resign a rdf:Property;
+    rdfs:label "resign";
+    rdfs:comment "Records resign in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:resources a rdf:Property;
+    rdfs:label "resources";
+    rdfs:comment "Records resources in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:respondent a rdf:Property;
+    rdfs:label "respondent";
+    rdfs:comment "Records respondent in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:responseSeconds a rdf:Property;
+    rdfs:label "response seconds";
+    rdfs:comment "Records response seconds in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:result a rdf:Property;
+    rdfs:label "result";
+    rdfs:comment "Records result in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:RetryChallengeStep a owl:Class;
+    rdfs:label "retry challenge step";
+    rdfs:comment "A script step with the authored instruction kind “retry-challenge”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:RevokeMandateStep a owl:Class;
+    rdfs:label "revoke mandate step";
+    rdfs:comment "A script step with the authored instruction kind “revoke-mandate”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:role a rdf:Property;
+    rdfs:label "role";
+    rdfs:comment "Records role in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:roleClaim a rdf:Property;
+    rdfs:label "role claim";
+    rdfs:comment "Records role claim in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:roles a rdf:Property;
+    rdfs:label "roles";
+    rdfs:comment "Records roles in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:roleSource a rdf:Property;
+    rdfs:label "role source";
+    rdfs:comment "Records role source in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:roleStatement a rdf:Property;
+    rdfs:label "role statement";
+    rdfs:comment "Records role statement in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:root a rdf:Property;
+    rdfs:label "root";
+    rdfs:comment "Records root in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:roots a rdf:Property;
+    rdfs:label "roots";
+    rdfs:comment "Records roots in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:route a rdf:Property;
+    rdfs:label "route";
+    rdfs:comment "Records route in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:routes a rdf:Property;
+    rdfs:label "routes";
+    rdfs:comment "Records routes in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:rowClaims a rdf:Property;
+    rdfs:label "row claims";
+    rdfs:comment "Records row claims in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:rows a rdf:Property;
+    rdfs:label "rows";
+    rdfs:comment "Records rows in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:rowsPerTable a rdf:Property;
+    rdfs:label "rows per table";
+    rdfs:comment "Records rows per table in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:rules a rdf:Property;
+    rdfs:label "rules";
+    rdfs:comment "Records rules in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:runs a rdf:Property;
+    rdfs:label "runs";
+    rdfs:comment "Records runs in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:scenarioAssurance a rdf:Property;
+    rdfs:label "scenario assurance";
+    rdfs:comment "Records scenario assurance in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:scope a rdf:Property;
+    rdfs:label "scope";
+    rdfs:comment "Records scope in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:score a rdf:Property;
+    rdfs:label "score";
+    rdfs:comment "Records score in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:script a rdf:Property;
+    rdfs:label "script";
+    rdfs:comment "Orders the instructions to execute in the baseline world.";
+    rdfs:domain awps:Scenario;
+    rdfs:range rdf:List.
+awps:segment a rdf:Property;
+    rdfs:label "segment";
+    rdfs:comment "Records segment in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:segmentEnd a rdf:Property;
+    rdfs:label "segment end";
+    rdfs:comment "Records segment end in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:selectiveCredentials a rdf:Property;
+    rdfs:label "selective credentials";
+    rdfs:comment "Records selective credentials in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:service a rdf:Property;
+    rdfs:label "service";
+    rdfs:comment "Records service in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:settlementFault a rdf:Property;
+    rdfs:label "settlement fault";
+    rdfs:comment "Records settlement fault in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:ShowMandateStep a owl:Class;
+    rdfs:label "show mandate step";
+    rdfs:comment "A script step with the authored instruction kind “show-mandate”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:signer a rdf:Property;
+    rdfs:label "signer";
+    rdfs:comment "Records signer in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:singleUse a rdf:Property;
+    rdfs:label "single use";
+    rdfs:comment "Records single use in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:singleUseOperation a rdf:Property;
+    rdfs:label "single use operation";
+    rdfs:comment "Records single use operation in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:singleUseRegisters a rdf:Property;
+    rdfs:label "single use registers";
+    rdfs:comment "Records single use registers in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:slug a rdf:Property;
+    rdfs:label "slug";
+    rdfs:comment "Gives a local identifier within a fixture and its existing reference scope.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:solid a rdf:Property;
+    rdfs:label "solid";
+    rdfs:comment "Records solid in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:sourceAliases a rdf:Property;
+    rdfs:label "source aliases";
+    rdfs:comment "Carries the domain profile’s string-to-IRI map for accepted source aliases.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:sourceCount a rdf:Property;
+    rdfs:label "source count";
+    rdfs:comment "Records source count in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:integer.
+awps:sourceLists a rdf:Property;
+    rdfs:label "source lists";
+    rdfs:comment "Groups source-authority rules by the local name of the agent that holds them.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:sources a rdf:Property;
+    rdfs:label "sources";
+    rdfs:comment "Records sources in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:standIns a rdf:Property;
+    rdfs:label "stand ins";
+    rdfs:comment "Records stand ins in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:StartStep a owl:Class;
+    rdfs:label "start step";
+    rdfs:comment "A script step with the authored instruction kind “start”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:state a rdf:Property;
+    rdfs:label "state";
+    rdfs:comment "Records state in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:statedConfidence a rdf:Property;
+    rdfs:label "stated confidence";
+    rdfs:comment "Records stated confidence in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:statement a rdf:Property;
+    rdfs:label "statement";
+    rdfs:comment "Records statement in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:statements a rdf:Property;
+    rdfs:label "statements";
+    rdfs:comment "Orders the statements or statement references declared by the containing fixture resource.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:statementTerms a rdf:Property;
+    rdfs:label "statement terms";
+    rdfs:comment "Records statement terms in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:statistic a rdf:Property;
+    rdfs:label "statistic";
+    rdfs:comment "Records statistic in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:status a rdf:Property;
+    rdfs:label "status";
+    rdfs:comment "Records status in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:statusClaims a rdf:Property;
+    rdfs:label "status claims";
+    rdfs:comment "Records status claims in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:statusReference a rdf:Property;
+    rdfs:label "status reference";
+    rdfs:comment "Records status reference in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:step a rdf:Property;
+    rdfs:label "step";
+    rdfs:comment "Records step in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:stepReference a rdf:Property;
+    rdfs:label "step reference";
+    rdfs:comment "Carries the engine expression used to resolve a value from a preceding step.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:stopAfter a rdf:Property;
+    rdfs:label "stop after";
+    rdfs:comment "Records stop after in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:store a rdf:Property;
+    rdfs:label "store";
+    rdfs:comment "Records store in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:storeAssessments a rdf:Property;
+    rdfs:label "store assessments";
+    rdfs:comment "Records store assessments in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:StoreAssessStep a owl:Class;
+    rdfs:label "store assess step";
+    rdfs:comment "A script step with the authored instruction kind “store-assess”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:storeRequest a rdf:Property;
+    rdfs:label "store request";
+    rdfs:comment "Records store request in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:StoreRequestStep a owl:Class;
+    rdfs:label "store request step";
+    rdfs:comment "A script step with the authored instruction kind “store-request”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:stores a rdf:Property;
+    rdfs:label "stores";
+    rdfs:comment "Records stores in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:stress a rdf:Property;
+    rdfs:label "stress";
+    rdfs:comment "Records stress in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:stripSignature a rdf:Property;
+    rdfs:label "strip signature";
+    rdfs:comment "Records strip signature in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:structuredOnly a rdf:Property;
+    rdfs:label "structured only";
+    rdfs:comment "Records structured only in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:structuredReply a rdf:Property;
+    rdfs:label "structured reply";
+    rdfs:comment "Records structured reply in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:structuredRequiredApproval a rdf:Property;
+    rdfs:label "structured required approval";
+    rdfs:comment "Describes the evidence required to approve an operation.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:subjectIds a rdf:Property;
+    rdfs:label "subject ids";
+    rdfs:comment "Records subject ids in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:subjectSlug a rdf:Property;
+    rdfs:label "subject slug";
+    rdfs:comment "Records subject slug in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:suites a rdf:Property;
+    rdfs:label "suites";
+    rdfs:comment "Records suites in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:superior a rdf:Property;
+    rdfs:label "superior";
+    rdfs:comment "Records superior in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:table a rdf:Property;
+    rdfs:label "table";
+    rdfs:comment "Records table in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:tableRowBounds a rdf:Property;
+    rdfs:label "table row bounds";
+    rdfs:comment "Records table row bounds in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:tamper a rdf:Property;
+    rdfs:label "tamper";
+    rdfs:comment "Records tamper in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:boolean.
+awps:taskId a rdf:Property;
+    rdfs:label "task id";
+    rdfs:comment "Records task id in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:tasks a rdf:Property;
+    rdfs:label "tasks";
+    rdfs:comment "Records tasks in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:template a rdf:Property;
+    rdfs:label "template";
+    rdfs:comment "Records template in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:term a rdf:Property;
+    rdfs:label "term";
+    rdfs:comment "Records term in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:TermDeliberationStep a owl:Class;
+    rdfs:label "term deliberation step";
+    rdfs:comment "A script step with the authored instruction kind “term-deliberation”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:terminal a rdf:Property;
+    rdfs:label "terminal";
+    rdfs:comment "Records terminal in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:termsAcceptance a rdf:Property;
+    rdfs:label "terms acceptance";
+    rdfs:comment "Records terms acceptance in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:threshold a rdf:Property;
+    rdfs:label "threshold";
+    rdfs:comment "Records threshold in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:thresholdValue a rdf:Property;
+    rdfs:label "threshold value";
+    rdfs:comment "Records threshold value in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:title a rdf:Property;
+    rdfs:label "title";
+    rdfs:comment "Records title in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:to a rdf:Property;
+    rdfs:label "to";
+    rdfs:comment "Gives the destination code in a directed mapping tuple.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:tolerance a rdf:Property;
+    rdfs:label "tolerance";
+    rdfs:comment "Records tolerance in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:toList a rdf:Property;
+    rdfs:label "to list";
+    rdfs:comment "Records to list in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:traceId a rdf:Property;
+    rdfs:label "trace id";
+    rdfs:comment "Records trace id in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:traceSteps a rdf:Property;
+    rdfs:label "trace steps";
+    rdfs:comment "Records trace steps in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:trust a rdf:Property;
+    rdfs:label "trust";
+    rdfs:comment "Describes the trust inputs an engine run uses to build its synthetic trust view.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:TrustDecisionStep a owl:Class;
+    rdfs:label "trust decision step";
+    rdfs:comment "A script step with the authored instruction kind “trust-decision”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:trustedIndex a rdf:Property;
+    rdfs:label "trusted index";
+    rdfs:comment "Records trusted index in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:typ a rdf:Property;
+    rdfs:label "typ";
+    rdfs:comment "Records typ in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:UnderwritingHandoverStep a owl:Class;
+    rdfs:label "underwriting handover step";
+    rdfs:comment "A script step with the authored instruction kind “underwriting-handover”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:useBy a rdf:Property;
+    rdfs:label "use by";
+    rdfs:comment "Records use by in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:useCase a rdf:Property;
+    rdfs:label "use case";
+    rdfs:comment "Records use case in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:validityTime a rdf:Property;
+    rdfs:label "validity time";
+    rdfs:comment "Records validity time in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:value a rdf:Property;
+    rdfs:label "value";
+    rdfs:comment "Records value in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.
+awps:values a rdf:Property;
+    rdfs:label "values";
+    rdfs:comment "Records values in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:List.
+awps:verdict a rdf:Property;
+    rdfs:label "verdict";
+    rdfs:comment "Records verdict in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:vocabulary a rdf:Property;
+    rdfs:label "vocabulary";
+    rdfs:comment "Records vocabulary in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdfs:Resource.
+awps:what a rdf:Property;
+    rdfs:label "what";
+    rdfs:comment "Records what in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:WithdrawAccessStep a owl:Class;
+    rdfs:label "withdraw access step";
+    rdfs:comment "A script step with the authored instruction kind “withdraw-access”.";
+    rdfs:subClassOf awps:ScriptStep.
+awps:withinSeconds a rdf:Property;
+    rdfs:label "within seconds";
+    rdfs:comment "Records within seconds in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:decimal.
+awps:witness a rdf:Property;
+    rdfs:label "witness";
+    rdfs:comment "Records witness in the authored fixture.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range xsd:string.
+awps:world a rdf:Property;
+    rdfs:label "world";
+    rdfs:comment "Carries the JSON patch applied to the world for a selected configuration.";
+    rdfs:domain rdfs:Resource;
+    rdfs:range rdf:JSON.

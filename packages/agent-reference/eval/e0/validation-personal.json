@@ -1,0 +1,480 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "command": "PATH=/opt/node24/bin:$PATH pnpm --filter @jeswr/personal-agent test --testTimeout=2000 --hookTimeout=2000 --teardownTimeout=1000 --reporter=json --outputFile=/tmp/e0-personal-results.json",
+  "total": 573,
+  "passed": 492,
+  "failed": 77,
+  "skipped": 4,
+  "files": 58,
+  "passedFiles": 42,
+  "failedFiles": 16,
+  "failures": [
+    {
+      "file": "src/actions/providers.test.ts",
+      "test": "credential supply (separable, no stored tokens) runs the operator's helper without a shell and maps its answers",
+      "observed": "CredentialError: the credential helper failed (exit 1)",
+      "explanation": "Subprocess I/O is not usable in this sandbox. A standalone child waiting on stdin exits zero with empty stdout; helper handshakes and policy replies cannot complete."
+    },
+    {
+      "file": "src/actions/providers.test.ts",
+      "test": "credential supply (separable, no stored tokens) settles once with a typed error when the helper exits early, hangs or floods",
+      "observed": "Error: promise resolved \"''\" instead of rejecting",
+      "explanation": "Subprocess I/O is not usable in this sandbox. A standalone child waiting on stdin exits zero with empty stdout; helper handshakes and policy replies cannot complete."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "Google login (installed-app loopback + PKCE + OIDC) stores a verified grant privately; the URL carries PKCE/state/nonce but no secret; nothing secret is printed",
+      "observed": "AssertionError: awp-credentials: file system error (EPERM)",
+      "explanation": "The sandbox denies the required subprocess or OS operation."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "Google login (installed-app loopback + PKCE + OIDC) ignores forged/mismatched callbacks (state), then accepts the real one; wrong host or path is not served",
+      "observed": "Error: promise rejected \"Error: listen EPERM: operation not permit\u2026 { \u2026(4) }\" instead of resolving",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "Google login (installed-app loopback + PKCE + OIDC) a denied consent, a timeout or an unreachable provider store nothing and close the listener",
+      "observed": "Error: expected [Function] to throw error matching /not completed \\(access_denied\\)/ but got 'listen EPERM: operation not permitted\u2026'",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "Google login (installed-app loopback + PKCE + OIDC) wrong account, unverified email, bad signature, wrong audience or nonce: refused, and an existing grant is not overwritten",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "Google login (installed-app loopback + PKCE + OIDC) no refresh token, or calendar scope not granted: nothing stored",
+      "observed": "Error: expected [Function] to throw error matching /no refresh token/ but got 'listen EPERM: operation not permitted\u2026'",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "helper token mode (the action contract) answers from the cached token, refreshes after expiry, and checks the request against the profile",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "helper token mode (the action contract) concurrent callers refresh ONCE (profile lock), and all get the same fresh token",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "helper token mode (the action contract) defers SIGTERM through persistence of a rotated token and restores signal listeners",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "helper token mode (the action contract) revoked (invalid_grant): exit 3, grant marked for re-consent with its tokens removed; outage/malformed: grant kept",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "helper token mode (the action contract) the token command refuses a terminal and prints the token only on its private stdout",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "Microsoft (public client, PKCE, tenant/account constraints) personal account: consumers tenant, localhost redirect, no secret; rotated refresh tokens replace the old one",
+      "observed": "Error: promise rejected \"Error: listen EPERM: operation not permit\u2026 { \u2026(4) }\" instead of resolving",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "Microsoft (public client, PKCE, tenant/account constraints) an account from another tenant or account type is refused",
+      "observed": "Error: expected Error: listen EPERM: operation not permit\u2026 { \u2026(4) } to match object { code: 'account' }",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "private store and human-facing commands refuses a widened directory, a symlinked or widened grant, and reports a corrupt one without replacing it",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "private store and human-facing commands calendar inventory needs the explicit inventory scope; the listing shows ids and roles, never tokens",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "private store and human-facing commands logout (no --revoke) forgets the local grant without any provider call; provider-config is a valid, secret-free action config",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "private store and human-facing commands only allow-listed provider origins are ever called",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "review corrections: ID-token claims, stored times, grant binding, complete writes an unreadable stored time is never a valid token: refused by the helper protocol and the inventory path; never written",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "review corrections: ID-token claims, stored times, grant binding, complete writes a grant for another account, profile, provider or client is not used (cached or refreshed)",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "review corrections: ID-token claims, stored times, grant binding, complete writes replacing the OAuth client needs --force; its grants then stop working until the profile logs in again",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/credentials/credentials.test.ts",
+      "test": "review corrections: ID-token claims, stored times, grant binding, complete writes writes are complete before the rename: short writes are finished, a failed write keeps the previous record",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/actions-api.test.ts",
+      "test": "dashboard actions API needs a session and CSRF; lists the catalogue with the owner's permissions",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/actions-api.test.ts",
+      "test": "dashboard actions API without provider configuration, provider calendars need setup (never free); no execute route exists",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: loopback trust boundary refuses a foreign Host (DNS rebinding) for pages and API",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: loopback trust boundary serves the page with a strict CSP and security headers and never sends CORS headers",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: loopback trust boundary requires a session for every private API call",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: loopback trust boundary exchanges a one-time code for an HttpOnly SameSite=Strict session once",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: loopback trust boundary stops accepting codes after repeated wrong guesses",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: loopback trust boundary requires the CSRF token, an Origin and a JSON body for writes",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: loopback trust boundary caps bodies, refuses unknown fields and malformed JSON with sanitised errors",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: loopback trust boundary serves only the allowlisted static files",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: settings round-trips a record, keeps hostile labels as data and refuses stale revisions",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: settings keeps imported records read-only except for the owner's own settings",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: settings never reports a provider-backed connection from inventory or Codex evidence",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: triage never calls the provider when no key is configured",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: triage ignores retired provider keys even with hosted triage enabled and consent",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: triage enforces account restrictions for local and hosted triage (consent never overrides triage off)",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: triage refuses samples not declared synthetic",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: calendars applies under the settings revision: a stale revision installs nothing",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: calendars refuses calendar settings with unknown references or a foreign agent",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/dashboard/server.test.ts",
+      "test": "dashboard server: real clock versus synthetic scheduling clock judges freshness and dates history with the real clock; previews use the demo clock",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/a2a.test.ts",
+      "test": "optional local A2A binding (official @a2a-js/sdk, loopback) runs a complete scheduling conversation over A2A, every send through the transmission boundary",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/a2a.test.ts",
+      "test": "optional local A2A binding (official @a2a-js/sdk, loopback) services run without owner private material: separate custody leaves no owner key in any service directory",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/a2a.test.ts",
+      "test": "optional local A2A binding (official @a2a-js/sdk, loopback) refuses unauthenticated, oversized, non-loopback-host and browser requests; only SendMessage",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/a2a.test.ts",
+      "test": "optional local A2A binding (official @a2a-js/sdk, loopback) verifies carried envelopes like any binding: tamper, wrong audience and replay",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/a2a.test.ts",
+      "test": "optional local A2A binding (official @a2a-js/sdk, loopback) send-time authorisation: a denied message never leaves (zero requests at the peer) mandate revoked after the message was signed",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/a2a.test.ts",
+      "test": "optional local A2A binding (official @a2a-js/sdk, loopback) send-time authorisation: a denied message never leaves (zero requests at the peer) the signed message expired while queued",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/a2a.test.ts",
+      "test": "optional local A2A binding (official @a2a-js/sdk, loopback) send-time authorisation: a denied message never leaves (zero requests at the peer) the pinned policy binary was replaced (policy module unavailable)",
+      "observed": "Error: SPARQ policy module not usable: probe: expected permit, got indeterminate (policy evaluator unavailable (sparq-policy-decide via sparq-policy-decide): spawnSync /tmp/awp-a2a-unit-yYh7mi/sparq-policy-decide EPERM)",
+      "explanation": "The sandbox denies the required subprocess or OS operation."
+    },
+    {
+      "file": "src/pilot/a2a.test.ts",
+      "test": "optional local A2A binding (official @a2a-js/sdk, loopback) send-time authorisation: a denied message never leaves (zero requests at the peer) the owner mandate expired while the message was still valid",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/a2a.test.ts",
+      "test": "optional local A2A binding (official @a2a-js/sdk, loopback) a lost reply is uncertain (not unsent); an identical re-authorised resend is a duplicate - one business effect",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/a2a.test.ts",
+      "test": "optional local A2A binding (official @a2a-js/sdk, loopback) an uncertain message whose authority is revoked is not resent and stays uncertain",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/a2a.test.ts",
+      "test": "optional local A2A binding (official @a2a-js/sdk, loopback) connection refused is not-sent; no reply by the deadline is uncertain; later delivery resolves it",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/a2a.test.ts",
+      "test": "optional local A2A binding (official @a2a-js/sdk, loopback) strict acknowledgements: wrong/missing ids, unknown dispositions, extra parts, tasks and garbage never retire a message",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/a2a.test.ts",
+      "test": "optional local A2A binding (official @a2a-js/sdk, loopback) two agents sending to each other at the same moment do not deadlock",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/a2a.test.ts",
+      "test": "optional local A2A binding (official @a2a-js/sdk, loopback) mortgage: a disclosure whose owner approval expired while queued is not sent (zero requests)",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/conventional.test.ts",
+      "test": "UC-02 / R25 remembered conventional scheduling service (local reference service) extracts, confirms, books deterministically, and resists poisoning, staleness and uncertainty",
+      "observed": "Error: listen EPERM: operation not permitted 127.0.0.1",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/demo.test.ts",
+      "test": "demo report runs every scenario and every check passes",
+      "observed": "AssertionError: expected [ { scenario: 'C', id: 'run', \u2026(4) } ] to deeply equal []",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/energy-durable.test.ts",
+      "test": "durable energy comparison (anonymous public carriage) compares durable retailers anonymously, isolates incompatible ones, leaks nothing, and survives a restart",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/mcp.test.ts",
+      "test": "local MCP server (official SDK, in-process streams) a FIFO stdin reports EOF when its last writer closes (non-blocking fd; the phase-5 hang)",
+      "observed": "Error: spawnSync mkfifo EPERM",
+      "explanation": "The sandbox denies the required subprocess or OS operation."
+    },
+    {
+      "file": "src/pilot/policy-config.test.ts",
+      "test": "recorded policy module (stand-in executables, not the evaluator) init probes the binary: one without three-valued semantics is refused",
+      "observed": "Error: expected [Function] to throw error matching /possibly applicable prohibition must \u2026/ but got 'SPARQ policy module not usable: probe\u2026'",
+      "explanation": "Subprocess I/O is not usable in this sandbox. A standalone child waiting on stdin exits zero with empty stdout; helper handshakes and policy replies cannot complete."
+    },
+    {
+      "file": "src/pilot/policy-config.test.ts",
+      "test": "recorded policy module (stand-in executables, not the evaluator) records and pins the probed binary; a changed or missing binary fails closed",
+      "observed": "Error: SPARQ policy module not usable: probe: expected permit, got indeterminate (policy evaluator unavailable (sparq-policy-decide via sparq-policy-decide): spawnSync /tmp/awp-pm-YcaWnE/sparq-policy-decide EPERM)",
+      "explanation": "The sandbox denies the required subprocess or OS operation."
+    },
+    {
+      "file": "src/pilot/policy-config.test.ts",
+      "test": "recorded policy module (stand-in executables, not the evaluator) an unavailable module stops a proposal: nothing is produced to send",
+      "observed": "Error: SPARQ policy module not usable: probe: expected permit, got indeterminate (policy evaluator unavailable (sparq-policy-decide via sparq-policy-decide): spawnSync /tmp/awp-pm-LkNGrw/sparq-policy-decide EPERM)",
+      "explanation": "The sandbox denies the required subprocess or OS operation."
+    },
+    {
+      "file": "src/pilot/policy-config.test.ts",
+      "test": "phase-4 review - long-running pin, consistent inspection, described module finding 1: the SAME resolved engine re-checks the pin before every decision",
+      "observed": "Error: SPARQ policy module not usable: probe: expected permit, got indeterminate (policy evaluator unavailable (sparq-policy-decide via sparq-policy-decide): spawnSync /tmp/awp-pm-4633qx/sparq-policy-decide EPERM)",
+      "explanation": "The sandbox denies the required subprocess or OS operation."
+    },
+    {
+      "file": "src/pilot/policy-config.test.ts",
+      "test": "phase-4 review - long-running pin, consistent inspection, described module finding 1: a running runtime reports current module availability",
+      "observed": "Error: SPARQ policy module not usable: probe: expected permit, got indeterminate (policy evaluator unavailable (sparq-policy-decide via sparq-policy-decide): spawnSync /tmp/awp-pm-rqjmbJ/sparq-policy-decide EPERM)",
+      "explanation": "The sandbox denies the required subprocess or OS operation."
+    },
+    {
+      "file": "src/pilot/policy-config.test.ts",
+      "test": "phase-4 review - long-running pin, consistent inspection, described module finding 2: inspection uses the runtime's resolution; re-pin is locked and audited",
+      "observed": "Error: SPARQ policy module not usable: probe: expected permit, got indeterminate (policy evaluator unavailable (sparq-policy-decide via sparq-policy-decide): spawnSync /tmp/awp-pm-BDskAO/sparq-policy-decide EPERM)",
+      "explanation": "The sandbox denies the required subprocess or OS operation."
+    },
+    {
+      "file": "src/pilot/policy-engine.test.ts",
+      "test": "SPARQ engine process boundary (stand-in executables, not the evaluator) passes the exact typed request on stdin and maps the reply",
+      "observed": "AssertionError: expected { effect: 'indeterminate', \u2026(1) } to match object { effect: 'permit', \u2026(1) }",
+      "explanation": "Subprocess I/O is not usable in this sandbox. A standalone child waiting on stdin exits zero with empty stdout; helper handshakes and policy replies cannot complete."
+    },
+    {
+      "file": "src/pilot/protected-disclosure.test.ts",
+      "test": "queued protected deliveries are re-checked at the transmission boundary health: a searchset queued under a grant is not sent after the patient revokes it - live and after restart",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/protected-disclosure.test.ts",
+      "test": "queued protected deliveries are re-checked at the transmission boundary health: a searchset queued under a grant is not sent once the grant EXPIRES (consent shorter than the session) - live and after restart",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/protected-disclosure.test.ts",
+      "test": "queued internal dataset releases are re-decided by the enforcement point before sending industrial: the store's data-use grant expires while the release is queued - live and after restart",
+      "observed": "Error: SPARQ policy module not usable: probe: expected permit, got indeterminate (policy evaluator unavailable (sparq-policy-decide via sparq-policy-decide): spawnSync /tmp/awp-protected-ind-SJUeaU/sparq-policy-decide EPERM)",
+      "explanation": "The sandbox denies the required subprocess or OS operation."
+    },
+    {
+      "file": "src/pilot/protected-disclosure.test.ts",
+      "test": "queued internal dataset releases are re-decided by the enforcement point before sending industrial: the pinned SPARQ policy module is replaced while the release is queued (generic usage decision indeterminate)",
+      "observed": "Error: SPARQ policy module not usable: probe: expected permit, got indeterminate (policy evaluator unavailable (sparq-policy-decide via sparq-policy-decide): spawnSync /tmp/awp-protected-ind-urkVWC/sparq-policy-decide EPERM)",
+      "explanation": "The sandbox denies the required subprocess or OS operation."
+    },
+    {
+      "file": "src/pilot/provider-http.test.ts",
+      "test": "review item 3 - bounded provider responses the deadline covers body consumption (a stalled body times out)",
+      "observed": "Error: STACK_TRACE_ERROR",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/public-reply.test.ts",
+      "test": "recoverable public replies a crash after receipt loses nothing: restart processes the retained reply once; one contribution per retailer; no resend",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/public-reply.test.ts",
+      "test": "recoverable public replies a crash after processing loses nothing: restart processes the retained reply once; one contribution per retailer; no resend",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/pilot/public-reply.test.ts",
+      "test": "recoverable public replies a dropped reply and a malformed reply are resolved by ONE identical re-request each; the service returns the same signed response; no duplicate contribution",
+      "observed": "Error: No free port found below the ephemeral range",
+      "explanation": "Loopback sockets are denied by the sandbox; the demo reports this for scenario C."
+    },
+    {
+      "file": "src/actions/providers/credentials.test.ts",
+      "test": "credential helper deadline budget lets a real fake helper finish its atomic rotated-token write on SIGTERM",
+      "observed": "Error: STACK_TRACE_ERROR",
+      "explanation": "Subprocess I/O is not usable in this sandbox. A standalone child waiting on stdin exits zero with empty stdout; helper handshakes and policy replies cannot complete."
+    },
+    {
+      "file": "src/actions/providers/credentials.test.ts",
+      "test": "credential helper deadline budget kills a real helper ignoring SIGTERM and never returns its late token",
+      "observed": "Error: STACK_TRACE_ERROR",
+      "explanation": "Subprocess I/O is not usable in this sandbox. A standalone child waiting on stdin exits zero with empty stdout; helper handshakes and policy replies cannot complete."
+    }
+  ],
+  "setupFailure": {
+    "file": "src/guarded-fetch-undici.test.ts",
+    "testsNotRun": 4,
+    "explanation": "The localhost setup hook cannot complete in the network-restricted sandbox."
+  }
+}

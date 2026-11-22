@@ -175,7 +175,10 @@ describe("DESIGN §4.1 ordered enforcement", () => {
     Object.assign(e.renderable.message.body, {
       input: { intent: signedIntent, account: structuredClone(e.account) },
     });
-    const wire = await h.binding.send.render(e.renderable, h.binding.carriage);
+    const wire = await h.binding.send.render(e.renderable, h.binding.carriage, {
+      proposalId: e.proposal.id,
+      conversation: e.proposal.intent.conversation,
+    });
     Object.assign(e, { wire, wireDigest: wire.digest });
     vi.mocked(h.binding.send.validate).mockImplementation(async (wire, context) => {
       const { termsDigest: _digest, ...intent } = context.intent;
@@ -199,6 +202,7 @@ describe("DESIGN §4.1 ordered enforcement", () => {
       renderable: e.renderable,
       intent: e.proposal.intent,
       account: e.account,
+      expected: { proposalId: e.proposal.id, conversation: e.proposal.intent.conversation },
     });
     if (field !== "unchanged") {
       expect(h.options.mandates.load).not.toHaveBeenCalled();

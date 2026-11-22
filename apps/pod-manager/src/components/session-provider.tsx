@@ -58,7 +58,9 @@ export function clearLegacyCredentials(): void {
   } catch {
     /* Unavailable storage. */
   }
-  for (const key of ["solid-pod-manager:active-webid", "solid:recent-accounts"]) {
+  // "solid:recent-accounts" (the old account list) is left alone: on the shared GitHub Pages
+  // origin it belongs to Solid Issues, and it never held credentials.
+  for (const key of ["solid-pod-manager:active-webid"]) {
     try {
       localStorage.removeItem(key);
     } catch {

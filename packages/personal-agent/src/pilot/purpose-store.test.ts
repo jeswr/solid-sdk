@@ -18,7 +18,7 @@ import { FileLedger } from "./store/ledger.js";
 const ORG = "https://lender.example/#org";
 const ASSESS = "https://lender.example/agents/assessment#agent";
 const ROLES: InternalRole[] = [
-  { agent: ASSESS, label: "assessment", purposes: [PURPOSE.creditChecking], actions: ["read"] },
+  { agent: ASSESS, label: "assessment", purposes: [PURPOSE.creditAssessment], actions: ["read"] },
 ];
 const T0 = Date.parse("2026-10-19T08:00:00Z");
 const DAY = 86_400_000;
@@ -41,7 +41,7 @@ function grantPolicy(target: string): OdrlPolicy {
         action: "read",
         target,
         constraints: [
-          { leftOperand: "purpose", operator: "isAnyOf", rightOperand: [PURPOSE.creditChecking] },
+          { leftOperand: "purpose", operator: "isAnyOf", rightOperand: [PURPOSE.creditAssessment] },
         ],
       },
     ],
@@ -80,7 +80,7 @@ function tempDir() {
 }
 
 const read = (s: PurposeBoundStore, id: string) =>
-  s.request({ agent: ASSESS, action: "read", items: [id], purpose: PURPOSE.creditChecking });
+  s.request({ agent: ASSESS, action: "read", items: [id], purpose: PURPOSE.creditAssessment });
 
 describe("purpose-bound store: recovery and retention", () => {
   it("a crash after the item commit but before its evidence is repaired on restart, before use", async () => {

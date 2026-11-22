@@ -1,17 +1,19 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The ODRL policy ↔ RDF lowering + round-trip. `policyToRdf` lowers a structured
 // OdrlPolicy to quads (via the typed wrapper write path — never hand-built
 // triples); `policyToTurtle`/`policyToJsonLd` serialise; `policyFromRdf`/
-// `parsePolicy` read a policy back from RDF (round-trip lossless on the policy
-// fields). All RDF reads/writes go through src/wrappers.ts.
+// `parsePolicy` read a policy back from RDF. All RDF reads/writes go through
+// src/wrappers.ts.
 
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { escapeIri, safeHttpIri, safeIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Quad } from "@rdfjs/types";
 import { serialize } from "./serialize.js";
 import type {
+  OdrlAction,
   OdrlConstraint,
   OdrlDuty,
   OdrlPolicy,
@@ -51,7 +53,6 @@ import {
   ODRL_UID,
   ODRLD_DELEGATED_UNDER,
   ODRLD_INLINE_CONTEXT_EXTENSION,
-  type OdrlActionName,
   OPERATOR_IRI,
   type OperatorName,
   RDF_TYPE,
@@ -203,9 +204,9 @@ export function isIriValued(left: LeftOperandName): boolean {
 }
 
 /**
- * Thrown when an EXPLICITLY-PROVIDED http(s)-contract IRI (a rule/duty/policy
+ * Thrown when an EXPLICITLY-PROVIDED HTTP(S)/URN policy IRI (a rule/duty/policy
  * `target`, `assignee`, `assigner`, or `profile`) cannot be made into a safe
- * http(s) IRI. We refuse to serialise rather than silently DROP it: a dropped
+ * HTTP(S) or RFC 8141 URN IRI. We refuse to serialise rather than silently DROP it: a dropped
  * `target`/`assignee` is treated as a WILDCARD by {@link evaluate} (a rule with no
  * target matches ANY resource; with no assignee, ANY agent), so silently dropping a
  * malformed one would WIDEN the policy — a privilege escalation. Throwing is the
@@ -220,35 +221,49 @@ export class OdrlSerializationError extends Error {
 }
 
 /**
- * Validate an EXPLICIT http(s)-contract IRI for an EVALUATION-CRITICAL field
+ * Validate an EXPLICIT HTTP(S) or RFC 8141 URN IRI for an EVALUATION-CRITICAL field
  * (`target`, `assignee`, `assigner`, `profile` — the ones {@link evaluate} compares
  * by EXACT STRING). `undefined` in → `undefined` out (the field is genuinely absent
- * — a legitimate wildcard the caller chose). Otherwise it must be a safe http(s) IRI
+ * — a legitimate wildcard the caller chose). Otherwise it must be a safe HTTP(S) or URN IRI
  * that ESCAPING WOULD NOT MUTATE, else it THROWS {@link OdrlSerializationError}:
  *
- *  - not an http(s) IRI → throw (dropping it would widen the policy to a wildcard —
+ *  - not an HTTP(S) or URN IRI → throw (dropping it would widen the policy to a wildcard —
  *    a privilege escalation).
  *  - would be MUTATED by escaping (contains a space / control / IRIREF-forbidden
  *    char) → throw. This is load-bearing: if we silently escaped it, the RAW
  *    in-memory policy (`…/a b`) and the serialise→parse round-trip (`…/a%20b`) would
  *    carry DIFFERENT target/assignee strings and `evaluate()` would give DIFFERENT
  *    decisions for the SAME policy. Rejecting a would-mutate value guarantees
- *    in-memory == serialised == parsed for these fields. A clean absolute http(s)
+ *    in-memory == serialised == parsed for these fields. A clean absolute HTTP(S) or URN
  *    IRI passes through BYTE-IDENTICAL.
  *
  * (Non-evaluation fields like a constraint right-operand keep the general
  * escape-for-serialisation behaviour via {@link safeIri}, since their round-trip
  * identity is not compared.)
  */
-function requireHttpIri(value: string | undefined, field: string): string | undefined {
+function requirePolicyIri(value: string | undefined, field: string): string | undefined {
   if (value === undefined) {
     return undefined;
   }
   const shown = value.length > 200 ? `${value.slice(0, 200)}…` : value;
-  const safe = safeHttpIri(value);
+  // RFC 8141 section 2: NID, NSS, optional r/q components and fragment.
+  // Check lexical syntax before the serializer: neither escaping nor URL
+  // normalization may change an evaluation-critical identifier.
+  const pchar = "(?:[a-z0-9._~!$&'()*+,;=:@-]|%[0-9a-f]{2})";
+  const urn = new RegExp(
+    `^urn:[a-z0-9][a-z0-9-]{0,30}[a-z0-9]:${pchar}(?:${pchar}|/)*` +
+      `(?:\\?\\+${pchar}(?:${pchar}|/|\\?(?!=))*)?` +
+      `(?:\\?=${pchar}(?:${pchar}|[/?])*)?(?:#(?:${pchar}|[/?])*)?$`,
+    "i",
+  );
+  const safe = /\s/u.test(value)
+    ? undefined
+    : urn.test(value)
+      ? escapeIri(value)
+      : safeHttpIri(value);
   if (safe === undefined) {
     throw new OdrlSerializationError(
-      `Refusing to serialise policy: ${field} must be an http(s) IRI, got ${JSON.stringify(shown)}. ` +
+      `Refusing to serialise policy: ${field} must be an http(s) IRI or RFC 8141 URN, got ${JSON.stringify(shown)}. ` +
         "Dropping it would widen the policy to a wildcard (fail-closed).",
     );
   }
@@ -257,20 +272,49 @@ function requireHttpIri(value: string | undefined, field: string): string | unde
       `Refusing to serialise policy: ${field} contains characters that require escaping, got ${JSON.stringify(
         shown,
       )}. An evaluation-critical IRI (target/assignee/assigner/profile) must be a clean absolute ` +
-        "http(s) IRI so it evaluates identically in-memory and after a serialise→parse round-trip.",
+        "http(s) or URN IRI so it evaluates identically in-memory and after a serialise→parse round-trip.",
     );
   }
   return safe;
 }
 
+/** Resolve a standard name or retain an absolute profile action unchanged. */
+export function actionIri(action: OdrlAction): string {
+  if (Object.hasOwn(ACTION_IRI, action)) return ACTION_IRI[action as keyof typeof ACTION_IRI];
+  if (Object.hasOwn(IRI_TO_ACTION, action)) {
+    throw new OdrlSerializationError(
+      `Use the short action name "${IRI_TO_ACTION[action]}" for a standard action.`,
+    );
+  }
+  if (absoluteAction(action)) return action;
+  throw new OdrlSerializationError(
+    "An action must be a standard ODRL name or a clean absolute IRI",
+  );
+}
+
+function absoluteAction(value: string): value is `${string}:${string}` {
+  return typeof value === "string" && !/[\ud800-\udfff]/u.test(value) && safeIri(value) === value;
+}
+
 /** Write a duty node under `parent` via `predicate`. */
-function writeDuty(b: GraphBuilder, parent: NodeRef, predicate: string, duty: OdrlDuty): void {
+function writeDuty(
+  b: GraphBuilder,
+  parent: NodeRef,
+  predicate: string,
+  duty: OdrlDuty,
+  onRuleNode?: PolicyWriteOptions["onRuleNode"],
+): void {
   // duty.id is a SUBJECT id that may legitimately be a non-http absolute IRI
   // (urn:/uuid:) — it is made breakout-proof at the GraphBuilder chokepoint
   // (escapeIri), so it is NOT dropped here.
   const node = b.linkChild(parent, predicate, duty.id);
-  b.addIri(node, ODRL_ACTION, ACTION_IRI[duty.action]);
-  const dutyTarget = requireHttpIri(duty.target, "duty.target");
+  onRuleNode?.(
+    duty,
+    node.kind === "blank" ? node.value : escapeIri(node.value),
+    node.kind === "blank",
+  );
+  b.addIri(node, ODRL_ACTION, actionIri(duty.action));
+  const dutyTarget = requirePolicyIri(duty.target, "duty.target");
   if (dutyTarget !== undefined) {
     b.addIri(node, ODRL_TARGET, dutyTarget);
   }
@@ -284,23 +328,29 @@ function writeRule(
   b: GraphBuilder,
   policy: NodeRef,
   rule: OdrlRule,
-  inheritedAssigner?: string,
-  inheritedAssignee?: string,
+  type: "permission" | "prohibition",
+  parties: Pick<OdrlPolicy, "assigner" | "assignee">,
+  onRuleNode?: PolicyWriteOptions["onRuleNode"],
 ): void {
-  const predicate = rule.type === "prohibition" ? ODRL_PROHIBITION : ODRL_PERMISSION;
+  const predicate = type === "prohibition" ? ODRL_PROHIBITION : ODRL_PERMISSION;
   // rule.id is a SUBJECT id that may legitimately be a non-http absolute IRI
   // (urn:/uuid:) — made breakout-proof at the GraphBuilder chokepoint, not dropped.
   const node = b.linkChild(policy, predicate, rule.id);
-  b.addIri(node, ODRL_ACTION, ACTION_IRI[rule.action]);
-  const target = requireHttpIri(rule.target, "rule.target");
+  onRuleNode?.(
+    rule,
+    node.kind === "blank" ? node.value : escapeIri(node.value),
+    node.kind === "blank",
+  );
+  b.addIri(node, ODRL_ACTION, actionIri(rule.action));
+  const target = requirePolicyIri(rule.target, "rule.target");
   if (target !== undefined) {
     b.addIri(node, ODRL_TARGET, target);
   }
-  const assignee = requireHttpIri(rule.assignee ?? inheritedAssignee, "rule.assignee");
+  const assignee = requirePolicyIri(rule.assignee ?? parties.assignee, "rule.assignee");
   if (assignee !== undefined) {
     b.addIri(node, ODRL_ASSIGNEE, assignee);
   }
-  const assigner = requireHttpIri(rule.assigner ?? inheritedAssigner, "rule.assigner");
+  const assigner = requirePolicyIri(rule.assigner ?? parties.assigner, "rule.assigner");
   if (assigner !== undefined) {
     b.addIri(node, ODRL_ASSIGNER, assigner);
   }
@@ -308,18 +358,24 @@ function writeRule(
     writeConstraint(b, node, c);
   }
   // Duties only condition a permission (ODRL `odrl:duty`).
-  if (rule.type === "permission") {
+  if (type === "permission") {
     for (const duty of rule.duties ?? []) {
-      writeDuty(b, node, ODRL_DUTY, duty);
+      writeDuty(b, node, ODRL_DUTY, duty, onRuleNode);
     }
   }
+}
+
+/** Options for observing rule and duty nodes while {@link policyToRdf} writes a policy. */
+export interface PolicyWriteOptions {
+  /** Observe each input rule and duty's IRI or document-local blank node label. */
+  readonly onRuleNode?: (rule: OdrlRule | OdrlDuty, value: string, isBlank: boolean) => void;
 }
 
 /**
  * Lower a structured {@link OdrlPolicy} to RDF quads (an `odrl:Policy` graph)
  * through the typed wrapper write path.
  */
-export function policyToRdf(policy: OdrlPolicy): Quad[] {
+export function policyToRdf(policy: OdrlPolicy, options?: PolicyWriteOptions): Quad[] {
   // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   const b = new GraphBuilder();
   // policy.id is the SUBJECT and its own uid — it may legitimately be a non-http
@@ -330,16 +386,16 @@ export function policyToRdf(policy: OdrlPolicy): Quad[] {
   // ODRL `uid` is the policy's identifier — set it to the policy IRI.
   b.addIri(subject, ODRL_UID, policy.id);
   for (const p of toArray(policy.profile)) {
-    const safeProfile = requireHttpIri(p, "policy.profile");
+    const safeProfile = requirePolicyIri(p, "policy.profile");
     if (safeProfile !== undefined) {
       b.addIri(subject, ODRL_PROFILE, safeProfile);
     }
   }
-  const policyAssigner = requireHttpIri(policy.assigner, "policy.assigner");
+  const policyAssigner = requirePolicyIri(policy.assigner, "policy.assigner");
   if (policyAssigner !== undefined) {
     b.addIri(subject, ODRL_ASSIGNER, policyAssigner);
   }
-  const policyAssignee = requireHttpIri(policy.assignee, "policy.assignee");
+  const policyAssignee = requirePolicyIri(policy.assignee, "policy.assignee");
   if (policyAssignee !== undefined) {
     b.addIri(subject, ODRL_ASSIGNEE, policyAssignee);
   }
@@ -350,13 +406,13 @@ export function policyToRdf(policy: OdrlPolicy): Quad[] {
     b.addIri(subject, legacyOdrlIri(ODRLD_DELEGATED_UNDER), policy.delegatedUnder);
   }
   for (const rule of policy.permissions ?? []) {
-    writeRule(b, subject, { ...rule, type: "permission" }, policy.assigner, policy.assignee);
+    writeRule(b, subject, rule, "permission", policy, options?.onRuleNode);
   }
   for (const rule of policy.prohibitions ?? []) {
-    writeRule(b, subject, { ...rule, type: "prohibition" }, policy.assigner, policy.assignee);
+    writeRule(b, subject, rule, "prohibition", policy, options?.onRuleNode);
   }
   for (const duty of policy.obligations ?? []) {
-    writeDuty(b, subject, ODRL_OBLIGATION, duty);
+    writeDuty(b, subject, ODRL_OBLIGATION, duty, options?.onRuleNode);
   }
   return b.quads();
 }
@@ -381,8 +437,8 @@ export function policyToTurtle(policy: OdrlPolicy, format?: string): Promise<str
 export function policyToJsonLd(policy: OdrlPolicy): Record<string, unknown> {
   // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   // Same sanitisation + fail-closed rule as the RDF path (policyToRdf): id fields
-  // are escaped scheme-agnostically (escapeIri); http(s)-contract fields go through
-  // requireHttpIri (throws on an unsafe EXPLICIT value rather than silently dropping
+  // are escaped scheme-agnostically (escapeIri); HTTP(S)/URN policy fields go through
+  // requirePolicyIri (throws on an unsafe EXPLICIT value rather than silently dropping
   // it to a wildcard). Keeps the two serialisations in lock-step so a policy the RDF
   // path REFUSES can never be smuggled out as JSON-LD. The delegation-profile
   // context terms are added ONLY when the policy uses one, so a plain ODRL policy's
@@ -400,14 +456,14 @@ export function policyToJsonLd(policy: OdrlPolicy): Record<string, unknown> {
   };
   const profiles = toArray(policy.profile);
   const emittedProfiles = profiles
-    .map((p) => requireHttpIri(p, "policy.profile"))
+    .map((p) => requirePolicyIri(p, "policy.profile"))
     .filter((p): p is string => p !== undefined);
   if (emittedProfiles.length > 0) {
     doc.profile = emittedProfiles.map((p) => ({ "@id": p }));
   }
-  const jsonAssigner = requireHttpIri(policy.assigner, "policy.assigner");
+  const jsonAssigner = requirePolicyIri(policy.assigner, "policy.assigner");
   if (jsonAssigner !== undefined) doc.assigner = { "@id": jsonAssigner };
-  const jsonAssignee = requireHttpIri(policy.assignee, "policy.assignee");
+  const jsonAssignee = requirePolicyIri(policy.assignee, "policy.assignee");
   if (jsonAssignee !== undefined) doc.assignee = { "@id": jsonAssignee };
   if (policy.conflict !== undefined) doc.conflict = { "@id": CONFLICT_IRI[policy.conflict] };
   // Escape the delegation-parent IRI exactly like the policy/rule/duty @id fields
@@ -434,12 +490,12 @@ export function policyToJsonLd(policy: OdrlPolicy): Record<string, unknown> {
 function ruleJsonLd(rule: OdrlRule, policy: OdrlPolicy): Record<string, unknown> {
   const node: Record<string, unknown> = {};
   if (rule.id !== undefined) node["@id"] = escapeIri(rule.id);
-  node.action = { "@id": ACTION_IRI[rule.action] };
-  const target = requireHttpIri(rule.target, "rule.target");
+  node.action = { "@id": actionIri(rule.action) };
+  const target = requirePolicyIri(rule.target, "rule.target");
   if (target !== undefined) node.target = { "@id": target };
-  const assignee = requireHttpIri(rule.assignee ?? policy.assignee, "rule.assignee");
+  const assignee = requirePolicyIri(rule.assignee ?? policy.assignee, "rule.assignee");
   if (assignee !== undefined) node.assignee = { "@id": assignee };
-  const assigner = requireHttpIri(rule.assigner ?? policy.assigner, "rule.assigner");
+  const assigner = requirePolicyIri(rule.assigner ?? policy.assigner, "rule.assigner");
   if (assigner !== undefined) node.assigner = { "@id": assigner };
   if (rule.constraints && rule.constraints.length > 0) {
     node.constraint = rule.constraints.map((c) => constraintJsonLd(c));
@@ -453,8 +509,8 @@ function ruleJsonLd(rule: OdrlRule, policy: OdrlPolicy): Record<string, unknown>
 function dutyJsonLd(duty: OdrlDuty): Record<string, unknown> {
   const node: Record<string, unknown> = {};
   if (duty.id !== undefined) node["@id"] = escapeIri(duty.id);
-  node.action = { "@id": ACTION_IRI[duty.action] };
-  const target = requireHttpIri(duty.target, "duty.target");
+  node.action = { "@id": actionIri(duty.action) };
+  const target = requirePolicyIri(duty.target, "duty.target");
   if (target !== undefined) node.target = { "@id": target };
   if (duty.constraints && duty.constraints.length > 0) {
     node.constraint = duty.constraints.map((c) => constraintJsonLd(c));
@@ -486,13 +542,23 @@ function constraintJsonLd(c: OdrlConstraint): Record<string, unknown> {
   return node;
 }
 
+/** Options shared by the ODRL policy readers. */
+export interface PolicyReadOptions {
+  /** Extension action IRIs to accept by exact match. Defaults to the standard action table alone. */
+  readonly allowedActionIris?: readonly string[];
+}
+
 /**
  * Read a structured {@link OdrlPolicy} back from an already-parsed RDF dataset.
  * Returns the FIRST well-formed policy found, or `undefined` if there is none.
  */
-export function policyFromRdf(dataset: DatasetCore): OdrlPolicy | undefined {
+export function policyFromRdf(
+  dataset: DatasetCore,
+  options?: PolicyReadOptions,
+): OdrlPolicy | undefined {
+  const allowedActionIris = options?.allowedActionIris ?? [];
   for (const node of wrapPolicy(dataset).policies()) {
-    const policy = projectPolicy(node);
+    const policy = projectPolicy(node, allowedActionIris);
     if (policy !== undefined) {
       return policy;
     }
@@ -509,12 +575,13 @@ export async function parsePolicy(
   input: string | DatasetCore,
   contentType = "text/turtle",
   baseIRI?: string,
+  options?: PolicyReadOptions,
 ): Promise<OdrlPolicy | undefined> {
   const dataset =
     typeof input === "string"
       ? await parseRdf(input, contentType, baseIRI ? { baseIRI } : {})
       : input;
-  return policyFromRdf(dataset);
+  return policyFromRdf(dataset, options);
 }
 
 /** The first recognised ODRL policy subtype among a node's rdf:type terms. */
@@ -541,7 +608,10 @@ function profileField(profiles: readonly string[]): { profile?: string | readonl
 }
 
 /** Project a {@link PolicyNode} to a plain {@link OdrlPolicy}, or `undefined`. */
-function projectPolicy(node: PolicyNode): OdrlPolicy | undefined {
+function projectPolicy(
+  node: PolicyNode,
+  allowedActionIris: readonly string[],
+): OdrlPolicy | undefined {
   const type = firstPolicyType(node.types);
   const profiles = [...node.profiles].filter((t) => t.termType === "NamedNode").map((t) => t.value);
   const assigner = firstIri(node.assigners);
@@ -557,13 +627,13 @@ function projectPolicy(node: PolicyNode): OdrlPolicy | undefined {
   const delegatedUnder = [...parents][0];
 
   const permissions = [...node.permissions]
-    .map((r) => projectRule(r, "permission"))
+    .map((r) => projectRule(r, "permission", allowedActionIris))
     .filter((r): r is OdrlRule => r !== undefined);
   const prohibitions = [...node.prohibitions]
-    .map((r) => projectRule(r, "prohibition"))
+    .map((r) => projectRule(r, "prohibition", allowedActionIris))
     .filter((r): r is OdrlRule => r !== undefined);
   const obligations = [...node.obligations]
-    .map((d) => projectDuty(d))
+    .map((d) => projectDuty(d, allowedActionIris))
     .filter((d): d is OdrlDuty => d !== undefined);
 
   return {
@@ -581,8 +651,12 @@ function projectPolicy(node: PolicyNode): OdrlPolicy | undefined {
 }
 
 /** Project a {@link RuleNode} to a plain {@link OdrlRule}, or `undefined` if malformed. */
-function projectRule(node: RuleNode, type: RuleType): OdrlRule | undefined {
-  const action = actionOf(node.actions);
+function projectRule(
+  node: RuleNode,
+  type: RuleType,
+  allowedActionIris: readonly string[],
+): OdrlRule | undefined {
+  const action = actionOf(node.actions, allowedActionIris);
   if (action === undefined) {
     return undefined;
   }
@@ -594,7 +668,9 @@ function projectRule(node: RuleNode, type: RuleType): OdrlRule | undefined {
     .filter((c): c is OdrlConstraint => c !== undefined);
   const duties =
     type === "permission"
-      ? [...node.duties].map((d) => projectDuty(d)).filter((d): d is OdrlDuty => d !== undefined)
+      ? [...node.duties]
+          .map((d) => projectDuty(d, allowedActionIris))
+          .filter((d): d is OdrlDuty => d !== undefined)
       : [];
 
   const id = node.termType === "NamedNode" ? node.value : undefined;
@@ -611,8 +687,8 @@ function projectRule(node: RuleNode, type: RuleType): OdrlRule | undefined {
 }
 
 /** Project a {@link DutyNode} to a plain {@link OdrlDuty}, or `undefined`. */
-function projectDuty(node: DutyNode): OdrlDuty | undefined {
-  const action = actionOf(node.actions);
+function projectDuty(node: DutyNode, allowedActionIris: readonly string[]): OdrlDuty | undefined {
+  const action = actionOf(node.actions, allowedActionIris);
   if (action === undefined) {
     return undefined;
   }
@@ -695,19 +771,24 @@ function coerceValue(value: string, datatype: string | undefined, isIri: boolean
   return value;
 }
 
-/** Map a rule/duty action term set to the ODRL action short name, if recognised. */
+/** Retain the existing preference for a recognised action when several are supplied. */
 function actionOf(
   actions: ReadonlySet<{ termType: string; value: string }>,
-): OdrlActionName | undefined {
-  for (const a of actions) {
-    if (a.termType === "NamedNode") {
-      const name = IRI_TO_ACTION[a.value];
-      if (name !== undefined) {
-        return name;
-      }
+  allowedActionIris: readonly string[],
+): OdrlAction | undefined {
+  let extension: OdrlAction | undefined;
+  for (const action of actions) {
+    if (action.termType !== "NamedNode") continue;
+    if (Object.hasOwn(IRI_TO_ACTION, action.value)) return IRI_TO_ACTION[action.value];
+    if (
+      extension === undefined &&
+      allowedActionIris.includes(action.value) &&
+      absoluteAction(action.value)
+    ) {
+      extension = action.value;
     }
   }
-  return undefined;
+  return extension;
 }
 
 // Re-export the reverse maps so consumers reading raw IRIs don't reach into vocab.

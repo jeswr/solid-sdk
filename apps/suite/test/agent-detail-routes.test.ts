@@ -70,7 +70,9 @@ beforeAll(async () => {
   // The route hook selects its implementation at import time, just as Next bakes in the target.
   vi.stubEnv("NEXT_PUBLIC_SUITE_TARGET", "native");
   await Promise.all(routes.map((route) => route.load()));
-});
+  // Importing every agent route page transforms the whole page tree cold. That takes about 20 s
+  // on a cold local run and went past the default 10 s hook timeout in CI.
+}, 60_000);
 beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_SUITE_TARGET", "native");
   navigation.pathname = null;

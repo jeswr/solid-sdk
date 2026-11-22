@@ -74,7 +74,7 @@
     "name": "Solid Pod Manager",
     "description": "Standalone Solid consumer and management app — Files, Tasks, Bookmarks, Profile/Contacts/Type-index, Sharing (WAC), Issues, Inbox/Chat/Schedule, federation discovery, plus data integrations.",
     "category": "Productivity",
-    "deployedUrl": "https://app.solid-test.jeswr.org",
+    "deployedUrl": "https://jeswr.github.io/solid-sdk/pod-manager/",
     "status": "live",
     "repo": "https://github.com/jeswr/solid-pod-manager",
     "launch": "prefill"
@@ -84,7 +84,7 @@
     "name": "Solid Issues",
     "description": "Jira/Monday-parity issue tracker storing wf:Task data in your pod — boards, WIP limits, dependencies, automation, control charts and live notifications.",
     "category": "Productivity",
-    "deployedUrl": "https://issues.solid-test.jeswr.org",
+    "deployedUrl": "https://jeswr.github.io/solid-sdk/issues/",
     "status": "live",
     "repo": "https://github.com/jeswr/solid-issues",
     "launch": "autologin"

@@ -1,0 +1,464 @@
+// AUTHORED-BY Codex GPT-6.2 Sol
+// AUTHORED-BY Claude Opus 5.5
+/**
+ * Trust as a lookup, not one stored list (trust suite `register-chain`). A question goes
+ * first to the principal's own list (scoped by task or claim type; it can also block), then
+ * to a root the principal accepts, which delegates to the register that answers for that
+ * kind of party. Every answer carries the path that produced it, when it was checked and
+ * when it expires.
+ *
+ * The own list for sources is the local trust store's source-authority rules, so the gate and
+ * the pilot's domain handlers read the same rules. Roots and registers here are synthetic
+ * in-memory fixtures.
+ */
+import type { Iri } from "../core/types.js";
+import type { SourceAuthorityRule, TrustStore } from "../mechanisms/trust.js";
+
+export type PathKind = "own-list" | "root" | "register" | "federation" | "international";
+
+export interface PathStep {
+  /** Who was consulted, by display name. */
+  readonly at: string;
+  readonly kind: PathKind;
+  readonly says: string;
+}
+
+export type ResolutionOutcome = "accepted" | "not-accepted" | "blocked" | "no-route" | "unresolved";
+
+export interface Resolution {
+  readonly question: string;
+  readonly path: readonly PathStep[];
+  readonly answer: string;
+  readonly outcome: ResolutionOutcome;
+  readonly checkedAt: string;
+  readonly expires?: string;
+  /** The rule or register entry the answer rests on. */
+  readonly rule?: { readonly id: string; readonly version?: string };
+}
+
+/** An entry the principal chose: accepted (or blocked) for named tasks. */
+export interface OwnListEntry {
+  readonly party: Iri;
+  /** Operation ids this party is accepted as a recipient for. */
+  readonly tasks: readonly Iri[];
+  readonly block?: boolean;
+  readonly note?: string;
+  readonly expiresAt?: string;
+}
+
+export interface RegisterEntry {
+  readonly party: Iri;
+  /** Operation or regulated-role IDs authorized by the register. */
+  readonly authorizedFor: readonly Iri[];
+  /** Kinds of claim the register says the party is an authority for (`x.*` prefixes allowed). */
+  readonly claimTypes?: readonly string[];
+  readonly status: "authorized" | "suspended" | "withdrawn";
+  readonly id: string;
+  readonly expiresAt?: string;
+}
+
+export interface Register {
+  readonly id: Iri;
+  readonly name: string;
+  /** The kind of party it answers for, in plain words ("lenders"). */
+  readonly answersFor: string;
+  readonly entries: readonly RegisterEntry[];
+  /** How long one of its answers may be relied on. */
+  readonly answerTtlMs: number;
+}
+
+export interface TrustRoot {
+  readonly id: Iri;
+  readonly name: string;
+  readonly delegates: readonly Register[];
+}
+
+export type TrustBasis = OwnListEntry | RegisterEntry | SourceAuthorityRule;
+
+export interface TrustResolverOptions {
+  readonly traceLinked?: boolean;
+  /** Display name of the principal whose list this is ("Sam"). */
+  readonly principal: string;
+  readonly trust: TrustStore;
+  readonly ownList?: readonly OwnListEntry[];
+  readonly root?: TrustRoot;
+  readonly name: (iri: string | undefined) => string;
+  readonly ownListOnly?: boolean;
+  /** Previously accepted register entries available offline, with a fixed expiry. */
+  readonly pinnedRegistrations?: readonly (RegisterEntry & { readonly expiresAt: string })[];
+  /**
+   * Brief 31 §2.2: registers the root delegates to whose entries this agent takes only from
+   * signed register answers it has admitted, never from a local table.
+   */
+  readonly answeredRegisters?: readonly Iri[];
+}
+
+/** One entry read from an admitted, signed register answer. */
+export interface AnsweredEntry {
+  readonly register: Iri;
+  readonly entry: RegisterEntry;
+  readonly signedAt: string;
+  readonly validUntil?: string;
+}
+
+export class TrustResolver {
+  private answers: () => readonly AnsweredEntry[] = () => [];
+  private readonly traceEntries?: WeakMap<Resolution, TrustBasis>;
+  constructor(private readonly opts: TrustResolverOptions) {
+    if (opts.traceLinked) this.traceEntries = new WeakMap();
+  }
+
+  traceBasis(resolution: Resolution): { entry: TrustBasis; owner: string } | undefined {
+    const entry = this.traceEntries?.get(resolution);
+    return entry ? { entry, owner: this.opts.trust.data.owner } : undefined;
+  }
+
+  private traced(resolution: Resolution, entry: TrustBasis | undefined): Resolution {
+    if (entry) this.traceEntries?.set(resolution, entry);
+    return resolution;
+  }
+
+  /** The agent's runtime supplies the entries of the register answers its gate admitted. */
+  bindAnswers(read: () => readonly AnsweredEntry[]): void {
+    this.answers = read;
+  }
+
+  /** True when this agent reads at least one register from admitted answers. */
+  get readsAnswers(): boolean {
+    return (this.opts.answeredRegisters?.length ?? 0) > 0;
+  }
+
+  /** The root as this agent sees it: answered registers hold only admitted entries. */
+  private delegates(root: TrustRoot, at: string): readonly Register[] {
+    const answered = this.opts.answeredRegisters ?? [];
+    if (!answered.length) return root.delegates;
+    const entries = this.answers();
+    const now = Date.parse(at);
+    return root.delegates.map((register) => {
+      if (!answered.includes(register.id)) return register;
+      const latest = new Map<string, AnsweredEntry[]>();
+      for (const answer of entries) {
+        const time = Date.parse(answer.signedAt);
+        if (answer.register !== register.id || !Number.isFinite(time) || time > now) continue;
+        const previous = latest.get(answer.entry.party);
+        const previousTime = previous ? Date.parse(previous[0]!.signedAt) : -Infinity;
+        if (time > previousTime) latest.set(answer.entry.party, [answer]);
+        else if (time === previousTime) previous?.push(answer);
+      }
+      return {
+        ...register,
+        entries: [...latest.values()].flatMap((answers) => {
+          const answer = answers[0]!;
+          const expires = Math.min(
+            Date.parse(answer.signedAt) + register.answerTtlMs,
+            ...answers.map(({ validUntil }) =>
+              validUntil === undefined ? Infinity : Date.parse(validUntil),
+            ),
+          );
+          // A superseded answer cannot come back when its replacement expires.
+          if (!Number.isFinite(expires)) return [];
+          const same = answers.every(
+            ({ entry }) =>
+              entry.status === answer.entry.status &&
+              JSON.stringify(entry.authorizedFor) === JSON.stringify(answer.entry.authorizedFor) &&
+              JSON.stringify(entry.claimTypes) === JSON.stringify(answer.entry.claimTypes),
+          );
+          return [
+            {
+              ...answer.entry,
+              status: same && now < expires ? answer.entry.status : "withdrawn",
+              expiresAt: new Date(expires).toISOString(),
+            },
+          ];
+        }),
+      };
+    });
+  }
+  get pinnedOnly(): boolean {
+    return this.opts.ownListOnly === true;
+  }
+
+  private get ownListName(): string {
+    return `${this.opts.principal}'s own list`;
+  }
+
+  /**
+   * Is `source` accepted for claims of `claimType` about `subject`? The own list first (the
+   * trust store's scoped source rules); otherwise the root and the register it delegates to.
+   */
+  resolveSource(input: {
+    evaluator: Iri;
+    source: Iri;
+    claimType: string;
+    subject?: Iri;
+    at: string;
+  }): Resolution {
+    const { name } = this.opts;
+    const question = `Is ${name(input.source)} an authority for ${input.claimType} claims${
+      input.subject ? ` about ${name(input.subject)}` : ""
+    }?`;
+    const blocked = this.pinnedOnly
+      ? (this.opts.ownList ?? []).find((e) => e.party === input.source && e.block)
+      : undefined;
+    const a = blocked
+      ? {
+          outcome: "not-accepted" as const,
+          reason: "The principal blocked this source.",
+          rule: undefined,
+        }
+      : this.opts.trust.assessSource(input);
+    if (
+      a.outcome === "accepted" ||
+      a.outcome === "unresolved" ||
+      !this.opts.root ||
+      this.pinnedOnly ||
+      blocked
+    ) {
+      const resolution: Resolution = {
+        question,
+        path: [
+          {
+            at: this.ownListName,
+            kind: "own-list",
+            says:
+              a.outcome === "accepted"
+                ? `${name(input.source)} is accepted for ${input.claimType}.`
+                : (a.reason ?? "No rule recognises this source."),
+          },
+        ],
+        answer:
+          a.outcome === "accepted"
+            ? `Accepted, for ${input.claimType} claims only.`
+            : a.outcome === "unresolved"
+              ? "Cannot tell."
+              : `Not accepted for ${input.claimType}.`,
+        outcome: blocked
+          ? "blocked"
+          : this.pinnedOnly &&
+              a.outcome === "not-accepted" &&
+              !this.opts.trust.data.sourceAuthority.some((r) => r.source === input.source)
+            ? "no-route"
+            : a.outcome,
+        checkedAt: input.at,
+        ...(a.rule ? { rule: a.rule } : {}),
+      };
+      if (!this.traceEntries) return resolution;
+      const rule = a.rule;
+      const entry =
+        rule &&
+        this.opts.trust.data.sourceAuthority.find(
+          (candidate) =>
+            candidate.id === rule.id &&
+            candidate.version === rule.version &&
+            candidate.source === input.source,
+        );
+      return this.traced(resolution, blocked ?? entry);
+    }
+    const path: PathStep[] = [
+      {
+        at: this.ownListName,
+        kind: "own-list",
+        says: `No entry for ${name(input.source)} for this kind of claim.`,
+      },
+    ];
+    const root = this.opts.root;
+    const matches = (types: readonly string[] | undefined) =>
+      (types ?? []).some((t) =>
+        t.endsWith(".*") ? input.claimType.startsWith(t.slice(0, -1)) : t === input.claimType,
+      );
+    const register = this.delegates(root, input.at).find((r) =>
+      r.entries.some((e) => e.party === input.source),
+    );
+    const entry = register?.entries.find((e) => e.party === input.source);
+    if (!register || !entry) {
+      path.push({
+        at: root.name,
+        kind: "root",
+        says: `No register it delegates to lists ${name(input.source)}.`,
+      });
+      return {
+        question,
+        path,
+        answer: "No register answers for this source.",
+        outcome: "no-route",
+        checkedAt: input.at,
+      };
+    }
+    path.push({
+      at: root.name,
+      kind: "root",
+      says: `${register.answersFor[0]?.toUpperCase()}${register.answersFor.slice(1)} are answered by the ${register.name}.`,
+    });
+    const ok = entry.status === "authorized" && matches(entry.claimTypes);
+    path.push({
+      at: register.name,
+      kind: "register",
+      says: ok
+        ? `${name(input.source)} is authorized; it is an authority for ${input.claimType}. Checked ${input.at}.`
+        : `${name(input.source)} is ${entry.status}, but not an authority for ${input.claimType}. Checked ${input.at}.`,
+    });
+    return this.traced(
+      {
+        question,
+        path,
+        answer: ok
+          ? `Accepted, for ${input.claimType} claims only.`
+          : `Not accepted for ${input.claimType}.`,
+        outcome: ok ? "accepted" : "not-accepted",
+        checkedAt: input.at,
+        expires:
+          entry.expiresAt ?? new Date(Date.parse(input.at) + register.answerTtlMs).toISOString(),
+        rule: { id: entry.id },
+      },
+      entry,
+    );
+  }
+
+  /** May `party` receive this for `task` (an operation id)? Own list, then root, then register. */
+  resolveRecipient(input: {
+    party: Iri;
+    task: Iri;
+    taskLabel: string;
+    at: string;
+    registeredRole?: boolean;
+  }): Resolution {
+    const { name } = this.opts;
+    const question = `Is ${name(input.party)} a party I can send ${input.taskLabel} to?`;
+    const path: PathStep[] = [];
+    const own = (this.opts.ownList ?? []).find((e) => e.party === input.party);
+    if (own?.block) {
+      path.push({
+        at: this.ownListName,
+        kind: "own-list",
+        says: `${name(input.party)} is blocked.`,
+      });
+      return this.traced(
+        { question, path, answer: "Blocked.", outcome: "blocked", checkedAt: input.at },
+        own,
+      );
+    }
+    if (
+      !input.registeredRole &&
+      own?.tasks.includes(input.task) &&
+      (!this.pinnedOnly || !own.expiresAt || Date.parse(input.at) < Date.parse(own.expiresAt))
+    ) {
+      path.push({
+        at: this.ownListName,
+        kind: "own-list",
+        says: `${name(input.party)} is accepted for ${input.taskLabel}.`,
+      });
+      return this.traced(
+        {
+          question,
+          path,
+          answer: `Accepted, for ${input.taskLabel} only.`,
+          outcome: "accepted",
+          checkedAt: input.at,
+        },
+        own,
+      );
+    }
+    path.push({
+      at: this.ownListName,
+      kind: "own-list",
+      says: own
+        ? `${name(input.party)} is listed, but not for ${input.taskLabel}.`
+        : `No entry for ${name(input.party)}.`,
+    });
+    if (input.registeredRole && this.pinnedOnly) {
+      const registration = this.opts.pinnedRegistrations?.find(
+        (entry) => entry.party === input.party && entry.authorizedFor.includes(input.task),
+      );
+      if (!registration)
+        return {
+          question,
+          path,
+          answer: "There is no pinned registration for this role.",
+          outcome: "no-route",
+          checkedAt: input.at,
+        };
+      const valid =
+        registration.status === "authorized" &&
+        Date.parse(input.at) < Date.parse(registration.expiresAt);
+      path.push({
+        at: this.ownListName,
+        kind: "own-list",
+        says: `The retained registration for ${input.taskLabel} is ${valid ? "current" : "unavailable"}.`,
+      });
+      return this.traced(
+        {
+          question,
+          path,
+          answer: valid ? `Accepted, for ${input.taskLabel} only.` : "Registration unavailable.",
+          outcome: valid ? "accepted" : "not-accepted",
+          checkedAt: input.at,
+          expires: registration.expiresAt,
+          rule: { id: registration.id },
+        },
+        registration,
+      );
+    }
+    const root = this.pinnedOnly ? undefined : this.opts.root;
+    if (!root) {
+      return {
+        question,
+        path,
+        answer: "No root to ask.",
+        outcome: "no-route",
+        checkedAt: input.at,
+      };
+    }
+    const matches = (entry: RegisterEntry) =>
+      entry.party === input.party &&
+      (!input.registeredRole || entry.authorizedFor.includes(input.task));
+    const register = this.delegates(root, input.at).find((r) => r.entries.some(matches));
+    const entry = register?.entries.find(matches);
+    if (!register || !entry) {
+      path.push({
+        at: root.name,
+        kind: "root",
+        says: `No register it delegates to lists ${name(input.party)}.`,
+      });
+      return {
+        question,
+        path,
+        answer: "No register answers for this party.",
+        outcome: "no-route",
+        checkedAt: input.at,
+      };
+    }
+    path.push({
+      at: root.name,
+      kind: "root",
+      says: `${register.answersFor[0]?.toUpperCase()}${register.answersFor.slice(1)} are answered by the ${register.name}.`,
+    });
+    const expires =
+      entry.expiresAt ?? new Date(Date.parse(input.at) + register.answerTtlMs).toISOString();
+    const ok =
+      entry.status === "authorized" &&
+      (!entry.expiresAt || Date.parse(input.at) < Date.parse(entry.expiresAt)) &&
+      entry.authorizedFor.includes(input.task);
+    path.push({
+      at: register.name,
+      kind: "register",
+      says:
+        entry.status !== "authorized"
+          ? `${name(input.party)} is ${entry.status}. Checked ${input.at}.`
+          : ok
+            ? `${name(input.party)} is authorized for ${input.taskLabel}. Checked ${input.at}.`
+            : `${name(input.party)} is authorized, but not for ${input.taskLabel}. Checked ${input.at}.`,
+    });
+    return this.traced(
+      {
+        question,
+        path,
+        answer: ok ? `Accepted, for ${input.taskLabel} only.` : "Not accepted.",
+        outcome: ok ? "accepted" : "not-accepted",
+        checkedAt: input.at,
+        expires,
+        rule: { id: entry.id },
+      },
+      entry,
+    );
+  }
+}

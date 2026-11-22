@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The declared policy-module seam and the SPARQ engine's protocol handling.
  *
@@ -262,7 +263,7 @@ describe("SPARQ engine process boundary (stand-in executables, not the evaluator
       operation: SCHEDULE_OP,
       terms: buildMeetingTerms({
         calendar: alice.calendar,
-        title: "x",
+        title: "meeting",
         durationMinutes: 30,
         window: { start: "2026-10-20T13:00:00Z", end: "2026-10-20T17:00:00Z" },
         now: clock.now().toISOString(),

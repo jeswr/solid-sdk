@@ -5,7 +5,12 @@ import { Session } from "./engine/session.js";
 import { App } from "./ui/App.js";
 import "./styles.css";
 
-const session = new Session();
+const url = new URL(window.location.href);
+const demoMode = url.searchParams.get("demo") === "1";
+const session = new Session({ demoMode });
+const explorerEmbed = window.self !== window.top && url.pathname === "/app/";
+url.searchParams.set("demo", "1");
+const demoHref = explorerEmbed && !demoMode ? url.href : undefined;
 
 /** On a host that offers a model (the hosted preview's `sample` capability), allow a live core. */
 type Host = { use?: (name: string) => Promise<unknown> };
@@ -21,4 +26,4 @@ if (host?.use) {
 
 const element = document.getElementById("root");
 if (!element) throw new Error("Missing root element");
-createRoot(element).render(<App session={session} />);
+createRoot(element).render(<App session={session} demoHref={demoHref} />);

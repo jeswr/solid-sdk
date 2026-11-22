@@ -41,7 +41,13 @@ export class TaskRecorder {
     };
   }
 
-  append(record: Omit<AuditRecord, keyof TaskContext>, at: string): Promise<LedgerEntry> {
+  append(
+    record: Omit<
+      Exclude<AuditRecord, { type: "gate-decision" | "record-anchor" }>,
+      keyof TaskContext
+    >,
+    at: string,
+  ): Promise<LedgerEntry> {
     return this.writer.append({ ...record, ...this.context }, at);
   }
 

@@ -1,0 +1,221 @@
+{
+  "@context": "https://w3id.org/jeswr/awp/context/scenario/v1",
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.2",
+  "id": "visa-application",
+  "parties": {
+    "owner": "The applicant",
+    "receiver": "The consulate",
+    "bank": "The foreign bank",
+    "employer": "The employer",
+    "owner-agent": "The applicant’s agent",
+    "receiver-agent": "The consulate’s agent"
+  },
+  "claims": [
+    {
+      "kind": "funds.balance",
+      "sources": [
+        "urn:fictional:visa-application:bank"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "visa-application.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:visa-application:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "employment.letter",
+      "sources": [
+        "urn:fictional:visa-application:employer"
+      ],
+      "methods": [
+        "person-opinion"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "travel.itinerary",
+      "sources": [
+        "urn:fictional:visa-application:owner"
+      ],
+      "methods": [
+        "self-reported"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:visa-application",
+      "claims": [
+        "funds.balance",
+        "visa-application.answer",
+        "derivation.request",
+        "employment.letter",
+        "travel.itinerary"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "urn:rule:visa-application:proof",
+      "template": "threshold",
+      "params": {
+        "input": "funds.balance",
+        "operator": "gte",
+        "value": 10000
+      },
+      "output": "visa-application.answer",
+      "inputsFrom": [
+        "urn:fictional:visa-application:bank"
+      ],
+      "assurances": [
+        "attested"
+      ],
+      "proofQuery": "SELECT DISTINCT ?subject WHERE { ?g <https://w3id.org/sparq/vcq#verifiedIssuer> <urn:fictional:visa-application:bank> . GRAPH ?g { ?subject <urn:claim:funds.balance> ?balance . FILTER(?balance >= 10000) } }"
+    }
+  ],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "funds.balance"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:visa-application",
+      "version": "0.1",
+      "label": "Applying for a visa",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:visa-application"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:visa-application:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:visa-application"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:visa-application:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:visa-application"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:visa-application:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:visa-application"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:visa-application:supporting-statements",
+      "version": "0.1",
+      "label": "Send the signed supporting statements",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:visa-application"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:visa-application",
+      "claims": [
+        "funds.balance"
+      ]
+    },
+    {
+      "action": "urn:op:visa-application:proof-answer",
+      "claims": [
+        "visa-application.answer"
+      ]
+    },
+    {
+      "action": "urn:op:visa-application:supporting-statements",
+      "claims": [
+        "employment.letter",
+        "travel.itinerary"
+      ]
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:visa-application:proof",
+      "method": "sparq-zk-result/5",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh"
+      ],
+      "purposes": [
+        "urn:purpose:visa-application"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "sparq-zk-result/5",
+      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). Single-issuer result proofs release supporting rows. There is no holder binding, completeness or unlinkability guarantee."
+    }
+  ],
+  "labels": {
+    "urn:purpose:visa-application": "Visa application"
+  }
+}

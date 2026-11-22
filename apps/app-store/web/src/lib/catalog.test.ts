@@ -40,23 +40,25 @@ describe("apps.json — the committed catalog matches the build spec", () => {
     }
   });
 
-  it("Pages apps keep their base paths; legacy deep-link targets keep their suite host", () => {
+  it("Pages apps keep their base paths; externally-hosted apps stay off the Pages origin", () => {
     for (const app of catalog.filter(isLive)) {
       const url = new URL(app.deployedUrl as string);
       const pagesSlug =
         app.id === "solid-access-manager"
           ? "access-manager"
-          : app.id.startsWith("pod-")
-            ? app.id
-            : null;
+          : app.id === "solid-pod-manager"
+            ? "pod-manager"
+            : app.id === "solid-issues"
+              ? "issues"
+              : app.id.startsWith("pod-")
+                ? app.id
+                : null;
       if (pagesSlug) {
         expect(url.href, app.id).toBe(`https://jeswr.github.io/solid-sdk/${pagesSlug}/`);
-      } else if (app.launch === "none") {
-        // Externally-hosted (fork / standalone) — a plain Open link, off the suite domain.
-        expect(url.host.endsWith("solid-test.jeswr.org"), app.id).toBe(false);
       } else {
-        // Suite-hosted deep-link target.
-        expect(url.host.endsWith("solid-test.jeswr.org"), app.id).toBe(true);
+        // Externally-hosted (fork / standalone) — a plain Open link, off the suite's Pages origin.
+        expect(app.launch, app.id).toBe("none");
+        expect(url.host, app.id).not.toBe("jeswr.github.io");
       }
     }
   });

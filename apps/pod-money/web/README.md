@@ -32,7 +32,7 @@ npm run dev
 APP_ORIGIN=https://money.solid-test.jeswr.org npm run build
 ```
 
-The HOME IdP issuer hint is `https://idp.solid-test.jeswr.org`
+The HOME IdP issuer hint is `https://solidcommunity.net/`
 (env-overridable via `VITE_HOME_IDP`); the auth issuer always comes from the
 WebID profile.
 

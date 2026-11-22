@@ -12,7 +12,13 @@ import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import type { OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, EMAIL_MIME } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
-import type { AccountRef, RenderableProposal, TokenProvider, Wire } from "../types.js";
+import type {
+  AccountRef,
+  ProposalContext,
+  RenderableProposal,
+  TokenProvider,
+  Wire,
+} from "../types.js";
 import { graphMailRest, messageId, mimeBody, record, responseBody } from "./rest.js";
 
 export interface GraphMailSendOptions extends EmailRenderOptions {
@@ -86,7 +92,7 @@ export function createGraphMailSend(
   const parseEmail = options.parseEmail;
   const footer = options.footer ?? AGENT_FOOTER;
   const rest = graphMailRest(options.transport);
-  async function checked(wire: Wire) {
+  async function checked(wire: Wire, context: ProposalContext | undefined) {
     const snapshot = renderer.assertWire(wire);
     const parsed = inspectEmail(snapshot.bytes, {
       parseEmail,
@@ -96,7 +102,7 @@ export function createGraphMailSend(
     });
     if (
       !parsed.proposal ||
-      (await renderer.render(parsed.proposal, EMAIL_MIME)).bytes !== snapshot.bytes
+      (await renderer.render(parsed.proposal, EMAIL_MIME, context)).bytes !== snapshot.bytes
     )
       throw new ChannelParseError("email wire differs from signed proposal");
     return { snapshot, proposal: parsed.proposal };
@@ -109,7 +115,7 @@ export function createGraphMailSend(
         if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
         if (accountId(io.account) !== account.id)
           throw new ProviderRejectedError("Graph account differs from configured sender");
-        const { snapshot, proposal } = await checked(wire);
+        const { snapshot, proposal } = await checked(wire, io.expected);
         const { message, compactJws } = proposal;
         // These are the same deterministic bodies checked against the reviewed MIME above.
         // Graph JSON accepts one HTML body; Exchange generates the text/plain alternative.
@@ -165,9 +171,9 @@ export function createGraphMailSend(
         return { outcome: "accepted", providerRef: internetMessageId };
       });
     },
-    async lookup(wire) {
+    async lookup(wire, context) {
       try {
-        const { proposal } = await checked(wire);
+        const { proposal } = await checked(wire, context);
         const internetMessageId = emailMessageIdFor(proposal.message.id);
         const params = new URLSearchParams([
           ["$filter", `internetMessageId eq '${internetMessageId}'`],

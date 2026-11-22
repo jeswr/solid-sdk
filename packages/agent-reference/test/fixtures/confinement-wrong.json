@@ -1,0 +1,26 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "configuration": {
+    "id": "transport-email",
+    "change": {
+      "transport": "email"
+    },
+    "world": {
+      "script": {
+        "confinement-fault": {
+          "id": "confinement-fault",
+          "type": "effect",
+          "agent": "sam-agent",
+          "params": {},
+          "activityType": "urn:test:forbidden-activity",
+          "intent": {
+            "action": "use",
+            "operation": "urn:test:forbidden-operation",
+            "parameters": {},
+            "target": "urn:op:unmandated-confinement-action"
+          }
+        }
+      }
+    }
+  }
+}

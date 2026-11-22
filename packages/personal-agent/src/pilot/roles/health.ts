@@ -176,6 +176,7 @@ export const HEALTH_PATIENT_ROLE: RoleDefinition = {
         return patientAuthorisationSchema.parse({
           type: "PatientAuthorisation",
           id: newUrn(),
+          issuer: ctx.party,
           patient: ctx.party,
           patientId: a.patientId,
           client: ctx.actor,

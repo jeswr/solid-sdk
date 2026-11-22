@@ -1,0 +1,19 @@
+# AUTHORED-BY Codex GPT-6
+# Local metadata extension for the native DQV view of preserved signed statements.
+@prefix awp: <https://w3id.org/jeswr/awp#> .
+@prefix dqv: <http://www.w3.org/ns/dqv#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+awp:uncertaintyKind a owl:DatatypeProperty ;
+    rdfs:label "Kind of uncertainty" ;
+    rdfs:comment "Whether a source confidence measurement describes uncertainty in the source's knowledge (epistemic) or variability in the world (aleatoric). The accepted values are epistemic and aleatoric." ;
+    rdfs:domain dqv:QualityMeasurement ;
+    rdfs:range xsd:string .
+
+awp:calibration a owl:DatatypeProperty ;
+    rdfs:label "Stated calibration" ;
+    rdfs:comment "Whether the source states a calibration method and supporting observations for its confidence measurement. The accepted values are calibrated and uncalibrated. This annotation records source-stated support; it is not an independent accuracy guarantee. Missing methods or inconsistent observations are read as uncalibrated." ;
+    rdfs:domain dqv:QualityMeasurement ;
+    rdfs:range xsd:string .

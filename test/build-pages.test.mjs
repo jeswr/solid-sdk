@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, it } from "vitest";
-import { assemblePages, pagesApps } from "../scripts/build-pages.mjs";
+import { assemblePages, pagesApps, pagesNextApps } from "../scripts/build-pages.mjs";
 
 // Reuse the existing app DOM dependency for generated HTML behavior tests.
 const appRequire = createRequire(new URL("../apps/access-manager/package.json", import.meta.url));
@@ -72,7 +72,7 @@ function redirect(fallback, href) {
 }
 
 describe("Pages artifact", () => {
-  it("selects all eleven Vite apps with the Vercel project prefixes removed", () => {
+  it("selects all twelve Vite apps with the Vercel project prefixes removed", () => {
     const root = fileURLToPath(new URL("..", import.meta.url));
     expect(
       pagesApps(root)
@@ -80,6 +80,7 @@ describe("Pages artifact", () => {
         .sort(),
     ).toEqual([
       "access-manager",
+      "agent-chat",
       "app-store",
       "pod-chat",
       "pod-docs",
@@ -91,6 +92,45 @@ describe("Pages artifact", () => {
       "pod-music",
       "pod-photos",
     ]);
+  });
+
+  it("adds the static-export Next.js apps with their origin variables", () => {
+    const root = fileURLToPath(new URL("..", import.meta.url));
+    expect(
+      pagesNextApps(root).map(({ slug, originEnv, staticEnv }) => ({ slug, originEnv, staticEnv })),
+    ).toEqual([
+      { slug: "pod-manager", originEnv: "NEXT_PUBLIC_APP_ORIGIN", staticEnv: {} },
+      { slug: "issues", originEnv: "APP_ORIGIN", staticEnv: { APP_STATIC_EXPORT: "1" } },
+    ]);
+  });
+
+  it("copies a Next.js export as-is, links it, and leaves it out of the SPA fallback", () => {
+    const root = mkdtempSync(join(tmpdir(), "pages-"));
+    dirs.push(root);
+    const vite = { slug: "pod-drive", rootDirectory: "apps/pod-drive/web" };
+    mkdirSync(join(root, vite.rootDirectory, "dist"), { recursive: true });
+    writeFileSync(join(root, vite.rootDirectory, "dist/index.html"), "<html><head></head></html>");
+    const next = { slug: "issues", rootDirectory: "apps/issues" };
+    mkdirSync(join(root, next.rootDirectory, "out/board"), { recursive: true });
+    writeFileSync(
+      join(root, next.rootDirectory, "out/index.html"),
+      "<html><head></head>issues</html>",
+    );
+    writeFileSync(join(root, next.rootDirectory, "out/board/index.html"), "board");
+    writeFileSync(join(root, next.rootDirectory, "out/404.html"), "next 404");
+    assemblePages(root, [vite], [next]);
+    const destination = join(root, ".pages");
+    expect(readFileSync(join(destination, "issues/index.html"), "utf8")).toBe(
+      "<html><head></head>issues</html>",
+    );
+    expect(readFileSync(join(destination, "issues/board/index.html"), "utf8")).toBe("board");
+    expect(readFileSync(join(destination, "issues/404.html"), "utf8")).toBe("next 404");
+    expect(readFileSync(join(destination, "index.html"), "utf8")).toContain(
+      'href="/solid-sdk/issues/"',
+    );
+    const fallback = readFileSync(join(destination, "404.html"), "utf8");
+    expect(fallback).toContain('["pod-drive"]');
+    expect(fallback).not.toContain('"issues"');
   });
 
   it("copies assets, writes a fallback per app and links every app at the root", () => {

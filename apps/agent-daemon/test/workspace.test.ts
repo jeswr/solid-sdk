@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { digestOf, recordFromTurtle } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
+import { buildOwnerOnlyAclTurtle } from "@jeswr/agentic-legacy-bridge";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
-import { StorageError } from "@jeswr/storage-client";
+import { createPodClient, StorageError } from "@jeswr/storage-client";
 import { LiteralFrom, OptionalAs, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { expect, it, vi } from "vitest";
@@ -186,4 +188,187 @@ it("publishes exactly the agent's introduction at descriptors/agent.ttl and keep
   ])
     await expect(workspace.introduce(unsafe)).rejects.toThrow("Unsafe");
   expect(pod.requests.filter((r) => r.method === "PUT")).toHaveLength(writes);
+});
+
+it("provisions memory and pending under the owner-only ACL before content", async () => {
+  const pod = createMemoryPod(root);
+  const workspace = new PodWorkspace({
+    io: pod.io,
+    storage: pod.storage,
+    root,
+    ownerWebId,
+    privateTypeIndex,
+  });
+  await workspace.initialize();
+  const creations = pod.requests.filter(({ method }) => method === "PUT" || method === "POST");
+  const acl = creations.findIndex(({ url }) => url === `${root}agent/.acl`);
+  const memory = creations.findIndex(({ url }) => url === `${root}agent/memory/`);
+  const pending = creations.findIndex(({ url }) => url === `${root}agent/memory/pending/`);
+  expect(acl).toBeGreaterThanOrEqual(0);
+  expect(memory).toBeGreaterThan(acl);
+  expect(pending).toBeGreaterThan(memory);
+  expect(pending).toBeLessThan(creations.findIndex(({ url }) => url === privateTypeIndex));
+  expect(creations[acl]?.body).toContain(ownerWebId);
+  expect(creations[acl]?.body).toContain("default");
+  expect(creations[acl]?.body).not.toContain("AgentClass");
+});
+
+it.each([".acl", "../access-policy"])("replaces permissive ACLs advertised as %s", async (link) => {
+  const pod = createMemoryPod(root);
+  const { storage } = await createPodClient({
+    storage: root,
+    async fetch(input, init) {
+      const request = new Request(input, init);
+      const response = await pod.io(request);
+      if (request.url === root) {
+        response.headers.append("link", '<http://www.w3.org/ns/pim/space#Storage>; rel="type"');
+        response.headers.set("updates-via", "wss://pod.example/socket");
+      }
+      return response;
+    },
+  });
+  const workspace = new PodWorkspace({ ...pod, storage, root, ownerWebId, privateTypeIndex });
+  const other = "https://other.example/profile#agent";
+  const agent = await pod.storage.create(root, null, { name: "agent", kind: "container" });
+  const memory = await pod.storage.create(agent.url, null, { name: "memory", kind: "container" });
+  const pending = await pod.storage.create(memory.url, null, {
+    name: "pending",
+    kind: "container",
+  });
+  const containers = [agent.url, memory.url, pending.url];
+  for (const url of containers) {
+    pod.aclLinks.set(url, link);
+    const acl = await buildOwnerOnlyAclTurtle(url, ownerWebId);
+    const extra = await buildOwnerOnlyAclTurtle(url, other);
+    await pod.storage.write(new URL(link, url).href, acl + extra, {
+      contentType: "text/turtle",
+      ifMatch: "*",
+    });
+  }
+  await workspace.initialize();
+  const wac = "http://www.w3.org/ns/auth/acl#";
+  for (const url of containers) {
+    const aclUrl = new URL(link, url).href;
+    const body = await (await pod.storage.read(aclUrl)).text();
+    const acl = new Store(await parseRdf(body, "text/turtle", { baseIRI: aclUrl }));
+    const agents = acl.getQuads(null, DataFactory.namedNode(`${wac}agent`), null, null);
+    expect(agents.map(({ object }) => object.value)).toEqual([ownerWebId]);
+    if (link !== ".acl") expect(pod.resources.has(`${url}.acl`)).toBe(false);
+    const authorization = agents[0]?.subject;
+    for (const predicate of ["accessTo", "default"])
+      expect(
+        acl.getObjects(authorization ?? null, `${wac}${predicate}`, null).map((o) => o.value),
+      ).toEqual([url]);
+    expect(
+      acl
+        .getObjects(authorization ?? null, `${wac}mode`, null)
+        .map((o) => o.value)
+        .sort(),
+    ).toEqual(["Control", "Read", "Write"].map((mode) => `${wac}${mode}`));
+    expect(acl.getQuads(null, DataFactory.namedNode(`${wac}agentClass`), null, null)).toEqual([]);
+    expect(acl.getQuads(null, DataFactory.namedNode(`${wac}agentGroup`), null, null)).toEqual([]);
+  }
+});
+
+it.each([
+  ["", null, /WAC ACL link/],
+  ["memory/", null, /WAC ACL link/],
+  ["memory/pending/", "https://other.example/policy", /another origin/],
+] as const)("refuses invalid ACL discovery for %s (%s)", async (path, link, error) => {
+  const pod = createMemoryPod(root);
+  const workspace = new PodWorkspace({ ...pod, root, ownerWebId, privateTypeIndex });
+  const url = workspace.url(path);
+  pod.aclLinks.set(url, link);
+
+  await expect(workspace.initialize()).rejects.toThrow(error);
+  const writes = pod.requests.filter(({ method }) => method === "PUT").map(({ url }) => url);
+  expect(writes).not.toContain(`${url}.acl`);
+  expect(writes).not.toContain(privateTypeIndex);
+  if (link !== null) expect(writes).not.toContain(link);
+});
+
+it("refuses to overwrite a workspace ACL shared with a memory container", async () => {
+  const pod = createMemoryPod(root);
+  const workspace = new PodWorkspace({ ...pod, root, ownerWebId, privateTypeIndex });
+  const aclUrl = `${root}policy`;
+  pod.aclLinks.set(workspace.url(""), aclUrl);
+  pod.aclLinks.set(workspace.url("memory/"), "../../policy");
+
+  await expect(workspace.initialize()).rejects.toThrow(/ACL.*collision/);
+  const writes = pod.requests.filter(({ method }) => method === "PUT");
+  const aclWrites = writes.filter(({ url }) => url === aclUrl);
+  expect(aclWrites).toHaveLength(1);
+  expect(aclWrites[0]?.body).toBe(await buildOwnerOnlyAclTurtle(workspace.url(""), ownerWebId));
+  expect(writes.some(({ url }) => url === privateTypeIndex)).toBe(false);
+});
+
+it.each([
+  privateTypeIndex,
+  `${root}settings`,
+  `${root}agent/memory/pending`,
+  `${root}agent/control/heartbeat.ttl`,
+  `${root}agent/descriptors/agent.ttl`,
+  `${root}agent/proposals/item.ttl`,
+])("refuses a container ACL at a workspace write destination (%s)", async (url) => {
+  const pod = createMemoryPod(root);
+  const workspace = new PodWorkspace({ ...pod, root, ownerWebId, privateTypeIndex });
+  pod.aclLinks.set(workspace.url(""), url);
+
+  await expect(workspace.initialize()).rejects.toThrow(/ACL.*collision/);
+  expect(pod.requests.some((request) => request.url === url && request.method === "PUT")).toBe(
+    false,
+  );
+});
+
+it("secures a new private type index using its own advertised ACL before registration", async () => {
+  const pod = createMemoryPod(root);
+  const workspace = new PodWorkspace({ ...pod, root, ownerWebId, privateTypeIndex });
+  const aclUrl = `${root}settings/index-policy`;
+  pod.aclLinks.set(privateTypeIndex, "index-policy");
+
+  await workspace.initialize();
+
+  const acl = pod.resources.get(aclUrl)?.body ?? "";
+  const dataset = new Store(await parseRdf(acl, "text/turtle", { baseIRI: aclUrl }));
+  const authorization = `${aclUrl}#owner`;
+  const wac = "http://www.w3.org/ns/auth/acl#";
+  expect(dataset.getObjects(authorization, `${wac}agent`, null).map((term) => term.value)).toEqual([
+    ownerWebId,
+  ]);
+  expect(
+    dataset.getObjects(authorization, `${wac}accessTo`, null).map((term) => term.value),
+  ).toEqual([privateTypeIndex]);
+  expect(dataset.getObjects(authorization, `${wac}default`, null)).toEqual([]);
+  const requests = pod.requests.filter(({ method }) => method === "PUT" || method === "HEAD");
+  expect(requests.filter(({ url }) => url === privateTypeIndex || url === aclUrl)).toEqual([
+    expect.objectContaining({ url: privateTypeIndex, method: "PUT", body: "" }),
+    expect.objectContaining({ url: privateTypeIndex, method: "HEAD" }),
+    expect.objectContaining({ url: aclUrl, method: "PUT" }),
+    expect.objectContaining({
+      url: privateTypeIndex,
+      method: "PUT",
+      body: expect.stringContaining("AgentWorkspace"),
+    }),
+  ]);
+  expect(pod.resources.has(`${privateTypeIndex}.acl`)).toBe(false);
+});
+
+it.each([
+  [null, /WAC ACL link/],
+  ["https://other.example/policy", /another origin/],
+  ["../../foreign-policy", /outside storage/],
+  [privateTypeIndex, /ACL document/],
+  [`${root}agent/.acl`, /ACL.*collision/],
+] as const)("keeps an index empty across retries when ACL discovery fails (%s)", async (link, error) => {
+  const pod = createMemoryPod(root);
+  const workspace = new PodWorkspace({ ...pod, root, ownerWebId, privateTypeIndex });
+  pod.aclLinks.set(privateTypeIndex, link);
+
+  await expect(workspace.initialize()).rejects.toThrow(error);
+  // A new process must also protect the empty index before adding a registration.
+  await expect(
+    new PodWorkspace({ ...pod, root, ownerWebId, privateTypeIndex }).initialize(),
+  ).rejects.toThrow(error);
+  expect(pod.resources.get(privateTypeIndex)?.body).toBe("");
+  expect(pod.resources.has(`${privateTypeIndex}.acl`)).toBe(false);
 });

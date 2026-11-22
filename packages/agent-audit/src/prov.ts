@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { canonicalJson } from "@jeswr/agent-model/core/canonical";
-import { AGENT, PROV } from "@jeswr/agent-model/vocab";
+import { AGENT, PROV, XSD } from "@jeswr/agent-model/vocab";
 import { writeDecisionRecord } from "./decision-record.js";
 import type { LedgerEntry } from "./records.js";
 
@@ -48,6 +48,14 @@ export function writeEntryGraph(
     ])
       if (id !== undefined) n.setIri(`${PROV}used`, id);
     if (r.type === "decision") writeDecisionRecord(n, r, e.at);
+    if (r.type === "gate-decision") {
+      n.setText(`${AGENT}gateSeq`, String(r.gateSeq), `${XSD}integer`);
+      n.setText(`${AGENT}gateHash`, r.gateHash);
+    }
+    if (r.type === "record-anchor") {
+      n.setText(`${AGENT}anchoredSeq`, String(r.seq), `${XSD}integer`);
+      n.setText(`${AGENT}anchoredHash`, r.hash);
+    }
   }
 }
 

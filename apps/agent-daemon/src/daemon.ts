@@ -1,14 +1,28 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { ChannelParseError, readEnvelope } from "@jeswr/agent-channels";
-import { proposalApprovalTerms } from "@jeswr/agent-executor";
-import { canonicalJson, digestOf, podRecordSchema } from "@jeswr/agent-model";
+import { AuditHeadChangedError, type AuditRecord, verifyLedger } from "@jeswr/agent-audit";
+import { linkedGateHead } from "@jeswr/agent-audit/verify";
+import {
+  type BridgeMessage,
+  ChannelParseError,
+  type InboundRawMessage,
+} from "@jeswr/agent-channels";
+import { ProposalRefusedError, proposalApprovalTerms } from "@jeswr/agent-executor";
+import { canonicalJson, digestBytes, digestOf, podRecordSchema } from "@jeswr/agent-model";
 import { GatewayError, type ModelCall } from "@jeswr/agent-model-gateway";
+import { CONFIG_ED25519 } from "@jeswr/agent-reference";
 import { importInbound } from "@jeswr/agentic-legacy-bridge";
 import { type ClientCredentialsOptions, forClientCredentials } from "@jeswr/pod-auth/node";
 import { createNotifications, type Subscription, type Timers } from "@jeswr/pod-notifications";
 import { createPodClient } from "@jeswr/storage-client";
 import { z } from "zod";
+import {
+  type Gate,
+  type GateVerdict,
+  inboundAuditDecision,
+  outboundAuditDecision,
+  type ParseRefusal,
+} from "./gate.js";
 import type { TaskContext } from "./instrumentation.js";
 import { scrubLog } from "./logging.js";
 import { checkedProposalResult } from "./proposal-results.js";
@@ -35,18 +49,6 @@ const triageSchema = z.object({
   urgency: z.enum(["urgent", "not_urgent"]),
   confidence: z.number().min(0).max(1),
 });
-function hasStructuredEnvelope(blocks: readonly string[] | undefined): boolean {
-  if (!blocks || blocks.length > 512) return false;
-  return blocks.some((block) => {
-    try {
-      readEnvelope(block);
-      return true;
-    } catch {
-      return false;
-    }
-  });
-}
-
 /** pod-auth retains credentials and supplies every authenticated pod request. */
 export async function composeDaemon(options: {
   credentials: ClientCredentialsOptions;
@@ -83,6 +85,12 @@ export async function composeDaemon(options: {
 
 /** Serial account passes keep shared bindings and durable cursors ordered. */
 export function createDaemon(o: DaemonOptions): Daemon {
+  if (!o.gate || typeof o.gate.check !== "function") throw new Error("Missing inbound gate");
+  if (typeof o.memory?.recall !== "function") throw new Error("Missing runtime memory");
+  const proposerContext = {
+    ...o.proposerContext,
+    memoryRecall: (query: string) => o.memory.recall(query),
+  };
   const now = o.now ?? Date.now;
   const timers = o.timers ?? systemTimers;
   const accounts = o.accounts.map((account) => ({ ...account }));
@@ -104,8 +112,9 @@ export function createDaemon(o: DaemonOptions): Daemon {
     limits.maxBytes <= 0
   )
     throw new Error("Invalid ingest bounds");
-  const append = async (record: Parameters<typeof o.audit.append>[0]) => {
-    const evidence = { ...record, owner: o.ownerWebId, agent: o.agentWebId };
+  const identity = { owner: o.ownerWebId, agent: o.agentWebId };
+  const append = async (record: AuditRecord) => {
+    const evidence = { ...record, ...identity };
     const existing = o.audit
       .entries()
       .filter(
@@ -149,10 +158,187 @@ export function createDaemon(o: DaemonOptions): Daemon {
           (record.type === "proposal" && proposals.has(record.id)),
       );
   }
-  async function accountPass(account: DaemonAccount) {
+  type SessionGate = Pick<Gate, "check" | "head" | "anchor" | "release"> &
+    Partial<
+      Pick<
+        Gate,
+        | "recordParseRefusal"
+        | "decisions"
+        | "evidence"
+        | "verifyAnchor"
+        | "recoverAnchor"
+        | "setReleaseAudit"
+      >
+    >;
+  // Check/release, head capture and audit append must stay together relative to witnessing.
+  let gateWork: Promise<unknown> = Promise.resolve();
+  function inGateOrder<T>(work: () => Promise<T>): Promise<T> {
+    const next = gateWork.then(work);
+    gateWork = next.catch(() => undefined);
+    return next;
+  }
+  type GateDecision = Extract<AuditRecord, { type: "gate-decision" }>;
+  function gateDecision(
+    fields: Pick<
+      GateDecision,
+      | "direction"
+      | "outcome"
+      | "reason"
+      | "messageDigest"
+      | "gateSeq"
+      | "gateHash"
+      | "taskId"
+      | "conversation"
+    >,
+  ) {
+    const { gateSeq, gateHash } = fields;
+    return append({
+      ...fields,
+      type: "gate-decision",
+      id: `urn:sha256:${digestOf({ gateSeq, gateHash }).slice(8)}`,
+      configuration: CONFIG_ED25519,
+      ...identity,
+    });
+  }
+  async function reconcileGate(gate: SessionGate) {
+    if (!gate.decisions) return;
+    const after = o.audit
+      .entries()
+      .reduce((max, { record }) => Math.max(max, linkedGateHead(record)?.seq ?? 0), 0);
+    for (const decision of gate.decisions(after)) await gateDecision(decision);
+  }
+  async function recoverGate(gate: SessionGate) {
+    if (gate.evidence) {
+      const entries = o.audit.entries();
+      const evidence = gate.evidence();
+      const verified = verifyLedger(entries, { ...evidence, allowUnwitnessedAnchors: true });
+      if (!verified.ok)
+        throw new Error(`Audit ledger ${verified.problem} at record ${verified.firstBadSeq}`);
+      const witnessed = new Set(evidence.witnessedHeads.map(({ seq, hash }) => `${seq}:${hash}`));
+      const orphans: Extract<AuditRecord, { type: "record-anchor" }>[] = [];
+      for (const { record, seq } of entries) {
+        if (record.type !== "record-anchor") continue;
+        if (!(await gate.verifyAnchor?.(record)))
+          throw new Error(`Audit ledger invalid anchor signature at record ${seq}`);
+        if (!witnessed.has(`${record.seq}:${record.hash}`)) orphans.push(record);
+      }
+      for (const record of orphans) {
+        if (!gate.recoverAnchor) throw new Error("Gate cannot recover the retained audit anchor");
+        await gate.recoverAnchor(record);
+      }
+      if (orphans.length) await o.audit.sync();
+    }
+    await reconcileGate(gate);
+  }
+  async function recordGate(gate: SessionGate, fields: ReturnType<typeof inboundAuditDecision>) {
+    if (gate.decisions) return reconcileGate(gate);
+    const head = gate.head();
+    await gateDecision({ ...fields, gateSeq: head.seq, gateHash: head.hash });
+  }
+  function anchorAudit(gate: SessionGate) {
+    return inGateOrder(async () => {
+      for (;;) {
+        const entries = o.audit.entries();
+        const head = entries.at(-1);
+        if (!head) return;
+        if (!verifyLedger(entries).ok) throw new Error("Audit ledger integrity failure");
+        if (head.record.type === "record-anchor") {
+          await o.audit.sync();
+          return;
+        }
+        const { seq, hash } = head;
+        let mirrorFailure: { error: unknown } | undefined;
+        let published = false;
+        try {
+          await gate.anchor({ seq, hash }, async (jws) => {
+            const record = {
+              type: "record-anchor",
+              id: `urn:sha256:${digestOf({ seq, hash, event: "record-anchor" }).slice(8)}`,
+              seq,
+              hash,
+              jws,
+              ...identity,
+            } as const;
+            try {
+              await append(record);
+            } catch (error) {
+              // A failed mirror can follow a successful local append. The gate can
+              // witness that durable row while the daemon reports the mirror failure.
+              if (
+                !o.audit
+                  .entries()
+                  .some((entry) => canonicalJson(entry.record) === canonicalJson(record))
+              )
+                throw error;
+              mirrorFailure = { error };
+            }
+            published = true;
+          });
+          if (!published) throw new Error("Gate did not publish its audit anchor");
+          if (mirrorFailure) throw mirrorFailure.error;
+          return;
+        } catch (error) {
+          // An executor write can win the race. No witness is persisted for a stale head.
+          if (!(error instanceof AuditHeadChangedError) || o.audit.entries().at(-1)?.hash === hash)
+            throw error;
+        }
+      }
+    });
+  }
+  async function accountPass(account: DaemonAccount, gate: SessionGate) {
     const cursor = await o.checkpoints.get(account.id);
-    let next: string | undefined;
-    const parsed: { message: ReturnType<typeof account.binding.ingest.parse>; id: string }[] = [];
+    const batch = await account.binding.ingest.list({ id: account.id }, cursor, limits);
+    if (
+      batch.items.length + (batch.refusals?.length ?? 0) > limits.maxItems ||
+      batch.items.reduce((n, item) => n + Buffer.byteLength(item.raw), 0) > limits.maxBytes
+    )
+      throw new Error("Ingest bound exceeded");
+    if (batch.next === undefined) throw new Error("Missing ingest cursor");
+    const cache = new Map<InboundRawMessage, BridgeMessage>();
+    const parsed: { message: BridgeMessage; id: string; verdict: GateVerdict }[] = [];
+    const source = { binding: account.binding.id, account: account.id };
+    const batchKey = { ...source, cursor: cursor ?? null };
+    await inGateOrder(() => reconcileGate(gate));
+    async function recordRefusal(refusal: ParseRefusal, item: string | number) {
+      await inGateOrder(async () => {
+        const digest = "raw" in refusal ? digestBytes(refusal.raw) : refusal.digest;
+        const replayKey = digestOf({ ...batchKey, item, digest, reason: refusal.reason });
+        const verdict = await gate.recordParseRefusal?.({ ...source, ...refusal, replayKey });
+        if (verdict?.outcome === "refused") await recordGate(gate, inboundAuditDecision(verdict));
+        if (verdict?.outcome !== "refused" || verdict.reason === "indeterminate")
+          throw new Error("Inbound gate could not record the parser refusal");
+      });
+    }
+    // importInbound prepares its ACL before pulling. Complete all checks before invoking it.
+    for (const [index, { digest, reason }] of (batch.refusals ?? []).entries()) {
+      await recordRefusal({ digest, reason }, index);
+    }
+    for (const item of batch.items) {
+      let message: BridgeMessage;
+      try {
+        message = account.binding.ingest.parse(item);
+      } catch (error) {
+        if (!(error instanceof ChannelParseError)) throw new Error("Reader parse failed");
+        await recordRefusal({ raw: item.raw, reason: error.reason }, item.id);
+        continue;
+      }
+      const verdict = await inGateOrder(async () => {
+        const replayKey = digestOf({ ...batchKey, item: item.id, digest: message.rawSha256 });
+        const checked = await gate.check({ ...source, message, replayKey });
+        await recordGate(gate, inboundAuditDecision(checked));
+        return checked;
+      });
+      if (verdict.outcome === "admitted" || verdict.outcome === "unstructured") {
+        cache.set(item, message);
+        parsed.push({ message, id: item.id, verdict });
+      } else if (verdict.outcome !== "refused" || verdict.reason === "indeterminate") {
+        throw new Error("Inbound gate could not check the batch");
+      }
+    }
+    if (cache.size === 0) {
+      await o.checkpoints.put(account.id, batch.next);
+      return;
+    }
     const inbox = await o.workspace.inbox(account.binding.id, account.id);
     await importInbound({
       container: inbox,
@@ -164,28 +350,16 @@ export function createDaemon(o: DaemonOptions): Daemon {
       adapter: {
         channel: account.binding.id,
         async pullInbound() {
-          const batch = await account.binding.ingest.list({ id: account.id }, cursor, limits);
-          if (
-            batch.items.length > limits.maxItems ||
-            batch.items.reduce((n, item) => n + Buffer.byteLength(item.raw), 0) > limits.maxBytes
-          )
-            throw new Error("Ingest bound exceeded");
-          next = batch.next;
-          return batch.items;
+          return [...cache.keys()];
         },
         parse(item) {
-          try {
-            const message = account.binding.ingest.parse(item);
-            parsed.push({ message, id: item.id });
-            return message;
-          } catch (error) {
-            if (error instanceof ChannelParseError) throw error;
-            throw new Error("Reader parse failed");
-          }
+          const observed = cache.get(item);
+          if (!observed) throw new Error("Missing checked message");
+          return observed;
         },
       },
     });
-    for (const { message, id } of parsed) {
+    for (const { message, id, verdict } of parsed) {
       const source = o.workspace.messageUrl(inbox, id);
       const thread =
         account.binding.ingest.threadKey?.(message) ?? message.threadId ?? message.messageId ?? id;
@@ -208,7 +382,8 @@ export function createDaemon(o: DaemonOptions): Daemon {
         ReturnType<typeof o.gateway.reader.extract<z.infer<typeof triageSchema>>>
       >;
       try {
-        extraction = await o.gateway.reader.extract(message, triageSchema);
+        const labelled = { ...message, gate: verdict };
+        extraction = await o.gateway.reader.extract(labelled, triageSchema);
       } catch (error) {
         if (error instanceof GatewayError) await calls(error.calls, task);
         throw new Error("Reader extraction failed");
@@ -250,13 +425,12 @@ export function createDaemon(o: DaemonOptions): Daemon {
         }
       } else {
         const flagged = await o.isFlagged(account.id, thread);
-        // A structured part is a processing hint; it never authenticates a sender.
-        if (!flagged && !hasStructuredEnvelope(message.jsonLdBlocks)) continue;
+        if (!flagged && verdict.outcome !== "admitted") continue;
         let generated: Awaited<ReturnType<DaemonOptions["gateway"]["proposer"]["propose"]>>;
         try {
           generated = await o.gateway.proposer.propose(
-            [{ source, message, triage }],
-            o.proposerContext,
+            [{ source, message, triage, gate: verdict }],
+            proposerContext,
           );
         } catch (error) {
           if (error instanceof GatewayError) await calls(error.calls, task);
@@ -280,8 +454,47 @@ export function createDaemon(o: DaemonOptions): Daemon {
         await o.proposalResults.put(key, result);
       }
       const entries = [];
+      const refused = [...(result.refused ?? [])];
       for (const proposal of result.proposals) {
-        const entry = await o.proposalWritten(proposal);
+        let entry: Awaited<ReturnType<DaemonOptions["project"]>>;
+        let signed: ReturnType<Gate["release"]> | undefined;
+        let audited: ReturnType<Gate["release"]> | undefined;
+        const taskFields = { taskId: task.taskId, conversation: task.conversation };
+        const recordRelease = (result: Awaited<ReturnType<Gate["release"]>>) =>
+          recordGate(gate, { ...outboundAuditDecision(proposal, result), ...taskFields }).then(
+            () => result,
+          );
+        gate.setReleaseAudit?.({
+          proposalDigest: digestOf(proposal),
+          task: taskFields,
+          record(result) {
+            if (audited) throw new Error("Outbox gate release mismatch");
+            audited = recordRelease(result);
+            return audited;
+          },
+        });
+        const sign = () => {
+          signed ??= inGateOrder(async () => {
+            const result = await gate.release(proposal);
+            return audited ?? recordRelease(result);
+          });
+          return signed;
+        };
+        try {
+          entry = await o.project(proposal, sign);
+          const released = (await signed) ?? (await audited);
+          if (!released?.ok || entry.renderable.compactJws !== released.renderable.compactJws)
+            throw new Error("Outbox gate release mismatch");
+        } catch (error) {
+          // Surface a failed audit even if a projector converts it to a typed refusal.
+          await signed;
+          await audited;
+          if (!(error instanceof ProposalRefusedError)) throw error;
+          refused.push({ id: proposal.id, reason: error.reason });
+          continue;
+        } finally {
+          gate.setReleaseAudit?.(undefined);
+        }
         if (entry.proposal.id !== proposal.id) throw new Error("Outbox proposal mismatch");
         if (entry.proposal.intent.termsDigest !== digestOf(proposalApprovalTerms(entry)))
           throw new Error("Outbox terms digest mismatch");
@@ -290,14 +503,24 @@ export function createDaemon(o: DaemonOptions): Daemon {
       result = checkedProposalResult({
         calls: result.calls,
         proposals: entries.map((entry) => entry.proposal),
+        ...(refused.length > 0 && { refused }),
       });
       // Publish only the finalized proposals returned by the trusted outbox projection.
       // Keep the original result durable until this replacement succeeds, so retries
       // retain model-call and proposal identities even if projection or fsync fails.
       await o.proposalResults.put(key, result);
-      // Model-call evidence names the proposal ID that is projected and published.
-      const proposalRef = result.proposals.length === 1 ? result.proposals[0]?.id : undefined;
-      await calls(result.calls, task, proposalRef);
+      const proposalIds = [...result.proposals, ...refused].map(({ id }) => id);
+      await calls(result.calls, task, proposalIds.length === 1 ? proposalIds[0] : undefined);
+      for (const { id, reason } of refused) {
+        await append({
+          type: "decision",
+          id: `urn:sha256:${digestOf({ proposal: id, task: task.taskId, event: "gate-refusal" }).slice(8)}`,
+          proposal: id,
+          status: "refused",
+          reason: /^[a-z][a-z0-9-]{0,63}$/.test(reason) ? reason : "gate-refused",
+          ...task,
+        });
+      }
       for (const entry of entries) {
         const proposal = entry.proposal;
         if (o.workspace.proposalLocation(proposal.id) === proposal.id)
@@ -314,14 +537,17 @@ export function createDaemon(o: DaemonOptions): Daemon {
         });
       }
     }
-    if (next === undefined) throw new Error("Missing ingest cursor");
-    await o.checkpoints.put(account.id, next);
+    await o.checkpoints.put(account.id, batch.next);
   }
   let active = false;
   async function session(repeat: boolean, signal?: AbortSignal) {
     if (active) throw new Error("Daemon already running");
     active = true;
     let release: (() => Promise<void>) | undefined;
+    let gateSession: Gate | undefined;
+    let recordingGate: SessionGate | undefined;
+    let sealFailure: unknown;
+    let sealing = Promise.resolve();
     let subscription: Subscription | undefined;
     let fault = false;
     let authority: Promise<unknown> = Promise.resolve();
@@ -348,10 +574,22 @@ export function createDaemon(o: DaemonOptions): Daemon {
       invalidate("control");
       invalidate("approval");
       await authority;
-      if (fault) throw new Error("Authority reconciliation failed");
+      if (fault) throw sealFailure ?? new Error("Authority reconciliation failed");
       if (now() >= heartbeat) {
         await o.workspace.heartbeat(new Date(now()), await o.executor.status());
         heartbeat = now() + HEARTBEAT_MS;
+        const gate = recordingGate;
+        if (gate) {
+          // A slow mirror must not delay control or approval reconciliation.
+          sealing = sealing
+            .then(async () => {
+              if (!sealFailure) await anchorAudit(gate);
+            })
+            .catch((error) => {
+              sealFailure = error;
+              fault = true;
+            });
+        }
       }
     };
     const armMaintenance = () => {
@@ -367,7 +605,13 @@ export function createDaemon(o: DaemonOptions): Daemon {
     try {
       signal?.throwIfAborted();
       release = await o.lease.acquire();
+      gateSession = await o.gate.open?.({ actor: o.agentWebId, party: o.ownerWebId });
+      const gate = gateSession ?? o.gate;
+      if (!("head" in gate && "anchor" in gate && "release" in gate))
+        throw new Error("Missing gate record capability");
+      await inGateOrder(() => recoverGate(gate));
       await o.workspace.initialize();
+      recordingGate = gate;
       await o.workspace.introduce(o.agentWebId);
       if (signal) {
         try {
@@ -402,18 +646,20 @@ export function createDaemon(o: DaemonOptions): Daemon {
       const due = new Map<string, number>();
       await maintain();
       armMaintenance();
+      await sealing;
       do {
         if (signal?.aborted) break;
         const at = now();
-        if (fault) throw new Error("Authority reconciliation failed");
+        if (fault) throw sealFailure ?? new Error("Authority reconciliation failed");
         for (const account of accounts) {
           if (signal?.aborted || fault) break;
           if (!account.enabled || at < (due.get(account.id) ?? -Infinity)) continue;
-          await accountPass(account);
+          await accountPass(account, gate);
           due.set(account.id, now() + pollInterval(account.category));
         }
         await authority;
-        if (fault) throw new Error("Authority reconciliation failed");
+        await sealing;
+        if (fault) throw sealFailure ?? new Error("Authority reconciliation failed");
         if (signal?.aborted) break;
         await o.executor.runOutboxOnce();
         if (!repeat || !signal) break;
@@ -439,13 +685,20 @@ export function createDaemon(o: DaemonOptions): Daemon {
         } finally {
           await maintenance;
           await authority;
-          if (release) await o.executor.drain();
+          await sealing;
+          try {
+            if (release) await o.executor.drain();
+            if (recordingGate && !sealFailure) await anchorAudit(recordingGate);
+          } finally {
+            await gateSession?.close();
+          }
         }
       } finally {
         await release?.();
         active = false;
       }
     }
+    if (sealFailure) throw sealFailure;
   }
   return { once: (signal) => session(false, signal), run: (signal) => session(true, signal) };
 }

@@ -32,6 +32,7 @@ import {
   AUDIT_SCOPE,
   type AuditEntry,
   auditJsonLd,
+  GATE_AUDIT_LABELS,
   HEAD_MISSING,
   type RangeCheck,
   readAuditHead,
@@ -67,6 +68,7 @@ const KINDS = {
   "model-call": "Model consulted",
   "tool-call": "Tool used",
   conversation: "Conversation recorded",
+  ...GATE_AUDIT_LABELS,
   "tamper-suspected": "Record mismatch suspected",
 };
 const ICONS = {
@@ -81,6 +83,8 @@ const ICONS = {
   "model-call": Brain,
   "tool-call": Activity,
   conversation: FileText,
+  "gate-decision": Shield,
+  "record-anchor": FileCheck,
   "tamper-suspected": CircleAlert,
   "ledger-checkpoint": Activity,
 };
@@ -386,7 +390,9 @@ function RecordDetail({ entry, entries }: { entry: AuditEntry; entries: AuditEnt
   const { client } = useAgentWorkspace();
   const approvals = useAgentQuery(client.paths.approvals, readApprovals);
   const proposals = useAgentQuery(client.paths.proposals, readProposals);
-  const approval = entry.record.type === "ledger-checkpoint" ? undefined : entry.record.approval;
+  const { record } = entry;
+  const gateRecord = record.type === "gate-decision" || record.type === "record-anchor";
+  const approval = record.type === "ledger-checkpoint" ? undefined : record.approval;
   const key =
     approvals.status === "ready"
       ? loadedRecords(approvals.data).find((a) => a.id === approval)?.signingKeyFragment
@@ -401,8 +407,12 @@ function RecordDetail({ entry, entries }: { entry: AuditEntry; entries: AuditEnt
         <dd>{entry.seq}</dd>
         <dt>Time</dt>
         <dd>{new Date(entry.at).toLocaleString()}</dd>
-        <dt>Approval key</dt>
-        <dd>{key ?? "Not recorded"}</dd>
+        {!gateRecord && (
+          <>
+            <dt>Approval key</dt>
+            <dd>{key ?? "Not recorded"}</dd>
+          </>
+        )}
         {entry.record.type !== "ledger-checkpoint" && entry.record.reason === "expired" && (
           <>
             <dt>Reason</dt>
@@ -410,16 +420,20 @@ function RecordDetail({ entry, entries }: { entry: AuditEntry; entries: AuditEnt
           </>
         )}
       </dl>
-      <h2>How this action is connected</h2>
-      <ProvenanceChain
-        entry={entry}
-        entries={entries}
-        proposals={
-          proposals.status === "ready" ? loadedRecords(proposals.data).map((p) => p.id) : []
-        }
-      />
+      {!gateRecord && (
+        <>
+          <h2>How this action is connected</h2>
+          <ProvenanceChain
+            entry={entry}
+            entries={entries}
+            proposals={
+              proposals.status === "ready" ? loadedRecords(proposals.data).map((p) => p.id) : []
+            }
+          />
+        </>
+      )}
       <details>
-        <summary>Technical details</summary>
+        <summary>{gateRecord ? "Advanced" : "Technical details"}</summary>
         <dl>
           <dt>Previous hash</dt>
           <dd>{entry.prev}</dd>

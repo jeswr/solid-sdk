@@ -14,6 +14,7 @@
  * new call is accepted (atomically), at most MAX_QUEUED_CALLS may wait, and `drain()` waits for
  * the accepted ones.
  */
+import { MAX_DOCUMENT_CARRIAGE_BYTES } from "./bindings/message-packet.js";
 import type { OpenAgent } from "./cli.js";
 import { PILOT_PROFILE_VERSION } from "./profile/vocabulary.js";
 import type { OperationContext, OperatorOperation } from "./roles/index.js";
@@ -31,7 +32,7 @@ import { FileLedger, verifyLedger } from "./store/ledger.js";
 
 export type Json = Record<string, unknown>;
 
-/** Largest inbound peer message accepted by `deliver`. */
+/** Largest inbound MIME or legacy envelope accepted by the pilot host. */
 export const MAX_INBOUND_BYTES = 256 * 1024;
 /** Largest serialised result of one call (tools and resources alike). */
 export const MAX_RESULT_BYTES = 512 * 1024;
@@ -296,8 +297,9 @@ export class AgentHost {
     data: string;
     carrier: string;
   }): Promise<ProcessReport> {
-    if (Buffer.byteLength(input.data) > MAX_INBOUND_BYTES)
-      throw new Error(`inbound message exceeds ${MAX_INBOUND_BYTES} bytes`);
+    const limit = input.format === "envelope" ? MAX_DOCUMENT_CARRIAGE_BYTES : MAX_INBOUND_BYTES;
+    if (Buffer.byteLength(input.data) > limit)
+      throw new Error(`inbound message exceeds ${limit} bytes`);
     const report = await processInput(
       this.agent.rt,
       { format: input.format, data: Buffer.from(input.data, "utf8"), carrier: input.carrier },

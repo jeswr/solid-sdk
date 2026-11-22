@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6
 // A2A + durable enterprise workflow (SYNTHETIC ONLY). Requires `npm run build` and a local SPARQ
 // policy binary (explicit path; never the ambient `sparq` command).
 //
@@ -34,6 +35,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readLedgerSegment } from "@jeswr/agent-reference/store/ledger";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -545,6 +547,8 @@ try {
     "mortgage-consumer",
     "--wallet",
     issuance.json.wallet,
+    "--issuers",
+    issuance.json.issuers,
   ]);
   mids.northbank = await provision("northbank", [
     "--role",
@@ -721,7 +725,7 @@ try {
   const permitted = await call("northbank", "internal_access", {
     agent: fixtures.NB_ASSESS,
     action: "read",
-    purpose: vocab.PURPOSE.creditChecking,
+    purpose: vocab.PURPOSE.creditAssessment,
     application,
   });
   const marketing = await call("northbank", "internal_access", {
@@ -733,13 +737,13 @@ try {
   const relabelled = await call("northbank", "internal_access", {
     agent: fixtures.NB_MARKETING,
     action: "read",
-    purpose: vocab.PURPOSE.creditChecking,
+    purpose: vocab.PURPOSE.creditAssessment,
     application,
   });
   const broker = await call("northbank", "internal_access", {
     agent: fixtures.NORTH.actor,
     action: "distribute",
-    purpose: vocab.PURPOSE.creditChecking,
+    purpose: vocab.PURPOSE.creditAssessment,
     recipient: fixtures.DATA_BROKER,
     application,
   });
@@ -838,10 +842,9 @@ try {
     const v = await cli(["verify-ledger", "--name", n]);
     post6[n] = [g.code, v.json.ok === true];
   }
-  const storeLedger = readFileSync(join(dir, "northbank", "data-store-ledger.jsonl"), "utf8")
-    .trim()
-    .split("\n")
-    .map((l) => JSON.parse(l).record);
+  const storeLedger = readLedgerSegment(join(dir, "northbank", "data-store-ledger.jsonl")).map(
+    ({ record }) => record,
+  );
   check(
     "B.8",
     "after shutdown: every retained file is registered (governance exit 0), ledgers verify, the enforcement ledger stored each item exactly once and holds no payloads",

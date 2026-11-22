@@ -58,7 +58,7 @@ export function actionProvenanceJsonLd(input: ActionProvenanceInput): Record<str
 // @public
 export interface ActiveDuty {
     // (undocumented)
-    readonly action: OdrlActionName;
+    readonly action: OdrlAction;
     readonly fulfilled: boolean;
     // (undocumented)
     readonly id?: string;
@@ -148,7 +148,9 @@ export const DPV: "https://w3id.org/dpv#";
 export { escapeIri }
 
 // @public
-export function evaluate(policy: OdrlPolicy, request: RequestContext, options?: EvaluateOptions): EvaluationResult;
+export function evaluate(policy: OdrlPolicy, request: Omit<RequestContext, "action"> & {
+    readonly action: OdrlAction;
+}, options?: EvaluateOptions): EvaluationResult;
 
 // @public
 export interface EvaluatedDecisionRecord {
@@ -218,6 +220,9 @@ export const ODRL_NEXT_POLICY: "http://www.w3.org/ns/odrl/2/nextPolicy";
 
 // @public
 export const ODRL_TRANSFER: "http://www.w3.org/ns/odrl/2/transfer";
+
+// @public
+export type OdrlAction = OdrlActionName | `${string}:${string}`;
 
 // @public
 export type OdrlActionName = (typeof ODRL_ACTIONS)[number];
@@ -295,7 +300,7 @@ export const ODRLD_RULE_KIND: "https://jeswr.org/ns/odrl-delegation#ruleKind";
 
 // @public
 export interface OdrlDuty {
-    readonly action: OdrlActionName;
+    readonly action: OdrlAction;
     readonly constraints?: readonly OdrlConstraint[];
     readonly id?: string;
     readonly target?: string;
@@ -318,7 +323,7 @@ export interface OdrlPolicy {
 
 // @public
 export interface OdrlRule {
-    readonly action: OdrlActionName;
+    readonly action: OdrlAction;
     readonly assignee?: string;
     readonly assigner?: string;
     readonly constraints?: readonly OdrlConstraint[];
@@ -343,22 +348,32 @@ export type OperatorName = (typeof OPERATORS)[number];
 export const OPERATORS: readonly ["eq", "neq", "gt", "gteq", "lt", "lteq", "isAnyOf", "isAllOf", "isNoneOf", "isPartOf"];
 
 // @public
-export function parsePolicy(input: string | DatasetCore, contentType?: string, baseIRI?: string): Promise<OdrlPolicy | undefined>;
+export function parsePolicy(input: string | DatasetCore, contentType?: string, baseIRI?: string, options?: PolicyReadOptions): Promise<OdrlPolicy | undefined>;
 
 // @public
-export function policyFromRdf(dataset: DatasetCore): OdrlPolicy | undefined;
+export function policyFromRdf(dataset: DatasetCore, options?: PolicyReadOptions): OdrlPolicy | undefined;
+
+// @public
+export interface PolicyReadOptions {
+    readonly allowedActionIris?: readonly string[];
+}
 
 // @public
 export function policyToJsonLd(policy: OdrlPolicy): Record<string, unknown>;
 
 // @public
-export function policyToRdf(policy: OdrlPolicy): Quad[];
+export function policyToRdf(policy: OdrlPolicy, options?: PolicyWriteOptions): Quad[];
 
 // @public
 export function policyToTurtle(policy: OdrlPolicy, format?: string): Promise<string>;
 
 // @public
 export type PolicyType = "Set" | "Offer" | "Agreement";
+
+// @public
+export interface PolicyWriteOptions {
+    readonly onRuleNode?: (rule: OdrlRule | OdrlDuty, value: string, isBlank: boolean) => void;
+}
 
 // @public
 export const PROV: "http://www.w3.org/ns/prov#";

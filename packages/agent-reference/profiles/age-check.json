@@ -1,0 +1,190 @@
+{
+  "@context": "https://w3id.org/jeswr/awp/context/scenario/v1",
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.2",
+  "id": "age-check",
+  "parties": {
+    "owner": "The customer",
+    "receiver": "The merchant",
+    "identity-issuer": "The identity issuer",
+    "owner-agent": "The customer’s agent",
+    "receiver-agent": "The merchant’s agent"
+  },
+  "claims": [
+    {
+      "kind": "identity.document",
+      "sources": [
+        "urn:fictional:age-check:identity-issuer"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "identity.birth-date",
+      "sources": [
+        "urn:fictional:age-check:identity-issuer"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "age-check.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:age-check:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:age-check",
+      "claims": [
+        "age-check.answer",
+        "derivation.request",
+        "identity.birth-date"
+      ]
+    },
+    {
+      "id": "urn:purpose:identity-management",
+      "claims": [
+        "identity.document"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "urn:rule:age-check:proof",
+      "template": "threshold",
+      "params": {
+        "input": "identity.birth-date",
+        "operator": "lte",
+        "date": "2008-11-13"
+      },
+      "output": "age-check.answer",
+      "inputsFrom": [
+        "urn:fictional:age-check:identity-issuer"
+      ],
+      "assurances": [
+        "attested"
+      ],
+      "proofQuery": "SELECT DISTINCT ?subject WHERE { ?g <https://w3id.org/sparq/vcq#verifiedIssuer> <urn:fictional:age-check:identity-issuer> . GRAPH ?g { ?subject <urn:claim:identity.birth-date> ?birth . FILTER(?birth <= \"2008-11-13\"^^<http://www.w3.org/2001/XMLSchema#date>) } }"
+    }
+  ],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "identity.document"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:age-check",
+      "version": "0.1",
+      "label": "Proving age to buy something",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:age-check"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:age-check:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:age-check"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:age-check:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:age-check"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:age-check:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:age-check"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:age-check:proof",
+      "method": "sparq-zk-result/5",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh"
+      ],
+      "purposes": [
+        "urn:purpose:age-check"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "sparq-zk-result/5",
+      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). Single-issuer result proofs release supporting rows. There is no holder binding, completeness or unlinkability guarantee."
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:age-check:proof-answer",
+      "claims": [
+        "age-check.answer"
+      ]
+    }
+  ],
+  "labels": {
+    "urn:purpose:age-check": "Age check",
+    "urn:purpose:identity-management": "Identity management"
+  }
+}

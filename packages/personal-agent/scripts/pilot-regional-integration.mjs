@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6
 // Durable REGIONAL workflows across independent OS processes (SYNTHETIC ONLY). Requires
 // `npm run build` and a local SPARQ policy binary (explicit path; never the ambient `sparq`).
 //
@@ -29,6 +30,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readLedgerSegment } from "@jeswr/agent-reference/store/ledger";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -820,7 +822,10 @@ async function partH() {
   );
 
   for (const n of All) await disconnect(n);
-  const fhirAudit = readFileSync(join(dir, "cv-fhir", "ledger.jsonl"), "utf8");
+  const fhirLedgerPath = join(dir, "cv-fhir", "ledger.jsonl");
+  const fhirAudit = JSON.stringify(readLedgerSegment(fhirLedgerPath));
+  const fhirAuditRaw = readFileSync(fhirLedgerPath, "utf8");
+  const clinicalPayload = /lisinopril|penicillin|atorvastatin|Systolic|metformin/i;
   const gov = [];
   for (const n of All) {
     const g = await cli(["governance", "--name", n]);
@@ -831,7 +836,7 @@ async function partH() {
     "H.8",
     "after shutdown: the resource service's audit holds no clinical payload; revocations persisted with their ownership facts; every file registered; ledgers verify",
     [
-      /lisinopril|penicillin|atorvastatin|Systolic|metformin/i.test(fhirAudit),
+      clinicalPayload.test(fhirAudit) || clinicalPayload.test(fhirAuditRaw),
       JSON.parse(readFileSync(join(dir, "cv-fhir", "revocations.json"), "utf8")).revoked.map(
         (r) => [r.patient, r.patientId],
       ),
@@ -903,6 +908,8 @@ async function partI() {
       "industrial-contracting",
       "--role-input",
       `membership=${syn.json.membership}`,
+      "--role-input",
+      `issuers=${alpineIssuer}`,
       "--owner-name",
       "nordwerk",
     ],
@@ -1238,13 +1245,10 @@ async function partI() {
   });
   await pumpAll();
   await disconnect("nordwerk-contracting");
-  const storeLog = readFileSync(
+  const storeLog = readLedgerSegment(
     join(dir, "nordwerk-contracting", "nordwerk-data-store-ledger.jsonl"),
-    "utf8",
   )
-    .trim()
-    .split("\n")
-    .map((l) => JSON.parse(l).record)
+    .map(({ record }) => record)
     .filter((r) => r.type === "access-decision")
     .map((r) => [r.agent, r.purpose, r.decision]);
   await connect("nordwerk-contracting", a2aFlags);
@@ -1295,10 +1299,7 @@ async function partI() {
 
   for (const n of N) await disconnect(n);
   const types = (n) =>
-    readFileSync(join(dir, n, "ledger.jsonl"), "utf8")
-      .trim()
-      .split("\n")
-      .map((l) => JSON.parse(l).record.type);
+    readLedgerSegment(join(dir, n, "ledger.jsonl")).map(({ record }) => record.type);
   const gov = [];
   for (const n of N) {
     const g = await cli(["governance", "--name", n]);

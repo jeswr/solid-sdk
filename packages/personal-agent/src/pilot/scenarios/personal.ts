@@ -158,6 +158,7 @@ export async function startAgent(
       actor: p.identity.actor,
       party: p.identity.party,
       ...(p.identity.operator ? { operator: p.identity.operator } : {}),
+      ...(p.identity.descriptionUrl ? { descriptionUrl: p.identity.descriptionUrl } : {}),
     },
     actorKeys: [p.actorKey],
     trust: await TrustStore.load(p.trust),

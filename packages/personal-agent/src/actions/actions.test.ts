@@ -21,6 +21,7 @@ import { SettingsStore } from "../dashboard/store.js";
 import { schedulingMandate } from "../pilot/mandates.js";
 import { signMandate } from "../pilot/mechanisms/mandate.js";
 import { BOB, provisionPair } from "../pilot/scenarios/personal.js";
+import { writeTrustFile } from "../pilot/setup.js";
 import type { ActionsEnv } from "./env.js";
 import { createActionRegistry } from "./index.js";
 import { createActionsMcpServer } from "./mcp.js";
@@ -674,11 +675,11 @@ describe("contact.lookup", () => {
     ...extra,
   });
   const dirOf = (name: string) => join(agents, name);
-  const writeAgent = (name: string, mandateJws: string) => {
+  const writeAgent = async (name: string, mandateJws: string) => {
     const dir = dirOf(name);
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "identity.json"), JSON.stringify(alice.identity));
-    writeFileSync(join(dir, "trust.json"), JSON.stringify(alice.trust));
+    await writeTrustFile(dir, alice.trust);
     writeFileSync(join(dir, "mandate.jws"), mandateJws);
     writeFileSync(
       join(dir, "a2a-peers.json"),
@@ -715,7 +716,7 @@ describe("contact.lookup", () => {
       now: () => NOW,
       aliceMandate: schedulingMandate(recipients),
     }));
-    writeAgent("owner", alice.mandateJws);
+    await writeAgent("owner", alice.mandateJws);
     // Same records, but a mandate that expired, and one with a broken signature.
     const expired = schedulingMandate(recipients)({
       owner: alice.identity.party,
@@ -723,9 +724,9 @@ describe("contact.lookup", () => {
       validFrom: "2026-09-01T00:00:00Z",
       validUntil: "2026-10-01T00:00:00Z",
     });
-    writeAgent("expired", await signMandate(alice.ownerKey, expired));
+    await writeAgent("expired", await signMandate(alice.ownerKey, expired));
     const [h, p] = alice.mandateJws.split(".");
-    writeAgent(
+    await writeAgent(
       "forged",
       `${h}.${p}.${Buffer.from("not the owner's signature").toString("base64url")}`,
     );
@@ -807,6 +808,8 @@ describe("contact.lookup", () => {
     for (const [file, content, contact] of [
       ["trust.json", "{not json", BOB.actor],
       ["trust.json", JSON.stringify({ keys: [{ role: "actor", subject: BOB.actor }] }), BOB.actor],
+      ["trust.ttl", "{not turtle", BOB.actor],
+      ["trust.ttl", "<urn:example:bad> a <https://w3id.org/jeswr/awp#TrustStore> .", BOB.actor],
       ["a2a-peers.json", JSON.stringify({ [BOB.actor]: { url: "x" } }), BOB.actor],
       ["associations.json", JSON.stringify({ not: "a list" }), "ben@example.org"],
       ["associations.json", "[", "ben@example.org"],
@@ -814,7 +817,8 @@ describe("contact.lookup", () => {
       ["identity.json", "{", "ana@example.org"],
     ] as const) {
       rmSync(dir, { recursive: true, force: true });
-      writeAgent("corrupt", alice.mandateJws);
+      await writeAgent("corrupt", alice.mandateJws);
+      if (file === "trust.json") rmSync(join(dir, "trust.ttl"));
       writeFileSync(join(dir, file), content);
       const r = await lookup(contact, "corrupt");
       expect(r.status, `${file}: ${content}`).toBe("blocked");

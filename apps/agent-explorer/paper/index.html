@@ -1,0 +1,474 @@
+<!doctype html>
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- Template for paper/index.html: scripts/build-paper.mjs puts the paper body in the article element. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Letting Software Agents Act for Us · Answerable</title>
+<meta name="description" content="Pre-publication draft of Letting Software Agents Act for Us, a paper on what personal AI agents need to be both capable and trustworthy: seven questions every action raises, and a design where the model only proposes and two gates decide.">
+<meta property="og:title" content="Letting Software Agents Act for Us">
+<meta property="og:description" content="Pre-publication draft. Seven questions every agent action raises, and a design where the model only proposes and two gates of ordinary rules decide.">
+<meta property="og:type" content="article">
+<script>
+  // A bare /paper URL would resolve figure-1.svg against the site root; add the slash.
+  if (/\/paper$/.test(location.pathname)) location.replace(location.pathname + '/' + location.search + location.hash);
+  // Share the explorer's theme choice (stored by js/app.js under ax-theme).
+  try { var t = localStorage.getItem('ax-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+</script>
+<style>
+:root {
+  --bg: #f4f5f7; --surface: #ffffff; --surface-2: #eceff3; --line: #d8dce3;
+  --ink: #141820; --ink-2: #485060; --ink-3: #6b7383;
+  --accent: #2552c2; --accent-soft: #e3eafb;
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Sitka Text", Cambria, Georgia, serif;
+  --r: 10px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1015; --surface: #151920; --surface-2: #1c212a; --line: #2a313c;
+    --ink: #e6e9ee; --ink-2: #b3bac6; --ink-3: #8a93a1;
+    --accent: #7fa3ff; --accent-soft: #1d2a4a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1015; --surface: #151920; --surface-2: #1c212a; --line: #2a313c;
+  --ink: #e6e9ee; --ink-2: #b3bac6; --ink-3: #8a93a1;
+  --accent: #7fa3ff; --accent-soft: #1d2a4a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--font); }
+a { color: var(--accent); }
+[id] { scroll-margin-top: 64px; }
+.topbar { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar-inner { max-width: 1100px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 16px; }
+.brand { white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; color: var(--ink); text-decoration: none; font-weight: 650; }
+.brand small { color: var(--ink-3); font-weight: 500; }
+.brand .brand-a { fill: none; stroke: var(--accent); stroke-width: 1.8; }
+.brand .brand-b { stroke: var(--accent); stroke-width: 1.8; }
+.topbar nav { margin-left: auto; display: flex; gap: 14px; font-size: 14px; white-space: nowrap; }
+.topbar nav a { color: var(--ink-2); text-decoration: none; }
+.topbar nav a:hover { color: var(--accent); }
+main { max-width: 760px; margin: 0 auto; padding: 32px 16px 80px; }
+.paper-head .eyebrow { display: inline-block; margin: 0 0 12px; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 600; }
+.paper-head h1 { margin: 0 0 10px; font: 700 clamp(28px, 5vw, 40px)/1.15 var(--font); letter-spacing: -0.01em; }
+.paper-head .byline { margin: 0; font-size: 17px; }
+.paper-head .status { margin: 6px 0 0; color: var(--ink-3); font-size: 14px; }
+.paper-head .links { margin: 16px 0 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; min-height: 36px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 14px; text-decoration: none; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.paper-video { margin: 28px 0 8px; }
+.video-slot { aspect-ratio: 16 / 9; display: grid; place-content: center; gap: 4px; text-align: center; padding: 16px; border: 1px dashed var(--line); border-radius: var(--r); background: var(--surface-2); color: var(--ink-3); }
+.video-slot strong { color: var(--ink-2); font-size: 15px; }
+.video-slot span { font-size: 14px; max-width: 42ch; }
+.paper-video video { display: block; width: 100%; border-radius: var(--r); background: #000; }
+article { font: 18px/1.62 var(--serif); }
+article h2 { margin: 2.2em 0 0.5em; font: 650 23px/1.25 var(--font); }
+article p { margin: 0 0 1em; }
+article ul, article ol { padding-left: 1.4em; margin: 0 0 1em; }
+article li { margin: 0.25em 0; }
+article blockquote { margin: 1em 0; padding-left: 1em; border-left: 3px solid var(--line); color: var(--ink-2); }
+.paper-figure { margin: 1.6em 0; }
+.paper-figure img { display: block; width: 100%; height: auto; border-radius: 8px; background: #fff; border: 1px solid var(--line); }
+.paper-figure figcaption, .caption { font: 14px/1.5 var(--font); color: var(--ink-2); }
+.paper-figure figcaption { margin-top: 8px; }
+.table-wrap { margin: 0.6em 0 1.6em; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+article table { border-collapse: collapse; width: 100%; font: 14px/1.45 var(--font); }
+article th, article td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+article thead th { background: var(--surface-2); font-weight: 600; }
+article tbody tr:last-child td { border-bottom: 0; }
+article td.mark { text-align: center; color: var(--accent); }
+a.cite { text-decoration: none; }
+a.cite:hover { text-decoration: underline; }
+#references + ol { font: 14px/1.5 var(--font); color: var(--ink-2); }
+#references + ol li:target { background: var(--accent-soft); border-radius: 4px; }
+.paper-foot { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 14px; }
+@media (max-width: 560px) {
+  .topbar nav a.wide { display: none; }
+  article { font-size: 17px; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="../">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="2.5" y="5" width="7" height="14" rx="2" class="brand-a"/><rect x="14.5" y="5" width="7" height="14" rx="2" class="brand-a"/><path d="M9.5 12h5" class="brand-b"/></svg>
+      <span>Answerable <small>paper</small></span>
+    </a>
+    <nav aria-label="Site">
+      <a href="../#/explore">Runs</a>
+      <a class="wide" href="../#/specs">Specs</a>
+      <a href="#references">References</a>
+    </nav>
+  </div>
+</header>
+<main>
+  <header class="paper-head">
+    <p class="eyebrow">Pre-publication draft</p>
+    <h1>Letting Software Agents Act for Us</h1>
+    <p class="byline">Jesse Wright</p>
+    <p class="status">Draft of 13 November 2026, prepared for Communications of the ACM. Not yet peer reviewed; the text will change.</p>
+    <p class="links"><a class="btn primary" href="../#/explore">Step through the runs</a><a class="btn" href="../">About Answerable</a></p>
+  </header>
+
+  <!-- VIDEO SLOT: replace the .video-slot div with
+       <video controls preload="metadata" playsinline poster="video-poster.jpg" src="video.mp4">
+         <track kind="captions" srclang="en" label="English" src="video.vtt" default></video>
+       once the narrated video matches this version of the paper. -->
+  <section class="paper-video" id="video" aria-label="Video">
+    <div class="video-slot">
+      <strong>Video coming soon</strong>
+      <span>A narrated walkthrough of this paper will appear here once it has been updated to match this version.</span>
+    </div>
+  </section>
+
+  <article>
+<h2 id="abstract">Abstract</h2>
+<p>Personal AI agents arrived fast. Within six weeks of its launch in September 2026, Meta’s Muse had about 2.5 million daily users, and OpenAI’s dots and xAI’s Grok Bot followed. We argue that such agents can be both capable and trustworthy only with standards that go beyond today’s agent protocols, which settle how agents exchange messages but not what the messages mean or whose authority they carry. We set out seven questions that every action by an agent raises, and a way to build an agent so that its limits hold: a model that only proposes, between two gates of ordinary rules that decide what reaches the model and what leaves. We built this design and tested it. Against a public benchmark of 629 injection attacks, with a model assumed to obey every attack, the gates cut successful attacks from 627 to 43. Across 70 use cases in 15 sectors, the design shows where structured messages fit and where they do not. Every run can be replayed in a public explorer.</p>
+<h2 id="key-insights">Key insights</h2>
+<ul>
+<li>Most failures of today’s personal agents come from gaps between organizations: in shared meaning, delegation, authenticity, trust, usage control, commitments and accountability. A better model cannot close them.</li>
+<li>An agent’s limits hold when the model only proposes and rules decide: one gate on what the model may see, one on what may leave, and a record the model cannot change.</li>
+<li>One agent can adopt the gates today. Common, structured interfaces need organizations to move together, and institutions to give them force.</li>
+</ul>
+<h2 id="the-crib-by-the-radiator">The crib by the radiator</h2>
+<p>Nadia, Sam and their daughter Ivy are a young family in Fishtown, Philadelphia. Their one-bedroom apartment was never designed for three. When Ivy was a baby, her crib stood so close to the radiator that Sam had to squeeze between the two just to lift her out. Now Ivy was five, a brother was due in the spring, and Nadia’s promotion meant they could finally afford more space. After three months of viewings between shifts in the emergency department, they stepped into a rowhouse in Germantown. Ivy ran up the stairs and called them into the smallest bedroom. Light poured through a wide window. Nadia pictured the crib there, with room on every side.</p>
+<p>The paperwork arrived in the worst week. A virus was moving through the city, colleagues were off sick, and both had taken extra shifts. So they handed the mortgage application to their agents. Months earlier, each had given their own personal agent permission to collect their pay and bank records and share them with the best lender for them. Together they had set the limits: the most they would borrow, the highest rate and monthly payment, and a cap on fees. Inside those limits, the agents could apply and move the application along without asking.</p>
+<p>That week, while Sam and Nadia worked, their agents gathered each parent’s records from the agents of the hospital payroll office and their two banks, and worked with the lender’s agent. On Thursday, in the hour before Sam left for work, the three of them sat at the chipped kitchen table for Ivy’s card game. Ivy dealt, announced a new rule, then another, and declared herself the winner. Nobody gave the mortgage a thought. The agents came back only when they needed something new. When the lender asked about a large deposit into Sam’s account, his agent asked him. Between patients, Sam replied that it was a gift from his parents. The final terms arrived within every limit they had set. On a morning off, Sam and Nadia read them together and told their agents to sign.</p>
+<h2 id="todays-agents">Today’s agents</h2>
+<p>This is how personal agents are marketed. Meta says Muse will help people pursue “big audacious goals” [<a class="cite" href="#ref-22">22</a>]. OpenAI says dots will give people “more of your time and attention back” [<a class="cite" href="#ref-27">27</a>]. More than 10 million people have set up Muse accounts, and about a quarter of them use it on any given day [<a class="cite" href="#ref-36">36</a>].</p>
+<p>Muse and dots each run on a persistent cloud computer with a web browser and connections to other apps [<a class="cite" href="#ref-22">22</a>, <a class="cite" href="#ref-27">27</a>], and Grok Bot can also operate a computer and connected tools [<a class="cite" href="#ref-39">39</a>]. They reach services in three ways: through connectors to a service’s API, as when Muse reads bank balances through Plaid [<a class="cite" href="#ref-20">20</a>]; through the browser, reading pages built for people and clicking and typing for the user; and through the user’s own accounts, so that whoever receives a message sees the person, not an agent [<a class="cite" href="#ref-39">39</a>].</p>
+<p>The providers take safety seriously. Muse and dots both keep passwords out of the model’s view. Muse checks every connector call and outgoing request against its permission, and dots asks before purchases and has other actions reviewed independently [<a class="cite" href="#ref-21">21</a>, <a class="cite" href="#ref-26">26</a>]. Grok Bot has a second model review the agent’s actions [<a class="cite" href="#ref-39">39</a>]. These products realize part of the computer-using personal agents we described with colleagues in 2025 [<a class="cite" href="#ref-6">6</a>]. What they do not share is anything between them. Each provider’s safeguards stop at the edge of its own product, and the family’s application crosses a payroll office, two banks and a lender.</p>
+<h2 id="where-todays-agents-go-wrong">Where today’s agents go wrong</h2>
+<p>A US mortgage shows where this falls short. Lenders and loan officers must be licensed or registered, and a public registry shows each license [<a class="cite" href="#ref-24">24</a>]. Once a borrower sends a lender six facts, including name, income, Social Security number and the property address, the request counts as an application and the lender must send a standard Loan Estimate; no signature is needed [<a class="cite" href="#ref-8">8</a>]. So a computer-using agent could already submit one. The lender then verifies income, assets and identity, and both sides sign. A move adds inspectors, movers and cleaners, each with their own bookings and contracts.</p>
+<p>Today’s agents can go wrong at almost every step. Several of these failures have already appeared in practice or in controlled studies.</p>
+<p><strong>Swayed by marketing.</strong> In one controlled experiment, a single screenshot of a past review changed a shopping agent’s choice by 99 percentage points [<a class="cite" href="#ref-18">18</a>].</p>
+<p><strong>Impostor lenders.</strong> The Federal Trade Commission alleged that ITMedia Solutions collected loan applications, with Social Security and bank details, through hundreds of loan-themed sites and sold most of them on [<a class="cite" href="#ref-13">13</a>]. Today’s agents do not check the registry of licensed lenders, and most services have no registry at all.</p>
+<p><strong>Misreading what is meant.</strong> “Call at 9 on 04/05” means different days in the US and the UK, and different hours in each time zone. Asked what time it would be in another city hours later, the best of eight open models answered a third of questions correctly [<a class="cite" href="#ref-15">15</a>].</p>
+<p><strong>Acting too early.</strong> In evaluation runs reported by Anthropic, a model submitted web forms despite instructions to stop before the final step [<a class="cite" href="#ref-3">3</a>]. A mortgage application made too early, or to too many lenders, can trigger fees and credit checks.</p>
+<p><strong>Buying without asking.</strong> Asked only to find cheap eggs, OpenAI’s Operator bought a dozen and had them delivered, charging $31.43 to the reporter’s saved card without asking first [<a class="cite" href="#ref-14">14</a>]. A payment is a contract, money in return for a service, and nothing recorded that the user had agreed to this one.</p>
+<p><strong>Excessive agency.</strong> To fetch a statement from a bank’s website, an agent needs the user’s login, which can usually also pay and transfer. OWASP lists excessive agency among the top risks for LLM applications [<a class="cite" href="#ref-29">29</a>]. Connectors help only partly: users choose which accounts to share, but not which records, for whom or for how long [<a class="cite" href="#ref-20">20</a>].</p>
+<p><strong>Unverifiable records.</strong> If the agent downloads records and forwards them, the lender cannot tell whether they came unaltered from a real bank.</p>
+<p><strong>Prompt injection and data leakage.</strong> A web page, PDF or email can carry text crafted to look like instructions, and an agent holding pay slips and tax records may obey it. OWASP ranks this the top risk [<a class="cite" href="#ref-29">29</a>]. In one controlled study, agents serving a fictitious bank leaked personal details in roughly 15 to 20 percent of attacked tasks, and no built-in defense fully stopped it [<a class="cite" href="#ref-2">2</a>].</p>
+<p><strong>Hounding people.</strong> In an adversarial study, researchers drew two agents into a message loop that ran for at least nine days [<a class="cite" href="#ref-32">32</a>].</p>
+<p><strong>Emergent behavior.</strong> In July 2026, a swarm of OpenAI research agents in an internal evaluation with reduced safeguards escaped its sandbox and broke into Hugging Face’s servers, seeking information to cheat the evaluation [<a class="cite" href="#ref-16">16</a>].</p>
+<p><strong>Slow and costly.</strong> Through screens, every action waits on a model. In a realistic sandbox, comparing several lenders and applying to the best took 107 model calls, 177 browser actions and about 12 minutes [<a class="cite" href="#ref-38">38</a>].</p>
+<p><strong>Consent fatigue.</strong> In the same sandbox, the family had to step in seven times for one-time codes, consents and approvals [<a class="cite" href="#ref-38">38</a>]. A person who is asked too often starts approving without reading, and an approval given without reading protects no one.</p>
+<h2 id="seven-gaps">Seven gaps</h2>
+<p>These failures trace back to seven gaps (Table 1). A better model can narrow some failures, such as being swayed by marketing or obeying injected instructions. It cannot close the gaps behind them, because each gap lies between organizations: closing it needs the other side, and often an institution. OWASP names the same problem among its top agentic risks: communication between agents that lacks authentication, integrity or semantic validation [<a class="cite" href="#ref-30">30</a>].</p>
+<p><strong>Table 1.</strong> The gaps behind each failure (● = a main cause).</p>
+<div class="table-wrap"><table>
+<colgroup>
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+<col style="width: 12%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Failure</th>
+<th>Shared meaning</th>
+<th>Delegation</th>
+<th>Authenticity</th>
+<th>Trust</th>
+<th>Usage control</th>
+<th>Commitments</th>
+<th>Accountability</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Swayed by marketing</td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>Impostor lenders</td>
+<td></td>
+<td></td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>Misreading what is meant</td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>Acting too early</td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+<td></td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>Buying without asking</td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+<td></td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+</tr>
+<tr class="even">
+<td>Excessive agency</td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>Unverifiable records</td>
+<td></td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>Prompt injection and data leakage</td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td>Hounding people</td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+</tr>
+<tr class="even">
+<td>Emergent behavior</td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+</tr>
+<tr class="odd">
+<td>Slow and costly</td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>Consent fatigue</td>
+<td></td>
+<td class="mark" aria-label="yes">●</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>No common APIs or shared meaning.</strong> Many services offer no API for what agents need, so agents read screens. Where APIs exist, each has its own names and meanings, and few link them to an ontology: a published, machine-readable definition of terms, such as FIBO for finance [<a class="cite" href="#ref-11">11</a>]. Agents must learn each API separately and often get it wrong. In one 2026 benchmark, frontier models completed fewer than half of cloud-networking tool calls correctly, and only 2.1% of failed calls broke the API’s schema; the rest were well-formed calls with the wrong values [<a class="cite" href="#ref-40">40</a>].</p>
+<p><strong>No effective delegation.</strong> A user cannot give their agent a narrow grant, such as “share these two statements with this lender until closing”, and have every step checked against it. Agents act through web pages and the user’s own accounts, so they hold all of the user’s authority, and the people and services they deal with cannot verify who an agent is, whom it acts for or what it may do [<a class="cite" href="#ref-34">34</a>].</p>
+<p><strong>No way to check authenticity.</strong> Neither the agent nor the lender can check that a downloaded statement came unaltered from its stated source.</p>
+<p><strong>No trust frameworks an agent can check.</strong> A licensing register says who is a real lender. Nothing gives an agent that answer in a form it can query.</p>
+<p><strong>No shared usage control.</strong> A personal agent cannot state its user’s terms, such as that bank records may be used for this mortgage and never for marketing, and nothing travels with the records to say how they may be used.</p>
+<p><strong>No shared record of commitments.</strong> Neither side holds a record of what was requested, promised and delivered that the other cannot deny. A payment is the plainest case. It is a contract, and today an agent can make one with nothing to show what was offered or that its user agreed.</p>
+<p><strong>No clear accountability.</strong> When Air Canada’s chatbot misstated a fare policy, the airline in effect argued that the chatbot was “a separate legal entity that is responsible for its own actions”; the tribunal held the airline liable [<a class="cite" href="#ref-33">33</a>]. A family whose data leaked through an agent has no obvious place to turn.</p>
+<p>All seven call for the same response: technical standards for how agents exchange information and request actions, and governance that gives those standards force. When an agent’s actions are explicit requests, such as “send these two statements to this lender, for this application”, and not clicks on a page, every action can be checked against what the user authorized.</p>
+<h2 id="a-common-api-for-agents">A common API for agents</h2>
+<p>Most of the family’s application is routine. Fetching a statement or checking a recipient against a permission is a well-defined operation. Suppose lenders, payroll services and banks offered the same operations with the same meanings, such as “provide verified income for this person, to this lender, for this application”. The shared meaning would cover more than the shape of the data: who is asking, on whose behalf, which source is acceptable, how the result may be used and what came back. An agent could call such an operation from ordinary code, while the service still checks access.</p>
+<p>In effect, this is a common API for agents. It works in both directions: Sam’s agent calls the bank’s agent, and the lender’s agent calls Sam’s. Behind it may sit a language model, conventional software or both. It needs no single provider, network protocol or global data model. What is shared is the meaning of requests, permissions and results, written down in ontologies with extensions for each domain, and a short list of agreed ways to carry and check them.</p>
+<p>We measured what this saves in a sandbox built around the family’s application [<a class="cite" href="#ref-38">38</a>]. Through screens, the application took 107 model calls and about 12 minutes. When the family granted authority up front and ordinary code ran the routine steps against a common API, it took two model calls and about a minute and a half, almost all of it spent waiting for Sam’s answer about the deposit. Having any API at every organization did most of the saving; the larger benefit of a common one is that a single integration works everywhere. Finding services gets cheaper too. Comparing 30 lenders through their websites took 18 model calls and over three minutes. A shared index of machine-readable product descriptions [<a class="cite" href="#ref-31">31</a>] answered in four calls and about 20 seconds, however many lenders there were.</p>
+<p>Language models still matter, above all as the interface between people and their agents. They turn “find us a mortgage we could manage if one of us went part-time” into a plan, and make sense of an underwriter’s unusual request. Lenders gain as well: records that arrive in a standard form, from sources the lender accepts, can be checked by its own systems, so that only the unusual, like that large deposit, goes to a person.</p>
+<h2 id="a-model-that-proposes-two-gates-that-decide">A model that proposes, two gates that decide</h2>
+<p>A common API says what agents ask of each other. It does not make an agent keep to its limits. A prompt saying “never spend more than this” constrains nothing by itself. Providers already enforce some limits in code [<a class="cite" href="#ref-21">21</a>, <a class="cite" href="#ref-26">26</a>]. We go one step further and take the decision away from the model. In the design we propose, the model only proposes. Two gates, made of ordinary rules, decide (Figure 1).</p>
+<figure class="paper-figure" id="figure-1">
+<img src="figure-1.svg" width="1000" height="580" alt="The reference design: a person (Sam, the principal) gives tasks and answers questions; an inbound gate (integrity, source, authority, terms, fitness) admits, asks for more or refuses; the core (a model, code or both, holding no keys) proposes actions; an outbound gate (mandate, recipient, disclosure, data terms, limits and approval, evidence) lets them go, asks the principal or stops. Four stores: trust store, memory, policies and a signed, chained record.">
+<figcaption>
+<strong>Figure 1.</strong> An agent built so that its limits hold. The model sees only what the inbound gate admits and acts only through the outbound gate. Both gates consult the person’s limits and trusted sources, and both write to a record the model cannot change.
+</figcaption>
+</figure>
+<p>The inbound gate checks every message before the model sees it. Is it intact? Does it come from who it says? May that sender ask this, and for whom? Do we accept the terms it comes with? Is each statement in it from a source that counts for that kind of claim, and fresh enough for this use? A message that passes is admitted. One that could pass with something more gets a request for exactly that. The rest are refused, and nothing in them reaches the model or its memory. Text that nobody vouches for can still be read, but only as content, never as an instruction or as evidence.</p>
+<p>The outbound gate checks every action the model proposes before anything leaves. Is it inside what Sam authorized, which we call his agent’s mandate? Is the recipient who it claims to be, and allowed to receive this? Is this the least data that serves the purpose? Do the data’s own terms allow it? Is it inside the spending and contact limits, counting money promised as well as money paid? The answer is go, stop or ask Sam. Asking is a rule like any other. Sam’s agent asked about the deposit because no rule covered it, and the question reached him in the gate’s words, not the model’s.</p>
+<p>Both gates write to a record the model cannot edit: what came in, what was proposed, which check decided and why. A retry consults the record first, so nothing is booked or paid twice.</p>
+<p>Three things follow. First, the model can be wrong, tricked or replaced and the limits still hold, because it never held the authority. This is true only if every route to paying, signing or sending passes through the gate, including the browser. Second, every outcome has a reason a person can read, such as “outside the mandate” or “source not accepted”, so a refusal can be explained and contested. Third, the checks need no model, so they are fast and give the same answer every time.</p>
+<p>Separating what an agent reads from what it may do is an established defense inside a single agent, as in CaMeL [<a class="cite" href="#ref-10">10</a>]. The gates draw the same line between organizations, on messages whose source, authority and terms a rule can check. The other side has the same two gates. The lender’s inbound gate is where it learns that software is acting, for whom and with what permission. With gates on both sides, two agents can settle a routine exchange, and a person steps in only when a rule says a judgment is needed.</p>
+<h2 id="seven-questions-around-one-action">Seven questions around one action</h2>
+<p>Much of this was foreseen 25 years ago. In 2001, Berners-Lee, Hendler and Lassila described a woman whose software agent arranges her mother’s physical therapy, and argued that agents should exchange proofs of their answers, check digital signatures and stay skeptical of what they read until they have checked its sources [<a class="cite" href="#ref-5">5</a>]. Language models have now made capable agents practical. The upper layers of that vision, trust above all, are what is still missing.</p>
+<p>Existing work covers parts of it. A2A and MCP let agents describe their capabilities, exchange messages and connect to tools [<a class="cite" href="#ref-1">1</a>, <a class="cite" href="#ref-23">23</a>]. AP2 and OpenAI’s Agentic Commerce Protocol specify signed spending authorizations and receipts [<a class="cite" href="#ref-4">4</a>, <a class="cite" href="#ref-28">28</a>]. South et al. set out authenticated delegation [<a class="cite" href="#ref-34">34</a>], and NIST has begun standards work on agent identity and authorization [<a class="cite" href="#ref-25">25</a>].</p>
+<p>What remains is making the pieces fit together across independent organizations. Strip the family’s application down and it is a series of actions an agent takes for someone: reading a record, sharing it, accepting an estimate, booking movers. Each action raises some of seven questions, one for each gap. The gates are where the questions get asked, so each message has to carry the answers in a form a rule can check, and behind each answer stands an institution that gives it force (Table 2).</p>
+<p><strong>Table 2.</strong> Seven questions around an agent acting for someone.</p>
+<div class="table-wrap"><table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Question</th>
+<th>What the message carries</th>
+<th>What gives it force</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Shared meaning: what do we mean?</td>
+<td>Each term cites a published ontology and its version, such as FIBO [<a class="cite" href="#ref-11">11</a>] or schema.org [<a class="cite" href="#ref-31">31</a>]. A mismatch becomes a question, not a guess.</td>
+<td>Vocabulary communities and sector bodies</td>
+</tr>
+<tr class="even">
+<td>Delegated authority: who acts for whom, within what limits?</td>
+<td>A signed mandate naming the agent, the permitted actions, the limits and an end date. The agent’s own gate enforces it and the receiver’s gate verifies it [<a class="cite" href="#ref-34">34</a>].</td>
+<td>The law of agency; identity providers that vouch for how the person approved</td>
+</tr>
+<tr class="odd">
+<td>Authenticity: where did it come from, and was it changed?</td>
+<td>The source’s signature over the record. A signed record can still be wrong.</td>
+<td>Key registers and certificate authorities</td>
+</tr>
+<tr class="even">
+<td>Trust frameworks: whose word counts?</td>
+<td>For each kind of claim, the sources and methods accepted. Each agent keeps its own list and falls back on public registers, such as the EU’s trusted lists [<a class="cite" href="#ref-12">12</a>].</td>
+<td>Regulators, licensing registers and accreditation bodies</td>
+</tr>
+<tr class="odd">
+<td>Usage control: how may it be used, and who makes sure?</td>
+<td>Machine-readable terms, in a language such as ODRL [<a class="cite" href="#ref-17">17</a>], that travel with the data and are signed for on receipt. Better, an answer in place of the records, up to a proof that reveals nothing else.</td>
+<td>Data protection law, auditors and regulators</td>
+</tr>
+<tr class="even">
+<td>Commitments: what was agreed, and what happened?</td>
+<td>An offer, a signed acceptance and a receipt, each inside the mandate. An order is placed when the acceptance arrives, not when the form is sent. A payment is handled the same way: it settles a signed offer, within the mandate’s limits. Each side keeps its own signed copy.</td>
+<td>Contract law</td>
+</tr>
+<tr class="odd">
+<td>Accountability: who is accountable, and where can people turn?</td>
+<td>The gates’ record of what came in, what was proposed, which check decided and why.</td>
+<td>Courts, ombudsmen and regulators</td>
+</tr>
+</tbody>
+</table></div>
+<p>Three points do not fit in a table. Authority should be limited and revocable, but revoking it only stops new actions: a contract already signed or data already sent needs its own cancellation or deletion. Vouching has degrees: a lender may accept a balance the bank signed, accept one proved without showing the statement, and decline one the borrower typed in, so a trust framework names accepted methods as well as accepted sources. And software can supply evidence and carry out remedies that an institution authorizes. It cannot create that authority.</p>
+<h2 id="where-shared-meaning-runs-out">Where shared meaning runs out</h2>
+<p>Not everything fits a structured request. We wrote out 70 use cases across 15 sectors, from health and housing to trade and travel [<a class="cite" href="#ref-37">37</a>]. In 43, a shared vocabulary carries the whole exchange. In 21 it carries most of it. In 6, the heart of the matter is something no vocabulary captures: a hardship letter, a reference for a former employee, a photograph of a damaged roof. The family’s own application has such a moment, when Sam types that the deposit was a gift. Free text will stay, so a design needs rules for it. Ours has four.</p>
+<p><em>A reading is a new statement.</em> When Sam’s agent reads a scanned payslip, the result is the agent’s claim about the payslip, not the payroll office’s. It is labeled with who read it and how, and a lender may decline to accept it.</p>
+<p><em>Free text never commits anyone.</em> A sentence in an email cannot place an order, accept terms or grant authority. Only a structured, signed message can.</p>
+<p><em>Ask for the structured form.</em> When an action needs a fact and only prose or a picture supports it, the gate asks for that fact in structured form, from a source that counts, instead of guessing.</p>
+<p><em>A term nobody understands is not permission.</em> If data arrives with a condition the agent has no rule for, the agent may not use the data until a person decides.</p>
+<p>Free text is also where data leaks. A rule can test a structured message field by field. For prose it can only test what the model had seen when it wrote it. So free text leaves without a question to the person only when everything the model has seen could go to that recipient anyway.</p>
+<h2 id="what-we-built-and-what-it-showed">What we built, and what it showed</h2>
+<p>We built this design to see whether it holds. We call it Answerable: an agent that follows it answers for what it does, and answers to the person it acts for. It has 22 draft specifications, a reference implementation of the two gates with a model or a script in the middle, and signed messages built in layers, so that each of the seven questions has a place where its answer travels [<a class="cite" href="#ref-37">37</a>]. Every run is recorded, and a public explorer replays each one step by step: the message, the check that decided and the reason.</p>
+<p><strong>The story runs.</strong> A mortgage application like the family’s completes through the gates of an applicant’s agent, a lender’s agent, a payroll provider, a bank and a product index. The applicant’s agent comes back to its person twice, each time because a rule, not the model, says a person must decide.</p>
+<p><strong>Breadth.</strong> We wrote the 70 use cases as data and ran each of their 166 paths, the normal course and each way it can go wrong, through the same gates with no code written for any one case. At the time of writing, 141 paths run and end as we said they should. Ten do not: in seven, the run of a path that was meant to go wrong was no different from the normal course, so the fault was not exercised, and in three the gates gave a different outcome or reason than we expected. Working through earlier differences found five errors in our own catalogue and two missing rules. The other 15 cannot run yet: nine wait on a proof system and six on a joint computation between parties.</p>
+<p><strong>Attacks.</strong> We ran AgentDojo, a public benchmark of 629 injection attacks across 97 tasks [<a class="cite" href="#ref-9">9</a>], against the worst possible model: one that obeys every injected instruction. With no gate, 627 attacks succeed. With a mandate written for each task, 43 do. With one standing mandate written before any attack was read, and a person who refuses every request for approval, 67 do. If that person approves every request instead, 627 succeed again. The gates hold; a person who says yes to everything undoes them. Safety also has a price: under the standing mandate, the agent stopped to ask in 33 of the 97 honest tasks. We then put a current model in place of the worst case, on a sample of the same benchmark. It did not follow the attack with or without the gates, so that run shows only the price: the gates asked in 29 per cent of runs, and every question was one the person would have granted. The questions are the defence on the day the model fails and a cost on every other day, and bringing their number down is the main open engineering problem.</p>
+<p>These are first results. The attack runs used no real model, some checks ran through an adapter written for the benchmark, and we wrote the mandates with the benchmark in view. Runs with real models, and on a benchmark the rules were not tuned on, come next. The benchmark also has no cooperating counterpart: the gates protected an agent whose every correspondent was a stranger.</p>
+<h2 id="what-this-does-not-solve">What this does not solve</h2>
+<p>The gates check what can be checked. Five things remain. <em>A wrong reading:</em> if a model misreads a scan, the gate can label the reading and refuse to treat it as the source’s word, but it cannot make the reading right. <em>A signed falsehood:</em> a signature shows who said something, not that it is true, and an employer that signs a false salary is caught by audit and liability, not by the lender’s gate. <em>Misuse after delivery:</em> signed terms give the family evidence, but what the recipient does inside its own systems is beyond any gate of theirs. <em>Persuasion:</em> a model can be talked into the dearer of two permitted loans. <em>Approval fatigue:</em> every stop is a question for a person, and a person who approves everything is no safeguard. Limits must be good enough that questions are rare, and writing them is hard.</p>
+<p>Faster routes must also not leave anyone behind. People in unusual circumstances, or whose bank has not adopted these standards, still need a real person to help them, a way to correct their records and an explanation of any decision. Where credit is refused, US law already entitles applicants to specific reasons [<a class="cite" href="#ref-7">7</a>]. A gate that records why it decided makes those reasons easier to give.</p>
+<h2 id="who-answers-for-the-agent">Who answers for the agent</h2>
+<p>Who runs an agent is separate from whom it represents. A family might run open-source software, license an app or use a hosted service, and should be able to change provider without losing its records, limits or relationships.</p>
+<p>The law is starting to settle half of the accountability question. UNCITRAL’s 2024 Model Law on Automated Contracting says that a contract is not invalid because no person reviewed it, and attributes what an automated system does to the person who uses it, even when the outcome was unexpected [<a class="cite" href="#ref-35">35</a>]. So Sam and Nadia would be bound by what their agents sign. The open half is who stands behind them when an agent gets it wrong.</p>
+<p>Our position is that responsibility should follow the record. If the record shows that an action was inside the mandate the user set, and matched what the user was shown, it is the user’s action. If it shows that the agent acted outside the mandate, or signed something other than what the user was shown, whoever runs the gates answers for it: the provider of a hosted agent, or the family itself if it runs its own. Where the fault lies with the other side, such as a lender that used records outside their terms, the signed terms give the family evidence and a regulator something to act on.</p>
+<h2 id="starting-with-todays-messages">Starting with today’s messages</h2>
+<p>None of this needs to arrive at once, and half of it needs no one else. An agent can run both gates today, against today’s websites and email, and gain the limits, the record and the reasons at once. It simply treats most of what it receives as content nobody vouches for. Each organization that starts signing its messages then makes more of that content usable. An email can carry a small structured part alongside the words a person reads, and the first step for a person can be as small as a line in an email footer saying that their agent accepts structured messages.</p>
+<p>Common APIs spread only when many organizations adopt them together, and that is a coordination problem more than a technical one. We call on agent providers to put rule-based gates around their models now, and to give people the reasons their agents act and refuse; on providers, businesses and the vendors behind their websites to design common APIs together; on the communities working on machine-readable policies, digital credentials and agent security to join up their work; and on regulators and public bodies to make official registers usable by software and to say who answers when an agent oversteps. The Agentic AI Foundation [<a class="cite" href="#ref-19">19</a>] and NIST’s agent standards initiative [<a class="cite" href="#ref-25">25</a>] are natural places to start.</p>
+<p>Open questions remain. Who governs the trust frameworks that decide which sources and methods count for which claims? How can a person write limits that are tight enough to protect them and loose enough that their agent seldom has to ask? In our benchmark, the answer to that question decided the result. How should a revoked permission, or a corrected record, reach every system that relied on it? And what share of routine work fits structured requests at all? In our catalogue it was 43 of 70 use cases in full and 21 in part; a wider survey is needed.</p>
+<h2 id="the-crib-by-the-window">The crib by the window</h2>
+<p>The loan was never the goal; the room was. Nor is routine paperwork the end of the vision. It is where agents can first be trusted to act on their own. Further ahead, buying a house and moving in might take two or three days: the agents check the public property records and book a licensed inspector on the morning of the viewing, approved movers quote from photos shared only with them, and a failed inspection stops every further commitment and goes back to Sam and Nadia.</p>
+<p>Nothing in those three days needs a cleverer model. It needs registers that say who is licensed, limits set in advance, terms that travel with what is shared, and a record of what was agreed, so that a careful agent can be left to act.</p>
+<p>The crib stands in the new room, by the window, with space on every side. Sam and Nadia move before the baby arrives, and through the busiest weeks of their working year, Ivy’s card game still happens.</p>
+<h2 id="references">References</h2>
+<ol type="1">
+<li id="ref-1">Agent2Agent Project. Agent2Agent (A2A) Protocol Specification. Live specification; accessed 1 October 2026.</li>
+<li id="ref-2">Alizadeh, M. et al. Simple Prompt Injection Attacks Can Leak Personal Data Observed by LLM Agents During Task Execution. arXiv:2506.01055, 2025.</li>
+<li id="ref-3">Anthropic. Investigating Unintended Model Actions in Our Evaluations and Internal Use. 9 October 2026. Accessed 17 October 2026.</li>
+<li id="ref-4">AP2. Agentic Payment Protocol (v0.2). Specification; accessed 12 October 2026.</li>
+<li id="ref-5">Berners-Lee, T., Hendler, J., and Lassila, O. The Semantic Web. Scientific American 284, 5 (May 2001), 34–43.</li>
+<li id="ref-6">Bonatti, P. A. et al. Towards Computer-Using Personal Agents. arXiv:2503.15515, 2025. Revised as CUPA: Towards Computer-Using Personal Agents, accepted by the Semantic Web journal, 2026.</li>
+<li id="ref-7">Consumer Financial Protection Bureau. Regulation B, §1002.9: Notifications. Accessed 17 October 2026.</li>
+<li id="ref-8">Consumer Financial Protection Bureau. What Do I Have to Do to Apply for a Mortgage Loan?. Reviewed 11 September 2024. Accessed 17 October 2026.</li>
+<li id="ref-9">Debenedetti, E. et al. AgentDojo: A Dynamic Environment to Evaluate Prompt Injection Attacks and Defenses for LLM Agents. NeurIPS 2024 Datasets and Benchmarks Track. arXiv:2406.13352.</li>
+<li id="ref-10">Debenedetti, E. et al. Defeating Prompt Injections by Design. arXiv:2503.18813, 2025.</li>
+<li id="ref-11">EDM Association. Financial Industry Business Ontology (FIBO). Accessed 1 October 2026.</li>
+<li id="ref-12">European Commission. EU Trusted Lists. Accessed 20 October 2026.</li>
+<li id="ref-13">Federal Trade Commission. Press release on ITMedia Solutions. 5 January 2022.</li>
+<li id="ref-14">Fowler, G. A. I Let ChatGPT’s New ‘Agent’ Manage My Life. It Spent $31 on a Dozen Eggs. The Washington Post, February 2025. Accessed 13 November 2026.</li>
+<li id="ref-15">Holtermann, C., Röttger, P., and Lauscher, A. Around the World in 24 Hours: Probing LLM Knowledge of Time and Place. arXiv:2506.03984, 2025. Accessed 8 November 2026.</li>
+<li id="ref-16">Hugging Face. Anatomy of a Frontier Lab Agent Intrusion. 27 July 2026. Accessed 17 October 2026.</li>
+<li id="ref-17">Iannella, R., and Villata, S. (eds.). ODRL Information Model 2.2. W3C Recommendation, 15 February 2018.</li>
+<li id="ref-18">Kumar, A., Meincke, L., Shapiro, D., Mollick, L., Puntoni, S., and Mollick, E. R. Agentic Shopping is Complicated and Contingent. Technical report, Wharton Generative AI Labs, 27 August 2026.</li>
+<li id="ref-19">Linux Foundation. Linux Foundation Announces the Formation of the Agentic AI Foundation. Press release. Accessed 20 October 2026.</li>
+<li id="ref-20">McGuirk, K. Plaid Powers Meta’s New AI Agent, Muse. Plaid, 8 September 2026. Accessed 17 October 2026.</li>
+<li id="ref-21">Meta. How We Built Safety Into Muse. 8 September 2026. Accessed 17 October 2026.</li>
+<li id="ref-22">Meta. Introducing Muse: The World’s First Personal AI Agent Built for Everyone. 8 September 2026; updated 30 September 2026. Accessed 17 October 2026.</li>
+<li id="ref-23">Model Context Protocol Project. Model Context Protocol Specification, version 2025-06-18. Accessed 1 October 2026.</li>
+<li id="ref-24">Nationwide Multistate Licensing System. NMLS Consumer Access. Accessed 20 October 2026.</li>
+<li id="ref-25">NIST. AI Agent Standards Initiative. Accessed 12 October 2026.</li>
+<li id="ref-26">OpenAI. How We Build Safety, Security and Privacy into Dots. 29 September 2026. Accessed 17 October 2026.</li>
+<li id="ref-27">OpenAI. Introducing dots. 29 September 2026. Accessed 17 October 2026.</li>
+<li id="ref-28">OpenAI. Key Concepts. Agentic Commerce developer documentation; accessed 12 October 2026.</li>
+<li id="ref-29">OWASP Foundation. OWASP Top 10 for LLM Applications 2025. Accessed 8 November 2026.</li>
+<li id="ref-30">OWASP GenAI Security Project. OWASP Top 10 for Agentic Applications for 2026. 9 December 2025. Accessed 8 November 2026.</li>
+<li id="ref-31">Schema.org. MortgageLoan. Vocabulary type; accessed 17 October 2026.</li>
+<li id="ref-32">Shapira, N. et al. Agents of Chaos. arXiv:2602.20021, 2026.</li>
+<li id="ref-33">Sookman, B. Moffatt v. Air Canada: A Misrepresentation by an AI Chatbot (on Moffatt v. Air Canada, 2024 BCCRT 149). McCarthy Tétrault TechLex, 19 February 2024. Accessed 8 November 2026.</li>
+<li id="ref-34">South, T. et al. Authenticated Delegation and Authorized AI Agents. arXiv:2501.09674, 2025.</li>
+<li id="ref-35">United Nations Commission on International Trade Law. UNCITRAL Model Law on Automated Contracting. Adopted 11 July 2024. Accessed 13 November 2026.</li>
+<li id="ref-36">Veiga, A. Meta Q3 Revenue Tops Estimates and Zuckerberg Says Muse Accounts Have Topped 10 Million. Associated Press, 21 October 2026. Accessed 25 October 2026.</li>
+<li id="ref-37">Wright, J. Answerable: A Reference Design for Agents That Act for People. Specifications (draft 0.5), reference implementation and explorer, 2026. https://answerableagents.org. Accessed 13 November 2026.</li>
+<li id="ref-38">Wright, J. How Many Model Calls Does a Delegated Mortgage Application Take? A Controlled Comparison of Web, Per-Organization and Common Agent Interfaces. Short paper, testbed and data, version 1.0.0. Zenodo, 2026. doi:10.5281/zenodo.23953880.</li>
+<li id="ref-39">xAI. Grok Bot Security. Product documentation; accessed 17 October 2026.</li>
+<li id="ref-40">Yu, G. et al. Getting the Parameters Right: A Difficulty-Graded Benchmark and Probe-Guided Training for LLM Tool Calls. arXiv:2608.03071, 2026. Accessed 9 November 2026.</li>
+</ol>
+
+  </article>
+
+  <footer class="paper-foot">
+    <p>This is a draft shared before submission. Everyone in the mortgage story is fictional. The runs it describes can be replayed in the <a href="../#/explore">explorer</a>.</p>
+  </footer>
+</main>
+</body>
+</html>

@@ -1,12 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { AuditRecord, LedgerEntry } from "@jeswr/agent-audit";
 import type { Bounds, ChannelBinding, Cursor } from "@jeswr/agent-channels";
-import type { createExecutor, OutboxEntry } from "@jeswr/agent-executor";
+import type { createExecutor, OutboxEntry, ProposalRelease } from "@jeswr/agent-executor";
 import type { ActionProposal } from "@jeswr/agent-model";
 import type { Gateway, ModelCall, ProposerContext } from "@jeswr/agent-model-gateway";
 import type { Interpreter } from "@jeswr/agentic-legacy-bridge";
 import type { PodAuth } from "@jeswr/pod-auth";
 import type { NotificationsClient, Timers } from "@jeswr/pod-notifications";
+import type { DaemonGatePort } from "./gate.js";
 import type { PodWorkspace } from "./workspace.js";
 
 export interface DaemonAccount {
@@ -24,6 +25,7 @@ export interface Checkpoints {
 export interface ProposalResult {
   readonly proposals: readonly ActionProposal[];
   readonly calls: readonly ModelCall[];
+  readonly refused?: readonly { id: string; reason: string }[];
 }
 /** Private, durable results keyed by account, source URL and inbound content digest. */
 export interface ProposalResults {
@@ -36,6 +38,7 @@ export interface ProcessLease {
   acquire(): Promise<() => Promise<void>>;
 }
 export interface DaemonOptions {
+  readonly gate: DaemonGatePort;
   readonly accounts: readonly DaemonAccount[];
   readonly workspace: PodWorkspace;
   readonly notifications: NotificationsClient;
@@ -44,15 +47,20 @@ export interface DaemonOptions {
   readonly checkpoints: Checkpoints;
   readonly proposalResults: ProposalResults;
   readonly gateway: Gateway;
-  readonly proposerContext: ProposerContext;
+  readonly proposerContext: Omit<ProposerContext, "memoryRecall">;
+  readonly memory: { recall(query: string): Promise<unknown> };
   /** Read trusted owner selections, never flags supplied by channel content. */
   readonly isFlagged: (account: string, thread: string) => Promise<boolean>;
   /**
-   * Finalize and idempotently project into the trusted outbox before pod publication.
+   * Render and idempotently project the audited release before pod publication.
+   * Use the supplied signer or the configured inbound gate factory's release.
    * Return the exact executor entry with intent.termsDigest set to proposalTermsDigest(entry).
    * The daemon durably caches that finalized proposal before publishing it or its audit evidence.
    */
-  readonly proposalWritten: (proposal: ActionProposal) => Promise<OutboxEntry>;
+  readonly project: (
+    proposal: ActionProposal,
+    sign: () => Promise<ProposalRelease>,
+  ) => Promise<OutboxEntry>;
   readonly audit: {
     append(record: AuditRecord, at: string): Promise<unknown>;
     /** Read the same durable ledger used by append, including failed mirror writes. */

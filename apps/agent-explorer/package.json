@@ -1,0 +1,13 @@
+{
+  "name": "@jeswr/app-agent-explorer",
+  "private": true,
+  "version": "0.0.0",
+  "x-authored-by": "Codex GPT-6",
+  "scripts": {
+    "bundle": "node scripts/bundle-data.mjs",
+    "build:public": "node scripts/build-public.mjs",
+    "fixture": "node scripts/make-fixture.mjs",
+    "import": "node scripts/import-traces.mjs",
+    "test": "node --test --test-isolation=none test/*.test.mjs"
+  }
+}

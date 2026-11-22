@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { parseBoundedJson } from "@jeswr/agent-model";
-import type { ChannelBinding } from "./binding.js";
+import { digestOf, parseBoundedJson } from "@jeswr/agent-model";
+import type { ChannelBinding, InboundRefusal } from "./binding.js";
 import type { InboundRawMessage } from "./channel.js";
 import { accountId } from "./direct/shared.js";
 import { assertEmailAddress, assertFooter, type EmailConfig, inspectEmail } from "./email-mime.js";
@@ -9,6 +9,7 @@ import {
   DELTA_INITIAL,
   deltaLink,
   expiredDeltaState,
+  GraphMimeSizeRefusedError,
   graphMailOrigins,
   graphMailRest,
   messageId,
@@ -143,8 +144,9 @@ export function createGraphMailReader(options: GraphMailReaderOptions): ChannelB
           parseBoundedJson(JSON.stringify(state));
         }
         const items: InboundRawMessage[] = [];
+        const refusals: InboundRefusal[] = [];
         let bytes = 0;
-        while (state.pending.length && items.length < maxItems) {
+        while (state.pending.length && items.length + refusals.length < maxItems) {
           const id = state.pending[0] as string;
           let raw: Uint8Array;
           try {
@@ -154,23 +156,21 @@ export function createGraphMailReader(options: GraphMailReaderOptions): ChannelB
               tokens,
               "read",
             );
-            if (response.status === 404) {
-              state.pending.shift();
-              continue;
-            }
             raw = await mimeBody(response);
           } catch (error) {
-            // Definitive MIME size refusals skip one item; failed reads remain retryable.
-            if (
-              !(error instanceof ChannelParseError) &&
-              !(error instanceof ResponseSizeRefusedError)
-            )
-              throw error;
+            let digest: string;
+            if (error instanceof GraphMimeSizeRefusedError) digest = error.digest;
+            else if (error instanceof ResponseSizeRefusedError && error.responseOk) {
+              // When the transport withholds the bytes, identify the refusal by account and item.
+              digest = digestOf(["graph-mail", ref.id, id]);
+            } else throw error;
+            refusals.push({ id, digest, reason: "bounds-exceeded" });
             state.pending.shift();
             continue;
           }
           if (bytes + raw.byteLength > maxBytes) {
-            if (!items.length) throw new RangeError("next item exceeds byte bound");
+            if (!items.length && !refusals.length)
+              throw new RangeError("next item exceeds byte bound");
             break;
           }
           bytes += raw.byteLength;
@@ -181,7 +181,7 @@ export function createGraphMailReader(options: GraphMailReaderOptions): ChannelB
           state.url = state.resume;
           state.resume = "";
         }
-        return { items, next: JSON.stringify(state) };
+        return { items, ...(refusals.length ? { refusals } : {}), next: JSON.stringify(state) };
       },
       parse(item) {
         return inspectEmail(item.raw, config).message;

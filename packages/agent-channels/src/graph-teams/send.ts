@@ -9,7 +9,13 @@ import { record } from "../graph-mail/rest.js";
 import type { OriginFetchOptions } from "../origins.js";
 import { AGENT_FOOTER, TEAMS_CARD } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
-import type { AccountRef, RenderableProposal, Wire } from "../types.js";
+import type {
+  AccountRef,
+  EnvelopeVerifier,
+  ProposalContext,
+  RenderableProposal,
+  Wire,
+} from "../types.js";
 import { card, envelopes } from "./card.js";
 import { BASE, graphTeamsRest, id, json, responseJson } from "./rest.js";
 
@@ -18,7 +24,7 @@ export interface GraphTeamsSendOptions {
   readonly account: AccountRef;
   /** Trusted actor -> existing chat. Inbound IDs never select a send destination. */
   readonly recipients: ReadonlyMap<string, string>;
-  readonly verify: (compactJws: string) => Promise<unknown>;
+  readonly verify: EnvelopeVerifier;
   readonly verifyApproval: (wire: Wire, account: AccountRef) => Promise<boolean>;
   /** Pure, stable ID derived from the signed content; injectable for fixtures. */
   readonly attachmentIdFor?: (compactJws: string) => string;
@@ -50,14 +56,18 @@ export function createGraphTeamsSend(
     )
       throw new ChannelParseError("Teams proposal is expired or not yet valid");
   }
-  const render: NonNullable<ChannelBinding["send"]>["render"] = async (proposal, carriage) => {
+  const render: NonNullable<ChannelBinding["send"]>["render"] = async (
+    proposal,
+    carriage,
+    context,
+  ) => {
     if (canonicalJson(carriage) !== canonicalJson(TEAMS_CARD))
       throw new ChannelParseError("unsupported Teams carriage");
     const compactJws = proposal.compactJws;
     const decoded = decodeEmailProposal(compactJws);
     assertJsonBounds(proposal.message);
     const proposed = canonicalJson(proposal.message);
-    const payload = await verify(compactJws);
+    const payload = await verify(compactJws, context);
     assertJsonBounds(payload);
     const checked = validateMessage(payload);
     if (
@@ -111,24 +121,28 @@ export function createGraphTeamsSend(
       throw new ChannelParseError("invalid Teams wire");
     return wire;
   }
-  async function checked(input: Wire) {
+  async function checked(input: Wire, context: ProposalContext | undefined) {
     const wire = snapshot(input);
     const plan = json(wire.bytes);
     const request = record(plan.request);
     const blocks = envelopes(request.attachments);
     if (blocks.length !== 1) throw new ChannelParseError("Teams wire requires one envelope");
     const proposal = decodeEmailProposal(json(blocks[0] as string)["agent:compactJws"] as string);
-    if ((await render(proposal, TEAMS_CARD)).bytes !== wire.bytes)
+    if ((await render(proposal, TEAMS_CARD, context)).bytes !== wire.bytes)
       throw new ChannelParseError("Teams wire differs from signed proposal");
     return { wire, proposal, chat: id(plan.chat), body: canonicalJson(request) };
   }
   return {
     render,
-    async validate(input, proposal) {
+    async validate(input, proposal, context) {
       try {
         const wire = snapshot(input);
         const compactJws = proposal.compactJws;
-        const expected = await render({ message: proposal.message, compactJws }, TEAMS_CARD);
+        const expected = await render(
+          { message: proposal.message, compactJws },
+          TEAMS_CARD,
+          context,
+        );
         current(decodeEmailProposal(compactJws));
         return wire.bytes === expected.bytes
           ? { ok: true }
@@ -142,7 +156,7 @@ export function createGraphTeamsSend(
         if (io.dryRun !== false) return { outcome: "rejected", detail: "dry-run" };
         if (accountId(io.account) !== account.id)
           throw new ProviderRejectedError("Teams account differs from configured sender");
-        const { wire, proposal, chat, body } = await checked(input);
+        const { wire, proposal, chat, body } = await checked(input, io.expected);
         current(proposal);
         const response = await rest(
           `${BASE}/chats/${encodeURIComponent(chat)}/messages`,

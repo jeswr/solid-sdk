@@ -1,0 +1,193 @@
+{
+  "@context": "https://w3id.org/jeswr/awp/context/scenario/v1",
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.2",
+  "id": "degree-recognition",
+  "parties": {
+    "owner": "The graduate",
+    "receiver": "The foreign employer",
+    "university": "The fictional university",
+    "national-root": "The employer’s national register",
+    "owner-agent": "The graduate’s agent",
+    "receiver-agent": "The foreign employer’s agent"
+  },
+  "claims": [
+    {
+      "kind": "education.degree",
+      "sources": [
+        "urn:fictional:degree-recognition:university"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "education.degree-code",
+      "sources": [
+        "urn:fictional:degree-recognition:university"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "degree-recognition.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:degree-recognition:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:degree-recognition",
+      "claims": [
+        "education.degree",
+        "degree-recognition.answer",
+        "derivation.request",
+        "education.degree-code"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "urn:rule:degree-recognition:proof",
+      "template": "membership",
+      "params": {
+        "input": "education.degree-code",
+        "values": [
+          "BSc",
+          "MSc"
+        ]
+      },
+      "output": "degree-recognition.answer",
+      "inputsFrom": [
+        "urn:fictional:degree-recognition:university"
+      ],
+      "assurances": [
+        "attested"
+      ],
+      "proofQuery": "SELECT DISTINCT ?subject WHERE { ?g <https://w3id.org/sparq/vcq#verifiedIssuer> <urn:fictional:degree-recognition:university> . GRAPH ?g { ?subject <urn:claim:education.degree-code> ?degree . FILTER(?degree IN (\"BSc\", \"MSc\")) } }"
+    }
+  ],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "education.degree"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:degree-recognition",
+      "version": "0.1",
+      "label": "Showing a degree to an employer abroad",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:degree-recognition"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:degree-recognition:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:degree-recognition"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:degree-recognition:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:degree-recognition"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:degree-recognition:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:degree-recognition"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:degree-recognition",
+      "claims": [
+        "education.degree"
+      ]
+    },
+    {
+      "action": "urn:op:degree-recognition:proof-answer",
+      "claims": [
+        "degree-recognition.answer"
+      ]
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:degree-recognition:proof",
+      "method": "sparq-zk-result/5",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh"
+      ],
+      "purposes": [
+        "urn:purpose:degree-recognition"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "sparq-zk-result/5",
+      "replacedBy": "Research-grade and unaudited; sparq commitment-signed credentials, not standard VCs; test-only issuer keys (testIssuerKeygen). No holder, absence or completeness binding or unlinkability guarantee. Unsupported rules stay blocked; no real scenario proof is claimed."
+    }
+  ],
+  "labels": {
+    "urn:purpose:degree-recognition": "Degree recognition"
+  }
+}

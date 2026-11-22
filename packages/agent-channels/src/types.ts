@@ -20,6 +20,15 @@ export interface RenderableProposal {
   readonly message: AnyMessage;
   readonly compactJws: string;
 }
+/** Expected release identity from the proposal being processed by the executor. */
+export interface ProposalContext {
+  readonly proposalId: string;
+  readonly conversation: string;
+}
+export type EnvelopeVerifier = (
+  compactJws: string,
+  expected: ProposalContext | undefined,
+) => Promise<unknown>;
 /** Exact wire bytes represented as UTF-8 text, with their content identity. */
 export interface Wire {
   readonly bytes: string;
@@ -39,6 +48,7 @@ export type ProviderLookupResult =
 export interface TransmissionIo {
   readonly account: AccountRef;
   readonly tokens: Pick<TokenProvider, "send">;
+  readonly expected?: ProposalContext;
   /** Executor-owned synchronous fence; thread through transport preflight and call
    * after all awaits (including DNS), immediately before each underlying dispatch. */
   readonly assertAuthority: () => void;

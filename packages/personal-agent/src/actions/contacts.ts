@@ -22,6 +22,7 @@ import { DEFAULT_LIMITS } from "../pilot/core/limits.js";
 import { AssociationStore } from "../pilot/domains/conventional/associations.js";
 import { loadMandate } from "../pilot/mechanisms/mandate.js";
 import { TrustStore } from "../pilot/mechanisms/trust.js";
+import { readTrustFile } from "../pilot/setup.js";
 import type { ActionsEnv } from "./env.js";
 import type { ActionDefinition } from "./types.js";
 
@@ -105,13 +106,10 @@ const associationsSchema = z
 const servicesSchema = z.record(z.string().max(200), z.string().max(2000));
 
 async function loadTrust(dir: string): Promise<TrustStore | undefined | "unreadable"> {
-  const raw = readJson(join(dir, "trust.json"));
-  if (raw === undefined) return undefined;
-  if (raw === UNREADABLE) return "unreadable";
   try {
-    return await TrustStore.load(raw);
-  } catch {
-    return "unreadable";
+    return await TrustStore.load(await readTrustFile(dir));
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT" ? undefined : "unreadable";
   }
 }
 

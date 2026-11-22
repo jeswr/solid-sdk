@@ -1,0 +1,1222 @@
+{
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-trace/0.1",
+  "useCase": "hardship-request",
+  "path": {
+    "index": 1,
+    "what": "The agent would send a diagnosis to explain the request"
+  },
+  "parties": [
+    {
+      "id": "owner",
+      "name": "The borrower"
+    },
+    {
+      "id": "receiver",
+      "name": "The lender"
+    },
+    {
+      "id": "owner-agent",
+      "name": "The borrower’s agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The lender’s agent"
+    }
+  ],
+  "scenario": {
+    "id": "hardship-request--branch-1",
+    "title": "Asking a lender for breathing space: The agent would send a diagnosis to explain the request",
+    "steps": {
+      "1": "The borrower’s agent checks the signed statements.",
+      "2": "The lender’s agent sends the signed request.",
+      "3": "The borrower’s agent checks the message and prepares a response.",
+      "4": "The borrower’s agent sends the signed request.",
+      "5": "The borrower declines to send the diagnosis.",
+      "6": "The borrower’s agent completes the approve step.",
+      "7": "The lender’s agent checks the message and prepares a response.",
+      "8": "The lender’s agent completes the read content step.",
+      "9": "The lender’s agent proposes the local action."
+    }
+  },
+  "configuration": {
+    "id": "hardship-request-local",
+    "layers": {
+      "transport": "direct-http",
+      "data-access": "by-value",
+      "identity": "pinned-key",
+      "meaning": "plain-language-upgrade",
+      "authority": "mandate-signed",
+      "authenticity": "jws",
+      "trust": "register-chain",
+      "reliance": "precedence-rules",
+      "usage-control": "odrl-rules",
+      "commitments": "signed-offer-acceptance",
+      "accountability": "local-ledger",
+      "settlement": "rdf-order"
+    }
+  },
+  "agents": [
+    {
+      "id": "owner-agent",
+      "name": "The borrower’s agent",
+      "actsFor": "owner",
+      "role": "agent"
+    },
+    {
+      "id": "receiver-agent",
+      "name": "The lender’s agent",
+      "actsFor": "receiver",
+      "role": "agent"
+    }
+  ],
+  "generated": {
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
+    "core": "scripted"
+  },
+  "standIns": [
+    {
+      "what": "Outside organizations and data sources",
+      "replacedBy": "Separately keyed fictional agents and source-specific signed fixtures; direct local transport"
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "caption": "The borrower's health diagnosis statement is intact and signed with The borrower's pinned key.",
+      "gateRun": 1
+    },
+    {
+      "seq": 2,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "source-accepted",
+      "rule": {
+        "id": "urn:source:borrower-diagnosis",
+        "text": "The borrower is accepted for health diagnosis claims."
+      },
+      "resolution": {
+        "question": "Is The borrower an authority for health diagnosis claims about The borrower?",
+        "path": [
+          {
+            "at": "The borrower's own list",
+            "kind": "own-list",
+            "says": "The borrower is accepted for health diagnosis."
+          }
+        ],
+        "answer": "Accepted, for health diagnosis claims only."
+      },
+      "caption": "The borrower's health diagnosis statement: The borrower is an accepted source for this kind of claim.",
+      "gateRun": 1,
+      "linked": [
+        "sha-256:2ef7c46781010301c6407de48c0ea6cb8050a7c29b06328889148a82719c4caf",
+        "sha-256:528e317fda97b26ec1893d673b50686297c3b80e1a3d79222d8174cb05117feb"
+      ]
+    },
+    {
+      "seq": 3,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "no-action",
+      "caption": "The borrower's health diagnosis statement asks for nothing, so there is no authority to check.",
+      "gateRun": 1
+    },
+    {
+      "seq": 4,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "terms-acceptable",
+      "rule": {
+        "id": "urn:terms:hardship-request:diagnosis",
+        "text": "Its terms allow this: use for Hardship request; share for Hardship request."
+      },
+      "caption": "The borrower's health diagnosis statement: its terms allow this: use for Hardship request; share for Hardship request.",
+      "gateRun": 1,
+      "linked": [
+        "sha-256:001719e6bece6e1179eb96aaf979dd3d6b8e809b2b0ee494c9e5a84a81af6999"
+      ]
+    },
+    {
+      "seq": 5,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:scenario:hardship-request:task"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade",
+          "id": "urn:fictional:hardship-request:owner"
+        }
+      ],
+      "reason": "fit-for-use",
+      "rule": {
+        "id": "urn:profile:hardship-request:health.diagnosis",
+        "text": "Accept health diagnosis from The borrower by self-reported, at most 30 days old."
+      },
+      "caption": "The borrower's health diagnosis statement is fit for Asking a lender for breathing space: self-reported, 0 days old.",
+      "gateRun": 1
+    },
+    {
+      "seq": 6,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "caption": "The borrower's health diagnosis statement is admitted.",
+      "gateRun": 1,
+      "linked": [
+        "sha-256:98f916335200533d6a6676e27587eea6f1b74a89fc06e5c0ec23d2c5768f7a0d"
+      ]
+    },
+    {
+      "seq": 7,
+      "step": 1,
+      "agent": "owner-agent",
+      "part": "memory",
+      "kind": "store",
+      "fact": {
+        "id": "urn:scenario:hardship-request:diagnosis",
+        "label": "The borrower's health diagnosis statement",
+        "claimType": "health.diagnosis",
+        "subject": "urn:fictional:hardship-request:owner",
+        "value": null,
+        "source": "urn:fictional:hardship-request:owner",
+        "method": "self-reported",
+        "asOf": "2026-11-13T09:00:00.000Z",
+        "terms": {
+          "id": "urn:terms:hardship-request:diagnosis",
+          "summary": "use for Hardship request; share for Hardship request"
+        },
+        "provenance": "signed by The borrower"
+      },
+      "caption": "The borrower's health diagnosis statement is stored with its source, how it was produced, its date and its terms.",
+      "linked": [
+        "sha-256:745a9c22c0a8baa20dfca80cd04394a87f05cdc39d19381a0e1409a22575ba86"
+      ]
+    },
+    {
+      "seq": 8,
+      "step": 2,
+      "agent": "receiver-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to take the next step in Request the needed information with The borrower."
+    },
+    {
+      "seq": 9,
+      "step": 2,
+      "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The lender's mandate covers this action.",
+      "gateRun": 1
+    },
+    {
+      "seq": 10,
+      "step": 2,
+      "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The borrower a party I can send Request the needed information to?",
+        "path": [
+          {
+            "at": "The lender's own list",
+            "kind": "own-list",
+            "says": "The borrower is accepted for Request the needed information."
+          }
+        ],
+        "answer": "Accepted, for Request the needed information only."
+      },
+      "reason": "recipient-established",
+      "caption": "The borrower: Accepted, for Request the needed information only.",
+      "gateRun": 1,
+      "linked": [
+        "sha-256:239287a517eefb6834ca6ec4cdcbdcf1c9556b5e51e07db5b7433431071bad89"
+      ]
+    },
+    {
+      "seq": 11,
+      "step": 2,
+      "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
+    },
+    {
+      "seq": 12,
+      "step": 2,
+      "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
+    },
+    {
+      "seq": 13,
+      "step": 2,
+      "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "within-limits",
+      "caption": "Inside what the agent may do on its own, and within The lender's limits.",
+      "gateRun": 1
+    },
+    {
+      "seq": 14,
+      "step": 2,
+      "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "The gate establishes from the vocabulary that the actual payload is only public query parameters.",
+      "gateRun": 1
+    },
+    {
+      "seq": 15,
+      "step": 2,
+      "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "evidence",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-OUT-9"
+        },
+        {
+          "layer": "accountability",
+          "suite": "local-ledger",
+          "clause": "CORE-OUT-9"
+        }
+      ],
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "Every outgoing message is signed over its exact bytes and its decision appended to the hash-chained record."
+      },
+      "reason": "evidence-complete",
+      "caption": "Signed (JWS Ed DSA) with The lender’s agent's pinned key, and written to the record.",
+      "gateRun": 1
+    },
+    {
+      "seq": 16,
+      "step": 2,
+      "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "go",
+      "messageId": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0002",
+      "messageDigest": "sha-256:6d138e05b8188d11df06e994035122e859ac8b11df0b2255e4daa9207a56af06",
+      "caption": "The invoke message goes to The borrower’s agent.",
+      "gateRun": 1,
+      "linked": [
+        "sha-256:24caaac5bcdf027c6342ace9266e3f9796439c1b4ccdcd39c81744593fe10d8b"
+      ]
+    },
+    {
+      "seq": 17,
+      "step": 2,
+      "agent": "receiver-agent",
+      "actionDigest": "sha-256:7b2627c310169f590979b9cfd1b37451bb4de319a79482e14599138ac15d4ef3",
+      "actionScope": {
+        "action": "use",
+        "target": "urn:op:hardship-request:request",
+        "operation": "urn:op:hardship-request:request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+        "recipient": "urn:fictional:hardship-request:owner",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "transport",
+      "kind": "message-out",
+      "messageId": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0002",
+      "packet": {
+        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-hardship-request-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-hardship-request-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8\"},\"to\":{\"id\":\"urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c\"},\"evidence\":{\"id\":\"urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk\"},\"@included\":[{\"id\":\"urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:hardship-request:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:hardship-request:receiver\"},{\"id\":\"urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:hardship-request:owner-agent:actor\",\"party\":\"urn:fictional:hardship-request:owner\"},{\"id\":\"urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ\"},\"input\":{\"id\":\"urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8\"},\"operation\":{\"id\":\"urn:op:hardship-request:request\"},\"purpose\":\"urn:purpose:hardship-request\"},{\"id\":\"urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:hardship-request:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo\"}]},{\"id\":\"urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:hardship-request:receiver\",\"proofGraph\":\"urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo\",\"type\":\"PropertyValue\",\"domainValue\":\"health.diagnosis\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA\"}},{\"id\":\"urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949\",\"byteLength\":\"9488\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU\",\"@graph\":[{\"id\":\"urn:awp:n:RwkA3Ompc5MZEf0PRlfwCymvJReEGAmdpPd4wq6yX_c\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246ZWY1NzBmMDg0MjU4Zjk5ODM5NTlhNWJiNjZkZDI3MWY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0IiwidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.nUsuSnzDYS-kc94X05t1SJDJmmgu8Y_DEHRKGA6zQ6Ro-7HXw7h-Gh9sZY0DnsczN4Y7omcj6wAKve4mhkGaDw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIn0sImlkIjoidXJuOmF3cDpuOld5b19VZGlVNTRpM0pHWWpaRUQ0YVdZeVJQek1TS1cteXlWYUx2T1FON2MiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpUbHV6bm5VbnNKSWswdWFmUU1RM3lKc2tDTlI4ZWRLZDNfRFQ1M3RaZ2Y4In0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmhhcmRzaGlwLXJlcXVlc3QiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpfRUZRWEowNTJ1NWhDaVVuSHh6dHIwQnJCU1I1dHN4Z2tBejZiTzdlOHFrIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6aGFyZHNoaXAtcmVxdWVzdDpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOlRsdXpublVuc0pJazB1YWZRTVEzeUpza0NOUjhlZEtkM19EVDUzdFpnZjgiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8ifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46X2FDb3V4T1UzcEdoM3psdGxyTjdsY0hPakotZEZmbmYtUlZRSW95dW1UWSIsImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aGFyZHNoaXAtcmVxdWVzdDpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46cmdneWdxeGJLQ0w3UUwzbDY4U3N1TTlYRE1HemNKWGg4OXp1WUgxT0JUVSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoiaGVhbHRoLmRpYWdub3NpcyIsImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8iLCJuYW1lIjoicmVxdWVzdCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpyZXF1ZXN0IiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOl9hQ291eE9VM3BHaDN6bHRsck43bGNIT2pKLWRGZm5mLVJWUUlveXVtVFkiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOjNCTm1ySTcyR1RJV1pXaVNpdFNzVnBlMV9GOUs1SlhCdDdLZkw4azhNYkEifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjpjOTQwYTVmZmFjNmZjODg0YjdkYjFmYWIxMjkzMmQyMTFmMDZiOWQxYWE4NzJlODRkODFhYjhhNTFkZGFkOTQ5IiwiYnl0ZUxlbmd0aCI6Ijk0ODgiLCJpZCI6InVybjphd3A6bjozQk5tckk3MkdUSVdaV2lTaXRTc1ZwZTFfRjlLNUpYQnQ3S2ZMOGs4TWJBIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpSd2tBM09tcGM1TVpFZjBQUmxmd0N5bXZKUmVFR0FtZHBQZDR3cTZ5WF9jIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklsSjVNamMzWVc5dVZtVnhWbk5VWmxwQ1JXOW1OVTVpY1VaWmJYbDBka3BEYm5GRE9HcEtiVkF0ZGxVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2WldZMU56Qm1NRGcwTWpVNFpqazVPRE01TlRsaE5XSmlOalprWkRJM01XWTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBvWVhKa2MyaHBjQzF5WlhGMVpYTjBPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVmpaV2wyWlhJdFlXZGxiblE2WVdOMGIzSWlMQ0poWTNSdmNrdHBaQ0k2SWpCT1oyaDZZVmN3UW5Gek5WaG9VMUJMUTB4dVYxRmZaa0ZuWjB0SVNqVXpZVmhwUWxSbE5sUXRjMmNpTENKdmNHVnlZWFJwYjI1eklqcGJJblZ5YmpwdmNEcG9ZWEprYzJocGNDMXlaWEYxWlhOMElpd2lkWEp1T205d09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVnhkV1Z6ZENJc0luVnlianB2Y0Rwb1lYSmtjMmhwY0MxeVpYRjFaWE4wT21SbFkybHphVzl1SWwwc0luWmhiR2xrUm5KdmJTSTZJakl3TWpZdE1URXRNVE5VTURnNk5UazZNREF1TURBd1dpSXNJblpoYkdsa1ZXNTBhV3dpT2lJeU1ESTNMVEF4TFRFeVZEQTVPakF3T2pBd0xqQXdNRm9pTENKcGMzTjFaV1JCZENJNklqSXdNall0TVRFdE1UTlVNRGs2TURBNk1EQXVNREF3V2lKOS5uVXN1U256RFlTLWtjOTRYMDV0MVNKREptbWd1OFlfREVIUktHQTZ6UTZSby03SFh3N2gtR2g5c1pZMERuc2N6TjRZN29tY2o2d0FLdmU0bWhrR2FEdyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOnJnZ3lncXhiS0NMN1FMM2w2OFNzdU05WERNR3pjSlhoODl6dVlIMU9CVFUifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46V3lvX1VkaVU1NGkzSkdZalpFRDRhV1l5UlB6TVNLVy15eVZhTHZPUU43YyJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BsYWluLWxhbmd1YWdlLXVwZ3JhZGUtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtaGFyZHNoaXAtcmVxdWVzdC1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46X0VGUVhKMDUydTVoQ2lVbkh4enRyMEJyQlNSNXRzeGdrQXo2Yk83ZThxayJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjA4RlZjekpsdjhyZHc2UmtNemxsdUdOSjk3d2dMRU8yV096QWp4TEE2VDgifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1oYXJkc2hpcC1yZXF1ZXN0LWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.cE5_nLfBXv1IO7U4HLAe6jUgUQlzeRKJf9HyDNpDhR9suhu0A5MbCFNb_os2fL-5xl0zWBueV0aJn2D563hNDA\"}}",
+        "context": "https://w3id.org/jeswr/awp/context/v1",
+        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-hardship-request-branch-1:receiver-agent:0002> a awp:Invoke, awp:Message;\n    awp:body <urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1>;\n    awp:conversation <urn:awp:engine-hardship-request-branch-1:receiver-agent:0001>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:evidence <urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/invoke>;\n    awp:presentFields awp:evidence, awp:content;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA>;\n    sec:proof _:awp0.\n<urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c> a awp:InvokeBody;\n    <https://w3id.org/dpv#hasPurpose> <urn:purpose:hardship-request>;\n    awp:basis <urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ>;\n    awp:input <urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8>;\n    awp:operation <urn:op:hardship-request:request>.\n<urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk> a awp:EvidenceItem;\n    <https://schema.org/position> 0;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/representation>;\n    vc:verifiableCredential <urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0>.\n<urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:hardship-request:receiver>;\n    awp:actor <urn:fictional:hardship-request:receiver-agent:actor>.\n<urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA> a awp:AudienceRef;\n    awp:actor <urn:fictional:hardship-request:owner-agent:actor>;\n    awp:party <urn:fictional:hardship-request:owner>.\n<urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ> a awp:RequestBasis;\n    awp:basisKind <https://w3id.org/jeswr/awp#basis/represented>.\n<urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8> a awp:NamedValueCollection;\n    <https://schema.org/itemListElement> <urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo>.\n<urn:op:hardship-request:request> a awp:OperationRef;\n    awp:version \"0.1\".\n<urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU>;\n    <http://www.w3.org/ns/prov#generatedAtTime> \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:credentialSubject <urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY>;\n    vc:issuer <urn:fictional:hardship-request:receiver>;\n    vc:validFrom \"2026-11-13T08:59:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:validUntil \"2027-01-12T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.\n<urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA> a awp:Attachment, awp:NamedValueCollection;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949\";\n    awp:byteLength 9488.\n<urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA>.\n<urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo> a <https://schema.org/PropertyValue>;\n    <https://schema.org/position> 0;\n    <https://schema.org/name> \"request\";\n    <https://schema.org/propertyID> <urn:awp:legacy-field:request>;\n    <https://schema.org/value> \"health.diagnosis\".\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIn0sImlkIjoidXJuOmF3cDpuOld5b19VZGlVNTRpM0pHWWpaRUQ0YVdZeVJQek1TS1cteXlWYUx2T1FON2MiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpUbHV6bm5VbnNKSWswdWFmUU1RM3lKc2tDTlI4ZWRLZDNfRFQ1M3RaZ2Y4In0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmhhcmRzaGlwLXJlcXVlc3QiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpfRUZRWEowNTJ1NWhDaVVuSHh6dHIwQnJCU1I1dHN4Z2tBejZiTzdlOHFrIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6aGFyZHNoaXAtcmVxdWVzdDpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOlRsdXpublVuc0pJazB1YWZRTVEzeUpza0NOUjhlZEtkM19EVDUzdFpnZjgiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8ifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46X2FDb3V4T1UzcEdoM3psdGxyTjdsY0hPakotZEZmbmYtUlZRSW95dW1UWSIsImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aGFyZHNoaXAtcmVxdWVzdDpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46cmdneWdxeGJLQ0w3UUwzbDY4U3N1TTlYRE1HemNKWGg4OXp1WUgxT0JUVSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoiaGVhbHRoLmRpYWdub3NpcyIsImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8iLCJuYW1lIjoicmVxdWVzdCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpyZXF1ZXN0IiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOl9hQ291eE9VM3BHaDN6bHRsck43bGNIT2pKLWRGZm5mLVJWUUlveXVtVFkiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOjNCTm1ySTcyR1RJV1pXaVNpdFNzVnBlMV9GOUs1SlhCdDdLZkw4azhNYkEifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjpjOTQwYTVmZmFjNmZjODg0YjdkYjFmYWIxMjkzMmQyMTFmMDZiOWQxYWE4NzJlODRkODFhYjhhNTFkZGFkOTQ5IiwiYnl0ZUxlbmd0aCI6Ijk0ODgiLCJpZCI6InVybjphd3A6bjozQk5tckk3MkdUSVdaV2lTaXRTc1ZwZTFfRjlLNUpYQnQ3S2ZMOGs4TWJBIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpSd2tBM09tcGM1TVpFZjBQUmxmd0N5bXZKUmVFR0FtZHBQZDR3cTZ5WF9jIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklsSjVNamMzWVc5dVZtVnhWbk5VWmxwQ1JXOW1OVTVpY1VaWmJYbDBka3BEYm5GRE9HcEtiVkF0ZGxVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2WldZMU56Qm1NRGcwTWpVNFpqazVPRE01TlRsaE5XSmlOalprWkRJM01XWTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBvWVhKa2MyaHBjQzF5WlhGMVpYTjBPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVmpaV2wyWlhJdFlXZGxiblE2WVdOMGIzSWlMQ0poWTNSdmNrdHBaQ0k2SWpCT1oyaDZZVmN3UW5Gek5WaG9VMUJMUTB4dVYxRmZaa0ZuWjB0SVNqVXpZVmhwUWxSbE5sUXRjMmNpTENKdmNHVnlZWFJwYjI1eklqcGJJblZ5YmpwdmNEcG9ZWEprYzJocGNDMXlaWEYxWlhOMElpd2lkWEp1T205d09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVnhkV1Z6ZENJc0luVnlianB2Y0Rwb1lYSmtjMmhwY0MxeVpYRjFaWE4wT21SbFkybHphVzl1SWwwc0luWmhiR2xrUm5KdmJTSTZJakl3TWpZdE1URXRNVE5VTURnNk5UazZNREF1TURBd1dpSXNJblpoYkdsa1ZXNTBhV3dpT2lJeU1ESTNMVEF4TFRFeVZEQTVPakF3T2pBd0xqQXdNRm9pTENKcGMzTjFaV1JCZENJNklqSXdNall0TVRFdE1UTlVNRGs2TURBNk1EQXVNREF3V2lKOS5uVXN1U256RFlTLWtjOTRYMDV0MVNKREptbWd1OFlfREVIUktHQTZ6UTZSby03SFh3N2gtR2g5c1pZMERuc2N6TjRZN29tY2o2d0FLdmU0bWhrR2FEdyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOnJnZ3lncXhiS0NMN1FMM2w2OFNzdU05WERNR3pjSlhoODl6dVlIMU9CVFUifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46V3lvX1VkaVU1NGkzSkdZalpFRDRhV1l5UlB6TVNLVy15eVZhTHZPUU43YyJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BsYWluLWxhbmd1YWdlLXVwZ3JhZGUtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtaGFyZHNoaXAtcmVxdWVzdC1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46X0VGUVhKMDUydTVoQ2lVbkh4enRyMEJyQlNSNXRzeGdrQXo2Yk83ZThxayJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjA4RlZjekpsdjhyZHc2UmtNemxsdUdOSjk3d2dMRU8yV096QWp4TEE2VDgifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1oYXJkc2hpcC1yZXF1ZXN0LWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.cE5_nLfBXv1IO7U4HLAe6jUgUQlzeRKJf9HyDNpDhR9suhu0A5MbCFNb_os2fL-5xl0zWBueV0aJn2D563hNDA\"\n}\n<urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU> {\n<urn:awp:n:RwkA3Ompc5MZEf0PRlfwCymvJReEGAmdpPd4wq6yX_c> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246ZWY1NzBmMDg0MjU4Zjk5ODM5NTlhNWJiNjZkZDI3MWY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0IiwidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.nUsuSnzDYS-kc94X05t1SJDJmmgu8Y_DEHRKGA6zQ6Ro-7HXw7h-Gh9sZY0DnsczN4Y7omcj6wAKve4mhkGaDw\"\n}\n",
+        "attachments": [
+          {
+            "digest": "sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949",
+            "mediaType": "application/n-quads",
+            "byteLength": 9488
+          }
+        ],
+        "id": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0002",
+        "from": "The lender’s agent",
+        "to": "The borrower’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Handed to the carriage. Carries the protected message bytes; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The lender’s agent to The borrower’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0002",
+              "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:hardship-request:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:hardship-request:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:hardship-request:owner-agent:actor",
+                "party": "urn:fictional:hardship-request:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-jsonld+jws",
+                "alg": "EdDSA"
+              }
+            },
+            "digest": "sha-256:6d138e05b8188d11df06e994035122e859ac8b11df0b2255e4daa9207a56af06"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The lender says The lender’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:ef570f084258f9983959a5bb66dd271f:1794560400000",
+                "party": "urn:fictional:hardship-request:receiver",
+                "actor": "urn:fictional:hardship-request:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:hardship-request",
+                  "urn:op:hardship-request:request",
+                  "urn:op:hardship-request:decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:360b481212fa30a7f267a035c0337ea6fdb9fe71987aaa04f1142c408866be29"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:hardship-request:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "health.diagnosis"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:hardship-request"
+            },
+            "digest": "sha-256:c409fc795d54416eb8e974c9662f234d5a5318dad354d11b1106439e71847f11"
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "The lender’s agent sends an invoke message to The borrower’s agent.",
+      "gateRun": 1
+    },
+    {
+      "seq": 18,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "transport",
+      "kind": "message-in",
+      "messageId": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0002",
+      "packet": {
+        "jsonld": "{\"@context\":\"https://w3id.org/jeswr/awp/context/v1\",\"id\":\"urn:awp:engine-hardship-request-branch-1:receiver-agent:0002\",\"type\":[\"Message\",\"Invoke\"],\"profile\":\"https://w3id.org/jeswr/awp/profile/pilot/0.1\",\"configuration\":\"https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1\",\"kind\":\"invoke\",\"conversation\":\"urn:awp:engine-hardship-request-branch-1:receiver-agent:0001\",\"from\":{\"id\":\"urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8\"},\"to\":{\"id\":\"urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA\"},\"createdAt\":\"2026-11-13T09:00:00.000Z\",\"expiresAt\":\"2026-11-13T15:00:00.000Z\",\"body\":{\"id\":\"urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c\"},\"evidence\":{\"id\":\"urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk\"},\"@included\":[{\"id\":\"urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8\",\"type\":\"ParticipantRef\",\"actor\":\"urn:fictional:hardship-request:receiver-agent:actor\",\"onBehalfOf\":\"urn:fictional:hardship-request:receiver\"},{\"id\":\"urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA\",\"type\":\"AudienceRef\",\"actor\":\"urn:fictional:hardship-request:owner-agent:actor\",\"party\":\"urn:fictional:hardship-request:owner\"},{\"id\":\"urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c\",\"type\":\"InvokeBody\",\"basis\":{\"id\":\"urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ\"},\"input\":{\"id\":\"urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8\"},\"operation\":{\"id\":\"urn:op:hardship-request:request\"},\"purpose\":\"urn:purpose:hardship-request\"},{\"id\":\"urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk\",\"type\":\"EvidenceItem\",\"embeddedCredential\":{\"id\":\"urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0\"},\"format\":\"jws-compact\",\"position\":\"0\",\"role\":\"representation\"},{\"id\":\"urn:op:hardship-request:request\",\"type\":\"OperationRef\",\"version\":\"0.1\"},{\"id\":\"urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8\",\"type\":\"NamedValueCollection\",\"itemListElement\":[{\"id\":\"urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo\"}]},{\"id\":\"urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ\",\"type\":\"RequestBasis\",\"basisKind\":\"represented\"},{\"id\":\"urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0\",\"type\":\"VerifiableCredential\",\"credentialSubject\":\"urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY\",\"issuedAt\":\"2026-11-13T09:00:00.000Z\",\"issuer\":\"urn:fictional:hardship-request:receiver\",\"proofGraph\":\"urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU\",\"validFrom\":\"2026-11-13T08:59:00.000Z\",\"validUntil\":\"2027-01-12T09:00:00.000Z\"},{\"id\":\"urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo\",\"type\":\"PropertyValue\",\"domainValue\":\"health.diagnosis\",\"name\":\"request\",\"position\":\"0\",\"propertyID\":\"urn:awp:legacy-field:request\"},{\"id\":\"urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY\",\"type\":\"LegacyCredentialSubject\",\"statementPayload\":{\"id\":\"urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA\"}},{\"id\":\"urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA\",\"type\":[\"NamedValueCollection\",\"Attachment\"],\"attachmentDigest\":\"sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949\",\"byteLength\":\"9488\",\"mediaType\":\"application/n-quads\"},{\"id\":\"urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU\",\"@graph\":[{\"id\":\"urn:awp:n:RwkA3Ompc5MZEf0PRlfwCymvJReEGAmdpPd4wq6yX_c\",\"type\":\"CompactJwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246ZWY1NzBmMDg0MjU4Zjk5ODM5NTlhNWJiNjZkZDI3MWY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0IiwidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.nUsuSnzDYS-kc94X05t1SJDJmmgu8Y_DEHRKGA6zQ6Ro-7HXw7h-Gh9sZY0DnsczN4Y7omcj6wAKve4mhkGaDw\"}]}],\"presentFields\":[\"https://w3id.org/jeswr/awp#evidence\",\"https://w3id.org/jeswr/awp#content\"],\"proof\":{\"type\":\"JwsProof\",\"jws\":\"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIn0sImlkIjoidXJuOmF3cDpuOld5b19VZGlVNTRpM0pHWWpaRUQ0YVdZeVJQek1TS1cteXlWYUx2T1FON2MiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpUbHV6bm5VbnNKSWswdWFmUU1RM3lKc2tDTlI4ZWRLZDNfRFQ1M3RaZ2Y4In0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmhhcmRzaGlwLXJlcXVlc3QiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpfRUZRWEowNTJ1NWhDaVVuSHh6dHIwQnJCU1I1dHN4Z2tBejZiTzdlOHFrIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6aGFyZHNoaXAtcmVxdWVzdDpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOlRsdXpublVuc0pJazB1YWZRTVEzeUpza0NOUjhlZEtkM19EVDUzdFpnZjgiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8ifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46X2FDb3V4T1UzcEdoM3psdGxyTjdsY0hPakotZEZmbmYtUlZRSW95dW1UWSIsImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aGFyZHNoaXAtcmVxdWVzdDpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46cmdneWdxeGJLQ0w3UUwzbDY4U3N1TTlYRE1HemNKWGg4OXp1WUgxT0JUVSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoiaGVhbHRoLmRpYWdub3NpcyIsImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8iLCJuYW1lIjoicmVxdWVzdCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpyZXF1ZXN0IiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOl9hQ291eE9VM3BHaDN6bHRsck43bGNIT2pKLWRGZm5mLVJWUUlveXVtVFkiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOjNCTm1ySTcyR1RJV1pXaVNpdFNzVnBlMV9GOUs1SlhCdDdLZkw4azhNYkEifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjpjOTQwYTVmZmFjNmZjODg0YjdkYjFmYWIxMjkzMmQyMTFmMDZiOWQxYWE4NzJlODRkODFhYjhhNTFkZGFkOTQ5IiwiYnl0ZUxlbmd0aCI6Ijk0ODgiLCJpZCI6InVybjphd3A6bjozQk5tckk3MkdUSVdaV2lTaXRTc1ZwZTFfRjlLNUpYQnQ3S2ZMOGs4TWJBIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpSd2tBM09tcGM1TVpFZjBQUmxmd0N5bXZKUmVFR0FtZHBQZDR3cTZ5WF9jIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklsSjVNamMzWVc5dVZtVnhWbk5VWmxwQ1JXOW1OVTVpY1VaWmJYbDBka3BEYm5GRE9HcEtiVkF0ZGxVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2WldZMU56Qm1NRGcwTWpVNFpqazVPRE01TlRsaE5XSmlOalprWkRJM01XWTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBvWVhKa2MyaHBjQzF5WlhGMVpYTjBPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVmpaV2wyWlhJdFlXZGxiblE2WVdOMGIzSWlMQ0poWTNSdmNrdHBaQ0k2SWpCT1oyaDZZVmN3UW5Gek5WaG9VMUJMUTB4dVYxRmZaa0ZuWjB0SVNqVXpZVmhwUWxSbE5sUXRjMmNpTENKdmNHVnlZWFJwYjI1eklqcGJJblZ5YmpwdmNEcG9ZWEprYzJocGNDMXlaWEYxWlhOMElpd2lkWEp1T205d09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVnhkV1Z6ZENJc0luVnlianB2Y0Rwb1lYSmtjMmhwY0MxeVpYRjFaWE4wT21SbFkybHphVzl1SWwwc0luWmhiR2xrUm5KdmJTSTZJakl3TWpZdE1URXRNVE5VTURnNk5UazZNREF1TURBd1dpSXNJblpoYkdsa1ZXNTBhV3dpT2lJeU1ESTNMVEF4TFRFeVZEQTVPakF3T2pBd0xqQXdNRm9pTENKcGMzTjFaV1JCZENJNklqSXdNall0TVRFdE1UTlVNRGs2TURBNk1EQXVNREF3V2lKOS5uVXN1U256RFlTLWtjOTRYMDV0MVNKREptbWd1OFlfREVIUktHQTZ6UTZSby03SFh3N2gtR2g5c1pZMERuc2N6TjRZN29tY2o2d0FLdmU0bWhrR2FEdyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOnJnZ3lncXhiS0NMN1FMM2w2OFNzdU05WERNR3pjSlhoODl6dVlIMU9CVFUifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46V3lvX1VkaVU1NGkzSkdZalpFRDRhV1l5UlB6TVNLVy15eVZhTHZPUU43YyJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BsYWluLWxhbmd1YWdlLXVwZ3JhZGUtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtaGFyZHNoaXAtcmVxdWVzdC1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46X0VGUVhKMDUydTVoQ2lVbkh4enRyMEJyQlNSNXRzeGdrQXo2Yk83ZThxayJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjA4RlZjekpsdjhyZHc2UmtNemxsdUdOSjk3d2dMRU8yV096QWp4TEE2VDgifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1oYXJkc2hpcC1yZXF1ZXN0LWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.cE5_nLfBXv1IO7U4HLAe6jUgUQlzeRKJf9HyDNpDhR9suhu0A5MbCFNb_os2fL-5xl0zWBueV0aJn2D563hNDA\"}}",
+        "context": "https://w3id.org/jeswr/awp/context/v1",
+        "rdf": "@prefix awp: <https://w3id.org/jeswr/awp#>.\n@prefix vc: <https://www.w3.org/2018/credentials#>.\n@prefix sec: <https://w3id.org/security#>.\n\n<urn:awp:engine-hardship-request-branch-1:receiver-agent:0002> a awp:Invoke, awp:Message;\n    awp:body <urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c>;\n    awp:configuration <https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1>;\n    awp:conversation <urn:awp:engine-hardship-request-branch-1:receiver-agent:0001>;\n    awp:createdAt \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:evidence <urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk>;\n    awp:expiresAt \"2026-11-13T15:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    awp:from <urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8>;\n    awp:kind <https://w3id.org/jeswr/awp#kind/invoke>;\n    awp:presentFields awp:evidence, awp:content;\n    awp:profile <https://w3id.org/jeswr/awp/profile/pilot/0.1>;\n    awp:to <urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA>;\n    sec:proof _:awp0.\n<urn:awp:n:Wyo_UdiU54i3JGYjZED4aWYyRPzMSKW-yyVaLvOQN7c> a awp:InvokeBody;\n    <https://w3id.org/dpv#hasPurpose> <urn:purpose:hardship-request>;\n    awp:basis <urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ>;\n    awp:input <urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8>;\n    awp:operation <urn:op:hardship-request:request>.\n<urn:awp:n:_EFQXJ052u5hCiUnHxztr0BrBSR5tsxgkAz6bO7e8qk> a awp:EvidenceItem;\n    <https://schema.org/position> 0;\n    awp:format \"jws-compact\";\n    awp:role <https://w3id.org/jeswr/awp#evidence-role/representation>;\n    vc:verifiableCredential <urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0>.\n<urn:awp:n:08FVczJlv8rdw6RkMzlluGNJ97wgLEO2WOzAjxLA6T8> a awp:ParticipantRef;\n    <http://www.w3.org/ns/prov#actedOnBehalfOf> <urn:fictional:hardship-request:receiver>;\n    awp:actor <urn:fictional:hardship-request:receiver-agent:actor>.\n<urn:awp:n:MiFvru01ueMkTqEQrdjG3QJDEeZkQCuzUlOeXjJv5YA> a awp:AudienceRef;\n    awp:actor <urn:fictional:hardship-request:owner-agent:actor>;\n    awp:party <urn:fictional:hardship-request:owner>.\n<urn:awp:n:f-yksbzLdG9PIY-yA6PkMrV7anwpNyGNcE8XsKmNkFQ> a awp:RequestBasis;\n    awp:basisKind <https://w3id.org/jeswr/awp#basis/represented>.\n<urn:awp:n:TluznnUnsJIk0uafQMQ3yJskCNR8edKd3_DT53tZgf8> a awp:NamedValueCollection;\n    <https://schema.org/itemListElement> <urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo>.\n<urn:op:hardship-request:request> a awp:OperationRef;\n    awp:version \"0.1\".\n<urn:awp:n:AFP3X45KiVoJteH7evPUsy0Vhv_QzuNCV-F5LDocYd0> a vc:VerifiableCredential;\n    sec:proof <urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU>;\n    <http://www.w3.org/ns/prov#generatedAtTime> \"2026-11-13T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:credentialSubject <urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY>;\n    vc:issuer <urn:fictional:hardship-request:receiver>;\n    vc:validFrom \"2026-11-13T08:59:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>;\n    vc:validUntil \"2027-01-12T09:00:00.000Z\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.\n<urn:awp:n:D5v3CgYDiOA163CFfBRWYy6W6aQRqd6_-YZf974_DEo> a <https://schema.org/PropertyValue>;\n    <https://schema.org/position> 0;\n    <https://schema.org/name> \"request\";\n    <https://schema.org/propertyID> <urn:awp:legacy-field:request>;\n    <https://schema.org/value> \"health.diagnosis\".\n<urn:awp:n:_aCouxOU3pGh3zltlrN7lcHOjJ-dFfnf-RVQIoyumTY> a awp:LegacyCredentialSubject;\n    awp:statementPayload <urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA>.\n<urn:awp:n:3BNmrI72GTIWZWiSitSsVpe1_F9K5JXBt7KfL8k8MbA> a awp:NamedValueCollection, awp:Attachment;\n    <https://schema.org/encodingFormat> \"application/n-quads\";\n    awp:attachmentDigest \"sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949\";\n    awp:byteLength 9488.\n_:awp0 {\n_:awp1 a awp:JwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJ0eXAiOiJhd3AtanNvbmxkK2p3cyJ9.eyJAY29udGV4dCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL2NvbnRleHQvdjEiLCJAaW5jbHVkZWQiOlt7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46MDhGVmN6Smx2OHJkdzZSa016bGx1R05KOTd3Z0xFTzJXT3pBanhMQTZUOCIsIm9uQmVoYWxmT2YiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXIiLCJ0eXBlIjoiUGFydGljaXBhbnRSZWYifSx7ImFjdG9yIjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyLWFnZW50OmFjdG9yIiwiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0Om93bmVyIiwidHlwZSI6IkF1ZGllbmNlUmVmIn0seyJiYXNpcyI6eyJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIn0sImlkIjoidXJuOmF3cDpuOld5b19VZGlVNTRpM0pHWWpaRUQ0YVdZeVJQek1TS1cteXlWYUx2T1FON2MiLCJpbnB1dCI6eyJpZCI6InVybjphd3A6bjpUbHV6bm5VbnNKSWswdWFmUU1RM3lKc2tDTlI4ZWRLZDNfRFQ1M3RaZ2Y4In0sIm9wZXJhdGlvbiI6eyJpZCI6InVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OnJlcXVlc3QifSwicHVycG9zZSI6InVybjpwdXJwb3NlOmhhcmRzaGlwLXJlcXVlc3QiLCJ0eXBlIjoiSW52b2tlQm9keSJ9LHsiZW1iZWRkZWRDcmVkZW50aWFsIjp7ImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAifSwiZm9ybWF0IjoiandzLWNvbXBhY3QiLCJpZCI6InVybjphd3A6bjpfRUZRWEowNTJ1NWhDaVVuSHh6dHIwQnJCU1I1dHN4Z2tBejZiTzdlOHFrIiwicG9zaXRpb24iOiIwIiwicm9sZSI6InJlcHJlc2VudGF0aW9uIiwidHlwZSI6IkV2aWRlbmNlSXRlbSJ9LHsiaWQiOiJ1cm46b3A6aGFyZHNoaXAtcmVxdWVzdDpyZXF1ZXN0IiwidHlwZSI6Ik9wZXJhdGlvblJlZiIsInZlcnNpb24iOiIwLjEifSx7ImlkIjoidXJuOmF3cDpuOlRsdXpublVuc0pJazB1YWZRTVEzeUpza0NOUjhlZEtkM19EVDUzdFpnZjgiLCJpdGVtTGlzdEVsZW1lbnQiOlt7ImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8ifV0sInR5cGUiOiJOYW1lZFZhbHVlQ29sbGVjdGlvbiJ9LHsiYmFzaXNLaW5kIjoicmVwcmVzZW50ZWQiLCJpZCI6InVybjphd3A6bjpmLXlrc2J6TGRHOVBJWS15QTZQa01yVjdhbndwTnlHTmNFOFhzS21Oa0ZRIiwidHlwZSI6IlJlcXVlc3RCYXNpcyJ9LHsiY3JlZGVudGlhbFN1YmplY3QiOiJ1cm46YXdwOm46X2FDb3V4T1UzcEdoM3psdGxyTjdsY0hPakotZEZmbmYtUlZRSW95dW1UWSIsImlkIjoidXJuOmF3cDpuOkFGUDNYNDVLaVZvSnRlSDdldlBVc3kwVmh2X1F6dU5DVi1GNUxEb2NZZDAiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiIsImlzc3VlciI6InVybjpmaWN0aW9uYWw6aGFyZHNoaXAtcmVxdWVzdDpyZWNlaXZlciIsInByb29mR3JhcGgiOiJ1cm46YXdwOm46cmdneWdxeGJLQ0w3UUwzbDY4U3N1TTlYRE1HemNKWGg4OXp1WUgxT0JUVSIsInR5cGUiOiJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoifSx7ImRvbWFpblZhbHVlIjoiaGVhbHRoLmRpYWdub3NpcyIsImlkIjoidXJuOmF3cDpuOkQ1djNDZ1lEaU9BMTYzQ0ZmQlJXWXk2VzZhUVJxZDZfLVlaZjk3NF9ERW8iLCJuYW1lIjoicmVxdWVzdCIsInBvc2l0aW9uIjoiMCIsInByb3BlcnR5SUQiOiJ1cm46YXdwOmxlZ2FjeS1maWVsZDpyZXF1ZXN0IiwidHlwZSI6IlByb3BlcnR5VmFsdWUifSx7ImlkIjoidXJuOmF3cDpuOl9hQ291eE9VM3BHaDN6bHRsck43bGNIT2pKLWRGZm5mLVJWUUlveXVtVFkiLCJzdGF0ZW1lbnRQYXlsb2FkIjp7ImlkIjoidXJuOmF3cDpuOjNCTm1ySTcyR1RJV1pXaVNpdFNzVnBlMV9GOUs1SlhCdDdLZkw4azhNYkEifSwidHlwZSI6IkxlZ2FjeUNyZWRlbnRpYWxTdWJqZWN0In0seyJhdHRhY2htZW50RGlnZXN0Ijoic2hhLTI1NjpjOTQwYTVmZmFjNmZjODg0YjdkYjFmYWIxMjkzMmQyMTFmMDZiOWQxYWE4NzJlODRkODFhYjhhNTFkZGFkOTQ5IiwiYnl0ZUxlbmd0aCI6Ijk0ODgiLCJpZCI6InVybjphd3A6bjozQk5tckk3MkdUSVdaV2lTaXRTc1ZwZTFfRjlLNUpYQnQ3S2ZMOGs4TWJBIiwibWVkaWFUeXBlIjoiYXBwbGljYXRpb24vbi1xdWFkcyIsInR5cGUiOlsiTmFtZWRWYWx1ZUNvbGxlY3Rpb24iLCJBdHRhY2htZW50Il19LHsiQGdyYXBoIjpbeyJpZCI6InVybjphd3A6bjpSd2tBM09tcGM1TVpFZjBQUmxmd0N5bXZKUmVFR0FtZHBQZDR3cTZ5WF9jIiwiandzIjoiZXlKaGJHY2lPaUpGWkVSVFFTSXNJbXRwWkNJNklsSjVNamMzWVc5dVZtVnhWbk5VWmxwQ1JXOW1OVTVpY1VaWmJYbDBka3BEYm5GRE9HcEtiVkF0ZGxVaUxDSjBlWEFpT2lKaGQzQXRjbVZ3Y21WelpXNTBZWFJwYjI0cmFuZHpJbjAuZXlKMGVYQmxJam9pVW1Wd2NtVnpaVzUwWVhScGIyNVRkR0YwWlcxbGJuUWlMQ0pwWkNJNkluVnlianBoZDNBNmNtVndjbVZ6Wlc1MFlYUnBiMjQ2WldZMU56Qm1NRGcwTWpVNFpqazVPRE01TlRsaE5XSmlOalprWkRJM01XWTZNVGM1TkRVMk1EUXdNREF3TUNJc0luQmhjblI1SWpvaWRYSnVPbVpwWTNScGIyNWhiRHBvWVhKa2MyaHBjQzF5WlhGMVpYTjBPbkpsWTJWcGRtVnlJaXdpWVdOMGIzSWlPaUoxY200NlptbGpkR2x2Ym1Gc09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVmpaV2wyWlhJdFlXZGxiblE2WVdOMGIzSWlMQ0poWTNSdmNrdHBaQ0k2SWpCT1oyaDZZVmN3UW5Gek5WaG9VMUJMUTB4dVYxRmZaa0ZuWjB0SVNqVXpZVmhwUWxSbE5sUXRjMmNpTENKdmNHVnlZWFJwYjI1eklqcGJJblZ5YmpwdmNEcG9ZWEprYzJocGNDMXlaWEYxWlhOMElpd2lkWEp1T205d09taGhjbVJ6YUdsd0xYSmxjWFZsYzNRNmNtVnhkV1Z6ZENJc0luVnlianB2Y0Rwb1lYSmtjMmhwY0MxeVpYRjFaWE4wT21SbFkybHphVzl1SWwwc0luWmhiR2xrUm5KdmJTSTZJakl3TWpZdE1URXRNVE5VTURnNk5UazZNREF1TURBd1dpSXNJblpoYkdsa1ZXNTBhV3dpT2lJeU1ESTNMVEF4TFRFeVZEQTVPakF3T2pBd0xqQXdNRm9pTENKcGMzTjFaV1JCZENJNklqSXdNall0TVRFdE1UTlVNRGs2TURBNk1EQXVNREF3V2lKOS5uVXN1U256RFlTLWtjOTRYMDV0MVNKREptbWd1OFlfREVIUktHQTZ6UTZSby03SFh3N2gtR2g5c1pZMERuc2N6TjRZN29tY2o2d0FLdmU0bWhrR2FEdyIsInR5cGUiOiJDb21wYWN0SndzUHJvb2YifV0sImlkIjoidXJuOmF3cDpuOnJnZ3lncXhiS0NMN1FMM2w2OFNzdU05WERNR3pjSlhoODl6dVlIMU9CVFUifV0sImJvZHkiOnsiaWQiOiJ1cm46YXdwOm46V3lvX1VkaVU1NGkzSkdZalpFRDRhV1l5UlB6TVNLVy15eVZhTHZPUU43YyJ9LCJjb25maWd1cmF0aW9uIjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3AjY29uZmlnL3BsYWluLWxhbmd1YWdlLXVwZ3JhZGUtbG9jYWwvMC4xIiwiY29udmVyc2F0aW9uIjoidXJuOmF3cDplbmdpbmUtaGFyZHNoaXAtcmVxdWVzdC1icmFuY2gtMTpyZWNlaXZlci1hZ2VudDowMDAxIiwiY3JlYXRlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIiwiZXZpZGVuY2UiOnsiaWQiOiJ1cm46YXdwOm46X0VGUVhKMDUydTVoQ2lVbkh4enRyMEJyQlNSNXRzeGdrQXo2Yk83ZThxayJ9LCJleHBpcmVzQXQiOiIyMDI2LTExLTEzVDE1OjAwOjAwLjAwMFoiLCJmcm9tIjp7ImlkIjoidXJuOmF3cDpuOjA4RlZjekpsdjhyZHc2UmtNemxsdUdOSjk3d2dMRU8yV096QWp4TEE2VDgifSwiaWQiOiJ1cm46YXdwOmVuZ2luZS1oYXJkc2hpcC1yZXF1ZXN0LWJyYW5jaC0xOnJlY2VpdmVyLWFnZW50OjAwMDIiLCJraW5kIjoiaW52b2tlIiwicHJlc2VudEZpZWxkcyI6WyJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNldmlkZW5jZSIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI2NvbnRlbnQiXSwicHJvZmlsZSI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwL3Byb2ZpbGUvcGlsb3QvMC4xIiwidG8iOnsiaWQiOiJ1cm46YXdwOm46TWlGdnJ1MDF1ZU1rVHFFUXJkakczUUpERWVaa1FDdXpVbE9lWGpKdjVZQSJ9LCJ0eXBlIjpbIk1lc3NhZ2UiLCJJbnZva2UiXX0.cE5_nLfBXv1IO7U4HLAe6jUgUQlzeRKJf9HyDNpDhR9suhu0A5MbCFNb_os2fL-5xl0zWBueV0aJn2D563hNDA\"\n}\n<urn:awp:n:rggygqxbKCL7QL3l68SsuM9XDMGzcJXh89zuYH1OBTU> {\n<urn:awp:n:RwkA3Ompc5MZEf0PRlfwCymvJReEGAmdpPd4wq6yX_c> a awp:CompactJwsProof;\n    awp:jws \"eyJhbGciOiJFZERTQSIsImtpZCI6IlJ5Mjc3YW9uVmVxVnNUZlpCRW9mNU5icUZZbXl0dkpDbnFDOGpKbVAtdlUiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246ZWY1NzBmMDg0MjU4Zjk5ODM5NTlhNWJiNjZkZDI3MWY6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoidXJuOmZpY3Rpb25hbDpoYXJkc2hpcC1yZXF1ZXN0OnJlY2VpdmVyIiwiYWN0b3IiOiJ1cm46ZmljdGlvbmFsOmhhcmRzaGlwLXJlcXVlc3Q6cmVjZWl2ZXItYWdlbnQ6YWN0b3IiLCJhY3RvcktpZCI6IjBOZ2h6YVcwQnFzNVhoU1BLQ0xuV1FfZkFnZ0tISjUzYVhpQlRlNlQtc2ciLCJvcGVyYXRpb25zIjpbInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0IiwidXJuOm9wOmhhcmRzaGlwLXJlcXVlc3Q6cmVxdWVzdCIsInVybjpvcDpoYXJkc2hpcC1yZXF1ZXN0OmRlY2lzaW9uIl0sInZhbGlkRnJvbSI6IjIwMjYtMTEtMTNUMDg6NTk6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI3LTAxLTEyVDA5OjAwOjAwLjAwMFoiLCJpc3N1ZWRBdCI6IjIwMjYtMTEtMTNUMDk6MDA6MDAuMDAwWiJ9.nUsuSnzDYS-kc94X05t1SJDJmmgu8Y_DEHRKGA6zQ6Ro-7HXw7h-Gh9sZY0DnsczN4Y7omcj6wAKve4mhkGaDw\"\n}\n",
+        "attachments": [
+          {
+            "digest": "sha-256:c940a5ffac6fc884b7db1fab12932d211f06b9d1aa872e84d81ab8a51ddad949",
+            "mediaType": "application/n-quads",
+            "byteLength": 9488
+          }
+        ],
+        "id": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0002",
+        "from": "The lender’s agent",
+        "to": "The borrower’s agent",
+        "kind": "invoke",
+        "carriage": {
+          "suite": "direct-http",
+          "summary": "Arrived over direct-local/0.1. Carries the protected message bytes; never trusted."
+        },
+        "layers": {
+          "header": {
+            "present": true,
+            "summary": "From The lender’s agent to The borrower’s agent; invoke; signed (JWS EdDSA, pinned actor key); valid 2026-11-13T09:00:00.000Z to 2026-11-13T15:00:00.000Z; a unique message identifier prevents replay.",
+            "raw": {
+              "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+              "configuration": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+              "id": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0002",
+              "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001",
+              "kind": "invoke",
+              "from": {
+                "actor": "urn:fictional:hardship-request:receiver-agent:actor",
+                "onBehalfOf": "urn:fictional:hardship-request:receiver"
+              },
+              "to": {
+                "actor": "urn:fictional:hardship-request:owner-agent:actor",
+                "party": "urn:fictional:hardship-request:owner"
+              },
+              "createdAt": "2026-11-13T09:00:00.000Z",
+              "expiresAt": "2026-11-13T15:00:00.000Z",
+              "proof": {
+                "kid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "typ": "awp-jsonld+jws",
+                "alg": "EdDSA"
+              }
+            },
+            "digest": "sha-256:6d138e05b8188d11df06e994035122e859ac8b11df0b2255e4daa9207a56af06"
+          },
+          "authority": {
+            "present": true,
+            "summary": "1 representation statement(s): The lender says The lender’s agent acts for it.",
+            "raw": [
+              {
+                "type": "RepresentationStatement",
+                "id": "urn:awp:representation:ef570f084258f9983959a5bb66dd271f:1794560400000",
+                "party": "urn:fictional:hardship-request:receiver",
+                "actor": "urn:fictional:hardship-request:receiver-agent:actor",
+                "actorKid": "0NghzaW0Bqs5XhSPKCLnWQ_fAggKHJ53aXiBTe6T-sg",
+                "operations": [
+                  "urn:op:hardship-request",
+                  "urn:op:hardship-request:request",
+                  "urn:op:hardship-request:decision"
+                ],
+                "validFrom": "2026-11-13T08:59:00.000Z",
+                "validUntil": "2027-01-12T09:00:00.000Z",
+                "issuedAt": "2026-11-13T09:00:00.000Z"
+              }
+            ],
+            "digest": "sha-256:360b481212fa30a7f267a035c0337ea6fdb9fe71987aaa04f1142c408866be29"
+          },
+          "content": {
+            "present": true,
+            "summary": "Invokes an operation. It also carries untrusted free text; the original is available separately as content.",
+            "raw": {
+              "operation": {
+                "id": "urn:op:hardship-request:request",
+                "version": "0.1"
+              },
+              "input": {
+                "request": "health.diagnosis"
+              },
+              "basis": {
+                "kind": "represented"
+              },
+              "purpose": "urn:purpose:hardship-request"
+            },
+            "digest": "sha-256:c409fc795d54416eb8e974c9662f234d5a5318dad354d11b1106439e71847f11",
+            "untrusted": [
+              {
+                "path": "operation.id",
+                "text": "urn:op:hardship-request:request"
+              },
+              {
+                "path": "purpose",
+                "text": "urn:purpose:hardship-request"
+              }
+            ]
+          },
+          "evidence": {
+            "present": false,
+            "summary": "No third-party statements."
+          },
+          "terms": {
+            "present": true,
+            "summary": "Terms of the offer (operation model fields).",
+            "raw": {
+              "kind": "represented"
+            },
+            "digest": "sha-256:0785c9ded4cef88d0df11ff33244c26ffc175453a331bf77db81fadb2698d1dc"
+          },
+          "provenance": {
+            "present": false,
+            "summary": "Opens or continues the conversation.",
+            "raw": {
+              "conversation": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0001"
+            }
+          }
+        }
+      },
+      "refs": [
+        {
+          "layer": "transport",
+          "suite": "direct-http"
+        },
+        {
+          "layer": "data-access",
+          "suite": "by-value"
+        },
+        {
+          "layer": "meaning",
+          "suite": "plain-language-upgrade"
+        }
+      ],
+      "caption": "An invoke message from The lender’s agent reaches the inbound gate.",
+      "gateRun": 2
+    },
+    {
+      "seq": 19,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "integrity",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-1"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-IN-1"
+        }
+      ],
+      "reason": "intact",
+      "rule": {
+        "id": "https://w3id.org/jeswr/awp#config/plain-language-upgrade-local/0.1",
+        "text": "The configuration requires a signature from a pinned key, this agent as audience, a valid time window and a message id not seen before."
+      },
+      "caption": "The message is intact, signed with The lender’s agent's pinned key (Ed DSA), addressed here, inside its time window and not seen before.",
+      "gateRun": 2
+    },
+    {
+      "seq": 20,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "source",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-IN-4"
+        },
+        {
+          "layer": "authenticity",
+          "suite": "jws",
+          "clause": "CORE-IN-4"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no statements from third parties.",
+      "gateRun": 2
+    },
+    {
+      "seq": 21,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "authority",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-IN-7"
+        }
+      ],
+      "reason": "authority-valid",
+      "rule": {
+        "id": "urn:awp:representation:ef570f084258f9983959a5bb66dd271f:1794560400000",
+        "text": "A representation statement signed with The lender's pinned key must name this agent, this operation and a current validity period."
+      },
+      "caption": "The lender signed a statement that The lender’s agent acts for them in this operation.",
+      "gateRun": 2
+    },
+    {
+      "seq": 22,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-IN-10"
+        },
+        {
+          "layer": "commitments",
+          "suite": "signed-offer-acceptance",
+          "clause": "CORE-IN-10"
+        }
+      ],
+      "reason": "no-data",
+      "caption": "The message carries no data that needs terms.",
+      "gateRun": 2
+    },
+    {
+      "seq": 23,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "check",
+      "check": "fitness",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "reliance",
+          "suite": "precedence-rules",
+          "clause": "CORE-IN-13"
+        }
+      ],
+      "reason": "no-claims",
+      "caption": "The message carries no claims whose quality matters.",
+      "gateRun": 2
+    },
+    {
+      "seq": 24,
+      "step": 3,
+      "agent": "owner-agent",
+      "part": "inbound-gate",
+      "kind": "decision",
+      "verdict": "pass",
+      "outcome": "admit",
+      "messageId": "urn:awp:engine-hardship-request-branch-1:receiver-agent:0002",
+      "messageDigest": "sha-256:6d138e05b8188d11df06e994035122e859ac8b11df0b2255e4daa9207a56af06",
+      "caption": "The message is admitted and passed to the core, labelled with its sources, terms and quality.",
+      "gateRun": 2,
+      "linked": [
+        "sha-256:e83e00ded2fb769946c04c443b8ba7577c4437f8c95915e2e4054bccfce7d9b2"
+      ]
+    },
+    {
+      "seq": 25,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "core",
+      "kind": "propose",
+      "caption": "The core proposes to share Asking a lender for breathing space with The lender."
+    },
+    {
+      "seq": 26,
+      "step": 4,
+      "agent": "owner-agent",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:hardship-request",
+        "operation": "urn:op:hardship-request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:hardship-request:receiver",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "mandate",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-2"
+        },
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-2"
+        }
+      ],
+      "reason": "within-mandate",
+      "caption": "The borrower's mandate covers this action.",
+      "gateRun": 1
+    },
+    {
+      "seq": 27,
+      "step": 4,
+      "agent": "owner-agent",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:hardship-request",
+        "operation": "urn:op:hardship-request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:hardship-request:receiver",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "recipient",
+      "verdict": "pass",
+      "refs": [
+        {
+          "layer": "trust",
+          "suite": "register-chain",
+          "clause": "CORE-OUT-3"
+        },
+        {
+          "layer": "identity",
+          "suite": "pinned-key",
+          "clause": "CORE-OUT-3"
+        }
+      ],
+      "resolution": {
+        "question": "Is The lender a party I can send Asking a lender for breathing space to?",
+        "path": [
+          {
+            "at": "The borrower's own list",
+            "kind": "own-list",
+            "says": "The lender is accepted for Asking a lender for breathing space."
+          }
+        ],
+        "answer": "Accepted, for Asking a lender for breathing space only."
+      },
+      "reason": "recipient-established",
+      "caption": "The lender: Accepted, for Asking a lender for breathing space only.",
+      "gateRun": 1,
+      "linked": [
+        "sha-256:1fab6fa90dee8ec8bc7fe038331b3a450721d3f50645a8a4506a36d44045fb88"
+      ]
+    },
+    {
+      "seq": 28,
+      "step": 4,
+      "agent": "owner-agent",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:hardship-request",
+        "operation": "urn:op:hardship-request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:hardship-request:receiver",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "disclosure",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "data-access",
+          "suite": "by-value",
+          "clause": "CORE-OUT-4"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
+    },
+    {
+      "seq": 29,
+      "step": 4,
+      "agent": "owner-agent",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:hardship-request",
+        "operation": "urn:op:hardship-request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:hardship-request:receiver",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "data-terms",
+      "verdict": "not-applicable",
+      "refs": [
+        {
+          "layer": "usage-control",
+          "suite": "odrl-rules",
+          "clause": "CORE-OUT-5"
+        }
+      ],
+      "reason": "no-personal-data",
+      "caption": "This action passes on no personal data.",
+      "gateRun": 1
+    },
+    {
+      "seq": 30,
+      "step": 4,
+      "agent": "owner-agent",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:hardship-request",
+        "operation": "urn:op:hardship-request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:hardship-request:receiver",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "check",
+      "check": "limits-approval",
+      "verdict": "ask-principal",
+      "refs": [
+        {
+          "layer": "authority",
+          "suite": "mandate-signed",
+          "clause": "CORE-OUT-7"
+        }
+      ],
+      "reason": "approval-required",
+      "rule": {
+        "id": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+        "text": "Requires 1 approval(s) from the principal."
+      },
+      "caption": "The required people must decide this exact action.",
+      "gateRun": 1
+    },
+    {
+      "seq": 31,
+      "step": 4,
+      "agent": "owner-agent",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:hardship-request",
+        "operation": "urn:op:hardship-request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:hardship-request:receiver",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "ask-principal",
+      "outcome": "ask-principal",
+      "reason": "approval-required",
+      "caption": "The action is held for the named decision makers.",
+      "gateRun": 1,
+      "linked": [
+        "sha-256:c8a7e370aeb7253c050f871ebc0aeab52cf033272c2003b497c1d237470ceee3"
+      ]
+    },
+    {
+      "seq": 32,
+      "step": 4,
+      "agent": "owner-agent",
+      "part": "principal",
+      "kind": "ask-principal",
+      "reason": "approval-required",
+      "chat": {
+        "who": "agent",
+        "text": "The lender asks for one of your statements: The borrower's health diagnosis statement (health.diagnosis). They would use them for Hardship request. May I share them? Action digest: sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9. Parameters: {}"
+      },
+      "caption": "The gate built this request from the action and the approval rule."
+    },
+    {
+      "seq": 33,
+      "step": 5,
+      "agent": "owner-agent",
+      "part": "principal",
+      "kind": "principal-reply",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "approvalDecision": "deny",
+      "chat": {
+        "who": "principal",
+        "text": "Do not send my diagnosis."
+      },
+      "caption": "Declines by signing an answer bound to the exact action."
+    },
+    {
+      "seq": 34,
+      "step": 5,
+      "agent": "owner-agent",
+      "actionDigest": "sha-256:cb827b6d9d5bd0062e5322cc2377ed35a7a7db8c1b34b08e3e69a335443dccd9",
+      "actionScope": {
+        "action": "distribute",
+        "target": "urn:op:hardship-request",
+        "operation": "urn:op:hardship-request",
+        "conversation": "urn:awp:engine-hardship-request-branch-1:owner-agent:0001",
+        "recipient": "urn:fictional:hardship-request:receiver",
+        "purpose": "urn:purpose:hardship-request",
+        "evidence": []
+      },
+      "part": "outbound-gate",
+      "kind": "decision",
+      "verdict": "fail",
+      "outcome": "stop",
+      "reason": "approval-denied",
+      "caption": "The borrower declined; the action is stopped.",
+      "gateRun": 2,
+      "linked": [
+        "sha-256:d65adff6e12b58a39ac5df9e9f00d24ed09835c229ca2e6fb72f24f6db0c0957"
+      ]
+    }
+  ],
+  "linkedTable": "linked/hardship-request--baseline.json"
+}

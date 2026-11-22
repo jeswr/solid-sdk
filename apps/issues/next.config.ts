@@ -48,6 +48,9 @@ const nextConfig: NextConfig = staticExport
   ? {
       ...baseConfig,
       output: "export",
+      // Served from a sub-path on GitHub Pages (jeswr.github.io/solid-sdk/issues/):
+      // scripts/build-pages.mjs sets NEXT_PUBLIC_BASE_PATH. Unset, the app is at the root.
+      basePath: process.env.NEXT_PUBLIC_BASE_PATH?.replace(/\/+$/, "") || undefined,
       // Caddy `file_server` serves `/foo` → `/foo/index.html`; trailing-slash
       // routing makes Next emit that directory layout so links resolve on disk.
       trailingSlash: true,

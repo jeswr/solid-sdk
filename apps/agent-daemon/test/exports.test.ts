@@ -41,10 +41,16 @@ it.each(entries)("resolves implemented %s exports", (subpath, target) => {
           "configureCloud",
           "createCliHost",
           "createDaemon",
+          "createGateReceiver",
+          "createInboundGate",
           "createLocalState",
           "createProcessLease",
+          "createRuntimeMemory",
+          "initGate",
           "installLaunchd",
           "launchdPlist",
+          "openGate",
+          "pinPeer",
           "pollInterval",
           "runCli",
           "runCloud",
@@ -52,6 +58,16 @@ it.each(entries)("resolves implemented %s exports", (subpath, target) => {
           "runConfiguredCloud",
           "scrubLog",
         ]
-      : ["createMemoryPod", "createMemoryState"],
+      : ["createMemoryPod", "createMemoryState", "createTestGate", "createTestMemory"],
   );
 });
+
+const legacyComposition = (options: entry0.DaemonOptions): entry0.DaemonOptions => ({
+  ...options,
+  proposerContext: {
+    ...options.proposerContext,
+    // @ts-expect-error Only the daemon supplies the gateway's memoryRecall tool.
+    memoryRecall: async () => [],
+  },
+});
+void legacyComposition;

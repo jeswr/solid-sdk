@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import type { ProposalContext } from "@jeswr/agent-channels/provider/send";
 import type { Approval, Mandate, MandateVerifier, PolicyEngine } from "@jeswr/agent-mandate";
 import type {
   ActionProposal,
@@ -53,7 +54,11 @@ export interface SendBinding {
     readonly maxBytes: number;
   };
   readonly send: {
-    render(proposal: RenderableProposal, carriage: SendBinding["carriage"]): Promise<Wire>;
+    render(
+      proposal: RenderableProposal,
+      carriage: SendBinding["carriage"],
+      expected: ProposalContext,
+    ): Promise<Wire>;
     /** Trusted validator must bind every intent term and account to the signed wire/destination. */
     validate(
       wire: Wire,
@@ -61,6 +66,7 @@ export interface SendBinding {
         readonly renderable: RenderableProposal;
         readonly intent: ActionProposal["intent"];
         readonly account: AccountRef;
+        readonly expected: ProposalContext;
       },
     ): Promise<{ ok: true } | { ok: false; reason: string }>;
     transmit(
@@ -68,12 +74,13 @@ export interface SendBinding {
       io: {
         readonly account: AccountRef;
         readonly tokens: TokenProvider;
+        readonly expected: ProposalContext;
         /** Required immediately before each effect, with no intervening await. */
         readonly assertAuthority: () => void;
         readonly dryRun: boolean;
       },
     ): Promise<SendResult>;
-    lookup?(wire: Wire): Promise<LookupResult>;
+    lookup?(wire: Wire, expected: ProposalContext): Promise<LookupResult>;
     readonly finalAbsence?: true;
     /** Honoured exclusively for id === "a2a". */
     readonly idempotentResend?: true;

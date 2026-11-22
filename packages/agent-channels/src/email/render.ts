@@ -16,7 +16,7 @@ import {
 } from "../email-mime.js";
 import { ChannelParseError } from "../errors.js";
 import { AGENT_FOOTER, EMAIL_MIME } from "../profiles.js";
-import type { RenderableProposal, Wire } from "../types.js";
+import type { EnvelopeVerifier, ProposalContext, RenderableProposal, Wire } from "../types.js";
 import { renderBodies } from "./bodies.js";
 
 export interface EmailRenderOptions {
@@ -26,7 +26,7 @@ export interface EmailRenderOptions {
   /** Trusted actor -> single pinned mailbox, snapshotted at construction. */
   readonly recipients: ReadonlyMap<string, string>;
   /** Pure local verifier; must verify the sender key and intended audience. */
-  readonly verify: (compactJws: string) => Promise<unknown>;
+  readonly verify: EnvelopeVerifier;
   readonly now?: () => number;
 }
 function base64(text: string): string {
@@ -55,7 +55,11 @@ export function emailRenderer(options: EmailRenderOptions) {
     )
       throw new ChannelParseError("email message is expired or not yet valid");
   }
-  async function render(proposal: RenderableProposal, carriage: CarriageProfile): Promise<Wire> {
+  async function render(
+    proposal: RenderableProposal,
+    carriage: CarriageProfile,
+    context?: ProposalContext,
+  ): Promise<Wire> {
     if (canonicalJson(carriage) !== canonicalJson(EMAIL_MIME))
       throw new ChannelParseError("unsupported email carriage");
     const compactJws = proposal.compactJws;
@@ -63,7 +67,7 @@ export function emailRenderer(options: EmailRenderOptions) {
     const proposedMessage = proposal.message;
     assertJsonBounds(proposedMessage);
     const proposed = canonicalJson(proposedMessage);
-    const payload = await verify(compactJws);
+    const payload = await verify(compactJws, context);
     assertJsonBounds(payload);
     const checked = validateMessage(payload);
     if (
@@ -133,11 +137,15 @@ export function emailRenderer(options: EmailRenderOptions) {
       throw new ChannelParseError("invalid email wire");
     return { bytes: wire.bytes, mediaType: wire.mediaType, digest: wire.digest };
   }
-  const validate: NonNullable<ChannelBinding["send"]>["validate"] = async (wire, proposal) => {
+  const validate: NonNullable<ChannelBinding["send"]>["validate"] = async (
+    wire,
+    proposal,
+    context,
+  ) => {
     try {
       const snapshot = assertWire(wire);
       const compactJws = proposal.compactJws;
-      const expected = await render({ message: proposal.message, compactJws }, EMAIL_MIME);
+      const expected = await render({ message: proposal.message, compactJws }, EMAIL_MIME, context);
       current(decodeEmailProposal(compactJws).message);
       return snapshot.bytes === expected.bytes
         ? { ok: true }

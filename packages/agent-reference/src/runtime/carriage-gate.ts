@@ -1,0 +1,234 @@
+// AUTHORED-BY Codex GPT-6
+/** Gate-side carriage checks. Readable text is derived only after signature verification. */
+
+import { readA2a } from "../bindings/a2a.js";
+import type { ByteMessage, HttpExchange } from "../bindings/bytes.js";
+import { CarriageError } from "../bindings/bytes.js";
+import { readEmail } from "../bindings/email.js";
+import { footerText, footerVariant } from "../bindings/email-footer.js";
+import {
+  type ChannelToken,
+  type FictionalAuthorizationServer,
+  readMcpRequest,
+  readMcpResult,
+} from "../bindings/mcp.js";
+import { DEFAULT_LIMITS } from "../core/limits.js";
+import { validateMessage } from "../core/schema.js";
+import type { AnyMessage } from "../core/types.js";
+import type { InboundGate } from "../gates/inbound.js";
+import { type SigningKey, verifyCompact } from "../mechanisms/jws.js";
+import { MessageNode } from "../model/message-nodes.js";
+import { configurationById } from "../profile/configurations.js";
+import { peekWire } from "../trace/packet.js";
+import { carriageWire } from "../wire/carriage.js";
+import {
+  documentConfiguration,
+  isMessagePacket,
+  verifyMessagePacket,
+} from "../wire/message-packet.js";
+import type { StepResult } from "./agent.js";
+
+export interface CarriageNotice {
+  readonly caption: string;
+  readonly fault?: string;
+}
+
+export interface CarriageDelivery {
+  readonly carriage: "email" | "a2a-request" | "a2a-result" | "mcp-request" | "mcp-result";
+  readonly frame: ByteMessage | HttpExchange;
+  readonly server?: FictionalAuthorizationServer;
+  readonly token?: ChannelToken;
+  readonly notices?: readonly (string | CarriageNotice)[];
+  /** Scenario provenance stays outside the frame and affects only the transport record. */
+  readonly injectedA2aFault?: "a2a-text-part-instruction" | "a2a-task-state-lies";
+}
+const isDelivery = (value: unknown): value is CarriageDelivery =>
+  !!value && typeof value === "object" && "carriage" in value && "frame" in value;
+
+function display(value: unknown, name: (id: string | undefined) => string): unknown {
+  if (typeof value === "string")
+    return value.replace(/(?:https?:\/\/|urn:)[^\s<>"{}|\\^`]+/g, (id) => {
+      const label = name(id);
+      return /(?:https?:\/\/|urn:)/.test(label) ? "a referenced item" : label;
+    });
+  if (Array.isArray(value)) return value.map((item) => display(item, name));
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, display(item, name)]),
+    );
+  return value;
+}
+export function readableCopy(
+  message: AnyMessage,
+  name: (id: string | undefined) => string,
+): string {
+  return `Sent by ${name(message.from.actor)}, an automated agent, for ${name(message.from.onBehalfOf)}.\n${message.kind[0]?.toUpperCase()}${message.kind.slice(1)} message:\n${JSON.stringify(display(message.body, name), null, 2)}\n\nThe signed structured part is authoritative. Agents exchange signed descriptions to discover supported configurations.`;
+}
+
+function footerNames(message: AnyMessage, name: (id: string | undefined) => string) {
+  if (message.from.onBehalfOf === undefined) return undefined;
+  return { agent: name(message.from.actor), principal: name(message.from.onBehalfOf) };
+}
+
+async function signedMessage(wire: unknown, key: SigningKey): Promise<AnyMessage> {
+  if (isMessagePacket(wire)) {
+    const cfg = configurationById(documentConfiguration(wire).configuration);
+    const suite =
+      cfg?.integrity.status === "selected" && cfg.integrity.mechanism === "data-integrity"
+        ? "data-integrity"
+        : "jws";
+    const checked = await verifyMessagePacket(wire, {
+      suite,
+      resolve: (id) => (id.replace(/^urn:awp:key:/, "") === key.kid ? key : undefined),
+    });
+    if (!checked.ok) throw new CarriageError("bad-signature", checked.detail);
+    return new MessageNode(checked.root, checked.dataset).live;
+  }
+  const value = wire as { jws?: string };
+  if (typeof value?.jws !== "string")
+    throw new CarriageError(
+      "no-structured-content",
+      "Signed structured content is required for agent mail.",
+    );
+  const verified = await verifyCompact(value.jws, {
+    typ: "awp-message+jws",
+    allowedAlgs: [key.alg],
+    limits: DEFAULT_LIMITS,
+    resolve: (kid) =>
+      kid === key.kid ? { ...key, subject: peekWire(wire)?.from.actor ?? "" } : undefined,
+  });
+  if (verified.outcome !== "valid")
+    throw new CarriageError("bad-signature", "The outbound message does not verify.");
+  const checked = validateMessage(verified.payload);
+  if (!checked.ok) throw new CarriageError("malformed", "The outbound message is malformed.");
+  return checked.message;
+}
+
+export async function signedReadable(
+  wire: unknown,
+  key: SigningKey,
+  name: (id: string | undefined) => string,
+): Promise<string> {
+  return emailReadable(await signedMessage(wire, key), name);
+}
+
+function emailReadable(message: AnyMessage, name: (id: string | undefined) => string): string {
+  const readable = readableCopy(message, name);
+  const names = footerNames(message, name);
+  return names
+    ? `${readable}\n\n${footerText({ ...names, variant: footerVariant(message) })}`
+    : readable;
+}
+
+/** Only the receive hand-off calls this; existing gates still decide all message semantics. */
+export async function receiveCarriage(
+  input: unknown,
+  meta: { binding?: string },
+  gate: InboundGate,
+  name: (id: string | undefined) => string,
+  answersOurs: (id: string) => boolean,
+  accept: (wire: unknown) => Promise<StepResult>,
+): Promise<StepResult> {
+  if (
+    !isDelivery(input) &&
+    !(input && typeof input === "object" && "bytes" in input && "mediaType" in input)
+  )
+    return accept(input);
+  let wire: unknown;
+  let readable: string | undefined;
+  try {
+    const notices: CarriageNotice[] = [];
+    let hasDescriptionHint = false;
+    if (!isDelivery(input)) wire = carriageWire(input as ByteMessage);
+    else {
+      for (const notice of input.notices ?? [])
+        notices.push(typeof notice === "string" ? { caption: notice } : notice);
+      switch (input.carriage) {
+        case "email": {
+          const recovered = readEmail(input.frame as ByteMessage);
+          wire = carriageWire(recovered.message);
+          readable = recovered.readable;
+          hasDescriptionHint = recovered.description !== undefined;
+          break;
+        }
+        case "a2a-request":
+        case "a2a-result": {
+          const recovered = readA2a(
+            input.frame as HttpExchange,
+            input.injectedA2aFault === "a2a-text-part-instruction",
+          );
+          wire = carriageWire(recovered.message);
+          for (const caption of recovered.dropped)
+            notices.push({
+              caption,
+              ...(recovered.droppedFault ? { fault: recovered.droppedFault } : {}),
+            });
+          if (recovered.taskState)
+            notices.push({
+              caption:
+                "The A2A task state is a carriage hint; the signed message determines the outcome.",
+              ...(input.injectedA2aFault === "a2a-task-state-lies"
+                ? { fault: input.injectedA2aFault }
+                : {}),
+            });
+          break;
+        }
+        case "mcp-request": {
+          if (!input.server) throw new CarriageError("malformed", "The tool server is missing.");
+          const recovered = readMcpRequest(input.frame as HttpExchange, input.server);
+          if (!recovered.message)
+            throw new CarriageError(
+              "no-structured-content",
+              "This tool call contains no signed message.",
+            );
+          wire = carriageWire(recovered.message);
+          break;
+        }
+        case "mcp-result": {
+          const recovered = readMcpResult(input.frame as HttpExchange, input.token);
+          wire = carriageWire(recovered.message);
+          break;
+        }
+      }
+    }
+    if (readable !== undefined) {
+      const checked = await gate.verifyIntegrity(wire, meta, answersOurs);
+      // A failed signature is handled by the ordinary gate, with its original reason.
+      if (!checked.ok) return accept(wire);
+      if (!checked.signedBy)
+        throw new CarriageError(
+          "no-structured-content",
+          "Signed structured content is required for agent mail.",
+        );
+      if (readable !== emailReadable(checked.message, name))
+        throw new CarriageError(
+          "human-parity-mismatch",
+          "The readable email says something different from the signed message.",
+        );
+      // The description URL has no resolver here. Discovery uses an admitted signed message.
+      const captions: string[] = [];
+      if (checked.message.from.onBehalfOf !== undefined)
+        captions.push("The standard footer matched the signed message.");
+      if (hasDescriptionHint)
+        captions.push(
+          "Agent-Description is an unverified hint and does not select a configuration.",
+        );
+      if (captions.length > 0) notices.push({ caption: captions.join(" ") });
+    }
+    for (const { caption, fault } of notices)
+      gate.emit({ part: "transport", kind: "record", caption, ...(fault ? { fault } : {}) });
+  } catch (error) {
+    const reason = error instanceof CarriageError ? error.reason : "malformed";
+    const admission = gate.arrive(wire, meta.binding, peekWire(wire));
+    admission.failIntegrity(reason, "The carriage was refused before reaching the core.");
+    admission.refuse(reason, "The carriage was refused before reaching the core.");
+    return {
+      disposition: "rejected",
+      reason,
+      detail: error instanceof Error ? error.message : "Invalid carriage",
+      outbound: [],
+      decisions: [],
+    };
+  }
+  return accept(wire);
+}
