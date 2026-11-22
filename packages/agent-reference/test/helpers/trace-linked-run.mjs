@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // A fresh process for each switch setting, as in run-scenarios.mjs.
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-import { mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { dirname, join } from "path";
 import { availableAdapters } from "../../dist/derive/adapters/index.js";
@@ -11,11 +11,22 @@ import { runScenario } from "../../dist/engine/run.js";
 import { ScenarioTraceWriter } from "../../scripts/write-scenario-traces.mjs";
 
 const [id, file, mode, configuration] = process.argv.slice(2);
-const baseline = JSON.parse(readFileSync(`traces/${id}--${configuration}.json`, "utf8"));
+// Without the sparq adapters (as in CI) the build blocks age-check's main path and removes its
+// trace; a branch trace of the same run then supplies the commit.
+const recorded = existsSync(`traces/${id}--${configuration}.json`)
+  ? `traces/${id}--${configuration}.json`
+  : `traces/${
+      readdirSync("traces")
+        .filter((name) => name.startsWith(`${id}--`) && name.endsWith(`--${configuration}.json`))
+        .sort()[0]
+    }`;
+const baseline = JSON.parse(readFileSync(recorded, "utf8"));
 const registry = await availableAdapters();
 const method = SPARQ_ZK_RESULT.method;
 const system = registry.proofSystems.get(method);
 if (id === "age-check" && system) {
+  if (!recorded.endsWith(`/${id}--${configuration}.json`))
+    throw new Error("Missing recorded age proof trace");
   // The prover randomises the proof. Replay its published output at the prover
   // boundary. The real receiver still verifies the proof and all its bindings.
   const claim = baseline.events
