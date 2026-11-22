@@ -309,9 +309,7 @@ export function AccountsProvider({
         isSignedInAccount: (id) => sessions.current.has(id) && !retiring.current.has(id),
         fetchFor: (account, options) => {
           const backend = sessions.current.get(account.id);
-          // Match authenticatedFetch: no new account-bound fetch while an account is retiring.
-          if (!backend || currentStatus.current !== "ready" || retiring.current.has(account.id))
-            throw new Error("Sign in to continue");
+          if (!backend || retiring.current.has(account.id)) throw new Error("Sign in to continue");
           return backend.fetchFor(account, options);
         },
         sessionVersion: sessionVersion.current,

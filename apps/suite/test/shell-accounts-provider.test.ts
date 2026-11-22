@@ -87,6 +87,46 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
+it("uses the requested Solid session even when the selected account has expired", async () => {
+  const expired = { ...two, kind: "solid" as const };
+  localStorage.setItem(
+    "suite.accounts.v1",
+    JSON.stringify({ activeId: one.id, accounts: [one, expired] }),
+  );
+  const live = backend(one);
+  const response = new Response(null, { status: 204 });
+  const transport = vi.fn<typeof fetch>().mockResolvedValue(response);
+  const bindFetch = vi.spyOn(live, "fetchFor").mockReturnValue(transport);
+  await mount(h(AccountsProvider, { backends: [live], children: h(Probe) }));
+  const { fetchFor } = accounts;
+  if (!fetchFor) throw new Error("Missing account-bound fetch");
+
+  await act(() => accounts.switchTo(expired.id));
+  expect(accounts.status).toBe("expired");
+  expect(accounts.active).toEqual(expired);
+  expect(() => fetchFor(expired)).toThrow("Sign in to continue");
+  await expect(accounts.fetch(expired.storageUrl)).rejects.toThrow("Sign in to continue");
+
+  const relay = "https://relay.example";
+  const renewal = `${relay}/push/registrations/one`;
+  const options = { extraResourceOrigins: [relay] };
+  expect(await fetchFor(one, options)(renewal, { method: "PUT" })).toBe(response);
+
+  const checkRetirement = vi.fn(async () => {
+    expect(() => fetchFor(one, options)).toThrow("Sign in to continue");
+  });
+  const stop = onBeforeSignOut(checkRetirement);
+  try {
+    await act(() => accounts.signOut(one.id));
+    expect(checkRetirement).toHaveBeenCalledOnce();
+    expect(() => fetchFor(one, options)).toThrow("Sign in to continue");
+  } finally {
+    stop();
+  }
+  expect(bindFetch).toHaveBeenCalledExactlyOnceWith(one, options);
+  expect(transport).toHaveBeenCalledExactlyOnceWith(renewal, { method: "PUT" });
+});
+
 it.each([
   "signOut",
   "signOutAll",
