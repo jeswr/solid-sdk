@@ -44,6 +44,27 @@ export function tripsTypeIndex(
     isWithinStorage: (url) => url === owner || url === profileUrl || storage.isWithinStorage(url),
     readRdf: (url, options) =>
       url === profileUrl ? readProfile(options?.signal) : storage.readRdf(url, options),
+    head: async (url, options) => {
+      if (url !== profileUrl) return storage.head(url, options);
+      const { contentType, etag } = await readProfile(options?.signal);
+      // Only pod observations can supply auxiliary-resource or access metadata.
+      return {
+        url: profileUrl,
+        status: 200,
+        etag,
+        contentType,
+        lastModified: null,
+        body: null,
+        bytes: async () => new Uint8Array(),
+        text: async () => "",
+        blob: async () => new Blob([], { type: contentType }),
+        links: new Map(),
+        parent: null,
+        metadataUrl: null,
+        kind: "resource",
+        allow: null,
+      };
+    },
     writeRdf: async (url, dataset, options) => {
       await verify(url);
       return storage.writeRdf(url, dataset, options);

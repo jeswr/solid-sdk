@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import { checkOwnerOnly } from "@jeswr/pod-access";
+import { createTypeIndex } from "@jeswr/pod-type-index";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { tripsTypeIndex } from "../src/type-index.js";
 
 vi.mock("@jeswr/pod-access", () => ({ checkOwnerOnly: vi.fn() }));
+vi.mock("@jeswr/pod-type-index", { spy: true });
 const root = "https://pod.example/",
   owner = "https://identity.example/user#me",
   indexUrl = `${root}private/index`;
@@ -13,7 +15,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(checkOwnerOnly).mockResolvedValue({ private: true });
 });
-async function fixture(preferences = false) {
+async function fixture(preferences = false, profileHeaders: Record<string, string> = {}) {
   const storage = createMemoryStorage({ protocol: "solid", root });
   await storage.create(root, null, { kind: "container", name: "private" });
   await storage.create(
@@ -30,9 +32,16 @@ async function fixture(preferences = false) {
     : `<${owner}> <${solid}privateTypeIndex> <${indexUrl}> .`;
   const fetch = vi.fn<typeof globalThis.fetch>(
     async () =>
-      new Response(profile, { headers: { "content-type": "text/turtle", etag: '"profile"' } }),
+      new Response(profile, {
+        headers: { "content-type": "text/turtle", etag: '"profile"', ...profileHeaders },
+      }),
   );
   return { storage, fetch, ...tripsTypeIndex(storage, fetch, owner, false) };
+}
+function indexStorage() {
+  const [call] = vi.mocked(createTypeIndex).mock.calls;
+  assert.isDefined(call);
+  return call[0].storage;
 }
 describe("existing private Type Index integration", () => {
   it.each([
@@ -58,6 +67,56 @@ describe("existing private Type Index integration", () => {
     expect(write.mock.calls[0]?.[0]).toBe(indexUrl);
     expect(await (await storage.read(indexUrl)).text()).toContain("Keep me");
     expect(checkOwnerOnly).toHaveBeenCalledWith({ storage, url: indexUrl, ownerWebId: owner });
+  });
+  it("keeps HEAD scoped to the pod for every URL other than the exact profile document", async () => {
+    const { fetch } = await fixture();
+    const storage = indexStorage();
+    for (const url of [owner, "https://identity.example/user-other", "https://other.example/doc"]) {
+      await expect(storage.head(url)).rejects.toMatchObject({ code: "scope" });
+    }
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("discards profile link and access headers and writes only to the private index", async () => {
+    const { storage, index } = await fixture(false, {
+      link: `<${indexUrl}>; rel="acl describedby", <https://other.example/index>; rel="alternate"`,
+      "wac-allow": 'user="read write control"',
+    });
+    const write = vi.spyOn(storage, "writeRdf");
+    const create = vi.spyOn(storage, "create");
+    const profileUrl = "https://identity.example/user";
+    const observation = await indexStorage().head(profileUrl);
+    expect(observation).toMatchObject({
+      url: profileUrl,
+      status: 200,
+      contentType: "text/turtle",
+      etag: '"profile"',
+      metadataUrl: null,
+      allow: null,
+      body: null,
+    });
+    expect(observation.links.size).toBe(0);
+    expect(await observation.bytes()).toHaveLength(0);
+    expect(await observation.text()).toBe("");
+    expect(await observation.blob()).toMatchObject({ size: 0, type: "text/turtle" });
+
+    await index.register("http://schema.org/Trip", { container: `${root}trips/` });
+    expect(await index.find("http://schema.org/Trip")).toEqual([`${root}trips/`]);
+    expect(create).not.toHaveBeenCalled();
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(write.mock.calls[0]?.[0]).toBe(indexUrl);
+  });
+  it("fails registration on a missing profile observation before any write", async () => {
+    const { storage, fetch, index } = await fixture();
+    const write = vi.spyOn(storage, "writeRdf");
+    const create = vi.spyOn(storage, "create");
+    fetch.mockResolvedValueOnce(new Response(null, { status: 404 }));
+
+    await expect(
+      index.register("http://schema.org/Trip", { container: `${root}trips/` }),
+    ).rejects.toMatchObject({ status: 404, url: "https://identity.example/user" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(write).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
   });
   it("rechecks private index access just before persisting a registration", async () => {
     const { storage, index, verifyPrivateIndex } = await fixture();
