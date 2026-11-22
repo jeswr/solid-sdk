@@ -149,6 +149,18 @@ def main():
     stale = existing_trace_files(dest)
 
     m = json.load(open(manifest))
+    # Check every source trace before replacing the manifest, so a bad source leaves the
+    # previous import (manifest and traces) in place rather than a half-written one.
+    sources = {}
+    for p in m['paths']:
+        if p['status'] == 'blocked': continue
+        file = p['trace']
+        if not isinstance(file, str) or not re.fullmatch(r'[a-zA-Z0-9_-]+\.json', file):
+            raise ValueError(f'{file}: invalid trace filename')
+        source = src / file
+        if not stat.S_ISREG(source.lstat().st_mode):
+            raise ValueError(f'{source}: expected a regular trace file')
+        sources[file] = source
     json.dump(dict(note='Copied from packages/agent-reference/scenario-runs.json by scripts/import-engine-runs.py.',
                    paths=m['paths']), open(os.path.join(ROOT, 'data', 'scenario-runs.json'), 'w'), indent=1)
     subprocess.check_call([sys.executable, os.path.join(HERE, 'use-cases.src.py')])
@@ -160,11 +172,7 @@ def main():
     for p in m['paths']:
         if p['status'] == 'blocked': continue
         file = p['trace']
-        if not isinstance(file, str) or not re.fullmatch(r'[a-zA-Z0-9_-]+\.json', file):
-            raise ValueError(f'{file}: invalid trace filename')
-        source = src / file
-        if not stat.S_ISREG(source.lstat().st_mode):
-            raise ValueError(f'{source}: expected a regular trace file')
+        source = sources[file]
         t = json.loads(source.read_text(encoding='utf-8'))
         if 'linkedTable' in t:
             reference = t['linkedTable']

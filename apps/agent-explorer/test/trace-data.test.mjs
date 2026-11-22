@@ -513,6 +513,16 @@ test("engine reimport removes blocked traces and wholly unreferenced tables", as
     "whole--baseline.json",
   ]);
 
+  // A source trace that is missing fails the import before the manifest is replaced, so the
+  // previous import still bundles.
+  const runsFile = join(dir, "data/scenario-runs.json");
+  const priorRuns = readFileSync(runsFile, "utf8");
+  writeRuns([{ ...keep, status: "blocked" }, { ...branch, trace: "absent--baseline.json" }]);
+  await assert.rejects(importRuns(), /absent--baseline\.json/);
+  assert.equal(readFileSync(runsFile, "utf8"), priorRuns);
+  assert.deepEqual(readdirSync(traces).sort(), ["linked", keep.trace]);
+  writeRuns([keep, { ...branch, status: "blocked" }, { ...whole, status: "blocked" }]);
+
   const outside = join(dir, "outside.json");
   writeFileSync(outside, "keep");
   for (const path of [join(traces, branch.trace), join(linked, "whole--baseline.json")]) {
