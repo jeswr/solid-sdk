@@ -86,6 +86,7 @@ export interface ImportReport {
   skipped?: number;
   /** Unsupported source fields, products or formats. */
   unsupported?: readonly string[];
+  /** Fixed diagnostics for bounded or partial imports. */
   warnings?: readonly string[];
   /** The type-index document used/created. */
   indexUrl: string;

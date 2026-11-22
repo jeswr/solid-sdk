@@ -50,6 +50,14 @@
       "types": "./dist/pod/*.d.ts",
       "default": "./dist/pod/*.js"
     },
+    "./adapters/activity-files": {
+      "types": "./dist/activity-files/file-adapter.d.ts",
+      "default": "./dist/activity-files/file-adapter.js"
+    },
+    "./activity-files/*": {
+      "types": "./dist/activity-files/*.d.ts",
+      "default": "./dist/activity-files/*.js"
+    },
     "./adapters/amazon-orders": {
       "types": "./dist/amazon-orders/file-adapter.d.ts",
       "default": "./dist/amazon-orders/file-adapter.js"
