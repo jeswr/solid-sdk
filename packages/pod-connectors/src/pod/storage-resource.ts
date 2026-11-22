@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { serialize } from "@jeswr/rdf-serialize";
-import { type StorageClient, StorageError } from "@jeswr/storage-client";
+import { type StorageClient, StorageError, type WriteResult } from "@jeswr/storage-client";
 import type { DatasetCore } from "@rdfjs/types";
 import { strongEtag } from "../core/pod-writer-policy.js";
 import type { WriteConditions } from "../core/types.js";
@@ -17,12 +18,13 @@ export async function createStorageResource(
   body: string | Uint8Array | Blob,
   contentType: string,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<WriteResult> {
   signal?.throwIfAborted();
   const parent = new URL(".", url).href;
   try {
     const result = await storage.create(parent, body, { exactUrl: url, contentType, signal });
     if (result.url !== url) throw new TypeError("Storage changed the connector resource URL.");
+    return result;
   } catch (error) {
     // Solid maps an occupied exact name to conflict; the writer preserves its HTTP precondition.
     if (error instanceof StorageError && error.code === "conflict")
@@ -44,10 +46,10 @@ export async function writeStorageRdf(
   conditions: WriteConditions,
   signal?: AbortSignal,
   prefixes: Record<string, string> = { ...VOCAB_PREFIXES },
-): Promise<void> {
+): Promise<WriteResult> {
   signal?.throwIfAborted();
   if (conditions.ifMatch !== undefined) {
-    await storage.writeRdf(url, dataset, {
+    return storage.writeRdf(url, dataset, {
       ifMatch: strongEtag(conditions.ifMatch, "storage", url),
       prefixes,
       signal,
@@ -60,6 +62,6 @@ export async function writeStorageRdf(
       format: "text/turtle",
       prefixes,
     });
-    await createStorageResource(storage, url, body, "text/turtle", signal);
+    return createStorageResource(storage, url, body, "text/turtle", signal);
   } else throw new TypeError("A conditional RDF write is required.");
 }

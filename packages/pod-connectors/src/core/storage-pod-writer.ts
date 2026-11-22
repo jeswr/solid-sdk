@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { type StorageClient, StorageError } from "@jeswr/storage-client";
+import { type StorageClient, StorageError, type WriteResult } from "@jeswr/storage-client";
 import { createSolidBackend, type SolidBackendOptions } from "@jeswr/storage-client/solid";
 import {
   createStorageResource,
@@ -49,6 +49,12 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
     throw new TypeError("Connector slugs require a Solid storage backend.");
   const resolve = containerResolver(container, "storage");
   if (!storage.isWithinStorage(container)) throw new TypeError("Container is outside storage.");
+  function writeValidator({ etag, etagSource }: WriteResult) {
+    // Some backends fall back to HEAD, which may observe another writer's version.
+    return options.verifyPrivateDestination && etagSource === "response" && etag !== null
+      ? { writeEtag: etag }
+      : {};
+  }
   async function currentEtag(url: string): Promise<string | undefined> {
     signal?.throwIfAborted();
     try {
@@ -82,9 +88,10 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
           const etag = await currentEtag(url);
           conditional = etag === undefined ? { ifNoneMatch: "*" } : { ifMatch: etag };
         }
-        await writeStorageRdf(storage, url, doc.dataset, conditional, signal);
+        const result = await writeStorageRdf(storage, url, doc.dataset, conditional, signal);
         return {
           url,
+          ...writeValidator(result),
           category: doc.category,
           forClass: doc.forClass,
           skipRegistration: doc.skipRegistration,
@@ -99,19 +106,20 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
         const etag = mode === "replace" ? await currentEtag(url) : undefined;
         signal?.throwIfAborted();
         try {
-          if (etag !== undefined)
-            await storage.write(url, body, {
-              contentType: doc.contentType,
-              ifMatch: etag,
-              signal,
-            });
-          else await createStorageResource(storage, url, body, doc.contentType, signal);
+          const result =
+            etag !== undefined
+              ? await storage.write(url, body, {
+                  contentType: doc.contentType,
+                  ifMatch: etag,
+                  signal,
+                })
+              : await createStorageResource(storage, url, body, doc.contentType, signal);
+          return { url, created: true, ...writeValidator(result) };
         } catch (error) {
           if (mode === "create" && error instanceof StorageError && error.status === 412)
             return { url, created: false };
           throw error;
         }
-        return { url, created: true };
       },
       async remove(slug, conditions = {}) {
         const url = resolve(slug);

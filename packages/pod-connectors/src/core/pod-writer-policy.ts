@@ -22,6 +22,24 @@ export async function requirePrivateDestination(
   throw new PrivateDestinationError(id);
 }
 
+/** Recheck after writing and delete only the version returned by that write. */
+export async function verifyPrivateWrite(
+  verify: () => Promise<void>,
+  writeEtag: string | null | undefined,
+  remove: (etag: string) => Promise<unknown>,
+): Promise<void> {
+  try {
+    await verify();
+  } catch (error) {
+    try {
+      if (isStrongEtag(writeEtag)) await remove(writeEtag);
+    } catch {
+      // Best effort. A missing validator or rejected delete cannot make the run succeed.
+    }
+    throw error;
+  }
+}
+
 /** Resolve connector slugs identically for every transport. */
 export function containerResolver(container: string, adapterId: string) {
   const root = new URL(container);
@@ -64,13 +82,17 @@ export function validateBinaryType(contentType: string, adapterId: string): void
     throw new IntegrationSyncError(adapterId, `Unsupported binary content type: ${mediaType}`);
 }
 
-/** A single strong validator; wildcards could turn a Solid write into a blind overwrite. */
+/** A single strong validator; wildcards could turn a Solid mutation into a blind one. */
+export function isStrongEtag(etag: string | null | undefined): etag is string {
+  return typeof etag === "string" && /^"[\x21\x23-\x7e\x80-\xff]*"$/.test(etag);
+}
+
 export function strongEtag(
   etag: string | null | undefined,
   adapterId: string,
   url: string,
 ): string {
-  if (!etag || !/^"[\x21\x23-\x7E\x80-\xFF]*"$/.test(etag))
+  if (!isStrongEtag(etag))
     throw new IntegrationSyncError(adapterId, "Existing resource has no strong ETag.", { url });
   return etag;
 }

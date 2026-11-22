@@ -219,6 +219,60 @@ describe("owner-only destination verifier", () => {
     expect(requests().every((request) => !request.startsWith("PUT "))).toBe(true);
   });
 
+  it.each([
+    "planted ACL",
+    "concurrent share",
+    "owner-only",
+  ] as const)("checks the bank payload after writing with %s", async (policy) => {
+    const folder = `${container}finance/`;
+    const payload = `${folder}bank-transactions.ttl`;
+    const provenance = `${container}_provenance.ttl`;
+    const { pod, fetch, verify, requests } = fixture(async (url, init) => {
+      if (url === payload && init?.method === "PUT" && policy === "concurrent share")
+        await seedPublicRead(pod.fetch, folder, true);
+    });
+    if (policy === "planted ACL") await seedPublicRead(pod.fetch, payload, false);
+    const writer = createFetchPodWriter({
+      adapterId: "bank-statements",
+      webId: ownerWebId,
+      profileDocumentUrl: TEST_PROFILE_DOC,
+      podRoot: root,
+      fetch,
+      verifyPrivateDestination: verify,
+    });
+    // Isolate import mutations from the separate Type Index registration path.
+    const registerType = vi.fn(async () => ({ indexUrl: "" }));
+    const onState = vi.fn();
+    const importing = runFileImport({
+      adapter: bankStatementsFileAdapter,
+      file: memoryFile("bank.csv", "Date,Description,Amount,Currency\n2026-06-01,Shop,-5.25,GBP"),
+      podWriter: { ...writer, registerType },
+      onState,
+    });
+    const mutations = () => requests().filter((request) => /^(PUT|DELETE) /.test(request));
+    if (policy === "owner-only") {
+      await expect(importing).resolves.toMatchObject({ state: { lastOutcome: "success" } });
+      expect(mutations()).toEqual([
+        `PUT ${parent}`,
+        `PUT ${container}`,
+        `PUT ${folder}`,
+        `PUT ${payload}`,
+        `PUT ${provenance}`,
+      ]);
+    } else {
+      await expect(importing).rejects.toMatchObject({ name: "PrivateDestinationError" });
+      expect(registerType).not.toHaveBeenCalled();
+      expect(onState).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ lastOutcome: "error" }),
+      );
+      expect(mutations().slice(-2)).toEqual([`PUT ${payload}`, `DELETE ${payload}`]);
+      const deletion = fetch.mock.calls.find(([, init]) => init?.method === "DELETE");
+      expect(new Headers(deletion?.[1]?.headers).get("if-match")).toBe('"v1"');
+      expect((await pod.fetch(payload)).status).toBe(404);
+      expect(pod.get(provenance)).toBeUndefined();
+    }
+  });
+
   it("rejects an out-of-scope target before opening storage", async () => {
     const { openStorage, verify, requests } = fixture();
     await expect(verify(new URL("../bob/statement.ttl", root).href)).rejects.toThrow();

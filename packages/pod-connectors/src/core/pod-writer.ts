@@ -57,7 +57,7 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
     },
     async write(doc, conditions = {}) {
       const url = resolve(doc.slug);
-      await writeResource(url, doc.dataset, {
+      const { etag } = await writeResource(url, doc.dataset, {
         fetchImpl: podFetch,
         etag: conditions.ifMatch,
         createOnly: conditions.ifNoneMatch === "*",
@@ -65,12 +65,20 @@ export function createFetchPodWriter(options: FetchPodWriterOptions): PodWriter 
       });
       return {
         url,
+        ...(options.verifyPrivateDestination && etag !== null && { writeEtag: etag }),
         category: doc.category,
         forClass: doc.forClass,
         skipRegistration: doc.skipRegistration,
       };
     },
-    writeBinary: async (doc) => writeBinaryResource(adapterId, resolve(doc.slug), doc, podFetch),
+    writeBinary: async (doc) =>
+      writeBinaryResource(
+        adapterId,
+        resolve(doc.slug),
+        doc,
+        podFetch,
+        !!options.verifyPrivateDestination,
+      ),
     async remove(slug, conditions = {}) {
       const url = resolve(slug);
       const headers = new Headers();
@@ -95,6 +103,7 @@ async function writeBinaryResource(
   url: string,
   doc: BinaryDoc,
   podFetch: typeof fetch,
+  keepWriteEtag: boolean,
 ): Promise<WrittenBinary> {
   validateBinaryType(doc.contentType, adapterId);
   const headers = new Headers({ "content-type": doc.contentType });
@@ -120,7 +129,8 @@ async function writeBinaryResource(
   if (response.status === 412 && (doc.mode ?? "create") === "create")
     return { url, created: false };
   if (!response.ok) throw new ResourceWriteError(url, response.status);
-  return { url, created: true };
+  const etag = response.headers.get("etag");
+  return { url, created: true, ...(keepWriteEtag && etag !== null && { writeEtag: etag }) };
 }
 
 /** Distinct class/container registrations for written documents. */

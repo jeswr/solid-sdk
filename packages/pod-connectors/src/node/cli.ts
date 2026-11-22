@@ -394,8 +394,9 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
     if (privateImport) await requirePrivateDestination(command.id, podWriter, stateStore.url);
     let previous = await stateStore.read();
     const writeState = async (state: CliConnectorState) => {
-      if (privateImport) await requirePrivateDestination(command.id, podWriter, stateStore.url);
-      await stateStore.write(state);
+      const verify = () => requirePrivateDestination(command.id, podWriter, stateStore.url);
+      if (privateImport) await verify();
+      await stateStore.write(state, privateImport ? verify : undefined);
     };
     let sourceAuth = options.sourceAuth;
     if (command.id === "vesync" && !sourceAuth) {

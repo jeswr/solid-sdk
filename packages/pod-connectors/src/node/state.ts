@@ -1,11 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 
 import { assertWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
 import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { readJson } from "../core/budget.js";
+import { verifyPrivateWrite } from "../core/pod-writer-policy.js";
 import type { ConnectorState } from "../core/types.js";
 import { writeResource } from "../pod/resource.js";
 import {
@@ -145,7 +147,8 @@ export function createStateStore(options: {
         );
       }
     },
-    async write(state: CliConnectorState): Promise<void> {
+    async write(state: CliConnectorState, verifyDestination?: () => Promise<void>): Promise<void> {
+      let writeEtag: string | null;
       try {
         if (!loaded) throw new PermanentCauseError(); // Read state before writing.
         const headers = new Headers({ "content-type": "application/json" });
@@ -157,11 +160,16 @@ export function createStateStore(options: {
           body: JSON.stringify(connectorState(state)),
         });
         if (!response.ok) throw new StateHttpError(response.status);
+        writeEtag = response.headers.get("etag");
         // Force a fresh read (and ETag) before another write.
         loaded = false;
       } catch (error) {
         throw new StateStoreError("Cannot save connector state.", isTransientCause(error));
       }
+      if (verifyDestination)
+        await verifyPrivateWrite(verifyDestination, writeEtag, (ifMatch) =>
+          fetchSafe(url, { method: "DELETE", headers: { "if-match": ifMatch } }),
+        );
     },
   };
 }

@@ -41,6 +41,21 @@ async function setup() {
   return { pod, session };
 }
 describe("Connect uses the real package writer against the suite demo pod", () => {
+  it("imports a bank export into owner-only demo storage through the shared verifier", async () => {
+    const { session } = await setup();
+    const adapter = fileAdapterById("bank-statements");
+    if (!adapter) throw new Error("Missing bank statement adapter");
+    const report = await runFileImport({
+      adapter,
+      file: memoryFile("bank.csv", "Date,Description,Amount,Currency\n2026-06-01,Shop,-5,GBP"),
+      podWriter: createImportWriter(session, "bank-statements", new AbortController().signal),
+    });
+    expect(report.state?.lastOutcome).toBe("success");
+    expect(report.written.map(({ url }) => url)).toEqual([
+      `${session.storageUrl}integrations/bank-statements/finance/bank-transactions.ttl`,
+    ]);
+  });
+
   it.each([
     "public parent",
     "unavailable ACL",
