@@ -905,6 +905,18 @@ describe("signed mandate activation and revocation", () => {
     expect(loadedRecords(await readMandateCredentials(client))).toMatchObject([{ id: other.id }]);
     expect(await lastSignedMandate(client, session)).toBeUndefined();
   });
+  it("remembers no permissions when the agent has no published introduction", async () => {
+    const { client, session } = await fixture(true, false);
+    const signed = mandate();
+    await client.create(
+      signed.id,
+      await mandateToTurtle(await signedCredential(signed)),
+      "application/trig",
+    );
+    expect(await readAgentIdentity(client)).toBeUndefined();
+    expect(loadedRecords(await readMandateCredentials(client))).toMatchObject([{ id: signed.id }]);
+    expect(await lastSignedMandate(client, session)).toBeUndefined();
+  });
   it("signs the editor's currency so the executor can count its spend limits", async () => {
     const { client, session } = await fixture();
     const agent = await readAgentIdentity(client);
