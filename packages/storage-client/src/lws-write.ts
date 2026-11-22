@@ -3,7 +3,11 @@
 import type { Quad, Term } from "@jeswr/fetch-rdf";
 import { escapeIri } from "@jeswr/rdf-serialize";
 import { DataFactory, Store } from "n3";
-import { isAuxiliaryResource } from "./auxiliary.js";
+import {
+  hasLwsAuxiliaryResourceEvidence,
+  isUnsafeLwsCreatePath,
+  normalizePercentEncoding,
+} from "./auxiliary.js";
 import { StorageError, storageErrorFrom } from "./errors.js";
 import { discard, mediaTypeOf, readResultFrom, scoped, send } from "./http.js";
 import { paginate, throwIfAborted } from "./internal.js";
@@ -365,11 +369,17 @@ export function lwsWrites(
         opts.keepalive,
       );
       const location = response.headers.get("location");
+      const parentIdentity = normalizePercentEncoding(parent);
       let dest: string;
       try {
         if (location === null || location.trim() === "") throw new TypeError("Missing Location");
         dest = target("POST", new URL(location, parent).href);
-        if (dest === parent || dest === root || isAuxiliaryResource(dest))
+        const destIdentity = normalizePercentEncoding(dest);
+        if (
+          destIdentity === parentIdentity ||
+          destIdentity === normalizePercentEncoding(root) ||
+          isUnsafeLwsCreatePath(dest)
+        )
           throw new TypeError("Location is not a new data resource");
       } catch {
         discard(response.body);
@@ -380,7 +390,7 @@ export function lwsWrites(
       const unverified = () => invalid("POST", parent, "Could not verify created Location");
       const advertised = inspect("POST", parent, response);
       if (
-        isAuxiliaryResource(dest, {
+        hasLwsAuxiliaryResourceEvidence(dest, {
           url: parent,
           links: advertised,
           metadataUrl: null,
@@ -399,12 +409,13 @@ export function lwsWrites(
       const typeLinks = head.links.get("type") ?? [];
       const types = new Set(typeLinks.map((link) => link.target));
       if (
-        head.parent !== parent ||
+        head.parent === null ||
+        normalizePercentEncoding(scoped(root, "HEAD", head.parent)) !== parentIdentity ||
         head.links.get("up")?.length !== 1 ||
         head.kind !== kind ||
         !types.has(`${LWS}${kind === "container" ? "Container" : "DataResource"}`) ||
         types.has(`${LWS}${kind === "container" ? "DataResource" : "Container"}`) ||
-        isAuxiliaryResource(dest, head)
+        hasLwsAuxiliaryResourceEvidence(dest, head)
       )
         throw unverified();
       const own = response.headers.get("etag");

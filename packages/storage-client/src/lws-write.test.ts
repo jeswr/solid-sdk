@@ -1777,8 +1777,72 @@ test("PUT never infers a container kind from a non-root identifier's trailing sl
 });
 
 describe("verifying server-assigned LWS destinations", () => {
+  test("verifies a parent with equivalent URL escapes and retains the assigned Unicode identifier", async () => {
+    const parent = `${ROOT}caf%C3%A9/`;
+    const dest = `${ROOT}%20cafe%cc%81%3A100%25%20`;
+    const { storage, calls } = backend({
+      [`POST ${parent}`]: reply(201, { location: dest, etag: tag }),
+      [`HEAD ${dest}`]: reply(200, { link: childLinks(`${ROOT}%63af%c3%a9/`) }),
+    });
+    expect(
+      await storage.create(parent, "body", { name: " café:100% ", contentType: "text/plain" }),
+    ).toEqual({ url: dest, etag: tag, created: true, etagSource: "response" });
+    expect(calls.map(({ method, url }) => [method, url])).toEqual([
+      ["POST", parent],
+      ["HEAD", dest],
+    ]);
+  });
+
+  test("verifies a child of the slashless storage root alias", async () => {
+    const root = `${ROOT}storage/`;
+    const dest = `${root}%61ssigned`;
+    const { fetch } = backend({
+      [`POST ${root}`]: reply(201, { location: dest }),
+      [`HEAD ${dest}`]: reply(200, { link: childLinks(root.slice(0, -1)) }),
+    });
+    const storage = createLwsBackend({ root, fetch });
+    await expect(storage.create(root, "", { contentType: "text/plain" })).resolves.toMatchObject({
+      url: dest,
+      created: true,
+    });
+  });
+
+  test("does not equate distinct parents whose URLs differ in Unicode normalization", async () => {
+    const parent = `${ROOT}caf%C3%A9/`;
+    const dest = `${ROOT}assigned`;
+    const { storage } = backend({
+      [`POST ${parent}`]: reply(201, { location: dest }),
+      [`HEAD ${dest}`]: reply(200, { link: childLinks(`${ROOT}cafe%CC%81/`) }),
+    });
+    await expect(storage.create(parent, "", { contentType: "text/plain" })).rejects.toMatchObject({
+      code: "invalid-response",
+      message: "Could not verify created Location",
+    });
+  });
+
+  test.each([
+    "%6eotes/",
+    "policy%2Eacl",
+    "policy.acr%20",
+    "policy.acl%00%20",
+    "policy%252eacl",
+    "ambiguous%25%32%66child",
+    "%20",
+    "nested/%20.%20/child",
+  ])("rejects a potentially unsafe Location spelling before HEAD: %s", async (path) => {
+    const { storage, calls } = backend({
+      [`POST ${NOTES}`]: reply(201, { location: `${ROOT}${path}` }),
+    });
+    await expect(storage.create(NOTES, "", { contentType: "text/plain" })).rejects.toMatchObject({
+      code: "invalid-response",
+      message: "Invalid Location",
+    });
+    expect(calls.map(({ method }) => method)).toEqual(["POST"]);
+  });
+
   test.each([
     ["sibling collection", childLinks(`${ROOT}sibling/`)],
+    ["parent with a fragment", childLinks(`${NOTES}#`)],
     ["missing parent", '<https://www.w3.org/ns/lws#DataResource>; rel="type"'],
     ["ambiguous parents", `${childLinks()}, <${ROOT}>; rel="up"`],
     ["wrong kind", childLinks(NOTES, "Container")],
@@ -1803,13 +1867,17 @@ describe("verifying server-assigned LWS destinations", () => {
     expect(calls[1]?.init?.cache).toBe("no-cache");
   });
 
-  test("rejects a Location advertised as auxiliary before fetching it", async () => {
-    const dest = `${ROOT}opaque-resource`;
+  test.each([
+    ["opaque-resource", "opaque-resource"],
+    ["%20opaque-resource%20", "opaque-resource"],
+    ["opaque-resource%25", "opaque-resource%"],
+  ])("rejects Location %s advertised as auxiliary before fetching it", async (location, auxiliary) => {
+    const dest = ROOT + location;
     const { storage, calls } = backend({
       [`POST ${NOTES}`]: reply(201, {
         location: dest,
         etag: tag,
-        link: `<${dest}>; rel="linkset"`,
+        link: `<${ROOT + auxiliary}>; rel="linkset"`,
       }),
     });
     await expect(storage.create(NOTES, "", { contentType: "text/plain" })).rejects.toMatchObject({
