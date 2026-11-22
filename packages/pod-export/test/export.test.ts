@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { strFromU8, Unzip, UnzipPassThrough, unzipSync } from "fflate";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -325,6 +326,18 @@ describe("ZIP", () => {
     expect(files["pod/bad"]).toBeUndefined();
     expect(strFromU8(files["pod/good"] as Uint8Array)).toBe("hello");
     expect(manifest.entries[0]).toMatchObject({ bytes: 0, error: { status } });
+  });
+  it("reports a partial GET as failed even when its range matches Content-Length", async () => {
+    const { files, manifest } = await archive(
+      async () =>
+        new Response("short", {
+          status: 206,
+          headers: { "content-range": "bytes 0-4/10", "content-length": "5" },
+        }),
+      plan(["file"]),
+    );
+    expect(files["pod/file"]).toBeUndefined();
+    expect(manifest.entries[0]).toMatchObject({ bytes: 0, error: { status: 206 } });
   });
   it("retains planning errors, handles GET transport errors and null bodies", async () => {
     const planned = plan(["a", "b", "c"]);

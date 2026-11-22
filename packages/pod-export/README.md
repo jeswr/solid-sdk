@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # @jeswr/pod-export
 
 Read-only Solid pod Takeout with bounded breadth-first discovery and streaming ZIP output.
@@ -55,7 +56,8 @@ The archive has `export-manifest.json` at its root, with `exportedAt`, `root`, a
 containing `url`, `path`, `contentType`, `bytes`, `kind` and optional `{ message, status? }`
 `error`. Containers are empty folders beneath `pod/`; their byte count is zero. RDF GETs
 request `text/turtle` and preserve exactly the served body; binary bytes are unchanged.
-The manifest records actual response types/bytes. Failed HTTP reads have no ZIP member.
+The manifest records actual response types/bytes. A member GET requires HTTP 200 or 204.
+Failed HTTP reads, including 206 range responses, have no ZIP member.
 A body failure after streaming began leaves a partial member, explicitly marked with its
 error, `partial: true`, actual byte count and `.partial` suffix. Clean EOF shorter than an
 unencoded Content-Length is also partial. Members start with provisional `.partial` headers.

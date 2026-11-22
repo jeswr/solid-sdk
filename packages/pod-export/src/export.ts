@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { pathAllocator } from "./paths.js";
 import { planExport } from "./plan.js";
 import {
@@ -142,7 +143,7 @@ export async function exportPod(options: ExportPodOptions): Promise<ExportManife
           entry.error = exportError(error);
         }
         if (response) {
-          if (!response.ok) {
+          if (response.status !== 200 && response.status !== 204) {
             cancel(response);
             if (item.auxiliaryFor && (response.status === 404 || response.status === 410)) {
               manifest.entries.pop();
