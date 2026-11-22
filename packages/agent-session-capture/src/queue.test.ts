@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_BYTES, queueDirectory } from "./io.js";
 import { digest, parseClaudeTranscript } from "./parsers.js";
 import { enqueue, type QueueEntry, replay, sequenceConversation } from "./queue.js";
+import { redactConversation } from "./redact.js";
 
 let home: string;
 let directory: string;
@@ -51,6 +52,27 @@ afterEach(async () => {
 });
 
 describe("offline queue", () => {
+  it.each([
+    "enqueue",
+    "legacy",
+  ])("redacts full %s snapshots before one-message replay saves", async (path) => {
+    entry.conversation.title = "AKIA0000";
+    entry.conversation.messages = [
+      { id: "a".repeat(64), role: "user", text: "000000000000 Safe ghp_fixture", createdAt: stamp },
+      { id: "b".repeat(64), role: "assistant", text: "Token123", createdAt: stamp },
+    ];
+    if (path === "enqueue") {
+      const name = await enqueue(directory, entry, signal());
+      const text = await fs.readFile(join(directory, name as string), "utf8");
+      expect(text).not.toMatch(/AKIA0000|000000000000|ghp_fixture|Token123/);
+    } else await store(entry);
+    const save = vi.fn().mockResolvedValue({});
+    await replay(directory, target, save, signal());
+    expect(save.mock.calls.map(([chat]) => [chat.title, chat.messages[0].text])).toEqual([
+      ["[REDACTED]", "[REDACTED] Safe [REDACTED TOKEN]"],
+      ["[REDACTED]", "[REDACTED]"],
+    ]);
+  });
   it("persists private sequence assignments before snapshots and reuses them across trimming", async () => {
     const chat = entry.conversation;
     chat.messages.push({ id: "b".repeat(64), role: "assistant", text: "Next", createdAt: stamp });
@@ -120,7 +142,11 @@ describe("offline queue", () => {
     (entry.conversation.messages[0] as { text: string }).text = "sk-fixture-body";
     await enqueue(directory, entry, signal());
     await enqueue(directory, entry, signal());
-    expect(await files()).toEqual([`${digest(entry)}.json`]);
+    const redacted = { ...entry, conversation: redactConversation(entry.conversation) };
+    expect(await files()).toEqual([`${digest(redacted)}.json`]);
+    expect(await fs.readFile(join(directory, (await files())[0] as string), "utf8")).not.toContain(
+      "sk-fixture",
+    );
     expect((await fs.stat(join(directory, (await files())[0] as string))).mode & 0o7777).toBe(
       0o600,
     );

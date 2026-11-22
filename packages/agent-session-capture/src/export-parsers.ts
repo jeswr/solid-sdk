@@ -6,7 +6,7 @@ import {
 } from "@jeswr/solid-chat-interop";
 import { MAX_BYTES } from "./io.js";
 import { type AccountOptions, conversationAccount, digest, record } from "./parsers.js";
-import { redactSecrets } from "./redact.js";
+import { redactConversation } from "./redact.js";
 
 const MAX_CONVERSATIONS = 10000;
 const MAX_MESSAGES = 100000;
@@ -30,8 +30,8 @@ function string(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-function parts(values: unknown): string {
-  if (!Array.isArray(values)) return "";
+function parts(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
   if (values.length > MAX_PARTS) throw new Error("Export content exceeds limit");
   return values
     .map((value) => {
@@ -41,9 +41,7 @@ function parts(values: unknown): string {
         ? block.text
         : "";
     })
-    .filter(Boolean)
-    .join("\n")
-    .trim();
+    .filter(Boolean);
 }
 
 function parse(
@@ -70,6 +68,7 @@ function parse(
     const scoped = conversationAccount(digest([`${provider}-export`, sourceId]), account);
     const { conversationId } = scoped;
     const messages: ChatMessage[] = [];
+    const contents = new Map<string, string[]>();
     const seen = new Set<string>();
     const entries =
       provider === "chatgpt"
@@ -84,7 +83,7 @@ function parse(
       const role = provider === "chatgpt" ? record(message.author).role : message.sender;
       if (role !== "user" && role !== "human" && role !== "assistant") continue;
       if (message.channel === "analysis" || message.channel === "reasoning") continue;
-      let text: string;
+      let chunks: string[];
       let stamp: string | undefined;
       if (provider === "chatgpt") {
         if (message.recipient !== undefined && message.recipient !== "all") continue;
@@ -95,37 +94,41 @@ function parse(
           content.content_type !== "multimodal_text"
         )
           continue;
-        text = parts(content.parts);
+        chunks = parts(content.parts);
         stamp = seconds(message.create_time);
       } else {
         if (Array.isArray(message.content) && message.content.length > MAX_PARTS)
           throw new Error("Export content exceeds limit");
-        text =
+        chunks =
           Array.isArray(message.content) && message.content.length > 0
             ? parts(message.content.filter((block) => record(block).type === "text"))
-            : (string(message.text) ?? "");
+            : [string(message.text) ?? ""];
         stamp = iso(message.created_at);
       }
+      const text = chunks.join("\n").trim();
       if (!text) continue;
       const id = digest([conversationId, string(message.id) ?? string(message.uuid) ?? key]);
       if (seen.has(id)) continue;
       seen.add(id);
+      contents.set(id, chunks);
       messages.push({
         id,
         role: role === "assistant" ? "assistant" : "user",
-        text: redactSecrets(text),
+        text,
         createdAt: stamp ?? created ?? EPOCH,
       });
     }
     messages.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
-    if (messages.length > 0)
-      result.push({
-        provider,
-        ...scoped,
-        channel: "export",
-        title: redactSecrets(title.trim()),
-        messages,
-      });
+    if (messages.length > 0) {
+      // Keep source parts until all adjacent boundaries (including message/batch joins)
+      // have been checked. Redacting each part early can hide a token's prefix.
+      result.push(
+        redactConversation(
+          { provider, ...scoped, channel: "export", title: title.trim(), messages },
+          { chunks: messages.map((message) => contents.get(message.id as string) as string[]) },
+        ),
+      );
+    }
   }
   return result;
 }

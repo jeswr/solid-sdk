@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { CHAT_CHANNELS, CHAT_PROVIDERS, CHAT_ROLES, type ChatConversation } from "./chat-writer.js";
 import { sanitizeText } from "./iri.js";
-import { redactSecrets } from "./redact.js";
+import { redactConversation, redactSecrets } from "./redact.js";
 
 /** A fence one backtick longer than any backtick run in `text`, so content cannot close it. */
 function fence(text: string): string {
@@ -35,8 +35,8 @@ export function renderTranscript(conversation: ChatConversation): string {
     conversation.messages.some((m) => !CHAT_ROLES.includes(m.role))
   )
     throw new TypeError("Invalid chat conversation");
-  // Sanitize before redacting, so a control character cannot split a credential.
-  const title = line(redactSecrets(sanitizeText(conversation.title))) || "Untitled conversation";
+  conversation = redactConversation(conversation);
+  const title = line(conversation.title) || "Untitled conversation";
   const parts = [
     `# ${title}`,
     "",
@@ -47,7 +47,7 @@ export function renderTranscript(conversation: ChatConversation): string {
   if (conversation.channel !== undefined)
     parts.push("", `Channel: ${line(sanitizeText(conversation.channel))}`);
   for (const message of conversation.messages) {
-    const text = redactSecrets(sanitizeText(message.text)).replace(/\r\n?/g, "\n");
+    const text = message.text.replace(/\r\n?/g, "\n");
     const marks = fence(text);
     parts.push(
       "",
