@@ -1,14 +1,17 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2 Sol
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { spawn } from "child_process";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { once } from "events";
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
   // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 } from "fs";
@@ -39,6 +42,73 @@ function fixture() {
   writeFileSync(index, "[]");
   return { root, traces, manifest, index };
 }
+
+it("waits for the corpus lock before generating trace files or replacing the index", async () => {
+  const { root, traces, manifest, index } = fixture();
+  mkdirSync(join(root, "scripts"));
+  mkdirSync(join(root, "dist/reference"), { recursive: true });
+  for (const file of ["generate-traces.mjs", "write-scenario-traces.mjs"]) {
+    copyFileSync(new URL(`../scripts/${file}`, import.meta.url), join(root, "scripts", file));
+  }
+  symlinkSync(join(import.meta.dirname, "../dist/trace"), join(root, "dist/trace"), "dir");
+  writeFileSync(
+    join(root, "dist/reference/generate.js"),
+    `export function generateTraces() {
+      return new Map([["test--baseline", {
+        schema: "agent-trace/0.1",
+        scenario: { id: "test" },
+        configuration: { id: "baseline" },
+        events: [],
+      }]]);
+    }`,
+  );
+  const script = `
+    import fs from "fs";
+    import { syncBuiltinESMExports } from "module";
+    import { pathToFileURL } from "url";
+    const [generator, lock, ready] = process.argv.slice(1);
+    const open = fs.openSync;
+    fs.openSync = (path, ...args) => {
+      try {
+        return open(path, ...args);
+      } catch (error) {
+        if (path === lock && error.code === "EEXIST") fs.writeFileSync(ready, "");
+        throw error;
+      }
+    };
+    syncBuiltinESMExports();
+    await import(pathToFileURL(generator).href);
+  `;
+  const generator = join(root, "scripts/generate-traces.mjs");
+  const lock = `${manifest}.lock`;
+  const ready = join(root, "generator.ready");
+  const trace = join(traces, "test--baseline.json");
+  writeFileSync(lock, "previous writer", { flag: "wx" });
+  const child = spawn(
+    process.execPath,
+    ["--input-type=module", "--eval", script, generator, lock, ready],
+    { stdio: ["ignore", "ignore", "inherit"] },
+  );
+  const done = once(child, "close");
+  try {
+    await vi.waitFor(() => expect(existsSync(ready)).toBe(true), { timeout: 5_000 });
+    expect(existsSync(trace)).toBe(false);
+    expect(read(index)).toEqual([]);
+  } finally {
+    rmSync(lock);
+    expect(await done).toEqual([0, null]);
+  }
+  expect(read(trace).scenario).toEqual({ id: scenario });
+  expect(read(index)).toEqual([
+    {
+      file: "test--baseline.json",
+      scenario: { id: scenario },
+      configuration: "baseline",
+      events: 0,
+    },
+  ]);
+  expect(existsSync(lock)).toBe(false);
+});
 
 it("merges rows and index entries from overlapping writers for different configurations", async () => {
   const { root, manifest, index } = fixture();

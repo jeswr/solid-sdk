@@ -387,6 +387,69 @@ test("bundler refuses a trace file missing from the run index", async (t) => {
   );
 });
 
+test("bundler refuses indexed trace symlinks before replacing output", async (t) => {
+  const dir = bundleFixture(t);
+  const file = "sample--baseline.json";
+  writeTraceIndex(dir, [file]);
+  const outside = join(dir, "outside.json");
+  writeFileSync(
+    outside,
+    JSON.stringify({
+      schema: "agent-trace/0.1",
+      scenario: { id: "sample" },
+      configuration: { id: "baseline" },
+      events: [],
+    }),
+  );
+  symlinkSync(outside, join(dir, "traces", file));
+  const output = join(dir, "data/bundle.js");
+  writeFileSync(output, "previous valid bundle");
+  await assert.rejects(
+    promisify(execFile)(process.execPath, [join(dir, "scripts/bundle-data.mjs")]),
+    /sample--baseline\.json: expected a regular trace file/,
+  );
+  assert.equal(readFileSync(output, "utf8"), "previous valid bundle");
+});
+
+test("standalone runtime import refuses before changing the trace directory, manifest or bundle", (t) => {
+  const dir = bundleFixture(t);
+  const script = "scripts/import-traces.mjs";
+  copyFileSync(join(root, script), join(dir, script));
+  const source = join(dir, "source");
+  mkdirSync(source);
+  writeFileSync(
+    join(source, "aa-trace-sample--baseline.json"),
+    JSON.stringify({
+      schema: "agent-trace/0.1",
+      scenario: { id: "sample" },
+      configuration: { id: "baseline" },
+      events: [],
+    }),
+  );
+  const manifest = join(dir, "data/scenario-runs.json");
+  const before = readFileSync(manifest, "utf8");
+  const output = join(dir, "data/bundle.js");
+  writeFileSync(output, "previous valid bundle");
+  const log = join(dir, "import.log");
+  const stderr = openSync(log, "w");
+  try {
+    const child = spawnSync(process.execPath, [join(dir, script), source], {
+      stdio: ["ignore", "ignore", stderr],
+    });
+    assert.ifError(child.error);
+    assert.equal(child.status, 1);
+  } finally {
+    closeSync(stderr);
+  }
+  assert.match(
+    readFileSync(log, "utf8"),
+    /requires a scenario run manifest.*import-engine-runs\.py/,
+  );
+  assert.deepEqual(readdirSync(join(dir, "traces")), []);
+  assert.equal(readFileSync(manifest, "utf8"), before);
+  assert.equal(readFileSync(output, "utf8"), "previous valid bundle");
+});
+
 test("engine reimport removes blocked traces and wholly unreferenced tables", async (t) => {
   const dir = bundleFixture(t);
   const script = "scripts/import-engine-runs.py";

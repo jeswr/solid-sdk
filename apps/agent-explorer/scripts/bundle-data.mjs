@@ -127,7 +127,9 @@ for (const file of readdirSync(join(root, "traces"))
   .filter((f) => f.endsWith(".json"))
   .sort()) {
   if (!indexedFiles.has(file)) throw new Error(`${file}: trace file is not in the run index`);
-  const packed = readJson(join(root, "traces", file));
+  const source = join(root, "traces", file);
+  if (!lstatSync(source).isFile()) throw new Error(`${file}: expected a regular trace file`);
+  const packed = readJson(source);
   if (packed.schema !== "agent-trace/0.1") {
     console.warn(`skip ${file}: schema is ${packed.schema}, expected agent-trace/0.1`);
     continue;

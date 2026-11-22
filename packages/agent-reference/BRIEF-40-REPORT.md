@@ -1840,3 +1840,24 @@ typecheck, and Biome's error-level check. The selected engine suites passed 16
 tests and skipped nine committed-corpus comparisons. The in-memory mortgage-core
 reproducibility test failed on RDF ordering and reproduced in a temporary
 copy of unmodified HEAD. The committed corpus was left untouched.
+
+## Review 40r14 fixes
+
+<!-- AUTHORED-BY Codex GPT-6.2 Sol -->
+
+The explorer's `pnpm run import` command refuses standalone runtime traces
+before writing files. A recording does not carry the scenario result needed
+for a manifest row. The command and README direct users to the manifest-backed
+engine importer. The bundler checks each indexed trace with `lstat` before
+reading it and names any entry that fails the regular-file check.
+
+Reference trace generation uses the same exclusive `scenario-runs.json.lock`
+as scenario publication. It holds the lock through trace writes, linked table
+publication, and the trace index update. A regression holds that lock in a
+temporary fixture, verifies that the generator waits without writing, and
+checks the trace and index after release.
+
+On Node 24, all 65 explorer tests and 12 focused engine tests passed in
+temporary directories. The focused engine run excluded three comparisons
+against the committed recordings. The engine typecheck and the error-level
+Biome check on changed code passed.
