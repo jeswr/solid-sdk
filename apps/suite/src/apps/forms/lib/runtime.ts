@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@jeswr/fetch-rdf";
 import type { Store } from "n3";
 import type { PodSession } from "@/lib/session/pod-session";
@@ -8,6 +9,8 @@ import type { FormsStore } from "./data/store";
 // JSON-only demo double implement this contract without pretending to produce RDF.
 export interface FormModel {
   shape: string;
+  /** The validator belongs to this draft's source document and read. */
+  editVersion?: { shape: string; etag: string | null };
   targetClass?: string;
   label?: string;
   description?: string;

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   closestCenter,
@@ -31,6 +32,7 @@ import {
 } from "@jeswr/suite-ui";
 import { ArrowDown, ArrowUp, Copy, GripVertical, Trash2 } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
+import { DemoSnapshotConflictError } from "../lib/data/store";
 import {
   designerIssues,
   duplicateQuestion,
@@ -295,8 +297,9 @@ export function Designer({
   const currentDraft = useRef(initial);
   const [issues, setIssues] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(0);
+  const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
+  const [conflict, setConflict] = useState<DemoSnapshotConflictError>();
   const [announcement, announce] = useState("");
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -328,34 +331,64 @@ export function Designer({
             Back to forms
           </Button>
           <Button
+            disabled={saving}
             onClick={() => {
               const errors = designerIssues(draft);
               setIssues(errors);
               if (errors.length) return;
               const submitted = draft;
-              setSaving((value) => value + 1);
+              setSaving(true);
               void controller
                 .save(submitted)
                 .then(
                   (saved) => {
+                    setConflict(undefined);
                     if (currentDraft.current === submitted) {
                       currentDraft.current = saved;
                       setDraft(saved);
                       setDirty(false);
                       setStatus("Saved");
+                    } else {
+                      const { editVersion: _version, ...latestDraft } = currentDraft.current;
+                      const next = {
+                        ...latestDraft,
+                        shape: saved.shape,
+                        ...(saved.editVersion && { editVersion: saved.editVersion }),
+                      };
+                      currentDraft.current = next;
+                      setDraft(next);
                     }
                     onSaved(saved);
                     toast.success("Form saved");
                   },
-                  () => setStatus("Save failed · Your draft is still here"),
+                  (error: unknown) => {
+                    if (error instanceof DemoSnapshotConflictError) setConflict(error);
+                    else setStatus("Save failed · Your draft is still here");
+                  },
                 )
-                .finally(() => setSaving((value) => value - 1));
+                .finally(() => setSaving(false));
             }}
           >
-            Save form
+            {conflict?.latest ? "Save draft over latest version" : "Save form"}
           </Button>
         </div>
       </div>
+      {conflict && (
+        <div className="fm-card fm-stack">
+          <p role="alert">{conflict.message}</p>
+          {conflict.latest && (
+            <details>
+              <summary>Review the latest saved form</summary>
+              <AnswerForm
+                form={conflict.latest}
+                validate={controller.store.validate}
+                preview
+                disabled
+              />
+            </details>
+          )}
+        </div>
+      )}
       {issues.length > 0 && (
         <div role="alert" className="fm-validation">
           {issues.map((issue, index) => (

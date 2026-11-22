@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { sampleForms } from "../src/apps/forms/demo/sample";
 import { createMemoryFormsStore } from "../src/apps/forms/lib/data/memory-store";
+import { DemoSnapshotConflictError } from "../src/apps/forms/lib/data/store";
 import { FormsController } from "../src/apps/forms/state/controller";
 
 const root = "https://pod.example/";
@@ -23,21 +25,51 @@ describe("optimistic forms controller", () => {
   it("reconciles allocated form identifiers in queued saves", async () => {
     const backing = store();
     const canonical = "https://pod.example/forms/server-assigned#form";
+    const editVersion = { shape: canonical, etag: '"allocated"' };
     const save = vi
       .spyOn(backing, "saveForm")
-      .mockImplementation(async (draft) => ({ ...draft, shape: canonical }));
+      .mockImplementation(async (draft) => ({ ...draft, shape: canonical, editVersion }));
     const controller = new FormsController(backing, vi.fn());
     await controller.load();
     const a = controller.save({ ...form, label: "First" });
     const b = controller.save({ ...form, label: "Second" });
     await Promise.all([a, b]);
-    expect(save.mock.calls[1]?.[0].shape).toBe(canonical);
+    expect(save.mock.calls[1]?.[0]).toMatchObject({ shape: canonical, editVersion });
     expect(controller.getSnapshot().forms.filter((item) => item.shape === canonical)).toHaveLength(
       1,
     );
     expect(controller.getSnapshot().forms.find((item) => item.shape === canonical)?.label).toBe(
       "Second",
     );
+  });
+  it("keeps a queued edit's original validator after another edit succeeds", async () => {
+    const backing = store();
+    const original = { ...form, editVersion: { shape: form.shape, etag: '"first"' } };
+    const save = vi.spyOn(backing, "saveForm").mockResolvedValueOnce({
+      ...form,
+      editVersion: { shape: form.shape, etag: '"second"' },
+    });
+    const controller = new FormsController(backing, vi.fn());
+    await Promise.all([
+      controller.save(original),
+      controller.save({ ...original, label: "Draft" }),
+    ]);
+    expect(save).toHaveBeenLastCalledWith({ ...original, label: "Draft" });
+  });
+  it("rejects edits queued before a demo conflict and publishes the refreshed snapshot", async () => {
+    const fixture = sampleForms(root);
+    const latest = { ...form, label: "Other tab" };
+    const persist = vi.fn().mockResolvedValueOnce({ ...fixture, forms: [latest] });
+    const backing = createMemoryFormsStore(root, fixture, persist);
+    const controller = new FormsController(backing, vi.fn());
+    const first = controller.save({ ...form, label: "First draft" });
+    const queued = controller.save({ ...form, label: "Queued draft" });
+    await expect(first).rejects.toBeInstanceOf(DemoSnapshotConflictError);
+    await expect(queued).rejects.toMatchObject({ latest });
+    expect(controller.getSnapshot().forms).toEqual([latest]);
+    expect(persist).toHaveBeenCalledOnce();
+    await controller.save({ ...form, label: "Reviewed draft" });
+    expect(controller.getSnapshot().forms[0]?.label).toBe("Reviewed draft");
   });
   it("loads and notifies subscribers, then unsubscribes", async () => {
     const controller = new FormsController(store(), vi.fn());

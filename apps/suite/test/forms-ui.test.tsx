@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { StrictMode } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
@@ -11,10 +12,12 @@ import {
 } from "../../../packages/suite-ui/node_modules/@testing-library/react";
 import { AnswerForm } from "../src/apps/forms/components/answer-form";
 import { Designer } from "../src/apps/forms/components/designer";
+import { openDemoFormsStore } from "../src/apps/forms/lib/data/demo-store";
 import { createMemoryFormsStore } from "../src/apps/forms/lib/data/memory-store";
 import { newForm, newQuestion } from "../src/apps/forms/lib/designer";
 import { createFakeRuntime } from "../src/apps/forms/lib/fake-runtime";
 import { FormsProvider } from "../src/apps/forms/state/forms-context";
+import { createDemoPod } from "../src/lib/demo-pod/pod";
 import type { PodSession } from "../src/lib/session/pod-session";
 
 beforeAll(() => {
@@ -29,6 +32,69 @@ beforeAll(() => {
 });
 afterEach(cleanup);
 describe("descriptor-driven answer controls", () => {
+  it("keeps a blank choice line in the editor and omits it from the live select", () => {
+    const root = "https://pod.example/";
+    const session: PodSession = {
+      mode: "demo",
+      storageUrl: root,
+      webId: `${root}profile#me`,
+      displayName: "Demo",
+      fetch: vi.fn(),
+      subscribe: () => () => {},
+      reset: async () => {},
+    };
+    const initial = {
+      ...newForm(`${root}forms/choices#form`),
+      fields: [newQuestion("a", "choice")],
+    };
+    const store = createMemoryFormsStore(root, { version: 1, forms: [initial], responses: [] });
+    const save = vi.spyOn(store, "saveForm");
+    render(
+      <FormsProvider session={session} store={store} unavailable={null}>
+        <Designer initial={initial} onSaved={() => {}} onClose={() => {}} />
+      </FormsProvider>,
+    );
+    const choices = screen.getByLabelText("Choices (one per line)") as HTMLTextAreaElement;
+    fireEvent.change(choices, { target: { value: "Option 1\n" } });
+    expect(choices.value).toBe("Option 1\n");
+    expect(screen.getByRole("combobox", { name: "Untitled question" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save form" }));
+    expect(screen.getByRole("alert").textContent).toContain("add unique, non-empty choices");
+    expect(save).not.toHaveBeenCalled();
+  });
+  it("shows the latest demo form beside the preserved draft and lets the author reconcile", async () => {
+    const root = "https://pod.example/";
+    const pod = createDemoPod({ root });
+    const session: PodSession = {
+      mode: "demo",
+      storageUrl: root,
+      webId: `${root}profile#me`,
+      displayName: "Demo",
+      fetch: pod.fetch,
+      subscribe: () => () => {},
+      reset: async () => {},
+    };
+    const first = await openDemoFormsStore(session);
+    const second = await openDemoFormsStore(session);
+    const initial = (await second.listForms()).forms[0];
+    if (!initial) throw new Error("Missing demo form");
+    await first.saveForm({ ...initial, label: "Other tab's title" });
+    render(
+      <FormsProvider session={session} store={second} unavailable={null}>
+        <Designer initial={initial} onSaved={() => {}} onClose={() => {}} />
+      </FormsProvider>,
+    );
+    const title = screen.getByLabelText("Form title") as HTMLInputElement;
+    fireEvent.change(title, { target: { value: "My draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save form" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("changed in another tab");
+    expect(title.value).toBe("My draft");
+    expect(screen.getByText("Review the latest saved form")).toBeTruthy();
+    expect(screen.getByText("Other tab's title")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save draft over latest version" }));
+    await screen.findByText("Saved");
+    expect((await second.loadForm(initial.shape)).label).toBe("My draft");
+  });
   it("keeps appended questions last when an imported form has gaps in sh:order", async () => {
     const root = "https://pod.example/";
     const session: PodSession = {
@@ -183,10 +249,22 @@ describe("descriptor-driven answer controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save form" }));
     await waitFor(() => expect(store.saveForm).toHaveBeenCalledOnce());
     fireEvent.change(screen.getByLabelText("Form title"), { target: { value: "Still editing" } });
-    resolve(initial);
+    const canonical = `${root}forms/allocated#form`;
+    const editVersion = { shape: canonical, etag: '"saved"' };
+    resolve({ ...initial, shape: canonical, editVersion } as typeof initial);
     await waitFor(() => expect(saved).toHaveBeenCalledOnce());
     expect((screen.getByLabelText("Form title") as HTMLInputElement).value).toBe("Still editing");
     expect(screen.getByText("Unsaved changes")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save form" }));
+    await waitFor(() =>
+      expect(store.saveForm).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          shape: canonical,
+          label: "Still editing",
+          editVersion,
+        }),
+      ),
+    );
   });
   it("associates labels, exposes validation and keeps zero as an answer", () => {
     const form = {

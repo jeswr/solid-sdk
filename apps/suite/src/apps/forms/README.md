@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Forms from SHACL
 
 Forms replaces the `/forms` placeholder with a designer, live preview, fill route
@@ -19,19 +20,22 @@ The initial response class is `https://schema.org/Answer`. Built-in datatypes us
 The runtime is injected into `createPodFormsStore` as a `FormRuntime` object.
 It alone compiles shapes, validates answers, builds and parses responses, and
 serialises RDF. The store accepts a prepared `StorageClient`, author forms and
-respondent responses containers, plus an explicit shapes reader. It uses
+respondent responses containers, the respondent's WebID and an explicit shapes reader. It uses
 `storage.listAll` for pagination and `storage.readRdf` for response reads, preserves
-server-assigned identifiers, and uses conditional writes. Form URLs use `#form`
+verified server-assigned identifiers, and uses conditional writes. Existing form edits require a
+resource in the forms container and the ETag from the draft's source read. Access-control and
+auxiliary resources are excluded. Form URLs use `#form`
 and responses use `#response`. Solid creates full documents with named conditional
 creates (`If-None-Match: *`). LWS reserves empty documents so server-assigned identifiers
-are known; reservations are recorded immediately and reused on failure. Interrupted
+are known. A zero-byte cap and a ten-second deadline bound the reservation read. Reservations are
+recorded immediately and reused on failure. Interrupted
 LWS allocations can leave empty documents; no unconditional cleanup is attempted.
-If a retained response create or conditional write conflicts after a lost reply,
-the store reads that same document once and compares its graph, including the
-response subject, with the runtime's intended graph. A match confirms the save;
-otherwise the fill view warns that the response may already be saved and keeps
-the answers available. A committed write without a usable validator also requires
-this confirmation before any retry can be treated as saved.
+After a lost Solid form-create reply, a collision on the retained URL is accepted only if readback
+confirms the intended graph. Before writing answers, the store checks the container policy and the
+actual response destination with the shared owner-only verifier. A refusal keeps the draft open.
+LWS response writes require owner-only verification support in the shared SDK. Every response
+readback compares the graph, including the response subject, with the intended graph. A mismatch
+keeps the answers available and warns that the response may already be saved.
 Listing skips unreadable or unadmitted resources, returns their URLs in `skipped`,
 and shows a quiet notice without hiding valid forms.
 Failed refreshes retain the confirmed forms and previous skipped list, with a
@@ -39,8 +43,8 @@ visible refresh notice and retry action; a successful refresh replaces both.
 
 Both the fill view and stores require absolute HTTPS form URLs without userinfo,
 at most 4096 characters; development also permits HTTP localhost/127.0.0.1.
-The pod adapter's `readShapes` callback is restricted to the user's storage origin
-and must refuse redirects. Foreign origins use the separately injected pristine
+The pod adapter's `readShapes` callback is restricted to the user's storage scope
+and must refuse redirects. Shapes outside that scope use the separately injected pristine
 `publicFetch` through `@jeswr/guarded-fetch` with credentials omitted and redirects
 refused. The fill view identifies the foreign hosting origin before any answers
 are entered, using the store's `isForeign` decision against `storage.root`.
@@ -58,7 +62,8 @@ received responses. `lib/data/demo-store.ts` seeds and conditionally updates
 `forms/demo.json` in the existing browser demo pod, using the in-memory store and
 JSON-only runtime double. This snapshot is a simulation, clearly labelled in the
 UI; it is not SHACL or a production response representation. Reopening restores
-saved changes. A competing tab causes a safe conflict, requiring reload. Seed
+saved changes. A competing tab reloads the snapshot in place. The designer keeps the draft open
+and offers the latest saved form for review before retrying. Seed
 creation retries competing 412 responses at most three times.
 
 The response flow is **respondent saves in their own pod under `forms/responses/`,

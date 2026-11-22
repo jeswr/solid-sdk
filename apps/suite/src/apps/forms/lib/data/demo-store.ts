@@ -1,8 +1,20 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import type { PodSession } from "@/lib/session/pod-session";
 import { sampleForms } from "../../demo/sample";
 import { createMemoryFormsStore } from "./memory-store";
 import type { DemoSnapshot, FormsStore } from "./store";
+
+async function readSnapshot(response: Response): Promise<DemoSnapshot> {
+  const snapshot = (await response.json()) as DemoSnapshot;
+  if (
+    snapshot.version !== 1 ||
+    !Array.isArray(snapshot.forms) ||
+    !Array.isArray(snapshot.responses)
+  )
+    throw new Error("Unsupported demo forms snapshot");
+  return snapshot;
+}
 
 /** Demo JSON stays in the demo pod, never a real user's storage. */
 export async function openDemoFormsStore(session: PodSession): Promise<FormsStore> {
@@ -22,6 +34,13 @@ async function openSnapshot(session: PodSession, retries: number): Promise<Forms
       headers: { "content-type": "application/json", "if-match": etag },
       body: JSON.stringify(snapshot),
     });
+    if (result.status === 412) {
+      const latest = await session.fetch(url, { redirect: "error", cache: "no-store" });
+      if (!latest.ok) throw new Error("Couldn't refresh demo forms. Try saving again.");
+      const refreshed = await readSnapshot(latest);
+      etag = latest.headers.get("etag");
+      return refreshed;
+    }
     if (!result.ok) throw new Error("Couldn't save demo forms. Reload before trying again.");
     etag = result.headers.get("etag");
   };
@@ -42,9 +61,7 @@ async function openSnapshot(session: PodSession, retries: number): Promise<Forms
     if (!created.ok) throw new Error("Couldn't seed demo forms");
     etag = created.headers.get("etag");
   } else {
-    initial = (await response.json()) as DemoSnapshot;
-    if (initial.version !== 1 || !Array.isArray(initial.forms) || !Array.isArray(initial.responses))
-      throw new Error("Unsupported demo forms snapshot");
+    initial = await readSnapshot(response);
   }
   return createMemoryFormsStore(session.storageUrl, initial, persist);
 }

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import type { FormsStore } from "../lib/data/store";
+// AUTHORED-BY Codex GPT-6
+import { DemoSnapshotConflictError, type FormsStore } from "../lib/data/store";
 import type { FormModel } from "../lib/runtime";
 
 export interface FormsState {
@@ -26,6 +27,7 @@ export class FormsController {
   private confirmed: FormModel[] = [];
   private edits: { token: object; form: FormModel }[] = [];
   private generation = 0;
+  private demoRefresh = 0;
   private savedDuringRead = new Map<string, FormModel>();
   constructor(
     readonly store: FormsStore,
@@ -70,10 +72,15 @@ export class FormsController {
   }
   save(form: FormModel): Promise<FormModel> {
     const edit = { token: {}, form: structuredClone(form) };
+    const demoRefresh = this.demoRefresh;
     this.edits.push(edit);
     this.publish({ failed: false, status: "ready" });
     const task = this.queue.then(async () => {
       try {
+        if (demoRefresh !== this.demoRefresh)
+          throw new DemoSnapshotConflictError(
+            this.confirmed.find((item) => item.shape === edit.form.shape),
+          );
         const saved = await this.store.saveForm(edit.form);
         this.savedDuringRead.set(form.shape, saved);
         this.confirmed = [
@@ -83,12 +90,26 @@ export class FormsController {
           saved,
         ];
         for (const waiting of this.edits) {
-          if (waiting !== edit && waiting.form.shape === form.shape)
-            waiting.form = { ...waiting.form, shape: saved.shape };
+          if (
+            waiting !== edit &&
+            waiting.form.shape === edit.form.shape &&
+            !waiting.form.editVersion &&
+            !edit.form.editVersion
+          ) {
+            waiting.form = {
+              ...waiting.form,
+              shape: saved.shape,
+              ...(saved.editVersion && { editVersion: saved.editVersion }),
+            };
+          }
         }
         this.publish({ failed: false });
         return saved;
       } catch (error) {
+        if (error instanceof DemoSnapshotConflictError && demoRefresh === this.demoRefresh) {
+          this.demoRefresh++;
+          await this.load();
+        }
         this.publish({ failed: true });
         this.reportError();
         throw error;

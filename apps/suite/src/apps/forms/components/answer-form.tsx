@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   Button,
@@ -28,6 +29,8 @@ function AnswerControl({
   id,
   invalid,
   describedBy,
+  disabled,
+  preview,
 }: {
   field: FieldDescriptor;
   value: FormValues[string] | undefined;
@@ -35,8 +38,10 @@ function AnswerControl({
   id: string;
   invalid: boolean;
   describedBy: string;
+  disabled: boolean;
+  preview: boolean;
 }) {
-  const common = { id, "aria-invalid": invalid, "aria-describedby": describedBy };
+  const common = { id, disabled, "aria-invalid": invalid, "aria-describedby": describedBy };
   if (
     field.kind === "node" ||
     (field.maxCount !== undefined && field.maxCount !== 1) ||
@@ -50,9 +55,10 @@ function AnswerControl({
             { value: "true", label: "Yes" },
             { value: "false", label: "No" },
           ]
-        : (field.options ?? []);
+        : (field.options ?? []).filter((option) => !preview || option.value.trim());
     return (
       <Select
+        disabled={disabled}
         value={value === undefined ? "" : String(value)}
         onValueChange={(next) => change(field.kind === "boolean" ? next === "true" : next)}
       >
@@ -102,11 +108,13 @@ export function AnswerForm({
   validate,
   onSubmit,
   preview = false,
+  disabled = false,
 }: {
   form: FormModel;
   validate: FormRuntime["validate"];
   onSubmit?: (values: FormValues) => void;
   preview?: boolean;
+  disabled?: boolean;
 }) {
   const prefix = useId();
   const [values, setValues] = useState<FormValues>({});
@@ -136,11 +144,14 @@ export function AnswerForm({
             </Label>
             <AnswerControl
               field={field}
+              disabled={disabled}
+              preview={preview}
               value={values[field.key]}
               id={id}
               invalid={issues.some((issue) => issue.severity === "violation")}
               describedBy={`${id}-help ${id}-issues`}
               change={(value) => {
+                if (disabled) return;
                 setValues((current) => ({ ...current, [field.key]: value }));
                 setResult((current) => {
                   if (!current) return current;
@@ -166,6 +177,7 @@ export function AnswerForm({
       className="fm-answer"
       onSubmit={(event) => {
         event.preventDefault();
+        if (disabled) return;
         const submitted = { ...values };
         // datetime-local omits seconds at minute precision; XSD dateTime needs them.
         for (const field of form.fields) {
@@ -198,7 +210,7 @@ export function AnswerForm({
           {renderFields(group.iri)}
         </fieldset>
       ))}
-      <Button type="submit" disabled={!form.fields.length || unsupported}>
+      <Button type="submit" disabled={disabled || !form.fields.length || unsupported}>
         {preview ? "Check preview answers" : "Save response to my pod"}
       </Button>
       {preview && <p className="fm-muted">Preview only · These answers won't be saved.</p>}

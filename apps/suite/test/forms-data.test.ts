@@ -1,8 +1,11 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
+import { checkOwnerOnly, createOwnerOnlyDestinationVerifier } from "@jeswr/pod-access";
 import { StorageError } from "@jeswr/storage-client";
+import { createLwsBackend } from "@jeswr/storage-client/lws";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { DataFactory, Store, Writer } from "n3";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sampleForms } from "../src/apps/forms/demo/sample";
 import { openDemoFormsStore } from "../src/apps/forms/lib/data/demo-store";
 import { createMemoryFormsStore } from "../src/apps/forms/lib/data/memory-store";
@@ -11,7 +14,14 @@ import type { FormRuntime } from "../src/apps/forms/lib/runtime";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import type { PodSession } from "../src/lib/session/pod-session";
 
+vi.mock("@jeswr/pod-access", () => ({
+  checkOwnerOnly: vi.fn(),
+  createOwnerOnlyDestinationVerifier: vi.fn(),
+}));
+
 const root = "https://pod.example/";
+const ownerWebId = `${root}profile#me`;
+
 const fixture = sampleForms(root);
 const first = fixture.forms[0];
 if (!first) throw new Error("Missing fixture");
@@ -119,17 +129,52 @@ describe("demo pod snapshots", () => {
     await expect(openDemoFormsStore(session(fetch))).rejects.toThrow("three retries");
     expect(fetch).toHaveBeenCalledTimes(8);
   });
-  it("refuses unversioned writes and retains the previous snapshot after conflict", async () => {
+  it("refuses unversioned writes", async () => {
     const missing = await openDemoFormsStore(
       session(vi.fn().mockResolvedValue(Response.json(fixture))),
     );
     await expect(missing.saveForm(form)).rejects.toThrow("version");
+  });
+  it("refreshes after a conflict and preserves another tab's forms and responses on retry", async () => {
+    const pod = createDemoPod({ root });
+    const current = session(pod.fetch);
+    const a = await openDemoFormsStore(current);
+    const b = await openDemoFormsStore(current);
+    const draft = { ...form, label: "My draft" };
+    await a.saveForm({ ...form, label: "Other tab" });
+    await a.submit(form, values);
+    const first = b.saveForm(draft);
+    const queued = b.saveForm({ ...draft, label: "Queued before refresh" });
+    await expect(first).rejects.toMatchObject({
+      latest: expect.objectContaining({ label: "Other tab" }),
+    });
+    await expect(queued).rejects.toThrow("changed in another tab");
+    expect((await b.loadForm(form.shape)).label).toBe("Other tab");
+    expect(await b.listResponses(form)).toHaveLength(3);
+    expect(draft.label).toBe("My draft");
+    await b.saveForm(draft);
+    const reopened = await openDemoFormsStore(current);
+    expect((await reopened.loadForm(form.shape)).label).toBe("My draft");
+    expect(await reopened.listResponses(form)).toHaveLength(3);
+  });
+  it("keeps the prior snapshot when conflict refresh fails", async () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(Response.json(fixture, { headers: { etag: '"1"' } }))
-      .mockResolvedValueOnce(new Response(null, { status: 412 }));
+      .mockResolvedValueOnce(new Response(null, { status: 412 }))
+      .mockResolvedValueOnce(new Response(null, { status: 503 }));
     const store = await openDemoFormsStore(session(fetch));
-    await expect(store.saveForm({ ...form, label: "Conflict" })).rejects.toThrow("Reload");
+    await expect(store.saveForm({ ...form, label: "Conflict" })).rejects.toThrow("refresh");
+    expect((await store.loadForm(form.shape)).label).toBe(form.label);
+  });
+  it("keeps the previous snapshot when a write fails without a conflict", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(fixture, { headers: { etag: '"1"' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 507 }));
+    const store = await openDemoFormsStore(session(fetch));
+    await expect(store.saveForm({ ...form, label: "Unsaved" })).rejects.toThrow("Reload");
+    expect(fetch).toHaveBeenCalledTimes(2);
     expect((await store.loadForm(form.shape)).label).toBe(form.label);
   });
 });
@@ -138,10 +183,17 @@ describe.each([
   "solid",
   "lws",
 ] as const)("runtime-backed pod adapter over %s storage", (protocol) => {
+  const verifyDestination = vi.fn<(url: string) => Promise<boolean>>();
+  beforeEach(() => {
+    vi.mocked(checkOwnerOnly).mockReset().mockResolvedValue({ private: true });
+    vi.mocked(createOwnerOnlyDestinationVerifier).mockReset().mockReturnValue(verifyDestination);
+    verifyDestination.mockReset().mockResolvedValue(true);
+  });
+
   // Runtime spies stand in for the parallel package. They do not implement RDF.
-  async function setup() {
-    const storage = createMemoryStorage({ root, protocol, pageSize: 1 });
-    const forms = await storage.create(root, null, { kind: "container", name: "forms" });
+  async function setup(storageRoot = root) {
+    const storage = createMemoryStorage({ root: storageRoot, protocol, pageSize: 1 });
+    const forms = await storage.create(storageRoot, null, { kind: "container", name: "forms" });
     const responses = await storage.create(forms.url, null, {
       kind: "container",
       name: "responses",
@@ -159,8 +211,10 @@ describe.each([
       storage.readRdf(shape.split("#")[0] ?? shape),
     );
     const publicFetch = vi.fn();
+    responseFixture(runtime);
     const store = createPodFormsStore({
       storage,
+      ownerWebId,
       formsContainer: forms.url,
       responsesContainer: responses.url,
       runtime,
@@ -195,9 +249,133 @@ describe.each([
     await expect(store.loadForm(`${root}missing#form`)).rejects.toThrow();
     expect(readShapes).toHaveBeenCalledExactlyOnceWith(`${root}missing#form`);
   });
+  it("reads shapes in a sibling pod on the same origin without credentials", async () => {
+    const { store, readShapes, publicFetch } = await setup("https://8.8.8.8/alice/");
+    const shape = "https://8.8.8.8/bob/forms/shared.ttl#form";
+    publicFetch.mockResolvedValueOnce(
+      new Response("", { headers: { "content-type": "text/turtle" } }),
+    );
+    expect(store.isForeign(shape)).toBe(true);
+    const loaded = await store.loadForm(shape);
+    expect(loaded.shape).toBe(shape);
+    expect(readShapes).not.toHaveBeenCalled();
+    expect(publicFetch).toHaveBeenCalledExactlyOnceWith(
+      "https://8.8.8.8/bob/forms/shared.ttl",
+      expect.objectContaining({ credentials: "omit", redirect: "manual" }),
+    );
+    await expect(store.saveForm(loaded)).rejects.toThrow("forms container");
+  });
+  it("rejects external, container and auxiliary edit targets even if they compile", async () => {
+    const { storage, store, forms, readShapes } = await setup();
+    const outside = await storage.create(root, "", { contentType: "text/turtle" });
+    const inside = await storage.create(forms.url, "", { contentType: "text/turtle" });
+    const write = vi.spyOn(storage, "write");
+    const head = storage.head.bind(storage);
+    const headSpy = vi.spyOn(storage, "head");
+    await expect(store.saveForm(await store.loadForm(`${outside.url}#form`))).rejects.toThrow(
+      "forms container",
+    );
+    readShapes.mockResolvedValueOnce(await storage.readRdf(inside.url));
+    await expect(store.saveForm(await store.loadForm(`${forms.url}#form`))).rejects.toThrow(
+      "forms container",
+    );
+    const auxiliary = `${forms.url.replace(/\/$/, "")}/rules.%61cr#form`;
+    const loaded = await store.loadForm(`${inside.url}#form`);
+    await expect(store.saveForm({ ...loaded, shape: auxiliary })).rejects.toThrow("Reload");
+    await expect(
+      store.saveForm({
+        ...loaded,
+        shape: auxiliary,
+        editVersion: { shape: auxiliary, etag: '"fake"' },
+      }),
+    ).rejects.toThrow("forms container");
+    headSpy.mockImplementationOnce(async (url, options) => ({
+      ...(await head(url, options)),
+      links: new Map([["describes", [{ target: outside.url, params: {} }]]]),
+    }));
+    await expect(store.saveForm(loaded)).rejects.toThrow("forms container");
+    expect(write).not.toHaveBeenCalled();
+  });
+  it("refuses a draft based on version A even after loading version B", async () => {
+    const { storage, store } = await setup();
+    const a = await store.saveForm(form);
+    const url = a.shape.split("#")[0] ?? "";
+    await storage.write(url, "", {
+      ifMatch: a.editVersion?.etag ?? "",
+      contentType: "text/turtle",
+    });
+    const b = await store.loadForm(a.shape);
+    expect(b.editVersion?.etag).not.toEqual(a.editVersion?.etag);
+    await expect(
+      store.saveForm(structuredClone({ ...a, label: "Stale draft" })),
+    ).rejects.toMatchObject({
+      code: "precondition-failed",
+    });
+    expect((await storage.readRdf(url)).etag).toBe(b.editVersion?.etag);
+    await expect(store.saveForm(b)).resolves.toMatchObject({ shape: b.shape });
+  });
+  it("writes nothing when the response container's owner-only privacy cannot be verified", async () => {
+    const { storage, store, responses, runtime } = await setup();
+    const create = vi.spyOn(storage, "create");
+    const write = vi.spyOn(storage, "write");
+    vi.mocked(checkOwnerOnly)
+      .mockResolvedValueOnce({ private: false, reasons: [] })
+      .mockRejectedValueOnce(new Error("policy unavailable"));
+    for (const _attempt of [1, 2])
+      await expect(store.submit(form, values)).rejects.toThrow("verify that only you");
+    expect(checkOwnerOnly).toHaveBeenCalledWith({ storage, url: responses.url, ownerWebId });
+    expect(create).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    expect(runtime.build).not.toHaveBeenCalled();
+  });
+  it("rechecks the actual response destination after a failed attempt", async () => {
+    const { storage, store, runtime, responses } = await setup();
+    const create = vi.spyOn(storage, "create");
+    const write = vi.spyOn(storage, "write");
+    vi.mocked(runtime.serialize).mockRejectedValueOnce(new Error("offline"));
+    await expect(store.submit(form, values)).rejects.toThrow("offline");
+    const subject = vi.mocked(runtime.build).mock.calls[0]?.[1];
+    const url = subject?.split("#")[0];
+    if (protocol === "solid") {
+      const destinationOptions = vi.mocked(createOwnerOnlyDestinationVerifier).mock.calls[0]?.[0];
+      expect(destinationOptions).toMatchObject({ podRoot: storage.root, ownerWebId });
+      expect(await destinationOptions?.openStorage()).toBe(storage);
+      verifyDestination.mockResolvedValueOnce(false);
+    } else {
+      vi.mocked(checkOwnerOnly).mockImplementation(async ({ url }) =>
+        url === responses.url ? { private: true } : { private: false, reasons: [] },
+      );
+    }
+    await expect(store.submit(form, values)).rejects.toThrow("verify that only you");
+    if (protocol === "solid") {
+      expect(verifyDestination.mock.calls).toEqual([[url], [url]]);
+      expect(create).not.toHaveBeenCalled();
+    } else {
+      expect(checkOwnerOnly).toHaveBeenLastCalledWith({ storage, url, ownerWebId });
+      expect(create).toHaveBeenCalledExactlyOnceWith(responses.url, null, {
+        contentType: "text/turtle",
+      });
+    }
+    expect(write).not.toHaveBeenCalled();
+    expect(runtime.build).toHaveBeenCalledOnce();
+  });
+  it("compares the graph on first-attempt response readback", async () => {
+    const { storage, store, runtime } = await setup();
+    const read = storage.readRdf.bind(storage);
+    vi.spyOn(storage, "readRdf").mockImplementationOnce(async (url) => {
+      const saved = await read(url);
+      const different = runtime.build(form, `${url}#response`, { ...values, q_name: "Changed" });
+      await storage.writeRdf(url, different, {
+        contentType: "text/turtle",
+        ifMatch: saved.etag ?? "",
+      });
+      return read(url);
+    });
+    await expect(store.submit(form, values)).rejects.toThrow("Your response may already be saved");
+    expect(runtime.parse).not.toHaveBeenCalled();
+  });
   it("adopts a committed response after a lost write reply and conditional conflict", async () => {
     const { storage, store, runtime, responses } = await setup();
-    responseFixture(runtime);
     const create = storage.create.bind(storage);
     const write = storage.write.bind(storage);
     const createSpy = vi.spyOn(storage, "create");
@@ -243,7 +421,6 @@ describe.each([
     "unreadable",
   ])("reports an uncertain save when the conflicted document has different %s", async (difference) => {
     const { storage, store, runtime } = await setup();
-    responseFixture(runtime);
     const create = storage.create.bind(storage);
     const write = storage.write.bind(storage);
     const createSpy = vi.spyOn(storage, "create");
@@ -286,7 +463,7 @@ describe.each([
     true,
   ])("confirms an unversioned committed response only with a non-empty graph (%s)", async (empty) => {
     const { storage, store, runtime } = await setup();
-    if (!empty) responseFixture(runtime);
+    if (empty) vi.mocked(runtime.build).mockReturnValue(new Store());
     const create = storage.create.bind(storage);
     const write = storage.write.bind(storage);
     const createSpy = vi.spyOn(storage, "create");
@@ -371,7 +548,7 @@ describe.each([
     expect(runtime.parse).toHaveBeenCalledWith(
       form,
       response.subject,
-      expect.objectContaining({ size: 0 }),
+      expect.objectContaining({ size: 1 }),
     );
   });
   it("skips empty, invalid and unreadable documents without hiding good forms", async () => {
@@ -386,7 +563,7 @@ describe.each([
       return { ...form, shape };
     });
     expect(await store.listForms()).toEqual({
-      forms: [{ ...form, shape: good.shape }],
+      forms: [good],
       skipped: expect.arrayContaining([empty.url, invalid.url]),
     });
     expect((await store.listForms()).skipped).toHaveLength(2);
@@ -460,13 +637,41 @@ describe.each([
     }));
     readShapes.mockRejectedValueOnce(new Error("Readback failed"));
     await expect(store.saveForm(saved)).rejects.toThrow("Readback failed");
-    await expect(store.saveForm(saved)).rejects.toThrow("Reload");
-    expect(mutation).toHaveBeenCalledOnce();
-    // Explicit reload obtains a content-bound ETag and makes editing safe again.
-    await store.loadForm(saved.shape);
-    await store.saveForm(saved);
+    await expect(store.saveForm(saved)).rejects.toMatchObject({ code: "precondition-failed" });
+    expect(mutation).toHaveBeenCalledTimes(2);
+    // Explicit reload returns a new model with a content-bound ETag.
+    await store.saveForm(await store.loadForm(saved.shape));
   });
   if (protocol === "solid") {
+    it("surfaces a named-create conflict without adopting a resource on a 409", async () => {
+      const { storage, store, readShapes, forms } = await setup();
+      vi.spyOn(storage, "create").mockRejectedValueOnce(
+        new StorageError("conflict", { method: "PUT", url: forms.url, status: 409 }),
+      );
+      await expect(store.saveForm(form)).rejects.toMatchObject({ code: "conflict", status: 409 });
+      expect(readShapes).not.toHaveBeenCalled();
+    });
+    it.each([
+      "matches",
+      "differs",
+      "empty",
+    ])("recovers a lost form-create reply only when its graph %s", async (graph) => {
+      const { storage, store, runtime } = await setup();
+      vi.mocked(runtime.formToShapes).mockImplementation((draft) =>
+        runtime.build(draft, draft.shape, { q_name: draft.label ?? "" }),
+      );
+      if (graph === "empty") vi.mocked(runtime.formToShapes).mockReturnValue(new Store());
+      const create = storage.create.bind(storage);
+      const spy = vi.spyOn(storage, "create").mockImplementationOnce(async (...args) => {
+        await create(...args);
+        throw new Error("lost reply");
+      });
+      await expect(store.saveForm(form)).rejects.toThrow("lost reply");
+      const retry = store.saveForm(graph === "differs" ? { ...form, label: "Different" } : form);
+      if (graph === "matches") await expect(retry).resolves.toHaveProperty("editVersion.etag");
+      else await expect(retry).rejects.toThrow("couldn't be confirmed");
+      expect(spy.mock.calls[0]?.[2]?.name).toBe(spy.mock.calls[1]?.[2]?.name);
+    });
     it("refuses an unexpected named-create address", async () => {
       const { storage, store } = await setup();
       const create = storage.create.bind(storage);
@@ -499,7 +704,106 @@ describe.each([
       ...(await storage.readRdf(url)),
       etag: null,
     }));
-    await store.loadForm(saved.shape);
-    await expect(store.saveForm(saved)).rejects.toThrow("Reload");
+    const unversioned = await store.loadForm(saved.shape);
+    await expect(store.saveForm(unversioned)).rejects.toThrow("Reload");
+    await expect(
+      store.saveForm({
+        ...saved,
+        editVersion: { shape: saved.shape, etag: "*" },
+      }),
+    ).rejects.toThrow("Reload");
+  });
+});
+
+describe("Forms with an HTTP LWS storage backend", () => {
+  const formsContainer = `${root}forms`;
+  const responsesContainer = `${root}responses`;
+  const url = `${root}opaque-resource`;
+  const resourceType = '<https://www.w3.org/ns/lws#DataResource>; rel="type"';
+
+  function setup(link: string, body?: ReadableStream<Uint8Array>) {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (_input, init) => {
+      switch (init?.method) {
+        case "POST":
+          return new Response(null, { status: 201, headers: { location: url } });
+        case "HEAD":
+          return new Response(null, { headers: { link, etag: '"reserved"' } });
+        case "GET":
+          return new Response(body, { headers: { link, etag: '"reserved"' } });
+        default:
+          throw new Error("Unexpected request");
+      }
+    });
+    const storage = createLwsBackend({ root, fetch });
+    const runtime: FormRuntime = {
+      compileForm: vi.fn(),
+      validate: vi.fn(() => ({ valid: true, issues: [] })),
+      formToShapes: vi.fn(() => new Store()),
+      build: vi.fn(),
+      serialize: vi.fn(async () => ""),
+      parse: vi.fn(),
+    };
+    const store = createPodFormsStore({
+      storage,
+      ownerWebId,
+      formsContainer,
+      responsesContainer,
+      runtime,
+      readShapes: vi.fn(),
+      publicFetch: vi.fn(),
+    });
+    return { store, fetch, runtime };
+  }
+  it("refuses a server-assigned location whose logical parent is another container", async () => {
+    vi.mocked(checkOwnerOnly).mockReset().mockResolvedValue({ private: true });
+    const { store, fetch, runtime } = setup(`${resourceType}, <${root}public>; rel="up"`);
+    await expect(store.submit(form, values)).rejects.toMatchObject({ code: "invalid-response" });
+    expect(fetch.mock.calls.map(([, init]) => init?.method)).toEqual(["POST", "HEAD"]);
+    expect(fetch.mock.calls[0]?.[0]).toBe(responsesContainer);
+    expect(fetch.mock.calls[0]?.[1]?.body).toBe("");
+    expect(runtime.build).not.toHaveBeenCalled();
+  });
+  it("refuses LWS response writes when the shared SDK cannot verify privacy", async () => {
+    const access = await vi.importActual<typeof import("@jeswr/pod-access")>("@jeswr/pod-access");
+    vi.mocked(checkOwnerOnly).mockReset().mockImplementation(access.checkOwnerOnly);
+    const { store, fetch, runtime } = setup(`${resourceType}, <${responsesContainer}>; rel="up"`);
+    await expect(store.submit(form, values)).rejects.toThrow("verify that only you");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(runtime.build).not.toHaveBeenCalled();
+  });
+  it("limits reservation reads to zero bytes, cancelling on the first chunk", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1]));
+      },
+      cancel,
+    });
+    const { store, fetch } = setup(`${resourceType}, <${formsContainer}>; rel="up"`, body);
+    await expect(store.saveForm(form)).rejects.toMatchObject({ code: "payload-too-large" });
+    expect(fetch.mock.calls.map(([, init]) => init?.method)).toEqual(["POST", "HEAD", "GET"]);
+    expect(fetch.mock.calls[2]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+  it("cancels a stalled reservation body when the read deadline expires", async () => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ cancel });
+    const { store, fetch } = setup(`${resourceType}, <${formsContainer}>; rel="up"`, body);
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValueOnce(controller.signal);
+    try {
+      const saving = expect(store.saveForm(form)).rejects.toMatchObject({
+        code: "network",
+        retryable: false,
+      });
+      await vi.waitFor(() => expect(fetch.mock.calls[2]?.[1]?.method).toBe("GET"));
+      expect(timeout).toHaveBeenCalledExactlyOnceWith(10_000);
+      controller.abort();
+      await saving;
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(fetch).toHaveBeenCalledTimes(3);
+    } finally {
+      timeout.mockRestore();
+    }
   });
 });

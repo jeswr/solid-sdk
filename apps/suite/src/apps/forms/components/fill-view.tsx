@@ -1,9 +1,15 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, EmptyState, ErrorState, LoadingSkeleton, toast } from "@jeswr/suite-ui";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { type FormResponse, ResponseSaveUncertainError } from "../lib/data/store";
+import {
+  DemoSnapshotConflictError,
+  type FormResponse,
+  ResponsePrivacyError,
+  ResponseSaveUncertainError,
+} from "../lib/data/store";
 import { formUrl } from "../lib/form-url";
 import type { FormModel } from "../lib/runtime";
 import { useForms } from "../state/forms-context";
@@ -99,6 +105,7 @@ export function FillView() {
         <AnswerForm
           key={shape}
           form={form}
+          disabled={saving}
           validate={controller.store.validate}
           onSubmit={(values) => {
             if (saving) return;
@@ -112,7 +119,9 @@ export function FillView() {
                 },
                 (error: unknown) => {
                   const message =
-                    error instanceof ResponseSaveUncertainError
+                    error instanceof ResponseSaveUncertainError ||
+                    error instanceof ResponsePrivacyError ||
+                    error instanceof DemoSnapshotConflictError
                       ? error.message
                       : "Couldn't save your response. Your answers are still here; try again when connected.";
                   setSaveError(message);

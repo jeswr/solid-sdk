@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { toast } from "@jeswr/suite-ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,7 +15,7 @@ import { FormsHome } from "../src/apps/forms/components/forms-home";
 import { ResponsesView } from "../src/apps/forms/components/responses-view";
 import { sampleForms } from "../src/apps/forms/demo/sample";
 import { createMemoryFormsStore } from "../src/apps/forms/lib/data/memory-store";
-import { ResponseSaveUncertainError } from "../src/apps/forms/lib/data/store";
+import { ResponsePrivacyError, ResponseSaveUncertainError } from "../src/apps/forms/lib/data/store";
 import { FormsProvider, useForms } from "../src/apps/forms/state/forms-context";
 import { saveBlob } from "../src/lib/native/save-file";
 import type { PodSession } from "../src/lib/session/pod-session";
@@ -114,6 +115,31 @@ describe("response view", () => {
 });
 
 describe("fill URL boundary and source notice", () => {
+  it("disables answer editing and submission until the pending write settles", async () => {
+    query.shape = form.shape;
+    const store = makeStore();
+    const question = form.fields[0];
+    if (!question) throw new Error("Missing name question");
+    vi.spyOn(store, "loadForm").mockResolvedValue({ ...form, fields: [question] });
+    const write = Promise.withResolvers<Awaited<ReturnType<typeof store.submit>>>();
+    vi.spyOn(store, "submit").mockReturnValueOnce(write.promise);
+    show(<FillView />, store);
+    const input = (await screen.findByLabelText(/Your name/)) as HTMLInputElement;
+    const button = screen.getByRole("button", {
+      name: "Save response to my pod",
+    }) as HTMLButtonElement;
+    fireEvent.change(input, { target: { value: "Monday" } });
+    fireEvent.click(button);
+    expect(input.disabled).toBe(true);
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(store.submit).toHaveBeenCalledExactlyOnceWith(expect.anything(), { q_name: "Monday" });
+    write.reject(new ResponsePrivacyError());
+    expect((await screen.findByRole("alert")).textContent).toContain("verify that only you");
+    expect(input.disabled).toBe(false);
+    expect(button.disabled).toBe(false);
+    expect(input.value).toBe("Monday");
+  });
   it.each([
     "javascript:alert(1)",
     "data:text/plain,hi",
