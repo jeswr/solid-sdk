@@ -17,6 +17,7 @@ import {
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { StartSomethingNew } from "@/components/templates/start-something-new";
 import { DOMAINS, UNCATEGORISED, visibleDomains } from "../lib/model/domains";
 import {
   connectedSources,
@@ -127,6 +128,7 @@ export function HomePage({ domain }: { domain: string }) {
         onRetry={retry}
       />
       <HomeAgentPermissions />
+      <StartSomethingNew session={session} />
       <DomainNavigation
         domains={visibleDomains(data.items)}
         active={entry.id}

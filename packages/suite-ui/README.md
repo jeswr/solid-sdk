@@ -503,3 +503,13 @@ callback to composers. Rich editors provide a `ChipEditorAdapter` for query/subs
 focus and insertion. `Chip` defers metadata until hover/focus unless `resolveOnMount` is
 explicitly set for an own-pod resource. Textarea blur handlers always run; Escape restores
 composer focus, while Tab or outside focus closes the picker without refocusing.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+### Template gallery
+
+`TemplateGallery` presents built-in and pod templates in a responsive dialog. Pass
+`items`, `onChoose`, `open` and `onOpenChange`; each item has `id`, `name`, `category`,
+`source` (`builtin` or `user`) and optional description, app and preview. Category and
+source filters, native buttons, arrow/Home/End navigation, loading/error/retry states
+and optional `onDelete` are included. `busy` disables choices and dismissal while the
+caller creates an item. Load `styles/components.css` for token-based light/dark styles.

@@ -24,6 +24,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
+import { TemplateLauncher } from "@/components/templates/template-picker";
 import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
 import { copyDocument } from "../editor/copy";
@@ -151,6 +152,7 @@ export function DocumentList({ session }: { session: PodSession }) {
             </h2>
           </div>
           <div className="docs-list-create">
+            <TemplateLauncher app="docs" session={session} />
             <Button variant="outline" onClick={() => setImporting(true)}>
               Upload
             </Button>

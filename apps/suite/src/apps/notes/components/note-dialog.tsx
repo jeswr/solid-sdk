@@ -44,8 +44,10 @@ import { writeRdf } from "@/apps/docs/lib/model/rdf-io";
 import { createDocsStore, type StoredDocument } from "@/apps/docs/lib/model/store";
 import { PREFIXES } from "@/apps/docs/lib/model/vocab";
 import { ChipEditorTools, suiteChipExtension } from "@/components/chips";
+import { SaveTemplateDialog } from "@/components/templates/save-template-dialog";
 import { encodeRef } from "@/lib/refs";
 import { notesExtensions } from "../editor/extensions";
+import { notesMediaContainer } from "../lib/images";
 import { NoteMoveBlockedError } from "../lib/model/errors";
 import type { StoredNote } from "../lib/model/store";
 import { checklistItems } from "../lib/ui/checklist";
@@ -81,6 +83,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
   );
   const [, selectionChanged] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
   const actionPending = useRef(false);
   // Keep the destination across failed moves and dismissed confirmations.
   const conversions = useRef(
@@ -491,6 +494,9 @@ export function NoteDialog({ note }: { note: StoredNote }) {
               </Button>
             ) : (
               <>
+                <Button variant="ghost" disabled={busy} onClick={() => setSavingTemplate(true)}>
+                  Save as template
+                </Button>
                 <ReminderPicker
                   disabled={busy}
                   value={note.reminder}
@@ -693,6 +699,32 @@ export function NoteDialog({ note }: { note: StoredNote }) {
               conversions.current.delete(saved.url);
             })
           }
+        />
+      )}
+      {savingTemplate && (
+        <SaveTemplateDialog
+          session={session}
+          app="notes"
+          title={draft.title}
+          open
+          onOpenChange={setSavingTemplate}
+          // Only Notes' own media are copied into the template.
+          imagesFrom={notesMediaContainer(session.storageUrl)}
+          content={async (resource) => {
+            const { buildNote } = await import("../lib/model/note");
+            const { serializeTurtle } = await import("../../docs/lib/model");
+            return {
+              body: await serializeTurtle(
+                buildNote(resource, {
+                  title: draft.title,
+                  body: editor?.getHTML() ?? draft.body,
+                  labels: draft.labels,
+                  creator: session.webId,
+                }),
+              ),
+              contentType: "text/turtle",
+            };
+          }}
         />
       )}
     </Dialog>
