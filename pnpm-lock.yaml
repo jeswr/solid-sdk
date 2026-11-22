@@ -2475,6 +2475,9 @@ importers:
       '@jeswr/agent-model':
         specifier: workspace:*
         version: link:../../packages/agent-model
+      '@jeswr/excalidraw-scene':
+        specifier: workspace:*
+        version: link:../../packages/excalidraw-scene
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
@@ -2490,6 +2493,9 @@ importers:
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../packages/pod-access
+      '@jeswr/pod-ask':
+        specifier: workspace:*
+        version: link:../../packages/pod-ask
       '@jeswr/pod-auth':
         specifier: workspace:*
         version: link:../../packages/pod-auth
@@ -2502,6 +2508,9 @@ importers:
       '@jeswr/pod-legacy':
         specifier: workspace:*
         version: link:../../packages/pod-legacy
+      '@jeswr/pod-notifications':
+        specifier: workspace:*
+        version: link:../../packages/pod-notifications
       '@jeswr/pod-type-index':
         specifier: workspace:*
         version: link:../../packages/pod-type-index
@@ -2520,15 +2529,42 @@ importers:
       '@jeswr/solid-dav-bridge':
         specifier: workspace:*
         version: link:../../packages/solid-dav-bridge
+      '@jeswr/solid-drawing':
+        specifier: workspace:*
+        version: link:../../packages/solid-drawing
+      '@jeswr/solid-events':
+        specifier: workspace:*
+        version: link:../../packages/solid-events
+      '@jeswr/solid-journal':
+        specifier: workspace:*
+        version: link:../../packages/solid-journal
+      '@jeswr/solid-listening':
+        specifier: workspace:*
+        version: link:../../packages/solid-listening
+      '@jeswr/solid-media-log':
+        specifier: workspace:*
+        version: link:../../packages/solid-media-log
       '@jeswr/solid-money':
         specifier: workspace:*
         version: link:../../packages/solid-money
       '@jeswr/solid-offline':
         specifier: workspace:*
         version: link:../../packages/solid-offline
+      '@jeswr/solid-places':
+        specifier: workspace:*
+        version: link:../../packages/solid-places
+      '@jeswr/solid-publish':
+        specifier: workspace:*
+        version: link:../../packages/solid-publish
+      '@jeswr/solid-recipe':
+        specifier: workspace:*
+        version: link:../../packages/solid-recipe
       '@jeswr/solid-sheets':
         specifier: workspace:*
         version: link:../../packages/solid-sheets
+      '@jeswr/solid-slides':
+        specifier: workspace:*
+        version: link:../../packages/solid-slides
       '@jeswr/solid-task-model':
         specifier: workspace:*
         version: link:../../packages/solid-task-model
@@ -2538,18 +2574,33 @@ importers:
       '@jeswr/solid-vc':
         specifier: workspace:*
         version: link:../../packages/solid-vc
+      '@jeswr/solid-wallet':
+        specifier: workspace:*
+        version: link:../../packages/solid-wallet
       '@jeswr/storage-capabilities':
         specifier: workspace:*
         version: link:../../packages/storage-capabilities
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../../packages/storage-client
+      '@jeswr/suite-charts':
+        specifier: workspace:*
+        version: link:../../packages/suite-charts
+      '@jeswr/suite-groups':
+        specifier: workspace:*
+        version: link:../../packages/suite-groups
+      '@jeswr/suite-insights':
+        specifier: workspace:*
+        version: link:../../packages/suite-insights
       '@jeswr/suite-native':
         specifier: workspace:*
         version: link:../../packages/suite-native
       '@jeswr/suite-sdk':
         specifier: workspace:*
         version: link:../../packages/suite-sdk
+      '@jeswr/suite-templates':
+        specifier: workspace:*
+        version: link:../../packages/suite-templates
       '@jeswr/suite-ui':
         specifier: workspace:*
         version: link:../../packages/suite-ui
@@ -3466,6 +3517,24 @@ importers:
         specifier: ^4.1.9
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  packages/excalidraw-scene:
+    devDependencies:
+      '@biomejs/biome':
+        specifier: 2.5.3
+        version: 2.5.3
+      '@types/node':
+        specifier: 25.9.5
+        version: 25.9.5
+      '@vitest/coverage-v8':
+        specifier: ^4.1.10
+        version: 4.1.10(vitest@4.1.10)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
   packages/federation-client:
     dependencies:
       '@jeswr/federation-registry':
@@ -4187,6 +4256,24 @@ importers:
         specifier: ^4.1.9
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  packages/pod-ask:
+    devDependencies:
+      '@biomejs/biome':
+        specifier: 2.5.3
+        version: 2.5.3
+      '@types/node':
+        specifier: 25.9.5
+        version: 25.9.5
+      '@vitest/coverage-v8':
+        specifier: ^4.1.10
+        version: 4.1.10(vitest@4.1.10)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
   packages/pod-auth:
     dependencies:
       '@jeswr/guarded-fetch':
@@ -4379,13 +4466,28 @@ importers:
 
   packages/pod-notifications:
     dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../storage-client
+      '@rdfjs/wrapper':
+        specifier: 0.34.0
+        version: 0.34.0
+      n3:
+        specifier: 2.0.3
+        version: 2.0.3
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -5333,6 +5435,55 @@ importers:
         specifier: ^4.1.8
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  packages/solid-events:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/ldp-container':
+        specifier: workspace:*
+        version: link:../ldp-container
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+    devDependencies:
+      '@biomejs/biome':
+        specifier: 2.5.3
+        version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@rdfjs/types':
+        specifier: 2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: 25.9.5
+        version: 25.9.5
+      '@vitest/coverage-v8':
+        specifier: ^4.1.10
+        version: 4.1.10(vitest@4.1.10)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
   packages/solid-federation-vocab:
     devDependencies:
       '@rdfjs/wrapper':
@@ -5455,6 +5606,40 @@ importers:
       vitest:
         specifier: ^4.1.8
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@20.19.43)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/solid-journal:
+    dependencies:
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
+    devDependencies:
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
 
   packages/solid-listening:
     dependencies:
@@ -5592,6 +5777,34 @@ importers:
       vitest:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/solid-media-log:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/pod-connectors':
+        specifier: workspace:*
+        version: link:../pod-connectors
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
+    devDependencies:
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
 
   packages/solid-memory:
     dependencies:
@@ -5802,6 +6015,49 @@ importers:
         specifier: ^4.0.0
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@24.13.3)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  packages/solid-places:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+    devDependencies:
+      '@biomejs/biome':
+        specifier: 2.5.3
+        version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@rdfjs/types':
+        specifier: 2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: 25.9.5
+        version: 25.9.5
+      '@vitest/coverage-v8':
+        specifier: ^4.1.10
+        version: 4.1.10(vitest@4.1.10)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
   packages/solid-pod-guard:
     dependencies:
       '@jeswr/fetch-rdf':
@@ -5847,6 +6103,74 @@ importers:
       vitest:
         specifier: ^4.1.9
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/solid-publish:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+      marked:
+        specifier: 17.0.6
+        version: 17.0.6
+      sanitize-html:
+        specifier: 2.18.1
+        version: 2.18.1
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@rdfjs/types':
+        specifier: 2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      '@types/sanitize-html':
+        specifier: 2.16.2
+        version: 2.16.2
+      '@vitest/coverage-v8':
+        specifier: 4.1.10
+        version: 4.1.10(vitest@4.1.10)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/solid-recipe:
+    dependencies:
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+    devDependencies:
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
 
   packages/solid-scheduling:
     dependencies:
@@ -6088,6 +6412,61 @@ importers:
         specifier: ^4.1.9
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@26.1.0)(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  packages/solid-slides:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      marked:
+        specifier: 17.0.6
+        version: 17.0.6
+      n3:
+        specifier: 2.0.3
+        version: 2.0.3
+      sanitize-html:
+        specifier: 2.18.1
+        version: 2.18.1
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      '@types/sanitize-html':
+        specifier: 2.16.2
+        version: 2.16.2
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
   packages/solid-task-model:
     dependencies:
       '@jeswr/fetch-rdf':
@@ -6241,6 +6620,52 @@ importers:
         specifier: ^3.2.6
         version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.1)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(terser@5.51.2)(yaml@2.9.1)
 
+  packages/solid-wallet:
+    dependencies:
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
+      '@jeswr/solid-vc':
+        specifier: workspace:*
+        version: link:../solid-vc
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+    devDependencies:
+      '@biomejs/biome':
+        specifier: 2.5.3
+        version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@rdfjs/types':
+        specifier: 2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: 25.9.5
+        version: 25.9.5
+      '@vitest/coverage-v8':
+        specifier: ^4.1.10
+        version: 4.1.10(vitest@4.1.10)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
   packages/solid-webauthn-reauth:
     dependencies:
       '@simplewebauthn/browser':
@@ -6373,6 +6798,55 @@ importers:
         specifier: ^4.1.9
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  packages/suite-groups:
+    dependencies:
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../pod-access
+      '@jeswr/solid-task-model':
+        specifier: workspace:*
+        version: link:../solid-task-model
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+      '@rdfjs/wrapper':
+        specifier: 0.34.0
+        version: 0.34.0
+      '@solid/object':
+        specifier: 0.6.0
+        version: 0.6.0
+      n3:
+        specifier: 2.0.3
+        version: 2.0.3
+    devDependencies:
+      '@biomejs/biome':
+        specifier: 2.5.3
+        version: 2.5.3
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: 25.9.5
+        version: 25.9.5
+      '@vitest/coverage-v8':
+        specifier: 4.1.10
+        version: 4.1.10(vitest@4.1.10)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
+  packages/suite-insights:
+    dependencies:
+      '@jeswr/suite-charts':
+        specifier: workspace:*
+        version: link:../suite-charts
+
   packages/suite-native:
     dependencies:
       '@capacitor/core':
@@ -6394,6 +6868,9 @@ importers:
 
   packages/suite-sdk:
     dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -6418,10 +6895,25 @@ importers:
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../storage-client
+      '@rdfjs/wrapper':
+        specifier: 0.34.0
+        version: 0.34.0
+      n3:
+        specifier: 2.0.3
+        version: 2.0.3
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@tiptap/core':
+        specifier: 3.31.4
+        version: 3.31.4(@tiptap/pm@3.31.4)
+      '@tiptap/pm':
+        specifier: 3.31.4
+        version: 3.31.4
+      '@types/n3':
+        specifier: 1.26.1
+        version: 1.26.1
       '@types/node':
         specifier: ^25.9.2
         version: 25.9.5
@@ -6450,11 +6942,54 @@ importers:
         specifier: ^4.1.9
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@26.1.0)(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  packages/suite-templates:
+    dependencies:
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/model-runtime':
+        specifier: workspace:*
+        version: link:../model-runtime
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@jeswr/federation-codegen':
+        specifier: workspace:*
+        version: link:../federation-codegen
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
   packages/suite-ui:
     dependencies:
       '@hookform/resolvers':
         specifier: 5.4.0
         version: 5.4.0(react-hook-form@7.81.0(react@19.2.7))
+      '@jeswr/suite-sdk':
+        specifier: workspace:*
+        version: link:../suite-sdk
       '@radix-ui/react-popover':
         specifier: 1.1.19
         version: 1.1.19(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
