@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import type {
-  PlaceData,
-  PlacesRepository,
-  PlacesSnapshot,
-  RecordValue,
-  TimelineImport,
+// AUTHORED-BY Codex GPT-6
+import {
+  type PlaceData,
+  PlacesPrivacyError,
+  type PlacesRepository,
+  type PlacesSnapshot,
+  type RecordValue,
+  type TimelineImport,
 } from "@jeswr/solid-places";
 import { sampleWeek } from "../demo/sample";
 import { readTimeline } from "../lib/import-worker";
@@ -127,10 +129,12 @@ export function placesController(
     });
     queue = task.catch(() => {});
     return task
-      .catch(() => {
+      .catch((error) => {
         if (alive)
           failed(
-            "Could not save this place. Your change was rolled back; reconnect or reload and try again.",
+            error instanceof PlacesPrivacyError
+              ? "Could not confirm owner-only access to this place. Check your storage permissions, then reload."
+              : "Could not save this place. Your change was rolled back; reconnect or reload and try again.",
           );
       })
       .finally(() => {

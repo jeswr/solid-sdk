@@ -1,6 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import type { PlaceData, PlacesRepository, PlacesSnapshot } from "@jeswr/solid-places";
-import { describe, expect, it, vi } from "vitest";
+// AUTHORED-BY Codex GPT-6
+import {
+  type PlaceData,
+  PlacesPrivacyError,
+  type PlacesRepository,
+  type PlacesSnapshot,
+} from "@jeswr/solid-places";
+import { expect, it, vi } from "vitest";
 import { sampleWeek } from "../src/apps/places/demo/sample";
 import { placesController } from "../src/apps/places/state/controller";
 
@@ -117,6 +123,16 @@ it("rolls back a failed edit while retaining a newer patch to another field", as
     name: "Park",
     notes: "Kept note",
   });
+});
+it("explains a privacy refusal and rolls back the edit", async () => {
+  const { controller, repo, failed } = setup();
+  await controller.open();
+  repo.savePlace.mockRejectedValueOnce(new PlacesPrivacyError());
+  await controller.save(place, { notes: "Private note" });
+  expect(failed).toHaveBeenCalledWith(
+    "Could not confirm owner-only access to this place. Check your storage permissions, then reload.",
+  );
+  expect(controller.getSnapshot().snapshot.places).toEqual([place]);
 });
 it("does not resurrect two failed edits or write no-ops", async () => {
   const { controller, repo } = setup();

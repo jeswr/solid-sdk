@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { checkOwnerOnly, ownerPolicy, writeWac } from "@jeswr/pod-access";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { describe, expect, it, vi } from "vitest";
 import { entities } from "../src/model.js";
-import { createPlacesRepository, importId } from "../src/repository.js";
+import { createPlacesRepository, importId, PlacesPrivacyError } from "../src/repository.js";
 import { parseGoogleTimeline } from "../src/timeline.js";
 
 const actual = await vi.importActual<typeof import("@jeswr/pod-access")>("@jeswr/pod-access");
@@ -566,6 +567,37 @@ it("re-checks containers shared between loads and imports instead of reusing old
   ).rejects.toThrow("owner-only");
   expect(vi.mocked(g.storage.create).mock.calls.slice(creates)).toHaveLength(0);
 });
+it.each([
+  "load",
+  "import",
+])("refuses a save after the collection is shared following %s", async (operation) => {
+  const { repo, memory, storage } = await fixture();
+  await repo.initialize();
+  await repo.importTimeline(input);
+  const [record] = (await repo.load()).places;
+  if (operation === "import") await repo.importTimeline(input);
+
+  const collection = `${root}places/places/`;
+  const acl = `${collection}.acl`;
+  const policy = ownerPolicy(owner, true);
+  const [reader] = ownerPolicy("https://stranger.example/me", true).grants;
+  const { etag } = await memory.head(acl);
+  if (!record || !reader || !etag) throw new Error("Incomplete Places fixture");
+  policy.grants.push({
+    ...reader,
+    modes: new Set(["read"]),
+    appliesTo: "members",
+  });
+  await memory.write(acl, await writeWac(policy, collection, acl), {
+    contentType: "text/turtle",
+    ifMatch: etag,
+  });
+
+  await expect(repo.savePlace(record, { notes: "Private note" })).rejects.toThrow(
+    PlacesPrivacyError,
+  );
+  expect(storage.write).not.toHaveBeenCalled();
+});
 it("never records proofs from a check that straddles initialize", async () => {
   const f = await fixture();
   await f.repo.initialize();
@@ -794,12 +826,12 @@ it("rejects invalid or concurrently malformed edits and unreadable follow-up bod
   await f.repo.importTimeline(input);
   const before = (await f.repo.load()).places[0]!;
   await expect(f.repo.savePlace(before, { name: "" })).rejects.toThrow("Invalid place");
-  vi.mocked(f.storage.read).mockImplementationOnce(async (...args) => ({
-    ...(await f.memory.read(...args)),
-    body: null,
-    contentType: null,
-  }));
+  vi.mocked(f.storage.read).mockImplementation(async (...args) => {
+    const value = await f.memory.read(...args);
+    return args[0] === before.url ? { ...value, body: null, contentType: null } : value;
+  });
   await expect(f.repo.savePlace(before, {})).rejects.toThrow("Cannot read the place to edit");
+  vi.mocked(f.storage.read).mockImplementation(f.memory.read);
   const actualWrite = f.memory.write;
   vi.mocked(f.storage.write).mockImplementationOnce(async (...args) => {
     const saved = await actualWrite(...args);

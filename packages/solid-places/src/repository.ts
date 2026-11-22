@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { checkOwnerOnly, ownerPolicy, writeWac } from "@jeswr/pod-access";
 import { createTypeIndex } from "@jeswr/pod-type-index";
@@ -72,6 +73,13 @@ function version(etag: string | null): string {
   return etag;
 }
 
+export class PlacesPrivacyError extends Error {
+  constructor() {
+    super("Cannot confirm owner-only Places storage");
+    this.name = "PlacesPrivacyError";
+  }
+}
+
 /** Solid-only first cut: unsupported/ambiguous access models refuse before history is written. */
 export function createPlacesRepository(
   storage: StorageClient,
@@ -108,6 +116,10 @@ export function createPlacesRepository(
     verified.clear();
     proofHeads.clear();
     proofReads.clear();
+  }
+  async function requireOwnerOnly(url: string, accessStorage = storage) {
+    if (!(await checkOwnerOnly({ storage: accessStorage, url, ownerWebId: owner })).private)
+      throw new PlacesPrivacyError();
   }
   async function verifyPrivacy(url: string) {
     scope(url);
@@ -150,8 +162,7 @@ export function createPlacesRepository(
         return typeof value === "function" ? value.bind(target) : value;
       },
     });
-    if (!(await checkOwnerOnly({ storage: proofStorage, url, ownerWebId: owner })).private)
-      throw new Error("Cannot confirm owner-only Places storage");
+    await requireOwnerOnly(url, proofStorage);
     if (url.endsWith("/") && started === generation) {
       verified.add(url);
       for (const [key, value] of heads) proofHeads.set(key, value);
@@ -241,9 +252,9 @@ export function createPlacesRepository(
   function ready() {
     if (!initialized) throw new Error("Open private Places storage first");
   }
-  async function resource(url: string) {
-    await verifyPrivacy(url);
-    const response = await storage.read(scope(url), { accept: "text/turtle" });
+  async function resource(url: string, verify = verifyPrivacy) {
+    await verify(scope(url));
+    const response = await storage.read(url, { accept: "text/turtle" });
     const dataset = await parseRdf(response.body ?? "", response.contentType ?? "text/turtle", {
       baseIRI: url,
       maxBytes: MAX_RESOURCE_BYTES,
@@ -423,7 +434,8 @@ export function createPlacesRepository(
       target.hash
     )
       throw new Error("Place is outside this collection");
-    const current = await resource(record.url);
+    // A save must observe the current inherited ACL even while a load or import is running.
+    const current = await resource(record.url, requireOwnerOnly);
     if (current.etag !== record.etag)
       throw new Error("This place changed elsewhere. Reload before editing.");
     const baseline = entities.Place.parse(record.url, current.dataset);
@@ -458,7 +470,7 @@ export function createPlacesRepository(
       { ifMatch: version(record.etag), contentType: "text/turtle" },
     );
     if (result.etagSource !== "response") {
-      const fresh = await resource(result.url);
+      const fresh = await resource(result.url, requireOwnerOnly);
       const reconciled = entities.Place.parse(result.url, fresh.dataset);
       if (!reconciled) throw new Error("Cannot read the saved place");
       return { url: result.url, etag: fresh.etag, data: reconciled };
