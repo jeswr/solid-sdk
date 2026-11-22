@@ -173,6 +173,9 @@ export function createMemoryPod(): MemoryPod {
 
       if (method === "DELETE") {
         if (!existing) return new Response("Not found", { status: 404 });
+        const ifMatch = new Headers(init?.headers).get("if-match");
+        if (ifMatch && ifMatch !== `"v${existing.version}"`)
+          return new Response("Precondition failed", { status: 412 });
         resources.delete(url);
         return new Response(null, { status: 205 });
       }

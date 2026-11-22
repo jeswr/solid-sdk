@@ -156,11 +156,15 @@ export interface BinaryDoc {
 export interface WrittenBinary {
   readonly url: string;
   readonly created: boolean;
+  /** ETag from the write response, when available for private-destination cleanup. */
+  readonly writeEtag?: string;
 }
 
 /** A doc the runner wrote, with its final URL. */
 export interface WrittenDoc {
   readonly url: string;
+  /** ETag from the write response, when available for private-destination cleanup. */
+  readonly writeEtag?: string;
   readonly category: string;
   readonly forClass: string;
   /** Further classes registered for the same container as `forClass`. */

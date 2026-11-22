@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { NS } from "@jeswr/suite-vocab";
 import type { Term } from "@rdfjs/types";
@@ -311,6 +312,14 @@ describe("typed money RDF", () => {
     expect(() => model.putAccount(document, { id: account, label: " " })).toThrow();
     expect(() => model.putBalance(document, { ...balance, asOf: "bad" })).toThrow();
   });
+  it("round-trips a plain decimal longer than the exponent expansion limit", async () => {
+    const document = new model.MoneyDocument();
+    const transaction = { ...row, amount: `-0.${"0".repeat(65_536)}1` };
+    model.putTransaction(document, transaction);
+    const parsed = await model.parseMoney(await model.serialiseMoney(document), base);
+    expect(parsed.transactions()).toEqual([transaction]);
+  });
+
   it("reads old finance amounts and migrates pm categories/parents without changing resource IDs or literal content", async () => {
     const legacy = "https://w3id.org/jeswr/pod-money#";
     const fin = "https://w3id.org/jeswr/sectors/finance#";

@@ -13,15 +13,16 @@
  */
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { createFetchPodWriter, createSourceAuth } from "@jeswr/pod-connectors";
-import { useCallback, useRef, useState } from "react";
-import { NoStorageError } from "@/lib/errors";
-import { authorize, OAUTH_CALLBACK_PATH } from "@/lib/integrations/core/oauth";
-import { BASE_PATH } from "@/lib/base-path";
 import {
-  type ImportReport,
-  runImport,
-} from "@/lib/integrations/core/import-runner";
+  createFetchPodWriter,
+  createSessionPrivateDestinationVerifier,
+  createSourceAuth,
+} from "@jeswr/pod-connectors";
+import { useCallback, useRef, useState } from "react";
+import { BASE_PATH } from "@/lib/base-path";
+import { NoStorageError } from "@/lib/errors";
+import { type ImportReport, runImport } from "@/lib/integrations/core/import-runner";
+import { authorize, OAUTH_CALLBACK_PATH } from "@/lib/integrations/core/oauth";
 import { getToken, setToken } from "@/lib/integrations/core/token-store";
 import type { ImportProgress, IntegrationAdapter } from "@/lib/integrations/core/types";
 import { isLive } from "@/lib/integrations/registry";
@@ -76,12 +77,18 @@ export function useConnect(adapter: IntegrationAdapter | undefined) {
           profileDocumentUrl: profile.profileDocumentUrl,
           podRoot,
           fetch: podFetch,
+          verifyPrivateDestination: createSessionPrivateDestinationVerifier({
+            fetch: podFetch,
+            storageUrl: podRoot,
+            webId,
+          }),
         }),
         mode: live ? "live" : "demo",
-        sourceAuth: live ? createSourceAuth(adapter.metadata.id, adapter, token, sourceFetch) : undefined,
+        sourceAuth: live
+          ? createSourceAuth(adapter.metadata.id, adapter, token, sourceFetch)
+          : undefined,
         cursor: cursorRef.current,
-        onProgress: (progress) =>
-          setState((s) => ({ ...s, phase: "importing", progress })),
+        onProgress: (progress) => setState((s) => ({ ...s, phase: "importing", progress })),
       });
       cursorRef.current = report.cursor;
       setState({ phase: "done", report });

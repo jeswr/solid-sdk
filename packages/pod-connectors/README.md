@@ -61,8 +61,8 @@ Pass the run's `signal` to the writer to cancel every storage operation inside a
 Hosts own cache policy; the Node transport forces revalidation.
 
 Garmin, WHOOP and bank statement runs require a `PodWriter.verifyPrivateDestination(url)`
-port. The runner invokes it for each destination, including run provenance. The Suite and CLI
-use `createOwnerOnlyDestinationVerifier` from `@jeswr/pod-connectors`. Hosts supply the pod root,
+port. The runner invokes it before and after each write, including run provenance. The CLI
+uses `createOwnerOnlyDestinationVerifier` from `@jeswr/pod-connectors`. Hosts supply the pod root,
 owner WebID, a lazy `openStorage` callback and the run signal. The storage transport must also
 honor cancellation during access-policy reads.
 
@@ -80,10 +80,19 @@ const verifyPrivateDestination = createOwnerOnlyDestinationVerifier({
 The verifier checks the target's pod scope, the containing policy and any existing resource's
 own policy. It creates missing containers empty under verified owner-only defaults, then checks
 them before any payload write. Only an explicit `true` permits the write. Public, unreadable or
-unsupported policies fail closed. The check observes current policy without binding it to the PUT.
-For a legacy root without storage-description discovery, Suite detects WAC via pod-access
-and uses `createWacImportStorage({ root, fetch })` with the advertised storage root. This
-client still needs a successful `checkOwnerOnly` proof of the actual destination.
+unsupported policies fail closed. The post-write check examines the resource's now-discoverable
+policy. On refusal, the run fails and attempts to delete the just-written version using the
+strong ETag from the PUT response, when available.
+
+These checks narrow the exposure window but cannot eliminate it. Policy reads and the PUT
+are separate requests, so permissions can change between them and another reader could
+retrieve the data before cleanup. A missing strong ETag or a denied or conflicting DELETE
+can prevent cleanup.
+
+Suite and Pod Manager use `createSessionPrivateDestinationVerifier({ fetch, storageUrl, webId, signal })`.
+It discovers storage with the authenticated session fetch. For a legacy root without a
+storage-description link, it requires WAC and a typed storage root before verifying the
+destination policy.
 
 Live imports take `sourceAuth: { fetch: authenticatedSourceFetch }`. The optional
 `createSourceAuth(id, adapter, token, sourceFetch)` helper adds bearer and adapter headers.
@@ -975,8 +984,8 @@ the factory and vault wiring.
 
 The standalone CLI verifies owner-only WAC for Garmin, WHOOP and bank imports by default,
 using the authenticated Solid client that writes the payload. It checks the checkpoint destination
-before protecting the checkpoint and checks every import destination before writing it. A refused
-destination reports an import error. Node hosts can override the verifier through
+before protecting the checkpoint and verifies every import and checkpoint destination before and
+after writing. A refused destination reports an import error. Node hosts can override the verifier through
 `runCli(args, { verifyPrivateDestination })`. The callback receives the exact URL, storage client,
 authenticated fetch, owner WebID and cancellation signal.
 

@@ -38,14 +38,14 @@ export function rdfAmount(term: TermWrapper): string {
   const pattern = numericLexicals.get(term.datatype.value);
   if (pattern === undefined) return text;
   if (!pattern.test(text)) throw new TypeError("Invalid money amount");
-  const [mantissa, exponent = "0"] = text.replace(/^[+-]/, "").split(/[eE]/) as [string, string?];
+  const [mantissa, exponent] = text.replace(/^[+-]/, "").split(/[eE]/) as [string, string?];
   const [whole, fraction = ""] = mantissa.split(".") as [string, string?];
   const digits = whole + fraction;
-  const point = whole.length + Number(exponent);
+  const point = whole.length + Number(exponent ?? "0");
   if (!Number.isSafeInteger(point)) throw new TypeError("Invalid money amount");
   const length =
     point <= 0 ? 2 - point + digits.length : point < digits.length ? digits.length + 1 : point;
-  if (length + Number(text.startsWith("-")) > MAX_EXPANDED_AMOUNT_CHARS)
+  if (exponent !== undefined && length + Number(text.startsWith("-")) > MAX_EXPANDED_AMOUNT_CHARS)
     throw new TypeError("Invalid money amount");
   const decimal =
     point <= 0

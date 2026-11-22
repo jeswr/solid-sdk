@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 import {
   createFetchPodWriter,
+  createSessionPrivateDestinationVerifier,
   type ImportFile,
   type ImportReport,
   type NormalisedDoc,
@@ -15,7 +16,6 @@ import type {
   ConnectorConnection,
 } from "../../lib/connect/connection-state";
 import { withConnectorLock } from "../../lib/connect/import-lock";
-import { privateDestinationVerifier } from "./private-destination";
 
 /** A sign-in that expired while waiting for another sync; nothing was recorded. */
 export class SignInExpiredError extends Error {
@@ -181,7 +181,11 @@ export function createImportWriter(
     profileDocumentUrl: profile.href,
     podRoot: session.storageUrl,
     fetch,
-    verifyPrivateDestination: privateDestinationVerifier({ ...session, fetch }, signal),
+    verifyPrivateDestination: createSessionPrivateDestinationVerifier({
+      ...session,
+      fetch,
+      signal,
+    }),
     signal,
   });
   return {

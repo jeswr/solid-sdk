@@ -4349,6 +4349,9 @@ importers:
       '@jeswr/solid-money':
         specifier: workspace:*
         version: link:../solid-money
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../storage-capabilities
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../storage-client

@@ -374,6 +374,7 @@
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-health": "workspace:*",
     "@jeswr/solid-listening": "workspace:*",
+    "@jeswr/storage-capabilities": "workspace:*",
     "@jeswr/storage-client": "workspace:*",
     "@jeswr/solid-dpop": "workspace:*",
     "@jeswr/solid-money": "workspace:*",

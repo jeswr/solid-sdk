@@ -2296,6 +2296,67 @@ describe("CLI owner-only import destinations", () => {
     if (problem === "public resource")
       expect(requests.at(-1)).toMatchObject({ url: `${statementUrl}.acl`, method: "GET" });
   });
+
+  it("fails a checkpoint write whose resulting policy is public", async () => {
+    const { pod, transport, requests } = fixturePod();
+    const path = await configPath();
+    const file = join(path, "..", "bank.csv");
+    await writeFile(file, statement);
+    const checkpoint = `${bankContainer}state.json`;
+    const stderr = vi.fn();
+    const stdout = vi.fn();
+    const podTransport: typeof fetch = async (input, init) => {
+      const response = await transport(input, init);
+      if (String(input) === checkpoint && init?.method === "PUT")
+        await seedPublicRead(pod.fetch, checkpoint, false);
+      return response;
+    };
+    expect(
+      await runCli(["import", "bank-statements", "--file", file], {
+        configPath: path,
+        podTransport,
+        stdout,
+        stderr,
+      }),
+    ).toBe(EXIT_CODES.import);
+    expect(stderr).toHaveBeenCalledExactlyOnceWith(
+      `${new PrivateDestinationError("bank-statements").message}\n`,
+    );
+    expect(stdout).not.toHaveBeenCalled();
+    expect(requests.at(-1)).toMatchObject({ method: "DELETE", url: checkpoint });
+    expect(requests.at(-1)?.headers.get("if-match")).toBe('"v1"');
+    expect((await pod.fetch(checkpoint)).status).toBe(404);
+  });
+
+  it("never uses a follow-up HEAD ETag to delete a refused payload", async () => {
+    const { pod, transport, requests } = fixturePod();
+    const path = await configPath();
+    const file = join(path, "..", "bank.csv");
+    await writeFile(file, statement);
+    const stderr = vi.fn();
+    const podTransport: typeof fetch = async (input, init) => {
+      const response = await transport(input, init);
+      if (String(input) === statementUrl && init?.method === "PUT") {
+        response.headers.delete("etag");
+        await seedPublicRead(pod.fetch, statementUrl, false);
+        await pod.fetch(statementUrl, { method: "PUT", body: "Concurrent version" });
+      }
+      return response;
+    };
+    expect(
+      await runCli(["import", "bank-statements", "--file", file], {
+        configPath: path,
+        podTransport,
+        stdout: vi.fn(),
+        stderr,
+      }),
+    ).toBe(EXIT_CODES.import);
+    expect(stderr).toHaveBeenCalledExactlyOnceWith(
+      `${new PrivateDestinationError("bank-statements").message}\n`,
+    );
+    expect(requests.some(({ method }) => method === "DELETE")).toBe(false);
+    expect(pod.get(statementUrl)).toBe("Concurrent version");
+  });
 });
 
 describe("CLI bank statement options", () => {
