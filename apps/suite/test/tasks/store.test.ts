@@ -1693,7 +1693,7 @@ describe("transport failures and typed classification", () => {
     ] as const) {
       const error = new ModelError(status, storage);
       expect(error.category).toBe(category);
-      expect(classifyError({ status })).toBe(status === 0 ? "unknown" : category);
+      expect(classifyError({ status })).toBe(category);
     }
     expect(classifyError({ code: "unsupported" })).toBe("unsupported");
     expect(classifyError({ code: "network" }, false)).toBe("offline");
