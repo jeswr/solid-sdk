@@ -80,10 +80,12 @@ try {
   }
   const before = json(root, manifestFile);
   const after = json(copy, manifestFile);
-  const selected = new Set(
-    before.paths
-      .filter((row) => row.trace && scenarios.has(row.scenario))
-      .map((row) => join("traces", row.trace)),
+  const selectedRows = before.paths.filter((row) => row.trace && scenarios.has(row.scenario));
+  const selected = new Set(selectedRows.map((row) => join("traces", row.trace)));
+  const selectedTables = new Set(
+    selectedRows.map(
+      (row) => `traces/linked/${row.scenario}--${row.configuration ?? "baseline"}.json`,
+    ),
   );
   const compare = (name, actual, expected) => {
     if (!isDeepStrictEqual(actual, expected)) differences.push(`${name}: content differs`);
@@ -100,7 +102,7 @@ try {
     for (const file of new Set([...committed, ...regenerated])) {
       if (file === indexFile) continue;
       // --no-linked replaces the selected scenarios' linked traces with plain traces.
-      if ([...scenarios].some((scenario) => file === `traces/linked/${scenario}.json`)) {
+      if (selectedTables.has(file)) {
         if (regenerated.has(file)) differences.push(`${file}: table retained after plain runs`);
         continue;
       }

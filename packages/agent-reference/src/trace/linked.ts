@@ -85,7 +85,14 @@ export function trustLinks(
     ];
   }
   const dataset = new IndexedStore();
-  const root = "id" in basis ? basis.id : scopedId(owner, digestOf(basis));
-  makeNode("id" in basis ? "RegisterEntry" : "OwnListEntry", basis, root, dataset);
+  if ("id" in basis) {
+    makeNode("RegisterEntry", basis, basis.id, dataset);
+    return [{ what: "trust-entry", root: basis.id, dataset }];
+  }
+  // Scenario own-list entries can also carry purposes for identity pins.
+  const { party, tasks, block, note, expiresAt } = basis;
+  const entry = { party, tasks, block, note, expiresAt };
+  const root = scopedId(owner, digestOf(entry));
+  makeNode("OwnListEntry", entry, root, dataset);
   return [{ what: "trust-entry", root, dataset }];
 }

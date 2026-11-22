@@ -1,10 +1,13 @@
 // AUTHORED-BY Codex GPT-6
 import {
-  existsSync,
+  closeSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -22,11 +25,17 @@ const sortedTable = (views) =>
 function addView(views, key, view) {
   if (!view) throw new Error(`Missing linked view ${key}`);
   const previous = views.get(key);
-  if (previous && (previous.what !== view.what || previous.jsonld !== view.jsonld))
+  if (
+    previous &&
+    (previous.what !== view.what ||
+      previous.jsonld !== view.jsonld ||
+      previous.turtle !== view.turtle)
+  )
     throw new Error(`Conflicting linked view ${key}`);
-  // Equivalent graphs can have different Turtle statement orders.
-  if (!previous || view.turtle < previous.turtle) views.set(key, view);
+  if (!previous) views.set(key, view);
 }
+
+const groupId = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export class ScenarioTraceWriter {
   #files = new Set();
@@ -34,12 +43,20 @@ export class ScenarioTraceWriter {
   #stage;
   #reference;
 
-  constructor(directory, scenario) {
-    if (!/^[a-zA-Z0-9_-]+$/.test(scenario)) throw new Error(`Invalid scenario ID ${scenario}`);
-    this.directory = directory;
+  constructor(directory, scenario, configuration) {
+    if (
+      typeof scenario !== "string" ||
+      typeof configuration !== "string" ||
+      !groupId.test(scenario) ||
+      !groupId.test(configuration)
+    )
+      throw new Error(`Invalid trace group ${scenario} / ${configuration}`);
+    if (!lstatSync(directory).isDirectory()) throw new Error("traces must be a regular directory");
+    this.directory = realpathSync(directory);
     this.scenario = scenario;
-    this.#reference = `linked/${scenario}.json`;
-    this.#stage = mkdtempSync(join(directory, ".scenario-"));
+    this.configuration = configuration;
+    this.#reference = `linked/${scenario}--${configuration}.json`;
+    this.#stage = mkdtempSync(join(this.directory, ".scenario-"));
   }
 
   write(file, trace) {
@@ -64,19 +81,45 @@ export class ScenarioTraceWriter {
   }
 
   publish() {
+    if (!this.#files.size) return;
+    const linked = join(this.directory, "linked");
+    try {
+      mkdirSync(linked);
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
+    if (!lstatSync(linked).isDirectory() || realpathSync(linked) !== linked)
+      throw new Error("traces/linked must be a regular directory inside traces");
     const target = join(this.directory, this.#reference);
-    const hasPrior = existsSync(target);
-    const prior = hasPrior ? traceLinkedTableSchema.parse(readJson(target)) : {};
-    // A configuration-only run can leave other branches and configurations pointing at
-    // this table. Keep exactly the keys those traces still use.
-    if (hasPrior) {
-      for (const file of readdirSync(this.directory)) {
+    const lockPath = `${target}.lock`;
+    const lock = openSync(lockPath, "wx");
+    try {
+      this.#publishLocked(target);
+    } finally {
+      try {
+        closeSync(lock);
+      } finally {
+        rmSync(lockPath);
+      }
+    }
+  }
+
+  #publishLocked(target) {
+    const stat = lstatSync(target, { throwIfNoEntry: false });
+    if (stat && (!stat.isFile() || realpathSync(target) !== target))
+      throw new Error(`${this.#reference} must be a regular file inside traces/linked`);
+    const prior = stat ? traceLinkedTableSchema.parse(readJson(target)) : {};
+    // Keep keys still used by branches outside this write, including recorded paths.
+    if (stat) {
+      for (const entry of readdirSync(this.directory, { withFileTypes: true })) {
+        const file = entry.name;
         if (
           !file.startsWith(`${this.scenario}--`) ||
-          !file.endsWith(".json") ||
+          !file.endsWith(`--${this.configuration}.json`) ||
           this.#files.has(file)
         )
           continue;
+        if (!entry.isFile()) throw new Error(`${file} must be a regular trace file`);
         const trace = readJson(join(this.directory, file));
         if (trace.linkedTable !== this.#reference) continue;
         for (const event of trace.events)
@@ -84,8 +127,7 @@ export class ScenarioTraceWriter {
       }
     }
     const writeTable = (views) => {
-      const staged = join(this.#stage, "table.json");
-      mkdirSync(join(this.directory, "linked"), { recursive: true });
+      const staged = join(this.#stage, ".table.json");
       writeFileSync(staged, sortedTable(views));
       renameSync(staged, target);
     };

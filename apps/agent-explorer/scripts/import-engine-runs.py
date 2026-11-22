@@ -16,24 +16,54 @@
 # The bundle reader and browser's async trace accessor restore independent copies
 # before using any events. This is lossless, including packet JSON-LD and RDF strings.
 # Shared linked tables keep their original keys and view text.
-import json, os, re, subprocess, sys
+import json, os, re, stat, subprocess, sys
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, '..')
 MAX_LINKED_TABLE_BYTES = 12_000_000
 
-def copy_linked_table(src, dest, scenario, reference):
-    if not re.fullmatch(r'linked/[a-zA-Z0-9_-]+\.json', reference) or reference != f'linked/{scenario}.json':
-        raise ValueError(f'{scenario}: invalid linked table reference')
-    with open(os.path.join(src, reference), encoding='utf-8') as source:
+def linked_table_path(directory, reference, *, create=False):
+    root = Path(directory)
+    if not stat.S_ISDIR(root.lstat().st_mode):
+        raise ValueError(f'{root}: traces must be a regular directory')
+    root = root.resolve(strict=True)
+    linked = root / 'linked'
+    if create:
+        try:
+            linked.mkdir()
+        except FileExistsError:
+            pass
+    if not stat.S_ISDIR(linked.lstat().st_mode) or linked.resolve(strict=True) != linked:
+        raise ValueError(f'{linked}: linked must be a regular directory inside traces')
+    path = root / reference
+    if path.parent != linked:
+        raise ValueError(f'{path}: linked table must be directly inside traces/linked')
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError:
+        if create:
+            return path
+        raise
+    if not stat.S_ISREG(mode) or path.resolve(strict=True) != path:
+        raise ValueError(f'{path}: linked table must be a regular file inside traces/linked')
+    return path
+
+def validate_linked_reference(row, reference):
+    scenario, configuration = row['scenario'], row.get('configuration', 'baseline')
+    if (not isinstance(reference, str)
+            or not re.fullmatch(r'linked/[a-z0-9]+(?:-[a-z0-9]+)*--[a-z0-9]+(?:-[a-z0-9]+)*\.json', reference)
+            or reference != f'linked/{scenario}--{configuration}.json'):
+        raise ValueError(f'{scenario}/{configuration}: invalid linked table reference')
+
+def copy_linked_table(src, dest, reference):
+    with linked_table_path(src, reference).open(encoding='utf-8') as source:
         table = json.load(source)
     text = json.dumps(table, ensure_ascii=False, separators=(',', ':')) + '\n'
     data = text.encode('utf-8')
     if len(data) > MAX_LINKED_TABLE_BYTES:
         raise ValueError(f'{reference}: linked table is {len(data)} bytes; limit is {MAX_LINKED_TABLE_BYTES} bytes')
-    os.makedirs(os.path.join(dest, 'linked'), exist_ok=True)
-    with open(os.path.join(dest, reference), 'wb') as output:
-        output.write(data)
+    linked_table_path(dest, reference, create=True).write_bytes(data)
 
 def readable(agent_id):
     words = agent_id.replace('-', ' ').split()
@@ -106,10 +136,12 @@ def main():
     for p in m['paths']:
         if p['status'] == 'blocked': continue
         t = json.load(open(os.path.join(src, p['trace'])))
-        reference = t.get('linkedTable')
-        if reference is not None and reference not in tables:
-            copy_linked_table(src, dest, p['scenario'], reference)
-            tables.add(reference)
+        if 'linkedTable' in t:
+            reference = t['linkedTable']
+            validate_linked_reference(p, reference)
+            if reference not in tables:
+                copy_linked_table(src, dest, reference)
+                tables.add(reference)
         u = U.get(p.get('useCase') or p['scenario'])
         if u and not t.get('useCase'):
             run = [r for r in u.get('runs', []) if r['path'] == p['path']][0]

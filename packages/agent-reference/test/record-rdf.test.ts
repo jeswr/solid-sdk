@@ -24,7 +24,7 @@ import {
 } from "../src/store/ledger.js";
 import { TraceRecorder } from "../src/trace/recorder.js";
 import { storeDocumentLoader } from "../src/wire/store-contexts.js";
-import { linkedView, storeProjection } from "../src/wire/store-document.js";
+import { linkedView, linkedViewOfProjection, storeProjection } from "../src/wire/store-document.js";
 import { readNQuads, writeNQuads } from "../src/wire/store-quads.js";
 
 const at = "2026-11-20T09:00:00Z";
@@ -250,6 +250,8 @@ it("projects only reachable subjects and renders the same RDF via Turtle and JSO
     literal(JSON.stringify(json), namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON")),
   ]);
   const view = await linkedView(dataset, root, "record");
+  const reordered = await linkedView(new Store([...dataset].reverse()), root, "record");
+  expect(reordered).toEqual(view);
   expect(view.what).toBe("record");
   expect(JSON.parse(view.jsonld)["@context"]).toEqual(view.context);
   for (const graph of [
@@ -262,6 +264,19 @@ it("projects only reachable subjects and renders the same RDF via Turtle and JSO
       expect([quad.subject, quad.object].every((term) => term.termType !== "BlankNode")).toBe(true);
       expect(expected.has(quad)).toBe(true);
     }
+  }
+
+  const namedView = await linkedViewOfProjection(dataset, "record");
+  const reorderedNamed = await linkedViewOfProjection(new Store([...dataset].reverse()), "record");
+  expect(reorderedNamed).toEqual(namedView);
+  for (const graph of [
+    await parseRdf(namedView.turtle, "application/trig"),
+    await parseRdf(namedView.jsonld, "application/ld+json", {
+      documentLoader: storeDocumentLoader,
+    }),
+  ]) {
+    expect(graph.size).toBe(dataset.size);
+    for (const quad of graph) expect(dataset.has(quad)).toBe(true);
   }
 });
 

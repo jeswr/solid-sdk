@@ -36,11 +36,15 @@
 
   function tablePath(trace) {
     const path = trace.linkedTable;
-    const match = typeof path === "string" && /^linked\/([a-zA-Z0-9_-]+)\.json$/.exec(path);
+    const match =
+      typeof path === "string" &&
+      /^linked\/([a-z0-9]+(?:-[a-z0-9]+)*)--([a-z0-9]+(?:-[a-z0-9]+)*)\.json$/.exec(path);
     const id = trace.scenario.id;
     if (
       !match ||
       trace.linked !== undefined ||
+      // A baseline group can use a scenario-local runtime configuration ID.
+      (match[2] !== "baseline" && match[2] !== trace.configuration?.id) ||
       (id !== match[1] && !id.startsWith(`${match[1]}--`))
     ) {
       throw new Error("Invalid linked table reference.");

@@ -215,7 +215,7 @@ export interface TraceFile {
   };
   readonly events: readonly TraceEvent[];
   readonly linked?: Readonly<Record<string, TraceLinkedView>>;
-  /** Relative path from the trace directory to its scenario's shared views. */
+  /** Relative path from the trace directory to the scenario and configuration's shared views. */
   readonly linkedTable?: string;
 }
 

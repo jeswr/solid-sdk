@@ -2,8 +2,18 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { spawnSync } from "child_process";
-// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
-import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from "fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+  // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+} from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { tmpdir } from "os";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
@@ -11,9 +21,16 @@ import { join } from "path";
 import { expect, it } from "vitest";
 import { digestBytes } from "../src/core/canonical.js";
 import type { PathResult } from "../src/engine/run.js";
+import { trustLinks } from "../src/trace/linked.js";
 import { traceFileSchema, traceFileSchemaWithLinkedTable } from "../src/trace/schema.js";
-import { outlineOf, type TraceFile, type TraceLinkedView } from "../src/trace/types.js";
-import { storeDocumentLoader } from "../src/wire/store-contexts.js";
+import {
+  outlineOf,
+  TRACE_SCHEMA,
+  type TraceFile,
+  type TraceLinkedView,
+} from "../src/trace/types.js";
+import { STORE_CONTEXT, storeDocumentLoader } from "../src/wire/store-contexts.js";
+import { linkedViewOfProjection, storeProjection } from "../src/wire/store-document.js";
 
 const root = new URL("../", import.meta.url);
 const committed = (stem: string, configuration: string): TraceFile & { "x-authored-by": string } =>
@@ -57,7 +74,7 @@ function run(scenario: string, mode: "plain" | "linked", configuration: string) 
           ),
         );
     }
-    const reference = `linked/${scenario}.json`;
+    const reference = `linked/${scenario}--${configuration}.json`;
     const table: Record<string, TraceLinkedView> | undefined =
       mode === "linked"
         ? JSON.parse(readFileSync(join(directory, "traces", reference), "utf8"))
@@ -69,6 +86,103 @@ function run(scenario: string, mode: "plain" | "linked", configuration: string) 
 }
 
 const bytes = (trace: TraceFile) => digestBytes(`${JSON.stringify(trace, null, 2)}\n`);
+
+it("renders the recipient trust basis when the own-list entry also carries a pin purpose", async () => {
+  const own = { party: "urn:party:peer", tasks: ["urn:task:share"], block: false };
+  const render = async (entry: typeof own) => {
+    const [link] = trustLinks(entry, "urn:party:owner", false);
+    if (!link) throw new Error("Missing trust view");
+    return linkedViewOfProjection(storeProjection(link.dataset, link.root), link.what);
+  };
+  const withPurposes = { ...own, purposes: ["urn:purpose:identity-pin"] };
+  const view = await render(withPurposes);
+  expect(view).toEqual(await render(own));
+  expect(view.turtle).toContain("urn:party:peer");
+  expect(view.turtle).toContain("urn:task:share");
+});
+
+it("publishes independently locked tables and keeps the keys of retained branches", async () => {
+  const modulePath = join(import.meta.dirname, "../scripts/write-scenario-traces.mjs");
+  const { ScenarioTraceWriter } = await import(modulePath);
+  const directory = mkdtempSync(join(tmpdir(), "trace-table-groups-"));
+  const baseline = join(directory, "linked/test--baseline.json");
+  const alternate = join(directory, "linked/test--alternate.json");
+  const lock = `${baseline}.lock`;
+  const entry = (name: string) => {
+    const id = `urn:test:${name}`;
+    const jsonld = JSON.stringify({ "@id": id, "@type": "urn:test:Type" });
+    const key = digestBytes(jsonld);
+    return {
+      schema: TRACE_SCHEMA,
+      events: [{ linked: [key] }],
+      linked: {
+        [key]: {
+          what: "record-entry",
+          context: STORE_CONTEXT,
+          jsonld,
+          turtle: `<${id}> a <urn:test:Type> .`,
+        },
+      },
+    };
+  };
+  const mainTrace = entry("main");
+  const branchTrace = entry("branch");
+  try {
+    {
+      using writer = new ScenarioTraceWriter(directory, "test", "baseline");
+      writer.write("test--baseline.json", mainTrace);
+      writer.write("test--branch--baseline.json", branchTrace);
+      writer.publish();
+    }
+    const initial = readFileSync(baseline, "utf8");
+    expect(JSON.parse(initial)).toEqual({ ...mainTrace.linked, ...branchTrace.linked });
+    writeFileSync(lock, "existing writer");
+    {
+      using writer = new ScenarioTraceWriter(directory, "test", "baseline");
+      writer.write("test--baseline.json", { schema: TRACE_SCHEMA, events: [] });
+      expect(() => writer.publish()).toThrow("EEXIST");
+      expect(readFileSync(lock, "utf8")).toBe("existing writer");
+      expect(readFileSync(baseline, "utf8")).toBe(initial);
+      using other = new ScenarioTraceWriter(directory, "test", "alternate");
+      other.write("test--alternate.json", mainTrace);
+      other.publish();
+      rmSync(lock);
+      writer.publish();
+    }
+    expect(JSON.parse(readFileSync(alternate, "utf8"))).toEqual(mainTrace.linked);
+    expect(JSON.parse(readFileSync(baseline, "utf8"))).toEqual(branchTrace.linked);
+    expect(existsSync(lock)).toBe(false);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+it("refuses symlinks for shared tables and their directory and releases its lock on failure", async () => {
+  const modulePath = join(import.meta.dirname, "../scripts/write-scenario-traces.mjs");
+  const { ScenarioTraceWriter } = await import(modulePath);
+  const root = mkdtempSync(join(tmpdir(), "trace-table-paths-"));
+  try {
+    const directory = join(root, "traces");
+    const linked = join(directory, "linked");
+    const outside = join(root, "test--baseline.json");
+    const target = join(linked, "test--baseline.json");
+    mkdirSync(directory);
+    writeFileSync(outside, "{}");
+    symlinkSync(root, linked, "dir");
+    using writer = new ScenarioTraceWriter(directory, "test", "baseline");
+    writer.write("test--baseline.json", { schema: TRACE_SCHEMA, events: [] });
+    expect(() => writer.publish()).toThrow("regular directory");
+    rmSync(linked);
+    mkdirSync(linked);
+    symlinkSync(outside, target);
+    expect(() => writer.publish()).toThrow("regular file");
+    expect(existsSync(`${target}.lock`)).toBe(false);
+    expect(readFileSync(outside, "utf8")).toBe("{}");
+    expect(existsSync(join(directory, "test--baseline.json"))).toBe(false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 for (const [scenario, configuration] of [
   ["age-check", "baseline"],

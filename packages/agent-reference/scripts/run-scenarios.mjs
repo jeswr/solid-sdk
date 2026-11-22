@@ -54,8 +54,13 @@ async function* pathsFor(profile, scenario) {
         ? [selectedConfiguration]
         : [undefined, ...scenario.configurations.map((entry) => entry.id)];
   const proofCache = new ProofCache(join(root, "proofs"));
-  for (const configuration of configurations)
-    yield* await runScenario(profile, scenario, {
+  for (const configuration of configurations) {
+    using writer = new ScenarioTraceWriter(
+      join(root, "traces"),
+      scenario.id,
+      configuration ?? "baseline",
+    );
+    const paths = await runScenario(profile, scenario, {
       commit,
       linked,
       configuration,
@@ -64,6 +69,9 @@ async function* pathsFor(profile, scenario) {
       registry,
       proofCache,
     });
+    for (const path of paths) yield { path, writer };
+    writer.publish();
+  }
 }
 for (const file of readdirSync(join(root, "scenarios"))
   .filter((f) => f.endsWith(".json"))
@@ -71,8 +79,7 @@ for (const file of readdirSync(join(root, "scenarios"))
   const id = file.slice(0, -5);
   if (selected && selected !== id) continue;
   const { profile, scenario } = loadCase(root, id);
-  using writer = new ScenarioTraceWriter(join(root, "traces"), id);
-  for await (const path of pathsFor(profile, scenario)) {
+  for await (const { path, writer } of pathsFor(profile, scenario)) {
     assertPublishable(path);
     if (!path.configuration && jointPaths.has(`${id}/${path.path}`)) {
       const saved = recordedJoint(root, previous, id, path.path);
@@ -154,7 +161,6 @@ for (const file of readdirSync(join(root, "scenarios"))
       events: path.trace.events.length,
     });
   }
-  writer.publish();
   if (record && (!selectedConfiguration || selectedConfiguration === "baseline")) {
     // Update expectations on the authoring object, preserving its 0.2 envelope and omissions.
     const original = JSON.parse(readFileSync(join(root, "scenarios", file), "utf8"));

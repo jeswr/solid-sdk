@@ -64,3 +64,37 @@ samples. They cover a single fetch shared across paths, the missing-table
 note, the size limit, and rejection of missing keys and unsafe table paths.
 The linked view and its test passed Biome. The touched legacy explorer files
 have the same lint diagnostics as HEAD.
+
+## Review 40r11 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The importer validates each shared reference against its manifest group and
+copies the table once. The explorer shares the fetch across branches of that
+configuration and continues to render traces without a table. The importer
+and bundler require regular files inside `traces/linked` and keep the
+12,000,000-byte limit per table.
+
+The public checker parses JSON, scans its string values and checks RDF text
+after unescaping literals. Its regression test embeds both roadmap strings
+from the review independently in linked JSON-LD, Turtle and TriG views.
+
+The largest table measured across all 38 mortgage-main groups and 12
+other groups was
+`linked/mortgage-main--accountability-reputation-post.json`. It stores
+417 views in **4,157,963 compact bytes** or **4,172,563 engine bytes**.
+The 38 mortgage-main tables sum to 95,514,367 compact bytes.
+
+The projected trace directories are **294 MB for the explorer** and
+**809 MB for the engine**. The estimate uses all 38 measured mortgage-main
+table sizes and weights the other 12 measured groups by whether their
+existing engine traces total at least 1 MB. It includes the added event
+keys and references and holds the six joint recordings at their original
+sizes. All sizes use decimal MB.
+
+All 59 explorer tests passed on the committed fixtures and with populated
+tables in a disposable copy. The importer and public bundler processed
+278 traces and all 50 measured tables, including the largest table. The
+public bundle checker scanned 333 files and found zero roadmap matches
+or symlinks. The Biome error check passed for the changed hand-written
+JavaScript and TypeScript.

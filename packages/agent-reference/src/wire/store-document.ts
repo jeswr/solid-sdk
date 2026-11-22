@@ -68,15 +68,14 @@ export function storeProjection(dataset: DatasetCore, root: string): Store {
   return projected;
 }
 
-/** Expand the named store graph while preserving every literal's lexical form. */
-function expandedStore(projected: Store): jsonld.NodeObject[] {
+/** Expand one graph while preserving every literal's lexical form. */
+function expandedNodes(quads: readonly Quad[]): jsonld.NodeObject[] {
   const nodes = new Map<
     string,
     Record<string, (string | jsonld.NodeObject | jsonld.ValueObject)[]>
   >();
-  // Use the same canonical quad order as the recorder fingerprint. fromRDF turns
-  // rdf:JSON literals into @json values, which a reader would then canonicalize again.
-  for (const { subject, predicate, object } of readNQuads(writeNQuads(projected))) {
+  // fromRDF turns rdf:JSON literals into @json values, which a reader would canonicalize again.
+  for (const { subject, predicate, object } of quads) {
     const node = nodes.get(subject.value) ?? {};
     nodes.set(subject.value, node);
     const isType = predicate.value === RDF_TYPE && object.termType === "NamedNode";
@@ -99,6 +98,19 @@ function expandedStore(projected: Store): jsonld.NodeObject[] {
   return Array.from(nodes, ([id, node]) => ({ "@id": id, ...node }));
 }
 
+function expandedStore(quads: readonly Quad[]): jsonld.NodeObject[] {
+  const graphs = new Map<string, Quad[]>();
+  for (const quad of quads) {
+    const graph = graphs.get(quad.graph.value);
+    if (graph) graph.push(quad);
+    else graphs.set(quad.graph.value, [quad]);
+  }
+  return Array.from(graphs, ([id, quads]) => {
+    const nodes = expandedNodes(quads);
+    return id ? [{ "@id": id, "@graph": nodes }] : nodes;
+  }).flat();
+}
+
 export interface LinkedStoreView<Kind extends string = string> {
   readonly what: Kind;
   readonly context: string | readonly string[];
@@ -119,8 +131,10 @@ export async function linkedViewOfProjection<Kind extends string>(
   what: Kind,
 ): Promise<LinkedStoreView<Kind>> {
   if (!projected.size) throw new TypeError("Store view root is absent");
+  // Both renderings use the recorder fingerprint's canonical quad order.
+  const quads = [...readNQuads(writeNQuads(projected))];
   const uses = (prefix: string) =>
-    [...projected].some(
+    quads.some(
       ({ predicate, object }) =>
         predicate.value.startsWith(prefix) ||
         (object.termType === "NamedNode" && object.value.startsWith(prefix)),
@@ -129,10 +143,13 @@ export async function linkedViewOfProjection<Kind extends string>(
   // VC context can redefine protected terms such as kid. Other terms keep their IRIs.
   const context = uses(prefixes.odrl) ? [ODRL_CONTEXT, STORE_CONTEXT] : STORE_CONTEXT;
   const compacted = await jsonld.compact(
-    expandedStore(projected),
+    expandedStore(quads),
     context as unknown as NonNullable<Parameters<typeof jsonld.compact>[1]>,
     { documentLoader: storeJsonLdLoader },
   );
-  const turtle = await serialize([...projected], { format: "text/turtle", prefixes });
+  const format = quads.some(({ graph }) => graph.termType === "NamedNode")
+    ? "application/trig"
+    : "text/turtle";
+  const turtle = await serialize(quads, { format, prefixes });
   return { what, context, jsonld: JSON.stringify({ ...compacted, "@context": context }), turtle };
 }

@@ -42,6 +42,7 @@ export const documentPacketSchema = z
   .strict();
 export const packetViewSchema = z.union([documentPacketSchema, z.object(fields).strict()]);
 const linkedKey = z.string().regex(/^sha-256:[a-f0-9]{64}$/);
+export const linkedTablePath = /^linked\/[a-z0-9][a-z0-9-]*\.json$/;
 const linkedView = z.strictObject({
   what: z.enum(LINKED_KINDS),
   context: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
@@ -58,10 +59,7 @@ export const traceFileShapeSchema = z
         .passthrough(),
     ),
     linked: traceLinkedTableSchema.optional(),
-    linkedTable: z
-      .string()
-      .regex(/^linked\/[a-zA-Z0-9_-]+\.json$/)
-      .optional(),
+    linkedTable: z.string().regex(linkedTablePath, { abort: true }).optional(),
   })
   .passthrough();
 
@@ -70,15 +68,20 @@ export function traceFileSchemaWithLinkedTable(resolve?: (reference: string) => 
   return traceFileShapeSchema.superRefine((trace, ctx) => {
     let table = trace.linked;
     if (trace.linkedTable !== undefined) {
-      const resolved = traceLinkedTableSchema.safeParse(resolve?.(trace.linkedTable));
-      if (table !== undefined || !resolved.success) {
+      if (table !== undefined) {
         ctx.addIssue({
           code: "custom",
           path: ["linkedTable"],
-          message:
-            table !== undefined
-              ? "Trace has both linked tables"
-              : "Invalid or unavailable linked table",
+          message: "Trace has both linked tables",
+        });
+        return;
+      }
+      const resolved = traceLinkedTableSchema.safeParse(resolve?.(trace.linkedTable));
+      if (!resolved.success) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["linkedTable"],
+          message: "Invalid or unavailable linked table",
         });
         return;
       }

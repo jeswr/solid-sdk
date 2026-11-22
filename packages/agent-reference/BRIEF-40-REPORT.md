@@ -1742,3 +1742,47 @@ and payment runs after removing the linked fields. Repeating `pay-an-invoice`
 in one process varies three existing packets. The same variation reproduced
 on the starting commit `e3796a576` with linked views off. The linked run's
 stripped bytes matched the corresponding repeated switch-off run exactly.
+
+## Review 40r11 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The runner stages and publishes one table per manifest scenario and
+configuration, with `baseline` as the default suffix. Branches in that group
+share the file. Publishing takes an exclusive lock through the table and
+trace replacements, retains keys still used by branches outside the write,
+and prunes superseded keys. The README describes recovery from a stale lock.
+
+The schema rejects invalid paths before invoking a table resolver. The writer
+and corpus check require regular files and directories inside the canonical
+`traces/` directory. The corpus check verifies the expected group, content
+digests and exact set of referenced keys. JSON-LD, Turtle and TriG use the
+same canonical quad order. The regression test compares bytes from two
+insertion orders and reads both RDF renderings back into quads.
+
+The representative runs exposed a linked-view failure in `flat-share`.
+Scenario own-list entries can carry purposes for identity pins. The view now
+projects the fields used by recipient trust, with a regression test for an
+own-list entry that also carries a pin purpose.
+
+The isolated `mortgage-main` run covered all 38 configuration groups and
+113 live paths. Its largest table was
+`linked/mortgage-main--accountability-reputation-post.json`, with 417 keys
+and **4,172,563 engine bytes**. The compact explorer copy was **4,157,963
+bytes**, about 35% of its limit. The 38 tables totalled 95,827,452 bytes
+in the engine and 95,514,367 bytes in compact form.
+
+The projected full trace directories are **809 MB for the engine** and
+**294 MB for the explorer**. The estimate uses those 38 measured table
+sizes and extrapolates from 12 other groups. It weights those groups by
+whether their existing engine traces total at least 1 MB, includes event
+keys and table references, and holds the six joint recordings at their
+original sizes. All sizes use decimal MB.
+
+The Node 24 library compile, schema export check, typecheck and Biome error
+check passed. The focused and compatibility suites passed 97 tests across
+11 files. The corpus check also passed with all 50 measured tables in a
+disposable copy. `check-no-trace-change.mjs` passed on the committed fixtures
+and with the mortgage-core and pay-an-invoice group tables present. All six joint
+recording digests verified. The worktree's traces, outlines and run manifest
+matched HEAD after the runs.

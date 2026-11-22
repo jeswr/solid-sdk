@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { digestBytes } from "../src/core/canonical.js";
 import { traceFileSchema, traceFileSchemaWithLinkedTable } from "../src/trace/schema.js";
 import { TRACE_SCHEMA } from "../src/trace/types.js";
@@ -40,7 +40,7 @@ it("checks the linked key and value shapes", () => {
 });
 
 it("requires the applicable shared table and rejects missing keys and unsafe paths", () => {
-  const reference = "linked/test.json";
+  const reference = "linked/test--baseline.json";
   const trace = { schema: TRACE_SCHEMA, events: [{ linked: [key] }], linkedTable: reference };
   const table = { [key]: entry };
   const schema = traceFileSchemaWithLinkedTable((path) => (path === reference ? table : undefined));
@@ -49,12 +49,18 @@ it("requires the applicable shared table and rejects missing keys and unsafe pat
   const missing = traceFileSchemaWithLinkedTable(() => ({})).safeParse(trace);
   expect(missing.error?.issues[0]?.path).toEqual(["events", 0, "linked", 0]);
   expect(schema.safeParse({ ...trace, linked: table }).success).toBe(false);
-  const alwaysResolves = traceFileSchemaWithLinkedTable(() => table);
+  const resolve = vi.fn(() => table);
+  const alwaysResolves = traceFileSchemaWithLinkedTable(resolve);
   for (const path of [
     "../test.json",
+    "/linked/test.json",
+    "linked/../test.json",
     "linked/test.json?x",
     "linked/sub/test.json",
     "linked/test.json\n",
+    "linked/TEST_name.json",
   ])
     expect(alwaysResolves.safeParse({ ...trace, linkedTable: path }).success).toBe(false);
+  expect(alwaysResolves.safeParse({ ...trace, linked: table }).success).toBe(false);
+  expect(resolve).not.toHaveBeenCalled();
 });

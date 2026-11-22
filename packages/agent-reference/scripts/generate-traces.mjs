@@ -24,18 +24,16 @@ const outDir = join(root, "traces");
 mkdirSync(outDir, { recursive: true });
 const traces = await generateTraces(commit, !process.argv.includes("--no-linked"));
 const index = [];
-for (const [scenario, runs] of Map.groupBy(traces, ([, trace]) => trace.scenario.id)) {
-  using writer = new ScenarioTraceWriter(outDir, scenario);
-  for (const [file, trace] of runs) {
-    writer.write(`${file}.json`, trace);
-    index.push({
-      file: `${file}.json`,
-      scenario: trace.scenario,
-      configuration: trace.configuration.id,
-      events: trace.events.length,
-    });
-  }
+for (const [file, trace] of traces) {
+  using writer = new ScenarioTraceWriter(outDir, trace.scenario.id, trace.configuration.id);
+  writer.write(`${file}.json`, trace);
   writer.publish();
+  index.push({
+    file: `${file}.json`,
+    scenario: trace.scenario,
+    configuration: trace.configuration.id,
+    events: trace.events.length,
+  });
 }
 writeFileSync(join(outDir, "index.json"), `${JSON.stringify(index, null, 2)}\n`);
 console.log(`wrote ${traces.size} traces to ${outDir}`);

@@ -719,7 +719,7 @@
     },
     "linkedTable": {
       "type": "string",
-      "pattern": "^linked\\/[a-zA-Z0-9_-]+\\.json$"
+      "pattern": "^linked\\/[a-z0-9][a-z0-9-]*\\.json$"
     }
   },
   "required": [

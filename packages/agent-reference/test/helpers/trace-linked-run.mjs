@@ -38,7 +38,7 @@ const paths = await runScenario(profile, scenario, {
 });
 const directory = join(dirname(file), "traces");
 mkdirSync(directory);
-using writer = new ScenarioTraceWriter(directory, id);
+using writer = new ScenarioTraceWriter(directory, id, configuration);
 for (const path of paths) {
   if (path.trace) writer.write(`${path.trace.scenario.id}--${configuration}.json`, path.trace);
 }
