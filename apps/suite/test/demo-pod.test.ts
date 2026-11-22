@@ -41,7 +41,20 @@ describe("demo seed and binary fixtures", () => {
   it("seeds a profile, owner-only ACL, registered calendars, Contacts type index, agent type registration and the Drive acceptance tree", async () => {
     const seed = await buildDemoSeed(NOW);
     const pod = createDemoPod({ root: DEMO_ROOT, seed, now: () => NOW });
-    expect(seed.filter((file) => !file.path.startsWith("agent/"))).toHaveLength(98);
+    const nonAgentPaths = seed
+      .map((file) => file.path)
+      .filter((path) => !path.startsWith("agent/"));
+    // Groups & family adds two group records, two folder ACLs and the family sharing state.
+    expect(nonAgentPaths).toHaveLength(103);
+    expect(nonAgentPaths).toEqual(
+      expect.arrayContaining([
+        "groups/.acl",
+        "groups/family.ttl",
+        "groups/team.ttl",
+        "settings/group-sharing/.acl",
+        "settings/group-sharing/state.json",
+      ]),
+    );
     expect(DRIVE_ROOT_CLASS).toBe("https://jeswr.org/ns/pod-drive#DriveRoot");
     for (const file of seed) {
       const url = new URL(file.path, DEMO_ROOT).href;
@@ -147,13 +160,14 @@ describe("demo seed and binary fixtures", () => {
 describe("demo pod HTTP contract", () => {
   it("lists direct children with typed metadata and advertises the storage root", async () => {
     const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(NOW), now: () => NOW });
+    const descriptionUrl = new URL("/.well-known/solid", DEMO_ROOT).href;
     const response = await pod.fetch(DEMO_ROOT);
     expect(response.headers.get("link")).toContain(
       '<http://www.w3.org/ns/pim/space#Storage>; rel="type"',
     );
     expect(response.headers.get("link")).toContain(`<${DEMO_ROOT}.acl>; rel="acl"`);
     expect(response.headers.get("link")).toContain(
-      `<${DEMO_ROOT}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`,
+      `<${descriptionUrl}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`,
     );
     expect(response.headers.get("wac-allow")).toBe('user="read write append control",public=""');
     const rootGraph = await graph(response, DEMO_ROOT);
@@ -181,6 +195,15 @@ describe("demo pod HTTP contract", () => {
       `${DEMO_ROOT}settings/`,
       `${DEMO_ROOT}templates/`,
     ]);
+    const description = await graph(await pod.fetch(descriptionUrl), descriptionUrl);
+    expect(objects(description, DEMO_ROOT, TYPE)).toEqual([
+      "http://www.w3.org/ns/pim/space#Storage",
+    ]);
+    const discoveryParent = new URL("./", descriptionUrl).href;
+    expect((await pod.fetch(discoveryParent, { method: "PUT" })).status).toBe(201);
+    const discoveryListing = await graph(await pod.fetch(discoveryParent), discoveryParent);
+    expect(objects(discoveryListing, discoveryParent, `${LDP}contains`)).toEqual([]);
+
     const work = `${DEMO_ROOT}drive/Work/`;
     const listing = await graph(await pod.fetch(work), work);
     expect(objects(listing, work, `${LDP}contains`)).toEqual([
