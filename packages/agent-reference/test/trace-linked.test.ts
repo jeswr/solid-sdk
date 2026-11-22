@@ -21,7 +21,7 @@ import { join } from "path";
 import { expect, it } from "vitest";
 import { digestBytes } from "../src/core/canonical.js";
 import type { PathResult } from "../src/engine/run.js";
-import { trustLinks } from "../src/trace/linked.js";
+import { termsLinks, trustLinks } from "../src/trace/linked.js";
 import { traceFileSchema, traceFileSchemaWithLinkedTable } from "../src/trace/schema.js";
 import {
   outlineOf,
@@ -283,3 +283,17 @@ for (const [scenario, configuration] of [
     expect(categories).toEqual(new Set(["memory-item", "record-entry", "policy", "trust-entry"]));
   });
 }
+
+it("leaves out the policy view for peer terms whose rule has no ODRL form", () => {
+  const terms = (action: string) => ({
+    policy: {
+      id: "urn:test:terms",
+      permissions: [{ type: "permission" as const, action, target: "urn:test:item" }],
+    },
+  });
+  // A clean rule gets its view; a rule action that is neither an ODRL name nor a clean IRI
+  // (as a peer may send before the terms check fails) gets none, and the check is not aborted.
+  expect(termsLinks(true, terms("use")).linkedInputs).toHaveLength(1);
+  expect(termsLinks(true, terms("not a clean action"))).toEqual({});
+  expect(termsLinks(false, terms("use"))).toEqual({});
+});

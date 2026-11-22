@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.2 Sol
 // AUTHORED-BY Codex GPT-6
 import type { DatasetCore } from "@jeswr/fetch-rdf";
+import { OdrlSerializationError } from "@jeswr/solid-odrl";
 import { digestOf } from "../core/canonical.js";
 import type { AdmittedFact, ContextItem, ItemTerms } from "../gates/common.js";
 import { jointLogView } from "../mechanisms/joint-privacy.js";
@@ -58,10 +59,18 @@ export function termsLinks(
 ): { linkedInputs?: readonly TraceLinkedInput[] } {
   if (!enabled || !terms?.policy) return {};
   const policy = jointLogView(terms.policy);
+  let dataset: IndexedStore;
+  try {
+    dataset = policyDataset(policy);
+  } catch (error) {
+    // Terms from a peer are checked before they are trusted, and a rule whose action is not a
+    // standard ODRL name or a clean IRI cannot be written as ODRL. The verdict event still
+    // records the check; it carries no linked view of terms that have no ODRL form.
+    if (error instanceof OdrlSerializationError) return {};
+    throw error;
+  }
   return {
-    linkedInputs: [
-      { what: "policy", root: policySubject(policy.id), dataset: policyDataset(policy) },
-    ],
+    linkedInputs: [{ what: "policy", root: policySubject(policy.id), dataset }],
   };
 }
 
