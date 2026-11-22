@@ -21,6 +21,7 @@ import {
   UnsupportedAccessError,
 } from "../src/apps/home/lib/permissions";
 import { recordsFrom } from "../src/apps/home/lib/permissions/records";
+import { AccessNode } from "../src/apps/home/lib/permissions/vocab";
 import { readWacPolicy } from "../src/apps/home/lib/permissions/walk";
 
 const ROOT = "https://pod.test/alice/";
@@ -263,6 +264,73 @@ describe("pure revoke planning", () => {
   });
 });
 describe("WAC revocation and inverse plans", () => {
+  it.each([
+    "combined",
+    "separate",
+    "blank",
+  ])("revokes both equal folder scopes from a merged %s line and Undo restores both", async (kind) => {
+    const graph = new Store([...(await parseRdf(body(""), "text/turtle", { baseIRI: DOC }))]);
+    const rule = (id: string) => {
+      const node = new AccessNode(
+        kind === "blank" ? DataFactory.blankNode(id) : DataFactory.namedNode(`${DOC}#${id}`),
+        graph,
+        DataFactory,
+      );
+      node.values(`${NS.RDF}type`).add(`${ACL}Authorization`);
+      node.values(`${ACL}agent`).add(BOB);
+      node.values(`${ACL}mode`).add(`${ACL}Read`);
+      return node;
+    };
+    const own = rule("bob");
+    own.values(`${ACL}accessTo`).add(ROOT);
+    (kind === "separate" ? rule("members") : own).values(`${ACL}default`).add(ROOT);
+    const data = await serializeTurtle(graph);
+    const state = await snapshot(data);
+    expect(state.rows[0]!.lines).toHaveLength(1);
+    const line = state.rows[0]!.lines[0]!;
+    expect(line.inherited).toBe(false);
+    expect(line.resources.map((r) => r.scope)).toEqual(["resource", "members"]);
+    const plan = planRevoke(line, "line");
+    expect(plan.changes).toHaveLength(2);
+    const pod = fixture(data);
+    const { undo } = await pod.apply(plan);
+    await same(await pod.graph(), body(""));
+    expect(pod.puts()).toHaveLength(1);
+    await pod.apply(undo);
+    await same(await pod.graph(), data);
+  });
+  it.each([
+    "resource",
+    "members",
+  ] as const)("revokes only the selected unequal %s scope and restores it", async (scope) => {
+    const graph = new Store([...(await parseRdf(body(""), "text/turtle", { baseIRI: DOC }))]);
+    for (const [id, predicate, mode] of [
+      ["own", "accessTo", "Read"],
+      ["members", "default", "Write"],
+    ]) {
+      const node = new AccessNode(DataFactory.namedNode(`${DOC}#${id}`), graph, DataFactory);
+      for (const [p, value] of [
+        [`${NS.RDF}type`, `${ACL}Authorization`],
+        [`${ACL}agent`, BOB],
+        [`${ACL}${predicate}`, ROOT],
+        [`${ACL}mode`, `${ACL}${mode}`],
+      ])
+        node.values(p!).add(value!);
+    }
+    const data = await serializeTurtle(graph);
+    const state = await snapshot(data);
+    expect(state.rows[0]!.lines).toHaveLength(2);
+    const line = state.rows[0]!.lines.find((line) => line.folderScope === scope)!;
+    const pod = fixture(data);
+    const { undo } = await pod.apply(planRevoke(line, "line"));
+    const remaining = readWacPolicy(await pod.graph(), ROOT, DOC).grants.filter((g) =>
+      g.who.some((clause) => clause.some((s) => s.kind === "agent" && s.webId === BOB)),
+    );
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0]!.appliesTo).toBe(scope === "resource" ? "members" : "resource");
+    await pod.apply(undo);
+    await same(await pod.graph(), data);
+  });
   it("removes a line with If-Match, retains owner control, and undo restores an isomorphic graph", async () => {
     const pod = fixture();
     const before = await pod.graph();
@@ -390,17 +458,17 @@ describe("WAC revocation and inverse plans", () => {
             !line.inherited && JSON.stringify(line.conditions) === JSON.stringify([condition]),
         )!;
       const plan = planRevoke(line, "line");
-      expect(plan.changes).toHaveLength(1);
+      expect(plan.changes).toHaveLength(2);
       expect(plan.changes[0]!.clause).toEqual([
         { kind: "agent", webId: BOB },
         { kind: "origin", origin: a },
       ]);
       const { undo } = await pod.apply(plan);
       expect(await combinations(pod, ROOT)).toEqual(remaining);
-      expect(await combinations(pod, ROOT, true)).toEqual(full);
+      expect(await combinations(pod, ROOT, true)).toEqual(remaining);
       expect(await combinations(pod, other)).toEqual(full);
       const graph = await pod.graph();
-      expect([...graph.match(null, DataFactory.namedNode("urn:purpose"))]).toHaveLength(3);
+      expect([...graph.match(null, DataFactory.namedNode("urn:purpose"))]).toHaveLength(5);
       expect(
         [...graph.match(null, DataFactory.namedNode("urn:purpose"))].every(
           (quad) => quad.object.value === "retain",
