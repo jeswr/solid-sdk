@@ -19,7 +19,7 @@
  * - the `.acl` document of an existing resource is auxiliary: like CSS, it is
  *   not listed in `ldp:contains` and is deleted together with its subject;
  * - `Link` headers carry `rel="type"`, `rel="acl"`, the storage root type and
- *   `solid:storageDescription` to the read-only `/.well-known/solid` resource;
+ *   `solid:storageDescription` to a read-only resource under `/.well-known/`;
  * - `X-Solid-Demo-Access-Control: none` explicitly reports the lack of enforcement.
  *
  * Listings are serialised with `n3.Writer` the way a server would emit them.
@@ -214,7 +214,6 @@ function etagList(value: string | null): string[] | undefined {
 export function createDemoPod(options: DemoPodOptions): DemoPod {
   const root = new URL(options.root).href;
   if (!root.endsWith("/")) throw new Error("Demo pod root must end with '/'");
-  const descriptionUrl = new URL("/.well-known/solid", root).href;
   const now = options.now ?? (() => Date.now());
   const latency = options.latency ?? 0;
   const resources = new Map<string, DemoResource>();
@@ -287,6 +286,19 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
       }
     }
   }
+
+  // Older snapshots could use the discovery path for ordinary files or containers.
+  const descriptionBase = new URL("/.well-known/solid", root).href;
+  let descriptionUrl = descriptionBase;
+  for (
+    let suffix = 1;
+    resources.has(descriptionUrl) || containers.has(`${descriptionUrl}/`);
+    suffix += 1
+  ) {
+    descriptionUrl = `${descriptionBase}-${suffix}`;
+  }
+  const reservedDescriptionPath = (url: string) =>
+    url === descriptionUrl || url.startsWith(`${descriptionUrl}/`);
 
   // An ACL document of an existing subject is auxiliary: addressable, but not a
   // container member. An orphan "x.acl" stays listed so clients' guards against
@@ -432,6 +444,7 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
   };
 
   const write = async (url: string, init: RequestInit, headers: Headers): Promise<Response> => {
+    if (reservedDescriptionPath(url)) return respond(409);
     // All asynchronous body work precedes the precondition and mutation. No
     // await is allowed in the critical section below (including notifications).
     const body = await bodyBytes(init.body);
@@ -472,7 +485,11 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     const slug = (headers.get("slug") ?? "").replace(/[/\\]/g, "-").trim();
     const base = encodeURIComponent(slug || crypto.randomUUID());
     let candidate = `${url}${base}${asContainer ? "/" : ""}`;
-    for (let n = 1; resources.has(candidate) || containers.has(candidate); n += 1) {
+    for (
+      let n = 1;
+      reservedDescriptionPath(candidate) || resources.has(candidate) || containers.has(candidate);
+      n += 1
+    ) {
       candidate = `${url}${base}-${n}${asContainer ? "/" : ""}`;
     }
     const childHeaders = new Headers();

@@ -14,6 +14,7 @@
 import {
   AppGlyph,
   type AppSlug,
+  BottomTabBar,
   Sheet,
   SheetContent,
   SheetDescription,
@@ -226,14 +227,7 @@ export function SuiteFrame({
           </SheetContent>
         </Sheet>
       ) : null}
-      <nav className="ish-tabbar" aria-label="Apps">
-        {apps.map(({ slug: id, name: label, basePath: href }) => (
-          <Link key={id} href={href} aria-current={id === app ? "page" : undefined}>
-            <AppGlyph app={id} />
-            <span>{label}</span>
-          </Link>
-        ))}
-      </nav>
+      <BottomTabBar currentApp={app} apps={apps} showBacklog={env.NEXT_PUBLIC_SHOW_BACKLOG_APPS} />
       <WalkthroughDock />
     </div>
   );

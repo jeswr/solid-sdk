@@ -5,8 +5,8 @@ import { createMemoryCache } from "@jeswr/storage-capabilities/cache";
 import { createPodClient } from "@jeswr/storage-client";
 import { DataFactory, Writer } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DEMO_ROOT } from "../src/lib/demo-pod/constants";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
-import { DEMO_ROOT } from "../src/lib/demo-pod/seed";
 
 const STORAGE_DESCRIPTION = "http://www.w3.org/ns/solid/terms#storageDescription";
 const STORAGE = "http://www.w3.org/ns/pim/space#Storage";
@@ -129,6 +129,59 @@ describe.each([DEMO_ROOT, `${DEMO_ROOT}alice/`])("demo storage discovery at %s",
     }
     expect(pod.snapshot()).toEqual(before);
   });
+});
+
+it("discovers storage without shadowing saved files or containers", async () => {
+  const descriptionUrl = new URL("/.well-known/solid", DEMO_ROOT).href;
+  const seeded = createDemoPod({
+    root: DEMO_ROOT,
+    seed: [
+      { path: ".well-known/solid", body: "saved bytes", contentType: "text/plain" },
+      { path: ".well-known/solid-1/child", body: "saved child", contentType: "text/plain" },
+    ],
+  });
+  const snapshot = seeded.snapshot();
+  const pod = createDemoPod({ root: DEMO_ROOT, snapshot });
+  expect(await (await pod.fetch(descriptionUrl)).text()).toBe("saved bytes");
+  expect(await (await pod.fetch(`${descriptionUrl}-1/child`)).text()).toBe("saved child");
+  const { description } = await createPodClient({
+    storage: DEMO_ROOT,
+    fetch: pod.fetch,
+    capabilities: createMemoryCache(),
+  });
+  expect(description.descriptionUrl).toBe(`${descriptionUrl}-2`);
+  expect(description.sources).toContain("solid-description");
+  expect(pod.snapshot()).toEqual(snapshot);
+});
+
+it.each([false, true])("POST skips the virtual description for container=%s", async (container) => {
+  const root = new URL("/.well-known/", DEMO_ROOT).href;
+  const pod = createDemoPod({ root: DEMO_ROOT });
+  expect((await pod.fetch(root, { method: "PUT" })).status).toBe(201);
+  for (const path of ["solid/", "solid/child"]) {
+    expect((await pod.fetch(new URL(path, root), { method: "PUT" })).status).toBe(409);
+  }
+  const response = await pod.fetch(root, {
+    method: "POST",
+    headers: {
+      slug: "solid",
+      ...(container ? { link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"' } : {}),
+    },
+    body: "posted bytes",
+  });
+  const location = new URL(container ? "solid-1/" : "solid-1", root);
+  expect(response.status).toBe(201);
+  expect(response.headers.get("location")).toBe(location.href);
+  const saved = await pod.fetch(location);
+  expect(saved.status).toBe(200);
+  if (!container) expect(await saved.text()).toBe("posted bytes");
+  const listing = await parseRdf(await (await pod.fetch(root)).text(), "text/turtle", {
+    baseIRI: root,
+  });
+  expect(listing.match(namedNode(root), namedNode(CONTAINS)).size).toBe(1);
+  expect(listing.match(namedNode(root), namedNode(CONTAINS), namedNode(location.href)).size).toBe(
+    1,
+  );
 });
 
 it("propagates storage description serialization failures", async () => {

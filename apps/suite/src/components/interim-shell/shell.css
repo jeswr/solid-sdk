@@ -27,15 +27,20 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-4);
+  min-height: 0;
   padding-block: var(--space-3);
 }
 .ish-rail ul {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: var(--space-1) 0;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: var(--space-2);
+  width: 100%;
+  overflow-y: auto;
+  scrollbar-width: none;
 }
 .ish-brand {
   color: var(--primary);
@@ -193,9 +198,6 @@
     max-height: 85dvh;
   }
 }
-.ish-tabbar {
-  display: none;
-}
 @media (max-width: 1023px) {
   .ish-frame,
   .ish-frame[data-has-details] {
@@ -216,7 +218,9 @@
   .ish-frame,
   .ish-frame[data-has-details] {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: var(--topbar-h-mobile) minmax(0, 1fr) 56px;
+    grid-template-rows:
+      var(--topbar-h-mobile) minmax(0, 1fr)
+      calc(56px + env(safe-area-inset-bottom));
     grid-template-areas:
       "topbar"
       "main"
@@ -235,33 +239,12 @@
   .ish-search form {
     height: 36px;
   }
-  .ish-tabbar {
-    grid-area: tabbar;
-    display: flex;
-    border-top: 1px solid var(--border);
-    background: var(--surface);
-  }
-  .ish-tabbar a {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    font-size: var(--text-xs);
-    color: var(--foreground-muted);
-    text-decoration: none;
-  }
-  .ish-tabbar a[aria-current="page"] {
-    color: var(--primary);
-    font-weight: 600;
-  }
 }
 @media print {
   .ish-rail,
   .ish-sidebar,
   .ish-topbar,
-  .ish-tabbar,
+  .ish-frame > .suite-bottom-tabs,
   .ish-details {
     display: none;
   }
