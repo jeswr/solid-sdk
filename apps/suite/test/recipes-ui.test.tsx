@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import "./drive-ui-dom";
 
 import type { RecipeData, RecipeRecord, RecipeStore } from "@jeswr/solid-recipe";
@@ -8,7 +9,7 @@ import { RecipeForm } from "../src/apps/recipes/components/recipe-form";
 import { RecipesApp } from "../src/apps/recipes/components/recipes-app";
 import { recipeFromForm } from "../src/apps/recipes/lib/recipes";
 import { createRecipeState, type RecipeState } from "../src/apps/recipes/state/recipe-state";
-import { click, h, mount } from "./drive-ui-dom";
+import { act, click, h, mount } from "./drive-ui-dom";
 
 let currentState: RecipeState;
 vi.mock("../src/apps/recipes/state/recipes-context", () => ({
@@ -41,6 +42,64 @@ const button = (host: Element, name: string) => {
   if (!element) throw new Error(`Missing button: ${name}`);
   return element;
 };
+it.each([
+  ["loads a bounded image", "https://93.184.216.34/soup.png", 4, "loaded"],
+  ["refuses an oversized image", "https://93.184.216.34/soup.png", 2_097_153, "refused"],
+  ["blocks loopback", "https://127.0.0.1/soup.png", 4, "blocked"],
+] as const)("%s only after the user opts in", async (_test, image, bytes, outcome) => {
+  const transport = vi.fn(
+    async () => new Response(new Uint8Array(bytes), { headers: { "content-type": "image/png" } }),
+  );
+  const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(transport);
+  const create = vi.spyOn(URL, "createObjectURL");
+  const revoke = vi.spyOn(URL, "revokeObjectURL");
+  try {
+    const store: RecipeStore = {
+      container: "https://pod.example/recipes/",
+      list: async () => ({
+        recipes: [{ ...record, data: { ...data, image } }],
+        plans: [],
+        skipped: [],
+      }),
+      create: vi.fn(),
+      update: vi.fn(),
+      savePlan: vi.fn(),
+    };
+    currentState = createRecipeState(store, vi.fn());
+    await currentState.refresh();
+    const view = await mount(h(RecipesApp));
+    expect(transport).not.toHaveBeenCalled();
+    expect(view.host.innerHTML).not.toContain(image);
+    await click(button(view.host, "Load external image"));
+    if (outcome === "blocked") expect(transport).not.toHaveBeenCalled();
+    else {
+      expect(transport).toHaveBeenCalledOnce();
+      expect(transport).toHaveBeenCalledWith(
+        image,
+        expect.objectContaining({
+          credentials: "omit",
+          redirect: "manual",
+          referrerPolicy: "no-referrer",
+        }),
+      );
+    }
+    if (outcome === "loaded") {
+      expect(view.host.querySelector(".recipes-image-preview")?.getAttribute("style")).toContain(
+        "blob:",
+      );
+      expect(create).toHaveBeenCalledOnce();
+      await act(async () => view.unmount());
+      expect(revoke).toHaveBeenCalledWith(create.mock.results[0]?.value);
+    } else {
+      expect(view.host.textContent).toContain("Image unavailable");
+      expect(create).not.toHaveBeenCalled();
+    }
+  } finally {
+    fetch.mockRestore();
+    create.mockRestore();
+    revoke.mockRestore();
+  }
+});
 
 it("keeps cook mode, scaling and checked steps/ingredients after a favourite write changes modified", async () => {
   const store: RecipeStore = {
@@ -57,7 +116,6 @@ it("keeps cook mode, scaling and checked steps/ingredients after a favourite wri
   await click(button(view.host, "Start cooking"));
   const scale = view.host.querySelector<HTMLSelectElement>("#recipe-scale");
   if (!scale) throw new Error("Missing scale");
-  const { act } = await import("./drive-ui-dom");
   await act(async () => {
     scale.value = "2";
     scale.dispatchEvent(new Event("change", { bubbles: true }));

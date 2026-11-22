@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 
 import { entities, type MealPlanData } from "./generated/model.js";
 
@@ -14,7 +15,7 @@ function monday(date: Date | undefined): date is Date {
 }
 
 /** Keep old name-encoded weeks readable; startDate is authoritative when present. */
-function withWeek(data: MealPlanData): MealPlanData {
+export function normalizeWeek(data: MealPlanData): MealPlanData {
   const { startDate, ...plain } = data;
   const fromName = /^\d{4}-\d{2}-\d{2}$/.test(data.name)
     ? new Date(`${data.name}T00:00:00Z`)
@@ -30,7 +31,7 @@ function withWeek(data: MealPlanData): MealPlanData {
 export async function serializeMealPlan(url: string, data: MealPlanData): Promise<string> {
   if (data.startDate !== undefined && !monday(data.startDate))
     throw new TypeError("Choose a Monday at midnight UTC for the meal plan week");
-  return entities.MealPlan.serialize(url, withWeek(data));
+  return entities.MealPlan.serialize(url, normalizeWeek(data));
 }
 
 export async function parseMealPlan(
@@ -39,5 +40,5 @@ export async function parseMealPlan(
   contentType: string | null = "text/turtle",
 ): Promise<MealPlanData | undefined> {
   const data = await entities.MealPlan.parseDocument(url, body, contentType);
-  return data ? withWeek(data) : undefined;
+  return data ? normalizeWeek(data) : undefined;
 }

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 
 import type {
   Day,
@@ -21,10 +22,11 @@ type Content = Pick<RecipeSnapshot, "recipes" | "plans">;
 interface Operation {
   apply: (value: Content) => Content;
   run: (value: Content) => Promise<Content>;
+  onSaved?: (() => void) | undefined;
 }
 
 /** Recipe-specific serial queue: failed intents leave the confirmed baseline intact. */
-export function createRecipeState(store: RecipeStore, onError: () => void) {
+export function createRecipeState(store: RecipeStore, onError: (error: unknown) => void) {
   let confirmed: Content = { recipes: [], plans: [] };
   let skipped: SkippedRecipeEntry[] = [];
   let snapshot: RecipeSnapshot = { ...confirmed, skipped, status: "loading", pending: 0 };
@@ -47,13 +49,17 @@ export function createRecipeState(store: RecipeStore, onError: () => void) {
       const op = operations[0] as Operation;
       try {
         const next = await op.run(confirmed);
-        if (alive) confirmed = next;
-      } catch {
-        if (alive) onError();
+        if (alive) {
+          confirmed = next;
+          op.onSaved?.();
+        }
+      } catch (error) {
+        if (alive) onError(error);
       }
       operations.shift();
       emit();
     }
+    if (snapshot.status === "loading") void refresh();
   }
   const enqueue = (op: Operation) => {
     if (!alive) return;
@@ -62,6 +68,32 @@ export function createRecipeState(store: RecipeStore, onError: () => void) {
     emit();
     if (operations.length === 1) void drain();
   };
+  async function refresh() {
+    if (!alive || operations.length) return;
+    const captured = ++generation;
+    try {
+      const data = await store.list();
+      if (!alive || captured !== generation) return;
+      confirmed = data;
+      skipped = data.skipped;
+      emit("ready");
+    } catch (error) {
+      if (!alive || captured !== generation) return;
+      if (
+        snapshot.status === "ready" &&
+        error instanceof StorageError &&
+        error.code === "network"
+      ) {
+        // A disconnected pod cannot invalidate recipes already open on this device.
+        emit("ready");
+        return;
+      }
+      // Failed refreshes never paint data whose access may have been revoked.
+      confirmed = { recipes: [], plans: [] };
+      skipped = [];
+      emit("error");
+    }
+  }
   return {
     subscribe(listener: () => void) {
       listeners.add(listener);
@@ -70,33 +102,9 @@ export function createRecipeState(store: RecipeStore, onError: () => void) {
       };
     },
     getSnapshot: () => snapshot,
-    async refresh() {
-      if (!alive || operations.length) return;
-      const captured = ++generation;
-      try {
-        const data = await store.list();
-        if (!alive || captured !== generation) return;
-        confirmed = data;
-        skipped = data.skipped;
-        emit("ready");
-      } catch (error) {
-        if (!alive || captured !== generation) return;
-        if (
-          snapshot.status === "ready" &&
-          error instanceof StorageError &&
-          error.code === "network"
-        ) {
-          // A disconnected pod cannot invalidate recipes already open on this device.
-          emit("ready");
-          return;
-        }
-        // Failed refreshes never paint data whose access may have been revoked.
-        confirmed = { recipes: [], plans: [] };
-        skipped = [];
-        emit("error");
-      }
-    },
-    save(data: RecipeData, url?: string) {
+    refresh,
+    save(data: RecipeData, opened?: RecipeRecord, onSaved?: () => void) {
+      const url = opened?.url;
       const temporary = `local:${crypto.randomUUID()}`;
       // These fields have separate owners; the editor does not modify them.
       const edited = (original: RecipeData): RecipeData => ({
@@ -108,15 +116,20 @@ export function createRecipeState(store: RecipeStore, onError: () => void) {
         ...value,
         recipes: url
           ? value.recipes.map((record) =>
-              record.url === url ? { ...record, data: edited(record.data) } : record,
+              record.url === url && record.etag === opened?.etag
+                ? { ...record, data: edited(record.data) }
+                : record,
             )
           : [...value.recipes, { url: temporary, etag: "", data }],
       });
       enqueue({
         apply,
+        onSaved,
         async run(value) {
           const original = value.recipes.find((record) => record.url === url);
           if (url && !original) throw new Error("Recipe no longer exists");
+          if (opened && original?.etag !== opened.etag)
+            throw new StorageError("precondition-failed", { method: "PUT", url: opened.url });
           const saved = original
             ? await store.update(original, edited(original.data))
             : await store.create(data);

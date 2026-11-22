@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
-import { openRecipeStore } from "@jeswr/solid-recipe";
+import { openRecipeStore, RecipePrivacyError } from "@jeswr/solid-recipe";
+import { StorageError } from "@jeswr/storage-client";
 import { ErrorState, LoadingSkeleton, toast } from "@jeswr/suite-ui";
 import {
   createContext,
@@ -44,9 +46,12 @@ export function RecipesProvider({
           toast.error(
             "Recipes work, but your pod's Type Index could not be updated. Reopen Recipes to try again.",
           );
-        opened = createRecipeState(store, () =>
-          toast.error("Couldn't save that change. Your previous recipe is safe. Please try again."),
-        );
+        opened = createRecipeState(store, (error) => {
+          if (error instanceof RecipePrivacyError) toast.error(error.message);
+          else if (error instanceof StorageError && error.code === "precondition-failed")
+            toast.error("This recipe changed. Reload it and reopen the editor before saving.");
+          else toast.error("Couldn't save that change. Please try again.");
+        });
         setState(opened);
         stop = session.subscribe(() => {
           void opened?.refresh();

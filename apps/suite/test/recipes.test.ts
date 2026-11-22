@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import {
   type RecipeData,
   type RecipeRecord,
@@ -12,6 +13,11 @@ import { ensureSample, SAMPLE_RECIPES } from "../src/apps/recipes/demo/sample";
 import { filterRecipes, recipeFromForm, weekDays } from "../src/apps/recipes/lib/recipes";
 import { createRecipeState } from "../src/apps/recipes/state/recipe-state";
 import type { PodSession } from "../src/lib/session/pod-session";
+
+vi.mock("@jeswr/pod-access", async (original) => ({
+  ...(await original<typeof import("@jeswr/pod-access")>()),
+  checkOwnerOnly: vi.fn(async () => ({ private: true })),
+}));
 
 const data: RecipeData = {
   name: "Soup",
@@ -133,6 +139,36 @@ describe("recipe view helpers", () => {
   });
 });
 describe("recipe optimistic state", () => {
+  it("replaces an initial list invalidated by a save and retains the saved recipe", async () => {
+    const { state, store } = setup();
+    const old = deferred<{ recipes: RecipeRecord[]; plans: []; skipped: [] }>();
+    vi.mocked(store.list).mockReturnValueOnce(old.promise);
+    const initial = state.refresh();
+    const saved = { ...record, data: { ...data, name: "Created during loading" } };
+    vi.mocked(store.create).mockResolvedValueOnce(saved);
+    vi.mocked(store.list).mockResolvedValueOnce({ recipes: [saved], plans: [], skipped: [] });
+    const onSaved = vi.fn();
+    state.save(saved.data, undefined, onSaved);
+    await vi.waitFor(() => expect(state.getSnapshot().status).toBe("ready"));
+    old.resolve({ recipes: [], plans: [], skipped: [] });
+    await initial;
+    expect(state.getSnapshot()).toMatchObject({ recipes: [saved], pending: 0, status: "ready" });
+    expect(onSaved).toHaveBeenCalledOnce();
+  });
+  it("rejects an editor save when a refresh has advanced the original version", async () => {
+    const { state, store, errors } = setup();
+    await state.refresh();
+    const newer = { ...record, etag: '"2"', data: { ...data, instructions: ["Simmer"] } };
+    vi.mocked(store.list).mockResolvedValueOnce({ recipes: [newer], plans: [], skipped: [] });
+    await state.refresh();
+    const onSaved = vi.fn();
+    state.save({ ...data, name: "Stale title" }, record, onSaved);
+    expect(state.getSnapshot().recipes).toEqual([newer]);
+    await vi.waitFor(() => expect(state.getSnapshot().pending).toBe(0));
+    expect(store.update).not.toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(errors).toHaveBeenCalledWith(expect.objectContaining({ code: "precondition-failed" }));
+  });
   it("keeps skipped notices through mutations, replaces them on refresh and clears them on access failure", async () => {
     const { state, store } = setup();
     const skipped = [{ url: `${store.container}bad`, reason: "invalid-data" as const }];
@@ -207,7 +243,7 @@ describe("recipe optimistic state", () => {
     const failed = deferred<RecipeRecord>();
     vi.mocked(store.update).mockReturnValueOnce(failed.promise);
     state.favourite(record.url);
-    state.save({ ...data, name: "Edited soup", favourite: true }, record.url);
+    state.save({ ...data, name: "Edited soup", favourite: true }, record);
     failed.reject(new Error("failed favourite"));
     await vi.waitFor(() => expect(state.getSnapshot().pending).toBe(0));
     expect(state.getSnapshot().recipes[0]?.data).toMatchObject({
@@ -254,7 +290,7 @@ describe("recipe optimistic state", () => {
     state.save({ ...data, name: "Toast" });
     expect(state.getSnapshot().recipes).toHaveLength(2);
     await vi.waitFor(() => expect(state.getSnapshot().pending).toBe(0));
-    state.save({ ...data, name: "Bean soup" }, record.url);
+    state.save({ ...data, name: "Bean soup" }, record);
     state.assign("2026-11-09", "monday", `${record.url}#it`);
     state.assign("2026-11-09", "tuesday", `${record.url}#it`);
     await vi.waitFor(() => expect(state.getSnapshot().pending).toBe(0));
@@ -310,7 +346,7 @@ describe("recipe optimistic state", () => {
     await state.refresh();
     state.favourite("absent");
     expect(state.getSnapshot().pending).toBe(0);
-    state.save(data, "absent");
+    state.save(data, { ...record, url: "absent" });
     await vi.waitFor(() => expect(errors).toHaveBeenCalledOnce());
   });
 });
@@ -320,7 +356,7 @@ describe("recipe demo seed", () => {
     const container = (
       await storage.create(storage.root, null, { kind: "container", name: "recipes" })
     ).url;
-    const store = recipeStore(storage, container);
+    const store = recipeStore(storage, container, container, `${storage.root}profile#me`);
     const session = {
       mode: "demo",
       fetch: vi.fn(),

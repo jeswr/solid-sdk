@@ -1,5 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import { openRecipeStore, type RecipeData, type RecipeStore } from "@jeswr/solid-recipe";
+// AUTHORED-BY Codex GPT-6
+import {
+  openRecipeStore,
+  type RecipeData,
+  RecipePrivacyError,
+  type RecipeStore,
+} from "@jeswr/solid-recipe";
+import { StorageError } from "@jeswr/storage-client";
 import { toast } from "@jeswr/suite-ui";
 import { expect, it, vi } from "vitest";
 import { ensureSample } from "../src/apps/recipes/demo/sample";
@@ -85,6 +92,29 @@ it("offers retry after an opening error", async () => {
   await act(async () => {
     await vi.waitFor(() => expect(view.host.textContent).toContain("Opened"));
   });
+});
+
+it("explains privacy refusals and edit conflicts without exposing pod URLs", async () => {
+  const { session, store } = fixture();
+  vi.mocked(store.create)
+    .mockRejectedValueOnce(new RecipePrivacyError())
+    .mockRejectedValueOnce(
+      new StorageError("precondition-failed", { method: "PUT", url: session.storageUrl }),
+    )
+    .mockRejectedValueOnce(new StorageError("network", { method: "PUT", url: session.storageUrl }));
+  vi.mocked(openRecipeStore).mockResolvedValueOnce(store);
+  let current: ReturnType<typeof useRecipes> | undefined;
+  function Consumer() {
+    current = useRecipes();
+    return null;
+  }
+  await mount(h(RecipesProvider, { session, children: h(Consumer) }));
+  for (const message of ["owner-only access", "This recipe changed", "Couldn't save"]) {
+    await act(async () => {
+      current?.actions.save(data);
+    });
+    expect(toast.error).toHaveBeenLastCalledWith(expect.stringContaining(message));
+  }
 });
 
 it("opens a live session through discovery and rejects use outside its provider", async () => {

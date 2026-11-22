@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   DAYS,
@@ -26,7 +27,6 @@ import {
 import {
   BookOpen,
   CalendarDays,
-  ChefHat,
   ChevronLeft,
   ChevronRight,
   Heart,
@@ -41,6 +41,7 @@ import { filterRecipes, weekDays } from "../lib/recipes";
 import { RecipesProvider, useRecipes } from "../state/recipes-context";
 import { RecipeDetail } from "./recipe-detail";
 import { RecipeForm } from "./recipe-form";
+import { RecipeImage } from "./recipe-image";
 
 export function RecipesApp() {
   return (
@@ -74,7 +75,7 @@ function Workspace() {
   const [cuisine, setCuisine] = useState("");
   const [favourites, setFavourites] = useState(false);
   const [selected, setSelected] = useState<string>();
-  const [editing, setEditing] = useState<{ data?: RecipeData; url?: string }>();
+  const [editing, setEditing] = useState<{ data?: RecipeData; record?: RecipeRecord }>();
   const [importing, setImporting] = useState(false);
   const [source, setSource] = useState("");
   const [importError, setImportError] = useState("");
@@ -126,11 +127,15 @@ function Workspace() {
       }
       actions={
         <>
-          <Button variant="outline" onClick={() => setImporting(true)} disabled={offline}>
+          <Button
+            variant="outline"
+            onClick={() => setImporting(true)}
+            disabled={offline || status !== "ready"}
+          >
             <Upload size={16} aria-hidden="true" />
             Import
           </Button>
-          <Button onClick={() => setEditing({})} disabled={offline}>
+          <Button onClick={() => setEditing({})} disabled={offline || status !== "ready"}>
             <Plus size={16} aria-hidden="true" />
             New recipe
           </Button>
@@ -188,7 +193,7 @@ function Workspace() {
             record={record}
             disabled={offline || record.url.startsWith("local:")}
             onBack={() => setSelected(undefined)}
-            onEdit={() => setEditing({ data: record.data, url: record.url })}
+            onEdit={() => setEditing({ data: record.data, record })}
             onFavourite={() => actions.favourite(record.url)}
           />
         ) : tab === "box" ? (
@@ -377,13 +382,14 @@ function Workspace() {
       </div>
       {editing && (
         <RecipeForm
-          disabled={offline}
+          disabled={offline || pending > 0}
           initial={editing.data}
           onClose={() => setEditing(undefined)}
           onSave={(data) => {
             if (offline) return;
-            actions.save(data, editing.url);
-            setEditing(undefined);
+            actions.save(data, editing.record, () => {
+              setEditing((current) => (current === editing ? undefined : current));
+            });
           }}
         />
       )}
@@ -442,22 +448,10 @@ function RecipeCard({
   disabled: boolean;
 }) {
   const { data } = record;
-  const [failedImage, setFailedImage] = useState<string>();
   return (
     <article className="recipes-card">
       <div className="recipes-card-image">
-        {data.image && failedImage !== data.image ? (
-          // biome-ignore lint/performance/noImgElement: user-supplied recipe artwork cannot use a server image proxy.
-          <img
-            src={data.image}
-            alt=""
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            onError={() => setFailedImage(data.image)}
-          />
-        ) : (
-          <ChefHat size={48} strokeWidth={1} aria-hidden="true" />
-        )}
+        <RecipeImage key={data.image} url={data.image} />
         <IconButton
           label={`${data.favourite ? "Unfavourite" : "Favourite"} ${data.name}`}
           aria-pressed={data.favourite ?? false}

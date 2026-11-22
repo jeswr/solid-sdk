@@ -1,10 +1,11 @@
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Recipes first cut (sst-889p)
 
 `/recipes` uses AppFrame, the shell pod session and @jeswr/solid-recipe. Demo mode
 seeds fictional recipes and a weekly plan through the same SDK store used for live
-pods. The recipe box supports search, category/cuisine/favourite filters and images
-with a local placeholder when an image cannot load. Cook mode has larger text,
+pods. The recipe box supports search, category/cuisine/favourite filters and
+opt-in external images fetched without credentials. Cook mode has larger text,
 ingredient and step checklists, quantity scaling and optional screen wake lock.
 The editor includes durations, yield, source, nutrition, rating and metadata; import
 previews pasted HTML/JSON-LD in the editor before saving. Weekly plans link recipes
@@ -12,8 +13,9 @@ to days and support week navigation.
 
 The state controller paints optimistically and serialises writes. It removes failed
 intents from the queue and recomputes from confirmed data, shows a toast on failure,
-fences stale refreshes and disposes account-specific work on unmount. Conditional
-write conflicts require the user to refresh and reapply their change.
+fences stale refreshes and disposes account-specific work on unmount. The editor
+keeps its starting version and stays open on failure. Recipe and meal plan writes
+require verified owner-only access.
 
 Already-open recipes and cook-mode checklists remain usable offline. Save controls
 require reconnection; this first cut has no durable recipe cache or offline write queue.

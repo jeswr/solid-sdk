@@ -3,6 +3,7 @@ name: solid-recipe
 description: Use when reading or writing Solid recipes and weekly meal plans through @jeswr/solid-recipe, changing its generated profile, importing schema.org JSON-LD, scaling ingredients or formatting cooking durations.
 ---
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Solid recipe model
 
@@ -44,15 +45,16 @@ minutes and decimal seconds at microsecond precision. `normalizeDuration` omits
 invalid, unsupported or unsafe-size optional imports. `scaleIngredient` affects
 only an initial quantity or range.
 
-`openRecipeStore` creates `recipes/` and `meal-plans/` and registers their respective
-classes in the Type Index. `recipeStore(storage, container, planContainer?)` also
-supports memory clients; the default plan container is the supplied container for
-existing callers. Listing filters by generated type, reads legacy co-located plans,
-and returns `skipped` entries without hiding valid records. Access and transport
-errors propagate. Nullable or weak ETags permit reading; writes require an observed
-strong ETag. `savePlan` uses the recipe subjects known from successful list/create/
-update calls, without listing again, and works when destructured. Retain actual
-server-assigned resource URLs and pass authenticated fetch from the session.
+`openRecipeStore` uses fixed container names and optional private Type Index
+registration on Solid. On LWS it discovers server-assigned collection identifiers
+by their type markers. `recipeStore(storage, container, planContainer?, ownerWebId?)`
+defaults to co-location. Pass the owner WebID and authenticated storage transport
+to enable owner-only verification before writes. Listing uses bounded reads,
+includes legacy co-located plans, and reports unreadable files in `skipped`.
+Nullable or weak ETags permit reading. Follow-up writes require a strong ETag.
+Solid weekly plans conditionally reserve one resource per week and reconcile
+concurrent changes to different days. `savePlan` validates new recipe references
+against the subjects known from list/create/update and works when destructured.
 
 From the workspace root, with Node 24 on PATH:
 

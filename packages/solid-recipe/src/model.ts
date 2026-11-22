@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 
 import { entities, type RecipeData as GeneratedRecipe } from "./generated/model.js";
 
@@ -56,7 +57,7 @@ function reconcileOrdered(standard: string[] = [], ordered: string[] = []): stri
     : standard;
 }
 
-function toGenerated(data: RecipeData): GeneratedRecipe {
+export function toGenerated(data: RecipeData): GeneratedRecipe {
   return {
     ...data,
     orderedIngredients: encodeOrdered(data.ingredients),
@@ -92,7 +93,10 @@ export async function parseRecipe(
   body: string,
   contentType = "text/turtle",
 ): Promise<RecipeData | undefined> {
-  const data = await entities.Recipe.parseDocument(url, body, contentType);
+  return fromGenerated(await entities.Recipe.parseDocument(url, body, contentType));
+}
+
+export function fromGenerated(data: GeneratedRecipe | undefined): RecipeData | undefined {
   const { orderedIngredients, orderedInstructions, ...plain } = data ?? {};
   return data
     ? {

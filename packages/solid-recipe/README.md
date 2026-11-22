@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # @jeswr/solid-recipe
 
 Generated recipes and weekly meal plans, browser-safe schema.org JSON-LD import,
@@ -108,17 +109,24 @@ fractions, mixed numbers and ranges. It leaves package sizes and preparation tex
 alone. `formatDuration` formats fixed cooking durations; month/year durations retain
 their original spelling because they have no fixed minute equivalent.
 
-`openRecipeStore({fetch, storageUrl, webId})` uses storage-client and pod-type-index
-to create `recipes/` and `meal-plans/` and register schema:Recipe and recipe:MealPlan
-in the private Type Index against their respective containers. Index failure
-is exposed as `registrationError`, so callers can explain failed discovery without
-hiding accessible recipes. `recipeStore(storage, container)` accepts an existing
-client, including memory clients for Solid and LWS. It uses returned create URLs,
-nullable read ETags, bounded container listings and strongly conditional writes. Conflicts
-propagate to the caller. Weekly plans accept only recipe subjects known from successful list/create/update calls,
-without re-listing the box per change. Legacy plans in recipes/ remain readable.
-`recipeStore(storage, container, planContainer?)` defaults to co-location for existing callers.
-Registration relies on the pod's existing access policy; this package never grants access.
+`openRecipeStore({fetch, storageUrl, webId})` opens the `recipes/` and `meal-plans/`
+containers on Solid and conditionally registers them in the private Type Index.
+LWS collections use server-assigned URLs and type markers in the root listing.
+Index failures appear as `registrationError` while the store remains usable.
+
+`recipeStore(storage, container, planContainer?, ownerWebId?)` accepts an existing
+client and defaults to co-location. The owner WebID enables write attempts.
+Writes require verified owner-only access to the collection and actual document.
+Listing accepts nullable ETags and bounds each document and listing page.
+Conditional recipe edits retain unrelated RDF. A recipe create returns the
+write acknowledgement, with a nullable ETag if the server supplies no safe one.
+Within the open store, retrying the same draft can resume its allocated URL.
+
+On Solid, first assignments share a conditional reservation keyed by week and
+reapply their changed days after a creation race. New references must be known recipe
+subjects, and unchanged unavailable recipes are preserved. The store still reads
+legacy plans in `recipes/`. LWS writes require a supported owner-only proof and
+new LWS weeks also require an atomic reservation mechanism.
 
 An explicitly configured `protocol: "solid"` uses the SDK's Solid backend for a known
 transport without discovery headers (the Suite demo pod). This is caller configuration,

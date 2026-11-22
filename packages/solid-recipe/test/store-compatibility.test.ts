@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { describe, expect, it, vi } from "vitest";
@@ -6,12 +7,17 @@ import { entities } from "../src/generated/model.js";
 import { recipeSubject, serializeMealPlan } from "../src/model.js";
 import { recipeStore } from "../src/store.js";
 
+vi.mock("@jeswr/pod-access", async (original) => ({
+  ...(await original<typeof import("@jeswr/pod-access")>()),
+  checkOwnerOnly: vi.fn(async () => ({ private: true })),
+}));
+const OWNER = "https://pod.example/profile#me";
 const data = { name: "Soup", ingredients: ["2 eggs"], instructions: ["Mix"] };
 async function setup(protocol: "solid" | "lws" = "solid") {
   const storage = createMemoryStorage({ root: "https://pod.example/", protocol });
   const recipes = await storage.create(storage.root, null, { kind: "container", name: "recipes" });
   const plans = await storage.create(storage.root, null, { kind: "container", name: "meal-plans" });
-  const store = recipeStore(storage, recipes.url, plans.url);
+  const store = recipeStore(storage, recipes.url, plans.url, OWNER);
   const good = await store.create(data);
   return { storage, store, good, container: recipes.url, planContainer: plans.url };
 }
@@ -145,7 +151,7 @@ it("creates safely only with an observed strong ETag", async () => {
 
 it("saves destructured plan methods without relisting recipes, including after reopening", async () => {
   const { store, storage, good, container, planContainer } = await setup();
-  const another = recipeStore(storage, container, planContainer);
+  const another = recipeStore(storage, container, planContainer, OWNER);
   await another.list();
   const list = vi.spyOn(storage, "listAll");
   const read = vi.spyOn(storage, "read");
@@ -190,5 +196,98 @@ it("refreshes the known recipe set and refuses weak plan validators before writi
   expect(write).not.toHaveBeenCalled();
   await storage.delete(good.url, { ifMatch: good.etag as string });
   await store.list();
-  await expect(store.savePlan(plan.data, plan)).rejects.toThrow("Choose a recipe");
+  const next = await store.create({ ...data, name: "Toast" });
+  const changed = await store.savePlan({ ...plan.data, tuesday: recipeSubject(next.url) }, plan);
+  expect(changed).toMatchObject({
+    data: { monday: recipeSubject(good.url), tuesday: recipeSubject(next.url) },
+  });
+  await expect(
+    store.savePlan({ ...changed.data, tuesday: recipeSubject(good.url) }, changed),
+  ).rejects.toThrow("Choose a recipe");
+});
+
+it.each([
+  "solid",
+  "lws",
+] as const)("rejects outside and auxiliary targets on %s", async (protocol) => {
+  const { store, storage, good, container, planContainer } = await setup(protocol);
+  const outside = await storage.create(storage.root, "", { contentType: "text/turtle" });
+  const auxiliary = await storage.create(container, "", {
+    name: "external.acl",
+    contentType: "text/turtle",
+  });
+  const linked = await store.create({ ...good.data, name: "Advertised auxiliary" });
+  const head = storage.head.bind(storage);
+  vi.spyOn(storage, "head").mockImplementation(async (url, options) => {
+    const result = await head(url, options);
+    if (url !== container) return result;
+    const links = new Map(result.links);
+    links.set("acl", [{ target: linked.url, params: {} }]);
+    return { ...result, links };
+  });
+  const write = vi.spyOn(storage, "write");
+  for (const target of [outside, auxiliary, linked]) {
+    await expect(store.update({ ...good, ...target }, data)).rejects.toMatchObject({
+      code: "scope",
+    });
+  }
+  const plan = { name: "week" };
+  await expect(store.savePlan(plan, { ...outside, data: plan })).rejects.toMatchObject({
+    code: "scope",
+  });
+  await expect(store.update({ ...good, url: planContainer }, data)).rejects.toMatchObject({
+    code: "scope",
+  });
+  expect(write).not.toHaveBeenCalled();
+});
+
+it("rejects a server-assigned create follow-up outside its collection", async () => {
+  const { store, storage } = await setup("lws");
+  const other = await storage.create(storage.root, "", { contentType: "text/turtle" });
+  vi.spyOn(storage, "create").mockResolvedValueOnce(other);
+  const write = vi.spyOn(storage, "write");
+  await expect(store.create(data)).rejects.toMatchObject({ code: "scope" });
+  expect(write).not.toHaveBeenCalled();
+});
+
+it("refuses an auxiliary Solid filename before allocating it", async () => {
+  const { store, storage } = await setup();
+  const create = vi.spyOn(storage, "create");
+  await expect(store.create(data, "external.acr")).rejects.toMatchObject({ code: "scope" });
+  expect(create).not.toHaveBeenCalled();
+});
+
+it("preserves unrelated RDF and only replaces changed recipe predicates", async () => {
+  const { store, storage, good } = await setup();
+  // Fixture from a compatible producer with properties outside the generated profile.
+  const external = `
+    <#it> <http://schema.org/aggregateRating> <#aggregate>;
+      <http://schema.org/nutrition> <#nutrition> .
+    <#aggregate> <http://schema.org/ratingValue> 4.6 .
+    <#nutrition> a <http://schema.org/NutritionInformation>;
+      <http://schema.org/calories> "400 kcal";
+      <http://schema.org/proteinContent> "20 g" .
+  `;
+  const original = await (await storage.read(good.url)).text();
+  const written = await storage.write(good.url, original + external, {
+    contentType: "text/turtle",
+    ifMatch: good.etag as string,
+  });
+  const before = (await store.list()).recipes[0] as typeof good;
+  expect(before.etag).toBe(written.etag);
+  const updated = await store.update(before, {
+    ...before.data,
+    favourite: true,
+    calories: undefined,
+  });
+  expect(updated.data.favourite).toBe(true);
+  expect(updated.data.calories).toBeUndefined();
+  expect((await store.list()).recipes).toEqual([updated]);
+  const turtle = await (await storage.read(good.url)).text();
+  expect(turtle).toContain("aggregateRating");
+  expect(turtle).toContain("ratingValue");
+  expect(turtle).toContain("proteinContent");
+  expect(turtle).toContain("NutritionInformation");
+  expect(turtle).toContain("schema.org/nutrition");
+  expect(turtle).not.toContain("400 kcal");
 });

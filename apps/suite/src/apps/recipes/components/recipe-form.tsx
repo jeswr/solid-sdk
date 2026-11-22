@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { durationMinutes, type RecipeData } from "@jeswr/solid-recipe";
 import {
@@ -27,6 +28,7 @@ export function RecipeForm({
   onSave: (data: RecipeData) => void;
 }) {
   const [error, setError] = useState("");
+  const [openedAt] = useState(() => new Date());
   return (
     <Sheet
       open
@@ -46,7 +48,8 @@ export function RecipeForm({
           onSubmit={(event) => {
             event.preventDefault();
             try {
-              onSave(recipeFromForm(new FormData(event.currentTarget), initial));
+              const data = recipeFromForm(new FormData(event.currentTarget), initial);
+              onSave({ ...data, created: initial?.created ?? openedAt });
             } catch (error) {
               setError(error instanceof Error ? error.message : "Check your recipe");
             }
