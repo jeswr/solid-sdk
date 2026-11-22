@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -568,7 +567,7 @@ describe("Takeout untrusted paths and classification", () => {
     );
     expect(report).toMatchObject({
       skipped: 1,
-      unsupported: ["(invalid path): invalid-entry"],
+      unsupported: ["(invalid path): unsafe-entry-path"],
     });
   });
   it("reports safe ZIP names outside the Takeout root without dispatching them", async () => {

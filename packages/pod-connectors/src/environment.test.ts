@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -61,5 +60,9 @@ it("confines environment access to the Node-only VeSync credentials and CLI vaul
     visit(source);
   }
   expect(violations).toEqual([]);
-  expect([...allowedReads].sort()).toEqual(["CONNECTOR_VAULT_KEY", "VESYNC_EMAIL", "VESYNC_PASSWORD"]);
+  expect([...allowedReads].sort()).toEqual([
+    "CONNECTOR_VAULT_KEY",
+    "VESYNC_EMAIL",
+    "VESYNC_PASSWORD",
+  ]);
 });

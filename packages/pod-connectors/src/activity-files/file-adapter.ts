@@ -287,11 +287,10 @@ export function createActivityFilesAdapter(
               limit: () => budget.limits.fileBytes,
               skip: (_name, reason) => {
                 skipped++;
-                budget.warn(
-                  reason === "entry-inflated-cap-exceeded"
-                    ? "file-byte-cap-exceeded"
-                    : "archive-entry-skipped",
-                );
+                if (reason === "unsafe-entry-path") budget.warn("unsafe-archive-path");
+                else if (reason === "entry-inflated-cap-exceeded")
+                  budget.warn("file-byte-cap-exceeded");
+                else budget.warn("archive-entry-skipped");
               },
               entry: (name) =>
                 cappedSink(budget.limits.fileBytes, async (bytes) => {

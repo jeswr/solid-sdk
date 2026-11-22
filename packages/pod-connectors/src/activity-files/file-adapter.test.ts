@@ -209,6 +209,15 @@ describe("activity-files file contract", () => {
     );
     expect(pod.urls().every((u) => u.startsWith(TEST_POD_ROOT))).toBe(true);
   });
+
+  it("reports encoded traversal rejected by the ZIP reader as an unsafe path", async () => {
+    const bytes = zipSync({ "%2e%2e/escape.gpx": encoder.encode(STRAVA_GPX) });
+    const { pod, report } = await fileImport(activityFilesAdapter, file(bytes));
+    expect(docs(pod)).toHaveLength(0);
+    expect(report.skipped).toBe(1);
+    expect(report.warnings).toEqual(["unsafe-archive-path"]);
+  });
+
   it("supports GPX 1.0, prefixed roots and multiple segments without joining segment gaps", async () => {
     const xml = STRAVA_GPX.replace('version="1.1"', 'version="1.0"')
       .replace("<gpx ", "<g:gpx ")

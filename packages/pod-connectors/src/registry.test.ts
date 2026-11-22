@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { FILE_ADAPTERS, fileAdapterById } from "./file-adapters.js";
 import {
@@ -14,12 +13,13 @@ import {
 } from "./registry.js";
 
 describe("integrations registry", () => {
-  it("exposes exactly 37 catalog entries with unique, URL-safe ids", () => {
+  it("exposes exactly 36 catalog entries with unique, URL-safe ids", () => {
     const entries = allCatalogEntries();
-    expect(entries).toHaveLength(37);
+    expect(entries).toHaveLength(36);
     const ids = entries.map((e) => e.id);
-    expect(new Set(ids).size).toBe(37);
+    expect(new Set(ids).size).toBe(36);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9-]+$/);
+    expect(ids).toEqual(expect.arrayContaining(["activity-files", "vesync", "whoop"]));
   });
 
   it("ships the 9 Tier-A adapters from the catalog", () => {
@@ -209,7 +209,7 @@ describe("injected public configuration", () => {
     expect(first.statusOf(TIER_C[0]!)).toBe("export-file");
     expect(first.statusOf({ ...ADAPTERS[0]!.metadata, id: "unknown" })).toBe("demo");
     expect(first.adapterById("unknown")).toBeUndefined();
-    expect(first.allCatalogEntries()).toHaveLength(37);
+    expect(first.allCatalogEntries()).toHaveLength(36);
   });
 });
 

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 /**
  * The shared end-user OAuth2 engine: authorization-code + PKCE (S256) in a
  * popup. Generic — adapters supply only endpoints/scopes/params via
@@ -590,8 +589,7 @@ export async function authorize(
   if (!cfg.clientId) throw new IntegrationAuthError(adapterId, "not-configured");
   const callbackPage =
     typeof callbackPageOrOptions === "string" ? callbackPageOrOptions : OAUTH_CALLBACK_PATH;
-  const vaultOptions =
-    typeof callbackPageOrOptions === "string" ? options : callbackPageOrOptions;
+  const vaultOptions = typeof callbackPageOrOptions === "string" ? options : callbackPageOrOptions;
   const redirect = new URL(callbackPage, window.location.href);
   if (redirect.origin !== window.location.origin) {
     throw new TypeError("The OAuth callback must be on the app's own origin");
