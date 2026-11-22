@@ -1,6 +1,16 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 import type { EntryData } from "./model.js";
 
+const htmlEntities = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&apos;": "'",
+  "&nbsp;": " ",
+};
+const htmlEntityPattern = new RegExp(Object.keys(htmlEntities).join("|"), "g");
+
 /** Calendar days use the viewer's time zone, including at daylight-saving transitions. */
 export function dayKey(date: Date, timeZone = "UTC"): string {
   if (!Number.isFinite(date.getTime())) throw new TypeError("Invalid journal date");
@@ -74,13 +84,7 @@ export function markdownToPlainText(markdown: string): string {
     .replace(/^[ \t]*(?:[-*_][ \t]*){3,}$/gm, "")
     .replace(/\\([\\`*_{}[\]()#+.!>-])/g, "$1")
     .replace(/[*_~`]/g, "")
-    .replace(
-      /&(?:amp|lt|gt|quot|apos|nbsp);/g,
-      (value) =>
-        ({ "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'", "&nbsp;": " " })[
-          value
-        ] ?? value,
-    )
+    .replace(htmlEntityPattern, (value) => htmlEntities[value as keyof typeof htmlEntities])
     .replace(/\s+/g, " ")
     .trim();
 }

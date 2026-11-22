@@ -399,3 +399,24 @@ it("refuses an ACL representation with a stale validator", async () => {
   await expect(verifyJournalResource(storage, container, owner, vi.fn())).rejects.toThrow("verify");
   expect(readGrants).not.toHaveBeenCalled();
 });
+
+it("propagates a forbidden ACL HEAD without checking inherited access", async () => {
+  const storage = await fixture();
+  const acl = `${container}.acl`;
+  const forbidden = new StorageError("forbidden", { url: acl, method: "HEAD", status: 403 });
+  vi.spyOn(storage, "head").mockResolvedValueOnce(await storage.head(container));
+  vi.mocked(storage.head).mockRejectedValueOnce(forbidden);
+  const read = vi.spyOn(storage, "readRdf");
+  await expect(protectJournal(storage, container, owner, vi.fn())).rejects.toBe(forbidden);
+  expect(read).not.toHaveBeenCalled();
+  expect(setGrants).not.toHaveBeenCalled();
+});
+
+it("stops when storage rejects the scope of an inherited ACL parent", async () => {
+  const storage = await fixture(false);
+  const within = storage.isWithinStorage;
+  vi.spyOn(storage, "isWithinStorage").mockImplementation((url) => url !== root && within(url));
+  await expect(protectJournal(storage, container, owner, vi.fn())).rejects.toThrow("inherited");
+  expect(storage.head).not.toHaveBeenCalledWith(root, expect.anything());
+  expect(setGrants).not.toHaveBeenCalled();
+});

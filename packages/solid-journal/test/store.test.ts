@@ -271,3 +271,100 @@ it("reads one private entry with its ETag without listing unrelated shared entri
   );
   await expect(store.read(invalid.url)).rejects.toThrow("couldn't be read");
 });
+
+it("reports private registration failures and clears the warning after a successful retry", async () => {
+  const { index, store } = fixture();
+  expect(store.registrationWarning).toBeUndefined();
+  const denied = new JournalPrivacyError("Private preferences need review");
+  const invalid = new StorageError("invalid-response", { method: "PUT", url: root });
+  const conflict = new StorageError("conflict", { method: "PUT", url: root });
+  vi.mocked(index.register)
+    .mockRejectedValueOnce(denied)
+    .mockRejectedValueOnce(invalid)
+    .mockRejectedValueOnce(conflict);
+  await store.initialize();
+  expect(store.registrationWarning).toBe(denied.message);
+  await store.initialize();
+  expect(store.registrationWarning).toContain("valid private Type Index and preferences");
+  await expect(store.initialize()).rejects.toBe(conflict);
+  await store.initialize();
+  expect(store.registrationWarning).toBeUndefined();
+});
+
+it("propagates registration setup errors other than an out-of-scope profile", async () => {
+  const { storage } = fixture();
+  const { features } = fixture("lws").storage;
+  vi.mocked(createPodClient).mockResolvedValue({
+    storage: { ...storage, features },
+    features,
+    description: { protocol: "solid" },
+  } as PodClient);
+  await expect(openJournal(vi.fn(), root, owner)).rejects.toThrow("Storage and features protocols");
+});
+
+it("uses a fresh reservation read but discards follow-up validators on save results", async () => {
+  const { storage, store } = fixture();
+  await store.initialize();
+  const create = storage.create;
+  let reservationEtag: string | null = null;
+  vi.spyOn(storage, "create").mockImplementation(async (...args) => {
+    const result = await create(...args);
+    reservationEtag = result.etag;
+    return { ...result, etag: '"from-follow-up"', etagSource: "follow-up" };
+  });
+  const write = storage.write;
+  vi.spyOn(storage, "write").mockImplementation(async (...args) => ({
+    ...(await write(...args)),
+    etagSource: "follow-up",
+  }));
+  const saved = await store.save(data);
+  expect(saved).toMatchObject({ text: data.text, etag: null });
+  const fresh = await store.read(saved.url);
+  expect(fresh.etag).toMatch(/^".+"$/);
+  expect(reservationEtag).toMatch(/^".+"$/);
+  expect(storage.write).toHaveBeenCalledWith(
+    saved.url,
+    expect.any(String),
+    expect.objectContaining({ ifMatch: reservationEtag }),
+  );
+  expect(await store.save({ ...data, text: "Edited" }, fresh)).toMatchObject({
+    url: saved.url,
+    text: "Edited",
+    etag: null,
+  });
+  expect(await store.read(saved.url)).toMatchObject({ text: "Edited" });
+});
+
+it("preserves a reservation when its fresh read fails with a transport error", async () => {
+  const { storage, store } = fixture();
+  await store.initialize();
+  const offline = new Error("offline");
+  const create = vi.spyOn(storage, "create");
+  const write = vi.spyOn(storage, "write");
+  vi.spyOn(storage, "read").mockRejectedValueOnce(offline);
+  await expect(store.save(data)).rejects.toBe(offline);
+  expect(write).not.toHaveBeenCalled();
+  expect(await store.save(data)).toMatchObject({ text: data.text });
+  expect(create).toHaveBeenCalledOnce();
+});
+
+it("refuses an untyped attachment even if cancelling its unread body fails", async () => {
+  const { storage, store } = fixture();
+  await store.initialize();
+  const { url } = await storage.create(store.container, "photo", {
+    name: "photo.png",
+    contentType: "image/png",
+  });
+  const cancel = vi.fn().mockRejectedValue(new Error("connection dropped"));
+  const result = await storage.read(url);
+  const blob = vi.fn(result.blob);
+  vi.spyOn(storage, "read").mockResolvedValueOnce({
+    ...result,
+    blob,
+    body: new ReadableStream({ cancel }),
+    contentType: null,
+  });
+  await expect(store.photo(url)).rejects.toThrow("supported photo");
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(blob).not.toHaveBeenCalled();
+});

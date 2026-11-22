@@ -85,3 +85,9 @@ it("exports all entries in date order with Markdown, metadata and photos intact"
     expect(output).toContain(value);
   expect(exportMarkdown([])).toBe("");
 });
+
+it("decodes supported HTML entities once and preserves unknown entities", () => {
+  expect(markdownToPlainText("&lt;&gt; &quot;&apos; a&nbsp;b &amp;lt; &copy;")).toBe(
+    `<> "' a b &lt; &copy;`,
+  );
+});

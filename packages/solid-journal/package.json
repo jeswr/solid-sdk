@@ -23,9 +23,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
     "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/journal.ontology.ttl --shapes codegen/journal.shapes.ttl --config codegen.config.json --out src/generated",
-    "lint": "biome check src scripts test *.json",
+    "lint": "pnpm -w exec biome check packages/solid-journal",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "pnpm -w exec vitest run --root packages/solid-journal"
   },
   "dependencies": {
     "@jeswr/model-runtime": "workspace:*",

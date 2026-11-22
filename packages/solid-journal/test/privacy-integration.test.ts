@@ -12,8 +12,8 @@ const container = `${root}journal/`;
 const acl = `${container}.acl`;
 const owner = `${root}profile#me`;
 const other = "https://other.example/profile#me";
-async function fixture(partial = false) {
-  const policy: EffectivePolicy = {
+function policyFor(partial: boolean): EffectivePolicy {
+  return {
     grants: [owner, other].map((webId) => ({
       modes: new Set(
         webId === owner ? (["read", "write", "control"] as const) : (["read"] as const),
@@ -25,7 +25,10 @@ async function fixture(partial = false) {
     })),
     denials: [],
   };
-  let body = await writeWac(policy, container, acl);
+}
+async function fixture(partial = false, divergeDuringSeal = false) {
+  let body = await writeWac(policyFor(partial), container, acl);
+  let divergentBody = divergeDuringSeal ? await writeWac(policyFor(true), container, acl) : null;
   const initial = body;
   let version = 1;
   const writes: Headers[] = [];
@@ -45,9 +48,15 @@ async function fixture(partial = false) {
         version++;
         return new Response(null, { status: 204, headers: { etag: `"${version}"` } });
       }
-      return new Response(init.method === "HEAD" ? null : body, {
+      const response = new Response(init.method === "HEAD" ? null : body, {
         headers: { "content-type": "text/turtle", etag: `"${version}"` },
       });
+      if (init.method !== "HEAD" && divergentBody !== null) {
+        // Simulate a server changing the policy between reads while reusing its validator.
+        body = divergentBody;
+        divergentBody = null;
+      }
+      return response;
     },
   ) as typeof globalThis.fetch;
   const storage = createSolidBackend({ root, fetch });
@@ -82,4 +91,15 @@ it("explains partial folder/member scopes and leaves the ACL unchanged", async (
   });
   expect(writes).toEqual([]);
   expect(body()).toBe(initial);
+});
+
+it("refuses mismatched scopes found by the sealing preflight even if the ETag was reused", async () => {
+  const { store, writes, body } = await fixture(false, true);
+  await expect(store.makePrivate()).rejects.toMatchObject({
+    message: expect.stringContaining("Review both in Drive"),
+    cause: { code: "partial-scope" },
+    canMakePrivate: false,
+  });
+  expect(writes).toEqual([]);
+  expect(body()).toBe(await writeWac(policyFor(true), container, acl));
 });
