@@ -1,0 +1,205 @@
+/* AUTHORED-BY Codex (GPT-6.1 Sol) */
+.fm-page {
+  width: 100%;
+  max-width: 1440px;
+  min-width: 0;
+  margin-inline: auto;
+  padding: var(--space-6);
+  color: var(--foreground);
+}
+.fm-page h1 {
+  font-size: var(--text-3xl);
+  font-weight: 650;
+}
+.fm-page h2 {
+  font-size: var(--text-xl);
+  font-weight: 600;
+}
+.fm-sidebar {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+.fm-sidebar p,
+.fm-muted {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+}
+.fm-page a,
+.fm-sidebar a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.fm-stack,
+.fm-answer {
+  display: grid;
+  align-content: start;
+  gap: var(--space-5);
+}
+.fm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: var(--space-5);
+}
+.fm-card,
+.fm-preview,
+.fm-answer {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  padding: var(--space-5);
+  min-width: 0;
+}
+.fm-card {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+}
+.fm-form-card {
+  border-top: 4px solid var(--app-forms);
+}
+.fm-form-card :where(.fm-actions) {
+  margin-top: auto;
+}
+.fm-eyebrow {
+  font-size: var(--text-xs);
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  color: var(--foreground-muted);
+}
+.fm-toolbar,
+.fm-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.fm-toolbar {
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.fm-field {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+.fm-field [data-slot="select-trigger"] {
+  width: 100%;
+}
+.fm-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.fm-designer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+  gap: var(--space-6);
+  margin-top: var(--space-5);
+  align-items: start;
+}
+.fm-preview {
+  position: sticky;
+  top: var(--space-4);
+  display: grid;
+  gap: var(--space-4);
+  max-height: calc(100dvh - 100px);
+  overflow: auto;
+}
+.fm-preview .fm-answer {
+  border: 0;
+  padding: 0;
+  background: none;
+}
+.fm-answer fieldset {
+  display: grid;
+  gap: var(--space-5);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4);
+}
+.fm-answer legend {
+  font-weight: 600;
+  padding-inline-end: var(--space-2);
+}
+.fm-notice {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-5);
+}
+.fm-validation {
+  color: var(--destructive);
+  font-size: var(--text-sm);
+}
+.fm-fill {
+  max-width: 760px;
+  margin-inline: auto;
+}
+.fm-url {
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+  color: var(--foreground-muted);
+}
+.fm-table {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.fm-table table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: start;
+}
+.fm-table caption {
+  text-align: start;
+  padding: var(--space-3);
+  color: var(--foreground-muted);
+}
+.fm-table th,
+.fm-table td {
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-3);
+  min-width: 140px;
+  max-width: 360px;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+.fm-table thead {
+  background: var(--surface-2);
+}
+.fm-page :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.fm-share {
+  display: grid;
+  gap: var(--space-4);
+}
+@media (max-width: 1100px) {
+  .fm-designer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fm-preview {
+    position: static;
+    max-height: none;
+  }
+}
+@media (max-width: 600px) {
+  .fm-page {
+    padding: var(--space-4);
+  }
+  .fm-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fm-card,
+  .fm-preview,
+  .fm-answer {
+    padding: var(--space-4);
+  }
+  .fm-actions {
+    row-gap: var(--space-3);
+  }
+}

@@ -24,6 +24,8 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       include: [
+        "src/apps/forms/lib/**/*.ts",
+        "src/apps/forms/state/**/*.{ts,tsx}",
         "src/apps/agent/lib/**/*.ts",
         "src/apps/slides/lib/**/*.ts",
         "src/apps/slides/state/**/*.{ts,tsx}",

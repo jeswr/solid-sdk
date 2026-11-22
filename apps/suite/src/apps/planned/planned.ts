@@ -10,8 +10,6 @@ export const plannedApps: ReadonlySet<AppSlug> = new Set<AppSlug>([
 
   "insights",
 
-  "forms",
-
   "recipes",
 
   "media",

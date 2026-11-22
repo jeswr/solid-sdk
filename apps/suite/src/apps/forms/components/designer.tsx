@@ -1,0 +1,544 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
+"use client";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  Button,
+  Checkbox,
+  IconButton,
+  Input,
+  Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Textarea,
+  toast,
+} from "@jeswr/suite-ui";
+import { ArrowDown, ArrowUp, Copy, GripVertical, Trash2 } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
+import {
+  designerIssues,
+  duplicateQuestion,
+  moveQuestion,
+  newQuestion,
+  type QuestionKind,
+  questionKinds,
+} from "../lib/designer";
+import type { FieldDescriptor, FormModel } from "../lib/runtime";
+import { useForms } from "../state/forms-context";
+import { AnswerForm } from "./answer-form";
+
+function QuestionEditor({
+  field,
+  form,
+  index,
+  change,
+  announce,
+}: {
+  field: FieldDescriptor;
+  form: FormModel;
+  index: number;
+  change: (form: FormModel) => void;
+  announce: (message: string) => void;
+}) {
+  const moved = useRef<"up" | "down" | null>(null);
+  const title = useRef<HTMLInputElement>(null);
+  const up = useRef<HTMLButtonElement>(null);
+  const down = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const direction = moved.current;
+    if (!direction) return;
+    const control = direction === "up" ? up.current : down.current;
+    const atBoundary = direction === "up" ? index === 0 : index === form.fields.length - 1;
+    (atBoundary ? title.current : control)?.focus();
+    announce(
+      `${field.label || "Question"} moved to position ${index + 1} of ${form.fields.length}.`,
+    );
+    moved.current = null;
+  }, [index, field.label, form.fields.length, announce]);
+  const move = (direction: "up" | "down") => {
+    moved.current = direction;
+    change(moveQuestion(form, index, index + (direction === "up" ? -1 : 1)));
+  };
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
+    id: field.key,
+  });
+  const update = (patch: Partial<FieldDescriptor>) =>
+    change({
+      ...form,
+      fields: form.fields.map((item) => (item.key === field.key ? { ...item, ...patch } : item)),
+    });
+  const numeric = (
+    key: "minLength" | "maxLength" | "minInclusive" | "maxInclusive",
+    label: string,
+  ) => (
+    <div className="fm-field">
+      <Label htmlFor={`${field.key}-${key}`}>{label}</Label>
+      <Input
+        id={`${field.key}-${key}`}
+        type="number"
+        value={field[key] ?? ""}
+        onChange={(event) => {
+          const copy = { ...field };
+          if (event.target.value === "") delete copy[key];
+          else copy[key] = Number(event.target.value);
+          change({
+            ...form,
+            fields: form.fields.map((item) => (item.key === field.key ? copy : item)),
+          });
+        }}
+      />
+    </div>
+  );
+  return (
+    <article
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className="fm-card"
+      aria-label={`Question ${index + 1}`}
+    >
+      <div className="fm-toolbar">
+        <span className="fm-eyebrow">QUESTION {index + 1}</span>
+        <div className="fm-actions">
+          <IconButton
+            variant="ghost"
+            label={`Reorder question ${index + 1}`}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical />
+          </IconButton>
+          <IconButton
+            ref={up}
+            variant="ghost"
+            label={`Move question ${index + 1} up`}
+            disabled={index === 0}
+            onClick={() => move("up")}
+          >
+            <ArrowUp />
+          </IconButton>
+          <IconButton
+            ref={down}
+            variant="ghost"
+            label={`Move question ${index + 1} down`}
+            disabled={index === form.fields.length - 1}
+            onClick={() => move("down")}
+          >
+            <ArrowDown />
+          </IconButton>
+          <IconButton
+            variant="ghost"
+            label={`Duplicate question ${index + 1}`}
+            onClick={() => change(duplicateQuestion(form, field.key, crypto.randomUUID()))}
+          >
+            <Copy />
+          </IconButton>
+          <IconButton
+            variant="ghost"
+            label={`Delete question ${index + 1}`}
+            onClick={() =>
+              change({ ...form, fields: form.fields.filter((item) => item.key !== field.key) })
+            }
+          >
+            <Trash2 />
+          </IconButton>
+        </div>
+      </div>
+      <div className="fm-field">
+        <Label htmlFor={`${field.key}-label`}>Question title</Label>
+        <Input
+          ref={title}
+          id={`${field.key}-label`}
+          value={field.label ?? ""}
+          onChange={(event) => update({ label: event.target.value })}
+        />
+      </div>
+      <div className="fm-pair">
+        <div className="fm-field">
+          <Label htmlFor={`${field.key}-kind`}>Answer type</Label>
+          <Select
+            value={field.kind}
+            onValueChange={(kind) => {
+              const clean = newQuestion(field.key, kind as QuestionKind);
+              change({
+                ...form,
+                fields: form.fields.map((item) =>
+                  item.key === field.key
+                    ? {
+                        ...clean,
+                        key: field.key,
+                        path: field.path,
+                        label: field.label ?? "",
+                        description: field.description ?? "",
+                        minCount: field.minCount,
+                        ...(field.group ? { group: field.group } : {}),
+                      }
+                    : item,
+                ),
+              });
+            }}
+          >
+            <SelectTrigger id={`${field.key}-kind`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(questionKinds).map(([kind, label]) => (
+                <SelectItem key={kind} value={kind}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="fm-field">
+          <Label htmlFor={`${field.key}-group`}>Section</Label>
+          <Select
+            value={field.group ?? "ungrouped"}
+            onValueChange={(group) => {
+              const copy = { ...field };
+              if (group === "ungrouped") delete copy.group;
+              else copy.group = group;
+              change({
+                ...form,
+                fields: form.fields.map((item) => (item.key === field.key ? copy : item)),
+              });
+            }}
+          >
+            <SelectTrigger id={`${field.key}-group`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ungrouped">No section</SelectItem>
+              {form.groups.map((group) => (
+                <SelectItem key={group.iri} value={group.iri}>
+                  {group.label || "Untitled section"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="fm-field">
+        <Label htmlFor={`${field.key}-help`}>Help text</Label>
+        <Input
+          id={`${field.key}-help`}
+          value={field.description ?? ""}
+          onChange={(event) => update({ description: event.target.value })}
+        />
+      </div>
+      {field.kind === "choice" && (
+        <div className="fm-field">
+          <Label htmlFor={`${field.key}-options`}>Choices (one per line)</Label>
+          <Textarea
+            id={`${field.key}-options`}
+            value={field.options?.map((option) => option.value).join("\n") ?? ""}
+            onChange={(event) =>
+              update({
+                options: event.target.value
+                  .split("\n")
+                  .map((value) => ({ value, termType: "Literal" })),
+              })
+            }
+          />
+        </div>
+      )}
+      {(field.kind === "text" || field.kind === "multiline") && (
+        <div className="fm-pair">
+          {numeric("minLength", "Minimum length")}
+          {numeric("maxLength", "Maximum length")}
+        </div>
+      )}
+      {(field.kind === "integer" || field.kind === "decimal") && (
+        <div className="fm-pair">
+          {numeric("minInclusive", "Minimum value")}
+          {numeric("maxInclusive", "Maximum value")}
+        </div>
+      )}
+      <div className="fm-actions">
+        <Checkbox
+          id={`${field.key}-required`}
+          checked={field.minCount > 0}
+          onCheckedChange={(checked) => update({ minCount: checked === true ? 1 : 0 })}
+        />
+        <Label htmlFor={`${field.key}-required`}>Required answer</Label>
+      </div>
+    </article>
+  );
+}
+
+export function Designer({
+  initial,
+  onSaved,
+  onClose,
+}: {
+  initial: FormModel;
+  onSaved: (form: FormModel) => void;
+  onClose: () => void;
+}) {
+  const { controller } = useForms();
+  const [draft, setDraft] = useState(initial);
+  const currentDraft = useRef(initial);
+  const [issues, setIssues] = useState<string[]>([]);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(0);
+  const [status, setStatus] = useState("");
+  const [announcement, announce] = useState("");
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const change = (form: FormModel) => {
+    const next = { ...form, fields: form.fields.map((field, order) => ({ ...field, order })) };
+    currentDraft.current = next;
+    setDraft(next);
+    setDirty(true);
+    setStatus("Unsaved changes");
+    setIssues([]);
+  };
+  return (
+    <>
+      <div className="fm-toolbar">
+        <div>
+          <h2>Design your form</h2>
+          <p className="fm-muted">Start a conversation, one question at a time.</p>
+        </div>
+        <div className="fm-actions">
+          <span role="status">{saving ? "Saving…" : status}</span>
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (!dirty || window.confirm("Leave without saving your changes?")) onClose();
+            }}
+          >
+            Back to forms
+          </Button>
+          <Button
+            onClick={() => {
+              const errors = designerIssues(draft);
+              setIssues(errors);
+              if (errors.length) return;
+              const submitted = draft;
+              setSaving((value) => value + 1);
+              void controller
+                .save(submitted)
+                .then(
+                  (saved) => {
+                    if (currentDraft.current === submitted) {
+                      currentDraft.current = saved;
+                      setDraft(saved);
+                      setDirty(false);
+                      setStatus("Saved");
+                    }
+                    onSaved(saved);
+                    toast.success("Form saved");
+                  },
+                  () => setStatus("Save failed · Your draft is still here"),
+                )
+                .finally(() => setSaving((value) => value - 1));
+            }}
+          >
+            Save form
+          </Button>
+        </div>
+      </div>
+      {issues.length > 0 && (
+        <div role="alert" className="fm-validation">
+          {issues.map((issue, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a replaced validation snapshot, never reordered
+            <p key={index}>{issue}</p>
+          ))}
+        </div>
+      )}
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
+      <div className="fm-designer">
+        <section className="fm-stack" aria-label="Form designer">
+          <div className="fm-card">
+            <div className="fm-field">
+              <Label htmlFor="form-title">Form title</Label>
+              <Input
+                id="form-title"
+                value={draft.label ?? ""}
+                onChange={(event) => change({ ...draft, label: event.target.value })}
+              />
+            </div>
+            <div className="fm-field">
+              <Label htmlFor="form-description">Description</Label>
+              <Textarea
+                id="form-description"
+                value={draft.description ?? ""}
+                onChange={(event) => change({ ...draft, description: event.target.value })}
+              />
+            </div>
+          </div>
+          {draft.groups.map((group, index) => (
+            <div className="fm-card" key={group.iri}>
+              <Label htmlFor={`group-${index}`}>Section {index + 1}</Label>
+              <div className="fm-actions">
+                <Input
+                  id={`group-${index}`}
+                  value={group.label ?? ""}
+                  onChange={(event) =>
+                    change({
+                      ...draft,
+                      groups: draft.groups.map((item) =>
+                        item.iri === group.iri ? { ...item, label: event.target.value } : item,
+                      ),
+                    })
+                  }
+                />
+                <IconButton
+                  label={`Delete section ${index + 1}`}
+                  variant="ghost"
+                  onClick={() =>
+                    change({
+                      ...draft,
+                      groups: draft.groups.filter((item) => item.iri !== group.iri),
+                      fields: draft.fields.map((field) => {
+                        const copy = { ...field };
+                        if (copy.group === group.iri) delete copy.group;
+                        return copy;
+                      }),
+                    })
+                  }
+                >
+                  <Trash2 />
+                </IconButton>
+              </div>
+            </div>
+          ))}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            accessibility={{ announcements: dragAnnouncements(draft) }}
+            onDragEnd={({ active, over }) => {
+              if (over)
+                change(
+                  moveQuestion(
+                    draft,
+                    draft.fields.findIndex((field) => field.key === active.id),
+                    draft.fields.findIndex((field) => field.key === over.id),
+                  ),
+                );
+            }}
+          >
+            <SortableContext
+              items={draft.fields.map((field) => field.key)}
+              strategy={verticalListSortingStrategy}
+            >
+              {draft.fields.map((field, index) => (
+                <QuestionEditor
+                  key={field.key}
+                  field={field}
+                  form={draft}
+                  index={index}
+                  change={change}
+                  announce={announce}
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+          <div className="fm-actions">
+            <Button
+              variant="outline"
+              onClick={() =>
+                change({
+                  ...draft,
+                  fields: [
+                    ...draft.fields,
+                    { ...newQuestion(crypto.randomUUID()), order: draft.fields.length },
+                  ],
+                })
+              }
+            >
+              Add question
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() =>
+                change({
+                  ...draft,
+                  groups: [
+                    ...draft.groups,
+                    {
+                      iri: `${draft.shape}-section-${crypto.randomUUID()}`,
+                      label: "New section",
+                      order: draft.groups.length,
+                    },
+                  ],
+                })
+              }
+            >
+              Add section
+            </Button>
+          </div>
+          <p className="fm-muted">
+            To reorder with a keyboard, focus a question's grip, press Space, then use the arrow
+            keys. Press Space to drop, or Escape to cancel.
+          </p>
+        </section>
+        <aside className="fm-preview" aria-label="Live preview">
+          <p className="fm-eyebrow">LIVE PREVIEW</p>
+          <AnswerForm form={draft} validate={controller.store.validate} preview />
+        </aside>
+      </div>
+    </>
+  );
+}
+
+/** Screen-reader announcements name questions by title and position, never by internal key. */
+function dragAnnouncements(form: { fields: readonly { key: string; label?: string }[] }) {
+  const describe = (id: string | number) => {
+    const index = form.fields.findIndex((field) => field.key === id);
+    const label = form.fields[index]?.label || "Question";
+    return { label, position: index + 1, total: form.fields.length };
+  };
+  return {
+    onDragStart: ({ active }: { active: { id: string | number } }) => {
+      const { label, position, total } = describe(active.id);
+      return `Picked up ${label}, position ${position} of ${total}.`;
+    },
+    onDragOver: ({
+      active,
+      over,
+    }: {
+      active: { id: string | number };
+      over: { id: string | number } | null;
+    }) => {
+      const { label } = describe(active.id);
+      if (!over) return `${label} is no longer over a position.`;
+      const target = describe(over.id);
+      return `${label} is over position ${target.position} of ${target.total}.`;
+    },
+    onDragEnd: ({
+      active,
+      over,
+    }: {
+      active: { id: string | number };
+      over: { id: string | number } | null;
+    }) => {
+      const { label } = describe(active.id);
+      if (!over) return `${label} was dropped and kept its place.`;
+      const target = describe(over.id);
+      return `${label} was dropped at position ${target.position} of ${target.total}.`;
+    },
+    onDragCancel: ({ active }: { active: { id: string | number } }) =>
+      `Moving ${describe(active.id).label} was cancelled.`,
+  };
+}
