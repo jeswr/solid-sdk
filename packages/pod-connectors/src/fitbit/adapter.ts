@@ -4,11 +4,9 @@
  * Fitbit → Health. Your logged activities (`/1/user/-/activities/list.json`)
  * as `schema:ExerciseAction` (type, start time, duration, distance).
  *
- * Tier B: Fitbit requires developer app review (and a personal/server app
- * type) before intraday and historical activity scopes can serve real users.
- * Fitbit's OAuth requires a confidential client for the code→token exchange,
- * so live mode goes through the maintainer's token proxy. Demoable now against
- * recorded fixtures.
+ * Retired 2 November 2026. Retained as a fixture/demo compatibility oracle for
+ * Google Health's pod mappings. The registry hides it from new connections,
+ * and the runner refuses live imports before any provider request.
  */
 import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
@@ -25,6 +23,8 @@ export const fitbitAdapter: IntegrationAdapter = {
   vocabMap,
   metadata: {
     id: ID,
+    deprecated:
+      "Fitbit's live API and OAuth retired on 2 November 2026. Connect Google Health and re-authorize with Google; existing pod activities remain valid.",
     name: "Fitbit",
     tier: "B",
     authKind: "oauth-pkce",
@@ -32,9 +32,7 @@ export const fitbitAdapter: IntegrationAdapter = {
     categories: ["health"],
     whatYouGet: "Your logged activities — runs, walks and rides — saved into Health.",
     requirements: [
-      "Fitbit developer app review for intraday data: Fitbit must approve the app before activity/heart-rate scopes can serve real users.",
-      "Register an app at dev.fitbit.com and add <app-origin>/oauth-callback.html as the redirect URI.",
-      "Fitbit needs a confidential client for token exchange, so set NEXT_PUBLIC_FITBIT_CLIENT_ID and deploy the token proxy at NEXT_PUBLIC_FITBIT_TOKEN_PROXY.",
+      "The Fitbit Web API and OAuth endpoints retired on 2 November 2026. Connect Google Health and re-authorize with Google.",
     ],
   },
   oauth: {

@@ -91,6 +91,18 @@ describe("exchangeCodeForToken", () => {
     redirectUri: "https://app.test/oauth-callback.html",
   };
 
+  it("keeps the granted scope string from the token response and drops a malformed one", async () => {
+    const answer = (scope: unknown) => async () =>
+      Response.json({ access_token: "tok", token_type: "Bearer", scope });
+    expect((await exchangeCodeForToken("spotify", CFG, params, answer("read history"))).scope).toBe(
+      "read history",
+    );
+    for (const scope of [7, "a\nb", "x".repeat(8193)])
+      expect(
+        (await exchangeCodeForToken("spotify", CFG, params, answer(scope))).scope,
+      ).toBeUndefined();
+  });
+
   it("posts a form-encoded PKCE exchange and parses the token set", async () => {
     let captured: { url: string; init: RequestInit } | undefined;
     const fetchImpl: typeof fetch = async (input, init) => {

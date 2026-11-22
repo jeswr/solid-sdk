@@ -108,6 +108,19 @@ interface TokenEndpointAnswer {
   token_type?: string;
   refresh_token?: string;
   expires_in?: number;
+  scope?: unknown;
+}
+
+/** The granted `scope` string of a token response, when it is a bounded plain string. */
+export function grantedScope(value: unknown): string | undefined {
+  return typeof value === "string" && value.length <= 8192 && /^[\x21-\x7e ]*$/.test(value)
+    ? value
+    : undefined;
+}
+
+/** Split a granted RFC 6749 `scope` string into scope tokens. */
+export function scopeList(scope: string | undefined): readonly string[] | undefined {
+  return scope === undefined ? undefined : scope.split(" ").filter(Boolean);
 }
 
 /**
@@ -162,6 +175,7 @@ export async function exchangeCodeForToken(
     tokenType: json.token_type ?? "Bearer",
     refreshToken: json.refresh_token,
     expiresAt: json.expires_in ? Date.now() + json.expires_in * 1000 : undefined,
+    scope: grantedScope(json.scope),
   };
 }
 

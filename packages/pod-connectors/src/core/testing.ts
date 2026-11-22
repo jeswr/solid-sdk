@@ -15,6 +15,7 @@ import { type FileImportAdapter, type ImportFile, runFileImport } from "./file-i
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createSourceAuth, type ImportReport, runImport } from "./import-runner.js";
 import { createFetchPodWriter } from "./pod-writer.js";
+import { adapterContainer } from "./pod-writer-policy.js";
 import { createStoragePodWriter } from "./storage-pod-writer.js";
 import { storageMemoryPod } from "./storage-testing.js";
 import type { FixtureRoute, IntegrationAdapter } from "./types.js";
@@ -294,7 +295,7 @@ export function testPodWriter(pod: MemoryPod, adapterId: string) {
   return pod.storage
     ? createStoragePodWriter({
         storage: pod.storage,
-        container: new URL(`integrations/${adapterId}/`, TEST_POD_ROOT).href,
+        container: adapterContainer(adapterId, TEST_POD_ROOT),
         webId: TEST_WEBID,
         typeIndex: { profileDocumentUrl: TEST_PROFILE_DOC },
       })
