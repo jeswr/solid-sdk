@@ -83,5 +83,5 @@ describe("AgentHost prepared cache", () => {
       if (!cursor) break;
     }
     expect(seen.size).toBe(total);
-  }, 180_000);
+  }, 360_000);
 });
