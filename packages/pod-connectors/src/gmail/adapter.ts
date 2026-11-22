@@ -21,6 +21,7 @@ import {
   type MailFolder,
   MailParseError,
   type MailWriter,
+  type MailWriterOptions,
 } from "../mail/writer.js";
 import {
   GMAIL_API,
@@ -48,58 +49,66 @@ export const SYSTEM_LABELS: Readonly<Record<string, string>> = {
   STARRED: "Starred",
 };
 
-export const gmailAdapter: IntegrationAdapter = {
-  metadata: {
-    id: ID,
-    name: "Gmail",
-    tier: "B",
-    authKind: "oauth-pkce",
-    scopes: GOOGLE_SCOPES.gmail,
-    categories: ["mail"],
-    whatYouGet:
-      "Your email, with labels as folders and the original messages kept, saved into Mail.",
-    requirements: [
-      "Google OAuth verification: gmail.readonly is a restricted scope, so only test users can connect until Google verifies the app (including its security assessment).",
-      "Browser hosts inject a Web OAuth client id and token proxy URL (TOKEN_PROXY); register their OAuth callback URI.",
-      "Node hosts inject a Desktop OAuth client configuration and use loopback PKCE.",
-    ],
-  },
-  oauth: createGoogleOAuthConfig("gmail"),
-  fixtures: () => GMAIL_FIXTURES,
+export function createGmailAdapter(options: MailWriterOptions = {}): IntegrationAdapter {
+  return {
+    metadata: {
+      id: ID,
+      name: "Gmail",
+      tier: "B",
+      authKind: "oauth-pkce",
+      scopes: GOOGLE_SCOPES.gmail,
+      categories: ["mail"],
+      whatYouGet:
+        "Your email, labels and original messages saved into Mail, plus sender-asserted purchases and reservations from email markup with sender authentication labels.",
+      requirements: [
+        "Google OAuth verification: gmail.readonly is a restricted scope, so only test users can connect until Google verifies the app (including its security assessment).",
+        "Browser hosts inject a Web OAuth client id and token proxy URL (TOKEN_PROXY); register their OAuth callback URI.",
+        "Node hosts inject a Desktop OAuth client configuration and use loopback PKCE.",
+      ],
+    },
+    oauth: createGoogleOAuthConfig("gmail"),
+    fixtures: () => GMAIL_FIXTURES,
 
-  async import(ctx: ImportContext): Promise<ImportOutcome> {
-    ctx.progress({ label: "Connecting to your mailbox…", done: 0 });
-    const profile = await getJson<GmailProfile>(ID, ctx.api, `${GMAIL_API}/profile`);
-    if (typeof profile?.emailAddress !== "string" || typeof profile.historyId !== "string")
-      throw new IntegrationSyncError(ID, "Gmail returned an incomplete mailbox profile.");
-    const account = profile.emailAddress;
-    const labels = await labelFolders(ctx);
-    const mail = createMailWriter(ctx, account);
-    const sync = new Sync(ctx, mail, labels, account);
+    async import(ctx: ImportContext): Promise<ImportOutcome> {
+      ctx.progress({ label: "Connecting to your mailbox…", done: 0 });
+      const profile = await getJson<GmailProfile>(ID, ctx.api, `${GMAIL_API}/profile`);
+      if (typeof profile?.emailAddress !== "string" || typeof profile.historyId !== "string")
+        throw new IntegrationSyncError(ID, "Gmail returned an incomplete mailbox profile.");
+      const account = profile.emailAddress;
+      const labels = await labelFolders(ctx);
+      const mail = createMailWriter(ctx, account, options);
+      const sync = new Sync(ctx, mail, labels, account);
 
-    let cursor: string | undefined;
-    if (ctx.cursor) {
-      try {
-        cursor = await sync.history(ctx.cursor);
-      } catch (error) {
-        // History ids expire (about a week); only a 404 means "start again".
-        if (!(error instanceof IntegrationSyncError) || error.status !== 404) throw error;
+      let cursor: string | undefined;
+      if (ctx.cursor) {
+        try {
+          cursor = await sync.history(ctx.cursor);
+        } catch (error) {
+          // History ids expire (about a week); only a 404 means "start again".
+          if (!(error instanceof IntegrationSyncError) || error.status !== 404) throw error;
+        }
       }
-    }
-    // The profile historyId is read before listing, so changes during the list replay next time.
-    if (cursor === undefined) {
-      await sync.full();
-      cursor = profile.historyId;
-    }
-    ctx.progress({ label: "Updating folders and conversations…", done: sync.done });
-    const known = new Map<string, MailFolder>();
-    for (const key of SYSTEM_FOLDERS) known.set(key, { key, title: key });
-    for (const folder of labels.values()) known.set(folder.key, folder);
-    await mail.flush([...known.values()]);
-    ctx.progress({ label: "Done", done: sync.done, total: sync.done });
-    return { cursor, skipped: sync.skipped || undefined };
-  },
-};
+      // The profile historyId is read before listing, so changes during the list replay next time.
+      if (cursor === undefined) {
+        await sync.full();
+        cursor = profile.historyId;
+      }
+      ctx.progress({ label: "Updating folders and conversations…", done: sync.done });
+      const known = new Map<string, MailFolder>();
+      for (const key of SYSTEM_FOLDERS) known.set(key, { key, title: key });
+      for (const folder of labels.values()) known.set(folder.key, folder);
+      await mail.flush([...known.values()]);
+      ctx.progress({ label: "Done", done: sync.done, total: sync.done });
+      return {
+        cursor,
+        skipped: sync.skipped || undefined,
+        errors: mail.errors.length ? mail.errors : undefined,
+      };
+    },
+  };
+}
+
+export const gmailAdapter = createGmailAdapter();
 
 /** Label id → folder. System folders are keyed by name, user labels by their stable id. */
 async function labelFolders(ctx: ImportContext): Promise<Map<string, MailFolder>> {
@@ -254,6 +263,8 @@ class Sync {
     try {
       await this.mail.add({
         raw,
+        googleReceiver: true,
+        trashed: labelIds.includes("TRASH"),
         folders,
         read: !labelIds.includes("UNREAD"),
         threadKey: `gmail-${message.threadId}`,
