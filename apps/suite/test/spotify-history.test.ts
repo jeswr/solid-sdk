@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fileAdapterById, runFileImport } from "@jeswr/pod-connectors";
 import {
   SPOTIFY_FILE_LIMITS,
@@ -206,5 +207,24 @@ describe("Spotify history parts, failures and duplicates in Music", () => {
       "scrobble-c",
       "scrobble-d",
     ]);
+  });
+
+  it("keeps untitled plays from both sources while deduplicating titled plays", () => {
+    const live = `${DEMO_ROOT}integrations/spotify/music/recently-played.ttl`;
+    const file = spotifyHistoryUrl(DEMO_ROOT, "2026-10", 1);
+    const play = (document: string, id: string, second: string, title?: string): Playback => ({
+      iri: `${document}#${id}`,
+      trackIri: `${document}#${id}-track`,
+      startTime: new Date(`2026-10-03T13:00:${second}Z`),
+      title,
+      artist: "Fixture Artist",
+    });
+    const liveUntitled = play(live, "play-1", "10");
+    const importedUntitled = play(file, "scrobble-a", "20");
+    const liveTitled = play(live, "play-2", "30", "Fixture Song");
+    const importedTitled = play(file, "scrobble-b", "40", "Fixture Song");
+    expect(
+      dedupeImportedPlays([liveUntitled, importedUntitled, liveTitled, importedTitled], live),
+    ).toEqual([liveUntitled, importedUntitled, liveTitled]);
   });
 });

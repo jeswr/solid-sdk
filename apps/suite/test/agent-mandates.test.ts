@@ -893,6 +893,18 @@ describe("signed mandate activation and revocation", () => {
       { id: first.id, status: "replaced" },
     ]);
   });
+  it("remembers no permissions when the only signed mandate is for another agent", async () => {
+    const { client, session } = await fixture();
+    const other = { ...mandate(at("mandates/other-agent.trig")), subject: at("card#other") };
+    await client.create(
+      other.id,
+      await mandateToTurtle(await signedCredential(other)),
+      "application/trig",
+    );
+    expect(await readAgentIdentity(client)).toBe(AGENT_ID);
+    expect(loadedRecords(await readMandateCredentials(client))).toMatchObject([{ id: other.id }]);
+    expect(await lastSignedMandate(client, session)).toBeUndefined();
+  });
   it("signs the editor's currency so the executor can count its spend limits", async () => {
     const { client, session } = await fixture();
     const agent = await readAgentIdentity(client);
