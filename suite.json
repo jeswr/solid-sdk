@@ -110,7 +110,8 @@
     "@jeswr/pod-legacy",
     "@jeswr/suite-templates",
     "@jeswr/suite-groups",
-    "@jeswr/solid-slides"
+    "@jeswr/solid-slides",
+    "@jeswr/solid-recipe"
   ],
   "applications": [
     {

@@ -26,6 +26,8 @@ export default defineConfig({
       include: [
         "src/apps/forms/lib/**/*.ts",
         "src/apps/forms/state/**/*.{ts,tsx}",
+        "src/apps/recipes/lib/**/*.ts",
+        "src/apps/recipes/state/*.{ts,tsx}",
         "src/apps/agent/lib/**/*.ts",
         "src/apps/slides/lib/**/*.ts",
         "src/apps/slides/state/**/*.{ts,tsx}",
@@ -126,7 +128,6 @@ export default defineConfig({
         "src/apps/docs/lib/markdown/**/*.ts",
         "src/apps/docs/lib/outline/**/*.ts",
         "src/apps/drive/lib/files/**/*.ts",
-        "src/apps/sheets/lib/engine/**/*.ts",
         "src/apps/sheets/lib/refs/**/*.ts",
         "src/apps/sheets/lib/structure/**/*.ts",
         "src/apps/sheets/lib/csv/**/*.ts",
