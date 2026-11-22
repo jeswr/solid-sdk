@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
 
-import { emptyScene } from "@jeswr/excalidraw-scene";
+import { addElement, emptyScene, rectangle } from "@jeswr/excalidraw-scene";
 import { StorageError } from "@jeswr/storage-client";
 import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -176,9 +176,17 @@ function storage() {
     },
   };
 }
-async function mount() {
-  vi.stubGlobal("localStorage", storage());
-  repo.list.mockResolvedValue([board]);
+async function mount({
+  local = storage(),
+  loaded = board,
+  expected = loaded,
+}: {
+  local?: ReturnType<typeof storage>;
+  loaded?: Board;
+  expected?: Board;
+} = {}) {
+  vi.stubGlobal("localStorage", local);
+  repo.list.mockResolvedValue([loaded]);
   const outer = new Driver().render(WhiteboardApp, {});
   const gate = nodes(outer).find(
     (n) => typeof n.type === "function" && n.type.name === "SessionGate",
@@ -189,7 +197,9 @@ async function mount() {
   let tree = render();
   await vi.waitFor(() => {
     tree = render();
-    expect(find(tree, BoardList).props.boards).toEqual([board]);
+    const { boards, ready } = find(tree, BoardList).props;
+    expect(ready).toBe(true);
+    expect(boards).toEqual([expected]);
   });
   return { driver, render };
 }
@@ -294,6 +304,23 @@ it("dismissing a rename conflict on a board that still exists reloads it and cle
   expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([]);
 });
 
+it("enables Dismiss only after a rename conflict's pod read resolves", async () => {
+  const { render } = await mount();
+  const read = Promise.withResolvers<Board>();
+  repo.rename.mockRejectedValueOnce(stale());
+  repo.read.mockReturnValueOnce(read.promise);
+  listOf(render()).onRename(board, "My name");
+  await vi.waitFor(() => expect(find(render(), "Dialog").props.open).toBe(true));
+  expect(find(render(), "Button", "Dismiss").props.disabled).toBe(true);
+
+  const remote = { ...board, title: "Their name", descriptorEtag: '"theirs"' };
+  read.resolve(remote);
+  await vi.waitFor(() => expect(find(render(), "Button", "Dismiss").props.disabled).toBe(false));
+  click(render(), "Dismiss");
+  expect(listOf(render()).boards).toEqual([remote]);
+  expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([]);
+});
+
 it("restores a board after a delete 412 without a draft, and Dismiss adopts the pod version", async () => {
   const { render } = await mount();
   const remote = { ...board, title: "Changed elsewhere", etag: '"theirs"' };
@@ -309,6 +336,64 @@ it("restores a board after a delete 412 without a draft, and Dismiss adopts the 
   click(render(), "Dismiss");
   expect(listOf(render()).boards).toEqual([remote]);
   expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([]);
+});
+
+it("keeps an unsaved drawing after a delete 412, Escape, and reload", async () => {
+  const local = storage();
+  const { driver, render } = await mount({ local });
+  listOf(render()).onOpen(board);
+  const editor = find(render(), BoardEditor).props as unknown as ComponentProps<typeof BoardEditor>;
+  const scene = addElement(board.scene, rectangle(10, 20, 100, 80, { id: "unsaved" }));
+  const draft = { ...board, scene };
+  const writer = new BoardAutosave(repo, board, (status, change) => {
+    editor.retain(change, status !== "saved");
+    editor.onChange(change);
+  });
+  editor.onWriter?.(board.id, writer);
+  repo.save.mockRejectedValueOnce(new Error("offline"));
+  writer.update(scene);
+  await writer.flush();
+  editor.onBack();
+
+  const remote = { ...board, title: "Changed elsewhere", descriptorEtag: '"theirs"' };
+  repo.remove.mockRejectedValueOnce(stale());
+  repo.read.mockResolvedValueOnce(remote);
+  listOf(render()).onDelete(draft);
+  expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([draft]);
+  await vi.waitFor(() =>
+    expect(find(render(), "Button", "Reload board").props.disabled).toBe(false),
+  );
+  (find(render(), "Dialog").props.onOpenChange as (open: boolean) => void)(false);
+  expect(find(render(), "Dialog").props.open).toBe(false);
+  expect(listOf(render()).boards).toEqual([draft]);
+  expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([draft]);
+
+  driver.unmount();
+  const { render: reopened } = await mount({ local, loaded: remote, expected: draft });
+  repo.remove.mockRejectedValueOnce(stale());
+  repo.read.mockResolvedValueOnce(remote);
+  listOf(reopened()).onDelete(draft);
+  await vi.waitFor(() =>
+    expect(find(reopened(), "Button", "Reload board").props.disabled).toBe(false),
+  );
+  click(reopened(), "Dismiss");
+  expect(listOf(reopened()).boards).toEqual([remote]);
+  expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([]);
+});
+
+it("clears a retained draft when deletion succeeds", async () => {
+  const local = storage();
+  const scene = addElement(board.scene, rectangle(10, 20, 100, 80, { id: "unsaved" }));
+  const draft = { ...board, scene };
+  writeDrafts(local, pod.webId, pod.storageUrl, [draft]);
+  const { render } = await mount({ local, expected: draft });
+  const deletion = Promise.withResolvers<void>();
+  repo.remove.mockReturnValueOnce(deletion.promise);
+  listOf(render()).onDelete(draft);
+  expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([draft]);
+  deletion.resolve();
+  await vi.waitFor(() => expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([]));
+  expect(listOf(render()).boards).toEqual([]);
 });
 
 it("keeps a writer registered when Strict Mode re-registers it before the first release runs", async () => {

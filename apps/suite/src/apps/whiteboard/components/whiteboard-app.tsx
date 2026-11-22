@@ -305,20 +305,17 @@ function Boards({ session }: { session: PodSession }) {
   const remove = (board: Board) => {
     if (!repository) return;
     const writer = writers.current.get(board.id)?.writer;
+    const local = dirty.current.get(board.id) ?? board;
+    // Keep the draft on disk until the pod confirms deletion.
     deleting.current.add(board.id);
     setBoards((current) => current.filter((b) => b.id !== board.id));
     setSelected(null);
-    dirty.current.delete(board.id);
-    pendingFields.current.delete(board.id);
-    try {
-      writeDrafts(localStorage, session.webId, session.storageUrl, [...dirty.current.values()]);
-    } catch {}
     let undone = false;
     toast("Board deleted", {
       action: {
         label: "Undo",
         onClick: () => {
-          if (!undone) create(board.title, board.scene);
+          if (!undone) create(local.title, local.scene);
           undone = true;
         },
       },
@@ -339,16 +336,14 @@ function Boards({ session }: { session: PodSession }) {
           }
         }
       }
-      writers.current.delete(board.id);
+      forget(board);
     }).catch(() => {
-      if (remote !== undefined) void showConflict(board, remote);
+      if (remote !== undefined) void showConflict(local, remote);
       deleting.current.delete(board.id);
-      // After a 412 the dialog offers the local copy and finish() discarded unsent edits, so
-      // the restored board keeps no draft that would override the pod listing on every boot.
-      retain(board, remote === undefined);
+      if (remote === undefined && !dirty.current.has(board.id)) retain(local, true);
       if (live.current)
         setBoards((current) =>
-          current.some((b) => b.id === board.id) ? current : [board, ...current],
+          current.some((b) => b.id === board.id) ? current : [local, ...current],
         );
     });
   };
@@ -457,7 +452,11 @@ function Boards({ session }: { session: PodSession }) {
                 : "Keep your drawing as a separate board, or reload the version from your pod."}
             </DialogDescription>
             <DialogFooter>
-              <Button variant="outline" onClick={dismissConflict}>
+              <Button
+                variant="outline"
+                disabled={!remoteDeleted && !otherVersion}
+                onClick={dismissConflict}
+              >
                 Dismiss
               </Button>
               <Button
