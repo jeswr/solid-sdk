@@ -155,6 +155,8 @@ async function pump(hosts: AgentHost[]): Promise<Json[]> {
 const ledger = (h: AgentHost) =>
   new FileLedger(join(h.agent.dir, "ledger.jsonl")).entries().map((e) => e.record);
 
+// Budgets raised (22 Nov): in CI these run beside the agent-reference suite and took up to
+// 90% of the old budgets on a fast runner (bead sst-ans.55 tracks making them faster).
 describe("durable synthetic mortgage slice (roles; restarts mid-flow)", () => {
   it("prequalification, purpose-bound storage, attenuated underwriting and a final receipt survive restarts without duplicates", async () => {
     const { root, common } = await provision();
@@ -339,7 +341,7 @@ describe("durable synthetic mortgage slice (roles; restarts mid-flow)", () => {
       expect.arrayContaining(["purpose-bound-store", "mortgage-workflow"]),
     );
     expect(SAM.party).not.toBe(UW.party);
-  }, 30_000);
+  }, 60_000);
 
   /** Provision, apply, approve (owner key outside the service) and store the evidence. */
   async function stored() {
@@ -438,7 +440,7 @@ describe("durable synthetic mortgage slice (roles; restarts mid-flow)", () => {
     expect(replay.step?.disposition).toBe("rejected");
     expect((nb.status().domain as { dataStore: Json[] }).dataStore).toEqual([]);
     expect(auditAgentDirectory(nb.agent.dir).unregistered).toEqual([]);
-  }, 30_000);
+  }, 60_000);
 
   it("interrupted after the underwriting commit: recovered from the runtime (one conversation); a phase-6 marker stays refused", async () => {
     const { root, sam, uw, application } = await stored();
@@ -475,5 +477,5 @@ describe("durable synthetic mortgage slice (roles; restarts mid-flow)", () => {
     await expect(
       nb.call(() => nb.runOperation("start_underwriting", { application: "urn:legacy:app" })),
     ).rejects.toThrow(/cannot be reconciled automatically/);
-  }, 30_000);
+  }, 60_000);
 });

@@ -206,6 +206,8 @@ const grantOf = (h: AgentHost) =>
 const payloadOf = (jws: string) =>
   JSON.parse(Buffer.from(jws.split(".")[1] as string, "base64url").toString()) as Json;
 
+// Budgets raised (22 Nov): in CI these run beside the agent-reference suite and took up to
+// 90% of the old budgets on a fast runner (bead sst-ans.55 tracks making them faster).
 describe("durable health summary (synthetic FHIR R4, SMART-like pattern)", () => {
   it("scoped grant, refusals, cited summary, revocation surviving restart", async () => {
     const { root, owners, common, init } = await provision();
@@ -374,7 +376,7 @@ describe("durable health summary (synthetic FHIR R4, SMART-like pattern)", () =>
       phase: "refused",
       reason: expect.stringMatching(/grant-revoked/),
     });
-  }, 60_000);
+  }, 120_000);
 
   it("issuance authority: clinic enrollment, consent audience/purpose/validity, bounded expiry — with authentic owner signatures", async () => {
     const { root, owners } = await provision();
@@ -531,7 +533,7 @@ describe("durable health summary (synthetic FHIR R4, SMART-like pattern)", () =>
     expect(records(fhir, "audit-access").map((a) => a.ids)).toEqual([
       [`MedicationRequest/${NOAH_PATIENT_ID}-mr-1`],
     ]);
-  }, 60_000);
+  }, 120_000);
 
   it("revocation needs authoritative grant ownership (unknown, arbitrary, cross-patient refused; own accepted; persisted)", async () => {
     const { root, owners, common } = await provision();
@@ -646,5 +648,5 @@ describe("durable health summary (synthetic FHIR R4, SMART-like pattern)", () =>
       reason: expect.stringMatching(/grant-revoked/),
     });
     expect((await read("carebrief-noah")).phase).toBe("completed");
-  }, 60_000);
+  }, 120_000);
 });

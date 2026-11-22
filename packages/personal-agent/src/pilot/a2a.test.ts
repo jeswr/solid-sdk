@@ -215,7 +215,7 @@ async function host(
   return { a, h, listener, dispatcher, posts, logs };
 }
 
-async function until(check: () => boolean, ms = 10_000) {
+async function until(check: () => boolean, ms = 25_000) {
   const end = Date.now() + ms;
   while (!check()) {
     if (Date.now() > end) throw new Error("condition not reached in time");
@@ -259,6 +259,8 @@ function files(dir: string): string[] {
   });
 }
 
+// Budgets raised (22 Nov): in CI these run beside the agent-reference suite and took up to
+// 90% of the old budgets on a fast runner (bead sst-ans.55 tracks making them faster).
 describe("optional local A2A binding (official @a2a-js/sdk, loopback)", () => {
   it("runs a complete scheduling conversation over A2A, every send through the transmission boundary", async () => {
     const env = await setup();
@@ -302,7 +304,7 @@ describe("optional local A2A binding (official @a2a-js/sdk, loopback)", () => {
     expect(card.defaultInputModes).toEqual([A2A_ENVELOPE_MEDIA_TYPE]);
     expect(text).not.toContain(env.root);
     expect(text).not.toMatch(/"d"\s*:|private|token"/i);
-  }, 20_000);
+  }, 40_000);
 
   it("services run without owner private material: separate custody leaves no owner key in any service directory", async () => {
     const env = await setup();
