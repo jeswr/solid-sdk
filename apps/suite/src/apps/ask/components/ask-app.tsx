@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { NOT_FOUND } from "@jeswr/pod-ask";
 import type { AppSlug } from "@jeswr/suite-ui";
@@ -217,7 +218,8 @@ export function AskWorkspace() {
         </p>
         {controller.retrieval.inboxUnidentified && (
           <p className="ask-notice" role="status">
-            Couldn't identify your inbox; items in it may appear as sources.
+            Couldn't identify every inbox from your profile. Items from unidentified inboxes may
+            appear as sources.
           </p>
         )}
         <div aria-live="polite" aria-busy={busy}>
@@ -357,7 +359,7 @@ export function AskWorkspace() {
                 changes. This first cut searches labels and descriptions; binary files and full
                 collaborative document bodies may not be included.{" "}
                 {controller.retrieval.inboxUnidentified
-                  ? "Containers named inbox are left out, because anyone can send items to them. Your profile's inbox couldn't be identified, so items in it may be included."
+                  ? "Known inboxes and containers named inbox are left out, because anyone can send items to them. Items from unidentified inboxes may be included."
                   : "Inbox items are left out, because anyone can send them."}
               </p>
             </details>

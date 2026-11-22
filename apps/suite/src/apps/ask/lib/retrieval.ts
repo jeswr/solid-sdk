@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { MAX_PASSAGES, type Passage, questionTerms } from "@jeswr/pod-ask";
@@ -24,7 +25,7 @@ export interface AskRetrieval {
   scopes: AppSlug[];
   count: number;
   limited: boolean;
-  /** The profile's inbox couldn't be identified, so only containers named inbox are excluded. */
+  /** The profile could not be read or some advertised inboxes could not be identified. */
   inboxUnidentified: boolean;
   retrieve(question: string, scope: AppSlug | undefined): AskPassage[];
   dispose(): void;
@@ -48,14 +49,16 @@ export function inInbox(url: string, inboxes: readonly string[] = []): boolean {
   });
 }
 
-/**
- * Ask-specific ranking adapter; discovery, bounded reads and RDF projections stay shared.
- * `inboxes` is null when the profile's inbox couldn't be identified.
- */
+interface InboxDiscovery {
+  urls: readonly string[];
+  unidentified: boolean;
+}
+
+/** Ask-specific ranking adapter; discovery, bounded reads and RDF projections stay shared. */
 export function rankAskSources(
   rows: readonly SearchResult[],
   root: string,
-  inboxes: readonly string[] | null = [],
+  inboxes: InboxDiscovery = { urls: [], unidentified: false },
 ): AskRetrieval {
   const index = new SearchIndex();
   const sources = new Map<string, AskPassage>();
@@ -66,7 +69,7 @@ export function rankAskSources(
     } catch {
       continue;
     }
-    if (inInbox(row.url, inboxes ?? [])) continue;
+    if (inInbox(row.url, inboxes.urls)) continue;
     const mapped = podSearchResult(row);
     if (sources.has(row.url) || new URL(row.url).pathname.endsWith("/")) continue;
     const text = (row.snippet || row.title).slice(0, 4000).toWellFormed();
@@ -87,7 +90,7 @@ export function rankAskSources(
     count: sources.size,
     // The shared warmer is capped too; this is always a partial, session-local view.
     limited: rows.length >= 1000,
-    inboxUnidentified: inboxes === null,
+    inboxUnidentified: inboxes.unidentified,
     scopes: [...new Set([...sources.values()].map((source) => source.app))].sort(),
     retrieve(question, scope) {
       const scores = new Map<string, number>();
@@ -128,14 +131,14 @@ class InboxOwner extends TermWrapper {
 }
 
 /**
- * Every `ldp:inbox` the session's own profile advertises, read through the session's fetch so
- * http and private-network pods work as well as public HTTPS ones. Null when the profile can't
- * be read or an advertised inbox isn't an IRI; the caller then says so rather than guessing.
+ * Keep every usable `ldp:inbox` from the session's profile. Flag an unreadable profile or
+ * unusable value so the caller can warn about gaps. The session's fetch supports HTTP and
+ * private-network pods.
  */
 export async function profileInboxes(
   session: Pick<PodSession, "webId" | "fetch">,
   signal: AbortSignal,
-): Promise<string[] | null> {
+): Promise<InboxDiscovery> {
   try {
     const profile = new URL(session.webId);
     profile.hash = "";
@@ -144,14 +147,16 @@ export async function profileInboxes(
       signal: AbortSignal.any([signal, AbortSignal.timeout(PROFILE_TIMEOUT_MS)]),
       maxBytes: PROFILE_MAX_BYTES,
     });
-    const inboxes = new InboxOwner(session.webId, dataset, DataFactory).inboxes;
-    // Excluding several advertised inboxes is safer than picking one.
-    if (inboxes.some((term) => term.termType !== "NamedNode" || !URL.canParse(term.value)))
-      return null;
-    return inboxes.map((term) => term.value);
+    const urls: string[] = [];
+    let unidentified = false;
+    for (const term of new InboxOwner(session.webId, dataset, DataFactory).inboxes) {
+      if (term.termType === "NamedNode" && URL.canParse(term.value)) urls.push(term.value);
+      else unidentified = true;
+    }
+    return { urls, unidentified };
   } catch {
     // Containers named inbox are still excluded.
-    return null;
+    return { urls: [], unidentified: true };
   }
 }
 

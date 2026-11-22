@@ -1,6 +1,11 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
+import { serialize } from "@jeswr/rdf-serialize";
 import type { SearchResult } from "@jeswr/suite-sdk/search";
+import { NS } from "@jeswr/suite-vocab";
+import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
+import { DataFactory, Store } from "n3";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PodSession } from "../../src/lib/session/pod-session";
 
@@ -186,7 +191,7 @@ describe("third-party-writable inboxes", () => {
         row("y", { ...hostile, url: `${root}messages/y.ttl#it` }),
       ],
       root,
-      [`${root}messages/`],
+      { urls: [`${root}messages/`], unidentified: false },
     );
     expect(retrieval.count).toBe(1);
     expect(retrieval.retrieve("passport", undefined).map((source) => source.url)).toEqual([
@@ -203,6 +208,35 @@ describe("third-party-writable inboxes", () => {
     expect(retrieval.inboxUnidentified).toBe(false);
     expect(String(session.fetch.mock.calls[0]?.[0])).toBe(`${root}profile/card`);
   });
+  it("excludes every valid advertised inbox even when other values trigger a warning", async () => {
+    const dataset = new Store();
+    const profile = new TermWrapper(`${root}profile/card#me`, dataset, DataFactory);
+    const inboxes = SetFrom.subjectPredicate(
+      profile,
+      `${NS.LDP}inbox`,
+      TermAs.term,
+      TermFrom.itself,
+    );
+    inboxes.add(DataFactory.namedNode(`${root}messages/`));
+    inboxes.add(DataFactory.literal("stray inbox value"));
+    inboxes.add(DataFactory.namedNode("https://[]/"));
+    inboxes.add(DataFactory.namedNode(`${root}notifications/`));
+    const session = profileSession(root, await serialize([...dataset]));
+    mocks.search.mockResolvedValue({
+      results: [
+        row("passport"),
+        row("message", { url: `${root}messages/notice.ttl#it` }),
+        row("notification", { url: `${root}notifications/notice.ttl#it` }),
+      ],
+    });
+
+    const retrieval = await openAskRetrieval(session, new AbortController().signal);
+    expect(retrieval.count).toBe(1);
+    expect(retrieval.inboxUnidentified).toBe(true);
+    expect(retrieval.retrieve("passport", undefined).map((source) => source.url)).toEqual([
+      row("passport").url,
+    ]);
+  });
   it("finds the inbox of an http pod on a private host, which public-HTTPS-only discovery refused", async () => {
     for (const host of ["http://192.168.1.20:3000/alice/", "http://localhost:3000/alice/"]) {
       const session = profileSession(host, `${LDP} <#me> ldp:inbox <../messages/>.`);
@@ -217,9 +251,10 @@ describe("third-party-writable inboxes", () => {
         ],
       });
       const retrieval = await openAskRetrieval(session, new AbortController().signal);
-      expect(await profileInboxes(session, new AbortController().signal)).toEqual([
-        `${host}messages/`,
-      ]);
+      expect(await profileInboxes(session, new AbortController().signal)).toEqual({
+        urls: [`${host}messages/`],
+        unidentified: false,
+      });
       expect(retrieval.count).toBe(1);
       expect(retrieval.inboxUnidentified).toBe(false);
       expect(retrieval.retrieve("passport", undefined).map((source) => source.url)).toEqual([
@@ -266,10 +301,9 @@ describe("third-party-writable inboxes", () => {
       root,
       `${LDP} <#me> ldp:inbox <../messages/>, <https://inbox.example/owner/>.`,
     );
-    expect((await profileInboxes(session, new AbortController().signal))?.sort()).toEqual([
-      "https://inbox.example/owner/",
-      `${root}messages/`,
-    ]);
+    const { urls, unidentified } = await profileInboxes(session, new AbortController().signal);
+    expect(urls.toSorted()).toEqual(["https://inbox.example/owner/", `${root}messages/`]);
+    expect(unidentified).toBe(false);
   });
   it("cancels the profile read with the retrieval's abort signal", async () => {
     const session = profileSession(root, 200);
@@ -286,6 +320,6 @@ describe("third-party-writable inboxes", () => {
     await vi.waitFor(() => expect(seen).toBeDefined());
     abort.abort();
     expect(seen?.aborted).toBe(true);
-    await expect(pending).resolves.toBeNull();
+    await expect(pending).resolves.toEqual({ urls: [], unidentified: true });
   });
 });

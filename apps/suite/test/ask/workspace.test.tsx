@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -73,14 +74,15 @@ it("renders question controls, truthful coverage and an empty session", () => {
   expect(html).toContain("Only in this session");
   expect(html).toContain("readable labels and description snippets");
 });
-it("says when the profile inbox couldn't be identified, and only then", async () => {
-  const notice = "Couldn&#x27;t identify your inbox; items in it may appear as sources.";
+it("says when inbox discovery is incomplete, and only then", async () => {
+  const notice = "Couldn&#x27;t identify every inbox from your profile.";
   expect(render(fixture())).not.toContain(notice);
   const unidentified = fixture([passage], null, false, true);
   expect(render(unidentified)).toContain(notice);
   await unidentified.ask("passport", undefined, true, true);
   const html = render(unidentified);
-  expect(html).toContain("Your profile&#x27;s inbox couldn&#x27;t be identified");
+  expect(html).toContain("Known inboxes and containers named inbox are left out");
+  expect(html).toContain("Items from unidentified inboxes may be included.");
   expect(html).not.toContain("Inbox items are left out");
   const identified = fixture([passage], null);
   await identified.ask("passport", undefined, true, true);
