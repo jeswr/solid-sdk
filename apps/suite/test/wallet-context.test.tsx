@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 // @vitest-environment jsdom
 import { WalletUnsupportedError } from "@jeswr/solid-wallet";
@@ -243,7 +244,7 @@ it("shows an unsupported pod distinctly, without shared-storage or permissions a
   expect(container.querySelector("button")).toBeNull();
   expect(repository.list).not.toHaveBeenCalled();
 });
-it("words a delete that cannot finish after an account switch as not completed", async () => {
+it("keeps delete failures account-neutral after session staleness or an account switch", async () => {
   vi.useFakeTimers();
   try {
     const item = {
@@ -255,6 +256,7 @@ it("words a delete that cannot finish after an account switch as not completed",
       etag: '"v1"',
     };
     const stale = new ExtensionSessionError("stale");
+    const pendingDelete = Promise.withResolvers<never>();
     const repository = {
       initialise: vi.fn(async () => {}),
       list: vi.fn(async () => [item]),
@@ -265,7 +267,7 @@ it("words a delete that cannot finish after an account switch as not completed",
         .mockRejectedValueOnce(
           new StorageError("network", { method: "DELETE", url: item.url, cause: stale }),
         )
-        .mockRejectedValueOnce(new Error("privacy check failed")),
+        .mockReturnValueOnce(pendingDelete.promise),
     };
     seams.open.mockResolvedValue({ repository });
     await act(async () => {
@@ -285,21 +287,33 @@ it("words a delete that cannot finish after an account switch as not completed",
       observed?.state.remove(item);
       await vi.advanceTimersByTimeAsync(8001);
     });
-    expect(seams.failure).toHaveBeenLastCalledWith(
-      expect.stringMatching(/^Delete not completed\. "Passport" may still be in your pod/),
-    );
-    // Unmounting for the new account flushes the pending delete against the old session.
+    const neutralFailure =
+      "Delete not completed. Open Wallet with the account where you started the delete to check whether you need to try again.";
+    expect(seams.failure).toHaveBeenLastCalledWith(neutralFailure);
+
+    // Switching accounts flushes the queued delete against the previous session.
     await act(async () => {
       observed?.state.remove(item);
     });
-    await act(async () => root.unmount());
-    root = createRoot(container);
-    await act(async () => {
-      await vi.runAllTimersAsync();
+    const nextSession = { ...session, webId: "https://other.example/profile#me" };
+    seams.open.mockResolvedValue({
+      repository: { initialise: vi.fn(async () => {}), list: vi.fn(async () => []) },
     });
+    await act(async () => {
+      root.render(
+        <WalletProvider key={nextSession.webId} session={nextSession}>
+          <Content />
+        </WalletProvider>,
+      );
+    });
+    expect(observed?.session).toBe(nextSession);
+    expect(container.textContent).toBe("ready:0");
     expect(repository.remove).toHaveBeenCalledTimes(3);
+    expect(seams.failure).toHaveBeenCalledTimes(2);
+
+    await act(async () => pendingDelete.reject(new Error("privacy check failed")));
     expect(seams.failure).toHaveBeenCalledTimes(3);
-    expect(seams.failure).toHaveBeenLastCalledWith(expect.stringMatching(/^Delete not completed/));
+    expect(seams.failure).toHaveBeenLastCalledWith(neutralFailure);
   } finally {
     vi.useRealTimers();
   }

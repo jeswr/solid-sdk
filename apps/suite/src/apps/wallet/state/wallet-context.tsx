@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import { WalletUnsupportedError } from "@jeswr/solid-wallet";
@@ -44,7 +45,7 @@ export function WalletProvider({
       controller = createWalletState(repository, (error, failure) =>
         toast.error(
           failure && (failure.sessionEnded || staleSession(error))
-            ? `Delete not completed. "${failure.item.name}" may still be in your pod. Open Wallet with that account to check, then delete it again if needed.`
+            ? "Delete not completed. Open Wallet with the account where you started the delete to check whether you need to try again."
             : "Couldn't save to your pod. Your change was rolled back. Check your connection and permissions, then try again.",
         ),
       );
