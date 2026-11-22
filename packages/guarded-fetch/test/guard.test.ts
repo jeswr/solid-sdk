@@ -1028,7 +1028,11 @@ describe("guard — body cap + timeout", () => {
           status: item.status,
           headers: { "content-type": "text/turtle", ...item.headers },
         })) as typeof globalThis.fetch;
-      const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS, maxBytes: 1024 });
+      const guarded = createGuardedFetch({
+        pinningFetch: fetch,
+        dnsLookup: PUBLIC_DNS,
+        maxBytes: 1024,
+      });
       const error = await guarded("https://big.example/doc").then(
         () => undefined,
         (caught: unknown) => caught,
