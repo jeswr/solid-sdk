@@ -1,8 +1,18 @@
 // biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { CredentialStore } from "@jeswr/agent-credentials";
-import { createServer, type IncomingMessage, type Server } from "http";
+import { DOCUMENT_MEDIA_TYPE, LEGACY_MEDIA_TYPE } from "@jeswr/agent-reference/wire/carriage";
+import { createServer, IncomingMessage, type Server, type ServerResponse } from "http";
+import type { Socket } from "net";
 import { isAbsolute } from "path";
+import {
+  createDirectHttpReceiver,
+  createGateReceiver,
+  isBuiltInA2aReceiver,
+  MAX_A2A_BODY,
+} from "./cloud-receivers.js";
+import type { Gate } from "./gate.js";
 import { createLocalState, createProcessLease } from "./local.js";
 import type { Daemon } from "./types.js";
 
@@ -38,14 +48,23 @@ export interface A2aRequest {
   readonly headers: IncomingMessage["headers"];
   readonly signal: AbortSignal;
 }
-export interface CloudComposition {
+export type CloudReceiver = (
+  request: A2aRequest,
+) => Promise<{ status: number; body: string; headers?: Readonly<Record<string, string>> }>;
+export type CloudComposition = {
   readonly daemon: Daemon;
   /** All ingest and executor binding IDs in the trusted composition. */
   readonly bindings: readonly string[];
-  /** Verify peer authentication and signed envelopes before durable ingestion. Never send here. */
-  readonly a2a: (request: A2aRequest) => Promise<{ status: number; body: string }>;
   close(): Promise<void>;
-}
+} & (
+  | {
+      /** Use the same leased gate as the daemon for both HTTP entrances. */
+      readonly gate: Pick<Gate, "receiveCarriage">;
+      /** Optional trusted receive-only A2A adapter, subject to the same ingress bounds. */
+      readonly a2a?: CloudReceiver;
+    }
+  | { readonly gate?: undefined; readonly a2a: CloudReceiver }
+);
 export type CloudFactory = (context: CloudContext) => Promise<CloudComposition>;
 
 function configuration(env: NodeJS.ProcessEnv) {
@@ -64,64 +83,165 @@ function configuration(env: NodeJS.ProcessEnv) {
   return { directory, port };
 }
 
-/** TLS terminates at ACA ingress; this server exposes only the explicit A2A receiver and probes. */
-function listener(composition: CloudComposition, signal: AbortSignal) {
+class CloudRequest extends IncomingMessage {
+  bodyRead?: { remaining: number; overflow: () => void };
+
+  override push(chunk: Buffer | null): boolean {
+    if (chunk === null) return super.push(null);
+    const bodyRead = this.bodyRead;
+    if (!bodyRead) return false;
+    // Check the parser's chunk before the stream can buffer or emit it.
+    if (chunk.length > bodyRead.remaining) {
+      bodyRead.overflow();
+      return false;
+    }
+    bodyRead.remaining -= chunk.length;
+    return super.push(chunk);
+  }
+}
+
+function readBody(
+  req: CloudRequest,
+  limit: number,
+  refuse: (status: number) => void,
+  resolve: (body?: Buffer) => void,
+) {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  function finish(body?: Buffer) {
+    req.bodyRead = undefined;
+    req.off("data", data);
+    req.off("end", end);
+    req.off("error", error);
+    req.off("close", close);
+    chunks.length = 0;
+    resolve(body);
+  }
+  function data(chunk: Buffer) {
+    chunks.push(chunk);
+    size += chunk.length;
+  }
+  function end() {
+    finish(Buffer.concat(chunks, size));
+  }
+  function error() {
+    refuse(400);
+    finish();
+  }
+  function close() {
+    finish();
+  }
+  req.bodyRead = {
+    remaining: limit,
+    overflow: () => {
+      refuse(413);
+      finish();
+    },
+  };
+  req.once("end", end);
+  req.once("error", error);
+  req.once("close", close);
+  req.on("data", data);
+}
+
+/** TLS terminates at ACA ingress. Both receiver paths share the same bounds and drain. */
+function listener(a2a: CloudReceiver, gate: CloudComposition["gate"], signal: AbortSignal) {
   const pending = new Set<Promise<void>>();
-  const server = createServer({ maxHeaderSize: 8192, requestTimeout: 15_000 }, (req, res) => {
-    const respond = (status: number, body = "") => {
+  const closing = new WeakSet<Socket>();
+  function handle(req: CloudRequest, res: ServerResponse, expectContinue = false) {
+    const socket = req.socket;
+    if (closing.has(socket)) return;
+    const respond = (status: number, body = "", headers?: Readonly<Record<string, string>>) => {
       if (res.destroyed || res.writableEnded) return;
+      for (const name of ["A2A-Version", "A2A-Extensions"]) {
+        const value = headers?.[name];
+        if (value !== undefined) res.setHeader(name, value);
+      }
       res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" });
       res.end(body);
     };
-    if (signal.aborted) return respond(503);
+    const refuse = (status: number) => {
+      if (res.destroyed || res.writableEnded) return;
+      closing.add(socket);
+      // Mark the stream handled without consuming bytes so Node won't drain it on finish.
+      req.read(0);
+      // HTTP can resume the socket while finishing an already-buffered pipelined request.
+      socket.on("resume", () => socket.pause());
+      socket.pause();
+      res.setHeader("Connection", "close");
+      res.prependOnceListener("finish", () => {
+        req.destroy();
+        socket.destroy();
+      });
+      respond(status);
+    };
+    if (
+      req.headers.expect !== undefined &&
+      (!expectContinue || req.headers.expect.trim().toLowerCase() !== "100-continue")
+    )
+      return refuse(417);
+    if (signal.aborted) return refuse(503);
     if (req.method === "GET" && (req.url === "/livez" || req.url === "/readyz"))
       return respond(200, '{"ready":true}');
-    if (req.url !== "/a2a") return respond(404);
-    if (req.method !== "POST") return respond(405);
-    if (req.headers["content-type"]?.split(";")[0]?.trim() !== "application/json")
-      return respond(415);
+    const direct = req.url === "/answerable" && gate;
+    if (req.url !== "/a2a" && !direct) return refuse(404);
+    if (req.method !== "POST") return refuse(405);
+    if (pending.size >= MAX_INFLIGHT) return refuse(503);
+    const mediaType = req.headers["content-type"]?.split(";")[0]?.trim().toLowerCase();
+    let receive = a2a;
+    if (direct) {
+      if (mediaType !== DOCUMENT_MEDIA_TYPE && mediaType !== LEGACY_MEDIA_TYPE) return refuse(415);
+      receive = createDirectHttpReceiver(direct, mediaType);
+    } else if (mediaType !== "application/json") return refuse(415);
+    const limit = isBuiltInA2aReceiver(receive) ? MAX_A2A_BODY : MAX_BODY;
     const length = Number(req.headers["content-length"] ?? 0);
-    if (!Number.isFinite(length) || length > MAX_BODY) return respond(413);
-    const chunks: Buffer[] = [];
-    let size = 0;
-    let refused = false;
-    req.on("data", (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > MAX_BODY) {
-        if (!refused) respond(413);
-        refused = true;
-        chunks.length = 0;
-      } else if (!refused) chunks.push(chunk);
+    if (!Number.isFinite(length) || length > limit) return refuse(413);
+    let resolveBody!: (body?: Buffer) => void;
+    const received = new Promise<Buffer | undefined>((resolve) => {
+      resolveBody = resolve;
     });
-    req.on("error", () => {
-      if (!res.writableEnded) respond(400);
-    });
-    req.on("end", () => {
-      if (refused || signal.aborted) {
-        if (!res.writableEnded) respond(503);
-        return;
-      }
-      if (pending.size >= MAX_INFLIGHT) return respond(503);
-      const task = Promise.resolve()
-        .then(() => composition.a2a({ body: Buffer.concat(chunks), headers: req.headers, signal }))
-        .then((result) => {
-          if (
-            !Number.isInteger(result.status) ||
-            result.status < 200 ||
-            result.status > 599 ||
-            Buffer.byteLength(result.body) > MAX_BODY
-          )
-            return respond(500);
-          respond(result.status, result.body);
-        })
-        .catch(() => respond(503))
-        .finally(() => pending.delete(task));
-      pending.add(task);
-    });
-  });
+    const task = received
+      .then(async (body) => {
+        if (body === undefined) return;
+        if (signal.aborted) return refuse(503);
+        let result: Awaited<ReturnType<CloudReceiver>>;
+        try {
+          result = await receive({ body, headers: req.headers, signal });
+        } catch {
+          // TR-8 acknowledges only recorded decisions, regardless of the gate outcome.
+          return respond(503);
+        }
+        if (
+          !Number.isInteger(result.status) ||
+          result.status < 200 ||
+          result.status > 599 ||
+          Buffer.byteLength(result.body) > MAX_BODY
+        )
+          return respond(500);
+        respond(result.status, result.body, result.headers);
+      })
+      .catch(() => respond(500))
+      .finally(() => pending.delete(task));
+    pending.add(task);
+    readBody(req, limit, refuse, resolveBody);
+    if (expectContinue) res.writeContinue();
+  }
+  const server = createServer(
+    { IncomingMessage: CloudRequest, maxHeaderSize: 8192, requestTimeout: 15_000 },
+    handle,
+  );
+  server.on("checkExpectation", handle);
+  server.on("checkContinue", (req, res) => handle(req, res, true));
+  // A client that half-closes after sending a complete body still gets its reply. Without this,
+  // Node aborts the request on the client's FIN and the gate can record a decision that the
+  // client never hears about.
+  // `httpAllowHalfOpen` is Node's (untyped) switch for this; the half-close test fails if a
+  // future Node drops it.
+  (server as typeof server & { httpAllowHalfOpen: boolean }).httpAllowHalfOpen = true;
   server.headersTimeout = 10_000;
   server.keepAliveTimeout = 1000;
-  server.maxConnections = MAX_INFLIGHT;
+  // Leave room to deliver a 503 when active uploads occupy separate connections.
+  server.maxConnections = MAX_INFLIGHT + 1;
   server.maxRequestsPerSocket = 100;
   return { server, drain: () => Promise.allSettled([...pending]) };
 }
@@ -184,14 +304,17 @@ async function cloudSession(
   };
   signal.addEventListener("abort", stop, { once: true });
   try {
+    const { gate } = composition;
+    const a2a = composition.a2a ?? (gate && createGateReceiver(gate));
     if (
       composition.bindings.some((id) => !cloudBindings.has(id)) ||
       !composition.bindings.includes("a2a") ||
-      typeof composition.a2a !== "function"
+      typeof a2a !== "function" ||
+      (gate !== undefined && typeof gate?.receiveCarriage !== "function")
     )
       throw new Error("Cloud requires A2A and cloud-capable bindings");
     if (signal.aborted) return;
-    const inbound = listener(composition, controller.signal);
+    const inbound = listener(a2a, gate, controller.signal);
     server = inbound.server;
     drain = inbound.drain;
     await new Promise<void>((resolve, reject) => {

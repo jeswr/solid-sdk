@@ -1,0 +1,357 @@
+{
+  "@context": "https://w3id.org/jeswr/awp/context/v1",
+  "id": "urn:awp:engine-mortgage-core-main:sam-agent:0003",
+  "type": ["Message", "Propose"],
+  "profile": "https://w3id.org/jeswr/awp/profile/pilot/0.1",
+  "configuration": "https://w3id.org/jeswr/awp#config/signed-ed25519/0.1",
+  "kind": "propose",
+  "conversation": "urn:awp:engine-mortgage-core-main:sam-agent:0001",
+  "from": {
+    "id": "urn:awp:n:a1hmdoa6v8owYXktJzUO4FdfAPZq1li-vnKsOls8Rq4"
+  },
+  "to": {
+    "id": "urn:awp:n:9TbET_WswBSaVrqUdxV5Swr5yvZmayfMZo_X2V1wW5I"
+  },
+  "createdAt": "2026-11-13T09:00:00.000Z",
+  "expiresAt": "2026-11-13T15:00:00.000Z",
+  "body": {
+    "id": "urn:awp:n:znRChxYoSJ9ZUSYN9fSf8eAHEQyh4E8C9ptXUaci25A"
+  },
+  "evidence": {
+    "id": "urn:awp:n:ZBSMMlwEHHG-F9FTWs9xxsqe0adv1Vk5QgnxmZ4Aodk"
+  },
+  "@included": [
+    {
+      "id": "urn:awp:n:a1hmdoa6v8owYXktJzUO4FdfAPZq1li-vnKsOls8Rq4",
+      "type": "ParticipantRef",
+      "actor": "https://agents.hostco.example/sam#agent",
+      "onBehalfOf": "https://sam.example/#me",
+      "operator": "https://agents.hostco.example/#org"
+    },
+    {
+      "id": "urn:awp:n:9TbET_WswBSaVrqUdxV5Swr5yvZmayfMZo_X2V1wW5I",
+      "type": "AudienceRef",
+      "actor": "https://northbank.example/agents/intake#agent",
+      "party": "https://northbank.example/#org"
+    },
+    {
+      "id": "urn:awp:n:znRChxYoSJ9ZUSYN9fSf8eAHEQyh4E8C9ptXUaci25A",
+      "type": "ProposeBody",
+      "operation": {
+        "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification"
+      },
+      "round": "1",
+      "terms": {
+        "id": "urn:awp:n:kJ0TezidZmv-iy_f_GBn63_7aK7N0d7dU8lQrXmnllc"
+      },
+      "termsDigest": "sha-256:2cdbbb7e217d705db2fd38cb9a8a2f335f653a36b5620d26cb101086e842fb59"
+    },
+    {
+      "id": "urn:awp:n:ZBSMMlwEHHG-F9FTWs9xxsqe0adv1Vk5QgnxmZ4Aodk",
+      "type": "EvidenceItem",
+      "embeddedCredential": {
+        "id": "urn:awp:n:G-rjCGbb4Ao02IavnOZGHALJFph5L8pX7DtXZB3AdTc"
+      },
+      "format": "jws-compact",
+      "position": "0",
+      "role": "representation"
+    },
+    {
+      "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification",
+      "type": "OperationRef",
+      "version": "0.1"
+    },
+    {
+      "id": "urn:awp:n:kJ0TezidZmv-iy_f_GBn63_7aK7N0d7dU8lQrXmnllc",
+      "type": "NamedValueCollection",
+      "itemListElement": [
+        {
+          "id": "urn:awp:n:3J8ZdOtb4ZJvmLsNfWg8TwrsHwjXtfs9ldqNQQidGfE"
+        },
+        {
+          "id": "urn:awp:n:MIichDc7O4rxjndOtimopOILtNHwQ3qfE0GAYr348T4"
+        },
+        {
+          "id": "urn:awp:n:6xftrZM6Uioc2MY5IRweq8DnTlJ1xukYWxVNt8izUVY"
+        },
+        {
+          "id": "urn:awp:n:y5krYn9mcICUbnFSNqW3jtcKlAgt0dipziHklouuakM"
+        },
+        {
+          "id": "urn:awp:n:BziuZZlODpYDM6-szl33m6uUS2fV70w3N6AUjGBs9Iw"
+        },
+        {
+          "id": "urn:awp:n:PruIFJnfJoXvayfaHMiDQuj-41gvrImlFvMegF-IT-U"
+        }
+      ]
+    },
+    {
+      "id": "urn:awp:n:3J8ZdOtb4ZJvmLsNfWg8TwrsHwjXtfs9ldqNQQidGfE",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "https://w3id.org/jeswr/awp#model/mortgage-application"
+      },
+      "name": "model",
+      "position": "0",
+      "propertyID": "urn:awp:legacy-field:model"
+    },
+    {
+      "id": "urn:awp:n:MIichDc7O4rxjndOtimopOILtNHwQ3qfE0GAYr348T4",
+      "type": "PropertyValue",
+      "domainValue": {
+        "type": "http://www.w3.org/2001/XMLSchema#integer",
+        "@value": "450000"
+      },
+      "name": "propertyPrice",
+      "position": "1",
+      "propertyID": "urn:awp:legacy-field:propertyPrice"
+    },
+    {
+      "id": "urn:awp:n:6xftrZM6Uioc2MY5IRweq8DnTlJ1xukYWxVNt8izUVY",
+      "type": "PropertyValue",
+      "domainValue": {
+        "type": "http://www.w3.org/2001/XMLSchema#integer",
+        "@value": "380000"
+      },
+      "name": "loanAmount",
+      "position": "2",
+      "propertyID": "urn:awp:legacy-field:loanAmount"
+    },
+    {
+      "id": "urn:awp:n:y5krYn9mcICUbnFSNqW3jtcKlAgt0dipziHklouuakM",
+      "type": "PropertyValue",
+      "domainValue": "USD",
+      "name": "currency",
+      "position": "3",
+      "propertyID": "urn:awp:legacy-field:currency"
+    },
+    {
+      "id": "urn:awp:n:BziuZZlODpYDM6-szl33m6uUS2fV70w3N6AUjGBs9Iw",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "https://sam.example/#me"
+      },
+      "name": "applicant",
+      "position": "4",
+      "propertyID": "urn:awp:legacy-field:applicant"
+    },
+    {
+      "id": "urn:awp:n:PruIFJnfJoXvayfaHMiDQuj-41gvrImlFvMegF-IT-U",
+      "type": "PropertyValue",
+      "domainValue": {
+        "type": "http://www.w3.org/2001/XMLSchema#boolean",
+        "@value": "true"
+      },
+      "name": "synthetic",
+      "position": "5",
+      "propertyID": "urn:awp:legacy-field:synthetic"
+    },
+    {
+      "id": "urn:awp:n:G-rjCGbb4Ao02IavnOZGHALJFph5L8pX7DtXZB3AdTc",
+      "type": "VerifiableCredential",
+      "credentialSubject": "urn:awp:n:pS18_UaW8e4Tb95xMyyuNHR40QhYFVH--7KQHZEfiyo",
+      "issuedAt": "2026-11-13T09:00:00.000Z",
+      "issuer": "https://sam.example/#me",
+      "proofGraph": "urn:awp:n:bfxB7rGT1viQ6kO1hLImcR_e68KbDk3hvwrLwYDv-6I",
+      "validFrom": "2026-11-13T08:59:00.000Z",
+      "validUntil": "2027-01-12T09:00:00.000Z"
+    },
+    {
+      "id": "urn:awp:n:pS18_UaW8e4Tb95xMyyuNHR40QhYFVH--7KQHZEfiyo",
+      "type": "LegacyCredentialSubject",
+      "statementPayload": {
+        "id": "urn:awp:n:1n74V-bCSldBQQGi-3WLl31rmbx35eARFPguDq8BrPo"
+      }
+    },
+    {
+      "id": "urn:awp:n:1n74V-bCSldBQQGi-3WLl31rmbx35eARFPguDq8BrPo",
+      "type": "NamedValueCollection",
+      "itemListElement": [
+        {
+          "id": "urn:awp:n:l98AJA2NPnJgD1psn6oGXhuRRtwZJ61s_fF7tZguBRQ"
+        },
+        {
+          "id": "urn:awp:n:8W0zWVjIY-he3w1d9xuXrorMQ191e1sNSlSb991RfWw"
+        },
+        {
+          "id": "urn:awp:n:7kV3nlHUYotYtjj0E_25FN34zxMVWEilERHr5jlpXA4"
+        },
+        {
+          "id": "urn:awp:n:l1u1ddDDPZIs8x2JITy6N0OLPPUTp4HekI6BHgBdmKM"
+        },
+        {
+          "id": "urn:awp:n:JcBPNTqXF6vEAg8HgcF-Uppgh73IhnmDrYLrQrGmzyA"
+        },
+        {
+          "id": "urn:awp:n:_Ate2YYoPRP6SDE8ev_3rU46ugdaZO6Nw_eBHWRB-po"
+        },
+        {
+          "id": "urn:awp:n:dbtSumxqXhM1AxyQA5zjDL2W7csBm4I8kKYuqCwwjtg"
+        },
+        {
+          "id": "urn:awp:n:Cj3cOEo_vUr7VNTe-bXbNritOE71vH-MYX319bWYqx0"
+        },
+        {
+          "id": "urn:awp:n:OM7h856oiuIrhHBxRwdy352tClJedf9mnDmAUSzXgLg"
+        },
+        {
+          "id": "urn:awp:n:LFVSvtaUpLUQu81Nkxb6p6OnqPW1nMjsAYGDMm4gxlU"
+        }
+      ]
+    },
+    {
+      "id": "urn:awp:n:l98AJA2NPnJgD1psn6oGXhuRRtwZJ61s_fF7tZguBRQ",
+      "type": "PropertyValue",
+      "domainValue": "RepresentationStatement",
+      "name": "type",
+      "position": "0",
+      "propertyID": "urn:awp:legacy-field:type"
+    },
+    {
+      "id": "urn:awp:n:8W0zWVjIY-he3w1d9xuXrorMQ191e1sNSlSb991RfWw",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "urn:awp:representation:9bee9851dc6b465da3e8823e6485c61c:1794560400000"
+      },
+      "name": "id",
+      "position": "1",
+      "propertyID": "urn:awp:legacy-field:id"
+    },
+    {
+      "id": "urn:awp:n:7kV3nlHUYotYtjj0E_25FN34zxMVWEilERHr5jlpXA4",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "https://sam.example/#me"
+      },
+      "name": "party",
+      "position": "2",
+      "propertyID": "urn:awp:legacy-field:party"
+    },
+    {
+      "id": "urn:awp:n:l1u1ddDDPZIs8x2JITy6N0OLPPUTp4HekI6BHgBdmKM",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "https://agents.hostco.example/sam#agent"
+      },
+      "name": "actor",
+      "position": "3",
+      "propertyID": "urn:awp:legacy-field:actor"
+    },
+    {
+      "id": "urn:awp:n:JcBPNTqXF6vEAg8HgcF-Uppgh73IhnmDrYLrQrGmzyA",
+      "type": "PropertyValue",
+      "domainValue": "GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o",
+      "name": "actorKid",
+      "position": "4",
+      "propertyID": "urn:awp:legacy-field:actorKid"
+    },
+    {
+      "id": "urn:awp:n:_Ate2YYoPRP6SDE8ev_3rU46ugdaZO6Nw_eBHWRB-po",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "https://agents.hostco.example/#org"
+      },
+      "name": "operator",
+      "position": "5",
+      "propertyID": "urn:awp:legacy-field:operator"
+    },
+    {
+      "id": "urn:awp:n:dbtSumxqXhM1AxyQA5zjDL2W7csBm4I8kKYuqCwwjtg",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "urn:awp:n:mvKmGK39OL5c4bsbjdbnIYJU3IbZR9gvHhVcOiP1jjQ"
+      },
+      "name": "operations",
+      "position": "6",
+      "propertyID": "urn:awp:legacy-field:operations"
+    },
+    {
+      "id": "urn:awp:n:Cj3cOEo_vUr7VNTe-bXbNritOE71vH-MYX319bWYqx0",
+      "type": "PropertyValue",
+      "domainValue": "2026-11-13T08:59:00.000Z",
+      "name": "validFrom",
+      "position": "7",
+      "propertyID": "urn:awp:legacy-field:validFrom"
+    },
+    {
+      "id": "urn:awp:n:OM7h856oiuIrhHBxRwdy352tClJedf9mnDmAUSzXgLg",
+      "type": "PropertyValue",
+      "domainValue": "2027-01-12T09:00:00.000Z",
+      "name": "validUntil",
+      "position": "8",
+      "propertyID": "urn:awp:legacy-field:validUntil"
+    },
+    {
+      "id": "urn:awp:n:LFVSvtaUpLUQu81Nkxb6p6OnqPW1nMjsAYGDMm4gxlU",
+      "type": "PropertyValue",
+      "domainValue": "2026-11-13T09:00:00.000Z",
+      "name": "issuedAt",
+      "position": "9",
+      "propertyID": "urn:awp:legacy-field:issuedAt"
+    },
+    {
+      "id": "urn:awp:n:mvKmGK39OL5c4bsbjdbnIYJU3IbZR9gvHhVcOiP1jjQ",
+      "type": "ItemList",
+      "itemListElement": [
+        {
+          "id": "urn:awp:n:aGZEICbnuVVyXFG6h002iD95mlN2ranL8VTbrIxtpY8"
+        },
+        {
+          "id": "urn:awp:n:2S__8Q2PC2UliB4zXS74EdfTWkWDlVyai2a8SWTdo1U"
+        },
+        {
+          "id": "urn:awp:n:VtxIfiP5PSa8YMoNoveMuKiIt-j0_S8YMrK6JvwWMk4"
+        }
+      ]
+    },
+    {
+      "id": "urn:awp:n:aGZEICbnuVVyXFG6h002iD95mlN2ranL8VTbrIxtpY8",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "https://w3id.org/jeswr/awp#op/mortgage-prequalification"
+      },
+      "name": "0",
+      "position": "0",
+      "propertyID": "urn:awp:legacy-field:0"
+    },
+    {
+      "id": "urn:awp:n:2S__8Q2PC2UliB4zXS74EdfTWkWDlVyai2a8SWTdo1U",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "https://w3id.org/jeswr/awp#op/mortgage-product-search"
+      },
+      "name": "1",
+      "position": "1",
+      "propertyID": "urn:awp:legacy-field:1"
+    },
+    {
+      "id": "urn:awp:n:VtxIfiP5PSa8YMoNoveMuKiIt-j0_S8YMrK6JvwWMk4",
+      "type": "PropertyValue",
+      "domainValue": {
+        "id": "https://w3id.org/jeswr/awp#op/balance-statement"
+      },
+      "name": "2",
+      "position": "2",
+      "propertyID": "urn:awp:legacy-field:2"
+    },
+    {
+      "id": "urn:awp:n:bfxB7rGT1viQ6kO1hLImcR_e68KbDk3hvwrLwYDv-6I",
+      "@graph": [
+        {
+          "id": "urn:awp:n:2xlkiSUYHVrk1RDxXwcg57d2bYRBXAzb0yDN1APdw_I",
+          "type": "CompactJwsProof",
+          "jws": "eyJhbGciOiJFZERTQSIsImtpZCI6IkVGTWlqWENuYkV5NURNMENndkd1Z09ETGM5elVJQWxhUFhnRHlDdlU0NzgiLCJ0eXAiOiJhd3AtcmVwcmVzZW50YXRpb24randzIn0.eyJ0eXBlIjoiUmVwcmVzZW50YXRpb25TdGF0ZW1lbnQiLCJpZCI6InVybjphd3A6cmVwcmVzZW50YXRpb246OWJlZTk4NTFkYzZiNDY1ZGEzZTg4MjNlNjQ4NWM2MWM6MTc5NDU2MDQwMDAwMCIsInBhcnR5IjoiaHR0cHM6Ly9zYW0uZXhhbXBsZS8jbWUiLCJhY3RvciI6Imh0dHBzOi8vYWdlbnRzLmhvc3Rjby5leGFtcGxlL3NhbSNhZ2VudCIsImFjdG9yS2lkIjoiR2pvcmVsbENsVzV2T0JmV0MxVFQyYnZDOWowY0R2b0k0Z2lMSFAxOUYxbyIsIm9wZXJhdG9yIjoiaHR0cHM6Ly9hZ2VudHMuaG9zdGNvLmV4YW1wbGUvI29yZyIsIm9wZXJhdGlvbnMiOlsiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3Ajb3AvbW9ydGdhZ2UtcHJlcXVhbGlmaWNhdGlvbiIsImh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI29wL21vcnRnYWdlLXByb2R1Y3Qtc2VhcmNoIiwiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3Ajb3AvYmFsYW5jZS1zdGF0ZW1lbnQiXSwidmFsaWRGcm9tIjoiMjAyNi0xMS0xM1QwODo1OTowMC4wMDBaIiwidmFsaWRVbnRpbCI6IjIwMjctMDEtMTJUMDk6MDA6MDAuMDAwWiIsImlzc3VlZEF0IjoiMjAyNi0xMS0xM1QwOTowMDowMC4wMDBaIn0.EG-KgflArP_BJuKJ5CzLFzegAmStwx10HrpIDpY39VbPOGOL66B48dX1aWEQyovdWfwWJ0a-0f8nFGv0Ap46CA"
+        }
+      ]
+    }
+  ],
+  "presentFields": "https://w3id.org/jeswr/awp#evidence",
+  "proof": {
+    "type": "DataIntegrityProof",
+    "cryptosuite": "eddsa-rdfc-2022",
+    "verificationMethod": "urn:awp:verification-method:GjorellClW5vOBfWC1TT2bvC9j0cDvoI4giLHP19F1o",
+    "proofPurpose": "assertionMethod",
+    "created": "2026-11-13T09:00:00.000Z",
+    "proofValue": "z3C4mtm8AhrWvc9koqEXGS2X9a4QgEuxRFUbF7JVoSYTUPZM9z3SpY2iYEcaoWbpCPNbwijfANbUJQm5h77qsakvr"
+  }
+}

@@ -131,6 +131,13 @@ export class ResponseBodyLimitError extends RangeError {
 }
 
 // @public
+export class ResponseBodyTooLargeError extends SsrfError {
+    constructor(message: string, responseOk: boolean);
+    // (undocumented)
+    readonly responseOk: boolean;
+}
+
+// @public
 export function snapshotFetchInput(input: RequestInfo | URL, init?: RequestInit, options?: {
     metadataOnly?: boolean;
     discardBody?: boolean;

@@ -209,12 +209,13 @@ describe("shared Pod auth session", () => {
   });
   it("cleans legacy credentials once even under StrictMode, leaving unrelated data", async () => {
     localStorage.setItem("solid-pod-manager:active-webid", WEB_ID);
-    localStorage.setItem("solid:recent-accounts", "legacy");
+    localStorage.setItem("solid:recent-accounts", "another app's list");
     localStorage.setItem("unrelated", "keep");
     await mount(auth, true);
     expect(deleteDatabase).toHaveBeenCalledExactlyOnceWith("solid-pod-manager:sessions");
     expect(localStorage.getItem("solid-pod-manager:active-webid")).toBeNull();
-    expect(localStorage.getItem("solid:recent-accounts")).toBeNull();
+    // Shared with Solid Issues on the Pages origin, and never a credential.
+    expect(localStorage.getItem("solid:recent-accounts")).toBe("another app's list");
     expect(localStorage.getItem("unrelated")).toBe("keep");
   });
   it("retries a failed runtime startup", async () => {

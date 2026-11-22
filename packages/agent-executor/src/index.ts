@@ -6,5 +6,6 @@ export {
   type DurableFile,
   type ExecutorFileSystem,
 } from "./files.js";
+export { createOutboxProjector, ProposalRefusedError, type ProposalRelease } from "./projector.js";
 export { MAX_TRANSMISSION_ATTEMPTS } from "./transmission.js";
 export type * from "./types.js";

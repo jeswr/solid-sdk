@@ -1,6 +1,7 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/solid-odrl
 
@@ -119,7 +120,18 @@ are attributed correctly. Records preserve the `isPartOf` constraint and collect
 ## Key API
 
 - Express: `policyToRdf`, `policyToTurtle`, `policyToJsonLd`, `serialize`.
-- Parse: `parsePolicy`, `policyFromRdf`.
+  Rule and duty actions accept an ODRL short name or an absolute profile IRI.
+  Actions in the standard action table must use their short names, including
+  `append` and `control`. The policy writers and the decision-record writers
+  (`decisionRecord`, `decisionRecordJsonLd`, and `recordEvaluation`) reject the
+  corresponding full IRIs.
+  Writers retain profile IRIs verbatim and reject invalid actions with
+  `OdrlSerializationError`. Standard evaluation applies only the standard action hierarchy.
+- Parse with `parsePolicy` or `policyFromRdf`. By default, readers map standard
+  action IRIs to short names and skip rules and duties with unrecognized actions.
+  Pass `PolicyReadOptions.allowedActionIris` to admit specific extension actions
+  by exact IRI match. For example, with `const options = { allowedActionIris: ["urn:example:pay"] }`,
+  call `policyFromRdf(dataset, options)` or `parsePolicy(turtle, undefined, undefined, options)`.
 - Evaluate: `evaluate`, `constraintSatisfied`, `matchingPermissions`.
 - Delegation: `evaluateDelegated`, `delegationProvenance`.
 - Adapters: `requestContextFromA2AIntent`, `requestContextFromWac`.
@@ -134,3 +146,14 @@ are attributed correctly. Records preserve the `isPartOf` constraint and collect
 ## License
 
 [MIT](./LICENSE) © Jesse Wright
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Explicit target (including duty targets), assignee, assigner and profile identifiers
+accept clean absolute HTTP(S) IRIs and syntactically valid RFC 8141 URNs. URN NIDs
+contain 2–32 ASCII letters, digits or hyphens, with alphanumeric endpoints; the NSS
+is nonempty and uses RFC 8141 syntax (including valid percent escapes). Optional
+r/q components and fragments follow that RFC. Identifiers are preserved exactly.
+Relative references, blank-node identifiers, other schemes, empty strings, whitespace
+and characters requiring `escapeIri` escaping are refused. An invalid explicit value
+throws rather than disappearing and widening the policy to a wildcard.

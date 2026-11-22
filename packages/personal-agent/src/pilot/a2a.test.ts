@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The optional local A2A binding in-process: agents run the loopback listener of the official
  * `@a2a-js/sdk` against their AgentHost and dispatch through the runtime transmission boundary.
@@ -8,6 +9,7 @@
  * Denial tests count requests at the PEER's listener (every request, before any check): a
  * sender-side refusal must leave that count at zero — not merely be rejected by the peer.
  */
+
 import {
   chmodSync,
   existsSync,
@@ -22,6 +24,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readJson } from "@jeswr/agent-reference/wire/document";
 import { afterEach, describe, expect, it } from "vitest";
 import { freePort } from "../test-support/free-port.js";
 import {
@@ -212,7 +215,7 @@ async function host(
   return { a, h, listener, dispatcher, posts, logs };
 }
 
-async function until(check: () => boolean, ms = 10_000) {
+async function until(check: () => boolean, ms = 25_000) {
   const end = Date.now() + ms;
   while (!check()) {
     if (Date.now() > end) throw new Error("condition not reached in time");
@@ -256,6 +259,8 @@ function files(dir: string): string[] {
   });
 }
 
+// Budgets raised (22 Nov): in CI these run beside the agent-reference suite and took up to
+// 90% of the old budgets on a fast runner (bead sst-ans.55 tracks making them faster).
 describe("optional local A2A binding (official @a2a-js/sdk, loopback)", () => {
   it("runs a complete scheduling conversation over A2A, every send through the transmission boundary", async () => {
     const env = await setup();
@@ -299,7 +304,7 @@ describe("optional local A2A binding (official @a2a-js/sdk, loopback)", () => {
     expect(card.defaultInputModes).toEqual([A2A_ENVELOPE_MEDIA_TYPE]);
     expect(text).not.toContain(env.root);
     expect(text).not.toMatch(/"d"\s*:|private|token"/i);
-  }, 20_000);
+  }, 40_000);
 
   it("services run without owner private material: separate custody leaves no owner key in any service directory", async () => {
     const env = await setup();
@@ -373,16 +378,12 @@ describe("optional local A2A binding (official @a2a-js/sdk, loopback)", () => {
     const carol = await host(env, "carol", { auto: false });
     await propose(alice, "bob");
     const [out] = alice.h.undelivered(IDS.bob[1]);
-    if (out?.wire.format !== "awp-jws-compact/0.1") throw new Error("no signed outbound");
+    if (out?.wire.format !== "awp-jsonld/0.1") throw new Error("no signed outbound");
     const bobPeer = readA2aPeers(alice.a.dir).find((p) => p.actor === IDS.bob[1]);
     if (!bobPeer) throw new Error("bob not pinned");
-    const [h, p, s] = out.wire.jws.split(".");
-    const payload = JSON.parse(Buffer.from(p as string, "base64url").toString());
-    payload.kind = "propose";
-    const tampered = {
-      ...out.wire,
-      jws: `${h}.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.${s}`,
-    };
+    const doc = readJson(out.wire.jsonld);
+    doc.expiresAt = new Date(env.clock.t + HOUR).toISOString();
+    const tampered = { ...out.wire, jsonld: JSON.stringify(doc) };
     expect(await sendEnvelope(bobPeer, { id: `${out.id}-t`, wire: tampered })).toMatchObject({
       kind: "processed",
       ack: { disposition: "rejected", reason: "bad-signature" },
@@ -401,7 +402,7 @@ describe("optional local A2A binding (official @a2a-js/sdk, loopback)", () => {
     });
     expect(await sendEnvelope(bobPeer, out)).toMatchObject({ ack: { disposition: "duplicate" } });
     expect(received(bob.a.dir)).toEqual([`describe:${A2A_BINDING}`]);
-  }, 20_000);
+  }, 30_000);
 
   describe("send-time authorisation: a denied message never leaves (zero requests at the peer)", () => {
     const denials: [string, (env: Setup, alice: Running) => Promise<void>, string][] = [
@@ -737,13 +738,16 @@ describe("optional local A2A binding (official @a2a-js/sdk, loopback)", () => {
 
   it("two agents sending to each other at the same moment do not deadlock", async () => {
     const env = await setup();
-    const alice = await host(env, "alice", { auto: false, deadlineMs: 3_000 });
-    const bob = await host(env, "bob", { auto: false, deadlineMs: 3_000 });
+    // A deadlock holds both sends until the deadline aborts them. The deadline sits well
+    // above a loaded CI runner's normal dispatch time (about 3 s) so only a deadlock reaches it.
+    const deadlineMs = 10_000;
+    const alice = await host(env, "alice", { auto: false, deadlineMs });
+    const bob = await host(env, "bob", { auto: false, deadlineMs });
     await propose(alice, "bob");
     await propose(bob, "alice", "2026-10-21");
     const started = Date.now();
     const [ra, rb] = await Promise.all([alice.dispatcher?.dispatch(), bob.dispatcher?.dispatch()]);
-    expect(Date.now() - started).toBeLessThan(2_500);
+    expect(Date.now() - started).toBeLessThan(deadlineMs - 2_000);
     expect(ra?.delivered).toHaveLength(1);
     expect(rb?.delivered).toHaveLength(1);
     expect(received(alice.a.dir)).toEqual([`describe:${A2A_BINDING}`]);
@@ -773,6 +777,8 @@ describe("optional local A2A binding (official @a2a-js/sdk, loopback)", () => {
       "mortgage-consumer",
       "--wallet",
       issuance.wallet,
+      "--issuers",
+      issuance.issuers,
       "--owner-dir",
       owners,
       ...common,

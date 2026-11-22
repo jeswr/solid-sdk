@@ -9,7 +9,7 @@ Explicit `login` uses the credential package's PKCE loopback listener.
 `composeDaemon` obtains a client-credentials DPoP session through
 `@jeswr/pod-auth/node`, creates the storage client and notifications client using
 that session's fetch, and calls a trusted `prepare(workspace)` host factory.
-Credentials stay in pod-auth. The factory supplies explicit accounts, a gateway,
+Credentials stay in pod-auth. The factory supplies explicit accounts, an inbound gate, runtime memory, a gateway,
 an executor, verified authority stores, an audit writer and durable local state.
 `createDaemon` accepts the same already-composed capabilities for embedded hosts
 and offline tests. No provider, account or permission is inferred from pod content.
@@ -38,6 +38,10 @@ and cannot be detected from the daemon's side; recover it by reconciling the out
 Only a taken name reported as Solid's remapped
 412 permits proposal replay or index-create retry; a real 409 remains a write failure.
 After a container-create conflict, a fresh HEAD must confirm the container exists.
+The workspace root and both memory containers must advertise a unique WAC ACL
+document within the configured storage root via `Link: <...>; rel="acl"` on HEAD.
+The daemon replaces those documents with owner-only grants before writing content.
+Missing, ambiguous or out-of-scope links stop initialization.
 Read bounds and existing CLI error messages are retained.
 `createMemoryPod(root?)` now exposes SDK memory `storage` and a fetch adapter sharing
 that state, with request records and resource snapshots for offline assertions.
@@ -58,20 +62,23 @@ identity (the mandate subject) only from that resource.
 Each enabled account is processed serially, including accounts sharing a binding:
 
 1. List within item/byte bounds from its durable cursor.
-2. Import through M1 `importInbound`: owner-only ACL before raw bytes, provenance
+2. Parse each message once and check it against the inbound gate. Finish checking the
+   entire batch before starting the import.
+3. Import admitted messages and unstructured observations through M1 `importInbound`.
+   The owner-only ACL precedes raw bytes, the provenance
    graph and canonical chat data. Account inboxes are separated under
    `agent/inbox/<binding>/<opaque-account>/`.
-3. Run the gateway Reader's deterministic-first triage schema and persist the result.
-4. Call the Proposer only for independently owner-flagged threads or structured
-   JSON-LD envelopes. Neither condition establishes identity or authority. Its
+4. Give the gateway Reader the gate label and run deterministic-first triage.
+5. Call the Proposer only for independently owner-flagged threads or admitted
+   messages, with the gate verdict included in its input. Its
    context supplies the gateway's read-only pod and memory tools.
-5. Stamp and create proposals only inside `agent/proposals/`; an identical replay
+6. Stamp and create proposals only inside `agent/proposals/`; an identical replay
    is safe, but a conflicting rewrite fails. Save each stamped Proposer result in
    durable local `proposalResults` before outbox projection. Replace that cache with
-   the trusted outbox's finalized proposals before pod publication or model counters,
-   and reuse it when a batch retries, including empty results. Commit the ingest
+   the finalized proposals and any gate refusals before pod publication or model
+   counters, and reuse it when a batch retries, including empty results. Commit the ingest
    cursor only after the entire batch succeeds.
-6. Run the executor's outbox pass. It alone owns send capabilities and credentials.
+7. Run the executor's outbox pass. It alone owns send capabilities and credentials.
 
 Email polls every 120 seconds, chat every 30, social every 300. The control watcher
 subscribes to `agent/control/` and `agent/approvals/` through pod-notifications with
@@ -86,12 +93,7 @@ controls, approvals and mandates: parsing RDF is insufficient. Its local HALT ch
 must read `createLocalState(...).halted` on every gate pass, and use its
 `assertNotHalted` as the control store's synchronous dispatch check. Wire/action validation,
 exact approval terms, accounting, durable transmissions and send adapters remain
-executor obligations. `proposalWritten` runs before pod publication and must
-idempotently project proposals into the trusted outbox, returning the exact
-`OutboxEntry` used by the executor with `proposal.intent.termsDigest` set using
-`proposalTermsDigest(entry)`. The daemon checks that digest and durably caches the
-finalized proposal before publishing the same proposal to the pod and audit.
-The hook must never send or grant approval. The daemon derives body-free evidence
+executor obligations. The daemon derives body-free evidence
 with `proposalApprovalTerms(entry)` from agent-executor, including account-bound
 recipient hashes, the exact wire digest and a hash committing the full private
 proposal, carrier and expiry. It records `digestOf(terms)`, matching the executor's
@@ -111,8 +113,8 @@ private credential-store directory whose parent already exists.
 
 The `awp` executable dispatches `run`, `once`, `halt`, `resume`, `status`, `accounts`,
 `login <profile>`, `stats [--ledger <path>] [--task <id>] [--format json|csv]`,
-`audit <artifact> [--at <instant>]`
-and `install-launchd`. `createCliHost` connects those commands to a daemon or lazy composition factory,
+`audit <artifact> [--at <instant>]`, `install-launchd` and `gate`.
+`createCliHost` connects those commands to a daemon or lazy composition factory,
 local state, credential helper and ledger. Prefer a lazy factory: local commands never
 authenticate, and run/once close the pod session after draining. Task statistics verify
 retained evidence and group records by explicit runtime-assigned task labels.
@@ -137,6 +139,176 @@ composition; they never authenticate or send. Preloads
 must be inert until a command needs their capabilities; keep secrets out of argv,
 logs, plist arguments and source control. No deployment module is downloaded or
 loaded from pod data.
+
+## Inbound gate
+
+`DaemonOptions.gate` is required for embedded and authenticated hosts. Configure
+`gate: createInboundGate({ directory: join(stateDirectory, "gate") })` and use
+`createProcessLease(stateDirectory)` for the daemon. Each run opens one reference
+runtime after acquiring the process lease and closes it after executor drain.
+Gate state, the reference ledger and body-free verdict files live under the
+private `gate/` directory. A failed gate startup or check aborts the account
+batch before inbox writes, model calls, or cursor advancement.
+
+For CLI composition, give `createCliHost` a `gate` object with `stateDirectory`,
+`agentWebId` and `ownerWebId`. The gate verifies that its stored actor and party
+match the configured WebIDs when the daemon starts.
+
+- `awp gate init --owner-dir <dir>` creates the actor key and a deny-all reference
+  mandate after confirmation. Keep the owner signing key outside the gate
+  directory. The executor independently enforces the owner's VC mandate.
+- `awp gate pin <card.json>` displays the public thumbprints and notice for
+  comparison with the peer through a separate trusted channel. Stop the daemon
+  before pinning because the command takes its process lease after confirmation.
+  The pin API also takes a per-gate lease and merges each confirmed card into
+  the latest trust store. The operator's pins supply the counterparty verification keys.
+- `awp gate mandate <mandate.jws>` installs the reference mandate after verifying
+  its `awp-mandate+jws` proof against the pinned owner key and checking the actor,
+  validity and revocation. Stop the daemon first so the command can acquire its
+  process lease. The owner signs the file independently with the separately held
+  owner key. The command only verifies and installs that signed file.
+- `awp gate status` displays pinned subjects and thumbprints, ledger integrity,
+  verdict counts and interrupted digests. Ask the sender for a new message
+  when a check for that digest was interrupted. Identical raw-byte retries
+  reuse their finalized verdicts when the verdict, commit record and post-sync
+  confirmation match. Earlier verdicts without a confirmation appear as
+  interrupted digests. The reference runtime checks replays across carriers.
+
+Refused content stays outside the inbox, models and suite audit. The reference
+ledger records the decision locally. Plain human mail and chat remain available
+for triage and can reach the Proposer when the owner flags a thread. They supply
+no admitted evidence. Pod inbox identity stays `unverified` because the channel
+handle is an observation. Reference-generated replies stay in the local runtime
+outbox. Suite send halves accept only messages explicitly released for a proposal.
+
+## Outbound gate
+
+Supply `outbound: { handlers, plan }` to `createInboundGate`. The trusted host maps a
+proposal to a reference plan in an established conversation and binds the exact
+action, recipient and terms. Keep the mapping deterministic across retries and
+ignore the draft's preview and terms digest. A missing mapping or the deny-all
+reference mandate prevents new releases. The gate holds `ask-principal` actions
+without granting approval.
+
+Pass `gate.verifyOwn` as the `verify` option of **every** send half. It checks the
+actor signature and requires the exact compact JWS in the gate's durable record
+and reference outbox for the expected proposal and conversation under the active
+mandate. The projector and executor supply that context from the proposal being
+processed. Preserve it through any send binding wrapper. Pass the executor's
+`expected` context to the channel's `send.validate(wire, renderable, expected)`
+when implementing the trusted validator that binds all intent terms and the
+destination account to the wire.
+
+```ts
+const gate = createInboundGate({
+  directory: join(stateDirectory, "gate"),
+  admission: { taskId, reliance, handlers },
+  outbound: { handlers, plan },
+});
+// Configure every send half used by bindings with verify: gate.verifyOwn.
+const project: DaemonOptions["project"] = async (proposal, sign) => {
+  const prepareEntry = createOutboxProjector({
+    bindings,
+    accounts: outboundAccountsByBinding,
+    sign,
+  });
+  const entry = await prepareEntry(proposal);
+  await persistOutboxEntry(entry); // Host's idempotent executor store write.
+  return entry;
+};
+// Supply gate and project to createDaemon or composeDaemon.
+```
+
+The projector can use the daemon's `sign` callback or be configured with
+`sign: gate.release`. Both pass through the leased gate and write the linked
+decision before returning the release for rendering. Persist and return the exact
+entry the executor reads. The projector replaces the model draft preview with a
+description drawn solely from signed message fields and binds the resulting
+preview, account, wire and intent to the approval digest. The daemon verifies
+that digest before publishing the pending proposal. A typed refusal is cached and audited with the
+proposal reference, and the daemon skips outbox and pending proposal publication
+for that refusal. Confirmed gate releases reuse their original wire while the
+same mandate is active. A changed mandate requires a fresh runtime release, and
+queued envelopes released under a different mandate fail verification.
+An interrupted release without a completed receipt requires a new proposal.
+
+The reference mandate controls release and sealing. The executor independently
+checks the VC mandate, HALT, approval and limits before delivery. **Known
+deviation** for outbound check 5. The executor decides approval and limits after
+the gate seals the message and records those verdicts in agent-audit. The
+`gate-decision` links the gate outcome to its reference ledger head.
+
+### Verify the linked audit ledgers
+
+Every completed check and release leaves a body-free decision in the reference
+ledger. The gate stages completed decisions so it can recover across a crash
+between the verdict or release receipt and the reference state checkpoint.
+Startup verifies the suite's retained decision links and pruning checkpoints
+against the recovered gate ledger. Startup and account processing reconcile
+missing suite decisions from that verified progress before new model calls or
+sends. A retry of a decision uses the same audit ID, derived from the reference
+sequence and hash.
+The heartbeat and shutdown seal each changed suite head with an EdDSA receipt.
+The suite writes the local anchor before the gate persists its witness. If a
+crash interrupts that sequence, startup checks the signature and witnesses the
+anchor's exact head before dispatch. Startup rejects WebIDs that would put a
+signed receipt over the 4 KiB limit.
+
+Run `awp audit --ledger <events.jsonl>` against the local audit file with the paired
+gate configured. The offline command checks both chains, looks up decision links,
+verifies retained anchor signatures and requires a matching witness for each
+retained anchor. It requires both the latest witnessed head and its anchor in
+the suite ledger. A valid retention checkpoint can cover older witnesses.
+Truncation of the unwitnessed tail after the latest witness cannot be detected.
+
+## Runtime memory
+
+Supply `DaemonOptions.memory` from the trusted host factory. The daemon uses it
+for the Proposer's `memory_recall` tool. Supply `pod` and `instructions` in
+`proposerContext`. Workspace initialization installs owner-only WAC ACLs on
+`agent/memory/` and `agent/memory/pending/` before writing content. It replaces
+existing ACLs on both containers and sets the owner-only default inherited by
+descendants that lack their own ACL.
+
+```ts
+const gate = createInboundGate({
+  directory: join(stateDirectory, "gate"),
+  admission: { taskId, reliance, handlers },
+});
+const memory = createRuntimeMemory({
+  facts: gate.facts,
+  owner: ownerMemory,
+  purpose,
+});
+```
+
+The factory passes both `gate` and `memory` to the daemon. `gate.facts` reads
+the reference runtime opened under the daemon's lease. The optional `admission`
+configuration gives the runtime a trusted task ID, reliance rules and operation
+handlers for evidence-bearing messages. The reference trust store supplies issuer
+pins and source authority rules. Gate recall selects the latest eligible revision of
+each statement ID whose delivery has a confirmed `admitted` verdict and a committed
+decision. A successor can supersede an earlier fact only after its own admission
+commits. This applies both live and after reopening the same gate directory with the
+same task configuration.
+
+Construct `ownerMemory` with `createAgentMemory`, using the authenticated
+workspace storage and a mandate loader that verifies owner, revocation, signed
+memory scope and purpose policy. Select the purpose IRI in the host. The tool
+treats the model query as a case-insensitive substring of admitted fact fields or
+owner assertion terms. Results are ordered by time and ID and default to 20 items
+and 64 KiB of JSON. Superseded facts with confirmed admissions, facts with an
+absent or different admitted purpose, and facts subject to the interaction-only
+default terms all contribute to the withheld count independently of the query.
+For a derived fact, recall checks inherited terms and the exact recorded input
+revisions recursively. A withheld or unavailable input also withholds the
+derived fact.
+Reopening preserves an absent admitted purpose. Returned facts carry their
+recorded purpose, supplier terms and other provenance.
+Owner recall verifies the stored, unexpired owner-signed approval against the
+exact TriG bytes and destination and validates the resource against the promotion
+SHACL shapes. It skips resources that fail either check. Owner memory results
+carry the four permitted graphs as RDF/JS quads and nanopublication metadata.
 
 ## Stop and resume
 
@@ -232,8 +404,10 @@ trusted composition to `/app/host/compose.mjs` and run Node with
 `--import /app/host/compose.mjs /app/bin/awp-cloud.mjs`. That preload imports
 `configureCloud` from `/app/dist/index.js` and registers an async factory. The
 factory receives `{ store, local, lease, apiKey }` and returns
-`{ daemon, bindings, a2a, close }`. Construct the normal daemon with those local
-state capabilities and the supplied process lease; retain all A-012 authority,
+`{ daemon, bindings, gate, close }` for gate-backed ingress. Construct the normal
+daemon with those local state capabilities and the supplied process lease. Pass
+the same `createInboundGate(...)` handle to the daemon and cloud composition.
+The daemon opens it inside the lease. Retain all A-012 authority,
 executor, outbox, audit and shutdown obligations described above. The cloud owner
 acquires the file lease before composing the host and retains it through daemon
 and inbound handler drain. `close` releases the pod session before that file lease
@@ -243,20 +417,52 @@ from the credential mount.
 `bindings` must enumerate **all** ingest and executor binding IDs. The cloud host
 allows only explicit network-capable binding IDs; iMessage, linked-device Signal
 and WhatsApp, MCP subprocesses and unknown bindings are refused. The host must
-include `a2a` and a trusted `a2a({ body, headers, signal })` receiver returning
-`{ status, body }`. The HTTP boundary forwards the exact bounded bytes and peer
-authorization headers; the receiver must authenticate the peer, verify envelopes
-and persist inbound data before acknowledging. It cannot grant authority or send.
-It must honor cancellation. The existing A2A channel module is still a scaffold;
-this task supplies the cloud hosting boundary, not a replacement protocol or a
-default verifier. An absent composition/receiver fails startup.
+include `a2a`. With a gate supplied, the listener uses `createGateReceiver(gate)`
+for `CloudComposition.a2a` by default. A trusted preload can supply its own
+receive-only `a2a({ body, headers, signal })` adapter. It must honor cancellation
+and verify the peer and signed envelope before durable admission. A composition with only
+that receiver serves A2A and probes. Startup requires a gate or a trusted A2A
+receiver.
 
 Cloud configuration requires `AGENT_ENVIRONMENT=dev`, `AGENT_A2A_ENABLED=true`, an
 absolute `AGENT_CREDENTIAL_DIR` and port `AGENT_A2A_PORT` (default 8080). Only this
-explicit entrypoint opens ingress: `POST /a2a`, with JSON and a 64 KiB body limit,
-plus body-free `GET /livez` and `/readyz` process probes. Probes mean the trusted
-composition and ingress are available; pod authority and provider availability
-still fail closed independently inside the executor. Local `awp` behavior is unchanged.
+explicit entrypoint opens ingress. Both POST routes share 64 slots. Each slot is
+reserved before reading the request body and held through the receiver call.
+
+- `POST /a2a` accepts `application/json` with an A2A 1.0 JSON-RPC
+  `SendMessage` request declaring the required message-format extension. The built-in
+  receiver passes the bytes and headers to the gate as A2A request carriage. The
+  gate checks the signed data part and discards untrusted text and file parts.
+  Invalid JSON-RPC request framing returns 400 with a `malformed` reason. For
+  recognized requests, the A2A response carries the JSON receipt or refusal code.
+  The built-in receiver accepts up to 65,024 request bytes, reserving 512 bytes
+  of the reference client's 64 KiB limit for the response envelope and receipt,
+  including the longest refusal reason. It allows up to 16,384 UTF-16 code units
+  and 32,512 serialized UTF-8 bytes per string correlation ID, including JSON
+  quotes and escapes, because the response carries two copies of the ID.
+- `POST /answerable` requires the composed gate and accepts a signed message as
+  the body with `application/vnd.answerable.document+json` or
+  `application/vnd.answerable.signed+json`, up to 64 KiB. The JSON body is
+  `{"outcome":"admitted"}` or a reason code such as `{"reason":"bad-signature"}`.
+
+The listener rejects unsupported media types with 415, oversized bodies with
+413 and unsupported `Expect` values with 417. At capacity or during shutdown
+it returns 503 before processing the request. For early refusals it stops reading
+and closes the connection after sending the response.
+Under TR-8 both built-in entrances return HTTP 200 once the gate records its
+decision, for admission and refusal alike. Once the listener reads a complete
+body, an empty HTTP 503 means the daemon could not record a decision. Either
+outcome's commit failure produces the same status, empty body and headers.
+The gate verifies against its pinned trust and records its decision. It refuses malformed
+or unsigned messages, unknown keys, failed proofs, replayed messages, and invalid
+audiences or validity windows. Both built-in receivers expose only the receipt
+or reason code. Custom A2A receivers have a 64 KiB limit in each direction.
+Any protocol message the reference runtime prepares stays in
+its internal outbox. Ingress has no send capability.
+
+The listener also exposes body-free `GET /livez` and `/readyz` process probes.
+Probes report ingress availability. The executor checks pod authority and provider
+availability independently.
 
 Mount a dedicated Azure Files SMB share at `/var/lib/jeswr-agent`, owned by UID/GID
 65532 with `dir_mode=0700,file_mode=0600`. Existing credential-store checks remain

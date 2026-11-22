@@ -19,6 +19,8 @@ const ignoredDirectories = new Set([
   ".git",
   ".turbo",
   "__fixtures__",
+  // Gitignored install of sparq's research package (scripts/install-sparq.mjs); never committed.
+  ".sparq",
 ]);
 const dependencyFields = ["dependencies", "optionalDependencies", "peerDependencies"];
 const modelSdks = ["openai", "@anthropic-ai/sdk", "@anthropic-ai/claude-agent-sdk"];
@@ -310,6 +312,16 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
 
 const forbiddenGlobals = new Set(["fetch", "globalThis", "global", "window", "self"]);
 const commonJsLoaders = new Set(["require", "createRequire"]);
+// The only files allowed a CommonJS loader, each with the reason. Every other agent file
+// still fails. sparq's aggregate package ships CommonJS glue around its WASM, verified by
+// SHA-256 at install, and has no ESM entry point; the adapter loads it from the gitignored
+// .sparq/ directory and validates every result with strict schemas.
+const commonJsExempt = new Map([
+  [
+    "packages/agent-reference/src/derive/adapters/sparq-aggregate.ts",
+    "sparq-verifiable-aggregate ships CommonJS only",
+  ],
+]);
 
 function isPropertyName(node) {
   const parent = node.parent;
@@ -355,6 +367,7 @@ function sourceFailures(root, file, projects) {
   const text = readFileSync(file, "utf8");
   const agentSource =
     ctx.project?.startsWith("agent-") || ctx.ui || ctx.path.startsWith("apps/agent-daemon/");
+  const commonJsAllowed = commonJsExempt.has(ctx.path);
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
   const failures = [];
   const report = (node, message) =>
@@ -389,8 +402,10 @@ function sourceFailures(root, file, projects) {
     // Reject capabilities at their reference, so wrappers and aliases cannot hide them.
     if (agentSource) {
       if (ts.isIdentifier(node)) {
-        if (commonJsLoaders.has(node.text))
-          report(node, "CommonJS loaders are forbidden; use literal ESM imports");
+        if (commonJsLoaders.has(node.text)) {
+          if (!commonJsAllowed)
+            report(node, "CommonJS loaders are forbidden; use literal ESM imports");
+        }
         if (forbiddenGlobals.has(node.text) && !isPropertyName(node))
           report(node, `forbidden agent identifier: ${node.text}; use the guarded-fetch adapter`);
       } else if (ts.isStringLiteralLike(node) && commonJsLoaders.has(node.text)) {
@@ -404,8 +419,10 @@ function sourceFailures(root, file, projects) {
           (ts.isBindingElement(parent) && parent.propertyName === reference) ||
           ts.isImportSpecifier(parent) ||
           ts.isExportSpecifier(parent)
-        )
-          report(node, "CommonJS loaders are forbidden; use literal ESM imports");
+        ) {
+          if (!commonJsAllowed)
+            report(node, "CommonJS loaders are forbidden; use literal ESM imports");
+        }
       }
     }
     if (ts.isImportDeclaration(node)) {

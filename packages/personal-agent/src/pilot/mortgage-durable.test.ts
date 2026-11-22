@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * The DURABLE synthetic mortgage slice in-process: independently initialised consumer, lender
  * intake and underwriter agent directories (roles), each opened by the same persistent runtime
@@ -6,15 +7,7 @@
  * scripts/pilot-a2a-integration.mjs. Agents use the explicitly selected solid-odrl module so
  * the gate needs no Rust binary.
  */
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -26,7 +19,7 @@ import { AgentHost, type Json } from "./host.js";
 import { signApproval } from "./mechanisms/mandate.js";
 import { PURPOSE } from "./profile/vocabulary.js";
 import { readAgent } from "./setup.js";
-import { FileLedger } from "./store/ledger.js";
+import { FileLedger, readLedgerSegment } from "./store/ledger.js";
 
 const NOW = "2026-10-19T08:00:00Z";
 const clock = { t: Date.parse(NOW) };
@@ -79,6 +72,8 @@ async function provision() {
     "mortgage-consumer",
     "--wallet",
     issuance.wallet,
+    "--issuers",
+    issuance.issuers,
     ...common,
   ]);
   init.northbank = await cli([
@@ -160,6 +155,8 @@ async function pump(hosts: AgentHost[]): Promise<Json[]> {
 const ledger = (h: AgentHost) =>
   new FileLedger(join(h.agent.dir, "ledger.jsonl")).entries().map((e) => e.record);
 
+// Budgets raised (22 Nov): in CI these run beside the agent-reference suite and took up to
+// 90% of the old budgets on a fast runner (bead sst-ans.55 tracks making them faster).
 describe("durable synthetic mortgage slice (roles; restarts mid-flow)", () => {
   it("prequalification, purpose-bound storage, attenuated underwriting and a final receipt survive restarts without duplicates", async () => {
     const { root, common } = await provision();
@@ -291,7 +288,7 @@ describe("durable synthetic mortgage slice (roles; restarts mid-flow)", () => {
       nb.runOperation("internal_access", {
         agent: NB_ASSESS,
         action: "read",
-        purpose: PURPOSE.creditChecking,
+        purpose: PURPOSE.creditAssessment,
         application,
       }),
     );
@@ -327,10 +324,8 @@ describe("durable synthetic mortgage slice (roles; restarts mid-flow)", () => {
 
     // No duplicate storage, and grants are unchanged (no widening) after all of it.
     expect((nb.status().domain as { dataStore: Json[] }).dataStore).toEqual(before);
-    const stores = readFileSync(join(nb.agent.dir, "data-store-ledger.jsonl"), "utf8")
-      .trim()
-      .split("\n")
-      .map((l) => JSON.parse(l).record as Json)
+    const stores = readLedgerSegment(join(nb.agent.dir, "data-store-ledger.jsonl"))
+      .map(({ record }) => record)
       .filter((r) => r.type === "data-stored");
     expect(stores.length).toBe(before.length);
     expect(ledger(nb).filter((r) => r.type === "message-in").length).toBeGreaterThan(0);
@@ -346,7 +341,7 @@ describe("durable synthetic mortgage slice (roles; restarts mid-flow)", () => {
       expect.arrayContaining(["purpose-bound-store", "mortgage-workflow"]),
     );
     expect(SAM.party).not.toBe(UW.party);
-  }, 30_000);
+  }, 60_000);
 
   /** Provision, apply, approve (owner key outside the service) and store the evidence. */
   async function stored() {
@@ -429,7 +424,7 @@ describe("durable synthetic mortgage slice (roles; restarts mid-flow)", () => {
       nb.runOperation("internal_access", {
         agent: NB_ASSESS,
         action: "read",
-        purpose: PURPOSE.creditChecking,
+        purpose: PURPOSE.creditAssessment,
         application,
       }),
     );
@@ -445,7 +440,7 @@ describe("durable synthetic mortgage slice (roles; restarts mid-flow)", () => {
     expect(replay.step?.disposition).toBe("rejected");
     expect((nb.status().domain as { dataStore: Json[] }).dataStore).toEqual([]);
     expect(auditAgentDirectory(nb.agent.dir).unregistered).toEqual([]);
-  }, 30_000);
+  }, 60_000);
 
   it("interrupted after the underwriting commit: recovered from the runtime (one conversation); a phase-6 marker stays refused", async () => {
     const { root, sam, uw, application } = await stored();
@@ -482,5 +477,5 @@ describe("durable synthetic mortgage slice (roles; restarts mid-flow)", () => {
     await expect(
       nb.call(() => nb.runOperation("start_underwriting", { application: "urn:legacy:app" })),
     ).rejects.toThrow(/cannot be reconciled automatically/);
-  }, 30_000);
+  }, 60_000);
 });

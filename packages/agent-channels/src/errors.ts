@@ -13,9 +13,18 @@
  * dependency-light while sharing the class.
  */
 
+export type ChannelParseRefusalReason =
+  | "malformed"
+  | "bounds-exceeded"
+  | "human-parity-mismatch"
+  | "conflicting-structured-copies";
+
 /** A controlled, typed, fail-closed refusal thrown by a channel `parse`. */
 export class ChannelParseError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly reason: ChannelParseRefusalReason = "malformed",
+  ) {
     super(message);
     this.name = "ChannelParseError";
   }
@@ -39,7 +48,7 @@ export class SendNotDispatchedError extends Error {
 
 /** Definitive response-size refusal, without transport details or an unsafe cause. */
 export class ResponseSizeRefusedError extends Error {
-  constructor() {
+  constructor(readonly responseOk: boolean) {
     super("binding response body exceeds size cap");
     this.name = "ResponseSizeRefusedError";
   }

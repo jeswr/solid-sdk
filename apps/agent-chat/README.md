@@ -23,6 +23,24 @@ demo is fictional: Sam, the stores, the banks and the products.
    the lender (the gate withholds what the purpose does not need), pass a simulated face
    check, and receive a signed, non-binding decision.
 
+Errand requires a platform passkey for each signed approval, spending limit and share.
+Face ID or the device's screen lock verifies the user with `userVerification: "required"`.
+On first use, Errand registers a passkey and saves its credential ID after validating the
+response. Later approvals use that credential. Errand checks the WebAuthn ceremony, origin,
+challenge, relying party and user-verification flags in the browser. The challenge covers the
+request ID and exact signing payload, including any edited limit or reduced set of fields.
+The sheet locks the selected terms during verification. The engine accepts the result once
+for that selection while the request is open. If verification is cancelled, denied by frame
+policy, unavailable or fails, the approval remains unsigned.
+
+Use `?demo=1` to explicitly enable simulated Face ID for the fictional flows. The explorer can
+embed `/app/?demo=1` directly. An explorer iframe at `/app/` also offers **Try with simulated
+Face ID**, which reloads the frame in demo mode. The header and verification dialog show
+**Demo: Face ID simulated**, and signing requires pressing **Confirm simulated Face ID**.
+Remove the flag to return to passkey verification. The bank's face check in flow 5 is a
+separate simulated identity-provider step. Browser passkey verification gates the device-key
+signature locally.
+
 **What it can do** lists every rule, with meters and hold-to-turn-off. **Activity** keeps
 each decision with its checks, digest and signed consent record. **Accounts** reserves a
 place for the sign-in and password-manager connector, which is built separately.

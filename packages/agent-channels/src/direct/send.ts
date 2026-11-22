@@ -7,7 +7,12 @@ import { createDirectReader } from "../direct.js";
 import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import { DIRECT } from "../profiles.js";
 import { sendAttempt } from "../provider/attempt.js";
-import type { RenderableProposal, TokenProvider } from "../types.js";
+import type {
+  EnvelopeVerifier,
+  ProposalContext,
+  RenderableProposal,
+  TokenProvider,
+} from "../types.js";
 import { accountId, assertGrant, assertWire, type DirectMailbox, envelope } from "./shared.js";
 
 /** All senders sharing a mailbox must observe its in-flight attempts before claiming absence. */
@@ -16,7 +21,7 @@ const pendingByMailbox = new WeakMap<DirectMailbox, Set<{ readonly bytes: string
 /** Inject a pure local signature verifier, including its key/audience policy. No keys are loaded here. */
 export interface DirectOptions {
   readonly tokens: TokenProvider;
-  readonly verify: (compactJws: string) => Promise<unknown>;
+  readonly verify: EnvelopeVerifier;
   readonly now?: () => number;
 }
 /** Construct the send half around an explicitly supplied local transport. */
@@ -27,8 +32,8 @@ export function createDirectSend(
   const now = options.now ?? Date.now;
   const pending = pendingByMailbox.get(mailbox) ?? new Set<{ readonly bytes: string }>();
   pendingByMailbox.set(mailbox, pending);
-  async function verified(compactJws: string) {
-    const payload = await options.verify(compactJws);
+  async function verified(compactJws: string, expected: ProposalContext | undefined) {
+    const payload = await options.verify(compactJws, expected);
     assertJsonBounds(payload);
     const result = validateMessage(payload);
     if (!result.ok) throw new ChannelParseError("unverifiable direct message");
@@ -43,7 +48,11 @@ export function createDirectSend(
     )
       throw new ChannelParseError("direct message is expired or not yet valid");
   }
-  async function renderVerified(proposal: RenderableProposal, carriage: CarriageProfile) {
+  async function renderVerified(
+    proposal: RenderableProposal,
+    carriage: CarriageProfile,
+    expected: ProposalContext | undefined,
+  ) {
     if (canonicalJson(carriage) !== canonicalJson(DIRECT))
       throw new ChannelParseError("unsupported direct carriage");
     // Bound work before serialization and hashing; assertWire still checks encoded bytes.
@@ -55,23 +64,23 @@ export function createDirectSend(
     const proposedJson = canonicalJson(proposedMessage);
     const bytes = envelope(compactJws);
     const wire = { bytes, digest: digestBytes(bytes), mediaType: "application/ld+json" };
-    const message = await verified(assertWire(wire));
+    const message = await verified(assertWire(wire), expected);
     if (canonicalJson(message) !== proposedJson)
       throw new ChannelParseError("signed payload differs from proposal");
     return { wire, message };
   }
   return {
-    async render(proposal, carriage) {
-      return (await renderVerified(proposal, carriage)).wire;
+    async render(proposal, carriage, expected) {
+      return (await renderVerified(proposal, carriage, expected)).wire;
     },
-    async validate(wire, proposal) {
+    async validate(wire, proposal, context) {
       try {
         // Refuse extra structure without walking its values or serializing the wire.
         if (Reflect.ownKeys(wire).length !== 3)
           return { ok: false, reason: "terms-digest-mismatch" };
         const snapshot = { bytes: wire.bytes, digest: wire.digest, mediaType: wire.mediaType };
         assertWire(snapshot);
-        const { wire: expected, message } = await renderVerified(proposal, DIRECT);
+        const { wire: expected, message } = await renderVerified(proposal, DIRECT, context);
         assertCurrent(message);
         return snapshot.bytes === expected.bytes &&
           snapshot.digest === expected.digest &&
@@ -94,7 +103,7 @@ export function createDirectSend(
         const attempt = { bytes: snapshot.bytes };
         pending.add(attempt);
         try {
-          const message = await verified(compactJws);
+          const message = await verified(compactJws, io.expected);
           assertCurrent(message);
           assertGrant(await io.tokens.send(accountRef), "send");
           assertCurrent(message);
@@ -117,9 +126,9 @@ export function createDirectSend(
         }
       });
     },
-    async lookup(wire) {
+    async lookup(wire, expected) {
       const snapshot = { ...wire };
-      const message = await verified(assertWire(snapshot));
+      const message = await verified(assertWire(snapshot), expected);
       const entry = mailbox.accepted.get(message.id);
       if (entry?.bytes === snapshot.bytes)
         return { outcome: "found", providerRef: entry.providerRef };

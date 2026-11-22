@@ -19,6 +19,7 @@
  * @packageDocumentation
  */
 
+import type { EventEmitter } from "node:events";
 import type { DatasetCore, Quad } from "@rdfjs/types";
 import contentType from "content-type";
 import { JsonLdParser } from "jsonld-streaming-parser";
@@ -105,13 +106,40 @@ function parseBufferedN3(body: string, options: ParseRdfSyncOptions, signal: Abo
     factory: budget.factory,
   });
   budget.start();
-  const quads = parser.parse(body);
   const store = new Store();
-  for (const quad of quads) {
+  const insert = (quad: Quad) => {
     options.check?.();
     checkAbort(signal);
     store.addQuad(quad);
     options.onQuad?.(quad);
+  };
+  if (options.incremental) {
+    // N3's event input lexes synchronously inside the data and end listeners.
+    // Only the listener interface is needed, so this also works in browsers.
+    const listeners = new Map<string, (data?: string) => void>();
+    const input = {
+      on(event: string, listener: (data?: string) => void) {
+        listeners.set(event, listener);
+        return this;
+      },
+    } as EventEmitter;
+    const observed: Quad[] = [];
+    let complete = false;
+    parser.parse(input, (error, quad) => {
+      if (error) throw error;
+      if (!quad) complete = true;
+      else if (options.onQuad) observed.push(quad);
+      else insert(quad);
+    });
+    const data = listeners.get("data");
+    const end = listeners.get("end");
+    if (!data || !end) throw new Error("RDF parser did not register input listeners");
+    data(body || " "); // An empty data event does not initialize N3's lexer.
+    end();
+    if (!complete) throw new Error("Incomplete RDF parse");
+    for (const quad of observed) insert(quad);
+  } else {
+    for (const quad of parser.parse(body)) insert(quad);
   }
   options.check?.();
   checkAbort(signal);

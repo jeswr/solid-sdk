@@ -63,11 +63,19 @@ export interface LoadedTrace {
   readonly chain: LedgerCheck;
 }
 /** Fetch exactly the published prefix; don't follow arbitrary PROV links or list an unbounded container. */
-export async function loadTrace(io: AuditFetch, root: string): Promise<LoadedTrace> {
-  return loadChain(io, auditBase(root));
+export async function loadTrace(
+  io: AuditFetch,
+  root: string,
+  recordEvidence?: Parameters<typeof verifyLedger>[1],
+): Promise<LoadedTrace> {
+  return loadChain(io, auditBase(root), recordEvidence);
 }
 /** Read a chain from an explicitly provisioned container. */
-export async function loadChain(io: AuditFetch, container: string): Promise<LoadedTrace> {
+export async function loadChain(
+  io: AuditFetch,
+  container: string,
+  recordEvidence?: Parameters<typeof verifyLedger>[1],
+): Promise<LoadedTrace> {
   const base = storageRoot(container);
   const head = await readHead(io, base);
   if (!head) throw new Error("missing-prov: no audit head");
@@ -75,9 +83,9 @@ export async function loadChain(io: AuditFetch, container: string): Promise<Load
   for (let seq = 1; seq <= head.seq; seq++) {
     entries.push(await readEntry(io, base, seq));
   }
-  const chain = verifyLedger(entries);
+  const chain = verifyLedger(entries, recordEvidence);
   if (!chain.ok || !verifyLatestRange(entries, head).ok)
-    throw new Error("chain-integrity: hash chain or head mismatch");
+    throw new Error(`chain-integrity: ${chain.problem ?? "head mismatch"}`);
   return { entries, chain };
 }
 /** Shared strict projection reader; the caller verifies the hash and predecessor. */
@@ -102,6 +110,7 @@ export interface AuditOptions {
   readonly root: string;
   readonly proposal: string;
   readonly at?: string;
+  readonly recordEvidence?: Parameters<typeof verifyLedger>[1];
   /** Optional independent owner pin; absent, the report identifies the cryptographically verified issuer. */
   readonly ownerWebId?: string;
   readonly webIdKeyResolver?: VcMandateOptions["webIdKeyResolver"];
@@ -125,7 +134,7 @@ export async function auditArtifact(options: AuditOptions): Promise<AuditReport>
     const root = storageRoot(options.root);
     documentUrl(root, options.proposal);
     if (options.at !== undefined) instantSchema.parse(options.at);
-    const trace = await loadTrace(options.fetch, root);
+    const trace = await loadTrace(options.fetch, root, options.recordEvidence);
     chain = trace.chain;
     const events = trace.entries.filter(
       (e): e is LedgerEntry & { record: AuditRecord } =>

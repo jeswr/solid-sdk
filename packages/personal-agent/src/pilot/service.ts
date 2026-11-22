@@ -12,17 +12,25 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import {
   buildEmail,
+  checkEmailParity,
   EMAIL_BINDING,
   type EmailObservation,
   gmailSendPayload,
   parseInboundEmail,
   rawFromGmailMessage,
+  readEmailCarrier,
   validateOutboundEmail,
 } from "./bindings/email.js";
+import {
+  hasProof,
+  MAX_DOCUMENT_CARRIAGE_BYTES,
+  messagePacketSchema,
+} from "./bindings/message-packet.js";
 import { digestBytes } from "./core/canonical.js";
 import { DEFAULT_LIMITS, parseBoundedJson } from "./core/limits.js";
-import type { Iri } from "./core/types.js";
+import type { AnyMessage, Iri } from "./core/types.js";
 import type { AgentRuntime, OutboundMessage, StepResult } from "./runtime/agent.js";
+import { wireDigest } from "./runtime/transmission.js";
 import type { WireMessage } from "./store/state.js";
 
 export type InputFormat = "eml" | "gmail-json" | "envelope";
@@ -170,6 +178,7 @@ export async function prepareOutbound(
   now: Date,
 ): Promise<ProcessedOutbound[]> {
   const items: ProcessedOutbound[] = [];
+  const agentDescription = rt.emailDescriptionAddress();
   for (const out of outbound) {
     const checks: OutboundCheck[] = [];
     const sig = await rt.selfCheck(out.wire);
@@ -190,15 +199,16 @@ export async function prepareOutbound(
     );
     const mailto = endpoints.find((e) => e.startsWith("mailto:"));
     let email: ProcessedOutbound["email"];
-    if (mailto && settings.selfAddress && out.wire.format === "awp-jws-compact/0.1") {
+    if (mailto && settings.selfAddress && hasProof(out.wire)) {
       const to = mailto.slice("mailto:".length);
       const thread = threads.get(out.conversation);
       const lastId = thread?.emailMessageIds.at(-1);
-      const built = buildEmail({
+      const built = await buildEmail({
         out,
         from: settings.selfAddress,
         to,
         date: now,
+        ...(agentDescription ? { agentDescription } : {}),
         ...(lastId ? { inReplyToEmailId: lastId } : {}),
         ...(thread ? { references: thread.emailMessageIds } : {}),
       });
@@ -209,20 +219,21 @@ export async function prepareOutbound(
         ok: size <= (settings.maxMimeBytes ?? 256 * 1024),
         detail: `${size} bytes`,
       });
-      const round = parseInboundEmail(built.raw, { strictParity: true });
+      const round = await parseInboundEmail(built.raw, { strictParity: true });
       const same =
-        round.ok && round.wire.format === "awp-jws-compact/0.1" && round.wire.jws === out.wire.jws;
+        round.ok && round.parity === "match" && wireDigest(round.wire) === wireDigest(out.wire);
       checks.push({
         check: "mime-roundtrip-and-human-parity",
         ok: same,
         detail: round.ok
           ? `parity ${round.parity}, copies ${round.structuredCopies}`
-          : round.reason,
+          : `${round.reason}: ${round.detail}`,
       });
-      const exact = validateOutboundEmail(built.raw, {
+      const exact = await validateOutboundEmail(built.raw, {
         from: settings.selfAddress,
         to,
-        jws: out.wire.jws,
+        wire: out.wire,
+        ...(agentDescription ? { agentDescription } : {}),
       });
       checks.push({
         check: "exact-outbound-bytes",
@@ -298,11 +309,22 @@ export async function processInput(
   let binding = input.carrier ?? "direct-local/0.1";
   let bindingOutcome = "ok";
   let gmailThreadId = input.gmailThreadId;
+  let verifyEmailParity: ((message: AnyMessage) => string | undefined) | undefined;
 
   try {
     if (input.format === "envelope") {
-      const value = parseBoundedJson(input.data.toString(), DEFAULT_LIMITS) as WireMessage;
-      wire = value;
+      const text = input.data.toString();
+      // Packet strings hold an entire document or
+      // attachment. The runtime bounds both before parsing RDF.
+      const value = parseBoundedJson(text, {
+        ...DEFAULT_LIMITS,
+        maxEnvelopeBytes: MAX_DOCUMENT_CARRIAGE_BYTES,
+        maxStringLength: MAX_DOCUMENT_CARRIAGE_BYTES,
+      }) as WireMessage;
+      wire =
+        value?.format === "awp-jsonld/0.1"
+          ? messagePacketSchema.parse(value)
+          : (parseBoundedJson(text, DEFAULT_LIMITS) as WireMessage);
     } else {
       binding = EMAIL_BINDING;
       let raw: Buffer | string = input.data;
@@ -315,15 +337,24 @@ export async function processInput(
         raw = rawFromGmailMessage(obj);
         if (typeof obj.threadId === "string") gmailThreadId = obj.threadId;
       }
-      const parsed = parseInboundEmail(raw, { strictParity: settings.strictParity ?? true });
-      emailObs = parsed.email;
-      copies = parsed.structuredCopies;
-      if (parsed.ok) {
-        wire = parsed.wire;
-        parity = parsed.parity;
+      const carried = readEmailCarrier(raw);
+      emailObs = carried.email;
+      copies = carried.structuredCopies;
+      if (carried.ok) {
+        wire = carried.wire;
+        verifyEmailParity = (message) => {
+          const parsed = checkEmailParity(raw, carried, message, settings.strictParity ?? true);
+          if (parsed.ok) {
+            parity = parsed.parity;
+            return undefined;
+          }
+          bindingOutcome = parsed.reason;
+          parityDetail = parsed.detail;
+          return parsed.detail;
+        };
       } else {
-        bindingOutcome = parsed.reason;
-        parityDetail = parsed.detail;
+        bindingOutcome = carried.reason;
+        parityDetail = carried.detail;
       }
     }
   } catch (error) {
@@ -337,6 +368,13 @@ export async function processInput(
     });
   }
 
+  const step = wire
+    ? await rt.receive(wire, {
+        binding:
+          input.carrier && input.carrier !== binding ? `${binding} via ${input.carrier}` : binding,
+        ...(verifyEmailParity ? { checkEmailParity: verifyEmailParity } : {}),
+      })
+    : undefined;
   const inputSummary = {
     format: input.format,
     digest,
@@ -349,7 +387,7 @@ export async function processInput(
     ...(copies !== undefined ? { structuredCopies: copies } : {}),
   };
 
-  if (!wire) {
+  if (!step || bindingOutcome === "human-parity-mismatch") {
     if (bindingOutcome !== "malformed") {
       rt.recordBindingEvent({
         type: "binding-rejection",
@@ -368,10 +406,6 @@ export async function processInput(
     };
   }
 
-  const step = await rt.receive(wire, {
-    binding:
-      input.carrier && input.carrier !== binding ? `${binding} via ${input.carrier}` : binding,
-  });
   if (step.conversation && emailObs?.emailMessageId)
     threads.note(step.conversation, emailObs.emailMessageId, gmailThreadId);
   if (step.messageId && emailObs) {

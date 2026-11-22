@@ -1,0 +1,390 @@
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+# @jeswr/agent-reference
+
+Brief 22d runs complete pinned JSON-LD messages, with content-addressed attachments,
+JCS/JWS or RDFC/Data Integrity authenticity, live message/intent views and full-document
+packet inspection. The two mortgage journeys also run under Data Integrity. Core model
+types alias their wrappers' live surfaces; `check:rdf-pipeline` reports **0 hard failures**
+and **216 explicit allowances**. This is still a partial migration:
+legacy input compatibility and remaining policy/store adapters are visible in those allowances;
+action approvals that precede message construction retain their original intent bindings.
+Message-release approvals retain the document and attachment bytes and bind the selected
+suite's full document digest, including after restart. Every scenario packet includes
+the document and its RDF graph. See `ENGINE-REPORT.md` and `RDF-PIPELINE-STATUS.json` for exact limits, completed
+parts, remaining boundaries and validation results.
+
+The reference agent runtime of the accountable agent architecture. It began as the September
+pilot runtime lifted from `@jeswr/personal-agent/pilot`, and now executes profile/scenario
+data through the same checked runtime:
+
+- `core/` — the transport-neutral message model, conversation state machine, limits, schema
+- `mechanisms/` — JWS signing, pinned trust store, owner mandates over an ODRL subset,
+  signed statements, policy engines
+- `profile/` — configurations, implementation descriptions, vocabulary
+- `runtime/` — the agent runtime (inbound pipeline, executor, transmission, retention)
+- `store/` — state stores and the hash-chained ledger
+- `bindings/direct` — the in-process direct binding
+- `domains/`, `fixtures/`, `scenarios/` — the synthetic mortgage flow and what it needs
+  (purpose-bound store, scheduling payment operation, mandates)
+
+`@jeswr/personal-agent/pilot` re-exports every moved module from its old path, so existing
+callers and tests are unchanged. Each module is reachable by path, for example
+`@jeswr/agent-reference/runtime/agent`.
+
+## Gates, suites and traces
+
+- `suites/` — `SuiteRegistry`: one interface per layer (ids from the explorer model),
+  `Configuration` (one suite per layer) with `check()`, and `baselineRegistry()` holding the
+  baseline suites and the `BASELINE` configuration. A message declares exactly one
+  configuration; `settle()` matches configurations whole, never layer by layer.
+- `gates/inbound` — `InboundGate` and `Admission`: integrity, source, authority, terms,
+  fitness, then admit or refuse. `gates/outbound` — `OutboundGate.release()`: mandate,
+  recipient, disclosure, data terms, limits and approval, then `seal()` for evidence; go,
+  ask the principal, or stop. The runtime calls them before release, including protocol messages. Unknown text and
+  untyped commitment content now fail conservatively even without trace collection.
+- `trust/resolver` — `TrustResolver`: own list, then a root, then the register it delegates
+  to; every answer carries its path.
+- `trace/` — the `agent-trace/0.1` types, `TraceRecorder`, packet views and `outlineOf()`.
+- `reference/` — reproducible runs (fixed test keys, deterministic ids, fixed clock,
+  scripted core) of the mortgage flow and its branches.
+
+`pnpm run build` writes every trace to `traces/<scenario>--<configuration>.json` (plus
+`traces/index.json`). Expected outlines are committed in `outlines/`; a test fails when a
+run departs from them. After an intended change, use `pnpm run scenarios --record-outlines`
+and review the diff. The five maintained mortgage outlines retain their original array format.
+
+Traces carry outcomes, trust-resolution paths, labelled facts and declared stand-ins. New
+cases use the core reason registry; the public pilot extension-code union remains available
+for compatibility. A signature establishes attribution, not truth or permission.
+
+The trace generators add optional RDF views of stored facts, record entries,
+policies and trust entries. Each event's `linked` list contains keys into a
+view table. Library runs with `{ linked: true }` include the table inline as
+`linked`. Generated traces use `linkedTable` to refer to
+`linked/<scenario>--<configuration>.json` relative to `traces/`.
+The main path and branches of a scenario share one table for each configuration,
+using `baseline` for the default. Each table stores the JSON-LD, context and
+Turtle under the SHA-256 of the JSON-LD text. Use
+`node scripts/run-scenarios.mjs --scenario=<id> --no-linked` to regenerate
+the original trace format.
+The runtime builds the view graphs only when requested, and the recorder
+serialises them after the run.
+
+Publishing a trace group takes an exclusive `linked/<scenario>--<configuration>.json.lock`
+file and removes it when publishing finishes. If a process is killed
+and leaves a lock, confirm the writer has stopped, remove the lock, and rerun
+the group. A concurrent writer for the same group can retry once the lock clears.
+
+Experimental. Synthetic parties and data only; both sides of every exchange run this code.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The data engine loads JSON-LD profiles (`agent-profile/0.2`) and scenarios
+(`agent-scenario/0.2`) from `profiles/<id>.json` and `scenarios/<id>.json`. Both
+use the pinned [scenario context](vocab/context/scenario-v1.README.md). The engine
+checks the envelope before applying the existing runtime validators. Legacy 0.1 files
+without a context still load. The published JSON Schemas in `schemas/` add the 0.2
+envelope to the same Zod definitions.
+
+`readCaseGraph(path)` from `@jeswr/agent-reference/engine/load` reads the RDF graph
+separately with the bundled contexts. Run `node scripts/check-fixtures-jsonld.mjs` to
+check the authoring terms and `node scripts/migrate-fixtures-jsonld.mjs --check` to
+verify the engine-object digests.
+Data imports include the `.json` suffix, for example
+`@jeswr/agent-reference/scenarios/probing-counterparty.json` and
+`@jeswr/agent-reference/profiles/mortgage.json`. The data export patterns are
+`./scenarios/*.json`, `./profiles/*.json`, `./schemas/*.json` and `./outlines/*.json`;
+code such as `@jeswr/agent-reference/scenarios/common` resolves to the built module.
+`runScenario()` runs the main path and each branch in a fresh synthetic world,
+using real runtimes, signatures and gates. It checks branch outcomes and outlines.
+`pnpm run scenarios` writes runnable traces and `scenario-runs.json`, which also
+names every blocked path and its reason. `--record-outlines` explicitly records
+new expectations for review; ordinary runs fail on drift.
+
+Scripts use literal JSON and whole-value references such as
+`{ "$ref": "steps.request.conversation" }`. They can start exchanges, route
+messages, propose replies or synthetic effects, answer approval requests, introduce
+hostile mutations, record readings and check records. They cannot write gate events.
+Branch `change` objects merge into the scenario; arrays replace. The engine rejects
+unsupported suites and legacy DER declarations instead of substituting another check.
+Thirty-one paths run from data, including every branch of the first ten catalogue cases
+and all five mortgage references. Only the separately named hidden-validity proof remains
+blocked: ordinary selective disclosure cannot prove a predicate about a concealed date.
+The mortgage reference entry points load the data engine; their complete maintained
+outlines are unchanged. Public mortgage operation handlers remain available and supply
+the closed checked implementations installed by the scenarios.
+
+Free text is detected recursively through the vocabulary's types and closed values.
+Unknown strings remain text, wherever they occur. Vocabulary paths use `*` for one
+member or index and `~1` for a literal dot in a key. Optional `claimType` labels
+identify data required by a purpose. Each task keeps the items its core actually
+sees, including memory reads and principal instructions; callers should declare
+`gates.taskId` when several conversations belong to one task. Unscoped fetched
+items conservatively affect every task. Text that fails the context rule is held
+before the outbox and requires a single-use approval of its exact message digest,
+when the signed mandate permits asking. `recordReading()` requires a declared core
+and records its signed implementation statement, original digest and model authorship.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+Installed handlers may supply a `contentProfile` with explicit vocabulary, purposes,
+known identifiers and reliance rules. The runtime snapshots it before calling the core.
+An identifier declaration accepts only identifiers already in the installed profile,
+verified conversation history, task context or runtime mint registry. An arbitrary IRI
+remains free text. `mintIdentifier()` and a handler's `identifierFor()` register their
+results; principal instructions may include structured task data in `instruct(text, data)`.
+A protected compound term needs an installed signature verifier, strict schema and
+vocabulary for its claims; a signature alone does not type prose or grant authority.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Brief 11 adds closed derived-data templates in `src/derive/rules.ts`: `sum`, `count`,
+`min`, `max`, `annualise-consecutive-months`, `ratio`, `threshold`, `all-of` and `any-of`.
+The schema publishes their parameter shapes. Inputs use admitted claim types (numeric or
+boolean `value`, or a monthly series); `field` selects a series measure such as `gross`.
+Aggregates require a signed completeness claim naming `forClaim`, `complete: true` and
+an exact `period`. Source aliases come from profile `sources`. Rules can name another
+rule's output; cycles fail at load, and derivations have a maximum depth of three.
+`derive()` supplies only the rule, subject, purpose and assurance: the runtime selects
+inputs from its own task memory. `by-source` additionally requires a host-installed
+`sourceKey` pinned to the source party, and every input must be that source's own claim.
+`proved`, `joint` and `attested` scenario assurances remain blocked.
+
+Profiles can declare agreement-bound `assessments`, `personDecisions`, claim-level
+`corroboration`, and own-list-only `trust`. Assessment discard removes payloads and accepted
+support while retaining context tombstones and restrictions; retained outputs keep their
+terms. Signed mandate permission rules may add `approvals` and payment `limit` objects.
+Role statements use `organization.role`, `subjectKey`, `organization`, `role`, validity
+and `status`. Organization approvals are exact-action signatures by independently pinned
+staff keys, counted against admitted directory roles. Requester identity is supplied by
+the authenticated task host or verified conversation, never by a core-chosen parameter.
+
+Payments use action `pay` with structured payee, amount, currency, reference and optional
+account. Account instructions need an admitted `payee-account` binding and sharing terms.
+The actual instruction and adapter parameters must equal the authorized payment. The
+runtime reserves integer minor-unit totals in its atomic state snapshot before release.
+The payment, corroboration and pinned-list cases use distinct, signed local configuration
+identifiers. Their filename suffix `--baseline.json` is retained for artifact compatibility;
+the trace header and index name the actual configuration. These are fictional local
+implementations; the bank records submission, without claiming settlement.
+
+Scenario steps also support `derive`, `assess`, `organisation-approve`, `trust-decision`
+and data assertions. A branch can supply `profileChange` to vary receiver policy. An
+assertion inspects runtime results; it cannot supply a gate verdict. Profile `standIns`
+lists local replacements and is copied to the trace header. See `ENGINE-REPORT.md` for
+coverage, interpretations, exact-outline comparisons and the intentionally blocked proof.
+
+Anonymous public queries additionally exclude open numeric/date slots and core-selected
+conversation IDs. A caller that needs variable personal parameters uses a represented,
+authorized action. Existing snapshots without the generated-conversation marker fail
+closed for new anonymous continuations rather than treating a remembered identifier as
+proof that its original selection was safe.
+
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+Brief 12 adds the following bounded capabilities without new dependencies:
+
+- Signed messages may contain text or raw-byte `content` parts with IDs, media types and raw-byte
+  digests. They enter context as unstructured data, never instructions. `readContent()`
+  supplies one immutable part to a host-installed reader without runtime capabilities and
+  keeps only the types/closed values declared by profile `readings`. Readings retain
+  `model-output`, the reader's signed implementation and the original digest. Required
+  action claims supported only by unaccepted readings ask their provenance source for
+  structured form. Inherited terms and principal-facing reading labels remain mandatory.
+- A signed mandate's `standing` rules can allow an emergency read of named items for a
+  current, register-attested clinician with a signed emergency declaration. The declaration
+  is a self-report. The actual authenticated request and output must match the named scope.
+  Each release creates durable principal/contact notification duties; the runtime discharges
+  them through signed, gated messages and records missed deadlines, including after restart.
+- `LocalResourceHolder` implements reader/item/purpose/expiry-bound signed grants and
+  authenticated, recorded reads. The receiver admits holder-signed statements under both
+  grant and original terms. Sending a reference discloses every item its grant names.
+  Health-referral uses `by-reference-local-holder`, explicitly replacing the catalogue's
+  Solid store; it implements no Solid access-control protocol.
+- Organization policies install a document resolver, registrar, required operation roles,
+  action kinds, required-status claim types and maximum status age. Current registrar-signed
+  documents restrict introduced organization/agent keys. Organization-signed mandate
+  credentials and issuer-signed status lists establish current scoped authority. Supplier
+  onboarding uses a local resolver, with no live DID-method claim.
+- `issueSelectiveCredential()` signs salted claim digests using existing JWS/SHA-256.
+  `presentSelective()` reveals selected disclosures; integrity, source, fitness and outbound
+  disclosure checks inspect those actual claims. API salts use cryptographic randomness;
+  reproducible fictional fixtures use fixed salts. No hidden-value proof or unlinkability
+  is claimed.
+
+Mortgage data additionally installs closed handlers and purpose-bound stores and can
+perform challenge retries, source issuance, agreement invocations, store requests,
+profile-bound assessments and consent-bound underwriting handovers. The underwriting
+release checks the real consumer agreement, exact onward fields and current store item
+revisions; transmission rechecks its protected outbox condition. Assessments record an
+output receipt and input digests without retaining an extra assessment copy of the inputs.
+The shared source store continues to enforce its separate agreed retention/grants.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+Brief 14 makes `actionClaims` apply to inbound operations as well as outbound actions:
+use an operation IRI in `action` for an inbound requirement, or an action name such as
+`read` for an outbound requirement. Fetched-statement `admit` steps may name their
+`operation`. A required claim rejected for a curable source or fitness failure produces
+`ask-more` with a gate-built replacement-evidence challenge. The statement stays out of
+facts and core context; later dependent actions retain its rejection reason. Unknown
+terms, including unmatched prohibitions and duties, never count as permission.
+Actor-keyed profile `termsAcceptance` entries list the purposes a principal accepts in
+an incoming request's offered `input.terms`.
+
+A profile can name self-statement kinds in `personMayRelyOn` for a person's exact-action
+reliance decision. The gate holds the unadmitted statement separately, shows its author
+and the absence of anyone vouching for it, and asks at limits-and-approval with
+`method-not-accepted`. A yes binds both the action and statement digests and is consumed
+once. Payment and unrestricted disclosure dependencies fail at load. Catalogue
+comparison uses the first non-pass/admit/go decision, equates inbound `refuse` with
+catalogue `stop`, and keeps later decisions in manifest `consequences`.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Solid alternatives and remaining work (Brief 26b)
+
+`mortgage-main` uses the existing configuration matrix for the following alternatives.
+Each executable main path passes confinement and has a configuration-only failure branch.
+
+| Configuration | Execution | Failure |
+|---|---|---|
+| `transport-solid-inbox` | Receiver-description discovery, authenticated POST, receiver listing and read of the original signed bytes. | Changed stored signature: `integrity` / `bad-signature`. |
+| `accountability-pod-mirror` | Sam's signed ledger entries reach independent, principal-controlled storage before release. | Provider unavailable: `evidence` / `record-unavailable`; release waits until recovery. |
+| `identity-webid` | Safely fetched Controlled Identifier Multikey profiles, bound to independently signed register thumbprints and key lifetimes. | Changed profile key: `integrity` / `sender-key-mismatch`. |
+| `data-access-by-reference-solid` | Sam grants Read on the balance statement and releases a signed pointer. The lender admits the delivery, then reads and checks the statement. | Folder grant: `disclosure` / `excessive-scope`. Read after withdrawal: `source` / `not-authorised`. |
+| `usage-control-solid-access-control` | Builds on reference access. The signed evidence terms and agreement govern the translated WAC grant, which records its permission provenance. | Write mode in the translation: `data-terms` / `prohibited`. |
+
+The shared storage is a fictional provider with its own signing key, WAC on each supported
+HTTP operation, guarded in-process fetches and an operator-visible read log. Its request
+authentication is an explicitly fictional signed-request format, not Solid-OIDC. WAC
+cannot express expiry or downstream purpose: expiry needs an enforcing withdrawal
+mechanism, while purpose and copying restrictions remain terms. The mirror has no
+persisted background recovery service, and the WebID resolver has no historical-key
+archive. These limits and the specification disagreements are detailed in
+[the Brief 26b report](ENGINE-REPORT.md#brief-26b). All parties and data are fictional;
+no live network, storage account or settlement service is used.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Meaning and reliance alternatives (Brief 26e)
+
+These `mortgage-main` configurations use the same matrix. The five executable main
+paths pass confinement; each has its own failure branch and refusal tests.
+
+| Configuration | Execution | Failure |
+|---|---|---|
+| `meaning-registry-lookup` | A signed, directed employment-code mapping from an accepted publisher retains its original statement and mapping provenance. | Unaccepted publisher: `fitness` / `unsupported-term`. |
+| `reliance-corroboration` | Independent payroll and bank observations agree for the same subject, currency and period within a stated tolerance. | Shared root record: `fitness` / `evidence-missing`. |
+| `reliance-stated-confidence` | A source-signed measurement is read as statement-level DQV with its method and calibration. | Uncalibrated model estimate: `fitness` / `confidence-too-low`. |
+| `reliance-quality-certificate` | An accepted certifier covers the index, dataset, product category, policy and time. | Other category: ordinary freshness rejects the stale record; the other valid record is admitted. |
+| `meaning-negotiated` | A fictional platform records the proposal, agent acceptance and both principals' signed approval for this exchange. | Agent agreement alone: `disclosure` / `approval-required`. |
+| `meaning-plain-language-upgrade` | Not run. The signed runtime lacks an opening prose email, description advertisement and persistent upgrade boundary. | The declared prose-evidence branch is blocked, with no trace. |
+
+Mappings, calibration observations, certification and deliberation are explicitly
+fictional, separately keyed sources. Bank salary credits equal the synthetic gross
+payroll amounts; no gross-to-net conversion is claimed. Confidence methods and certificate
+policies are source assertions. The platform supplies no real approval interface.
+Published mapping-version pins and deliberation records live for one agent run; durable
+registry governance and a prose-to-structured negotiation boundary remain unfinished.
+The DQV graph is the gate's typed view of preserved signed evidence metadata; its local
+annotations are defined in [meaning-reliance.ttl](vocab/meaning-reliance.ttl). Changing
+the existing evidence wire format remains the message-model lane's work. See
+[the Brief 26e report](ENGINE-REPORT.md#brief-26e) for scope, stand-ins and validation.
+
+## Identity and authority alternatives (Brief 26c)
+
+These mortgage cells use the existing configuration matrix and configuration-scoped branches.
+All providers are fictional and operate in process. Detailed limitations, local protocol
+choices and validation results are recorded in `ENGINE-REPORT.md`, Brief 26c.
+
+| Configuration | Mortgage status | Its own failure |
+| --- | --- | --- |
+| `authority-mandate-credential` | Runs; principal-signed suspension and revocation lists, checked at action/release and by the receiver. | Suspension stops Sam's gate first; the lender separately refuses an authentic packet already in transit, `mandate-withdrawn`. |
+| `identity-did` | Runs; explicit `did:web` methods, Multikey documents and independently signed key commitments. | Unlisted `did:key` actor, `unsupported-configuration`. |
+| `identity-email-endpoint` | Not run; mailbox-control proof is absent, and the added approved email workflow conflicts with ordered identity confinement. | `mailbox-reply-as-evidence` is declared and blocked; no prose is promoted to payroll evidence. |
+| `identity-anonymous` | Not run; product search is already anonymous, but the existing lender-register lookup has no signed exchange. | `anonymous-asks-for-more` is declared and blocked. |
+| `authority-authorization-server` | Runs; principal-approved, actor/key-bound rich authorization grant, lifted into the actual ODRL mandate. | Server-signed grant with no actor, `representation-invalid`. |
+| `authority-agent-registry` | Runs; fresh signed registration binds principal, actor key, status and operation scope. | Product-search-only registration, `representation-out-of-scope`. |
+
+The four running main paths pass confinement and retain the face-check step-up and paid
+journey ending. The DID resolver is a closed fictional-host subset, without rotation or
+historical resolution. The grant and registration formats are explicit local profiles of
+the supplied sketches. Neither blocked cell publishes a trace. No live OAuth, mailbox,
+DID host, registry or status service is claimed.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+Brief 26d runs the mortgage under Data Integrity, scoped own-list trust, selective payroll
+projection, origin-hosted products, a transparent product index, presented OpenID Federation
+chains and a principal’s minimum reputation score. Each uses the existing configuration
+matrix and configuration-only failure branches. Transparency receipts use RFC 9162 hashing
+with explicitly declared JSON/JWS stand-ins for SCITT COSE. Selective payroll reveals annual
+gross income and employer while withholding monthly inputs and the private insurance number;
+it remains linkable and uses the existing local disclosure mechanism. Origin observations
+are unsigned, fetched only at register-bound addresses and cannot be forwarded as evidence.
+The two recorded branch disagreements and the supported protocol subsets are explained in
+[ENGINE-REPORT.md](ENGINE-REPORT.md#brief-26d).
+
+## Durable evidence ledger
+
+`FileLedger` writes new segments as N-Quads. Each entry occupies a named graph
+identified by its existing chain hash. The hash still seals canonical JSON.
+Existing JSONL segments are read as JSONL, including appends to an existing
+current segment until its normal rotation. The configured file name can keep
+its `.jsonl` suffix. Use `readLedgerSegment(path)` for one file or
+`FileLedger.entries()` for the retained ledger. The `segmentFormat: "jsonl"`
+constructor option creates legacy segments for compatibility tests and hosts
+holding a rollout.
+
+The store ontology and SHACL shapes are published in `vocab/answerable-stores.ttl`
+and `vocab/answerable-stores.shacl.ttl`. The separately pinned
+`vocab/context/store-v1.jsonld` context is for display. The engine keeps the scenario
+ledger in memory and builds record graphs only when a consumer requests them.
+
+## Durable runtime state and trust
+
+`FileStateStore` keeps the configured filename and writes version 2 N-Quads.
+The default graph declares the snapshot and its sections and holds a SHA-256
+digest of the canonical section, entry, and policy blocks. Each section graph
+retains native entry order, with ODRL item policies in named graphs. The digest
+is unkeyed and detects accidental truncation or corruption. Anyone who can
+write the file can edit its contents and recompute the digest. Local files
+are inside the trust boundary. The ledger provides tamper evidence for
+recorded events when verified against a trusted head. Version 1 JSON has
+no snapshot digest and becomes version 2 on the next successful save.
+Startup and offline audit refuse empty, malformed, or incomplete RDF snapshots,
+including earlier version 2 snapshots without a digest. Restore a trusted backup
+if you have one. A trusted version 1 JSON backup can still be opened and migrated.
+
+File saves compare each entry's JSON text with the previous save and reuse its
+N-Quads block when unchanged. Positions can change independently of payloads.
+The save verifies that each outgoing block contains complete canonical N-Quads
+statements and compares the decoded state before the atomic replacement.
+Unchanged blocks reuse their validation. The file and
+containing directory are synced around the replacement. Snapshots preserve
+runtime-admitted timestamp spellings and escape unpaired surrogates in RDF JSON
+literals. Open values can also use RDF JSON when they exceed the named-value
+projection limits. Inherited item terms can nest up to 32 levels and expand at
+most 8,192 inherited references across the whole RDF snapshot.
+
+Local files must contain valid UTF-8. Local snapshot files are capped at 256 MiB
+and one million quads. Trust files
+are capped at 64 MiB. These budgets provide room for the expanded RDF of many
+accumulated conversations and signed records, and for a provisioned trust
+directory much larger than the pilot fixtures can exercise. Turtle trust parsing
+also caps expansion at 128 Mi characters of RDF term text and 250,000 quads,
+since a prefix or shorthand can repeat terms without repeating their bytes on
+disk.
+`AWP_STORE_RDF=1` enables save-time round-trip assertions in the memory store
+for tests.
+
+Provisioned trust is written to `trust.ttl`. `readTrustFile` chooses Turtle when
+present and uses legacy `trust.json` otherwise. A malformed Turtle file stops
+startup even when JSON exists alongside it. `writeTrustFile` atomically updates
+the selected format in mode 0600. The daemon uses it under its peer-pin lease.
+The existing trust verifier checks the resulting keys and delegations.
+Turtle preserves identifiers and timestamp spellings admitted by the verifier,
+using literals when a named node or XSD date-time cannot carry the original.
+`saveAgent` and `saveTrust` return promises so callers can wait for durable writes.
+
+The mandate store projection reuses the loaded credential and preserves ODRL
+rule order and native supplements. The RDF vocabulary uses `awp:pay` for the
+pilot payment action pending an ODRL profile decision.

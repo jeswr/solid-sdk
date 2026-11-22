@@ -11,6 +11,9 @@ import type { ConflictStrategy, LeftOperandName, OdrlActionName, OperatorName } 
 /** The ODRL policy subtype. `Set` is the default; `Offer`/`Agreement` carry parties. */
 export type PolicyType = "Set" | "Offer" | "Agreement";
 
+/** Standard ODRL action name or a profile-defined absolute action IRI. */
+export type OdrlAction = OdrlActionName | `${string}:${string}`;
+
 /** The ODRL rule kind. */
 export type RuleType = "permission" | "prohibition" | "obligation";
 
@@ -43,7 +46,7 @@ export interface OdrlDuty {
   /** Optional duty node IRI. */
   readonly id?: string;
   /** The duty action (e.g. `attribute`, `compensate`, `inform`, `delete`). */
-  readonly action: OdrlActionName;
+  readonly action: OdrlAction;
   /** Optional target asset the duty applies to. */
   readonly target?: string;
   /** Optional constraints on the duty. */
@@ -57,7 +60,7 @@ export interface OdrlRule {
   /** The rule kind. */
   readonly type: RuleType;
   /** The action concept the rule is about. */
-  readonly action: OdrlActionName;
+  readonly action: OdrlAction;
   /** The target Asset IRI the rule governs (the Solid resource). */
   readonly target?: string;
   /** The Party the rule is granted to (an agent WebID). */
@@ -142,7 +145,7 @@ export interface DecisionRule {
 
 /** A duty that a permit decision is contingent on (the assignee must discharge it). */
 export interface ActiveDuty {
-  readonly action: OdrlActionName;
+  readonly action: OdrlAction;
   readonly target?: string;
   readonly id?: string;
   /** Whether the evaluator could confirm the duty is discharged from the context. */

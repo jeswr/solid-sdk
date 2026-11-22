@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Durable UC-05 roles in-process (direct carriage between hosts; the separate-process A2A
  * workflow is scripts/pilot-regional-integration.mjs Part I): Alpine planner + data authority,
@@ -99,6 +100,8 @@ async function provision() {
     "industrial-contracting",
     "--role-input",
     `membership=${syn.membership}`,
+    "--role-input",
+    `issuers=${alpineIssuer}`,
     "--owner-name",
     "nordwerk",
   ]);
@@ -457,7 +460,13 @@ describe("durable industrial maintenance exchange (synthetic, three organisation
       JSON.parse(
         readFileSync(join(h["alpine-planner"].agent.dir, "industrial-work-orders.json"), "utf8"),
       ).orders as Record<string, { id: string; status: string }>;
-    expect(Object.values(orders())).toEqual([{ id: "WO-1", status: "open" }]);
+    const createdOrderId = h["alpine-planner"].agent.rt
+      .outboxMessages(rec.step.conversation)
+      .find((m) => m.kind === "receipt")?.message.body as { observed: { workOrder: string } };
+    expect(Object.values(orders())).toEqual([
+      { id: createdOrderId.observed.workOrder, status: "open" },
+    ]);
+    expect(Object.keys(orders())).toEqual([createdOrderId.observed.workOrder]);
 
     // 11. Planner restart + replay of the recommendation: duplicate, still one work order.
     stop(h["alpine-planner"]);
@@ -472,8 +481,12 @@ describe("durable industrial maintenance exchange (synthetic, three organisation
     )) as { step?: { disposition?: string } };
     expect(replay.step?.disposition).toBe("duplicate");
     expect(Object.values(orders())).toHaveLength(1);
-    const perf = await op("alpine-planner", "record_performance", { workOrder: "WO-1" });
-    const perfAgain = await op("alpine-planner", "record_performance", { workOrder: "WO-1" });
+    const perf = await op("alpine-planner", "record_performance", {
+      workOrder: createdOrderId.observed.workOrder,
+    });
+    const perfAgain = await op("alpine-planner", "record_performance", {
+      workOrder: createdOrderId.observed.workOrder,
+    });
     expect([perf.recorded, perfAgain.recorded]).toEqual([true, false]);
 
     // Agreement, transfer and performance are distinct events in distinct ledgers.

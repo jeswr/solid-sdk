@@ -1,0 +1,178 @@
+{
+  "@context": "https://w3id.org/jeswr/awp/context/scenario/v1",
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.2",
+  "id": "shopping-agent",
+  "claims": [
+    {
+      "kind": "payee-account",
+      "sources": ["urn:fictional:bank"],
+      "methods": ["recorded-by-authority"],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "invoice",
+      "sources": ["urn:fictional:supplier"],
+      "methods": ["recorded-by-authority"],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "other-offer",
+      "sources": ["urn:fictional:other-merchant"],
+      "methods": ["recorded-by-authority"],
+      "maxAgeDays": 7
+    },
+    {
+      "kind": "payment-receipt",
+      "sources": ["urn:fictional:bank"],
+      "methods": ["recorded-by-authority"],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:shopping-agent",
+      "claims": ["payee-account", "invoice", "other-offer", "payment-receipt"]
+    }
+  ],
+  "rules": [],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.payee": {
+      "type": "identifier"
+    },
+    "input.reference": {
+      "type": "identifier"
+    },
+    "input.account": {
+      "type": "identifier",
+      "claimType": "payee-account"
+    },
+    "input.amount": {
+      "type": "number"
+    },
+    "input.currency": {
+      "type": "code",
+      "values": ["GBP"]
+    },
+    "output.status": {
+      "type": "code",
+      "values": ["submitted", "settled"]
+    },
+    "output.reference": {
+      "type": "identifier"
+    },
+    "observed.status": {
+      "type": "code",
+      "values": ["settled"]
+    },
+    "terms.service": {
+      "type": "term",
+      "values": ["The invoiced service", "The agreed purchase", "Home valuation"]
+    },
+    "terms.compensation.amount": {
+      "type": "term",
+      "values": ["300.00", "450.00", "600.00", "700.00"]
+    },
+    "terms.compensation.currency": {
+      "type": "code",
+      "values": ["GBP", "USD"]
+    },
+    "terms.compensation.payee": {
+      "type": "identifier"
+    },
+    "terms.validFrom": {
+      "type": "term",
+      "values": ["2026-11-13T09:00:00.000Z"]
+    },
+    "terms.validUntil": {
+      "type": "term",
+      "values": ["2026-11-20T09:00:00.000Z"]
+    },
+    "input.invoice": {
+      "type": "identifier"
+    },
+    "input.agreement": {
+      "type": "code"
+    },
+    "input.instalment": {
+      "type": "number"
+    },
+    "input.validUntil": {
+      "type": "term",
+      "values": ["2026-11-13T10:00:00.000Z"]
+    },
+    "terms.purpose": {
+      "type": "identifier"
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:payment",
+      "version": "0.1",
+      "label": "shopping-agent",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": ["urn:purpose:shopping-agent"],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:paid-service",
+      "version": "0.1",
+      "label": "Agree the service",
+      "pattern": "negotiate",
+      "access": "represented",
+      "models": [],
+      "purposes": ["urn:purpose:shopping-agent"],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:payment-request",
+      "version": "0.1",
+      "label": "Request payment",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": ["urn:purpose:shopping-agent"],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:payment-provider",
+      "version": "0.1",
+      "label": "Settle the checked payment",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": ["urn:purpose:shopping-agent"],
+      "requiresRepresentation": true
+    }
+  ],
+  "standIns": [
+    {
+      "what": "Payment bank and account directory",
+      "replacedBy": "Fictional bank agent with its own keys and gates; account confirmations issued by the fictional bank"
+    },
+    {
+      "what": "Checkout and payment settlement",
+      "replacedBy": "Two source-signed merchant prices and a gated local payment-provider submission; no live checkout or settlement is claimed"
+    },
+    {
+      "what": "Payment settlement",
+      "replacedBy": "No money moves. The payment provider is a fictional party with its own keys that keeps a ledger."
+    }
+  ],
+  "parties": {
+    "business": "The shopper",
+    "business-agent": "The shopper’s agent",
+    "bank": "The payment provider",
+    "bank-agent": "The payment provider’s agent",
+    "supplier": "The chosen merchant",
+    "email": "The unverified account sender",
+    "other-merchant": "The other merchant"
+  },
+  "labels": {
+    "urn:purpose:shopping-agent": "Shopping agent"
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "x-authored-by": "Claude Opus 5.5",
+  "configuration": {
+    "id": "authenticity-data-integrity",
+    "change": {
+      "authenticity": "data-integrity"
+    },
+    "world": {
+      "script": {
+        "relookup": {
+          "id": "relookup",
+          "agent": "sam-agent",
+          "type": "start",
+          "peer": "valuer-register-agent",
+          "kind": "invoke",
+          "operation": "urn:op:valuer-lookup",
+          "contents": {
+            "service": "Home valuation"
+          },
+          "intent": {
+            "action": "use",
+            "operation": "urn:op:valuer-lookup",
+            "target": "urn:op:valuer-lookup",
+            "recipient": "urn:fictional:valuation-register",
+            "purpose": "urn:purpose:valuation",
+            "parameters": {}
+          },
+          "purpose": "urn:purpose:valuation",
+          "segment": "added",
+          "atStep": 40
+        },
+        "relookup-arrives": {
+          "id": "relookup-arrives",
+          "agent": "valuer-register-agent",
+          "type": "receive",
+          "from": "sam-agent",
+          "reply": {
+            "type": "deliver",
+            "output": {
+              "valuer": "urn:fictional:bracken-lantern-valuations"
+            },
+            "evidence": [
+              {
+                "$ref": "statements.valuation-registration.evidence"
+              }
+            ]
+          },
+          "atStep": 41
+        },
+        "relookup-found": {
+          "id": "relookup-found",
+          "agent": "sam-agent",
+          "type": "receive",
+          "from": "valuer-register-agent",
+          "segmentEnd": "added",
+          "atStep": 42
+        }
+      }
+    },
+    "added": [
+      {
+        "segment": "relookup",
+        "closes": {
+          "agent": "sam-agent",
+          "kind": "deliver",
+          "outcome": "admit"
+        }
+      }
+    ]
+  },
+  "note": "A correct added register lookup whose recorded trace then loses one check, as a gate that skipped it would record.",
+  "removeCheck": {
+    "check": "recipient",
+    "gate": "outbound-gate"
+  }
+}

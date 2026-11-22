@@ -1,0 +1,277 @@
+{
+  "@context": "https://w3id.org/jeswr/awp/context/scenario/v1",
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.2",
+  "id": "insurance-quote",
+  "parties": {
+    "owner": "The driver",
+    "receiver": "The insurer",
+    "licensing": "The licensing authority",
+    "claims-register": "The claims register",
+    "owner-agent": "The driver’s agent",
+    "receiver-agent": "The insurer’s agent"
+  },
+  "claims": [
+    {
+      "kind": "identity.details",
+      "sources": [
+        "urn:fictional:insurance-quote:owner"
+      ],
+      "methods": [
+        "self-reported"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "claims.list",
+      "sources": [
+        "urn:fictional:insurance-quote:claims-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30,
+      "completeness": "claims.completeness"
+    },
+    {
+      "kind": "claims.completeness",
+      "sources": [
+        "urn:fictional:insurance-quote:claims-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "licence.years",
+      "sources": [
+        "urn:fictional:insurance-quote:licensing"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "licence.points",
+      "sources": [
+        "urn:fictional:insurance-quote:licensing"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "claims.five-year-count",
+      "sources": [
+        "urn:fictional:insurance-quote:claims-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30,
+      "completeness": "claims.five-year-complete"
+    },
+    {
+      "kind": "insurance-quote.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:insurance-quote:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "claims.five-year-complete",
+      "sources": [
+        "urn:fictional:insurance-quote:claims-register"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:insurance-quote",
+      "claims": [
+        "claims.list",
+        "claims.completeness",
+        "insurance-quote.answer",
+        "derivation.request",
+        "licence.years",
+        "licence.points",
+        "claims.five-year-count",
+        "claims.five-year-complete"
+      ]
+    },
+    {
+      "id": "urn:purpose:driver-record",
+      "claims": [
+        "identity.details"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "urn:rule:insurance-quote:proof",
+      "template": "all-of",
+      "params": {
+        "inputs": [
+          "licence.years",
+          "licence.points",
+          "claims.five-year-count",
+          "claims.five-year-complete"
+        ],
+        "conditions": [
+          {
+            "input": "licence.years",
+            "operator": "gte",
+            "value": 5
+          },
+          {
+            "input": "licence.points",
+            "operator": "lte",
+            "value": 3
+          },
+          {
+            "input": "claims.five-year-count",
+            "operator": "eq",
+            "value": 0
+          },
+          {
+            "input": "claims.five-year-complete",
+            "operator": "eq",
+            "value": true
+          }
+        ]
+      },
+      "output": "insurance-quote.answer",
+      "inputsFrom": [
+        "urn:fictional:insurance-quote:claims-register",
+        "urn:fictional:insurance-quote:licensing"
+      ],
+      "assurances": [
+        "attested"
+      ],
+      "proofQuery": "SELECT DISTINCT ?result WHERE {\n  ?subject <urn:claim:licence.years> ?v0 .               BIND((?v0 >= 5) AS ?test0)\n  ?subject <urn:claim:licence.points> ?v1 .              BIND((?v1 <= 3) AS ?test1)\n  ?subject <urn:claim:claims.five-year-count> ?v2 .      BIND((?v2 = 0) AS ?test2)\n  ?subject <urn:claim:claims.five-year-complete> ?v3 .   BIND((?v3 = true) AS ?test3)\n  BIND((?test0 && ?test1 && ?test2 && ?test3) AS ?result)\n}\n"
+    }
+  ],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "identity.details",
+        "claims.list",
+        "claims.completeness"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:insurance-quote",
+      "version": "0.1",
+      "label": "An insurance quote with the least disclosure",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:insurance-quote"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:insurance-quote:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:insurance-quote"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:insurance-quote:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:insurance-quote"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:insurance-quote:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:insurance-quote"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:insurance-quote:proof",
+      "method": "sparq-zk-query/1",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh",
+        "complete"
+      ],
+      "purposes": [
+        "urn:purpose:insurance-quote"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "sparq-zk-query/1",
+      "replacedBy": "Research-grade and unaudited. Uses sparq Merkle-suite credentials and test-only issuer keys. The exact scenario query is absent from the pinned catalogue."
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:insurance-quote:proof-answer",
+      "claims": [
+        "insurance-quote.answer"
+      ]
+    }
+  ],
+  "labels": {
+    "urn:purpose:driver-record": "Driver record",
+    "urn:purpose:insurance-quote": "Insurance quote"
+  }
+}

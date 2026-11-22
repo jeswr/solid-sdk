@@ -71,6 +71,8 @@ export interface ParseRdfSyncOptions
   format?: Exclude<RdfMediaType, "application/ld+json">;
   /** Throw to stop work; called before term/quad construction, each store insertion and return. */
   check?: () => void;
+  /** Apply parse budgets while lexing, without buffering an array of tokens. */
+  incremental?: boolean;
   /** Observe quads in document order, including duplicates, after syntax validation.
    * A later check/insertion failure can still reject the operation; discard observations on failure. */
   onQuad?: (quad: Quad) => void;

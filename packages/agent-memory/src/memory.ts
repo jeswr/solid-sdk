@@ -26,6 +26,10 @@ export { DEFAULT_MEMORY_SCOPE } from "@jeswr/pkg-memory";
 
 const PROV = "http://www.w3.org/ns/prov#";
 const MAX_BYTES = 1_048_576;
+const TRIG = "application/trig";
+const JSON_TYPE = "application/json";
+const approvalEvidenceUrl = (target: string) => `${target}.approval.json`;
+type ApprovalEvidence = Parameters<AgentMemory["approveRemember"]>[1];
 function iri(value: string): string {
   if (!/^[a-z][a-z0-9+.-]*:[^\s<>"{}|\\^`]+$/i.test(value))
     throw new TypeError("Expected an absolute IRI");
@@ -83,18 +87,20 @@ export function createAgentMemory(options: AgentMemoryOptions): AgentMemory {
       throw new TypeError("Expected a directly contained memory TriG resource");
     return url.slice(parent.length);
   }
-  async function read(url: string) {
-    const response = await storage.read(url, { accept: "application/trig" });
+  async function readText(url: string, contentType: string, limit: number) {
+    const response = await storage.read(url, { accept: contentType });
     if (
       response.status !== 200 ||
       response.kind !== "resource" ||
-      response.contentType?.split(";")[0]?.trim().toLowerCase() !== "application/trig"
+      response.contentType?.split(";")[0]?.trim().toLowerCase() !== contentType
     ) {
       await response.body?.cancel();
-      throw new TypeError("Expected a memory TriG resource");
+      throw new TypeError(
+        `Expected a memory ${contentType === TRIG ? "TriG resource" : "approval"}`,
+      );
     }
     const reader = response.body?.getReader();
-    if (!reader) throw new Error("Missing memory resource body");
+    if (!reader) throw new TypeError("Missing memory resource body");
     const chunks: Uint8Array[] = [];
     let length = 0;
     try {
@@ -102,7 +108,7 @@ export function createAgentMemory(options: AgentMemoryOptions): AgentMemory {
         const chunk = await reader.read();
         if (chunk.done) break;
         length += chunk.value.byteLength;
-        if (length > maxBytes) throw new RangeError("Memory resource exceeds the size limit");
+        if (length > limit) throw new RangeError("Memory resource exceeds the size limit");
         chunks.push(chunk.value);
       }
     } catch (error) {
@@ -117,19 +123,72 @@ export function createAgentMemory(options: AgentMemoryOptions): AgentMemory {
       bytes.set(chunk, offset);
       offset += chunk.byteLength;
     }
-    return { trig: new TextDecoder("utf-8", { fatal: true }).decode(bytes), etag: response.etag };
+    const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+    return { text, etag: response.etag };
+  }
+  async function read(url: string) {
+    const { text, etag } = await readText(url, TRIG, maxBytes);
+    return { trig: text, etag };
+  }
+  function termsDigest(url: string, target: string, trig: string) {
+    const terms = JSON.stringify(["remember", ownerWebId, agentId, url, target, trig]);
+    return `sha-256:${createHash("sha256").update(terms).digest("hex")}`;
   }
   function proposal(url: string, trig: string, data: Nanopublications): RememberProposal {
     const target = new URL(name(url, pending), container).href;
-    const terms = JSON.stringify(["remember", ownerWebId, agentId, url, target, trig]);
     return {
       kind: "remember",
       id: url,
       target,
-      termsDigest: `sha-256:${createHash("sha256").update(terms).digest("hex")}`,
+      termsDigest: termsDigest(url, target, trig),
       trig,
       nanopublications: data.nanopubs.map((np) => np.id),
     };
+  }
+  async function readEvidence(target: string): Promise<ApprovalEvidence | undefined> {
+    try {
+      const { text } = await readText(approvalEvidenceUrl(target), JSON_TYPE, MAX_BYTES);
+      const value: unknown = JSON.parse(text);
+      if (
+        value &&
+        typeof value === "object" &&
+        "id" in value &&
+        typeof value.id === "string" &&
+        "document" in value &&
+        typeof value.document === "string"
+      )
+        return { id: value.id, document: value.document };
+    } catch (error) {
+      if (
+        !(
+          missing(error) ||
+          error instanceof TypeError ||
+          error instanceof RangeError ||
+          error instanceof SyntaxError
+        )
+      )
+        throw error;
+    }
+  }
+  function verifyEvidence(approval: ApprovalEvidence, url: string, digest: string) {
+    return verifyApproval(approval.document, {
+      id: approval.id,
+      ownerWebId,
+      proposal: url,
+      termsDigest: digest,
+      webIdKeyResolver: options.webIdKeyResolver,
+      now,
+    });
+  }
+  async function conformsToShapes(dataset: Nanopublications["dataset"]): Promise<boolean> {
+    const ownedEngine = options.validator === undefined ? createRdfEngine() : undefined;
+    const engine = options.validator ?? ownedEngine;
+    if (!engine) throw new Error("No SHACL validator available");
+    try {
+      return (await engine.validate(dataset, options.shapes)).conforms === true;
+    } finally {
+      ownedEngine?.dispose();
+    }
   }
   async function existing(filename: string): Promise<RememberProposal | undefined> {
     for (const parent of [container, pending]) {
@@ -214,13 +273,25 @@ export function createAgentMemory(options: AgentMemoryOptions): AgentMemory {
         if (++count > maxResources)
           throw new RangeError("Memory listing exceeds the resource limit");
         if (entry.kind !== "resource") continue;
+        let filename: string;
         try {
-          name(entry.url, container);
+          filename = name(entry.url, container);
         } catch {
           continue;
         }
+        const approval = await readEvidence(entry.url);
+        if (!approval) continue;
         const { trig } = await read(entry.url);
-        const data = await parseNanopublications(trig, entry.url);
+        const url = new URL(filename, pending).href;
+        const result = await verifyEvidence(approval, url, termsDigest(url, entry.url, trig));
+        if (!result.valid || result.approval.decision !== "approve") continue;
+        // Use the signed proposal's base IRI, as promotion does for the same bytes.
+        const data = await parseNanopublications(trig, url);
+        if (
+          !(await conformsToShapes(data.dataset)) ||
+          !(now().getTime() < Date.parse(result.approval.expires))
+        )
+          continue;
         for (const np of data.nanopubs) {
           if (
             np.validity !== "Current" ||
@@ -308,7 +379,11 @@ export function createAgentMemory(options: AgentMemoryOptions): AgentMemory {
     },
     approveRemember(url, approval) {
       name(url, pending);
+      const signed = { id: approval.id, document: approval.document };
       return mutate(async () => {
+        const evidence = JSON.stringify(signed);
+        if (new TextEncoder().encode(evidence).length > MAX_BYTES)
+          throw new RangeError("Memory approval exceeds the size limit");
         const target = new URL(name(url, pending), container).href;
         let snapshot: Awaited<ReturnType<typeof read>>;
         let alreadyMoved = false;
@@ -320,45 +395,36 @@ export function createAgentMemory(options: AgentMemoryOptions): AgentMemory {
           alreadyMoved = true;
         }
         const data = await parseNanopublications(snapshot.trig, url);
-        const item = proposal(url, snapshot.trig, data);
+        const digest = termsDigest(url, target, snapshot.trig);
         const verify = async () => {
-          const result = await verifyApproval(approval.document, {
-            id: approval.id,
-            ownerWebId,
-            proposal: url,
-            termsDigest: item.termsDigest,
-            webIdKeyResolver: options.webIdKeyResolver,
-            now,
-          });
+          const result = await verifyEvidence(signed, url, digest);
           if (!result.valid) throw new Error(`Memory approval refused: ${result.reason}`);
           if (result.approval.decision !== "approve")
             throw new Error("Memory approval refused: deny");
         };
         await verify();
         const etag = strongEtag(snapshot.etag);
-        const ownedEngine = options.validator === undefined ? createRdfEngine() : undefined;
-        const engine = options.validator ?? ownedEngine;
-        if (!engine) throw new Error("No SHACL validator available");
-        try {
-          const report = await engine.validate(data.dataset, options.shapes);
-          if (report.conforms !== true) throw new Error("Memory does not conform to SHACL shapes");
-        } finally {
-          ownedEngine?.dispose();
-        }
+        if (!(await conformsToShapes(data.dataset)))
+          throw new Error("Memory does not conform to SHACL shapes");
         // Validation may take time; do not promote under an approval that expired meanwhile.
         await verify();
-        if (alreadyMoved) return target;
-        try {
-          await storage.create(container, snapshot.trig, {
-            name: name(url, pending),
-            contentType: "application/trig",
-          });
-        } catch (error) {
-          if (!conflict(error)) throw error;
-          if ((await read(target)).trig !== snapshot.trig)
-            throw new Error("Conflicting approved memory");
+        if (!alreadyMoved) {
+          try {
+            await storage.create(container, snapshot.trig, {
+              name: name(url, pending),
+              contentType: TRIG,
+            });
+          } catch (error) {
+            if (!conflict(error)) throw error;
+            if ((await read(target)).trig !== snapshot.trig)
+              throw new Error("Conflicting approved memory");
+          }
         }
-        await storage.delete(url, { ifMatch: etag });
+        await storage.write(approvalEvidenceUrl(target), evidence, {
+          contentType: JSON_TYPE,
+          ifMatch: "*",
+        });
+        if (!alreadyMoved) await storage.delete(url, { ifMatch: etag });
         return target;
       });
     },

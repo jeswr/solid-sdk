@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6
 /**
  * `awp-pilot` — file/stdio interface to the pilot personal agent.
  *
@@ -90,7 +91,7 @@ import { FileStateStore } from "./store/state.js";
 const USAGE = `awp-pilot <command> [options]
 
 Setup (synthetic keys; nothing leaves this machine):
-  init      --name N --party IRI --actor IRI [--operator IRI] [--email ADDR] [--alg EdDSA|ES256]
+  init      --name N --party IRI --actor IRI [--operator IRI] [--email ADDR] [--description-url HTTPS_URL] [--alg EdDSA|ES256]
             [--known-party IRI]... [--known-contact ADDR]... [--timezone TZ] [--validity-days 30]
             [--policy-engine sparq|solid-odrl] [--sparq-bin PATH]
                                               SPARQ is the default policy module: init probes and
@@ -98,7 +99,7 @@ Setup (synthetic keys; nothing leaves this machine):
                                               without one; solid-odrl only when chosen explicitly
             [--role ROLE]                     personal (default) or a SYNTHETIC role; list them
                                               with \`roles\`. Roles with a fixed identity omit
-                                              --party/--actor; mortgage-consumer needs --wallet FILE,
+                                              --party/--actor; mortgage-consumer needs --wallet FILE --issuers FILE,
                                               mortgage-lender needs --issuers FILE (local anchors)
             [--role-input KEY=VALUE]...       role inputs declared by the role (\`roles\` lists them);
                                               unknown keys are refused
@@ -368,6 +369,7 @@ export async function openAgent(
         actor: identity.actor,
         party: identity.party,
         ...(identity.operator ? { operator: identity.operator } : {}),
+        ...(identity.descriptionUrl ? { descriptionUrl: identity.descriptionUrl } : {}),
       },
       actorKeys: [stored.actorKey],
       trust: await TrustStore.load(stored.trust),
@@ -574,6 +576,7 @@ export async function main(
       actor: { type: "string" },
       operator: { type: "string" },
       email: { type: "string" },
+      "description-url": { type: "string" },
       alg: { type: "string" },
       "known-party": { type: "string", multiple: true },
       "known-contact": { type: "string", multiple: true },
@@ -636,6 +639,7 @@ export async function main(
     case "init": {
       const alg = (opt(o, "alg") ?? "EdDSA") as KeyAlg;
       if (alg !== "EdDSA" && alg !== "ES256") throw new Error("--alg must be EdDSA or ES256");
+      const descriptionUrl = opt(o, "description-url");
       const known = (o["known-party"] as string[] | undefined) ?? [];
       const validity = Number.parseInt(opt(o, "validity-days") ?? "30", 10);
       const role = roleById(opt(o, "role"));
@@ -651,6 +655,7 @@ export async function main(
               ...(opt(o, "operator") ? { operator: opt(o, "operator") as string } : {}),
             }),
         ...(opt(o, "email") ? { email: opt(o, "email") as string } : {}),
+        ...(descriptionUrl ? { descriptionUrl } : {}),
       };
       // The policy module is chosen and probed BEFORE anything is written (SPARQ by default).
       const policyRecord = choosePolicyEngine({
@@ -707,7 +712,7 @@ export async function main(
               "this service's own issuing key",
             )
           : provisioned.trust;
-      const dir = saveAgent(
+      const dir = await saveAgent(
         root,
         { ...p, trust },
         role.accepted ? [...role.accepted] : [alg === "EdDSA" ? CONFIG_ED25519 : CONFIG_P256],
@@ -829,7 +834,12 @@ export async function main(
       });
       await TrustStore.load(trust);
       // Trust changes take the single-writer lock: refused while a service owns the agent.
-      withAgentLock(stored.dir, () => saveTrust(root, name, trust));
+      const lock = new FileStateStore(join(stored.dir, "state.json"));
+      try {
+        await saveTrust(root, name, trust);
+      } finally {
+        lock.close();
+      }
       print({ pinned: { party: card.party, actor: card.actor, endpoints: card.endpoints } });
       return 0;
     }
@@ -1224,7 +1234,7 @@ export async function main(
       try {
         const terms = buildMeetingTerms({
           calendar: a.calendar,
-          title: opt(o, "title") ?? "Synthetic test meeting",
+          title: opt(o, "title") ?? "meeting",
           durationMinutes: Number.parseInt(opt(o, "duration") ?? "30", 10),
           window: { start: need(o, "window-start"), end: need(o, "window-end") },
           now: now().toISOString(),

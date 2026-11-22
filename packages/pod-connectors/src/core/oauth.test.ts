@@ -149,3 +149,25 @@ describe("exchangeCodeForToken", () => {
     );
   });
 });
+
+describe("authorize callback URL", () => {
+  it("refuses a callback on another origin before opening any popup", async () => {
+    const open = vi.fn();
+    vi.stubGlobal("window", {
+      location: {
+        href: "https://jeswr.github.io/solid-sdk/pod-manager/connect",
+        origin: "https://jeswr.github.io",
+      },
+      open,
+    });
+    try {
+      const { authorize } = await import("./oauth.js");
+      await expect(
+        authorize("spotify", CFG, vi.fn(), "https://attacker.example/oauth-callback.html"),
+      ).rejects.toThrow(TypeError);
+      expect(open).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

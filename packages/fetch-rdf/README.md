@@ -100,6 +100,9 @@ wrapped as parse errors; an aborted signal still throws its original reason.
 `onQuad` observes validated quads in document order, including duplicates, for
 readers whose preference ties depend on source order. Store iteration can reorder
 them. Discard observations if a later budget check, insertion, or callback fails.
+`incremental: true` lexes through N3's event input so budgets apply token by
+token instead of after the whole body has been tokenised; use it for untrusted or
+large local input.
 
 `ParseRdfOptions` and `FetchRdfOptions` accept these finite, nonnegative integer
 limits (`maxContextConcurrency` must be positive). Increase them explicitly for

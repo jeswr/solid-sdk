@@ -5,7 +5,7 @@ import { entryGraph, node, PROV } from "../src/rdf.js";
 import { auditArtifact } from "../src/reader.js";
 import { type AuditRecord, checkedRecord, ENTRY_KINDS, GENESIS, seal } from "../src/records.js";
 import { aggregateTaskStats } from "../src/stats.js";
-import { AT, fixture } from "./fixture.js";
+import { AT, fixture, witnessFixture } from "./fixture.js";
 
 const record: AuditRecord = {
   type: "personal-data-read",
@@ -34,6 +34,8 @@ it("appends the new kind without changing historical ordering", () => {
     "tamper-suspected",
     "conversation",
     "personal-data-read",
+    "gate-decision",
+    "record-anchor",
   ]);
   expect(checkedRecord(record)).toEqual(record);
   const { purpose: _purpose, ...withoutPurpose } = record;
@@ -58,17 +60,30 @@ it.each([
   expect(() => checkedRecord(value)).toThrow();
 });
 it("forbids recall fields on every other kind, and refuses unbounded or value-bearing fields", () => {
-  for (const type of ENTRY_KINDS.filter((t) => t !== "personal-data-read"))
-    for (const field of ["purpose", "categories", "resources"])
-      expect(() =>
-        checkedRecord({
-          type,
-          id: "urn:test",
-          owner: "urn:owner",
-          agent: "urn:agent",
-          [field]: record[field as keyof AuditRecord],
-        }),
-      ).toThrow();
+  const identity = { id: "urn:test", owner: "urn:owner", agent: "urn:agent" };
+  const point = { seq: 1, hash: `sha-256:${"a".repeat(64)}` };
+  const otherRecords = [
+    ...ENTRY_KINDS.filter(
+      (type) => type !== "personal-data-read" && type !== "gate-decision" && type !== "record-anchor",
+    ).map((type) => ({ ...identity, type })),
+    {
+      ...identity,
+      type: "gate-decision",
+      direction: "out",
+      outcome: "stop",
+      reason: "unsupported-operation",
+      configuration: "urn:configuration:signed-ed25519",
+      messageDigest: point.hash,
+      gateSeq: point.seq,
+      gateHash: point.hash,
+    },
+    { ...identity, type: "record-anchor", ...point, jws: witnessFixture(identity, point) },
+  ];
+  for (const other of otherRecords) {
+    expect(checkedRecord(other)).toEqual(other);
+    for (const field of ["purpose", "categories", "resources"] as const)
+      expect(() => checkedRecord({ ...other, [field]: record[field] })).toThrow();
+  }
   for (const field of [
     "value",
     "values",

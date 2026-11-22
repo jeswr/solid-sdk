@@ -19,11 +19,14 @@ export {
   loadTrace,
 } from "./reader.js";
 export {
+  AuditHeadChangedError,
   type AuditRecord,
   type AuditTerms,
   ENTRY_KINDS,
+  GATE_DECISION_REASONS,
   type LedgerEntry,
   type LedgerRecord,
+  MAX_RECORD_ANCHOR_BYTES,
 } from "./records.js";
 export {
   aggregateTaskStats,

@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, it, vi } from "vitest";
 import { composeDaemon } from "../src/daemon.js";
-import { createMemoryState } from "../src/testing.js";
+import { createMemoryState, createTestMemory } from "../src/testing.js";
 import type { DaemonOptions } from "../src/types.js";
+import { testRecordPort } from "./record-port.js";
 
 const mocks = vi.hoisted(() => ({
   authenticate: vi.fn(),
@@ -49,6 +50,11 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
       expect(workspace.storage).toBe((await mocks.storage.mock.results.at(-1)?.value)?.storage);
       return {
         accounts: [],
+        gate: {
+          ...testRecordPort("https://pod.example/agent#me", options.ownerWebId),
+          check: vi.fn(),
+          release: vi.fn(),
+        },
         ...state,
         agentWebId: "https://pod.example/agent#me",
         executor: {
@@ -60,9 +66,9 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
           transmit: vi.fn(),
         },
         gateway: { reader: { extract: vi.fn() }, proposer: { propose: vi.fn() } },
+        memory: createTestMemory(),
         proposerContext: {
           instructions: "fixture",
-          memoryRecall: vi.fn(),
           pod: {
             root: options.storageRoot,
             webId: options.ownerWebId,
@@ -73,7 +79,7 @@ it("uses only pod-auth client-credentials DPoP fetch for storage and notificatio
           },
         },
         isFlagged: async () => false,
-        proposalWritten: vi.fn(),
+        project: vi.fn(),
         audit: { append: vi.fn(), entries: () => [], sync: vi.fn() },
       } satisfies Omit<DaemonOptions, "workspace" | "notifications" | "ownerWebId">;
     },

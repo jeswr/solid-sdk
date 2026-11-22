@@ -10,7 +10,7 @@
 // Escape close are provided by the platform); rendered as a controlled component.
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
-const HOME_IDP = import.meta.env.VITE_HOME_IDP ?? "https://idp.solid-test.jeswr.org";
+const HOME_IDP = import.meta.env.VITE_HOME_IDP ?? "https://solidcommunity.net/";
 
 export interface SignInDialogProps {
   open: boolean;
@@ -68,7 +68,7 @@ export function SignInDialog({ open, onClose, login, loggingIn, ready, error }: 
           type="url"
           inputMode="url"
           autoComplete="url"
-          placeholder="https://you.solid-test.jeswr.org/profile/card#me"
+          placeholder="https://you.solidcommunity.net/profile/card#me"
           value={webIdInput}
           onChange={(ev) => setWebIdInput(ev.target.value)}
           disabled={loggingIn}

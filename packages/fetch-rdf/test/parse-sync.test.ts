@@ -1,13 +1,21 @@
 // AUTHORED-BY Codex GPT-6
 import { Store } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { parseRdfSync, type Quad, RdfFetchError } from "../src/index.js";
+import {
+  type ParseRdfSyncOptions,
+  parseRdfSync as parseSync,
+  type Quad,
+  RdfFetchError,
+} from "../src/index.js";
 
 const baseIRI = "https://pod.example/doc";
 const turtle = '<#s> <#p> "café" .';
 afterEach(() => vi.restoreAllMocks());
 
-describe("parseRdfSync", () => {
+describe.each([false, true])("parseRdfSync with incremental=%s", (incremental) => {
+  const parseRdfSync = (body: string, options?: ParseRdfSyncOptions) =>
+    parseSync(body, { ...options, incremental });
+
   it("observes document order and duplicates before dataset ordering/deduplication", () => {
     const quads: Quad[] = [];
     const body = '<#later> <#p> "mentioned first" . <#s> <#p> <#first>, <#later>, <#first> .';

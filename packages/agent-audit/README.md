@@ -35,22 +35,34 @@ append for the same event. Calls on one writer/mirror are serialized.
 
 `FileLedger` fsyncs each line and its initial directory entry, rotates at
 `segmentMaxEntries` (default 5,000; minimum 2), and keeps `maxSegments` archived
-segments (default 40; minimum 1). Before pruning it fsyncs a `ledger-checkpoint`
-with the removed prefix's sequence and hash. It validates retained storage on
-open and before every append. Retention policy and archival are deployment
-decisions; mirror before pruning to preserve the complete pod prefix.
+segments (default 40; minimum 1). Retention can exceed this limit to preserve the
+two most recent anchors, their predecessors, and the tail. The earlier anchor
+protects the latest witness while the gate is recording the next one. Before
+pruning, the ledger fsyncs a `ledger-checkpoint` with the removed prefix's sequence
+and hash and its highest linked gate decision coordinates, when present. It
+validates retained storage on open and before every append. Mirror before pruning
+to preserve the complete pod prefix.
 `MemoryLedger` returns detached snapshots and is intended for ephemeral use.
 
 Records accept the DESIGN §5 kinds: `ingest`, `proposal`, `decision`,
 `approval-seen`, `transmission`, `receipt`, `control`, `mandate-change`,
-`model-call`, `tamper-suspected`, the A-045 `conversation` and `tool-call` kinds,
-plus internal `ledger-checkpoint` records.
+`model-call`, `tamper-suspected`, `conversation`, `tool-call`,
+`gate-decision` and `record-anchor`, plus internal `ledger-checkpoint` records.
 Unknown fields, bodies, prompt text, raw recipient arrays, malformed timestamps,
 non-JSON values and oversized records are rejected. Records are capped at 64 KiB.
 `model-call` accepts identifiers, provider/context and numeric counts only.
 Use `hashRecipient(handle, accountId, salt)` with a secret random salt of at least
 32 bytes, retained only in the private runtime store. Hashes are account-bound
 HMAC-SHA-256 (`sha256:<hex>`), matching agent-mandate's recipient vocabulary.
+
+A `gate-decision` links the message or action digest and reference outcome to a
+specific reference-ledger sequence and hash. Its reason must be in
+`GATE_DECISION_REASONS`. Appending an identical retained decision with the same ID
+reuses the original entry. Reusing the ID with different content fails.
+A `record-anchor` contains an EdDSA receipt of up to 4 KiB over the immediately
+preceding suite entry. Retain the paired gate ledger to check for missing
+witnessed heads and anchors. The unwitnessed tail after the latest witness can
+be truncated without detection.
 
 For a complete proposal audit, write these linked events in order:
 
@@ -170,6 +182,14 @@ The subpath exports the shared record schemas and types, `ENTRY_KINDS`, `GENESIS
 `MAX_AUDIT_SEQ`, `checkedRecord`, `seal`, `parseAuditEntry`, `auditHeadSchema`,
 `parseAuditHead`, `verifyLedger`, `verifyRange`, `verifyLatestRange`, and their
 result types and scope strings (`CHAIN_SCOPE`, `AUDIT_SCOPE`, `HEAD_MISSING`).
+
+Supply verified reference ledger points as `verifyLedger(entries, { gateEntries })`
+to check retained and checkpointed decision links. Pass independently retained
+heads as `witnessedHeads` to require the latest witnessed head and anchor, and a
+matching witness for each retained anchor. A retention checkpoint can cover
+older witnesses when the retained chain links its boundary to the latest
+witnessed anchor. The daemon's offline audit command checks retained anchor JWS
+signatures using the configured gate public key.
 It also exports `writeEntryGraph`, `writeHeadGraph` and `AuditProjectionNode`:
 callers supply wrapper-backed nodes to write the same entry, decision and head
 projections as the daemon, without importing parsers, storage or Node modules.

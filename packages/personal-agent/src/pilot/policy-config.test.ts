@@ -26,6 +26,7 @@ import { CONFIG_ED25519, CONFIGURATIONS, POLICY_PROFILE } from "./profile/config
 import { AWP } from "./profile/vocabulary.js";
 import { descriptionToRdf } from "./rdf/evidence.js";
 import { fixedClock, londonCalendar, provisionPair, startAgent } from "./scenarios/personal.js";
+import { readLedgerSegment } from "./store/ledger.js";
 import { FileStateStore } from "./store/state.js";
 
 const dirs: string[] = [];
@@ -355,7 +356,7 @@ describe("phase-4 review — long-running pin, consistent inspection, described 
     holder.close();
     const repin = await run(["policy-engine", "--name", "alice", `--sparq-bin=${bin}`, ...common]);
     expect(repin.code).toBe(0);
-    const ledger = readFileSync(join(root, "alice", "ledger.jsonl"), "utf8");
+    const ledger = JSON.stringify(readLedgerSegment(join(root, "alice", "ledger.jsonl")));
     expect(ledger).toContain('"type":"policy-module-recorded"');
     // Deleting the record: inspection now agrees with runtime opening (unavailable).
     unlinkSync(join(root, "alice", POLICY_ENGINE_FILE));

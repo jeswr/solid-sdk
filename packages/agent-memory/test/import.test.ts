@@ -35,9 +35,12 @@ it("imports once with explicit owner attribution and pinned revision, then recal
     }),
   ).toEqual(proposal);
   expect(queue).not.toHaveBeenCalled();
-  expect((await h.storage.list(CONTAINER)).items.filter((e) => e.kind === "resource")).toHaveLength(
-    1,
-  );
+  expect(
+    (await h.storage.list(CONTAINER)).items
+      .filter((e) => e.kind === "resource")
+      .map((e) => e.url)
+      .sort(),
+  ).toEqual([proposal.target, `${proposal.target}.approval.json`]);
 });
 it("deduplicates concurrent imports across instances and requeues pending imports after restart", async () => {
   const h = await harness();

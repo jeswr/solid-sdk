@@ -1,8 +1,34 @@
-import { describe, expect, it } from "vitest";
+import { Server } from "node:http";
+import { describe, expect, it, vi } from "vitest";
+import { SlotsService } from "./domains/conventional/slots-service.js";
 import { runConventional } from "./scenarios/conventional.js";
 import { fixedClock } from "./scenarios/personal.js";
 
 describe("UC-02 / R25 remembered conventional scheduling service (local reference service)", () => {
+  it("rejects a canary listen error and closes the booking service", async () => {
+    const service = vi
+      .spyOn(SlotsService.prototype, "listen")
+      .mockResolvedValue("http://127.0.0.1:1");
+    const close = vi.spyOn(SlotsService.prototype, "close").mockResolvedValue();
+    const error = Object.assign(new Error("canary port unavailable"), { code: "EADDRINUSE" });
+    const canary = vi.spyOn(Server.prototype, "listen").mockImplementation(function (this: Server) {
+      // Keep the simulated server error observable as a pending startup before the fix.
+      this.on("error", () => {});
+      queueMicrotask(() => this.emit("error", error));
+      return this;
+    });
+    try {
+      const started = runConventional(fixedClock("2026-10-19T08:00:00Z"));
+      const nextTurn = new Promise<void>((resolve) => setImmediate(resolve));
+      await expect(Promise.race([started, nextTurn])).rejects.toBe(error);
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      canary.mockRestore();
+      close.mockRestore();
+      service.mockRestore();
+    }
+  });
+
   it("extracts, confirms, books deterministically, and resists poisoning, staleness and uncertainty", async () => {
     const { obs } = await runConventional(fixedClock("2026-10-19T08:00:00Z"));
     expect(obs.firstContact).toEqual({ candidates: 1, status: "candidate", forwarded: false });

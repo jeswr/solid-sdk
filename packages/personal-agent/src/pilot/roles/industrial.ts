@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * SYNTHETIC EU industrial maintenance data exchange (UC-05) as durable, independently
  * initialised agents of three organisations. Every role composes the EXISTING domain handlers
@@ -387,13 +388,18 @@ export const INDUSTRIAL_CONTRACTING_ROLE: RoleDefinition = {
   identity: { party: NW_CONTRACT.party, actor: NW_CONTRACT.actor, operator: NW_CONTRACT.operator },
   mandate: contractingMandate,
   representationOperations: REPRESENTATION.contracting,
-  inputs: { membership: "participant credential file (`synthetic-industrial`)" },
+  inputs: {
+    membership: "participant credential file (`synthetic-industrial`)",
+    issuers: "public issuer anchors for received access authorisations",
+  },
   async init({ trust, now, options }) {
     if (!options.membership)
       throw new Error("industrial-contracting init needs --role-input membership=FILE");
     const file = membershipFile.parse(JSON.parse(readFileSync(options.membership, "utf8")));
     if (file.subject !== NORDWERK) throw new Error("the credential is about another organisation");
-    let next = trust;
+    let next = options.issuers
+      ? pinIssuersFromFiles(trust, options.issuers, "reviewed authorisation issuer")
+      : trust;
     for (const rule of recipientSourceRules(horizon(now))) next = addSourceRule(next, rule);
     return { trust: next, files: { [MEMBERSHIP_FILE]: file } };
   },
@@ -439,9 +445,7 @@ export const INDUSTRIAL_CONTRACTING_ROLE: RoleDefinition = {
             };
             // Read (NOT verify) the authorisation to build matching terms; the holder verifies.
             const tpa = tpaSchema.parse(
-              JSON.parse(
-                Buffer.from(a.authorisation.split(".")[1] ?? "", "base64url").toString("utf8"),
-              ),
+              await op.rt.readProtectedTerm(DATA_OFFER_OP, "output.authorisation", a.authorisation),
             );
             const step = await op.rt.startNegotiation({
               peer: op.pinnedPeer(a.providerActor),
@@ -539,6 +543,7 @@ export const INDUSTRIAL_DIAGNOSTIC_ROLE: RoleDefinition = {
                 dataset: string;
                 purpose: z.infer<typeof purposeInput>;
               };
+              op.rt.instruct("Inspect the principal-selected dataset.", { dataset: a.dataset });
               const step = await op.rt.startInvocation({
                 peer: op.pinnedPeer(a.contractingActor),
                 operation: DATASET_READ_OP,

@@ -27,6 +27,8 @@ async function run(args: string[]): Promise<{ code: number; json: Record<string,
   };
 }
 
+// Budgets raised (22 Nov): in CI these run beside the agent-reference suite and took up to
+// 90% of the old budgets on a fast runner (bead sst-ans.55 tracks making them faster).
 describe("awp-pilot CLI (file interface; nothing is sent)", () => {
   it("negotiates between two separately initialised agents via Gmail payload files", async () => {
     const root = mkdtempSync(join(tmpdir(), "awp-cli-"));
@@ -205,5 +207,5 @@ describe("awp-pilot CLI (file interface; nothing is sent)", () => {
       readFileSync(join(spool, "out", "replayed.gmail.json", "report.json"), "utf8"),
     );
     expect(report.step.disposition).toBe("duplicate");
-  });
+  }, 45_000);
 });

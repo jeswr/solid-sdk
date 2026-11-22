@@ -50,6 +50,15 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        {/* GitHub Pages cannot send frame-ancestors / X-Frame-Options, so refuse framing here. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              'if(window.top!==window.self){document.documentElement.style.display="none";try{window.top.location.replace(window.self.location.href)}catch(e){}}',
+          }}
+        />
+      </head>
       <body className="min-h-full bg-background text-foreground">
         {/* Skip-to-content: targets #main inside AppShell. */}
         <a

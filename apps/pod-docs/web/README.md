@@ -133,7 +133,7 @@ NOT re-typechecked here; `src/pod-docs-ui.d.ts` declares the consumed surface),
 |---|---|---|---|
 | `APP_ORIGIN` | `gen-clientid.mjs` (build) | `http://localhost:5173` | The deployment origin. Set per-subdomain for prod. |
 | `VITE_APP_ORIGIN` | UI label only | `http://localhost:5173` | Mirror of `APP_ORIGIN`; non-load-bearing (the runtime `client_id` derives from the actual window origin). |
-| `VITE_HOME_IDP` | `LoginScreen` hint | `https://idp.solid-test.jeswr.org` | Display only — the auth issuer always comes from the WebID profile. |
+| `VITE_HOME_IDP` | `LoginScreen` hint | `https://solidcommunity.net/` | Display only — the auth issuer always comes from the WebID profile. |
 
 ---
 

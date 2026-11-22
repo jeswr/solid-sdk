@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { runEnergy } from "./scenarios/energy.js";
+import { copyData } from "@jeswr/agent-reference/model/copy";
+import { describe, expect, it, vi } from "vitest";
+import { DirectBus } from "./bindings/direct.js";
+import { runEnergy, WATTLE } from "./scenarios/energy.js";
 import { fixedClock } from "./scenarios/personal.js";
 
 describe("UC-03 anonymous public energy-plan comparison", () => {
@@ -33,5 +35,40 @@ describe("UC-03 anonymous public energy-plan comparison", () => {
     expect(obs.deterministic).toBe(true);
     expect(obs.citationsComplete).toBe(true);
     expect(obs.ledgers).toBe(true);
-  });
+  }, 20_000);
+
+  it("flags legacy unsigned comparator follow-ups even when the service accepts them", async () => {
+    const send = DirectBus.prototype.send;
+    let legacyFollowUps = 0;
+    const spy = vi.spyOn(DirectBus.prototype, "send").mockImplementation(function (
+      this: DirectBus,
+      from,
+      result,
+    ) {
+      const outbound = "outbound" in result ? result.outbound : result;
+      return send.call(
+        this,
+        from,
+        outbound.map((out) => {
+          if (from.identity.actor !== WATTLE.actor || out.kind !== "invoke") return out;
+          legacyFollowUps++;
+          return {
+            ...out,
+            wire: {
+              format: "awp-unsigned-json/0.1",
+              payload: JSON.stringify(copyData(out.message)),
+            },
+          };
+        }),
+      );
+    });
+    try {
+      const { obs } = await runEnergy(fixedClock("2026-10-05T09:00:00Z").now);
+      expect(legacyFollowUps).toBeGreaterThan(0);
+      expect(obs.outcomes["southern-current"]).toEqual({ phase: "completed", reason: "delivered" });
+      expect(obs.identityFreeRequests).toBe(false);
+    } finally {
+      spy.mockRestore();
+    }
+  }, 20_000);
 });

@@ -16,7 +16,7 @@ const NAV: { id: View; label: string; icon: "chat" | "shield" | "activity" | "ke
   { id: "accounts", label: "Accounts", icon: "key" },
 ];
 
-export function App({ session }: { session: Session }) {
+export function App({ session, demoHref }: { session: Session; demoHref?: string }) {
   const engine = session.engine;
   const state = useSyncExternalStore(
     (fn) => engine.subscribe(fn),
@@ -109,6 +109,12 @@ export function App({ session }: { session: Session }) {
           <Icon name="plus" />
         </button>
         <div className="title">{title}</div>
+        {engine.demoMode && <span className="demo-label">Demo: Face ID simulated</span>}
+        {demoHref && (
+          <a className="demo-label" href={demoHref}>
+            Try with simulated Face ID
+          </a>
+        )}
         <button
           type="button"
           className={`stop-pill ${state.working ? "working" : ""}`}
@@ -181,9 +187,8 @@ export function App({ session }: { session: Session }) {
         <ApprovalSheet
           key={pending.request.id}
           request={pending.request}
-          kid={state.deviceKid}
+          engine={engine}
           products={products}
-          onRespond={(r) => engine.respond(r)}
           onClose={() => setSheetHidden(true)}
         />
       )}

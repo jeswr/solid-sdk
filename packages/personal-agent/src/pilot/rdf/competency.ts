@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Competency queries over the RDF evidence graph (conceptual-audit questions CT-02, CT-03,
  * CT-05, CT-07 and the uncertain-effect rule), plus assertion-absence checks. The SPARQL text
@@ -190,7 +191,7 @@ export async function collectRuntimeEvidence(): Promise<RuntimeEvidence> {
     operation: SCHEDULE_OP,
     terms: buildMeetingTerms({
       calendar: pair.alice.calendar,
-      title: "Synthetic catch-up",
+      title: "catch-up",
       durationMinutes: 30,
       window: { start: "2026-10-20T13:00:00Z", end: "2026-10-20T17:00:00Z" },
       now: clock.now().toISOString(),

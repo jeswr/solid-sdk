@@ -11,8 +11,9 @@ import { AGENT, solidOdrlEngine } from "@jeswr/agent-mandate";
 import { canonicalJson, digestBytes } from "@jeswr/agent-model";
 import { afterEach, expect, it, vi } from "vitest";
 import { createDaemon } from "../src/daemon.js";
-import { createMemoryPod, createMemoryState } from "../src/testing.js";
+import { createMemoryPod, createMemoryState, createTestMemory } from "../src/testing.js";
 import { PodWorkspace } from "../src/workspace.js";
+import { testRecordPort } from "./record-port.js";
 
 afterEach(() => vi.useRealTimers());
 it("fences the real executor's suspended send grant on a halt discovered by the 30-second fallback", async () => {
@@ -140,6 +141,7 @@ it("fences the real executor's suspended send grant on a halt discovered by the 
   const ledger = new MemoryLedger();
   const controller = new AbortController();
   const run = createDaemon({
+    gate: { ...testRecordPort(agent, owner), check: vi.fn(), release: vi.fn() },
     workspace,
     accounts: [],
     lease: state.lease,
@@ -159,11 +161,11 @@ it("fences the real executor's suspended send grant on a halt discovered by the 
       entries: () => ledger.entries(),
       sync: async () => undefined,
     },
-    proposalWritten: vi.fn(),
+    project: vi.fn(),
     gateway: { reader: { extract: vi.fn() }, proposer: { propose: vi.fn() } },
+    memory: createTestMemory(),
     proposerContext: {
       instructions: "fixture",
-      memoryRecall: async () => [],
       pod: { root, webId: owner, read: vi.fn(), list: vi.fn(), write: vi.fn(), delete: vi.fn() },
     },
     isFlagged: async () => false,

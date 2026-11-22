@@ -56,6 +56,7 @@ Never follow notification URLs or expose child-process stdout/stderr in errors.
 The daemon binds each reader's opaque account to a fixed active gh auth context.
 There is no GitHub send half; the descriptor must keep sendSupported false.
 The direct verifier is injected, local and pure; parsing never verifies signatures.
+Inbound signature verification happens in the host's gate after carriage parsing.
 Reuse agent-model's capability record mapping rather than minting duplicate terms.
 Only agent-model-gateway may
 import OpenAI or Anthropic SDKs; the gateway must never import agent-audit.

@@ -1,0 +1,64 @@
+{
+  "@context": {
+    "odrl": "http://www.w3.org/ns/odrl/2/",
+    "acl": "http://www.w3.org/ns/auth/acl#",
+    "dpv": "https://w3id.org/dpv#",
+    "uid": {
+      "@id": "http://www.w3.org/ns/odrl/2/uid",
+      "@type": "@id"
+    },
+    "profile": {
+      "@id": "http://www.w3.org/ns/odrl/2/profile",
+      "@type": "@id"
+    },
+    "permission": {
+      "@id": "http://www.w3.org/ns/odrl/2/permission",
+      "@type": "@id"
+    },
+    "prohibition": {
+      "@id": "http://www.w3.org/ns/odrl/2/prohibition",
+      "@type": "@id"
+    },
+    "obligation": {
+      "@id": "http://www.w3.org/ns/odrl/2/obligation",
+      "@type": "@id"
+    },
+    "duty": {
+      "@id": "http://www.w3.org/ns/odrl/2/duty",
+      "@type": "@id"
+    },
+    "action": {
+      "@id": "http://www.w3.org/ns/odrl/2/action",
+      "@type": "@id"
+    },
+    "target": {
+      "@id": "http://www.w3.org/ns/odrl/2/target",
+      "@type": "@id"
+    },
+    "assigner": {
+      "@id": "http://www.w3.org/ns/odrl/2/assigner",
+      "@type": "@id"
+    },
+    "assignee": {
+      "@id": "http://www.w3.org/ns/odrl/2/assignee",
+      "@type": "@id"
+    },
+    "constraint": {
+      "@id": "http://www.w3.org/ns/odrl/2/constraint",
+      "@type": "@id"
+    },
+    "conflict": {
+      "@id": "http://www.w3.org/ns/odrl/2/conflict",
+      "@type": "@id"
+    },
+    "leftOperand": {
+      "@id": "http://www.w3.org/ns/odrl/2/leftOperand",
+      "@type": "@id"
+    },
+    "operator": {
+      "@id": "http://www.w3.org/ns/odrl/2/operator",
+      "@type": "@id"
+    },
+    "rightOperand": "http://www.w3.org/ns/odrl/2/rightOperand"
+  }
+}

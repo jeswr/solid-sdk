@@ -125,7 +125,14 @@ export function aggregateTaskStats(
   const tasks = new Map<string, AuditRecord[]>();
   const unassigned: AuditRecord[] = [];
   for (const { record } of snapshot) {
-    if (record.type === "ledger-checkpoint" || record.type === "personal-data-read") continue;
+    // Gate links and seals carry integrity evidence rather than task instrumentation.
+    if (
+      record.type === "ledger-checkpoint" ||
+      record.type === "personal-data-read" ||
+      record.type === "record-anchor" ||
+      record.type === "gate-decision"
+    )
+      continue;
     if (record.taskId === undefined) {
       unassigned.push(record);
       continue;

@@ -5,9 +5,8 @@
 #
 #   protocol  every provider × every app client: discovery, CORS, JWKS, and the app's real
 #             authorization request reaching the provider's login page (no account needed).
-#   test-idp  a real browser signs up a throwaway account on the suite's own test IdP through
-#             Drive's deployed build, then signs in again with it. Credentials are random and
-#             never logged. Public providers get the protocol check only.
+# Public providers get the protocol check only. Full sign-in (a real browser, email and password,
+# consent) runs against a local Community Solid Server in sign-in-local.yml.
 name: sign-in-live
 
 on:
@@ -17,7 +16,6 @@ on:
   pull_request:
     paths:
       - "scripts/sign-in-live/**"
-      - "apps/pod-drive/web/tests/live/**"
       - ".github/workflows/sign-in-live.yml"
 
 permissions:
@@ -38,29 +36,3 @@ jobs:
           node-version: 24
       - name: Check every advertised provider
         run: node scripts/sign-in-live/check.mjs
-
-  test-idp:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: pnpm/action-setup@a7487c7e89a18df4991f7f222e4898a00d66ddda # v4.1.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile --filter @jeswr/pod-drive-web
-      - name: Install Playwright Chromium
-        working-directory: apps/pod-drive/web
-        run: |
-          timeout 600 pnpm exec playwright install --with-deps chromium \
-            || { echo "::warning::playwright --with-deps failed; installing Chromium without system deps"; pnpm exec playwright install chromium; }
-      - name: Sign up and sign in through Drive against the test IdP
-        run: pnpm --filter @jeswr/pod-drive-web run test:e2e:live
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: sign-in-live-test-idp
-          # Screenshots only: other diagnostics (error context, action logs) can carry form values.
-          path: apps/pod-drive/web/test-results/**/*.png
-          retention-days: 7

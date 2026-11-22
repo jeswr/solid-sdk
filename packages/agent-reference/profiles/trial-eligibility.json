@@ -1,0 +1,265 @@
+{
+  "@context": "https://w3id.org/jeswr/awp/context/scenario/v1",
+  "x-authored-by": "Codex GPT-6",
+  "schema": "agent-profile/0.2",
+  "id": "trial-eligibility",
+  "parties": {
+    "owner": "The volunteer",
+    "receiver": "The trial sponsor",
+    "practice": "The family practice",
+    "owner-agent": "The volunteer’s agent",
+    "receiver-agent": "The trial sponsor’s agent"
+  },
+  "claims": [
+    {
+      "kind": "medication.list",
+      "sources": [
+        "urn:fictional:trial-eligibility:practice"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30,
+      "completeness": "medication.completeness"
+    },
+    {
+      "kind": "medication.completeness",
+      "sources": [
+        "urn:fictional:trial-eligibility:practice"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "trial.age",
+      "sources": [
+        "urn:fictional:trial-eligibility:practice"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "trial.diagnosis",
+      "sources": [
+        "urn:fictional:trial-eligibility:practice"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "trial.medications",
+      "sources": [
+        "urn:fictional:trial-eligibility:practice"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30,
+      "completeness": "trial.medication-complete"
+    },
+    {
+      "kind": "trial-eligibility.answer",
+      "sources": [],
+      "methods": [
+        "derived"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "derivation.request",
+      "sources": [
+        "urn:fictional:trial-eligibility:receiver"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    },
+    {
+      "kind": "trial.medication-complete",
+      "sources": [
+        "urn:fictional:trial-eligibility:practice"
+      ],
+      "methods": [
+        "recorded-by-authority"
+      ],
+      "maxAgeDays": 30
+    }
+  ],
+  "purposes": [
+    {
+      "id": "urn:purpose:trial-eligibility",
+      "claims": [
+        "medication.list",
+        "medication.completeness",
+        "trial-eligibility.answer",
+        "derivation.request",
+        "trial.age",
+        "trial.diagnosis",
+        "trial.medications",
+        "trial.medication-complete"
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "id": "urn:rule:trial-eligibility:proof",
+      "template": "all-of",
+      "params": {
+        "inputs": [
+          "trial.age",
+          "trial.diagnosis",
+          "trial.medications",
+          "trial.medication-complete"
+        ],
+        "conditions": [
+          {
+            "input": "trial.age",
+            "operator": "gte",
+            "value": 18
+          },
+          {
+            "input": "trial.age",
+            "operator": "lte",
+            "value": 65
+          },
+          {
+            "input": "trial.diagnosis",
+            "operator": "eq",
+            "value": "condition-a"
+          },
+          {
+            "input": "trial.medications",
+            "operator": "not-in",
+            "value": [
+              "excluded-x",
+              "excluded-y"
+            ]
+          },
+          {
+            "input": "trial.medication-complete",
+            "operator": "eq",
+            "value": true
+          }
+        ]
+      },
+      "output": "trial-eligibility.answer",
+      "inputsFrom": [
+        "urn:fictional:trial-eligibility:practice"
+      ],
+      "assurances": [
+        "attested"
+      ],
+      "proofQuery": "SELECT DISTINCT ?result WHERE {\n  ?subject <urn:claim:trial.age> ?v0 .        BIND((?v0 >= 18) AS ?test0)\n  ?subject <urn:claim:trial.age> ?v1 .        BIND((?v1 <= 65) AS ?test1)\n  ?subject <urn:claim:trial.diagnosis> ?v2 .  BIND((?v2 = \"condition-a\") AS ?test2)\n  BIND(NOT EXISTS { ?subject <urn:claim:trial.medications> ?excluded3 .\n                    FILTER(?excluded3 IN (\"excluded-x\", \"excluded-y\")) } AS ?test3)\n  ?subject <urn:claim:trial.medication-complete> ?v4 . BIND((?v4 = true) AS ?test4)\n  BIND((?test0 && ?test1 && ?test2 && ?test3 && ?test4) AS ?result)\n}\n"
+    }
+  ],
+  "decisionsForPerson": [],
+  "modelReadings": [],
+  "vocabulary": {
+    "input.items.*": {
+      "type": "identifier"
+    },
+    "input.request": {
+      "type": "code",
+      "values": [
+        "medication.list",
+        "medication.completeness"
+      ]
+    },
+    "output.status": {
+      "type": "code",
+      "values": [
+        "received"
+      ]
+    }
+  },
+  "operations": [
+    {
+      "id": "urn:op:trial-eligibility",
+      "version": "0.1",
+      "label": "Proving eligibility for a clinical trial",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:trial-eligibility"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:trial-eligibility:request",
+      "version": "0.1",
+      "label": "Request the needed information",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:trial-eligibility"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:trial-eligibility:proof-request",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:trial-eligibility"
+      ],
+      "requiresRepresentation": true
+    },
+    {
+      "id": "urn:op:trial-eligibility:proof-answer",
+      "version": "0.1",
+      "label": "Request the installed rule or return its verified result",
+      "pattern": "invoke",
+      "access": "represented",
+      "models": [],
+      "purposes": [
+        "urn:purpose:trial-eligibility"
+      ],
+      "requiresRepresentation": true
+    }
+  ],
+  "acceptedProofs": [
+    {
+      "rule": "urn:rule:trial-eligibility:proof",
+      "method": "sparq-zk-query/1",
+      "assurance": "attested",
+      "binds": [
+        "rule",
+        "issuers",
+        "fresh",
+        "complete"
+      ],
+      "purposes": [
+        "urn:purpose:trial-eligibility"
+      ]
+    }
+  ],
+  "standIns": [
+    {
+      "what": "sparq-zk-query/1",
+      "replacedBy": "Research-grade and unaudited. Uses sparq Merkle-suite credentials and test-only issuer keys. The exact scenario query is absent from the pinned catalogue."
+    }
+  ],
+  "actionClaims": [
+    {
+      "action": "urn:op:trial-eligibility:proof-answer",
+      "claims": [
+        "trial-eligibility.answer"
+      ]
+    }
+  ],
+  "labels": {
+    "urn:purpose:trial-eligibility": "Trial eligibility"
+  }
+}

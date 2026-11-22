@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { digestOf } from "./core/canonical.js";
 import { openConversation, transition } from "./core/conversation.js";
@@ -276,7 +277,7 @@ describe("replay conflict with a genuine key", () => {
     const cal = new SyntheticCalendar(structuredClone(alice.calendar.data));
     const terms = buildMeetingTerms({
       calendar: cal,
-      title: "x",
+      title: "meeting",
       durationMinutes: 30,
       window: { start: "2026-10-20T13:00:00Z", end: "2026-10-20T17:00:00Z" },
       now: clock.now().toISOString(),

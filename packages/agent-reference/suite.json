@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "agent-reference",
+  "kind": "package",
+  "name": "Agent reference runtime",
+  "repo": "https://github.com/jeswr/solid-sdk",
+  "category": "agentic",
+  "maturity": "alpha",
+  "visibility": "public",
+  "securityCritical": true,
+  "stack": {
+    "lang": "TypeScript (ESM, NodeNext)",
+    "runtime": "Node >=24",
+    "test": "vitest",
+    "lint": "@biomejs/biome"
+  },
+  "dependsOn": ["solid-odrl"],
+  "federation": {
+    "sectors": ["agentic"],
+    "note": "The pilot runtime lifted out of @jeswr/personal-agent/pilot, which re-exports it. Synthetic test use only."
+  }
+}

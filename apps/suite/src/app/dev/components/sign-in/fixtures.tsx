@@ -16,8 +16,8 @@ import "@jeswr/suite-ui/styles/sign-in.css";
 const providers: SignInProvider[] = [
   {
     id: "home",
-    name: "solid-test.jeswr.org",
-    issuer: "https://idp.solid-test.jeswr.org",
+    name: "Home provider",
+    issuer: "https://provider.example/",
   },
   {
     id: "solidcommunity",

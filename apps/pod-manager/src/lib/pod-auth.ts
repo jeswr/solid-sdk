@@ -4,6 +4,7 @@
 import { createPodAuth, type PodAuth } from "@jeswr/pod-auth";
 import { CodeRequestCancelledError } from "@jeswr/reactive-authentication";
 import { allowInsecureLoopback } from "./auth-environment";
+import { BASE_PATH } from "./base-path";
 import { IssuerChoiceRequiredError } from "./sign-in";
 import type { PopupLoginController } from "./popup-login";
 export { publicFetch } from "./source-fetch";
@@ -20,8 +21,8 @@ export function getPodAuth(): PodAuth {
   singleton ??= createPodAuth({
     clientId: loopback
       ? { dynamicRegistration: true }
-      : new URL("/clientid.jsonld", location.origin).href,
-    redirectUri: new URL("/callback.html", location.origin).href,
+      : new URL(`${BASE_PATH}/clientid.jsonld`, location.origin).href,
+    redirectUri: new URL(`${BASE_PATH}/callback.html`, location.origin).href,
     allowInsecureLoopback: loopback,
     // Pod-server APIs outside the pod folder: custom domains and the notifications service.
     boundary: { storageEndpoints: STORAGE_ENDPOINTS },

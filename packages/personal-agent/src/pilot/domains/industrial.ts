@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Domain adapter: UC-05 industrial maintenance data exchange (synthetic companies, asset
  * and telemetry; no real data space, connector or programme membership).
@@ -8,9 +9,11 @@
  * digest), transfer attempts, the diagnostic recommendation (a modelled assertion), its
  * acceptance, the work order, and synthetic performance.
  */
+
+import type { ContentProfile, ContentVocabulary } from "@jeswr/agent-reference/profile/content";
 import type { OdrlPolicy } from "@jeswr/solid-odrl";
 import { z } from "zod";
-import { digestOf, newUrn } from "../core/canonical.js";
+import { digestOf } from "../core/canonical.js";
 import { iso } from "../core/schema.js";
 import type {
   ActionIntent,
@@ -136,6 +139,114 @@ const recommendationTerms = z.strictObject({
   synthetic: z.literal(true),
 });
 
+const idType = { type: "identifier" as const };
+const dateType = { type: "date" as const };
+const numberType = { type: "number" as const };
+const codes = (values: readonly (string | number | boolean)[]) => ({
+  type: "code" as const,
+  values,
+});
+const tpaVocabulary: ContentVocabulary = {
+  type: codes(["ThirdPartyAccessAuthorisation"]),
+  id: idType,
+  issuer: idType,
+  user: idType,
+  requestedBy: idType,
+  dataHolder: idType,
+  recipient: idType,
+  asset: idType,
+  purpose: idType,
+  "window.*": dateType,
+  retentionDays: numberType,
+  issuedAt: dateType,
+  validUntil: dateType,
+};
+/** Installed vocabulary of the synthetic maintenance model; explanatory prose is absent. */
+export const INDUSTRIAL_CONTENT: ContentProfile = {
+  identifiers: [
+    ASSET,
+    OFFER_ID,
+    EQUIPMENT_HEALTH.id,
+    REQUEST_MODEL.id,
+    RECOMMENDATION_MODEL.id,
+    PURPOSE.maintenance,
+    PURPOSE.productDevelopment,
+  ],
+  purposes: { [PURPOSE.maintenance]: ["industrial.telemetry"], [PURPOSE.productDevelopment]: [] },
+  protectedTerms: {
+    "output.authorisation": {
+      typ: TYP.statement,
+      role: "issuer",
+      schema: tpaSchema,
+      vocabulary: tpaVocabulary,
+    },
+  },
+  vocabulary: {
+    "description.extensions.catalogue.*.offerId": idType,
+    "description.extensions.catalogue.*.asset": idType,
+    "description.extensions.catalogue.*.model.id": idType,
+    "description.extensions.catalogue.*.model.version": codes(["1.1", "1.2"]),
+    "description.extensions.catalogue.*.allowedPurposes.*": idType,
+    "description.extensions.catalogue.*.source.sensors.*": codes(["VIB-1", "TMP-1"]),
+    "description.extensions.catalogue.*.source.lastCalibration": dateType,
+    "terms.model": idType,
+    "terms.modelVersion": codes(["1.1", "1.2"]),
+    "terms.offerId": idType,
+    "terms.asset": idType,
+    "terms.purpose": idType,
+    "terms.recipient": idType,
+    "terms.thirdPartyAuthorisation": idType,
+    "terms.window.*": dateType,
+    "terms.retentionDays": numberType,
+    "terms.noRedistribution": codes([true]),
+    "terms.synthetic": codes([true]),
+    "terms.assertion.risk": codes(["low", "medium", "high"]),
+    "terms.assertion.confidence": numberType,
+    "terms.assertion.basis.*": idType,
+    "terms.assertion.limitations.*": codes([
+      "synthetic-telemetry",
+      "calibration-unverified",
+      "ratio-vs-72h-baseline",
+    ]),
+    "terms.proposedAction.kind": codes(["inspect-bearing"]),
+    "terms.proposedAction.withinDays": numberType,
+    "terms.proposedAction.cost": numberType,
+    "terms.dataset": idType,
+    "input.model": idType,
+    "input.asset": idType,
+    "input.dataHolder": idType,
+    "input.recipient": idType,
+    "input.window.*": dateType,
+    "input.purpose": idType,
+    "input.retentionDays": numberType,
+    "input.dataset": idType,
+    "input.action": codes(["read", "distribute"]),
+    "output.id": idType,
+    "output.dataset": idType,
+    "output.repeat": codes([true, false]),
+    "output.model.id": idType,
+    "output.model.version": codes(["1.1", "1.2"]),
+    "output.asset": idType,
+    "output.source.holder": idType,
+    "output.source.sensors.*": codes(["VIB-1", "TMP-1"]),
+    "output.source.lastCalibration": dateType,
+    "output.samples.*.t": { ...dateType, claimType: "industrial.telemetry" },
+    "output.samples.*.vibrationRms": { ...numberType, claimType: "industrial.telemetry" },
+    "output.samples.*.temperatureC": { ...numberType, claimType: "industrial.telemetry" },
+    "output.source": idType,
+    "output.grant": idType,
+    "output.released": codes(["purpose-bound-release"]),
+    "observed.dataset": idType,
+    "observed.samples": numberType,
+    "observed.sourceAuthority": codes(["accepted"]),
+    "observed.state": codes(["agreed-not-delivered"]),
+    "observed.cause": codes(["synthetic-connector-failure"]),
+    "observed.workOrder": idType,
+    "observed.status": codes(["open", "completed-synthetic"]),
+    "observed.note": codes(["work-order-created"]),
+  },
+};
+
 function desc(
   op: { id: string; version: string },
   label: string,
@@ -163,6 +274,7 @@ function desc(
 // ------------------------------------------------------------------ Alpine (data user)
 
 export class AlpineAuthorityHandler implements OperationHandler {
+  readonly contentProfile = INDUSTRIAL_CONTENT;
   readonly description = desc(
     INTERNAL_TPA_OP,
     "Alpine internal: issue a third-party access authorisation",
@@ -188,7 +300,7 @@ export class AlpineAuthorityHandler implements OperationHandler {
     };
     const statement: ThirdPartyAccessAuthorisation = {
       type: "ThirdPartyAccessAuthorisation",
-      id: newUrn(),
+      id: ctx.mintIdentifier(),
       issuer: this.cfg.issuer,
       user: this.cfg.user,
       requestedBy: ctx.peer.actor ?? "unknown",
@@ -208,6 +320,7 @@ export class AlpineAuthorityHandler implements OperationHandler {
 }
 
 export class AlpinePlannerHandler implements OperationHandler {
+  readonly contentProfile = INDUSTRIAL_CONTENT;
   readonly description: OperationDescription;
   readonly requiresRepresentation = true;
   authorisation?: string;
@@ -274,7 +387,7 @@ export class AlpinePlannerHandler implements OperationHandler {
       effects: [
         {
           adapter: "workorder.create",
-          key: `${agreement.id}#work-order`,
+          key: ctx.identifierFor({ agreement: agreement.id, item: "work-order" }),
           params: {
             asset: t.asset,
             action: t.proposedAction.kind,
@@ -315,7 +428,7 @@ export class SyntheticWorkOrders implements EffectAdapter {
     this.orders = new Map(Object.entries(persist?.load() ?? {}));
   }
   async execute(key: string): Promise<EffectResult> {
-    const o = this.orders.get(key) ?? { id: `WO-${this.orders.size + 1}`, status: "open" as const };
+    const o = this.orders.get(key) ?? { id: key, status: "open" as const };
     this.orders.set(key, o);
     this.persist?.save(Object.fromEntries(this.orders));
     return {
@@ -323,7 +436,7 @@ export class SyntheticWorkOrders implements EffectAdapter {
       observed: {
         workOrder: o.id,
         status: o.status,
-        note: "creation of a synthetic work order; not performance",
+        note: "work-order-created",
       },
     };
   }
@@ -356,6 +469,17 @@ export function syntheticTelemetry(end: Date, hours = 72): TelemetrySample[] {
 }
 
 export class OrbisProviderHandler implements OperationHandler {
+  get contentProfile() {
+    return {
+      ...INDUSTRIAL_CONTENT,
+      vocabulary: {
+        ...INDUSTRIAL_CONTENT.vocabulary,
+        ...(this.op.id === TRANSFER_OP.id
+          ? { "input.dataset": codes(["vibration-temperature"]) }
+          : {}),
+      },
+    };
+  }
   readonly description: OperationDescription;
   readonly termsSchema = offerTerms as unknown as z.ZodType<JsonObject>;
   readonly inputSchema = z.strictObject({
@@ -558,12 +682,15 @@ export class OrbisProviderHandler implements OperationHandler {
       this.transfers.push({ agreement: body.basis.agreement, outcome: "not-executed" });
       return {
         type: "receipt",
-        activity: `${body.basis.agreement}#transfer-${this.transfers.length}`,
+        activity: ctx.identifierFor({
+          agreement: body.basis.agreement,
+          transfer: this.transfers.length,
+        }),
         outcome: "not-executed",
         final: false,
         observed: {
-          state: "agreement accepted; data not yet delivered",
-          cause: "synthetic connector failure",
+          state: "agreed-not-delivered",
+          cause: "synthetic-connector-failure",
         },
       };
     }
@@ -576,7 +703,7 @@ export class OrbisProviderHandler implements OperationHandler {
       );
     const datasetId =
       this.cfg.shared.delivered.get(body.basis.agreement) ??
-      `urn:orbis:dataset:${digestOf({ agreement: body.basis.agreement }).slice(9, 25)}`;
+      ctx.identifierFor({ agreement: body.basis.agreement, item: "dataset" });
     const repeat = this.cfg.shared.delivered.has(body.basis.agreement);
     this.cfg.shared.delivered.set(body.basis.agreement, datasetId);
     this.transfers.push({
@@ -615,12 +742,13 @@ export function consumerGrant(
   t: OfferTerms,
   holder: Iri,
   recipient: Iri,
+  policyId?: Iri,
 ): { target: Iri; policy: OdrlPolicy } {
   const target = `${agreement.id}#dataset`;
   return {
     target,
     policy: {
-      id: `${agreement.id}#usage-policy`,
+      id: policyId ?? `${agreement.id}#usage-policy`,
       type: "Agreement",
       assigner: holder,
       assignee: recipient,
@@ -656,6 +784,17 @@ export function consumerGrant(
 }
 
 export class NordWerkContractHandler implements OperationHandler {
+  get contentProfile() {
+    return {
+      ...INDUSTRIAL_CONTENT,
+      vocabulary: {
+        ...INDUSTRIAL_CONTENT.vocabulary,
+        ...(this.op.id === TRANSFER_OP.id
+          ? { "input.dataset": codes(["vibration-temperature"]) }
+          : {}),
+      },
+    };
+  }
   readonly description: OperationDescription;
   readonly termsSchema = offerTerms as unknown as z.ZodType<JsonObject>;
   readonly requiresRepresentation = true;
@@ -754,6 +893,7 @@ export class NordWerkContractHandler implements OperationHandler {
       t,
       this.cfg.holder,
       this.cfg.recipient,
+      ctx.identifierFor({ agreement: agreementId, item: "usage-policy" }),
     );
     const storedAs = `${out.dataset}`;
     if (!this.cfg.store.has(storedAs)) {
@@ -778,7 +918,7 @@ export class NordWerkContractHandler implements OperationHandler {
     }
     return {
       type: "receipt",
-      activity: `${agreementId}#received`,
+      activity: ctx.identifierFor({ agreement: agreementId, item: "received" }),
       outcome: "completed",
       final: true,
       observed: {
@@ -800,6 +940,7 @@ export class NordWerkContractHandler implements OperationHandler {
 }
 
 export class NordWerkDiagnosticHandler implements OperationHandler {
+  readonly contentProfile = INDUSTRIAL_CONTENT;
   readonly description = desc(
     RECOMMENDATION_OP,
     "NordWerk diagnostic recommendation",
@@ -843,6 +984,17 @@ const datasetReadInput = z.strictObject({
  * own ledger. Organisation membership alone grants nothing.
  */
 export class NordWerkDatasetHandler implements OperationHandler {
+  get contentProfile() {
+    // Existing checked-store handles are installed profile identifiers, including after a
+    // restart from a snapshot written before the runtime's mint registry existed.
+    return {
+      ...INDUSTRIAL_CONTENT,
+      identifiers: [
+        ...(INDUSTRIAL_CONTENT.identifiers ?? []),
+        ...this.cfg.store.inventory().flatMap((item) => [item.id, item.source, item.grant]),
+      ],
+    };
+  }
   readonly description = desc(
     DATASET_READ_OP,
     "NordWerk internal: read a stored dataset through the organisation's enforcement point",
@@ -889,7 +1041,7 @@ export class NordWerkDatasetHandler implements OperationHandler {
         asset: item?.subject ?? "",
         grant: item?.grant.id ?? "",
         samples: ((item?.data as { samples?: JsonObject[] })?.samples ?? []) as JsonObject[],
-        released: "for this purpose only; copies outside the enforcement point are not controlled",
+        released: "purpose-bound-release",
       },
       // PROTECTED payload: leaves only if the enforcement point still permits this release (same
       // verified agent, action, item revision and purpose) at transmission time.
@@ -915,6 +1067,7 @@ export class NordWerkDatasetHandler implements OperationHandler {
  * (not the raw telemetry).
  */
 export class DiagnosticReaderHandler implements OperationHandler {
+  readonly contentProfile = INDUSTRIAL_CONTENT;
   readonly description = desc(
     DATASET_READ_OP,
     "NordWerk diagnostic: request a dataset for diagnosis",
@@ -985,10 +1138,6 @@ export function diagnose(
   return {
     risk,
     confidence: Math.round(Math.min(0.9, 0.5 + 0.4 * completeness) * 100) / 100,
-    limitations: [
-      "synthetic telemetry",
-      "calibration taken from source metadata, not verified",
-      `vibration ratio ${ratio.toFixed(2)} vs 72h baseline`,
-    ],
+    limitations: ["synthetic-telemetry", "calibration-unverified", "ratio-vs-72h-baseline"],
   };
 }

@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { digestBytes } from "@jeswr/agent-model";
-import type { ChannelBinding } from "./binding.js";
+import type { ChannelBinding, InboundRefusal } from "./binding.js";
 import type { InboundRawMessage } from "./channel.js";
 import { accountId } from "./direct/shared.js";
 import { ChannelParseError } from "./errors.js";
@@ -8,6 +8,7 @@ import { record } from "./graph-mail/rest.js";
 import { envelopes } from "./graph-teams/card.js";
 import {
   BASE,
+  CURSOR_LIMITS,
   collection,
   type GraphTeamsTiming,
   graphTeamsOrigins,
@@ -15,6 +16,7 @@ import {
   id,
   json,
   nextLink,
+  PAGE_LIMITS,
   responseJson,
 } from "./graph-teams/rest.js";
 import { htmlToText } from "./html.js";
@@ -30,7 +32,7 @@ export interface GraphTeamsReaderOptions extends GraphTeamsTiming {
 interface State {
   account: string;
   jobs: string[];
-  pending: InboundRawMessage[];
+  pending: (InboundRawMessage | InboundRefusal)[];
   pages: number;
 }
 const initial = (account: string): State => ({
@@ -39,8 +41,13 @@ const initial = (account: string): State => ({
   pending: [],
   pages: 0,
 });
+function pendingMessage(id: string, raw: string): State["pending"][number] {
+  if (Buffer.byteLength(raw) > TEAMS_CARD.maxBytes)
+    return { id, digest: digestBytes(raw), reason: "bounds-exceeded" };
+  return { id, raw };
+}
 function saved(cursor: string, account: string): State {
-  const value = json(cursor, true);
+  const value = json(cursor, CURSOR_LIMITS);
   if (
     Object.keys(value).sort().join() !== "account,jobs,pages,pending" ||
     value.account !== account ||
@@ -54,12 +61,22 @@ function saved(cursor: string, account: string): State {
   )
     throw new ChannelParseError("invalid Teams account cursor");
   value.jobs.forEach(collection);
-  for (const item of value.pending) {
+  value.pending = value.pending.map((item) => {
     const row = record(item);
-    if (typeof row.id !== "string" || typeof row.raw !== "string")
-      throw new ChannelParseError("invalid Teams pending item");
-    parse({ id: row.id, raw: row.raw });
-  }
+    if (typeof row.id === "string") {
+      if (typeof row.raw === "string") {
+        json(row.raw, PAGE_LIMITS);
+        return pendingMessage(row.id, row.raw);
+      }
+      if (
+        row.reason === "bounds-exceeded" &&
+        typeof row.digest === "string" &&
+        /^sha-256:[a-f0-9]{64}$/.test(row.digest)
+      )
+        return { id: row.id, digest: row.digest, reason: row.reason };
+    }
+    throw new ChannelParseError("invalid Teams pending item");
+  });
   return value as unknown as State;
 }
 function conversation(path: string): string {
@@ -119,8 +136,11 @@ function parse(item: InboundRawMessage) {
       warnings: ["identity-unverified", ...(blocks.length ? ["signature-unverified"] : [])],
       ...(blocks.length ? { jsonLdBlocks: blocks } : {}),
     };
-  } catch {
-    throw new ChannelParseError("invalid Teams inbound message");
+  } catch (error) {
+    throw new ChannelParseError(
+      "invalid Teams inbound message",
+      error instanceof ChannelParseError ? error.reason : undefined,
+    );
   }
 }
 /** Read-only, bounded Graph traversal. Completed polls repeat stable IDs for deduplication. */
@@ -164,14 +184,21 @@ export function createGraphTeamsReader(options: GraphTeamsReaderOptions): Channe
         let state = cursor === undefined ? initial(ref.id) : saved(cursor, ref.id);
         if (!state.jobs.length && !state.pending.length) state = initial(ref.id);
         const items: InboundRawMessage[] = [];
+        const refusals: InboundRefusal[] = [];
         let bytes = 0;
         let requests = 0;
-        while (items.length < maxItems) {
+        while (items.length + refusals.length < maxItems) {
           const pending = state.pending[0];
           if (pending) {
+            if ("digest" in pending) {
+              refusals.push(pending);
+              state.pending.shift();
+              continue;
+            }
             const size = Buffer.byteLength(pending.raw);
             if (bytes + size > maxBytes) {
-              if (!items.length) throw new RangeError("next item exceeds byte bound");
+              if (!items.length && !refusals.length)
+                throw new RangeError("next item exceeds byte bound");
               break;
             }
             items.push(pending);
@@ -190,7 +217,9 @@ export function createGraphTeamsReader(options: GraphTeamsReaderOptions): Channe
             continue;
           }
           if (!response.ok) throw new Error(`Graph Teams read failed: HTTP ${response.status}`);
-          const page = await responseJson(response);
+          const messages = url.pathname.endsWith("/messages");
+          // Take the per-row decision after reading a bounded page, even for one long field.
+          const page = await responseJson(response, messages ? CURSOR_LIMITS : PAGE_LIMITS);
           if (!Array.isArray(page.value) || page.value.length > 512)
             throw new ChannelParseError("invalid Teams page");
           const next = page["@odata.nextLink"];
@@ -198,19 +227,18 @@ export function createGraphTeamsReader(options: GraphTeamsReaderOptions): Channe
           const children: string[] = [];
           for (const value of page.value) {
             const row = record(value);
-            if (url.pathname.endsWith("/messages")) {
+            if (messages) {
               if (row.messageType !== "message" || row.deletedDateTime != null) continue;
               const path = url.pathname.slice("/v1.0".length);
-              // A malformed or oversized individual message is skippable.
+              const raw = JSON.stringify({ path, message: row });
+              let key: string;
               try {
-                const key = encodeURIComponent(id(row.id));
-                const item = {
-                  id: `${conversation(path)}:${key}`,
-                  raw: JSON.stringify({ path, message: row }),
-                };
-                parse(item);
-                state.pending.push(item);
-              } catch {}
+                key = encodeURIComponent(id(row.id));
+              } catch {
+                // Give malformed IDs a stable identity for refusal.
+                key = digestBytes(raw);
+              }
+              state.pending.push(pendingMessage(`${conversation(path)}:${key}`, raw));
             } else {
               const key = encodeURIComponent(id(row.id));
               const path =
@@ -225,9 +253,9 @@ export function createGraphTeamsReader(options: GraphTeamsReaderOptions): Channe
           state.jobs.unshift(...new Set(children));
           if (state.jobs.length > 512)
             throw new ChannelParseError("Teams scan exceeds collection bound");
-          json(JSON.stringify(state), true);
+          json(JSON.stringify(state), CURSOR_LIMITS);
         }
-        return { items, next: JSON.stringify(state) };
+        return { items, ...(refusals.length ? { refusals } : {}), next: JSON.stringify(state) };
       },
       parse,
       threadKey(message) {

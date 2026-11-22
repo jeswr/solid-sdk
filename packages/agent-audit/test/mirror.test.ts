@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
+import { readFileSync } from "fs";
 import { Writer } from "n3";
 import { expect, it, vi } from "vitest";
 import { MemoryLedger, verifyLedger } from "../src/ledger.js";
@@ -20,7 +22,7 @@ import { createMemoryAuditPod } from "../src/testing.js";
 import type { AuditFetch } from "../src/transport.js";
 import { boundedText, documentUrl, readDocument, request, storageRoot } from "../src/transport.js";
 import { AuditWriter, hashRecipient, PodMirror } from "../src/writer.js";
-import { AT, required } from "./fixture.js";
+import { AT, required, witnessFixture } from "./fixture.js";
 
 const ROOT = "https://pod.example/";
 const BASE = `${ROOT}agent/audit/`;
@@ -62,7 +64,7 @@ it("mirrors task context and tool provenance without free-form call data", async
   expect((await loadTrace(pod.fetch, ROOT)).entries).toEqual(l.entries());
 });
 it.each([
-  ...ENTRY_KINDS,
+  ...ENTRY_KINDS.filter((type) => type !== "gate-decision" && type !== "record-anchor"),
   "ledger-checkpoint",
 ] as const)("keeps PROV entity and activity roles disjoint for %s", (type) => {
   const l = new MemoryLedger();
@@ -463,4 +465,84 @@ it("rejects malformed, ambiguous and missing PROV and handles serializer errors"
   });
   await expect(turtle(g)).rejects.toThrow("serialize failed");
   spy.mockRestore();
+});
+
+it("round-trips a gate decision and anchor through their PROV Turtle goldens", async () => {
+  const l = new MemoryLedger();
+  l.append(
+    {
+      ...record,
+      type: "gate-decision",
+      direction: "in",
+      outcome: "refuse",
+      reason: "bad-signature",
+      configuration: "urn:configuration:signed-ed25519",
+      messageDigest: `sha-256:${"a".repeat(64)}`,
+      gateSeq: 42,
+      gateHash: `sha-256:${"b".repeat(64)}`,
+    },
+    AT,
+  );
+  const first = required(l.entries()[0]);
+  l.append(
+    {
+      ...record,
+      type: "record-anchor",
+      id: "urn:event:2",
+      seq: first.seq,
+      hash: first.hash,
+      jws: witnessFixture(record, first),
+    },
+    AT,
+  );
+  const pod = createMemoryAuditPod();
+  await new PodMirror(pod.fetch, ROOT).sync(l.entries());
+  for (const [index, name] of ["gate-decision", "record-anchor"].entries()) {
+    const url = `${BASE}${index + 1}.ttl`;
+    const golden = readFileSync(new URL(`./fixtures/${name}.ttl`, import.meta.url), "utf8");
+    assertSameGraph(
+      await parseTurtle(required(pod.resources.get(url)).body, url),
+      await parseTurtle(golden, url),
+    );
+  }
+  expect((await loadTrace(pod.fetch, ROOT)).entries).toEqual(l.entries());
+  await expect(loadTrace(pod.fetch, ROOT, { gateEntries: [] })).rejects.toThrow(
+    "gate record missing",
+  );
+});
+
+it("retries a gate decision after mirror failure and rejects an ID collision", async () => {
+  const l = new MemoryLedger();
+  const pod = createMemoryAuditPod();
+  let fail = true;
+  const writer = new AuditWriter(
+    l,
+    new PodMirror(async (url, init) => {
+      if (fail) throw new Error("mirror offline");
+      return pod.fetch(url, init);
+    }, ROOT),
+  );
+  const decision = {
+    ...record,
+    type: "gate-decision",
+    direction: "in",
+    outcome: "refuse",
+    reason: "bad-signature",
+    configuration: "urn:configuration:signed-ed25519",
+    messageDigest: `sha-256:${"a".repeat(64)}`,
+    gateSeq: 42,
+    gateHash: `sha-256:${"b".repeat(64)}`,
+  } as const;
+  expect(() =>
+    writer.append({ ...decision, reason: "private-prompt-text" } as never, AT),
+  ).toThrow();
+  await expect(writer.append(decision, AT)).rejects.toThrow();
+  const first = required(l.entries()[0]);
+  fail = false;
+  await expect(writer.append(decision, AT)).resolves.toEqual(first);
+  await expect(writer.append({ ...decision, reason: "malformed" }, AT)).rejects.toThrow(
+    "Audit replay conflict",
+  );
+  expect(l.entries()).toEqual([first]);
+  expect((await loadTrace(pod.fetch, ROOT)).entries).toEqual([first]);
 });

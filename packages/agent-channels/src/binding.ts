@@ -3,18 +3,27 @@
 import type { ReasonCode } from "@jeswr/agent-model";
 import type { ChannelCapability } from "./capability.js";
 import type { InboundRawMessage } from "./channel.js";
+import type { ChannelParseRefusalReason } from "./errors.js";
 import type { BridgeMessage } from "./message.js";
 import type {
   AccountRef,
   BindingState,
   Bounds,
   Cursor,
+  ProposalContext,
   ProviderLookupResult,
   ProviderSendResult,
   RenderableProposal,
   TransmissionIo,
   Wire,
 } from "./types.js";
+
+/** An item refused before parsing, with a provenance digest and no retained body. */
+export interface InboundRefusal {
+  readonly id: string;
+  readonly digest: string;
+  readonly reason: ChannelParseRefusalReason;
+}
 
 export interface ChannelBinding<Raw = unknown> {
   /** Stable id, lower-case: "gmail" | "graph-mail" | "graph-teams" | "matrix" | "slack" | … */
@@ -32,7 +41,7 @@ export interface ChannelBinding<Raw = unknown> {
       account: AccountRef,
       cursor: Cursor | undefined,
       limits: Bounds,
-    ): Promise<{ items: InboundRawMessage<Raw>[]; next: Cursor }>;
+    ): Promise<{ items: InboundRawMessage<Raw>[]; refusals?: InboundRefusal[]; next: Cursor }>;
     /** Pure, hostile-input-hardened transform. Throws ChannelParseError to skip one item. */
     parse(item: InboundRawMessage<Raw>): BridgeMessage;
     /** Optional: resolve the thread/room for a BridgeMessage (for conversation stitching). */
@@ -41,17 +50,22 @@ export interface ChannelBinding<Raw = unknown> {
   /** Send half — exported ONLY from the "./<id>/send" subpath; importable ONLY by @jeswr/agent-executor. */
   readonly send?: {
     /** Build the exact wire bytes for a proposal. Pure. The digest of `wire` is what the owner approves. */
-    render(proposal: RenderableProposal, carriage: CarriageProfile): Promise<Wire>;
+    render(
+      proposal: RenderableProposal,
+      carriage: CarriageProfile,
+      expected?: ProposalContext,
+    ): Promise<Wire>;
     /** Re-derive and check `wire` from the proposal (defence against a tampered outbox entry). */
     validate(
       wire: Wire,
       proposal: RenderableProposal,
+      expected?: ProposalContext,
     ): Promise<{ ok: true } | { ok: false; reason: ReasonCode }>;
     /** Transmit. ProviderRejectedError is a definitive provider/gate refusal;
      * SendNotDispatchedError retains the cause of any local pre-dispatch failure. */
     transmit(wire: Wire, io: TransmissionIo): Promise<ProviderSendResult>;
     /** Positive-evidence lookup for an uncertain send (§4.3). */
-    lookup?(wire: Wire): Promise<ProviderLookupResult>;
+    lookup?(wire: Wire, expected?: ProposalContext): Promise<ProviderLookupResult>;
     /** Whether `lookup` absence is causally final (A2A loopback: yes; mail providers: never). */
     readonly finalAbsence?: true;
   };
