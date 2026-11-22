@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import type { BookmarkRepository } from "@jeswr/solid-bookmark/pod";
-import { createBookmarkRepository } from "@jeswr/solid-bookmark/pod";
-import { createPodClient } from "@jeswr/storage-client";
+import { BookmarkPrivacyError, createBookmarkRepository } from "@jeswr/solid-bookmark/pod";
+import { createPodClient, StorageError } from "@jeswr/storage-client";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
@@ -15,8 +16,14 @@ import {
 } from "../src/apps/bookmarks/state/bookmarks-context";
 import type { PodSession } from "../src/lib/session/pod-session";
 
-vi.mock("@jeswr/storage-client", () => ({ createPodClient: vi.fn(async () => ({ storage: {} })) }));
-vi.mock("@jeswr/solid-bookmark/pod", () => ({ createBookmarkRepository: vi.fn() }));
+vi.mock("@jeswr/storage-client", async (original) => ({
+  ...(await original<typeof import("@jeswr/storage-client")>()),
+  createPodClient: vi.fn(async () => ({ storage: {} })),
+}));
+vi.mock("@jeswr/solid-bookmark/pod", async (original) => ({
+  ...(await original<typeof import("@jeswr/solid-bookmark/pod")>()),
+  createBookmarkRepository: vi.fn(),
+}));
 vi.mock("../src/apps/bookmarks/demo/sample", () => ({ ensureSample: vi.fn(async () => {}) }));
 const notify = vi.hoisted(() => vi.fn());
 vi.mock("@jeswr/suite-ui", async () => {
@@ -188,6 +195,8 @@ it("loads the session, reconciles change events, reports save failures and unsub
       storage: expect.any(Object),
       fetch: f.session.fetch,
       profile: f.session.webId,
+      collectionStorage: expect.any(Object),
+      verifyOwnerOnly: expect.any(Function),
     });
     await act(async () => f.changed());
     expect(f.repo.list).toHaveBeenCalledTimes(2);
@@ -198,6 +207,79 @@ it("loads the session, reconciles change events, reports save failures and unsub
   }
   expect(f.unsubscribe).toHaveBeenCalledOnce();
   expect(vi.mocked(createPodClient).mock.calls[0]?.[0].signal?.aborted).toBe(true);
+});
+it("reports a privacy refusal and uses the shared verifier for real sessions", async () => {
+  const f = fixture();
+  const session: PodSession = { ...f.session, mode: "solid", publicFetch: f.session.fetch };
+  const refusal = new BookmarkPrivacyError();
+  vi.mocked(f.repo.update).mockRejectedValueOnce(refusal);
+  try {
+    await act(async () =>
+      f.root.render(
+        <BookmarksProvider session={session}>
+          <Probe />
+        </BookmarksProvider>,
+      ),
+    );
+    expect(vi.mocked(createBookmarkRepository).mock.calls[0]?.[0].verifyOwnerOnly).toBeUndefined();
+    await act(async () => f.host.querySelector("button")?.click());
+    expect(notify).toHaveBeenCalledWith(refusal.message);
+  } finally {
+    await f.close();
+  }
+});
+it("uses the isolated demo policy only for the demo session", async () => {
+  const f = fixture();
+  const session: PodSession = {
+    ...f.session,
+    fetch: vi.fn(
+      async () =>
+        new Response(null, {
+          headers: { "X-Solid-Demo-Access-Control": "none" },
+        }),
+    ),
+  };
+  try {
+    await act(async () =>
+      f.root.render(
+        <BookmarksProvider session={session}>
+          <Probe />
+        </BookmarksProvider>,
+      ),
+    );
+    const verify = vi.mocked(createBookmarkRepository).mock.calls[0]?.[0].verifyOwnerOnly;
+    expect(await verify?.(`${f.session.storageUrl}bookmarks/`)).toBe(true);
+    const settings = vi.mocked(createBookmarkRepository).mock.calls[0]?.[0].collectionStorage;
+    settings?.setItem("bookmark-test", "assigned");
+    expect(settings?.getItem("bookmark-test")).toBe("assigned");
+    window.localStorage.removeItem("bookmark-test");
+  } finally {
+    await f.close();
+  }
+});
+it.each([
+  ["unauthenticated", "sign in again"],
+  ["forbidden", "Check your permissions"],
+  ["rate-limited", "Wait before retrying"],
+  ["network", "rolled back"],
+] as const)("explains a %s storage write failure", async (code, message) => {
+  const f = fixture();
+  vi.mocked(f.repo.update).mockRejectedValueOnce(
+    new StorageError(code, { url: f.session.storageUrl, method: "PUT" }),
+  );
+  try {
+    await act(async () =>
+      f.root.render(
+        <BookmarksProvider session={f.session}>
+          <Probe />
+        </BookmarksProvider>,
+      ),
+    );
+    await act(async () => f.host.querySelector("button")?.click());
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining(message));
+  } finally {
+    await f.close();
+  }
 });
 it("aborts pending discovery on teardown and ignores a late discovery result", async () => {
   const f = fixture();

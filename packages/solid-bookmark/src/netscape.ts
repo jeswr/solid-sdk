@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 /** Inert Netscape bookmark interchange. No imported markup is rendered or fetched. */
 import type { BookmarkData } from "./bookmark.js";
 import { httpIriOrUndefined, isHttpIri } from "./iri.js";
@@ -171,36 +172,60 @@ export interface NetscapeImport {
   bookmarks: BookmarkData[];
   /** Invalid or non-http(s) links; the caller can explain omissions. */
   skipped: number;
-  /** Size/token budget exceeded. No partial bookmarks are returned. */
+  /** Input or expanded metadata budget exceeded. No partial bookmarks are returned. */
   error?: "file-too-large";
 }
 
+const MAX_IMPORT_BYTES = 10_000_000;
+const MAX_FIELD_BYTES = 16_384;
+const MAX_BOOKMARK_BYTES = 131_072;
+
 /** Folders become tags. Invalid dates are omitted; unsafe/missing URLs are skipped. */
 export function parseNetscapeBookmarks(html: string): NetscapeImport {
-  const tokens = html.length > 10_000_000 ? undefined : parseTokens(html);
-  if (!tokens) return { bookmarks: [], skipped: 0, error: "file-too-large" };
+  const tooLarge: NetscapeImport = { bookmarks: [], skipped: 0, error: "file-too-large" };
+  const encode = new TextEncoder();
+  const bytes = (value: string) => encode.encode(value).byteLength;
+  if (html.length > MAX_IMPORT_BYTES || bytes(html) > MAX_IMPORT_BYTES) return tooLarge;
+  const tokens = parseTokens(html);
+  if (!tokens) return tooLarge;
   const result: NetscapeImport = { bookmarks: [], skipped: 0 };
   const folders: (string | undefined)[] = [];
   let folder: string | undefined;
   let capture: { name: string; text: string; attrs: Record<string, string> } | undefined;
   let previous: BookmarkData | undefined;
+  let previousBytes = 0;
+  let expandedBytes = 0;
   const finish = () => {
-    if (!capture) return;
+    if (!capture) return true;
     const { name, text, attrs } = capture;
     capture = undefined;
     if (name === "h3") {
       folder = text.trim();
-      return;
+      return bytes(folder) <= MAX_FIELD_BYTES;
     }
     if (name === "dd") {
-      if (previous && !previous.description) previous.description = text.trim() || undefined;
-      return;
+      if (previous && !previous.description) {
+        const description = text.trim();
+        const length = bytes(description);
+        if (
+          length > MAX_FIELD_BYTES ||
+          previousBytes + length > MAX_BOOKMARK_BYTES ||
+          expandedBytes + length > MAX_IMPORT_BYTES
+        )
+          return false;
+        previous.description = description || undefined;
+        previousBytes += length;
+        expandedBytes += length;
+      }
+      return true;
     }
     previous = undefined;
+    if (bytes(attrs.href ?? "") > MAX_FIELD_BYTES || bytes(attrs.tags ?? "") > MAX_BOOKMARK_BYTES)
+      return false;
     const url = httpIriOrUndefined(attrs.href?.trim());
     if (!url) {
       result.skipped++;
-      return;
+      return true;
     }
     const tags = [
       ...new Set([
@@ -214,9 +239,18 @@ export function parseNetscapeBookmarks(html: string): NetscapeImport {
     const seconds =
       attrs.add_date && /^\d+$/.test(attrs.add_date) ? Number(attrs.add_date) : Number.NaN;
     const created = new Date(seconds * 1000);
+    const title = text.trim() || new URL(url).host;
+    previousBytes = 0;
+    for (const field of [url, title, attrs.description ?? "", attrs.notes ?? "", ...tags]) {
+      const length = bytes(field);
+      if (length > MAX_FIELD_BYTES) return false;
+      previousBytes += length;
+    }
+    expandedBytes += previousBytes;
+    if (previousBytes > MAX_BOOKMARK_BYTES || expandedBytes > MAX_IMPORT_BYTES) return false;
     previous = {
       url,
-      title: text.trim() || new URL(url).host,
+      title,
       tags,
       ...(Number.isNaN(created.getTime()) ? {} : { created }),
       ...(attrs.description ? { description: attrs.description } : {}),
@@ -224,20 +258,22 @@ export function parseNetscapeBookmarks(html: string): NetscapeImport {
       archived: attrs.archived === "1",
     };
     result.bookmarks.push(previous);
+    return true;
   };
   for (const token of tokens) {
     if (token.text !== undefined) {
       if (capture) capture.text += token.text;
       continue;
     }
-    if (["a", "h3", "dd", "dl", "dt"].includes(token.name) && !token.end) finish();
-    if (token.end && token.name === capture?.name) finish();
+    if (["a", "h3", "dd", "dl", "dt"].includes(token.name) && !token.end && !finish())
+      return tooLarge;
+    if (token.end && token.name === capture?.name && !finish()) return tooLarge;
     if (!token.end && ["a", "h3", "dd"].includes(token.name))
       capture = { name: token.name, text: "", attrs: token.attrs ?? {} };
     if (token.name === "br" && !token.end && capture) capture.text += "\n";
     if (token.name === "dl") {
       if (token.end) {
-        finish();
+        if (!finish()) return tooLarge;
         folders.pop();
       } else {
         if (folders.length >= 128) throw new RangeError("Bookmark folders are nested too deeply");
@@ -246,8 +282,7 @@ export function parseNetscapeBookmarks(html: string): NetscapeImport {
       }
     }
   }
-  finish();
-  return result;
+  return finish() ? result : tooLarge;
 }
 
 /** A portable flat export; TAGS preserves folder tags. Extra attributes preserve app fields. */

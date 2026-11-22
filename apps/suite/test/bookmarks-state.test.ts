@@ -1,11 +1,15 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
+
 import type {
   BookmarkListing,
   BookmarkRepository,
   StoredBookmark,
 } from "@jeswr/solid-bookmark/pod";
+import { BookmarkPrivacyError } from "@jeswr/solid-bookmark/pod";
+import { StorageError } from "@jeswr/storage-client";
 import { describe, expect, it, vi } from "vitest";
-import { createLibraryStore } from "../src/apps/bookmarks/state/library-store";
+import { BOOKMARK_UNDO_MS, createLibraryStore } from "../src/apps/bookmarks/state/library-store";
 
 const record = (id = "one"): StoredBookmark => ({
   url: `https://pod.example/bookmarks/${id}.ttl`,
@@ -124,6 +128,8 @@ describe("optimistic bookmark library", () => {
     vi.mocked(repo.list).mockResolvedValue({ items: [first, created], skipped: [] });
     await store.load();
     expect(store.getSnapshot().items.map((item) => item.id)).toEqual([first.url, "local"]);
+    await store.add([{ id: "local", data: created.data }]);
+    expect(repo.create).toHaveBeenCalledOnce();
     await store.edit(["local"], { title: "Still editable" });
     expect(store.getSnapshot().items[1]?.data.title).toBe("Still editable");
   });
@@ -153,12 +159,16 @@ describe("optimistic bookmark library", () => {
     const add = store.add([{ id: "local", data: { url: "https://example.net/" } }]);
     expect(store.getSnapshot().items).toHaveLength(2);
     await add;
-    const undo = store.remove([first.url]);
+    const commit = vi.fn();
+    const undo = store.remove([first.url], commit);
     expect(store.getSnapshot().items).toHaveLength(1);
+    undo();
     undo();
     expect(store.getSnapshot().items).toHaveLength(2);
     await store.settled();
-    expect(repo.create).toHaveBeenCalledTimes(2);
+    expect(repo.create).toHaveBeenCalledTimes(1);
+    expect(repo.remove).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
     expect(store.getSnapshot().saving).toBe(0);
   });
   it("rolls back both failed edits without resurrecting an unconfirmed value", async () => {
@@ -188,16 +198,106 @@ describe("optimistic bookmark library", () => {
     await store.tag([first.url], "x");
     expect(vi.mocked(repo.update).mock.calls[2]?.[0].etag).toBe('"2"');
   });
-  it("undoes a failed delete without creating a duplicate", async () => {
+  it("commits a conditional delete only after the undo window, restoring the item on failure", async () => {
+    vi.useFakeTimers();
+    try {
+      const { store, repo, first, failure } = setup();
+      await store.load();
+      vi.mocked(repo.remove).mockRejectedValueOnce(new Error("denied"));
+      const commit = vi.fn();
+      const undo = store.remove([first.url], commit);
+      await vi.advanceTimersByTimeAsync(BOOKMARK_UNDO_MS - 1);
+      expect(repo.remove).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await store.settled();
+      expect(repo.remove).toHaveBeenCalledWith(first);
+      expect(commit).toHaveBeenCalledOnce();
+      expect(store.getSnapshot().items).toHaveLength(1);
+      expect(failure).toHaveBeenCalledOnce();
+      undo();
+      expect(repo.create).not.toHaveBeenCalled();
+      store.remove([first.url], commit);
+      await vi.advanceTimersByTimeAsync(BOOKMARK_UNDO_MS);
+      expect(store.getSnapshot().items).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("cancels pending hard deletes when the session closes", async () => {
+    vi.useFakeTimers();
+    try {
+      const { store, repo, first } = setup();
+      await store.load();
+      const commit = vi.fn();
+      store.remove([first.url], commit);
+      store.dispose();
+      store.remove([first.url], commit)();
+      await vi.advanceTimersByTimeAsync(BOOKMARK_UNDO_MS);
+      expect(repo.remove).not.toHaveBeenCalled();
+      expect(commit).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("fences editor changes against both refreshes and preceding optimistic writes", async () => {
     const { store, repo, first, failure } = setup();
     await store.load();
-    vi.mocked(repo.remove).mockRejectedValueOnce(new Error("denied"));
-    const undo = store.remove([first.url]);
-    undo();
-    await store.settled();
-    expect(store.getSnapshot().items).toHaveLength(1);
-    expect(repo.create).not.toHaveBeenCalled();
-    expect(failure).toHaveBeenCalledOnce();
+    const current = { ...first, etag: '"external"', data: { ...first.data, notes: "Remote" } };
+    vi.mocked(repo.list).mockResolvedValueOnce({ items: [current], skipped: [] });
+    await store.load();
+    expect(() => store.edit([first.url], { notes: "Local" }, first.data)).toThrow("changed");
+    await store.edit([first.url], { title: "Local title" }, first.data);
+    expect(repo.update).toHaveBeenCalledWith(current, { title: "Local title" });
+    expect(store.getSnapshot().items[0]?.data.notes).toBe("Remote");
+
+    vi.mocked(repo.update).mockRejectedValueOnce(new Error("Earlier edit failed"));
+    const pending = store.edit([first.url], { title: "Optimistic" });
+    const opening = store.getSnapshot().items[0]?.data;
+    await store.edit([first.url], { title: "From editor" }, opening);
+    await pending;
+    expect(repo.update).toHaveBeenCalledTimes(2);
+    expect(failure.mock.lastCall?.[0]).toMatchObject({
+      message: expect.stringContaining("changed"),
+    });
+    expect(() => store.edit(["missing"], { title: "Gone" }, first.data)).toThrow("changed");
+  });
+  it.each([
+    new StorageError("rate-limited", { url: record().url, method: "POST", status: 429 }),
+    new StorageError("unauthenticated", { url: record().url, method: "POST", status: 401 }),
+    new BookmarkPrivacyError(),
+  ])("stops terminal imports and retries only failed and unattempted bookmarks (%s)", async (error) => {
+    const { store, repo, failure } = setup();
+    await store.load();
+    const batch = ["saved", "failed", "unattempted"].map((id) => ({
+      id,
+      data: { url: `https://example.net/${id}` },
+    }));
+    const initialCreate = vi.mocked(repo.create).getMockImplementation();
+    const firstSave = deferred<StoredBookmark>();
+    const [saved] = batch;
+    if (!saved) throw new Error("Missing import fixture");
+    vi.mocked(repo.create).mockReturnValueOnce(firstSave.promise).mockRejectedValueOnce(error);
+    const importing = store.importBookmarks(batch);
+    await store.retryImport();
+    firstSave.resolve({
+      url: "https://pod.example/bookmarks/saved.ttl",
+      etag: '"saved"',
+      data: saved.data,
+    });
+    await importing;
+    expect(repo.create).toHaveBeenCalledTimes(2);
+    expect(failure).toHaveBeenCalledWith(error);
+    expect(store.getSnapshot().importRemaining).toBe(2);
+    expect(store.getSnapshot().items.map(({ data }) => data.url)).toContain(saved.data.url);
+    if (initialCreate) vi.mocked(repo.create).mockImplementation(initialCreate);
+    await store.retryImport();
+    expect(
+      vi
+        .mocked(repo.create)
+        .mock.calls.slice(2)
+        .map(([data]) => data),
+    ).toEqual(batch.slice(1).map(({ data }) => data));
+    expect(store.getSnapshot().importRemaining).toBe(0);
   });
   it("handles partial bulk failures and ignores missing records", async () => {
     const { store, repo, first } = setup();

@@ -1,7 +1,10 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   bookmarkDraft,
+  bookmarkEditorFields,
+  bookmarkEditPatch,
   bookmarkImport,
   bookmarkTags,
   bookmarkTitle,
@@ -96,6 +99,25 @@ describe("bookmark presentation", () => {
       expect(() => bookmarkDraft({ url, title: "", description: "", notes: "", tags: "" })).toThrow(
         "http",
       );
+  });
+  it("submits only fields changed since opening without defaulting absent fields", () => {
+    const opening = { url: "https://example.org/", notes: " Original ", tags: ["one", "two"] };
+    expect(bookmarkEditorFields()).toEqual({
+      url: "",
+      title: "",
+      description: "",
+      notes: "",
+      tags: "",
+    });
+    const draft = bookmarkEditorFields(opening);
+    expect(bookmarkEditPatch(draft, opening)).toEqual({});
+    expect(bookmarkEditPatch({ ...draft, title: " New title " }, opening)).toEqual({
+      title: "New title",
+    });
+    expect(bookmarkEditPatch({ ...draft, notes: "", tags: "one" }, opening)).toEqual({
+      notes: "",
+      tags: ["one"],
+    });
   });
   it("filters all, unread, archive, tags and terms across every text field", () => {
     expect(visibleBookmarks(items, base).map((item) => item.id)).toEqual(["b", "a", "c"]);

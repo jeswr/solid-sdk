@@ -1,8 +1,22 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import { parseNetscapeBookmarks, serializeNetscapeBookmarks } from "../src/netscape.js";
 
 describe("Netscape bookmark interchange (without a DOM)", () => {
+  it("refuses oversized decoded fields and repeated folder metadata before returning a preview", () => {
+    const link = '<A HREF="https://example.org/">Example</A>';
+    const tooLarge = { bookmarks: [], skipped: 0, error: "file-too-large" };
+    const text = "🌱".repeat(4097);
+    expect(parseNetscapeBookmarks(`<H3>${text}</H3><DL>${link}</DL>`)).toEqual(tooLarge);
+    expect(parseNetscapeBookmarks(`${link}<DD>${text}</DD>`)).toEqual(tooLarge);
+    expect(
+      parseNetscapeBookmarks(`<H3>${"x".repeat(16_000)}</H3><DL>${link.repeat(650)}</DL>`),
+    ).toEqual(tooLarge);
+    expect(
+      parseNetscapeBookmarks(`<H3>${"x".repeat(16_000)}</H3><DL>${link}</DL>`).bookmarks,
+    ).toHaveLength(1);
+  });
   it("reads nested folders, attribute tags, dates, entities and descriptions", () => {
     const result = parseNetscapeBookmarks(`<!DOCTYPE NETSCAPE-Bookmark-file-1><DL><p>
       <DT><H3>Garden &amp; home</H3><DL><p><DT><H3>Ideas</H3><DL>

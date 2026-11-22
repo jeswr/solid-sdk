@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
-import { createBookmarkRepository } from "@jeswr/solid-bookmark/pod";
+import { verifyPrivateDemoAccess } from "@jeswr/pod-access/roles";
+import { BookmarkPrivacyError, createBookmarkRepository } from "@jeswr/solid-bookmark/pod";
 import { createMemoryCache } from "@jeswr/storage-capabilities/cache";
-import { createPodClient } from "@jeswr/storage-client";
+import { createPodClient, StorageError } from "@jeswr/storage-client";
 import { ErrorState, toast } from "@jeswr/suite-ui";
 import {
   createContext,
@@ -18,6 +20,20 @@ import { createLibraryStore, type LibraryStore } from "./library-store";
 
 const Context = createContext<LibraryStore | null>(null);
 const DISCOVERY_TIMEOUT_MS = 30_000;
+function saveFailureMessage(error: unknown): string {
+  if (error instanceof BookmarkPrivacyError) return error.message;
+  if (error instanceof StorageError) {
+    switch (error.code) {
+      case "unauthenticated":
+        return "Your pod requires you to sign in again before saving bookmarks.";
+      case "forbidden":
+        return "Your pod denied the change. Check your permissions before retrying.";
+      case "rate-limited":
+        return "Your pod is receiving too many requests. Wait before retrying.";
+    }
+  }
+  return "Couldn't save your bookmark. The failed change was rolled back. Refresh before trying again.";
+}
 export function BookmarksProvider({
   session,
   children,
@@ -56,14 +72,20 @@ export function BookmarksProvider({
           storage,
           fetch: session.fetch,
           profile: session.webId,
+          collectionStorage: {
+            getItem: (key) => window.localStorage.getItem(key),
+            setItem: (key, value) => window.localStorage.setItem(key, value),
+          },
+          ...(session.mode === "demo"
+            ? {
+                verifyOwnerOnly: (url: string) =>
+                  verifyPrivateDemoAccess(session, url, session.webId),
+              }
+            : {}),
         });
         await ensureSample(session, repository);
         if (!live) return;
-        opened = createLibraryStore(repository, () =>
-          toast.error(
-            "Couldn't save your bookmark. The failed change was rolled back. Refresh before trying again.",
-          ),
-        );
+        opened = createLibraryStore(repository, (error) => toast.error(saveFailureMessage(error)));
         setStore(opened);
         void opened.load();
         off = session.subscribe(() => {
@@ -102,6 +124,7 @@ const initial = {
   status: "loading" as const,
   error: null,
   saving: 0,
+  importRemaining: 0,
 };
 const noSubscribe = () => () => {};
 export function useBookmarkSnapshot() {

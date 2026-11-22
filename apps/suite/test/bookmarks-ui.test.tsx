@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { act, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -7,10 +8,11 @@ import { BookmarksApp } from "../src/apps/bookmarks/components/bookmarks-app";
 import type { LibrarySnapshot } from "../src/apps/bookmarks/state/library-store";
 
 let snapshot: LibrarySnapshot;
+const retryImport = vi.hoisted(() => vi.fn());
 vi.mock("../src/apps/bookmarks/state/bookmarks-context", () => ({
   BookmarksProvider: ({ children }: { children: ReactNode }) => children,
   useBookmarkSnapshot: () => snapshot,
-  useBookmarks: () => ({}),
+  useBookmarks: () => ({ retryImport }),
 }));
 vi.mock("../src/lib/session/pod-session", () => ({
   PodSessionProvider: ({ children }: { children: ReactNode }) => children,
@@ -43,6 +45,7 @@ beforeEach(() => {
     status: "ready",
     error: null,
     saving: 0,
+    importRemaining: 0,
   };
   host = document.createElement("div");
   document.body.append(host);
@@ -150,4 +153,18 @@ it("marks a rate-limited listing incomplete while keeping loaded bookmarks visib
   expect(host.textContent).toContain("Your library is incomplete");
   expect(host.textContent).toContain("too many requests");
   expect(host.textContent).not.toContain("1 item couldn't be read.");
+});
+
+it("offers to retry only the remaining import after the batch has stopped", async () => {
+  snapshot = { ...snapshot, saving: 1, importRemaining: 2 };
+  await render();
+  expect(host.textContent).not.toContain("Retry remaining bookmarks");
+  snapshot = { ...snapshot, saving: 0 };
+  await render();
+  expect(host.textContent).toContain("2 bookmarks still need importing");
+  const retry = Array.from(host.querySelectorAll("button")).find(
+    (button) => button.textContent === "Retry remaining bookmarks",
+  );
+  await click(retry ?? null);
+  expect(retryImport).toHaveBeenCalledOnce();
 });

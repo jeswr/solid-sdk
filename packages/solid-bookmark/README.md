@@ -125,6 +125,7 @@ alongside pins for the package's other workspace runtime dependencies. No runtim
 declared inlined; the generator is a devDependency and is stripped from mirrors.
 
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 ## Browser bookmark interchange and pod storage
 
 `@jeswr/solid-bookmark/netscape` exports pure `parseNetscapeBookmarks(html)` and
@@ -133,9 +134,11 @@ folders become tags, `TAGS` is merged and deduplicated, and `ADD_DATE` is read a
 seconds. Only HTTP(S) targets survive. Markup is never executed or rendered: a tolerant
 tokenizer retains an inert subset before the platform DOMParser handles it. Without a DOM,
 the tokenizer decodes numeric, core, Latin-1 and common punctuation entities; unknown names
-remain literal. Input is bounded to 10 MB, 100,000 tokens and 128 nesting levels.
-Byte/token overflow returns `{ bookmarks: [], skipped: 0, error: "file-too-large" }`,
-never a partial import or an exception. Excessive folder depth still throws `RangeError`.
+remain literal. The parser bounds input to 10 MB, 100,000 tokens and 128 nesting levels.
+Decoded metadata is capped at 16 KiB per field or tag, 128 KiB per bookmark, and 10 MB
+across the expanded import, including repeated folder tags.
+Size overflow returns `{ bookmarks: [], skipped: 0, error: "file-too-large" }`.
+Excessive folder depth still throws `RangeError`.
 The optional `NetscapeImport.error` field distinguishes overflow from an empty export.
 URLs are stored as canonical hrefs after entity decoding; unsafe schemes are skipped.
 Missing closing tags and malformed optional dates are tolerated. Export escapes all text
@@ -143,16 +146,21 @@ and attributes. `DESCRIPTION`, `NOTES` and `ARCHIVED` are optional extension att
 the standard `DD` description and `TAGS` remain usable in other bookmark managers.
 Tags containing commas cannot round-trip through the Netscape comma-separated `TAGS` field.
 
-`@jeswr/solid-bookmark/pod` exports `createBookmarkRepository({ storage, profile, fetch? })`
+`@jeswr/solid-bookmark/pod` exports `createBookmarkRepository({ storage, profile, fetch?, collectionStorage? })`
 for an injected SDK storage client. Obtain it with `createPodClient` from
 `@jeswr/storage-client`, which owns backend discovery and selection. The former
 `createSolidBookmarkRepository` factory has been removed.
-Initialisation creates/reuses `bookmarks/` and attempts to register its canonical bookmark
+Initialisation creates or reuses `bookmarks/`. When LWS assigns a different URL, the repository
+remembers it per profile and storage root through the supplied `collectionStorage` settings and
+revalidates the container on reopening. It attempts to register the canonical bookmark
 class in the private Type Index. Registration is best effort: a failure logs only a fixed
 message and error code, leaves CRUD usable, and retries once on a later initialise in the
 repository's lifetime. Concurrent initialisers share an attempt. Read the live
 `repository.registration` status (`pending`, `registered`, `failed`) to show a dismissible hint.
-Private registration means unlisted; it does not change access permissions.
+Solid registration checks owner-only access before writing private metadata. Ordinary writes
+check the collection and the actual bookmark resource using the shared effective access verifier.
+An unsupported or unverifiable policy produces `BookmarkPrivacyError`. Listing and conditional
+deletion remain available when the storage grants access.
 Records contain `{ url, etag, data }`. Both `create` and `update` canonicalise bookmark target
 URLs with `httpIriOrUndefined`,
 the same guard as the importer (for example, `http://example.org` becomes
@@ -160,7 +168,7 @@ the same guard as the importer (for example, `http://example.org` becomes
 before pod I/O. Returned records contain the canonical href; input objects are not mutated.
 Edits use generated accessors on the original dataset, preserve unrelated RDF and require the
 observed ETag. Missing or follow-up-only write validators
-require refreshing before another edit or delete. Collections over 5,000 entries fail explicitly.
+require refreshing before another edit or delete. Listing follows the storage client's pages.
 `list()` returns a `BookmarkListing`: `{ items: StoredBookmark[], skipped: { url, reason }[] }`.
 Child `unauthenticated` errors fail the whole listing so callers can show their session-expiry
 path. The first `rate-limited` child stops further reads and returns the bookmarks already read,
@@ -168,7 +176,7 @@ with a `skipped` entry whose `reason: "rate-limited"` marks the collection incom
 children have not been read). Other child errors are skipped; `reason` is a storage error code
 or `unknown`.
 Untyped resources are ignored. Container listing and initialisation errors still propagate.
-The current storage-client `readRdf` API has no per-resource byte limit; listings use a
+Child RDF reads use a streaming 1 MiB byte limit and a 10-second deadline. Listings use a
 4 MB per-page limit. Failed creates attempt to delete an orphan only after a fresh read
 confirms it is empty, using that read's ETag or the creation response's own validator;
 cleanup cannot delete a committed bookmark or

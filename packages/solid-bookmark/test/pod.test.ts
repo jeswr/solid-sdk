@@ -1,24 +1,41 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { StorageError, type StorageErrorCode } from "@jeswr/storage-client";
+import { ownerPolicy, writeWac } from "@jeswr/pod-access";
+import { type LinkTarget, StorageError, type StorageErrorCode } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import { DataFactory } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { parseBookmark } from "../src/bookmark.js";
 import { httpIriOrUndefined } from "../src/iri.js";
-import { createBookmarkRepository } from "../src/pod.js";
-import { BOOKMARK_CLASS } from "../src/vocab.js";
+import { BookmarkPrivacyError, createBookmarkRepository } from "../src/pod.js";
+import { BOOKMARK_CLASS, DCT_DESCRIPTION } from "../src/vocab.js";
 
+const root = "https://pod.example/owner/";
+const profile = `${root}profile#me`;
+const folder = `${root}bookmarks/`;
+const verifyOwnerOnly = async () => true;
 function setup(protocol: "solid" | "lws" = "solid") {
-  const storage = createMemoryStorage({ protocol, root: "https://pod.example/owner/" });
+  const storage = createMemoryStorage({ protocol, root });
   const index = { register: vi.fn(async () => undefined) };
+  const settings = new Map<string, string>();
+  const collectionStorage = {
+    getItem: (key: string) => settings.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      settings.set(key, value);
+    },
+  };
   return {
     storage,
     index,
+    collectionStorage,
     repo: createBookmarkRepository({
       storage,
       index,
-      profile: "https://pod.example/owner/profile#me",
+      profile,
+      verifyOwnerOnly,
+      collectionStorage,
     }),
   };
 }
@@ -339,7 +356,8 @@ it("preserves unrelated RDF and unprofiled text on edits", async () => {
   const { storage, repo } = setup();
   const record = await repo.create({ url: "https://example.org/", title: "Initial" });
   const dataset = await parseRdf(
-    `<${record.url}#it> <https://example.org/extra> "untouched". <${record.url}#else> <https://example.org/note> "also kept".`,
+    `<${record.url}#it> <https://example.org/extra> "untouched"; <${DCT_DESCRIPTION}> "Un café"@fr.
+    <${record.url}#else> <https://example.org/note> "also kept".`,
     "text/turtle",
   );
   const original = await storage.readRdf(record.url);
@@ -349,6 +367,13 @@ it("preserves unrelated RDF and unprofiled text on edits", async () => {
   if (!current) throw new Error("Missing fixture");
   await repo.update(current, { title: "Edited", notes: "" });
   const result = await storage.readRdf(record.url);
+  const descriptions = result.dataset.match(
+    DataFactory.namedNode(`${record.url}#it`),
+    DataFactory.namedNode(DCT_DESCRIPTION),
+  );
+  expect([...descriptions].map(({ object }) => object)).toEqual([
+    DataFactory.literal("Un café", "fr"),
+  ]);
   for (const quad of dataset)
     if (quad.predicate.value.startsWith("https://example.org/"))
       expect(result.dataset.has(quad)).toBe(true);
@@ -360,7 +385,8 @@ it("retries failed initialisation and never treats denied storage as absent", as
   const repo = createBookmarkRepository({
     storage,
     index,
-    profile: "https://pod.example/owner/profile#me",
+    profile,
+    verifyOwnerOnly,
   });
   await expect(repo.initialize()).rejects.toMatchObject({ code: "forbidden" });
   expect(create).not.toHaveBeenCalled();
@@ -375,14 +401,16 @@ it("reuses an existing container and recovers a concurrent exact-name create", a
   const repo = createBookmarkRepository({
     storage,
     index,
-    profile: "https://pod.example/owner/profile#me",
+    profile,
+    verifyOwnerOnly,
   });
   await repo.initialize();
   expect(index.register).toHaveBeenCalledTimes(1);
   const second = createBookmarkRepository({
     storage,
     index,
-    profile: "https://pod.example/owner/profile#me",
+    profile,
+    verifyOwnerOnly,
   });
   await second.initialize();
   expect((await second.list()).items).toEqual([]);
@@ -393,7 +421,8 @@ it("propagates container failures but tolerates registration failures", async ()
   const repo = createBookmarkRepository({
     storage,
     index,
-    profile: "https://pod.example/owner/profile#me",
+    profile,
+    verifyOwnerOnly,
   });
   await expect(repo.initialize()).rejects.toMatchObject({ code: "forbidden" });
   index.register.mockRejectedValueOnce(new Error("No index permission"));
@@ -468,26 +497,33 @@ it("requires a refresh if a write result has only a follow-up validator", async 
   }));
   expect((await repo.update(current, { title: "safe" })).etag).toBeNull();
 });
-it("forwards LWS class hints and refuses silently truncated collections", async () => {
-  const { storage } = setup("lws");
+it("forwards LWS class hints and lists bookmarks beyond 5,000 entries", async () => {
+  const { storage, collectionStorage } = setup("lws");
   const index = {
     register: vi.fn(async () => ({ links: [{ rel: "type", target: BOOKMARK_CLASS }] })),
   };
   const repo = createBookmarkRepository({
     storage,
     index,
-    profile: "https://pod.example/owner/profile#me",
+    profile,
+    verifyOwnerOnly,
+    collectionStorage,
   });
   await repo.initialize();
   const create = vi.spyOn(storage, "create");
-  await repo.create({ url: "https://example.org/" });
+  const record = await repo.create({ url: "https://example.org/" });
   expect(create.mock.calls[0]?.[2]?.links).toEqual([{ rel: "type", target: BOOKMARK_CLASS }]);
   const entry = (await storage.list(storage.root)).items[0];
-  if (!entry) throw new Error("Missing container");
+  const child = (await storage.list(folder)).items[0];
+  if (!entry || !child) throw new Error("Missing fixture");
   vi.spyOn(storage, "listAll").mockImplementation(async function* () {
-    for (let i = 0; i <= 5000; i++) yield { ...entry, kind: "container" };
+    for (let i = 0; i < 5000; i++) yield { ...entry, url: `${folder}${i}/`, kind: "container" };
+    yield child;
   });
-  await expect(repo.list()).rejects.toThrow("5,000");
+  const listing = await repo.list();
+  expect(listing.items.map(({ url }) => url)).toEqual([record.url]);
+  await repo.remove(listing.items[0] as typeof record);
+  expect((await repo.list()).items).toEqual([]);
 });
 it("does not claim compatibility with Pod Manager's distinct W3C ontology", async () => {
   const url = "https://pod.example/bookmarks/legacy.ttl";
@@ -496,4 +532,142 @@ it("does not claim compatibility with Pod Manager's distinct W3C ontology", asyn
     "text/turtle",
   );
   expect(parseBookmark(url, dataset)).toBeUndefined();
+});
+
+it("refuses writes when the bookmark container inherits public read access", async () => {
+  const { storage: memory, index } = setup();
+  await memory.create(root, null, { name: "bookmarks", kind: "container" });
+  const acl = `${root}.acl`;
+  const policy = ownerPolicy(profile, true);
+  const publicGrant = policy.grants[0];
+  if (!publicGrant) throw new Error("Missing owner policy");
+  policy.grants.push({ ...publicGrant, who: [[{ kind: "public" }]], modes: new Set(["read"]) });
+  await memory.create(root, await writeWac(policy, root, acl), {
+    name: ".acl",
+    contentType: "text/turtle",
+  });
+  const storage = {
+    ...memory,
+    features: {
+      ...memory.features,
+      accessControl: { state: "available", detail: { model: "wac" }, evidence: "fixture" } as const,
+    },
+    head: async (url: string) => {
+      const head = await memory.head(url);
+      const links = new Map<string, LinkTarget[]>([
+        ["acl", [{ target: `${url}.acl`, params: {} }]],
+      ]);
+      if (url === root)
+        links.set("type", [{ target: "http://www.w3.org/ns/pim/space#Storage", params: {} }]);
+      return { ...head, links };
+    },
+    create: vi.fn(memory.create),
+    write: vi.fn(memory.write),
+  };
+  const repo = createBookmarkRepository({ storage, profile, index });
+  await expect(
+    repo.create({ url: "https://example.org/", notes: "Private" }),
+  ).rejects.toBeInstanceOf(BookmarkPrivacyError);
+  expect(index.register).not.toHaveBeenCalled();
+  expect(storage.create).not.toHaveBeenCalled();
+  expect(storage.write).not.toHaveBeenCalled();
+  expect(await repo.list()).toMatchObject({ items: [] });
+
+  const original = await memory.head(acl);
+  await memory.write(acl, await writeWac(ownerPolicy(profile, true), root, acl), {
+    contentType: "text/turtle",
+    ifMatch: original.etag as string,
+  });
+  await expect(
+    repo.create({ url: "https://example.org/", notes: "Private" }),
+  ).resolves.toMatchObject({
+    data: { notes: "Private" },
+  });
+  expect(storage.write).toHaveBeenCalledOnce();
+});
+
+it("rechecks the allocated resource and refuses to update a bookmark whose policy changed", async () => {
+  const { storage, index, repo } = setup();
+  const existing = await repo.create({ url: "https://example.org/", notes: "Existing" });
+  const check = vi.fn(async (url: string) => url === folder);
+  const restricted = createBookmarkRepository({ storage, profile, index, verifyOwnerOnly: check });
+  const write = vi.spyOn(storage, "write");
+  const writeRdf = vi.spyOn(storage, "writeRdf");
+  await expect(
+    restricted.create({ url: "https://example.net/", notes: "Private" }),
+  ).rejects.toBeInstanceOf(BookmarkPrivacyError);
+  await expect(restricted.update(existing, { notes: "Still private" })).rejects.toBeInstanceOf(
+    BookmarkPrivacyError,
+  );
+  expect(check).toHaveBeenCalledWith(existing.url);
+  expect(write).not.toHaveBeenCalled();
+  expect(writeRdf).not.toHaveBeenCalled();
+  expect((await restricted.list()).items).toMatchObject([existing]);
+});
+
+it.each([
+  ["private.acl", "invalid-response"],
+  ["unrelated.ttl", "conflict"],
+])("leaves linked %s intact and keeps bookmark CRUD usable", async (name, code) => {
+  const { storage } = setup();
+  const indexUrl = `${root}${name}`;
+  await storage.create(
+    root,
+    `<${profile}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${indexUrl}>.`,
+    {
+      name: "profile",
+      contentType: "text/turtle",
+    },
+  );
+  const original = `<${indexUrl}> <http://purl.org/dc/terms/title> "Existing".`;
+  await storage.create(root, original, { name, contentType: "text/turtle" });
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const repo = createBookmarkRepository({ storage, profile, verifyOwnerOnly });
+    const record = await repo.create({ url: "https://example.org/" });
+    expect(repo.registration).toBe("failed");
+    expect(warn).toHaveBeenCalledWith("Bookmark Type Index registration failed", { reason: code });
+    expect(await (await storage.read(indexUrl)).text()).toBe(original);
+    expect((await repo.list()).items[0]?.url).toBe(record.url);
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+it("keeps bookmark CRUD usable when the owner's WebID is hosted outside Solid storage", async () => {
+  const { storage } = setup();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const repo = createBookmarkRepository({
+      storage,
+      profile: "https://id.example/me#owner",
+      verifyOwnerOnly,
+    });
+    expect((await repo.list()).items).toEqual([]);
+    expect(repo.registration).toBe("failed");
+    expect(warn).toHaveBeenCalledWith("Bookmark Type Index registration failed", {
+      reason: "scope",
+    });
+    const item = await repo.create({ url: "https://example.org/" });
+    const edited = await repo.update(item, { notes: "Kept" });
+    await repo.remove(edited);
+    expect((await repo.list()).items).toEqual([]);
+  } finally {
+    warn.mockRestore();
+  }
+});
+
+it("reopens the server-assigned LWS container for the same account and storage", async () => {
+  const { storage, collectionStorage } = setup("lws");
+  const create = storage.create.bind(storage);
+  const creates = vi
+    .spyOn(storage, "create")
+    .mockImplementation((parent, body, opts) =>
+      create(parent, body, opts?.kind === "container" ? { ...opts, name: "assigned-id" } : opts),
+    );
+  const options = { storage, profile, collectionStorage, verifyOwnerOnly };
+  const record = await createBookmarkRepository(options).create({ url: "https://example.org/" });
+  expect(record.url).toContain("/assigned-id/");
+  expect((await createBookmarkRepository(options).list()).items).toMatchObject([record]);
+  expect(creates.mock.calls.filter(([, , opts]) => opts?.kind === "container")).toHaveLength(1);
 });

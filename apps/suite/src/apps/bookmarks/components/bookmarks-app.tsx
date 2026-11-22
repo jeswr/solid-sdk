@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 "use client";
 import type { BookmarkData } from "@jeswr/solid-bookmark";
 import { type NetscapeImport, serializeNetscapeBookmarks } from "@jeswr/solid-bookmark/netscape";
@@ -52,6 +53,8 @@ import {
   type BookmarkSort,
   type BookmarkView,
   bookmarkDraft,
+  bookmarkEditorFields,
+  bookmarkEditPatch,
   bookmarkImport,
   bookmarkTags,
   bookmarkTitle,
@@ -59,28 +62,26 @@ import {
   visibleBookmarks,
 } from "../lib/library";
 import { BookmarksProvider, useBookmarkSnapshot, useBookmarks } from "../state/bookmarks-context";
+import { BOOKMARK_UNDO_MS } from "../state/library-store";
 
 function Editor({ item, onClose }: { item: BookmarkItem | "new" | null; onClose(): void }) {
   const store = useBookmarks();
   const connection = useConnectionState();
   const data = typeof item === "object" ? item?.data : undefined;
-  const [draft, setDraft] = useState({
-    url: data?.url ?? "",
-    title: data?.title ?? "",
-    description: data?.description ?? "",
-    notes: data?.notes ?? "",
-    tags: data?.tags?.join(", ") ?? "",
-  });
+  const [draft, setDraft] = useState(() => bookmarkEditorFields(data));
   const [error, setError] = useState("");
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!store || connection !== "online") return;
     try {
-      const value = bookmarkDraft(draft);
-      if (item && item !== "new") void store.edit([item.id], value);
+      if (item && item !== "new")
+        void store.edit([item.id], bookmarkEditPatch(draft, item.data), item.data);
       else
         void store.add([
-          { id: crypto.randomUUID(), data: { ...value, created: new Date(), archived: false } },
+          {
+            id: crypto.randomUUID(),
+            data: { ...bookmarkDraft(draft), created: new Date(), archived: false },
+          },
         ]);
       onClose();
     } catch (error) {
@@ -242,7 +243,7 @@ function ImportDialog({ open, onClose }: { open: boolean; onClose(): void }) {
           <Button
             disabled={!store || !candidates.length || reading || connection !== "online"}
             onClick={() => {
-              void store?.add(
+              void store?.importBookmarks(
                 candidates.map((data) => ({
                   id: crypto.randomUUID(),
                   data: { ...data, created: data.created ?? new Date() },
@@ -317,10 +318,12 @@ function Library() {
   };
   const remove = (ids: string[]) => {
     if (!store) return;
-    const undo = store.remove(ids);
+    const toastId = crypto.randomUUID();
+    const undo = store.remove(ids, () => toast.dismiss(toastId));
     setSelected([]);
-    toast(`${ids.length === 1 ? "Bookmark" : `${ids.length} bookmarks`} deleted`, {
-      duration: 8000,
+    toast(`${ids.length === 1 ? "Bookmark" : `${ids.length} bookmarks`} removed`, {
+      id: toastId,
+      duration: BOOKMARK_UNDO_MS,
       action: { label: "Undo", onClick: undo },
     });
   };
@@ -439,6 +442,23 @@ function Library() {
               ? "Your library is incomplete. The pod is receiving too many requests. Try refreshing later."
               : `${unreadable} ${unreadable === 1 ? "item couldn't" : "items couldn't"} be read.`}
           </p>
+        )}
+        {snapshot.importRemaining > 0 && snapshot.saving === 0 && (
+          <div className="bkm-notice" role="status">
+            <span>
+              {snapshot.importRemaining}{" "}
+              {snapshot.importRemaining === 1 ? "bookmark still needs" : "bookmarks still need"}{" "}
+              importing.
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!editable}
+              onClick={() => void store?.retryImport()}
+            >
+              Retry remaining bookmarks
+            </Button>
+          </div>
         )}
         {snapshot.registration === "failed" && !registrationHintDismissed && (
           <div className="bkm-notice">

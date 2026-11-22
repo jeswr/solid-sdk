@@ -1,17 +1,20 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import type { BookmarkData } from "@jeswr/solid-bookmark";
-import type {
-  BookmarkListing,
-  BookmarkPatch,
-  BookmarkRegistrationStatus,
-  BookmarkRepository,
-  StoredBookmark,
+import {
+  type BookmarkListing,
+  type BookmarkPatch,
+  BookmarkPrivacyError,
+  type BookmarkRegistrationStatus,
+  type BookmarkRepository,
+  type StoredBookmark,
 } from "@jeswr/solid-bookmark/pod";
+import { StorageError } from "@jeswr/storage-client";
 import type { BookmarkItem } from "../lib/library";
 
 type Change =
-  | { kind: "add"; items: BookmarkItem[] }
-  | { kind: "edit"; ids: string[]; patch: BookmarkPatch }
+  | { kind: "add"; items: BookmarkItem[]; importing?: boolean }
+  | { kind: "edit"; ids: string[]; patch: BookmarkPatch; opening: BookmarkData | undefined }
   | { kind: "tag"; ids: string[]; tag: string }
   | { kind: "remove"; ids: string[] };
 export interface LibrarySnapshot {
@@ -21,13 +24,36 @@ export interface LibrarySnapshot {
   saving: number;
   skipped: BookmarkListing["skipped"];
   registration: BookmarkRegistrationStatus;
+  importRemaining: number;
 }
+export const BOOKMARK_UNDO_MS = 8000;
+const sameValue = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
+const editConflict = () =>
+  new Error(
+    "This bookmark changed while you were editing it. Reopen it to review the latest version.",
+  );
+const matchesOpening = (
+  data: BookmarkData | undefined,
+  patch: BookmarkPatch,
+  opening: BookmarkData,
+) =>
+  data &&
+  (Object.keys(patch) as (keyof BookmarkPatch)[]).every((key) =>
+    sameValue(data[key], opening[key]),
+  );
+const stopsBatch = (error: unknown) =>
+  error instanceof BookmarkPrivacyError ||
+  (error instanceof StorageError &&
+    ["unauthenticated", "forbidden", "rate-limited"].includes(error.code));
+
 export function createLibraryStore(
   repository: BookmarkRepository,
   onFailure: (error: unknown) => void,
 ) {
   const confirmed = new Map<string, StoredBookmark>();
   const pending: Change[] = [];
+  const deleteTimers = new Set<ReturnType<typeof setTimeout>>();
+  const remainingImports = new Map<string, BookmarkItem>();
   const listeners = new Set<() => void>();
   let snapshot: LibrarySnapshot = {
     items: [],
@@ -36,6 +62,7 @@ export function createLibraryStore(
     status: "loading",
     error: null,
     saving: 0,
+    importRemaining: 0,
   };
   let queue = Promise.resolve();
   let generation = 0;
@@ -66,6 +93,7 @@ export function createLibraryStore(
       ...snapshot,
       items: [...items].map(([id, data]) => ({ id, data })),
       saving: pending.length,
+      importRemaining: remainingImports.size,
       registration: repository.registration,
     };
     for (const listener of listeners) listener();
@@ -95,38 +123,37 @@ export function createLibraryStore(
       publish();
     }
   };
-  const enqueue = (change: Change): Promise<void> => {
-    if (disposed) return Promise.resolve();
-    if (change.kind === "edit" || change.kind === "tag") {
-      const edit = change;
-      change.ids = change.ids.filter((id) => {
-        const data = snapshot.items.find((item) => item.id === id)?.data;
-        return (
-          data &&
-          Object.entries(patchFor(edit, data)).some(
-            ([key, value]) =>
-              JSON.stringify(data[key as keyof BookmarkData]) !== JSON.stringify(value),
-          )
-        );
-      });
-      if (!change.ids.length) return Promise.resolve();
-    }
+  const addPending = (change: Change) => {
     generation++;
     pending.push(change);
     publish();
+  };
+  const finishPending = (change: Change) => {
+    generation++;
+    pending.splice(pending.indexOf(change), 1);
+    publish();
+  };
+  const schedule = (change: Change): Promise<void> => {
     const run = async () => {
       if (disposed) return;
       let failure: unknown;
       const ids = change.kind === "add" ? change.items.map((item) => item.id) : change.ids;
-      for (const id of ids) {
+      for (const [position, id] of ids.entries()) {
         if (disposed) return;
         const record = confirmed.get(id);
         try {
           if (change.kind === "add") {
-            // Undo of a failed delete already exists in the confirmed collection.
-            const item = change.items.find((item) => item.id === id) as BookmarkItem;
+            const item = change.items[position] as BookmarkItem;
             if (!record) confirmed.set(id, await repository.create(item.data));
-          } else if (record) {
+            remainingImports.delete(id);
+          } else {
+            if (
+              change.kind === "edit" &&
+              change.opening &&
+              !matchesOpening(record?.data, change.patch, change.opening)
+            )
+              throw editConflict();
+            if (!record) continue;
             if (change.kind === "remove") {
               await repository.remove(record);
               confirmed.delete(id);
@@ -135,15 +162,37 @@ export function createLibraryStore(
           }
         } catch (error) {
           failure = error;
+          if (stopsBatch(error)) break;
         }
       }
-      pending.splice(pending.indexOf(change), 1);
-      publish();
+      finishPending(change);
       if (failure && !disposed) onFailure(failure);
     };
     const task = queue.then(run);
     queue = task.catch(onFailure);
     return task;
+  };
+  const enqueue = (change: Change): Promise<void> => {
+    if (disposed) return Promise.resolve();
+    if (change.kind === "edit" || change.kind === "tag") {
+      const edit = change;
+      change.ids = change.ids.filter((id) => {
+        const data = snapshot.items.find((item) => item.id === id)?.data;
+        if (edit.kind === "edit" && edit.opening && !matchesOpening(data, edit.patch, edit.opening))
+          throw editConflict();
+        return (
+          data &&
+          Object.entries(patchFor(edit, data)).some(
+            ([key, value]) => !sameValue(data[key as keyof BookmarkData], value),
+          )
+        );
+      });
+      if (!change.ids.length) return Promise.resolve();
+    }
+    if (change.kind === "add" && change.importing)
+      for (const item of change.items) remainingImports.set(item.id, item);
+    addPending(change);
+    return schedule(change);
   };
   return {
     getSnapshot: () => snapshot,
@@ -155,22 +204,41 @@ export function createLibraryStore(
     },
     load,
     add: (items: BookmarkItem[]) => enqueue({ kind: "add", items }),
-    edit: (ids: string[], patch: BookmarkPatch) => enqueue({ kind: "edit", ids, patch }),
+    importBookmarks: (items: BookmarkItem[]) => enqueue({ kind: "add", items, importing: true }),
+    retryImport: () => {
+      if (pending.some((change) => change.kind === "add" && change.importing))
+        return Promise.resolve();
+      return enqueue({ kind: "add", items: [...remainingImports.values()], importing: true });
+    },
+    edit: (ids: string[], patch: BookmarkPatch, opening?: BookmarkData) =>
+      enqueue({ kind: "edit", ids, patch, opening }),
     tag: (ids: string[], raw: string) => {
       const tag = raw.trim();
       return tag ? enqueue({ kind: "tag", ids, tag }) : Promise.resolve();
     },
-    remove(ids: string[]) {
-      const removed = snapshot.items.filter((item) => ids.includes(item.id));
-      void enqueue({ kind: "remove", ids });
+    remove(ids: string[], onCommit: () => void) {
+      if (disposed) return () => {};
+      const change: Change = { kind: "remove", ids };
+      addPending(change);
+      const timer = setTimeout(() => {
+        deleteTimers.delete(timer);
+        void schedule(change);
+        onCommit();
+      }, BOOKMARK_UNDO_MS);
+      deleteTimers.add(timer);
       return () => {
-        void enqueue({ kind: "add", items: removed });
+        if (!deleteTimers.delete(timer)) return;
+        clearTimeout(timer);
+        finishPending(change);
       };
     },
     settled: () => queue,
     dispose() {
       disposed = true;
       readGeneration++;
+      for (const timer of deleteTimers) clearTimeout(timer);
+      deleteTimers.clear();
+      remainingImports.clear();
       listeners.clear();
     },
   };

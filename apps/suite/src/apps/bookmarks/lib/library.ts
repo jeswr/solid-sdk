@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6
 import { type BookmarkData, httpIriOrUndefined } from "@jeswr/solid-bookmark";
 import { parseNetscapeBookmarks } from "@jeswr/solid-bookmark/netscape";
+import type { BookmarkPatch } from "@jeswr/solid-bookmark/pod";
 
 export const importSizeMessage =
-  "This file is too large. Import up to 5,000 bookmarks at a time from an HTML export smaller than 10 MB.";
+  "This import exceeds the size limit. Use an HTML export under 10 MB with up to 5,000 bookmarks and shorter titles, notes, descriptions, URLs, or tags.";
 export function bookmarkImport(html: string) {
   const result = parseNetscapeBookmarks(html);
   if (result.error === "file-too-large" || result.bookmarks.length > 5000)
@@ -20,13 +22,14 @@ export interface BookmarkItem {
 export function bookmarkTitle(data: BookmarkData): string {
   return data.title?.trim() || new URL(data.url).host;
 }
-export function bookmarkDraft(draft: {
+interface BookmarkDraft {
   url: string;
   title: string;
   description: string;
   notes: string;
   tags: string;
-}): BookmarkData {
+}
+export function bookmarkDraft(draft: BookmarkDraft): BookmarkData {
   const url = httpIriOrUndefined(draft.url.trim());
   if (!url) throw new TypeError("Enter a full http:// or https:// URL.");
   return {
@@ -43,6 +46,23 @@ export function bookmarkDraft(draft: {
       ),
     ].sort(),
   };
+}
+export function bookmarkEditorFields(data?: BookmarkData): BookmarkDraft {
+  return {
+    url: data?.url ?? "",
+    title: data?.title ?? "",
+    description: data?.description ?? "",
+    notes: data?.notes ?? "",
+    tags: data?.tags?.join(", ") ?? "",
+  };
+}
+export function bookmarkEditPatch(draft: BookmarkDraft, opening: BookmarkData): BookmarkPatch {
+  const original = bookmarkEditorFields(opening);
+  const value = bookmarkDraft(draft);
+  const patch: BookmarkPatch = {};
+  for (const key of ["url", "title", "description", "notes", "tags"] as const)
+    if (draft[key] !== original[key]) Object.assign(patch, { [key]: value[key] });
+  return patch;
 }
 export function visibleBookmarks(
   items: readonly BookmarkItem[],
