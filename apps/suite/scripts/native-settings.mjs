@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+import { validatePredecessorOrigins } from "@jeswr/suite-native";
 import { clientIdDocumentUrl, publicBaseUrl } from "../src/lib/public-url.ts";
 
 export function nativeSettings(env) {
@@ -19,5 +20,17 @@ export function nativeSettings(env) {
   }
   if (!["https://localhost", "capacitor://localhost"].includes(appBaseUrl))
     throw new Error("Native APP_BASE_URL must be a bundled local origin");
-  return { target: "native", appBaseUrl, publicSuiteUrl, clientIdUrl };
+  const predecessors =
+    env.PREDECESSOR_ORIGINS === undefined
+      ? [new URL(publicSuiteUrl).origin]
+      : JSON.parse(env.PREDECESSOR_ORIGINS);
+  const plan = validatePredecessorOrigins(predecessors);
+  if (!plan.valid)
+    throw new Error(
+      plan.reason === "list"
+        ? "PREDECESSOR_ORIGINS must be a JSON array of https origins"
+        : "PREDECESSOR_ORIGINS must contain canonical remote https origins",
+    );
+  const predecessorOrigins = [...new Set(plan.origins)];
+  return { target: "native", appBaseUrl, publicSuiteUrl, clientIdUrl, predecessorOrigins };
 }
