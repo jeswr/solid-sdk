@@ -50,6 +50,7 @@
     "@jeswr/solid-journal": "workspace:*",
     "@jeswr/solid-listening": "workspace:*",
     "@jeswr/solid-offline": "workspace:*",
+    "@jeswr/solid-places": "workspace:*",
     "@jeswr/solid-recipe": "workspace:*",
     "@jeswr/solid-sheets": "workspace:*",
     "@jeswr/solid-slides": "workspace:*",

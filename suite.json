@@ -105,6 +105,7 @@
     "@jeswr/solid-scheduling",
     "@jeswr/solid-sheets",
     "@jeswr/solid-environment",
+    "@jeswr/solid-places",
     "@jeswr/agent-consent",
     "@jeswr/pod-export",
     "@jeswr/pod-legacy",

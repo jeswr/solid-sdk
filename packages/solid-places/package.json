@@ -1,0 +1,54 @@
+{
+  "name": "@jeswr/solid-places",
+  "version": "0.1.0",
+  "description": "Generated private places, visits and journeys with a bounded, pure Google Timeline importer.",
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./timeline": {
+      "types": "./dist/timeline.d.ts",
+      "import": "./dist/timeline.js"
+    }
+  },
+  "files": [
+    "dist",
+    "codegen",
+    "README.md",
+    "SKILL.md"
+  ],
+  "scripts": {
+    "build": "pnpm --workspace-root exec tsc -p packages/solid-places/tsconfig.build.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/places.ontology.ttl --shapes codegen/places.shapes.ttl --config codegen.config.json --out src/generated",
+    "lint": "pnpm --workspace-root exec biome check packages/solid-places/src packages/solid-places/scripts packages/solid-places/test packages/solid-places/codegen.config.json packages/solid-places/package.json",
+    "typecheck": "pnpm --workspace-root exec tsc --noEmit -p packages/solid-places/tsconfig.json",
+    "test": "pnpm --workspace-root exec vitest run --root packages/solid-places"
+  },
+  "dependencies": {
+    "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
+    "@jeswr/pod-access": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*"
+  },
+  "devDependencies": {
+    "@jeswr/federation-codegen": "workspace:*",
+    "@biomejs/biome": "2.5.3",
+    "@rdfjs/types": "2.0.1",
+    "@types/n3": "1.26.1",
+    "@types/node": "25.9.5",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10",
+    "@vitest/coverage-v8": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "sideEffects": false,
+  "securityCritical": true
+}
