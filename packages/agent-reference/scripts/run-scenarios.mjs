@@ -18,6 +18,7 @@ import { loadCase } from "../dist/engine/load.js";
 import { assertPublishable } from "../dist/engine/publication.js";
 import { runScenario } from "../dist/engine/run.js";
 import { outlineOf } from "../dist/trace/types.js";
+import { publishScenarioRuns, readScenarioRuns } from "./publish-scenario-runs.mjs";
 import { jointPaths, recordedJoint, traceHash } from "./recorded-joint.mjs";
 import { ScenarioTraceWriter } from "./write-scenario-traces.mjs";
 
@@ -32,9 +33,7 @@ const selectedConfiguration = requestedConfiguration === "all" ? undefined : req
 if (selectedConfiguration && !selected)
   throw new Error("A configuration selection requires --scenario");
 const status = { "x-authored-by": "Codex GPT-6", schema: "agent-scenario-runs/0.1", paths: [] };
-const previous = JSON.parse(readFileSync(join(root, "scenario-runs.json"), "utf8")).paths.map(
-  (row) => ({ ...row, settlement: row.settlement ?? "rdf-order" }),
-);
+const recordedPaths = readScenarioRuns(root);
 const index = [];
 let retained = 0;
 let executed = 0;
@@ -82,7 +81,7 @@ for (const file of readdirSync(join(root, "scenarios"))
   for await (const { path, writer } of pathsFor(profile, scenario)) {
     assertPublishable(path);
     if (!path.configuration && jointPaths.has(`${id}/${path.path}`)) {
-      const saved = recordedJoint(root, previous, id, path.path);
+      const saved = recordedJoint(root, recordedPaths, id, path.path);
       status.paths.push(saved);
       const trace = JSON.parse(readFileSync(join(root, "traces", saved.trace), "utf8"));
       index.push({
@@ -170,34 +169,12 @@ for (const file of readdirSync(join(root, "scenarios"))
     writeFileSync(join(root, "scenarios", file), `${JSON.stringify(original, null, 2)}\n`);
   }
 }
-if (selected) {
-  // Replace existing rows in place and append newly discovered paths.
-  const configurationOf = (row) => row.configuration ?? "baseline";
-  const keyOf = (row) => JSON.stringify([configurationOf(row), row.path]);
-  const updates = new Map(status.paths.map((row) => [keyOf(row), row]));
-  status.paths = previous.flatMap((row) => {
-    if (
-      row.scenario !== selected ||
-      (selectedConfiguration && configurationOf(row) !== selectedConfiguration)
-    )
-      return [row];
-    const key = keyOf(row);
-    const update = updates.get(key);
-    updates.delete(key);
-    return update ? [update] : [];
-  });
-  status.paths.push(...updates.values());
-}
-writeFileSync(join(root, "scenario-runs.json"), `${JSON.stringify(status, null, 2)}\n`);
-const indexPath = join(root, "traces", "index.json");
-const existing = JSON.parse(readFileSync(indexPath, "utf8"));
-const newFiles = new Set(index.map((item) => item.file));
-writeFileSync(
-  indexPath,
-  `${JSON.stringify([...existing.filter((item) => !newFiles.has(item.file)), ...index], null, 2)}\n`,
-);
+const paths = publishScenarioRuns(root, status, index, {
+  scenario: selected,
+  configuration: selectedConfiguration,
+});
 console.log(
-  `${executed} live data paths ran; manifest: ${status.paths.filter((p) => p.status === "runs").length} runs, ${status.paths.filter((p) => p.status === "disagrees").length} disagree, ${status.paths.filter((p) => p.status === "blocked").length} blocked`,
+  `${executed} live data paths ran; manifest: ${paths.filter((p) => p.status === "runs").length} runs, ${paths.filter((p) => p.status === "disagrees").length} disagree, ${paths.filter((p) => p.status === "blocked").length} blocked`,
 );
 
 if (retained)

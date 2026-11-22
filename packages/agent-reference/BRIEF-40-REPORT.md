@@ -1786,3 +1786,30 @@ disposable copy. `check-no-trace-change.mjs` passed on the committed fixtures
 and with the mortgage-core and pay-an-invoice group tables present. All six joint
 recording digests verified. The worktree's traces, outlines and run manifest
 matched HEAD after the runs.
+
+## Review 40r12 fixes
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The public bundle checker decodes nested RDF and JSON strings until they stop
+changing or reach eight decoding levels. It scans parsed JSON string values and
+the unescaped text. Regression fixtures put roadmap text with quotes and a
+newline in an `rdf:JSON` literal, in standalone JSON-LD and Turtle and in both
+linked table renderings.
+
+Scenario runs use the table writer's exclusive file lock for the manifest and
+trace index. Publication rereads the manifest under the lock, replaces rows in
+place, and replaces each file atomically. A regression test starts two processes
+for different configurations from the same manifest snapshot and verifies that
+both rows and both index entries survive. When a path becomes blocked, the
+publisher removes its old trace and index entry and prunes the group table to
+the keys still referenced. The regression also covers removal of the last
+trace and table in a group. The corpus check rejects any trace file that the
+manifest does not name.
+
+On Node 24, all 50 focused engine tests and all 60 explorer tests passed. The
+library compile, schema export check, typecheck, Biome, and disposable
+`check-no-trace-change.mjs` runs passed. The RDF pipeline reported zero failures
+and 216 existing allowances. The agent layer guard reported two existing
+nonliteral imports in `test/trace-linked.test.ts`. The tracked traces, outlines
+and run manifest match HEAD, and no linked test files remain in the worktree.

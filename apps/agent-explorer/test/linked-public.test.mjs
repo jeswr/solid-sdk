@@ -1,7 +1,16 @@
 // AUTHORED-BY Codex GPT-6
 import assert from "node:assert/strict";
 import { execFile, spawnSync } from "node:child_process";
-import { closeSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -18,6 +27,18 @@ function fixture(t) {
   return dir;
 }
 
+function check(script, file) {
+  const log = `${file}.log`;
+  const fd = openSync(log, "w");
+  try {
+    const child = spawnSync(process.execPath, [script, file], { stdio: ["ignore", fd, fd] });
+    assert.ifError(child.error);
+    return { status: child.status, log: readFileSync(log, "utf8") };
+  } finally {
+    closeSync(fd);
+  }
+}
+
 test("public bundle checks both escaped roadmap strings inside linked RDF views", (t) => {
   const roadmap = JSON.parse(
     readFileSync(new URL("../data/roadmap.json", import.meta.url), "utf8"),
@@ -25,19 +46,8 @@ test("public bundle checks both escaped roadmap strings inside linked RDF views"
   const texts = [roadmap.note, roadmap.phases[7].items[1].detail];
   const dir = fixture(t);
   const file = join(dir, "test--baseline.json");
-  const log = join(dir, "check.log");
-  function check() {
-    const fd = openSync(log, "w");
-    try {
-      const child = spawnSync(process.execPath, [checker, file], { stdio: ["ignore", fd, fd] });
-      assert.ifError(child.error);
-      return { status: child.status, log: readFileSync(log, "utf8") };
-    } finally {
-      closeSync(fd);
-    }
-  }
   function refuses() {
-    const result = check();
+    const result = check(checker, file);
     assert.equal(result.status, 1, result.log);
     assert.match(result.log, /carries roadmap text/);
   }
@@ -46,7 +56,7 @@ test("public bundle checks both escaped roadmap strings inside linked RDF views"
     writeFileSync(file, JSON.stringify({ [key]: { what: "record-entry", jsonld, turtle } }));
   const cleanRdf = '<urn:s> <urn:p> "public fragment" .';
   writeView('{"@id":"urn:s","urn:p":"public fragment"}', cleanRdf);
-  const clean = check();
+  const clean = check(checker, file);
   assert.equal(clean.status, 0, clean.log);
   for (const text of texts) {
     assert.match(text, /["\\\r\n\t]/);
@@ -68,6 +78,39 @@ test("public bundle checks both escaped roadmap strings inside linked RDF views"
   const first = literal.charCodeAt(1).toString(16).padStart(4, "0");
   writeFileSync(file, `{"nested":["\\u${first}${literal.slice(2)}]}`);
   refuses();
+});
+
+test("public bundle checks nested rdf:JSON literals with quotes and a newline", (t) => {
+  const dir = fixture(t);
+  const script = join(dir, "scripts", "check-public-bundle.mjs");
+  mkdirSync(join(dir, "scripts"));
+  mkdirSync(join(dir, "data"));
+  copyFileSync(checker, script);
+  const text = 'Private fixture: the next step is "under review".\nKeep the timeline internal.';
+  const roadmap = JSON.parse(
+    readFileSync(new URL("../data/roadmap.json", import.meta.url), "utf8"),
+  );
+  writeFileSync(join(dir, "data", "roadmap.json"), JSON.stringify({ roadmap, text }));
+
+  const datatype = "http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON";
+  const lexical = JSON.stringify({ entries: [{ detail: text }] });
+  const jsonld = JSON.stringify({
+    "@id": "urn:s",
+    "urn:p": { "@type": datatype, "@value": lexical },
+  });
+  const turtle = `<urn:s> <urn:p> ${JSON.stringify(lexical)}^^<${datatype}> .`;
+  for (const [name, contents] of [
+    ["view.jsonld", jsonld],
+    ["view.ttl", turtle],
+    ["jsonld-table.json", JSON.stringify({ view: { jsonld } })],
+    ["turtle-table.json", JSON.stringify({ view: { turtle } })],
+  ]) {
+    const path = join(dir, name);
+    writeFileSync(path, contents);
+    const result = check(script, path);
+    assert.equal(result.status, 1, `${name}: ${result.log}`);
+    assert.match(result.log, /carries roadmap text/);
+  }
 });
 
 test("importer checks the run group and refuses symlinked tables and linked directories", async (t) => {

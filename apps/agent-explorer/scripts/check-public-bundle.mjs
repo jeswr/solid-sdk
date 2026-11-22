@@ -44,15 +44,46 @@ function unescapeLiterals(text) {
   );
 }
 
+const maxDecodeDepth = 8;
+const rdfStrings =
+  /"""((?:\\[\s\S]|(?!""")[^\\])*)"""|'''((?:\\[\s\S]|(?!''')[^\\])*)'''|"((?:\\[\s\S]|[^"\\])*)"|'((?:\\[\s\S]|[^'\\])*)'/g;
+
+function carriesDecodedRoadmap(text, depth = 0) {
+  if (text.length < 40) return false;
+  if (plain.test(text)) return true;
+  if (depth === maxDecodeDepth) return false;
+
+  let json;
+  const first = text.trimStart()[0];
+  if (first === "{" || first === "[" || first === '"') {
+    try {
+      json = JSON.parse(text);
+    } catch {
+      // RDF and ordinary text can also start with these characters.
+    }
+    for (const value of strings(json)) {
+      if (carriesDecodedRoadmap(value, depth + 1)) return true;
+    }
+  }
+  if (!text.includes("\\")) return false;
+  if (json === undefined) {
+    // Decode the literals before whole-text unescaping can erase their quote boundaries.
+    for (const [, longDouble, longSingle, double, single] of text.matchAll(rdfStrings)) {
+      const literal = longDouble ?? longSingle ?? double ?? single;
+      if (carriesDecodedRoadmap(unescapeLiterals(literal), depth + 1)) return true;
+    }
+  }
+  const decoded = unescapeLiterals(text);
+  return decoded !== text && carriesDecodedRoadmap(decoded, depth + 1);
+}
+
 function carriesRoadmap(path, text) {
   const extension = extname(path).toLowerCase();
   const json = extension === ".json" || extension === ".jsonld" ? JSON.parse(text) : undefined;
   if (raw.test(text)) return true;
-  if (extension === ".ttl" || extension === ".trig") return plain.test(unescapeLiterals(text));
+  if (extension === ".ttl" || extension === ".trig") return carriesDecodedRoadmap(text);
   for (const value of strings(json)) {
-    if (value.length < 40) continue;
-    if (plain.test(value) || (value.includes("\\") && plain.test(unescapeLiterals(value))))
-      return true;
+    if (carriesDecodedRoadmap(value)) return true;
   }
   return false;
 }

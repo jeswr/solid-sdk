@@ -36,9 +36,36 @@ function addView(views, key, view) {
 }
 
 const groupId = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const traceFilename = /^[a-zA-Z0-9_-]+\.json$/;
+
+export function withExclusiveFileLock(target, action, waitMs = 0) {
+  const lockPath = `${target}.lock`;
+  const deadline = performance.now() + waitMs;
+  const waiter = waitMs ? new Int32Array(new SharedArrayBuffer(4)) : undefined;
+  let lock;
+  while (lock === undefined) {
+    try {
+      lock = openSync(lockPath, "wx");
+    } catch (error) {
+      const remaining = deadline - performance.now();
+      if (error.code !== "EEXIST" || !waiter || remaining <= 0) throw error;
+      Atomics.wait(waiter, 0, 0, Math.min(25, remaining));
+    }
+  }
+  try {
+    return action();
+  } finally {
+    try {
+      closeSync(lock);
+    } finally {
+      rmSync(lockPath);
+    }
+  }
+}
 
 export class ScenarioTraceWriter {
   #files = new Set();
+  #removed = new Set();
   #views = new Map();
   #stage;
   #reference;
@@ -60,7 +87,7 @@ export class ScenarioTraceWriter {
   }
 
   write(file, trace) {
-    if (!/^[a-zA-Z0-9_-]+\.json$/.test(file) || this.#files.has(file))
+    if (!traceFilename.test(file) || this.#files.has(file) || this.#removed.has(file))
       throw new Error(`Invalid or duplicate trace filename ${file}`);
     const { linked, ...plain } = trace;
     if (
@@ -80,8 +107,14 @@ export class ScenarioTraceWriter {
     return bytes;
   }
 
+  remove(file) {
+    if (!traceFilename.test(file) || file === "index.json" || this.#files.has(file))
+      throw new Error(`Invalid trace filename to remove ${file}`);
+    this.#removed.add(file);
+  }
+
   publish() {
-    if (!this.#files.size) return;
+    if (!this.#files.size && !this.#removed.size) return;
     const linked = join(this.directory, "linked");
     try {
       mkdirSync(linked);
@@ -91,17 +124,7 @@ export class ScenarioTraceWriter {
     if (!lstatSync(linked).isDirectory() || realpathSync(linked) !== linked)
       throw new Error("traces/linked must be a regular directory inside traces");
     const target = join(this.directory, this.#reference);
-    const lockPath = `${target}.lock`;
-    const lock = openSync(lockPath, "wx");
-    try {
-      this.#publishLocked(target);
-    } finally {
-      try {
-        closeSync(lock);
-      } finally {
-        rmSync(lockPath);
-      }
-    }
+    withExclusiveFileLock(target, () => this.#publishLocked(target));
   }
 
   #publishLocked(target) {
@@ -109,6 +132,10 @@ export class ScenarioTraceWriter {
     if (stat && (!stat.isFile() || realpathSync(target) !== target))
       throw new Error(`${this.#reference} must be a regular file inside traces/linked`);
     const prior = stat ? traceLinkedTableSchema.parse(readJson(target)) : {};
+    for (const file of this.#removed) {
+      const entry = lstatSync(join(this.directory, file), { throwIfNoEntry: false });
+      if (entry && !entry.isFile()) throw new Error(`${file} must be a regular trace file`);
+    }
     // Keep keys still used by branches outside this write, including recorded paths.
     if (stat) {
       for (const entry of readdirSync(this.directory, { withFileTypes: true })) {
@@ -116,7 +143,8 @@ export class ScenarioTraceWriter {
         if (
           !file.startsWith(`${this.scenario}--`) ||
           !file.endsWith(`--${this.configuration}.json`) ||
-          this.#files.has(file)
+          this.#files.has(file) ||
+          this.#removed.has(file)
         )
           continue;
         if (!entry.isFile()) throw new Error(`${file} must be a regular trace file`);
@@ -131,7 +159,7 @@ export class ScenarioTraceWriter {
       writeFileSync(staged, sortedTable(views));
       renameSync(staged, target);
     };
-    if (this.#views.size) {
+    if (this.#files.size && this.#views.size) {
       // Publish the union first so that even an interrupted run leaves every visible
       // trace resolvable. Drop the superseded keys after replacing the trace files.
       const combined = new Map(this.#views);
@@ -139,6 +167,7 @@ export class ScenarioTraceWriter {
       writeTable(combined);
     }
     for (const file of this.#files) renameSync(join(this.#stage, file), join(this.directory, file));
+    for (const file of this.#removed) rmSync(join(this.directory, file), { force: true });
     if (this.#views.size) writeTable(this.#views);
     else rmSync(target, { force: true });
   }

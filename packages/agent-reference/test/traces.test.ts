@@ -34,7 +34,7 @@ const run = (s: ScenarioId) => {
   return p;
 };
 
-it("all committed linked views are resolvable and used", () => {
+it("all committed traces are named in the manifest and linked views are resolvable and used", () => {
   const traces = join(root, "traces");
   expect(lstatSync(traces).isDirectory()).toBe(true);
   const directory = realpathSync(traces);
@@ -66,13 +66,14 @@ it("all committed linked views are resolvable and used", () => {
   const groupsByFile = new Map(manifest.paths.map((row) => [row.trace, row]));
   for (const file of readdirSync(directory)) {
     if (!file.endsWith(".json") || file === "index.json") continue;
+    const group = groupsByFile.get(file);
+    if (!group) throw new Error(`Trace file ${file} is not named in the manifest`);
     const trace: TraceFile = read(file);
     const keys = trace.events.flatMap((event) => event.linked ?? []);
     if (keys.length || trace.linked || trace.linkedTable !== undefined) schema.parse(trace);
     if (trace.linkedTable === undefined) continue;
-    const group = groupsByFile.get(file);
     expect(trace.linkedTable, file).toBe(
-      `linked/${group?.scenario ?? trace.scenario.id}--${group ? (group.configuration ?? "baseline") : trace.configuration.id}.json`,
+      `linked/${group.scenario}--${group.configuration ?? "baseline"}.json`,
     );
     const references = used.get(trace.linkedTable) ?? new Set<string>();
     for (const key of keys) references.add(key);

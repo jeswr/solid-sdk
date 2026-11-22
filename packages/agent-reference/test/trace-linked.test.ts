@@ -102,8 +102,8 @@ it("renders the recipient trust basis when the own-list entry also carries a pin
 });
 
 it("publishes independently locked tables and keeps the keys of retained branches", async () => {
-  const modulePath = join(import.meta.dirname, "../scripts/write-scenario-traces.mjs");
-  const { ScenarioTraceWriter } = await import(modulePath);
+  // @ts-expect-error Standalone trace writer is deliberately JavaScript.
+  const { ScenarioTraceWriter } = await import("../scripts/write-scenario-traces.mjs");
   const directory = mkdtempSync(join(tmpdir(), "trace-table-groups-"));
   const baseline = join(directory, "linked/test--baseline.json");
   const alternate = join(directory, "linked/test--alternate.json");
@@ -158,8 +158,8 @@ it("publishes independently locked tables and keeps the keys of retained branche
 });
 
 it("refuses symlinks for shared tables and their directory and releases its lock on failure", async () => {
-  const modulePath = join(import.meta.dirname, "../scripts/write-scenario-traces.mjs");
-  const { ScenarioTraceWriter } = await import(modulePath);
+  // @ts-expect-error Standalone trace writer is deliberately JavaScript.
+  const { ScenarioTraceWriter } = await import("../scripts/write-scenario-traces.mjs");
   const root = mkdtempSync(join(tmpdir(), "trace-table-paths-"));
   try {
     const directory = join(root, "traces");
