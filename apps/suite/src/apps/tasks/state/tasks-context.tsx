@@ -18,7 +18,11 @@ import { TasksSharingAdapter } from "../lib/share/adapter";
 import { ensurePrivateIndexAccess, ensurePrivateTasksAccess, supportsTasksSharing } from "./access";
 import { pendingDeletes } from "./actions";
 import { completionVisuals } from "./completion-visuals";
-import { setPreferencesIdentity, useTasksPreferences } from "./preferences";
+import {
+  setPreferencesIdentity,
+  subscribeSharedProjectRemoval,
+  useTasksPreferences,
+} from "./preferences";
 import { TasksCache } from "./tasks-cache";
 
 export type { NewTask, TaskLoad, TasksSnapshot } from "./tasks-cache";
@@ -59,6 +63,13 @@ function useTasksValue(session: PodSession) {
     if (preferences.sharedOwner !== session.webId) return;
     void cache.setSharedProjects(preferences.sharedProjects);
   }, [cache, preferences.sharedProjects, preferences.sharedOwner, session.webId]);
+  useEffect(
+    () =>
+      subscribeSharedProjectRemoval((owner, url) => {
+        if (owner === session.webId && !cache.isOwnProject(url)) cache.forgetSharedProject(url);
+      }),
+    [cache, session.webId],
+  );
   const sharing = useMemo(() => new Map<string, TasksSharingAdapter>(), []);
   const snapshot = useSyncExternalStore(cache.subscribe, cache.getSnapshot, cache.getSnapshot);
   useEffect(() => {

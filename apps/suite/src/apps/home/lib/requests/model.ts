@@ -266,20 +266,23 @@ export interface RequestLists {
   /** Approved and denied within the last 30 days, most recently decided first. */
   decided: ReadableRequest[];
   /**
-   * Inbox notifications that aren't access requests or couldn't be read. Nothing can answer
-   * them, so they are never counted as waiting.
+   * Inbox notifications that aren't access requests or couldn't be read, other than recognised
+   * notifications such as shares. Nothing can answer them, so they are never counted as waiting.
    */
   unreadable: UnreadableRequest[];
 }
 
 /**
  * Split the inbox. `answered` holds requests decided in this session: they leave the waiting lists
- * at once, before (or even without) a fresh listing showing their new status.
+ * at once, before (or even without) a fresh listing showing their new status. `notifications`
+ * holds unreadable entries recognised as other notifications (share Announces): they were read
+ * fine, so they are left out of the unreadable note.
  */
 export function splitRequests(
   entries: readonly AccessRequestEntry[],
   now: Date,
   answered: ReadonlySet<string> = new Set(),
+  notifications: ReadonlySet<string> = new Set(),
 ): RequestLists {
   const readable = entries.filter(isReadable);
   const since = now.getTime() - DECIDED_WINDOW_DAYS * DAY;
@@ -298,7 +301,8 @@ export function splitRequests(
       )
       .sort((a, b) => time(b.decidedAt) - time(a.decidedAt) || a.id.localeCompare(b.id)),
     unreadable: entries.filter(
-      (entry): entry is UnreadableRequest => !isReadable(entry) && !answered.has(entry.id),
+      (entry): entry is UnreadableRequest =>
+        !isReadable(entry) && !answered.has(entry.id) && !notifications.has(entry.id),
     ),
   };
 }

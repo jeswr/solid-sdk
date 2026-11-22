@@ -47,15 +47,15 @@ const listeners = new Set<() => void>();
 /** Preferences that storage refused to save, kept for the rest of the session. */
 const unsaved = new Map<string, DrivePreferences>();
 
-function keyFor(webId: string): string {
+export function drivePreferencesKey(webId: string): string {
   return `suite.drive.prefs.${webId}`;
 }
 
 function load(webId: string): DrivePreferences {
-  const memory = unsaved.get(keyFor(webId));
+  const memory = unsaved.get(drivePreferencesKey(webId));
   if (memory) return memory;
   try {
-    const raw = localStorage.getItem(keyFor(webId));
+    const raw = localStorage.getItem(drivePreferencesKey(webId));
     if (!raw) return DEFAULTS;
     const parsed = drivePreferencesSchema.safeParse(JSON.parse(raw));
     return parsed.success ? parsed.data : DEFAULTS;
@@ -65,12 +65,12 @@ function load(webId: string): DrivePreferences {
 }
 
 export function useDrivePreferences(webId: string) {
-  const [prefs, setPrefs] = useState<DrivePreferences>(DEFAULTS);
+  const [snapshot, setSnapshot] = useState({ webId, prefs: DEFAULTS });
   useEffect(() => {
-    const sync = () => setPrefs(load(webId));
+    const sync = () => setSnapshot({ webId, prefs: load(webId) });
     sync();
     listeners.add(sync);
-    const onStorage = (event: StorageEvent) => event.key === keyFor(webId) && sync();
+    const onStorage = (event: StorageEvent) => event.key === drivePreferencesKey(webId) && sync();
     addEventListener("storage", onStorage);
     return () => {
       listeners.delete(sync);
@@ -81,17 +81,17 @@ export function useDrivePreferences(webId: string) {
     (change: (current: DrivePreferences) => DrivePreferences) => {
       const next = change(load(webId));
       try {
-        localStorage.setItem(keyFor(webId), JSON.stringify(next));
-        unsaved.delete(keyFor(webId));
+        localStorage.setItem(drivePreferencesKey(webId), JSON.stringify(next));
+        unsaved.delete(drivePreferencesKey(webId));
       } catch {
         // Storage can be unavailable (private mode or full); keep the value in memory
         // so listeners reloading preferences do not revert it.
-        unsaved.set(keyFor(webId), next);
+        unsaved.set(drivePreferencesKey(webId), next);
       }
-      setPrefs(next);
+      setSnapshot({ webId, prefs: next });
       for (const listener of listeners) listener();
     },
     [webId],
   );
-  return [prefs, update] as const;
+  return [snapshot.webId === webId ? snapshot.prefs : DEFAULTS, update] as const;
 }
