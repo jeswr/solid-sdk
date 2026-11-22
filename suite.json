@@ -117,7 +117,8 @@
     "@jeswr/suite-insights",
     "@jeswr/solid-media-log",
     "@jeswr/solid-wallet",
-    "@jeswr/solid-events"
+    "@jeswr/solid-events",
+    "@jeswr/solid-trips"
   ],
   "applications": [
     {

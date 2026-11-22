@@ -1,0 +1,246 @@
+/* AUTHORED-BY Codex (GPT-6.1 Sol) */
+.tr-page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: clamp(20px, 4vw, 48px);
+  color: var(--foreground);
+}
+.tr-toolbar {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.tr-page h1,
+.tr-toolbar h2 {
+  font-size: clamp(28px, 3vw, 38px);
+  line-height: 1.2;
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  margin: 8px 0 12px;
+}
+.tr-eyebrow {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--foreground-muted);
+}
+.tr-muted,
+.tr-trip-body > p,
+.tr-booking p {
+  color: var(--foreground-muted);
+}
+.tr-actions,
+.tr-detail-actions,
+.tr-confirmation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tr-detail-actions {
+  margin-bottom: 24px;
+}
+.tr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 285px), 1fr));
+  gap: 24px;
+}
+.tr-trip {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.tr-trip-art {
+  min-height: 160px;
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  justify-content: center;
+  align-items: center;
+  font-size: 22px;
+}
+.tr-trip-body {
+  padding: 24px;
+}
+.tr-trip-body h2 {
+  margin: 10px 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+.tr-trip-body h2 button {
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.tr-trip-body h2 button:hover {
+  text-decoration: underline;
+}
+.tr-trip-body h2 button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 5px;
+}
+.tr-sidebar {
+  padding: 24px 16px;
+}
+.tr-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 22px;
+  margin-bottom: 18px;
+}
+.tr-sidebar > p {
+  color: var(--foreground-muted);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+.tr-sidebar nav {
+  display: grid;
+  gap: 8px;
+}
+.tr-sidebar nav button {
+  justify-content: start;
+}
+.tr-private {
+  margin-top: 48px;
+  font-size: 12px;
+  color: var(--foreground-muted);
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tr-private p {
+  width: 100%;
+}
+.tr-save {
+  min-height: 20px;
+  color: var(--foreground-muted);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.tr-notice,
+.tr-notes,
+.tr-suggestions {
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 20px;
+  margin-bottom: 24px;
+}
+.tr-notes {
+  white-space: pre-wrap;
+}
+.tr-suggestions article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+.tr-suggestions h2,
+.tr-day h2 {
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.tr-day {
+  margin-bottom: 32px;
+}
+.tr-booking {
+  display: flex;
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+.tr-type-icon {
+  color: var(--primary);
+  padding-top: 2px;
+}
+.tr-booking-main {
+  flex: 1;
+  min-width: 0;
+}
+.tr-booking h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 6px 0;
+}
+.tr-card-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.tr-booking p {
+  margin: 7px 0;
+  overflow-wrap: anywhere;
+}
+.tr-confirmation {
+  margin: 12px 0;
+  font-size: 13px;
+}
+.tr-confirmation strong {
+  color: var(--foreground);
+  margin-left: 8px;
+  user-select: all;
+}
+.tr-form,
+.tr-field {
+  display: grid;
+  gap: 8px;
+}
+.tr-form {
+  gap: 18px;
+}
+.tr-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.tr-dialog {
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+@media (max-width: 600px) {
+  .tr-fields {
+    grid-template-columns: 1fr;
+  }
+  .tr-booking {
+    padding: 16px;
+    gap: 12px;
+  }
+  .tr-actions {
+    width: 100%;
+  }
+  .tr-page {
+    padding: 20px 16px;
+  }
+}
+.tr-trip-art {
+  position: relative;
+}
+.tr-trip-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.tr-trip-art img ~ svg,
+.tr-trip-art img ~ span {
+  position: relative;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--foreground);
+}

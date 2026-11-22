@@ -1,0 +1,50 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Source: PR #474, origin/claude/project-thread-mna5p5-markup,
+# packages/pod-connectors/src/mail/markup-fixtures.ts EMAIL_MARKUP_FIXTURES (travel items)
+# and markup-writer.test.ts "writes every supported type". Literal encoding follows
+# markup-writer.ts writeNode/addLiteral (string values stay xsd:string, every node
+# carries provenance/trust), but this is a test convenience, NOT the writer's layout:
+# all seven items share one document under readable fragment names. The writer emits
+# one document per item rooted at #it with #node-N children; see fixtures/writer/.
+@prefix s: <http://schema.org/> .
+@prefix f: <https://jeswr.org/fedcon#> .
+@prefix p: <http://www.w3.org/ns/prov#> .
+@prefix x: <http://www.w3.org/2001/XMLSchema#> .
+@prefix : <https://pod.example/mail/account/trips/opaque.ttl#> .
+:flight a s:FlightReservation ; s:reservationNumber "TEST-FLIGHT-42" ;
+ s:reservationStatus "https://schema.org/ReservationConfirmed" ;
+ s:provider :air ; s:underName :person ; s:reservationFor :plane ;
+ s:dateModified "2026-12-01T09:00:00Z"^^x:dateTime ;
+ f:emailMarkupTrust "verified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/a.ttl#it> .
+:air a s:Organization ; s:name "Example Air" ; f:emailMarkupTrust "verified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/a.ttl#it> .
+:person a s:Person ; s:name "Example Traveller" ; f:emailMarkupTrust "verified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/a.ttl#it> .
+:plane a s:Flight ; s:flightNumber "EX42" ; s:airline :air ; s:departureAirport :north ; s:arrivalAirport :south ; s:departureTime "2026-12-01T09:00:00Z" ; f:emailMarkupTrust "verified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/a.ttl#it> .
+:north a s:Airport ; s:name "Example North" ; s:iataCode "AAA" ; f:emailMarkupTrust "verified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/a.ttl#it> .
+:south a s:Airport ; s:name "Example South" ; s:iataCode "BBB" ; f:emailMarkupTrust "verified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/a.ttl#it> .
+:train a s:TrainReservation ; s:reservationNumber "TEST-TRAIN-42" ; s:provider :rail ; s:reservationFor :trainTrip ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/b.ttl#it> ; s:dateModified "2026-12-01T09:00:00Z"^^x:dateTime .
+:rail a s:Organization ; s:name "Example Rail" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/b.ttl#it> .
+:trainTrip a s:TrainTrip ; s:trainNumber "42" ; s:departureStation :central ; s:arrivalStation :coast ; s:departureTime "2026-12-01T10:00:00Z" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/b.ttl#it> .
+:central a s:Place ; s:name "Example Central" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/b.ttl#it> .
+:coast a s:Place ; s:name "Example Coast" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/b.ttl#it> .
+:bus a s:BusReservation ; s:reservationNumber "TEST-BUS-42" ; s:provider :coach ; s:reservationFor :busTrip ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/c.ttl#it> ; s:dateModified "2026-12-01T09:00:00Z"^^x:dateTime .
+:coach a s:Organization ; s:name "Example Coach" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/c.ttl#it> .
+:busTrip a s:BusTrip ; s:busNumber "42" ; s:departureBusStop :square ; s:arrivalBusStop :park ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/c.ttl#it> .
+:square a s:Place ; s:name "Example Square" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/c.ttl#it> .
+:park a s:Place ; s:name "Example Park" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/c.ttl#it> .
+:hotel a s:LodgingReservation ; s:reservationNumber "TEST-HOTEL-42" ; s:provider :hotels ; s:checkinTime "2026-12-01T15:00:00Z" ; s:checkoutTime "2026-12-02T11:00:00Z" ; s:numAdults "2" ; s:reservationFor :stay ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/d.ttl#it> ; s:dateModified "2026-12-01T09:00:00Z"^^x:dateTime .
+:hotels a s:Organization ; s:name "Example Hotels" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/d.ttl#it> .
+:stay a s:Hotel ; s:name "Example Hotel" ; s:address :postal ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/d.ttl#it> .
+:postal a s:PostalAddress ; s:streetAddress "2 Example Road" ; s:addressLocality "Example Town" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/d.ttl#it> .
+:food a s:FoodEstablishmentReservation ; s:reservationNumber "TEST-FOOD-42" ; s:provider :dining ; s:startTime "2026-12-01T19:00:00Z" ; s:partySize "2" ; s:reservationFor :table ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/e.ttl#it> ; s:dateModified "2026-12-01T09:00:00Z"^^x:dateTime .
+:dining a s:Organization ; s:name "Example Dining" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/e.ttl#it> .
+:table a s:Restaurant ; s:name "Example Table" ; s:telephone "+12025550100" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/e.ttl#it> .
+:event a s:EventReservation ; s:reservationNumber "TEST-EVENT-42" ; s:provider :tickets ; s:reservationFor :concert ; s:reservedTicket :ticket ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/f.ttl#it> ; s:dateModified "2026-12-01T09:00:00Z"^^x:dateTime .
+:tickets a s:Organization ; s:name "Example Tickets" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/f.ttl#it> .
+:concert a s:Event ; s:name "Example Concert" ; s:startDate "2026-12-01T20:00:00Z" ; s:location :hall ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/f.ttl#it> .
+:hall a s:Place ; s:name "Example Hall" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/f.ttl#it> .
+:ticket a s:Ticket ; s:ticketNumber "TEST-TICKET-42" ; s:ticketedSeat :seat ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/f.ttl#it> .
+:seat a s:Seat ; s:seatRow "A" ; s:seatNumber "12" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/f.ttl#it> .
+:car a s:RentalCarReservation ; s:reservationNumber "TEST-CAR-42" ; s:provider :rentals ; s:pickupTime "2026-12-01T12:00:00Z" ; s:dropoffTime "2026-12-02T12:00:00Z" ; s:pickupLocation :pickup ; s:reservationFor :compact ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/g.ttl#it> ; s:dateModified "2026-12-01T09:00:00Z"^^x:dateTime .
+:rentals a s:Organization ; s:name "Example Rentals" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/g.ttl#it> .
+:pickup a s:Place ; s:name "Example Airport" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/g.ttl#it> .
+:compact a s:RentalCar ; s:name "Example compact" ; s:model "Compact" ; f:emailMarkupTrust "unverified" ; p:wasDerivedFrom <https://pod.example/mail/account/messages/g.ttl#it> .

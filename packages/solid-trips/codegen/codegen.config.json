@@ -1,0 +1,287 @@
+{
+  "shapesBase": "https://jeswr.org/ns/trips#",
+  "prefixes": {
+    "schema": "http://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "prov": "http://www.w3.org/ns/prov#",
+    "trips": "https://jeswr.org/ns/trips#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "fedcon": "https://jeswr.org/fedcon#"
+  },
+  "entities": [
+    {
+      "name": "Trip",
+      "targetClass": "http://schema.org/Trip",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "cover": {
+          "iriScheme": "http-https"
+        },
+        "reservations": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "name": "Organization",
+      "targetClass": "http://schema.org/Organization",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "name": "Person",
+      "targetClass": "http://schema.org/Person",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "name": "Airport",
+      "targetClass": "http://schema.org/Airport",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "name": "Place",
+      "targetClass": "http://schema.org/Place",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "name": "Flight",
+      "targetClass": "http://schema.org/Flight",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "from": {
+          "iriScheme": "http-https"
+        },
+        "to": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "name": "TrainTrip",
+      "targetClass": "http://schema.org/TrainTrip",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "from": {
+          "iriScheme": "http-https"
+        },
+        "to": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "name": "BusTrip",
+      "targetClass": "http://schema.org/BusTrip",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "from": {
+          "iriScheme": "http-https"
+        },
+        "to": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "name": "LodgingBusiness",
+      "targetClass": "http://schema.org/LodgingBusiness",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "name": "FoodEstablishment",
+      "targetClass": "http://schema.org/FoodEstablishment",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "name": "Event",
+      "targetClass": "http://schema.org/Event",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "location": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "name": "Car",
+      "targetClass": "http://schema.org/Car",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "name": "FlightReservation",
+      "targetClass": "http://schema.org/FlightReservation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "provider": {
+          "iriScheme": "http-https"
+        },
+        "underName": {
+          "iriScheme": "http-https"
+        },
+        "source": {
+          "iriScheme": "http-https"
+        },
+        "booking": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "name": "TrainReservation",
+      "targetClass": "http://schema.org/TrainReservation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "provider": {
+          "iriScheme": "http-https"
+        },
+        "underName": {
+          "iriScheme": "http-https"
+        },
+        "source": {
+          "iriScheme": "http-https"
+        },
+        "booking": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "name": "BusReservation",
+      "targetClass": "http://schema.org/BusReservation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "provider": {
+          "iriScheme": "http-https"
+        },
+        "underName": {
+          "iriScheme": "http-https"
+        },
+        "source": {
+          "iriScheme": "http-https"
+        },
+        "booking": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "name": "LodgingReservation",
+      "targetClass": "http://schema.org/LodgingReservation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "provider": {
+          "iriScheme": "http-https"
+        },
+        "underName": {
+          "iriScheme": "http-https"
+        },
+        "source": {
+          "iriScheme": "http-https"
+        },
+        "booking": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "name": "FoodEstablishmentReservation",
+      "targetClass": "http://schema.org/FoodEstablishmentReservation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "provider": {
+          "iriScheme": "http-https"
+        },
+        "underName": {
+          "iriScheme": "http-https"
+        },
+        "source": {
+          "iriScheme": "http-https"
+        },
+        "booking": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "name": "EventReservation",
+      "targetClass": "http://schema.org/EventReservation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "provider": {
+          "iriScheme": "http-https"
+        },
+        "underName": {
+          "iriScheme": "http-https"
+        },
+        "source": {
+          "iriScheme": "http-https"
+        },
+        "booking": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "name": "RentalCarReservation",
+      "targetClass": "http://schema.org/RentalCarReservation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "provider": {
+          "iriScheme": "http-https"
+        },
+        "underName": {
+          "iriScheme": "http-https"
+        },
+        "source": {
+          "iriScheme": "http-https"
+        },
+        "booking": {
+          "iriScheme": "http-https"
+        },
+        "from": {
+          "iriScheme": "http-https"
+        },
+        "to": {
+          "iriScheme": "http-https"
+        }
+      }
+    }
+  ]
+}
