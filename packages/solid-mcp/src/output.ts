@@ -266,7 +266,6 @@ export class PodOutput {
   private async mutate<T>(url: string, operation: (target: string) => Promise<T>): Promise<T> {
     const target = this.target(url, true);
     if (this.personal) return this.operation(() => operation(target));
-    requireDataMutationPath(url);
     let auxiliaries: ReadonlySet<string>;
     try {
       // Discovery inspects protected metadata internally, without disclosing its contents.
@@ -277,6 +276,7 @@ export class PodOutput {
       throw new Error(PERSONAL_DATA_DENIED);
     }
     requireAuxiliaryMutationAccess(target, auxiliaries);
+    requireDataMutationPath(url);
     // Keep the discovered governing associations active through metadata and mutation.
     return withPodDataAccess(this.pod, false, () => operation(target), auxiliaries);
   }

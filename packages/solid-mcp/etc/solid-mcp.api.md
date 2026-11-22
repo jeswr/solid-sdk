@@ -108,6 +108,7 @@ export type PodEntry = Pick<PodChild, "url" | "isContainer"> & Partial<Omit<PodC
 // @public
 export interface PodHeadResult {
     acl?: string;
+    acr?: string[];
     auxiliaryResources?: readonly string[];
     describedby?: string[];
     exists?: boolean;

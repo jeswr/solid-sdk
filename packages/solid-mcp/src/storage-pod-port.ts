@@ -17,7 +17,7 @@ import { requireWriteConditions } from "./generic-mutation.js";
 import { podOperationFetch, withPodReadMode } from "./pod-operation.js";
 import {
   configurePodSearchLimits,
-  createFetchPodPort,
+  createFetchPodPortWithHead,
   type PodConditions,
   type PodPort,
   registerNativePodRead,
@@ -31,7 +31,7 @@ export function createStoragePodPort(
   discoveryFetch?: typeof fetch,
 ): PodPort {
   const config = { ...input, podRoot: normalizePodRoot(input.podRoot) };
-  const legacy = createFetchPodPort(config);
+  const legacy = createFetchPodPortWithHead(config);
   let client: Promise<StorageClient> | undefined;
   const transport: typeof fetch = async (url, init) => {
     const request = new Request(url, init);
@@ -106,7 +106,7 @@ export function createStoragePodPort(
       await storage();
       // storage-client rejects 404 responses before exposing their Link headers.
       // Use the same scoped fetch metadata path so absent targets remain discoverable.
-      return (await legacy.head?.(target)) ?? {};
+      return legacy.head(target);
     },
     async read(url, options) {
       if (url === config.webId && podScopedUrlOrUndefined(config, url) === undefined)
@@ -118,7 +118,7 @@ export function createStoragePodPort(
         contentType:
           read.contentType === null
             ? ""
-            : (read.contentType.split(";", 1)[0] ?? "").trim().toLowerCase(),
+            : read.contentType.replace(/;.*/su, "").trim().toLowerCase(),
         etag: read.etag ?? undefined,
         url: requirePodScopedUrl(config, read.url),
         isContainer: read.kind === "container",

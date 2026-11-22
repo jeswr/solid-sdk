@@ -230,13 +230,14 @@ chat ACL discovery and all pod operations, including current decorators.
 `webId`. Its optional `head` returns `PodHeadResult.acl`, an absolute WAC ACL URL
 discovered from a unique, unanchored `rel="acl"` Link on the exact target, including
 HTTP 404 for resources not yet created. `PodHeadResult.describedby` retains the absolute
-URLs from all unanchored `rel="describedby"` Links. It also returns `exists` and
+URLs from all unanchored `rel="describedby"` Links, and `acr` provides the absolute URLs
+from unanchored ACP access-control Links. It also returns `exists` and
 `auxiliaryResources`: the complete absolute URLs advertised by `acl`, `describedby`, `linkset`
 and ACP `http://www.w3.org/ns/solid/acp#accessControl` relations. An empty array
 means successful discovery with no such links; an absent field means unknown.
 HEAD refuses redirects and throws on failed responses other than 404, malformed or
-ambiguous Link metadata, anchored ACL/description links, or unsupported ACP metadata.
-Memory and audit still require a unique WAC `acl`. Optional
+ambiguous Link metadata or anchored ACL, ACP or description links. When ACP is
+advertised, HEAD omits `acl`. Chat, memory and audit require a unique WAC `acl`. Optional
 `PodReadOptions.accept` selects a representation; generic reads keep
 the backend default, while RDF/profile reads request RDF explicitly. The fetch adapter retains listing metadata, ETags, guarded read redirects,
 and refusal of all mutation redirects. Mutations reject the root and its slashless
@@ -269,7 +270,7 @@ Generic writes and deletes of an ACL, ACR or `.meta` resource that governs a pro
 area (the pod root's, an ancestor's, or the area's own, in `/.acl` and slashless `.acl`
 forms) are refused, because a protected area inherits its ancestors' access rules.
 Before each otherwise-allowed generic write/delete, the server also uses the current
-`PodPort.head` to discover `rel="acl"` and `rel="describedby"` associations for the pod
+`PodPort.head` to discover WAC ACL, ACP access-control and `rel="describedby"` associations for the pod
 root, every protected area (including the in-pod configured WebID profile document)
 and all their ancestor containers. Advertised auxiliary URLs are protected even at
 unconventional locations, including ACR query URLs. Shared ancestors are inspected

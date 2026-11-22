@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, test } from "vitest";
 import { LinkHeaderOverflowError, parseLinkHeaders } from "./link.js";
 
@@ -421,6 +422,11 @@ describe("authoritative Link syntax", () => {
     "<x>; rel=acl trailing",
     "<x>; title=no-rel",
     '<x>; rel=""',
+    '<x>; rel="alternate\u00a0acl"',
+    '<x>; rel="alternate\u2003describedby"',
+    '<x>; rel="lin\u212aset"',
+    '<x>; rel="not/registered"',
+    '<x>; rel="https://example.com/%zz"',
     "<http://[>; rel=acl",
     '<x>; rel=acl; anchor="http://["',
     "<>; rel=acl",
@@ -442,10 +448,18 @@ describe("authoritative Link syntax", () => {
     }
   });
   test("strict syntax accepts quoted delimiters, flags, empty fields and same-context anchors", () => {
-    const header = '<a,b>; rel="ACL describedBy"; title="a, b; \\"quote\\""; flag; anchor=""';
+    const header =
+      '<a,b>; rel="ACL\tDescribedBy urn:example:role https://example.com/a%20b#role"; title="a, b; \\"quote\\""; flag; anchor=""';
     const options = { onMalformed: "throw", onOverflow: "throw" } as const;
     expect(parseLinkHeaders(header, base, options)).toEqual(parseLinkHeaders(header, base));
     expect(parseLinkHeaders(["", " , , ", header], base, options)).toHaveLength(1);
     expect(parseLinkHeaders(null, base, options)).toEqual([]);
+  });
+
+  test("tolerant syntax preserves legacy relation parsing", () => {
+    expect(parseLinkHeaders('<x>; rel="alternate\u00a0acl next"', base)[0]?.rel).toEqual([
+      "alternate\u00a0acl",
+      "next",
+    ]);
   });
 });

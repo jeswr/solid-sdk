@@ -420,50 +420,50 @@ describe("tool registry over a fetch-free portable pod", () => {
     }
   });
 
-  it.each(["pod_write", "solid_write"])(
-    "keeps governing associations and target/parent auxiliary guards together for %s",
-    async (name) => {
-      const pod = portablePod();
-      const governing = `${ROOT}governing-permissions`;
-      pod.head.mockImplementation(async (target) => ({
-        acl: target === ROOT ? governing : `${target}.acl`,
-        auxiliaryResources: [target === ROOT ? governing : `${target}.acl`],
-        exists: false,
-      }));
-      const tool = createPodToolRegistry(pod).find(
-        (entry) => entry.name === name || entry.aliases.includes(name),
-      );
-      if (!tool) throw new Error("write tool missing");
-      const governingResult = await tool.handler({
-        url: governing,
-        content: "x",
-        contentType: "text/plain",
-      });
-      expect(governingResult).toMatchObject({
-        isError: true,
-        content: [{ text: "Personal data requires a purpose-limited tool" }],
-      });
-      expect(pod.write).not.toHaveBeenCalled();
+  it.each([
+    "pod_write",
+    "solid_write",
+  ])("keeps governing associations and target/parent auxiliary guards together for %s", async (name) => {
+    const pod = portablePod();
+    const governing = `${ROOT}governing-permissions`;
+    pod.head.mockImplementation(async (target) => ({
+      acl: target === ROOT ? governing : `${target}.acl`,
+      auxiliaryResources: [target === ROOT ? governing : `${target}.acl`],
+      exists: false,
+    }));
+    const tool = createPodToolRegistry(pod, false).find(
+      (entry) => entry.name === name || entry.aliases.includes(name),
+    );
+    if (!tool) throw new Error("write tool missing");
+    const governingResult = await tool.handler({
+      url: governing,
+      content: "x",
+      contentType: "text/plain",
+    });
+    expect(governingResult).toMatchObject({
+      isError: true,
+      content: [{ text: "Personal data requires a purpose-limited tool" }],
+    });
+    expect(pod.write).not.toHaveBeenCalled();
 
-      // An ordinary data target may independently be advertised as an auxiliary
-      // by its parent, even when no personal-area association points at it.
-      pod.head.mockImplementation(async (target) => ({
-        acl: `${target}.acl`,
-        auxiliaryResources: [`${target}.acl`, ...(target === ROOT ? [FILE] : [])],
-        exists: false,
-      }));
-      const auxiliaryResult = await tool.handler({
-        url: FILE,
-        content: "x",
-        contentType: "text/plain",
-      });
-      expect(auxiliaryResult).toMatchObject({
-        isError: true,
-        content: [{ text: "Generic tools cannot mutate access-control or description resources" }],
-      });
-      expect(pod.write).not.toHaveBeenCalled();
-    },
-  );
+    // An ordinary data target may independently be advertised as an auxiliary
+    // by its parent, even when no personal-area association points at it.
+    pod.head.mockImplementation(async (target) => ({
+      acl: `${target}.acl`,
+      auxiliaryResources: [`${target}.acl`, ...(target === ROOT ? [FILE] : [])],
+      exists: false,
+    }));
+    const auxiliaryResult = await tool.handler({
+      url: FILE,
+      content: "x",
+      contentType: "text/plain",
+    });
+    expect(auxiliaryResult).toMatchObject({
+      isError: true,
+      content: [{ text: "Generic tools cannot mutate access-control or description resources" }],
+    });
+    expect(pod.write).not.toHaveBeenCalled();
+  });
 
   it("renders binary tool/resource reads and wraps RDF failures", async () => {
     const pod = portablePod();

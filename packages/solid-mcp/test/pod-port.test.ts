@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { readRdf, readResource, search } from "../src/pod.js";
 import { createFetchPodPort } from "../src/pod-port.js";
@@ -31,7 +32,6 @@ describe("fetch PodPort", () => {
   });
 
   it.each([
-    '<policy>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
     '<a>; rel="acl", <b>; rel="acl"',
     '<a>; rel="acl"; anchor="other"',
     '<a>; rel="acl"; rel="alternate"',
@@ -39,6 +39,21 @@ describe("fetch PodPort", () => {
   ])("rejects unusable WAC metadata: %s", async (link) => {
     const pod = createFetchPodPort({ fetch: responding(200, { link }), podRoot: ROOT });
     await expect(pod.head?.(FILE)).rejects.toThrow();
+  });
+
+  it.each([200, 404])("returns complete ACP associations on HEAD HTTP %s", async (status) => {
+    const pod = createFetchPodPort({
+      fetch: responding(status, {
+        link: '<policy>; rel="http://www.w3.org/ns/solid/acp#accessControl", <permissions>; rel="acl", <meta>; rel="describedby"',
+      }),
+      podRoot: ROOT,
+    });
+    expect(await pod.head?.(FILE)).toEqual({
+      acr: [`${ROOT}policy`],
+      describedby: [`${ROOT}meta`],
+      auxiliaryResources: [`${ROOT}policy`, `${ROOT}permissions`, `${ROOT}meta`],
+      exists: status !== 404,
+    });
   });
 
   it.each([
@@ -61,6 +76,8 @@ describe("fetch PodPort", () => {
     expect(await pod.head?.(FILE)).toEqual({
       acl: `${ROOT}permissions`,
       describedby: [`${ROOT}meta/one`, `${ROOT}meta/two?ext=acr`],
+      auxiliaryResources: [`${ROOT}permissions`, `${ROOT}meta/one`, `${ROOT}meta/two?ext=acr`],
+      exists: status !== 404,
     });
   });
 

@@ -430,10 +430,16 @@ describe("MCP chat tools over the scoped fetch port", () => {
       };
       const args = (conversationId: string) =>
         name === "chat_list" ? { provider: "claude" } : { ...input, conversationId };
+      const requestStart = fixture.requests.length;
       const denied = await client.callTool({ name, arguments: args("sensitive-record") });
-      if (name === "chat_save" || name === "chat_get" || name === "chat_export")
-        expect(denied.isError).toBe(true);
+      if (name === "chat_get" || name === "chat_export") expect(denied.isError).toBe(true);
       else expect(denied.isError).toBeFalsy();
+      if (name === "chat_save") {
+        expect(json(denied)).toEqual({});
+        expect(
+          fixture.requests.slice(requestStart).filter(({ method }) => method === "PUT"),
+        ).toEqual([]);
+      }
       expect(JSON.stringify(denied)).not.toContain(deniedUrl);
       expect(JSON.stringify(denied)).not.toContain("sensitive-record");
       expect(JSON.stringify(denied)).not.toContain("private medical history");
@@ -878,13 +884,18 @@ describe("MCP chat tools over the scoped fetch port", () => {
     }
   });
 
-  it("refuses chat ACL PUT redirects without creating content", async () => {
+  it.each([
+    301, 302, 303, 307, 308,
+  ])("refuses an ACL PUT redirect (%s) without creating content", async (status) => {
     const pod = fakePod();
-    const fetch: typeof globalThis.fetch = async (input, init) => {
+    const target = `${ROOT}private/chats/`;
+    const acl = `${target}owner-permissions`;
+    pod.aclLinks.set(target, '<owner-permissions>; rel="acl"');
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       if (init?.method === "PUT")
-        return new Response(null, { status: 303, headers: { location: ROOT } });
+        return new Response(null, { status, headers: { location: ROOT } });
       return pod.fetch(input, init);
-    };
+    });
     const client = await connect({ fetch, podRoot: ROOT, webId: OWNER, readOnly: false });
     try {
       const saved = await client.callTool({ name: "chat_save", arguments: input });
@@ -893,8 +904,9 @@ describe("MCP chat tools over the scoped fetch port", () => {
         expect.objectContaining({ text: expect.stringMatching(/redirect/) }),
       ]);
       expect(pod.resources.size).toBe(0);
-      expect(pod.requests.some((r) => r.url === ROOT && r.method !== "HEAD")).toBe(false);
-      expect(pod.requests.filter((r) => r.url === ROOT && r.method === "HEAD")).toHaveLength(1);
+      expect(
+        fetch.mock.calls.filter(([, init]) => !["HEAD", "GET"].includes(init?.method ?? "")),
+      ).toEqual([[acl, expect.objectContaining({ method: "PUT", redirect: "manual" })]]);
     } finally {
       await client.close();
     }

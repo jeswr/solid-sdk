@@ -79,8 +79,6 @@ export function mockCss({ chatAcl = true } = {}) {
     assert.equal(request.headers.get("authorization"), `DPoP ${token}`);
     proofs.push(proofOf(request, token));
     stats.reads++;
-    if (request.method === "HEAD" && !request.url.startsWith(`${POD}private/chats/`))
-      return new Response(null, { headers: { link: `<${request.url}.acl>; rel="acl"` } });
     // Persist chat RDF behind the same credential and DPoP checks as pod tools.
     if (request.url.startsWith(`${POD}private/chats/`)) {
       const resource = chats.get(request.url);
@@ -126,6 +124,7 @@ export function mockCss({ chatAcl = true } = {}) {
           request.url === POD || request.url === `${POD}note` || written.has(request.url)
             ? 200
             : 404,
+        headers: { link: `<${request.url}.acl>; rel="acl"` },
       });
     if (request.method === "PUT") {
       if (request.headers.get("if-none-match") === "*" && written.has(request.url))

@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it, vi } from "vitest";
 import { createChatPodPort } from "../src/chat-tools.js";
-import { strongWriteEtag } from "../src/generic-mutation.js";
+import { MUTATION_DISCOVERY_UNAVAILABLE, strongWriteEtag } from "../src/generic-mutation.js";
 import { PodOutput } from "../src/output.js";
+import { PERSONAL_DATA_DENIED } from "../src/personal-data.js";
 import { writeResource } from "../src/pod.js";
 import { createFetchPodPort } from "../src/pod-port.js";
 import { createSolidMcpServer } from "../src/server.js";
@@ -23,7 +25,9 @@ function fixture() {
     const request = new Request(input, init);
     requests.push(request);
     const resource = resources.get(request.url);
-    const headers = new Headers({ link: links.get(request.url) ?? "" });
+    const headers = new Headers({
+      link: links.get(request.url) ?? `<${request.url}.acl>; rel="acl"`,
+    });
     if (resource) {
       headers.set("etag", resource.etag);
       headers.set("content-type", resource.contentType);
@@ -80,7 +84,9 @@ describe("generic mutation safety", () => {
         : kind === "chat"
           ? createChatPodPort(f.config, f.pod).write(target, new Uint8Array(), "text/plain", {})
           : output.write(target, new Uint8Array(), "text/plain", { ifNoneMatch: "*" });
-    await expect(operation).rejects.toThrow(/access-control|description/i);
+    await expect(operation).rejects.toThrow(
+      path === ".acl" ? PERSONAL_DATA_DENIED : /access-control|description/i,
+    );
     expect(f.mutations()).toEqual([]);
   });
 
@@ -126,7 +132,27 @@ describe("generic mutation safety", () => {
   ])("refuses malformed, anchored or multiple advertised links: %s", async (link) => {
     const f = fixture();
     f.links.set(PARENT, link);
-    await expect(writeResource(f.pod, FILE, "x", "text/plain")).rejects.toThrow();
+    await expect(writeResource(f.pod, FILE, "x", "text/plain")).rejects.toThrow(
+      MUTATION_DISCOVERY_UNAVAILABLE,
+    );
+    expect(f.mutations()).toEqual([]);
+  });
+
+  it.each(
+    ["acl", "describedby"].flatMap((rel) =>
+      [FILE, PARENT].map((advertiser) => ({ rel, advertiser })),
+    ),
+  )("fails closed on malformed $rel relations at $advertiser", async ({ rel, advertiser }) => {
+    const f = fixture();
+    f.links.set(advertiser, `<memo.txt>; rel="alternate\u00a0${rel}"`);
+    await expect(writeResource(f.pod, FILE, "x", "text/plain")).rejects.toThrow(
+      MUTATION_DISCOVERY_UNAVAILABLE,
+    );
+    await expect(new PodOutput(f.pod).delete(FILE)).rejects.toThrow(MUTATION_DISCOVERY_UNAVAILABLE);
+    expect(f.requests.filter(({ url }) => url === advertiser).map(({ method }) => method)).toEqual([
+      "HEAD",
+      "HEAD",
+    ]);
     expect(f.mutations()).toEqual([]);
   });
 
@@ -160,9 +186,11 @@ describe("generic mutation safety", () => {
     vi.useFakeTimers();
     const f = fixture();
     try {
-      f.pod.head = async () => new Promise(() => {});
+      const head = f.pod.head;
+      f.pod.head = async (url) =>
+        url === FILE ? new Promise(() => {}) : ((await head?.(url)) ?? {});
       const refused = expect(writeResource(f.pod, FILE, "x", "text/plain")).rejects.toThrow(
-        "Access-control and description discovery unavailable; mutation refused",
+        MUTATION_DISCOVERY_UNAVAILABLE,
       );
       await vi.advanceTimersByTimeAsync(5000);
       await refused;

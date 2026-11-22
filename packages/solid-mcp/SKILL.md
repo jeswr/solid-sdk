@@ -54,12 +54,14 @@ Keep that convention guard and also discover associations before every otherwise
 generic write/delete: HEAD the pod root, each protected area (including the in-pod
 WebID profile document) and all their ancestor containers through the current PodPort.
 Dedupe those HEADs within each mutation; never cache associations across calls.
-Refuse normalized aliases of every advertised `rel="acl"` and `rel="describedby"`
+Refuse normalized aliases of every advertised WAC ACL, ACP access-control and `rel="describedby"`
 target with the same fixed personal-data diagnostic. Missing HEAD capability or auxiliary metadata, failed
 HEADs (except 404), malformed/ambiguous Links and off-pod associations fail closed.
 Use Link metadata on 404 too; missing associations fail closed even on 404.
-Share the existing Link parser with WAC discovery; memory/audit still require a unique
-WAC ACL. Generic reads do not perform auxiliary discovery.
+Share the existing Link parser with WAC discovery. `PodHeadResult.acr` carries the
+ACP associations for governing checks. When ACP is advertised, omit `acl` so chat,
+memory and audit continue to require a unique WAC ACL. Generic reads do not perform
+auxiliary discovery.
 Check redirects and final aliases, slashless containers, case variants, repeated
 percent encoding and normalized dot segments at the shared output/operation
 boundary. Only memoryContext and audit may opt into internal personal access;

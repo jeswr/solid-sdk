@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { parseLinkHeaders } from "@jeswr/storage-capabilities";
+import type { PodHeadResult } from "./pod-port.js";
 
 const ACP = "http://www.w3.org/ns/solid/acp#accesscontrol";
+const AUXILIARY_RELATIONS = ["acl", "describedby", "linkset", ACP];
 
 /** One strict parser for WAC and generic auxiliary-resource discovery. */
 function discoveryLinks(header: string, base: string) {
@@ -28,10 +30,10 @@ function discoveryLinks(header: string, base: string) {
   }
   for (const link of links) {
     if (link.context !== context) throw new Error("Ambiguous auxiliary resource link");
-    if (!link.rel.some((rel) => ["acl", "describedby", "linkset", ACP].includes(rel))) continue;
+    if (!link.rel.some((rel) => AUXILIARY_RELATIONS.includes(rel))) continue;
     // Governing associations retain the stricter unanchored-only policy.
     if (
-      link.rel.some((rel) => ["acl", "describedby"].includes(rel)) &&
+      link.rel.some((rel) => ["acl", "describedby", ACP].includes(rel)) &&
       link.parameters.some(([name]) => name === "anchor")
     )
       throw new Error("Unsupported anchored chat ACL link");
@@ -42,35 +44,31 @@ function discoveryLinks(header: string, base: string) {
   return links;
 }
 
-/** All advertised access-control/description URLs; malformed or foreign-context links fail closed. */
-export function auxiliaryResourceLinks(header: string, base: string): string[] {
-  return discoveryLinks(header, base)
-    .filter((link) => link.rel.some((rel) => ["acl", "describedby", "linkset", ACP].includes(rel)))
-    .map((link) => link.target);
-}
-
-/** Governing discovery requires unambiguous WAC metadata, retaining every description link. */
+/** Complete auxiliary discovery, exposing a WAC ACL only when ACP is absent. */
 export function auxiliaryLinks(
   header: string,
   base: string,
-): { acl?: string; describedby?: string[] } {
+): Pick<PodHeadResult, "acl" | "acr" | "describedby" | "auxiliaryResources"> {
   const links = discoveryLinks(header, base);
-  if (links.some((link) => link.rel.includes(ACP)))
-    throw new Error("Unsupported chat access-control model: ACP");
+  const acr = links.filter((link) => link.rel.includes(ACP)).map((link) => link.target);
   const acls = links.filter((link) => link.rel.includes("acl")).map((link) => link.target);
   if (acls.length > 1) throw new Error("A unique WAC ACL link is required for chats");
   const describedby = links
     .filter((link) => link.rel.includes("describedby"))
     .map((link) => link.target);
   return {
-    ...(acls[0] ? { acl: acls[0] } : {}),
+    ...(acr.length ? { acr } : acls[0] ? { acl: acls[0] } : {}),
     ...(describedby.length ? { describedby } : {}),
+    auxiliaryResources: links
+      .filter((link) => link.rel.some((rel) => AUXILIARY_RELATIONS.includes(rel)))
+      .map((link) => link.target),
   };
 }
 
 /** WAC writers additionally require an ACL; metadata-only discovery is insufficient. */
 export function wacAclLink(header: string, base: string): string {
-  const { acl } = auxiliaryLinks(header, base);
+  const { acl, acr } = auxiliaryLinks(header, base);
+  if (acr) throw new Error("Unsupported chat access-control model: ACP");
   if (!acl) throw new Error("A unique WAC ACL link is required for chats");
   return acl;
 }

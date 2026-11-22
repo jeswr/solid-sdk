@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { isContainerUrl } from "@jeswr/guarded-fetch";
 import { ContainerDataset } from "@solid/object";
@@ -16,7 +17,7 @@ import { fetchBoundedRdf } from "./bounded-rdf.js";
 import type { PodChild } from "./pod.js";
 import { hasPodFetchLimits, podOperationFetch } from "./pod-operation.js";
 import { handlesProfileRedirects } from "./profile-redirects.js";
-import { auxiliaryLinks, auxiliaryResourceLinks } from "./wac-link.js";
+import { auxiliaryLinks } from "./wac-link.js";
 
 /** Conditional mutation headers supported by a pod. */
 export interface PodConditions {
@@ -39,8 +40,10 @@ export interface PodReadOptions {
 
 /** Server metadata for an exact resource, including a not-yet-created resource. */
 export interface PodHeadResult {
-  /** Absolute WAC ACL URL from a unique, unanchored server Link relation. */
+  /** Absolute WAC ACL URL from a unique, unanchored server Link relation, absent on ACP. */
   acl?: string;
+  /** Absolute targets of unanchored ACP access-control Links. */
+  acr?: string[];
   /** Absolute targets of every unanchored server `rel="describedby"` Link. */
   describedby?: string[];
   /** Complete absolute ACL, ACP access-control, describedby and linkset links; absent means unknown. */
@@ -148,8 +151,15 @@ export function podSearchLimits(source: PodSource): SolidMcpConfig["searchLimits
 
 /** Fetch-backed PodPort, preserving the existing pod scope and configured-identity exception. */
 export function createFetchPodPort(input: SolidMcpConfig): PodPort {
+  return createFetchPodPortWithHead(input);
+}
+
+/** @internal The built-in fetch adapter always supplies HEAD discovery. */
+export function createFetchPodPortWithHead(
+  input: SolidMcpConfig,
+): PodPort & Required<Pick<PodPort, "head">> {
   const config = { ...input, podRoot: normalizePodRoot(input.podRoot) };
-  const pod: PodPort = {
+  const pod: ReturnType<typeof createFetchPodPortWithHead> = {
     root: config.podRoot,
     webId: config.webId ?? "",
     async head(url) {
@@ -165,10 +175,8 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       const header = response.headers.get("link") ?? "";
       // Preserve strict governing-association discovery as well as the complete link set.
       // Never turn malformed, ambiguous or unsupported metadata into an empty success.
-      const links = auxiliaryLinks(header, target);
       return {
-        ...links,
-        auxiliaryResources: auxiliaryResourceLinks(header, target),
+        ...auxiliaryLinks(header, target),
         exists: response.status !== 404,
       };
     },

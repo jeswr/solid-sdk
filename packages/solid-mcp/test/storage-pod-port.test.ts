@@ -38,12 +38,13 @@ describe("storage-client PodPort", () => {
     const { pod, storage, fetch } = fixture();
     const create = vi.spyOn(storage, "create");
     const write = vi.spyOn(storage, "write");
-    fetch.mockImplementation(
-      async () =>
-        new Response(null, {
-          headers: { link: `<${FILE}>; rel="linkset"` },
-        }),
-    );
+    fetch.mockImplementation(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      return new Response(null, {
+        status: 404,
+        headers: { link: url === FILE ? `<${FILE}>; rel="linkset"` : `<${url}.acl>; rel="acl"` },
+      });
+    });
     await expect(writeResource(pod, FILE, "x", "text/plain")).rejects.toThrow(
       /access-control|description/,
     );
@@ -76,6 +77,25 @@ describe("storage-client PodPort", () => {
     const pod = createStoragePodPort({ fetch, podRoot: ROOT });
     await expect(pod.head?.(FILE)).rejects.toThrow("Discovery unavailable");
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("preserves a successful write without an ETag", async () => {
+    const { pod, storage } = fixture();
+    const write = vi.spyOn(storage, "write").mockResolvedValueOnce({
+      url: FILE,
+      created: false,
+      etag: null,
+    });
+    const body = new Uint8Array([1]);
+    await expect(
+      pod.write(FILE, body, "application/octet-stream", { ifMatch: '"old"' }),
+    ).resolves.toEqual({
+      etag: undefined,
+    });
+    expect(write).toHaveBeenCalledExactlyOnceWith(FILE, body, {
+      contentType: "application/octet-stream",
+      ifMatch: '"old"',
+    });
   });
 
   it.each([

@@ -140,7 +140,7 @@ Header and description helpers:
   is unlimited and its error uses `limit: 'maxResolvedBytes'`.
   The default `onOverflow: 'truncate'` preserves the original behaviour.
   Set `onMalformed: 'throw'` for authoritative discovery: malformed members, missing relations,
-  invalid URLs, duplicate parameters, empty targets and target whitespace/backslashes throw
+  invalid relation tokens or URLs, duplicate parameters, empty targets and target whitespace/backslashes throw
   `SyntaxError`. The default `onMalformed: 'skip'` retains the original tolerant parsing.
   Combine both throwing options to require complete, unambiguous metadata. Callers must also
   reject links whose resolved `context` differs from the response URL; an anchor naming the

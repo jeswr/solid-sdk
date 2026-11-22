@@ -92,7 +92,7 @@ For authoritative links, set `onOverflow: 'throw'`: exceeding any limit throws t
 `LinkHeaderOverflowError` (`limit`: `maxBytes`, `maxMembers` or `maxResolvedBytes`) instead of returning
 partial results; exact limits are accepted. `onOverflow: 'truncate'` is the default. The parser never fetches.
 For mutation guards also set `onMalformed: 'throw'`: malformed members, missing relations,
-invalid URLs, duplicate parameters, empty targets and target whitespace/backslashes throw
+invalid relation tokens or URLs, duplicate parameters, empty targets and target whitespace/backslashes throw
 `SyntaxError`. The default `onMalformed: 'skip'` preserves tolerant parsing and first-singleton
 handling. Both throwing options are needed for complete, unambiguous inspection. Check resolved
 `context` against the canonical response URL; an anchor naming that same URL is acceptable.

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY GPT-6.1-Sol
 
 /** A Link field value with its target and anchor context resolved against the response URL. */
@@ -22,7 +23,7 @@ export interface ParseLinkHeadersOptions {
   /** Ignore oversized fields and stop at member/resolved limits, or reject incomplete inspection. */
   onOverflow?: "truncate" | "throw";
   /** Skip malformed members (default), or throw SyntaxError on malformed/ambiguous members.
-   * Throwing also rejects duplicate parameters, empty targets and target whitespace/backslashes. */
+   * Throwing also rejects invalid relation tokens, duplicate parameters, empty targets and target whitespace/backslashes. */
   onMalformed?: "skip" | "throw";
 }
 
@@ -37,6 +38,10 @@ export class LinkHeaderOverflowError extends Error {
 type LinkToken = { kind: "target" | "quoted" | "token" | ";" | "=" | "invalid"; value: string };
 
 const tokenCharacter = /^[!#$%&'*+\-.^_`|~\da-z]$/i;
+
+// RFC 8288 relation tokens are registered names or absolute URIs with RFC 3986 characters.
+const relationToken =
+  /^[a-z][a-z0-9.-]*$|^[a-z][a-z0-9+.-]*:(?:[a-z0-9._~:/?#[\]@!$&'()*+,;=-]|%[a-f0-9]{2})*$/i;
 
 /** Tokenise once, treating commas inside targets and quoted strings as data. */
 function* tokenizeLinkValues(value: string): Generator<LinkToken[]> {
@@ -126,15 +131,15 @@ function parseLinkValue(
     parameters.push([name, value]);
   }
   const rel = (parameters.find(([name]) => name === "rel")?.[1] ?? "")
-    .toLowerCase()
     .split(/[ \t]+/)
     .filter(Boolean);
   if (rel.length === 0) return undefined;
+  if (strict && rel.some((relation) => !relationToken.test(relation))) return undefined;
   try {
     return {
       target: new URL(target.value, base).href,
       context: new URL(parameters.find(([name]) => name === "anchor")?.[1] ?? base, base).href,
-      rel,
+      rel: rel.map((relation) => relation.toLowerCase()),
       parameters,
     };
   } catch {
@@ -156,9 +161,9 @@ function parseLinkValue(
  * retaining an overflowing member. With onOverflow: 'throw', exceeding any bound throws
  * LinkHeaderOverflowError instead of returning partial links; exactly reaching a bound is valid.
  * With onMalformed: 'throw', any malformed member throws SyntaxError, including missing relations,
- * invalid URLs, duplicate parameters, empty targets and target whitespace/backslashes. Defaults
- * retain first-singleton handling and skip malformed members. An invalid response URL throws
- * TypeError; invalid limits throw RangeError.
+ * invalid relation tokens, invalid URLs, duplicate parameters, empty targets and target
+ * whitespace/backslashes. Defaults retain first-singleton handling and skip malformed members.
+ * An invalid response URL throws TypeError; invalid limits throw RangeError.
  */
 export function parseLinkHeaders(
   values: string | readonly string[] | null,

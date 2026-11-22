@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { serialize } from "@jeswr/rdf-serialize";
 import { LiteralFrom, RequiredAs, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
@@ -121,16 +122,17 @@ describe("mutation review regressions", () => {
 
   it("protects LWS linksets advertised by the parent", async () => {
     const f = server();
-    f.pod.head = async () => ({ auxiliaryResources: [`${ROOT}data/links`] });
-    // Exercise wire parsing too, independently of the portable metadata contract.
-    const fetch: typeof globalThis.fetch = async () =>
-      new Response(null, {
-        headers: { link: '<links>; rel="linkset"' },
-      });
+    const parent = `${ROOT}data/`;
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (String(input) === parent && init?.method === "HEAD")
+        return new Response(null, { headers: { link: '<links>; rel="linkset"' } });
+      return f.fetch(input, init);
+    };
     const pod = createFetchPodPort({ podRoot: ROOT, fetch, readOnly: false });
-    await expect(writeResource(pod, `${ROOT}data/links`, "x", "text/plain")).rejects.toThrow(
-      /access-control|description/,
+    await expect(writeResource(pod, `${parent}links`, "x", "text/plain")).rejects.toThrow(
+      "Generic tools cannot mutate access-control or description resources",
     );
+    expect(f.mutations).toEqual([]);
   });
 
   it("refuses arbitrary container description RDF through the fetch output", async () => {
@@ -140,8 +142,12 @@ describe("mutation review regressions", () => {
       }
     }
     const f = server();
-    f.pod.head = async () => ({ auxiliaryResources: [], exists: false });
     const target = `${ROOT}data/new/`;
+    const head = f.pod.head;
+    f.pod.head = async (url) => {
+      const metadata = (await head?.(url)) ?? {};
+      return url === target ? { ...metadata, exists: false } : metadata;
+    };
     const store = new Store();
     new Description(target, store, DataFactory).title = "agent-controlled description";
     await expect(
