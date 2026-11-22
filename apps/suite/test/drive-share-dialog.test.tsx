@@ -47,6 +47,13 @@ vi.mock("../src/apps/drive/lib/sharing/adapter", async (original) => ({
 }));
 const load = vi.mocked(loadSharing);
 const apply = vi.mocked(applySharing);
+vi.mock("../src/shell/groups/group-sharing", () => ({
+  GroupSharing: ({ onSaved }: { onSaved(): void }) => (
+    <button type="button" onClick={onSaved}>
+      Share group fixture
+    </button>
+  ),
+}));
 const state: SharingState = {
   people: [
     { webId: ALICE, role: "owner", inherited: false, explicit: true, sources: [`${FILE}.acl`] },
@@ -581,4 +588,12 @@ it("returns focus stranded by a save to the control, or to Done when the control
   await waitFor(() => expect(focusDone).toHaveBeenCalled());
   active.mockRestore();
   expect(share).toHaveProperty("disabled", true);
+});
+
+it("reloads the access snapshot after a group grant is saved", async () => {
+  show();
+  await ready();
+  fireEvent.click(screen.getByRole("button", { name: "Share group fixture" }));
+  await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+  expect(onSaved).toHaveBeenCalledTimes(1);
 });

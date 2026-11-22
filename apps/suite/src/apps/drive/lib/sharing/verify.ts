@@ -156,7 +156,11 @@ function isAcp(dataset: DatasetCore): boolean {
   );
 }
 function principal(subject: Subject): string {
-  return subject.kind === "agent" ? subject.webId : subject.kind;
+  return subject.kind === "agent"
+    ? subject.webId
+    : subject.kind === "group"
+      ? `group:${subject.group}`
+      : subject.kind;
 }
 function governs(resource: string, target: string): boolean {
   return resource === target || (resource.endsWith("/") && target.startsWith(resource));
@@ -204,7 +208,11 @@ function check(
   const own = effective(target, documents, "resource");
   const roles = new Map(
     grants.map((grant) => [
-      grant.agent.type === "webid" ? grant.agent.id : grant.agent.type,
+      grant.agent.type === "webid"
+        ? grant.agent.id
+        : grant.agent.type === "group"
+          ? `group:${grant.agent.id}`
+          : grant.agent.type,
       grant.role,
     ]),
   );

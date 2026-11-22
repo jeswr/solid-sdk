@@ -25,6 +25,7 @@ export function ShareWorkbook({
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
+      groupSession={session}
       url={container}
       name={title}
       kind="folder"

@@ -290,6 +290,34 @@ describe("Calendar repository discovery and demo", () => {
       ),
     ).rejects.toThrow("500");
   });
+  it("creates an exclusive calendar under a fresh slug and refuses an existing events folder", async () => {
+    const { account, io } = await setup();
+    const first = await createCalendar(account, "Family", PALETTE[0] as string, {
+      exclusive: true,
+    });
+    const second = await createCalendar(account, "Family", PALETTE[0] as string, {
+      exclusive: true,
+    });
+    expect(first).toMatch(/calendar\/family-[0-9a-f-]{36}\.ttl$/);
+    expect(second).not.toBe(first);
+    expect((await io.loadCalendar(first))?.data.title).toBe("Family");
+    // An events folder that already exists is never adopted (it would then be shared).
+    await expect(
+      createCalendar(
+        altered(account, (url, init) =>
+          /family-[^/]+\/$/.test(url) && init?.method === "PUT"
+            ? new Response(null, { status: 412 })
+            : undefined,
+        ),
+        "Family",
+        PALETTE[0] as string,
+        { exclusive: true },
+      ),
+    ).rejects.toThrow("412");
+    expect(await createCalendar(account, "Plain", PALETTE[0] as string)).toBe(
+      `${root}calendar/plain.ttl`,
+    );
+  });
 });
 describe("Calendar optimistic event writes", () => {
   it("creates, updates and deletes with conditional ETags, chaining fresh ETags for queued writes", async () => {

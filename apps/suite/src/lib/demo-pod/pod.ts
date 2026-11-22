@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
@@ -576,7 +577,10 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
         if (preconditionFails(url, headers)) return respond(412);
         return remove(url);
       case "OPTIONS":
-        return respond(204, { allow: "GET, HEAD, PUT, POST, PATCH, DELETE, OPTIONS" });
+        return respond(204, {
+          allow: "GET, HEAD, PUT, POST, PATCH, DELETE, OPTIONS",
+          link: linkHeader(url),
+        });
       default:
         return respond(405, { allow: "GET, HEAD, PUT, POST, PATCH, DELETE, OPTIONS" });
     }

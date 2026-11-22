@@ -67,6 +67,7 @@ All data and selected values are controlled props. Callbacks report user intent;
 never fetch, write permissions, resolve email remotely or compute protocol grants.
 
 `PeoplePicker` takes a contacts snapshot, query/value callbacks and a `useProfile(webId)` hook.
+Its optional `label` and `addLabel` props supply distinct input and action labels for group recipients.
 Pass the SDK hook from the consuming integration. Email entries resolve only against the supplied
 contacts; unresolved emails ask for an Account ID. Profile names override contact names and the
 Account ID remains visible. `RoleSelect.options` accepts a disabled flag and required reason per

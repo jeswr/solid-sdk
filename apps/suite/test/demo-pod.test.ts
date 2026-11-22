@@ -171,6 +171,7 @@ describe("demo pod HTTP contract", () => {
       `${DEMO_ROOT}contacts/`,
       `${DEMO_ROOT}docs/`,
       `${DEMO_ROOT}drive/`,
+      `${DEMO_ROOT}groups/`,
       `${DEMO_ROOT}health/`,
       `${DEMO_ROOT}inbox/`,
       `${DEMO_ROOT}integrations/`,

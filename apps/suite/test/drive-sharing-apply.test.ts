@@ -667,11 +667,7 @@ it("projects SDK grants and fails closed for principals the dialog cannot show",
     link: "editor",
     public: "viewer",
   });
-  for (const agent of [
-    { type: "authenticated" },
-    { type: "group", id: `${ROOT}group#it` },
-    { type: "app", id: `${ROOT}app#id` },
-  ] as const)
+  for (const agent of [{ type: "authenticated" }, { type: "app", id: `${ROOT}app#id` }] as const)
     expect(() => toSharingState([grant(agent)])).toThrow("can't be shown");
   for (const role of ["commenter", "manager"] as const)
     expect(() => toSharingState([grant({ type: "public" }, role)])).toThrow(

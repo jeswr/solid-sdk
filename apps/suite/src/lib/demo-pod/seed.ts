@@ -21,6 +21,7 @@ import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
 import { seedAssistants } from "./seed-assistants";
 import { seedContacts } from "./seed-contacts";
+import { seedGroups } from "./seed-groups";
 import { buildHomeSeed } from "./seed-home";
 import { seedLegacy, withDemoRecoveryProfile } from "./seed-legacy";
 import { seedPermissions } from "./seed-permissions";
@@ -200,5 +201,5 @@ export async function buildDemoSeed(
     const { seedCalendar } = await import("./seed-calendar");
     return seedContacts(await seedCalendar(files, now), now);
   };
-  return seedRequests(await seeded(), DEMO_ROOT, DEMO_WEBID, now);
+  return seedGroups(await seedRequests(await seeded(), DEMO_ROOT, DEMO_WEBID, now), now);
 }

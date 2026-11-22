@@ -108,7 +108,8 @@
     "@jeswr/agent-consent",
     "@jeswr/pod-export",
     "@jeswr/pod-legacy",
-    "@jeswr/suite-templates"
+    "@jeswr/suite-templates",
+    "@jeswr/suite-groups"
   ],
   "applications": [
     {

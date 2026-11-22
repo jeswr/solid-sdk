@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 
@@ -5,6 +6,7 @@ import { fetchRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { toast } from "@jeswr/suite-ui";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { groupDirectory } from "@/shell/groups/client";
 import { useHomeSession } from "../components/home-app";
 import { httpUrl, inStorage, subjectOf } from "../lib/model/rdf";
 import { readTypeIndexes } from "../lib/model/type-index";
@@ -342,6 +344,17 @@ export function usePermissions() {
         webId: session.webId,
         typeIndex: locations,
       });
+      if (snapshot.rows.some((row) => row.kind === "group")) {
+        try {
+          const groups = await (await groupDirectory(session)).list();
+          snapshot.rows = snapshot.rows.map((row) => {
+            const group = row.kind === "group" && groups.find((group) => group.id === row.id);
+            return group ? { ...row, name: group.name, members: group.members } : row;
+          });
+        } catch {
+          /* Symbolic group grants stay visible when membership cannot be read. */
+        }
+      }
       if (!mounted.current || seq !== generation.current) return;
       if (!snapshot.rows.length && snapshot.failures.some((f) => f.url === session.storageUrl)) {
         dispatch({ type: "error" });

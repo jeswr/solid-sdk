@@ -15,6 +15,7 @@ const sections = [
   ["account", "Account"],
   ["legacy", "Recovery & legacy"],
   ["appearance", "Appearance"],
+  ["groups", "Groups & family"],
   ["storage", "Storage"],
   ["export", "Export"],
   ["notifications", "Notifications"],
