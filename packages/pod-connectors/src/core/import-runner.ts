@@ -12,6 +12,7 @@
  * URLs, so a re-import overwrites in place (idempotent).
  */
 import { refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
+import { DEMO_CONNECTOR } from "@jeswr/suite-vocab";
 import { abortablePodWriter, unlessAborted } from "./abort.js";
 import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
@@ -34,6 +35,8 @@ export interface RunImportOptions extends ConnectorStateOptions {
   /** Explicit, host-owned storage port for this adapter. */
   podWriter: PodWriter;
   mode: ImportMode;
+  /** Override DEMO_CONNECTOR for demo fixtures; requires an absolute HTTPS IRI and a nonblank label. Ignored for live imports. */
+  demoAgent?: { readonly iri: string; readonly label: string };
   /** Required for live mode; already authenticated by the host. */
   sourceAuth?: SourceAuth;
   /** Cursor from the previous import (incremental, where supported). */
@@ -107,6 +110,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     source ? `${new URL(source).origin}/` : `urn:solid:connector:${encodeURIComponent(id)}:source`,
     opts,
     adapter.vocabMap,
+    mode === "demo" ? (opts.demoAgent ?? DEMO_CONNECTOR) : undefined,
   );
   try {
     const outcome = await adapter.import({

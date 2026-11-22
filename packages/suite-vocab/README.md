@@ -23,3 +23,9 @@ does not change the task model's HTTP write convention or rename retired classes
 Run `pnpm --filter @jeswr/suite-vocab run test`; coverage uses the workspace's existing V8 provider
 (`pnpm --filter @jeswr/app-pod-docs exec vitest run --root ../../packages/suite-vocab --coverage`).
 The package is private until the first conformance gate, per ADR-001 D5; no mirror is configured.
+
+`NS.SUITE` (`https://jeswr.org/ns/suite#`) is owned by this package for suite-wide terms.
+It declares `DEMO_CONNECTOR`, the `prov:SoftwareAgent` individual
+`https://jeswr.org/ns/suite#demo-connector`, labelled **Demo data**. Connector demo runs use
+this constant's `iri` and `label` for item attribution and the agent's stored name; live runs
+never add it. This declaration is maintained directly in TypeScript, with no TTL generator.
