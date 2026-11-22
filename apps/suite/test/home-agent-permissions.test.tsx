@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { defaultMandate } from "@jeswr/agent-mandate/issue";
 import { solidOdrlEngine } from "@jeswr/agent-mandate/verify";
@@ -85,8 +86,9 @@ it("names the enabled switch after its rule, explains removal, and returns focus
   expect(document.activeElement).toBe(toggle);
   expect(mandates.activateMandate).not.toHaveBeenCalled();
 });
-it("removes only the reviewed rule using the verified source as a concurrency guard", async () => {
+it("bans the reviewed ask-first scope using the verified source as a concurrency guard", async () => {
   const user = userEvent.setup();
+  const [rule] = mandate.withApproval.permissions ?? [];
   render(<AgentPermissionControls rules />);
   await user.click(screen.getByRole("switch", { name: /Ask first: send messages/ }));
   await user.click(await screen.findByRole("button", { name: "Sign and activate" }));
@@ -95,8 +97,9 @@ it("removes only the reviewed rule using the verified source as a concurrency gu
     client,
     session,
     expect.objectContaining({
+      autonomous: expect.objectContaining({ permissions: mandate.autonomous.permissions }),
       withApproval: expect.objectContaining({ permissions: [] }),
-      prohibitions: mandate.prohibitions,
+      prohibitions: [...mandate.prohibitions, { ...rule, type: "prohibition" }],
       limits: mandate.limits,
       validUntil: mandate.validUntil,
     }),
@@ -216,6 +219,7 @@ it.each([
   mandate = { ...mandate, memoryScope };
   const data = {
     mandate,
+    remembered: mandate,
     agent: mandate.subject,
     accounts: [{ ...exampleRecords.account, channelHandleHash: HASH }],
     emailBindings: ["gmail"],
