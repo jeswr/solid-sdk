@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { type Identity as Claims, sameIssuer } from "@jeswr/reactive-authentication";
 import { createAgentAuth } from "./agent.js";
@@ -231,7 +230,8 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     }
     return false;
   };
-  const fetchWithExpiry = (fetch: typeof globalThis.fetch): typeof globalThis.fetch =>
+  const fetchWithExpiry =
+    (fetch: typeof globalThis.fetch): typeof globalThis.fetch =>
     async (input, init) => {
       lifetime.signal.throwIfAborted();
       if (expired) throw new Error("Session expired");
