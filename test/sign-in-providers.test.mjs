@@ -106,7 +106,9 @@ describe("sign-in provider matrix", () => {
       // Positive evidence of each provider's login page, so an error page never passes.
       expect(typeof p.loginPage?.marker, `${p.id} loginPage.marker`).toBe("string");
       new RegExp(p.loginPage.marker);
-      if (p.loginPage.at !== undefined) new RegExp(p.loginPage.at);
+      // Anchored to a literal host, so a page on another site can never count as the login page.
+      expect(p.loginPage.at, `${p.id} loginPage.at`).toMatch(/^\^(?:[a-z0-9-]|\\\.)+\//);
+      new RegExp(p.loginPage.at);
     }
     for (const app of matrix.apps) {
       for (const key of ["url", "clientId", "redirectUri"])
@@ -225,6 +227,45 @@ describe("sign-in protocol checker", () => {
       false,
     );
     expect(checkJwks(JSON.stringify({ keys: [{ kty: "oct", k: "c2VjcmV0" }] })).ok).toBe(false);
+    const unusable = [
+      { kty: "EC", crv: "P-256", x: pub.x },
+      { kty: "OKP", crv: "X25519", x: pub.x },
+      { ...pub, key_ops: ["encrypt"] },
+      { ...pub, key_ops: "verify" },
+      { ...pub, crv: "secp256k1" },
+    ];
+    for (const key of unusable) {
+      expect(checkJwks(JSON.stringify({ keys: [key] })).detail, JSON.stringify(key)).toBe(
+        "no public signing keys",
+      );
+    }
+    expect(checkJwks(JSON.stringify({ keys: [{ ...pub, key_ops: ["verify"] }] })).ok).toBe(true);
+    const ed = generateKeyPairSync("ed25519").publicKey.export({ format: "jwk" });
+    expect(checkJwks(JSON.stringify({ keys: [ed] })).ok).toBe(true);
+  });
+
+  it("rejects a provider's login page when it is served from another host or path", () => {
+    const { loginPage } = matrix.providers.find((p) => p.id === "solidcommunity");
+    const final = {
+      status: 200,
+      location: null,
+      contentType: "text/html",
+      body: "<title>Solid</title>",
+      where: "solidcommunity.net/.account/",
+    };
+    const redirect = "https://app.example/callback";
+    expect(classifyAuthorizeEnd(final, redirect, loginPage).ok).toBe(true);
+    for (const where of [
+      "evil.example/.account/",
+      "solidcommunity.net.evil.example/.account/",
+      "solidcommunity.net/.account/error",
+    ]) {
+      expect(classifyAuthorizeEnd({ ...final, where }, redirect, loginPage).ok, where).toBe(false);
+    }
+    expect(
+      classifyAuthorizeEnd(final, redirect, { marker: loginPage.marker }).ok,
+      "an expectation without a host is not enough",
+    ).toBe(false);
   });
 
   it("passes a healthy provider and fails one that rejects the app's client", async () => {
