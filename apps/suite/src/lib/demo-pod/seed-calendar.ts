@@ -62,8 +62,8 @@ export async function seedCalendar(files: DemoSeedFile[], now: number): Promise<
     fromWallClock(new Date(`${day}T${time}:00Z`), "Europe/London");
   const add = async (slug: string, id: string, data: CalendarEvent) => {
     const path = `calendar/${slug}/${id}.ttl`;
-    out.push(
-      makeFile(
+    out.push({
+      ...makeFile(
         path,
         await serializeDataset(
           buildEvent(`${DEMO_ROOT}${path}`, {
@@ -72,7 +72,13 @@ export async function seedCalendar(files: DemoSeedFile[], now: number): Promise<
           }),
         ),
       ),
-    );
+      search: {
+        iri: `${DEMO_ROOT}${path}#it`,
+        label: data.name ?? "Event",
+        kind: "event",
+        app: "calendar",
+      },
+    });
   };
   await add("work", "stand-up", {
     name: "Team stand-up",

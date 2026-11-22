@@ -11,9 +11,9 @@ import {
 import { type Editor, EditorContent, type JSONContent, useEditor } from "@tiptap/react";
 import { ySyncPluginKey, yUndoPluginKey, yXmlFragmentToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
+import { documentScopedFetch } from "../editor/document-fetch";
 import { baseExtensions } from "../editor/extensions";
 import type { DocumentPersistence } from "../editor/persistence";
-import { podScopedFetch } from "../editor/private-image";
 import { useDialogFocus } from "../hooks/use-dialog-focus";
 import { suggestionAction } from "../lib/editor/suggestions";
 import { versionDisabledReason } from "../lib/editor/versions";
@@ -101,8 +101,8 @@ export function VersionHistory({
   const restoreFocus = useDialogFocus();
   const resource = runtime.stored?.url;
   const http = useMemo(
-    () => podScopedFetch(runtime.session.fetch, runtime.session.storageUrl),
-    [runtime.session],
+    () => documentScopedFetch(runtime.session, () => resource),
+    [runtime.session, resource],
   );
   const store = useMemo(
     () =>

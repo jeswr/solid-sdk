@@ -192,3 +192,44 @@ it("clears prior-room data on navigation and ignores late abandoned responses", 
   await act(() => current.retry());
   expect(view.host.textContent).toBe("Retried");
 });
+
+it("keeps the outbox instance across session-object rerenders while a send is in flight", async () => {
+  const pod = createDemoPod({ root: ROOT });
+  const client = new ChatClient(pod.fetch, ROOT, ME);
+  const room = await client.createRoom({ name: "Stable queue", members: [] });
+  const activeSession = session(pod);
+  const original = ChatClient.prototype.send;
+  let release!: () => void;
+  const delayed = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const sending = vi.spyOn(ChatClient.prototype, "send").mockImplementation(async function (
+    this: ChatClient,
+    ...args: Parameters<ChatClient["send"]>
+  ) {
+    await delayed;
+    return original.apply(this, args);
+  });
+  let chat!: ReturnType<typeof useChat>;
+  let sender!: ReturnType<typeof useSend>;
+  function Probe() {
+    chat = useChat();
+    sender = useSend(room.url);
+    return null;
+  }
+  const view = await mount(h(ChatProvider, { session: activeSession, children: h(Probe) }));
+  await act(() => sender.send("Only once"));
+  const snapshot = chat.outbox;
+  await view.render(
+    h(ChatProvider, { session: { ...activeSession, displayName: "New name" }, children: h(Probe) }),
+  );
+  expect(chat.outbox).toBe(snapshot);
+  expect(sending).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    release();
+    await delayed;
+  });
+  expect(
+    (await client.messages(room.url)).messages.filter((message) => message.content === "Only once"),
+  ).toHaveLength(1);
+});

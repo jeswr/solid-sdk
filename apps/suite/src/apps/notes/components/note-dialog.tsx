@@ -43,6 +43,7 @@ import { ResourceWriteError } from "@/apps/docs/lib/model/errors";
 import { writeRdf } from "@/apps/docs/lib/model/rdf-io";
 import { createDocsStore, type StoredDocument } from "@/apps/docs/lib/model/store";
 import { PREFIXES } from "@/apps/docs/lib/model/vocab";
+import { ChipEditorTools, suiteChipExtension } from "@/components/chips";
 import { encodeRef } from "@/lib/refs";
 import { notesExtensions } from "../editor/extensions";
 import { NoteMoveBlockedError } from "../lib/model/errors";
@@ -105,7 +106,9 @@ export function NoteDialog({ note }: { note: StoredNote }) {
   const editor = useEditor(
     {
       immediatelyRender: false,
-      extensions: notesExtensions(session.fetch, session.storageUrl),
+      extensions: notesExtensions(session.fetch, session.storageUrl).map((extension) =>
+        extension.name === "chip" ? suiteChipExtension() : extension,
+      ),
       content: draft.body,
       editable: !readOnly,
       editorProps: {
@@ -423,6 +426,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           </PopoverContent>
         </Popover>
         <div className="notes-editor">
+          <ChipEditorTools editor={editor} session={session} />
           {editor ? <EditorContent editor={editor} /> : <p role="status">Opening note…</p>}
         </div>
         {status === "conflict" && !viewOnly && (

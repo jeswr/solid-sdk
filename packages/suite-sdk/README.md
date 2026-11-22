@@ -305,3 +305,36 @@ account isolation, browser wake-up and desktop delivery.
 
 `inQuietHours(quiet, now, tz = "UTC")` exposes the same quiet-hours predicate for delivery
 adapters; reuse it rather than duplicating midnight-wrap rules in applications.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Smart chips
+
+`@jeswr/suite-sdk/chips` provides `ChipRef`, `chipCandidates` over the existing search facade,
+`resolveChip` (session-scoped, 30-second display metadata cache), text-composer helpers and
+once-on-save mention notification drafts/delivery. `@jeswr/suite-sdk/chips/tiptap` exports
+`createChipExtension`, an inline atom whose fallback HTML is a normal resource anchor. Person
+chips that arrive by paste, or by a drop from outside the editor, become plain links
+(`downgradePastedPeople`): foreign HTML can forge chip anchors, and a paste must not send mentions.
+The suite-ui package supplies `Chip` hover cards and the keyboard-accessible `ChipPicker`.
+See [SKILL.md](./SKILL.md) for lifecycle and receipt guarantees.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Smart chip consumers can import types, validation, text helpers and `chipHref(ref, encodeRef)`
+from the dependency-free `@jeswr/suite-sdk/chips/core` leaf. Tiptap's optional peers are used
+only by `./chips/tiptap`. `createChipPeople` accepts a contact-loader adapter; `createChipSearch`
+adapts shell search results without another index.
+
+After acknowledged local saves, call `notifySavedHtml/Text(session, resource, before, after, title)`.
+Only newly added person IRIs are notified. Supply loaded/last-saved content and the resource title
+(maximum 120 characters in the notification); never pass private body text as the title. Do not
+notify on import or remote merge. Collaborative editors can track local deltas with `addedChipRefs`
+and send acknowledged additions through `notifySavedChips`. `htmlChipRefs` validates raw absolute
+HTTP(S) hrefs. `createMentionNotifier` validates before receipts and isolates per-person failures.
+
+`podScopedFetch(fetch, roots)` and `isOwnPodIri(iri, roots)` from `./pod-scoped-fetch` keep
+authenticated reads inside one or more container roots (a string or an array). Each root gets
+guarded-fetch's strict path-prefix check (same origin, segment boundary, no userinfo, no encoded
+delimiters); in-scope requests refuse redirects. Chips pass only the user's storage; an app may
+add the containers an opened resource owns (Docs adds a shared document's own folder). Foreign
+reads bypass the session transport/cache, omit credentials, referrers and native caching, and
+follow redirects (WebIDs often 303). Resolve foreign chips only on hover/focus.

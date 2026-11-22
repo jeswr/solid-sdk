@@ -95,3 +95,8 @@ export function useShellSearchSource(): SearchSource {
   if (!source) throw new Error("useShellSearchSource requires ShellSearchProvider");
   return source;
 }
+
+/** Standalone app previews can still offer contacts without creating a second search index. */
+export function useOptionalShellSearchSource(): SearchSource | null {
+  return useContext(SearchSourceContext);
+}

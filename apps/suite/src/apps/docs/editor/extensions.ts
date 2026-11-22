@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
+
+import { createChipExtension } from "@jeswr/suite-sdk/chips/tiptap";
 import Collaboration from "@tiptap/extension-collaboration";
 import Highlight from "@tiptap/extension-highlight";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
@@ -242,6 +244,7 @@ const AccessibleTaskItem = TaskItem.extend({
 
 export function baseExtensions(fetchImpl: typeof fetch) {
   return [
+    createChipExtension(),
     SafeStarterKit.configure({
       code: false,
       paragraph: false,

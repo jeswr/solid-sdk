@@ -8,6 +8,17 @@ import { createPendingDrafts, type PendingDrafts } from "../src/apps/notes/state
 import { useNoteDraft } from "../src/apps/notes/state/use-note-draft";
 import { act, deferred, h, mount } from "./drive-ui-dom";
 
+const { mentionSaved, noteSession } = vi.hoisted(() => ({
+  mentionSaved: vi.fn(async () => {}),
+  noteSession: { webId: "https://alice.example/#me", fetch: vi.fn() },
+}));
+vi.mock("@jeswr/suite-sdk/chips", () => ({ notifySavedHtml: mentionSaved }));
+vi.mock("../src/lib/session/pod-session", () => ({
+  usePodSessionState: () => ({
+    status: "ready",
+    session: noteSession,
+  }),
+}));
 vi.mock("@jeswr/suite-ui", () => ({ toast: { error: vi.fn() } }));
 afterEach(() => vi.useRealTimers());
 const original: StoredNote = {
@@ -356,4 +367,28 @@ it("locks pending drafts on WAC write denial, then resumes only on an explicit r
   expect(ui.draft.viewOnly).toBe(false);
   await act(() => pending.retry());
   expect(ui.save).toHaveBeenCalledOnce();
+});
+
+it("passes the last loaded/saved note body and its title to mention diffing after acknowledgement", async () => {
+  const ui = await setup();
+  mentionSaved.mockClear();
+  await act(() => ui.draft.change({ body: "<p>Private new body</p>" }));
+  expect(mentionSaved).not.toHaveBeenCalled();
+  await act(() => ui.draft.flush());
+  expect(mentionSaved).toHaveBeenLastCalledWith(
+    expect.anything(),
+    original.url,
+    original.body,
+    "<p>Private new body</p>",
+    original.title,
+  );
+  await act(() => ui.draft.change({ body: "<p>Private typo fixed</p>" }));
+  await act(() => ui.draft.flush());
+  expect(mentionSaved).toHaveBeenLastCalledWith(
+    expect.anything(),
+    original.url,
+    "<p>Private new body</p>",
+    "<p>Private typo fixed</p>",
+    original.title,
+  );
 });

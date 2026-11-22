@@ -1,9 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { notifySavedText } from "@jeswr/suite-sdk/chips";
 import { Button, IconButton, toast } from "@jeswr/suite-ui";
 import { Send, X } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { ChipTextarea } from "@/components/chips";
+import { usePodSessionState } from "@/lib/session/pod-session";
 import type { Message } from "../lib/client";
 import { useChatActions, useDraft } from "../state/chat-context";
 export function Composer({
@@ -22,6 +25,7 @@ export function Composer({
   disabledReason?: string | undefined;
 }) {
   const actions = useChatActions();
+  const sessionState = usePodSessionState();
   const [storedDraft, setStoredDraft] = useDraft(url);
   const [editDraft, setEditDraft] = useState("");
   const draft = editing ? editDraft : storedDraft;
@@ -47,6 +51,14 @@ export function Composer({
       setSaving(true);
       try {
         await actions.edit(url, editing.id, draft);
+        if (sessionState.status === "ready")
+          void notifySavedText(
+            sessionState.session,
+            editing.id,
+            editing.content,
+            draft,
+            "Chat message",
+          ).catch(() => {});
         onEdit(undefined);
         setDraft("");
       } catch {
@@ -80,7 +92,7 @@ export function Composer({
         {editing ? "Edit message" : "Message"}
       </label>
       <div className="chat-compose-row">
-        <textarea
+        <ChipTextarea
           id={id}
           ref={field}
           rows={2}

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { notifySavedText } from "@jeswr/suite-sdk/chips";
 import { toast } from "@jeswr/suite-ui";
 import {
   createContext,
@@ -130,7 +131,19 @@ function useTasksValue(session: PodSession) {
       loadTasks: cache.loadTasks.bind(cache),
       retry: cache.retry,
       createTask: cache.createTask.bind(cache),
-      updateTask: cache.updateTask.bind(cache),
+      updateTask: async (...args: Parameters<typeof cache.updateTask>) => {
+        // Diff against the cached revision the change applied to, not the UI's captured item.
+        const revision = await cache.updateTaskRevision(...args);
+        if (revision)
+          void notifySavedText(
+            session,
+            revision.after.url,
+            revision.before.task.description ?? "",
+            revision.after.task.description ?? "",
+            revision.after.task.title ?? "Task",
+          ).catch(() => {});
+        return revision?.after;
+      },
       updateProject: cache.updateProject.bind(cache),
       moveTaskToProject: cache.moveTaskToProject.bind(cache),
       deleteTask: cache.deleteTask.bind(cache),
