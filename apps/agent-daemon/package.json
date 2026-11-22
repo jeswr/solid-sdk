@@ -45,6 +45,7 @@
     "@jeswr/agent-reference": "workspace:*",
     "@jeswr/agentic-legacy-bridge": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/pod-auth": "workspace:*",
     "@jeswr/pod-notifications": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
@@ -58,8 +59,7 @@
     "@jeswr/agent-mandate": "workspace:*",
     "@jeswr/solid-vc": "workspace:*",
     "@solid/community-server": "7.2.0",
-    "componentsjs": "5.5.1",
-    "@jeswr/guarded-fetch": "workspace:*"
+    "componentsjs": "5.5.1"
   },
   "bin": {
     "awp": "./bin/awp.mjs"

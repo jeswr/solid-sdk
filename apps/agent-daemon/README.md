@@ -9,6 +9,9 @@ Explicit `login` uses the credential package's PKCE loopback listener.
 `composeDaemon` obtains a client-credentials DPoP session through
 `@jeswr/pod-auth/node`, creates the storage client and notifications client using
 that session's fetch, and calls a trusted `prepare(workspace)` host factory.
+Before login, `composeDaemon` requires `storageRoot` to be an absolute URL within
+one of `credentials.boundary`'s roots. It applies the same check to the discovered
+root before creating the workspace.
 Credentials stay in pod-auth. The factory supplies explicit accounts, an inbound gate, runtime memory, a gateway,
 an executor, verified authority stores, an audit writer and durable local state.
 `createDaemon` accepts the same already-composed capabilities for embedded hosts
