@@ -22,22 +22,66 @@ export async function requirePrivateDestination(
   throw new PrivateDestinationError(id);
 }
 
-/** Recheck after writing and delete only the version returned by that write. */
-export async function verifyPrivateWrite(
-  verify: () => Promise<void>,
-  writeEtag: string | null | undefined,
-  remove: (etag: string) => Promise<unknown>,
+/** Confirm a successful write. A refused replacement must preserve earlier records. */
+export async function requirePrivateWriteConfirmation(
+  id: string,
+  writer: Pick<PodWriter, "confirmPrivateWrite" | "cleanupPrivateWrite">,
+  slug: string,
+  url: string,
+  created: boolean,
+  writeEtag?: string | null,
+  onRefusal?: (refusal: Promise<PrivateDestinationError>) => void,
 ): Promise<void> {
+  const version = writeEtag == null ? {} : { etag: writeEtag };
+  let observed: string | undefined;
   try {
-    await verify();
-  } catch (error) {
-    try {
-      if (isStrongEtag(writeEtag)) await remove(writeEtag);
-    } catch {
-      // Best effort. A missing validator or rejected delete cannot make the run succeed.
-    }
-    throw error;
+    const confirmed = await writer.confirmPrivateWrite?.(url, version, (etag) => {
+      if (observed === undefined && isStrongEtag(etag)) observed = etag;
+    });
+    if (confirmed === true) return;
+  } catch {
+    // Keep policy and transport errors out of the host's diagnostics.
   }
+  const etag = writeEtag ?? observed;
+  const refusal = Promise.resolve().then(async () => {
+    let removed = false;
+    if (created && isStrongEtag(etag) && writer.cleanupPrivateWrite) {
+      const signal = AbortSignal.timeout(10_000);
+      try {
+        const expired = new Promise<false>((resolve) =>
+          signal.addEventListener("abort", () => resolve(false), { once: true }),
+        );
+        removed =
+          (await Promise.race([writer.cleanupPrivateWrite(slug, { etag, signal }), expired])) ===
+          true;
+      } catch {
+        // A failed cleanup leaves the file potentially visible.
+      }
+    }
+    return new PrivateDestinationError(id, { url, removed });
+  });
+  onRefusal?.(refusal);
+  throw await refusal;
+}
+
+/** Delete a refused create, then check its exact URL once for absence. */
+export async function cleanupPrivateResource(
+  fetch: typeof globalThis.fetch,
+  url: string,
+  { etag, signal }: { etag: string; signal: AbortSignal },
+): Promise<boolean> {
+  if (!isStrongEtag(etag)) return false;
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: { "if-match": etag },
+    redirect: "error",
+    signal,
+  });
+  void response.body?.cancel().catch(() => {});
+  if (![200, 204, 404, 410].includes(response.status)) return false;
+  signal.throwIfAborted();
+  const head = await fetch(url, { method: "HEAD", redirect: "error", cache: "no-cache", signal });
+  return head.status === 404 || head.status === 410;
 }
 
 /** Resolve connector slugs identically for every transport. */

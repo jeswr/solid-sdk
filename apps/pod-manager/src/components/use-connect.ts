@@ -15,7 +15,7 @@
 // AUTHORED-BY Codex GPT-6
 import {
   createFetchPodWriter,
-  createSessionPrivateDestinationVerifier,
+  createSessionPrivateDestinationChecks,
   createSourceAuth,
 } from "@jeswr/pod-connectors";
 import { useCallback, useRef, useState } from "react";
@@ -77,7 +77,7 @@ export function useConnect(adapter: IntegrationAdapter | undefined) {
           profileDocumentUrl: profile.profileDocumentUrl,
           podRoot,
           fetch: podFetch,
-          verifyPrivateDestination: createSessionPrivateDestinationVerifier({
+          ...createSessionPrivateDestinationChecks({
             fetch: podFetch,
             storageUrl: podRoot,
             webId,

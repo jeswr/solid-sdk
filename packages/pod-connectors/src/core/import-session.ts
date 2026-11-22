@@ -8,15 +8,15 @@ import { canonicalizeJeswrDataset } from "./canonical-vocab.js";
 import {
   IntegrationSyncError,
   PreconditionUnsupportedError,
-  PrivateDestinationError,
+  type PrivateDestinationError,
 } from "./errors.js";
 import { copyDataset, mergeItems } from "./incremental.js";
 import { registrationsFor } from "./pod-writer.js";
 import {
   isStrongEtag,
   requirePrivateDestination,
+  requirePrivateWriteConfirmation,
   requiresPrivateDestination,
-  verifyPrivateWrite,
 } from "./pod-writer-policy.js";
 import { PROV, Provenance } from "./provenance.js";
 import type {
@@ -41,6 +41,7 @@ const active = new Set<string>();
 export const MAX_RUN_SOURCES = 1_000;
 
 export interface ImportSessionOptions extends ConnectorStateOptions {
+  readonly signal?: AbortSignal;
   /** Lower the run provenance source ceiling; includes the connector source, minimum 1. */
   readonly maxRunSources?: number;
   /** Retain only this many run activities; polling adapters opt in. */
@@ -83,23 +84,27 @@ export function createImportSession(
   // Retain one counter per document, never identifiers for every imported subject.
   const itemCounts = new Map<string, number>();
   const privateImport = requiresPrivateDestination(id);
-  let privacyRefused = false;
+  let privacyRefused: Promise<PrivateDestinationError> | undefined;
   async function verifyDestination(url: string): Promise<void> {
     if (!privateImport) return;
-    if (privacyRefused) throw new PrivateDestinationError(id);
+    if (privacyRefused) throw await privacyRefused;
     try {
       await requirePrivateDestination(id, writer, url);
     } catch (error) {
-      privacyRefused = true;
+      privacyRefused ??= Promise.resolve(error as PrivateDestinationError);
       throw error;
     }
   }
-  async function verifyWrittenDestination(slug: string, url: string, etag?: string): Promise<void> {
-    await verifyPrivateWrite(
-      () => verifyDestination(url),
-      etag,
-      async (ifMatch) => writer.remove?.(slug, { ifMatch }),
-    );
+  async function confirmWrittenDestination(
+    slug: string,
+    url: string,
+    created: boolean,
+    etag?: string,
+  ): Promise<void> {
+    await requirePrivateWriteConfirmation(id, writer, slug, url, created, etag, (refusal) => {
+      privacyRefused ??= refusal;
+    });
+    options.signal?.throwIfAborted();
   }
   const conditionFor = (
     existing: Awaited<ReturnType<PodWriter["read"]>>,
@@ -179,11 +184,12 @@ export function createImportSession(
     const slug = doc.slug;
     const destination = privateImport ? writer.resolve(slug) : url;
     await verifyDestination(destination);
-    const { writeEtag, ...result } = await writer.write(
-      { ...doc, slug, dataset },
-      conditions ?? conditionFor(previous),
-    );
-    if (privateImport) await verifyWrittenDestination(slug, destination, writeEtag);
+    const output = { ...doc, slug, dataset };
+    const writeConditions = conditions ?? conditionFor(previous);
+    if (privacyRefused) throw await privacyRefused;
+    const { writeEtag, writeCreated, ...result } = await writer.write(output, writeConditions);
+    if (privateImport)
+      await confirmWrittenDestination(slug, destination, writeCreated === true, writeEtag);
     // Take extra classes from the document, not the host writer's result: custom PodWriter
     // ports need not echo them.
     let registered: WrittenDoc = doc.additionalClasses?.length
@@ -203,6 +209,7 @@ export function createImportSession(
     const index = written.findIndex((w) => w.url === result.url);
     if (index === -1) written.push(registered);
     else written[index] = registered;
+    writer.onWriteAccepted?.(result.url, output);
     return result;
   }
   /** Binary resources carry no RDF; their metadata documents link to them. */
@@ -214,8 +221,10 @@ export function createImportSession(
     if (url.split(/[?#]/, 1)[0] === writer.resolve(RUNS))
       throw new Error("Reserved connector provenance slug.");
     await verifyDestination(url);
-    const { writeEtag, ...result } = await writer.writeBinary({ ...doc, slug });
-    if (privateImport && result.created) await verifyWrittenDestination(slug, url, writeEtag);
+    if (privacyRefused) throw await privacyRefused;
+    const { writeEtag, writeCreated, ...result } = await writer.writeBinary({ ...doc, slug });
+    if (privateImport && result.created)
+      await confirmWrittenDestination(slug, url, writeCreated === true, writeEtag);
     return result;
   }
   async function remove(slug: string): Promise<void> {
@@ -225,7 +234,9 @@ export function createImportSession(
       throw new Error("Reserved connector provenance slug.");
     const previous = reads.get(url);
     reads.delete(url);
+    if (privacyRefused) throw await privacyRefused;
     await writer.remove(slug, previous?.etag ? { ifMatch: previous.etag } : undefined);
+    if (privateImport) options.signal?.throwIfAborted();
     itemCounts.delete(url);
     const index = written.findIndex((w) => w.url === url);
     if (index !== -1) written.splice(index, 1);
@@ -236,7 +247,7 @@ export function createImportSession(
     if (finalized) return;
     finalized = true;
     try {
-      if (privacyRefused) throw new PrivateDestinationError(id);
+      if (privacyRefused) throw await privacyRefused;
       await recordRun();
       await committed?.();
     } finally {
@@ -298,6 +309,7 @@ export function createImportSession(
     }
     const url = writer.resolve(RUNS);
     await verifyDestination(url);
+    if (privacyRefused) throw await privacyRefused;
     const result = await writer.write(
       {
         slug: RUNS,
@@ -308,7 +320,8 @@ export function createImportSession(
       },
       conditionFor(previous),
     );
-    if (privateImport) await verifyWrittenDestination(RUNS, url, result.writeEtag);
+    if (privateImport)
+      await confirmWrittenDestination(RUNS, url, result.writeCreated === true, result.writeEtag);
   }
   function state(outcome?: ImportOutcome): ConnectorState {
     const success = outcome !== undefined;
@@ -336,7 +349,10 @@ export function createImportSession(
     itemCounts: itemCounts as ReadonlyMap<string, number>,
     /** Bounded run provenance summary, exposed read-only for diagnostics. */
     used: used as ReadonlySet<string>,
-    registrations: () => [...registrations.values()],
+    async registerTypes() {
+      if (privacyRefused) throw await privacyRefused;
+      return writer.registerType([...registrations.values()]);
+    },
     finish,
     release,
     state,

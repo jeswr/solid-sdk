@@ -15,7 +15,7 @@
 import { refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
 import { abortablePodWriter, unlessAborted } from "./abort.js";
 import { RunBudget, type RunLimits, stricterLimits } from "./budget.js";
-import { IntegrationSyncError } from "./errors.js";
+import { IntegrationSyncError, PrivateDestinationError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createImportSession } from "./import-session.js";
 import { budgetedFetch } from "./source-budget.js";
@@ -51,9 +51,9 @@ export interface RunImportOptions extends ConnectorStateOptions {
    * at the PodWriter boundary, immediately before each port call, so a cancel during a pending
    * read (a session's implicit read before a write, the provenance read in finalisation) still
    * stops the write that follows. Pass the same signal to `createFetchPodWriter` to check it
-   * before every HTTP request inside a port and to abort requests in flight. A run cancelled
-   * before it resolves is reported as cancelled, even when the cancel lands while the final
-   * provenance write is in flight (that write may still complete). Once the run has reported
+   * before HTTP dispatch and to abort reads in flight. Dispatched private writes finish
+   * and run confirmation before observing cancellation. A refused write still gets its
+   * independent cleanup and reports the privacy error. Once the run has reported
    * its state through `onState`, it resolves successfully; a cancel then only stops the
    * adapter's best-effort `ImportOutcome.commit` cleanup.
    *
@@ -175,7 +175,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     // The adapter has committed its data and checkpoints. The source deadline is not a
     // reason to discard them: only the caller's cancellation stops finalisation now.
     opts.signal?.throwIfAborted();
-    const { indexUrl } = await podWriter.registerType(session.registrations());
+    const { indexUrl } = await session.registerTypes();
     opts.signal?.throwIfAborted();
     let state: ConnectorState | undefined;
     await session.finish(async () => {
@@ -213,9 +213,15 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     else
       try {
         await session.finish();
-      } catch {
-        /* Original failure takes priority. */
+      } catch (provenanceError) {
+        // A refused provenance write can expose data even when the adapter already failed.
+        if (
+          provenanceError instanceof PrivateDestinationError &&
+          provenanceError.phase === "after-write"
+        )
+          throw provenanceError;
       }
+    if (error instanceof PrivateDestinationError && error.phase === "after-write") throw error;
     opts.onState?.(session.state());
     // A cancel can surface as an adapter or write error; callers match the abort reason.
     if (opts.signal?.aborted) throw opts.signal.reason;

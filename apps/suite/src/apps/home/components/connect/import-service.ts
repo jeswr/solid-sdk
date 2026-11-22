@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6
 import {
   createFetchPodWriter,
-  createSessionPrivateDestinationVerifier,
+  createSessionPrivateDestinationChecks,
   type ImportFile,
   type ImportReport,
   type NormalisedDoc,
   type PodWriter,
+  PrivateDestinationError,
   type TokenSet,
 } from "@jeswr/pod-connectors";
 import { Store } from "n3";
@@ -87,7 +88,9 @@ export async function runSavedImport<Auth = undefined>(
         });
         return result;
       } catch (error) {
-        update({ type: signal.aborted ? "incomplete" : "error" });
+        const privacyRefused =
+          error instanceof PrivateDestinationError && error.phase === "after-write";
+        update({ type: signal.aborted && !privacyRefused ? "incomplete" : "error" });
         throw error;
       }
     },
@@ -163,7 +166,7 @@ export function fileWithSignal(file: File, signal: AbortSignal): ImportFile {
 }
 
 /** The same package writer is used by the UI and demo-pod integration tests.
- * Cancellation reaches source requests, document writes and registration. */
+ * Cancellation stops new writes. A dispatched private write still gets confirmed. */
 export function createImportWriter(
   session: Pick<PodSession, "webId" | "storageUrl" | "fetch">,
   adapterId: string,
@@ -174,16 +177,14 @@ export function createImportWriter(
   const demos = new Set(demoResourceUrls);
   const profile = new URL(session.webId);
   profile.hash = "";
-  const fetch = fetchWithSignal(session.fetch, signal);
   const writer = createFetchPodWriter({
     adapterId,
     webId: session.webId,
     profileDocumentUrl: profile.href,
     podRoot: session.storageUrl,
-    fetch,
-    verifyPrivateDestination: createSessionPrivateDestinationVerifier({
+    fetch: session.fetch,
+    ...createSessionPrivateDestinationChecks({
       ...session,
-      fetch,
       signal,
     }),
     signal,
@@ -197,12 +198,9 @@ export function createImportWriter(
         ? { ...stored, dataset: new Store() }
         : stored;
     },
-    async write(doc, conditions) {
-      signal.throwIfAborted();
-      const result = await writer.write(doc, conditions);
-      demos.delete(result.url);
-      onWrite(result.url, doc);
-      return result;
+    onWriteAccepted(url, doc) {
+      demos.delete(url);
+      onWrite(url, doc);
     },
   };
 }

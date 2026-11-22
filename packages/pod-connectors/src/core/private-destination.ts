@@ -1,28 +1,40 @@
 // AUTHORED-BY Codex GPT-6
 import { createPodScopedFetch, normalizePodBase } from "@jeswr/guarded-fetch";
-import { createOwnerOnlyDestinationVerifier } from "@jeswr/pod-access";
+import { createOwnerOnlyDestinationChecks } from "@jeswr/pod-access";
 import { accessModel } from "@jeswr/pod-access/requests-solid";
 import { CapabilitiesError } from "@jeswr/storage-capabilities";
 import { createMemoryCache } from "@jeswr/storage-capabilities/cache";
 import { createPodClient, type StorageClient } from "@jeswr/storage-client";
 import { abortableFetch } from "./abort.js";
 import { createWacImportStorage } from "./storage-pod-writer.js";
+import type { PodWriter } from "./types.js";
 
-export { createOwnerOnlyDestinationVerifier };
+export {
+  createOwnerOnlyDestinationChecks,
+  createOwnerOnlyDestinationVerifier,
+} from "@jeswr/pod-access";
 
-/** Open owner-only destination verification for an authenticated Pod session. */
-export function createSessionPrivateDestinationVerifier(options: {
+type PrivateDestinationChecks = Required<
+  Pick<PodWriter, "verifyPrivateDestination" | "confirmPrivateWrite">
+>;
+
+interface SessionOptions {
   readonly fetch: typeof fetch;
   readonly storageUrl: string;
   readonly webId: string;
   readonly signal?: AbortSignal;
-}): (url: string) => Promise<boolean> {
+}
+
+/** Open owner-only destination checks for an authenticated Pod session. */
+export function createSessionPrivateDestinationChecks(
+  options: SessionOptions,
+): PrivateDestinationChecks {
   const { storageUrl, webId, signal } = options;
   const root = normalizePodBase(storageUrl);
-  const scopedFetch = createPodScopedFetch(root, {
-    fetch: signal ? abortableFetch(options.fetch, signal) : options.fetch,
-  });
-  async function openStorage(): Promise<StorageClient> {
+  async function openStorage(signal?: AbortSignal): Promise<StorageClient> {
+    const scopedFetch = createPodScopedFetch(root, {
+      fetch: signal ? abortableFetch(options.fetch, signal, true) : options.fetch,
+    });
     try {
       const { storage } = await createPodClient({
         storage: root,
@@ -46,10 +58,15 @@ export function createSessionPrivateDestinationVerifier(options: {
       return storage;
     }
   }
-  return createOwnerOnlyDestinationVerifier({
+  return createOwnerOnlyDestinationChecks({
     podRoot: root,
     ownerWebId: webId,
     openStorage,
     ...(signal && { signal }),
   });
+}
+
+/** Verify the containing policy and any existing resource policy before writing. */
+export function createSessionPrivateDestinationVerifier(options: SessionOptions) {
+  return createSessionPrivateDestinationChecks(options).verifyPrivateDestination;
 }

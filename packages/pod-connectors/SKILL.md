@@ -51,18 +51,13 @@ URL inputs become checked strings before any asynchronous transport work. Record
 RequestInit members. Source auth reads `init.headers` directly before its single spread capture (`initSemantics:
 "spread"`), matching its original mixed lookup semantics; never reread the original init after capture.
 
-Use `createStoragePodWriter({ storage, container, webId?, typeIndex?, signal? })` for storage-client hosts. It
-requires a Solid backend because connector slugs are deterministic. Reads and registration use `readRdf`;
-create-only RDF and binary writes use `storage.create` with `exactUrl`, preserving mail's colon-containing names.
-Updates require a single strong ETag; 412s propagate as StorageError and must never be retried as unconditional
-writes. Omitted write conditions use a fresh HEAD validator or create-only when absent. Delete uses the supplied
-ETag or a fresh HEAD, treating only HTTP 404 as already absent. Both writers share slug confinement and binary
-media-type validation in `core/pod-writer-policy.ts`. Registration requires webId and
-`typeIndex.profileDocumentUrl`; `storageFor` optionally selects another client for the pinned profile or validated
-Type Index. Never widen the document grant. The shared Type Index path retains typed wrappers, raw shared
-vocabulary and conditional bootstrap. The writer forwards the run signal before and through every operation,
-including after awaits. Storage-client refuses remote JSON-LD contexts by default; preserve this policy. Hosts
-supply freshness policy in their transport; Node requests force revalidation.
+Use `createStoragePodWriter` with a Solid backend. Reads and registration use `readRdf`; exact-URL
+creates preserve mail's colon-containing names. Updates require a strong ETag. Omitted conditions use
+a fresh HEAD validator or create-only when absent. Propagate 412s. For deletes, only 404 means absent.
+Both writers share slug and media-type validation in `core/pod-writer-policy.ts`. Registration needs
+`webId` and `typeIndex.profileDocumentUrl`. Optional `storageFor` selects a client for those exact documents.
+Preserve typed wrappers, conditional bootstrap and remote-context refusal. Hosts supply freshness policy.
+The writer checks cancellation before dispatch and aborts reads. Dispatched private mutations finish.
 
 All tests use recorded fixtures and memory Pods. Shared `demoImport`, `sparseImport` and `fileImport` helpers
 default to the strict storage-client memory backend, retaining synchronous snapshots for existing adapter
@@ -237,37 +232,41 @@ write has cleared the import session's retained precondition. Keep each message 
 until its cleanup succeeds; a missing document is a no-op. Reconcile all stored folders, including vanished labels,
 so interrupted relabeling cannot strand memberships. Preserve one run per connector container.
 
-CON-03 implements `./node` and the `pod-connectors` bin. Keep its imports separate from browser entry points. Read
-`src/node/config.ts` and the README's Node CLI section before changing the provisional MCP JSON schema. Use the
-0600 owner-held config descriptor, with no symlink following. Use `@jeswr/pod-auth/node`'s `forClientCredentials`
-for Pod credentials; pass its bounded fetch to storage-client's Solid backend and `createStoragePodWriter`. Suite
-and CLI wire Garmin, WHOOP and bank imports to `createOwnerOnlyDestinationVerifier` from `@jeswr/pod-access` before
-payload, provenance and CLI checkpoint writes. The pod-connectors root re-exports it for existing callers. Keep
-`node/pod-auth.ts` only as an adapter for the explicit token URL and exact profile-selected cross-storage index
-grant. Protocol discovery is cached and byte-capped, and only validated endpoints receive exchange credentials.
-Separate immutable agent boundaries handle external index documents. The adapter supplies local DPoP challenges for
-explicitly authorised requests so the engine authenticates before any Pod operation; it never implements proofs,
-token caching or refresh itself. Preserve transport separation, nonce retries, memory-only credentials and redirect
-refusal. Keep cached index agents independent of caller signals; cancel individual waits and requests, and evict
-rejected initialization promises only when they are still the cached promise. Suppress stale profile results by
-epoch. Preserve serialized RDF strings as immutable Blobs for both creates and updates so imports keep their
-adapter-specific size limits. Preserve the effective request signal in the exported Pod fetch, including refresh
-and nonce retry transports; reject already-aborted requests before sending. Use per-request transport closures so
-concurrent callers keep separate signals, and compose any internal signal with the caller's using AbortSignal.any.
+CON-03 implements `./node` and the `pod-connectors` bin. Keep its imports separate from
+browser entry points. Read `src/node/config.ts` and the README's Node CLI section before
+changing the provisional MCP JSON schema. Open the 0600 owner-held config without following symlinks. Pass the bounded
+`forClientCredentials` fetch to the Solid backend and `createStoragePodWriter`. Require both privacy
+checks from `@jeswr/pod-access` for Garmin, WHOOP and bank payloads, provenance and CLI checkpoints.
+Confirm the same strong ETag across resource HEADs. Latch refusals before conditional create cleanup under its own 10-second deadline.
+Keep `node/pod-auth.ts` as the adapter for the explicit token URL and exact cross-storage index grant.
+Protocol discovery is cached and byte-capped, and only validated endpoints receive exchange
+credentials. Separate immutable agent boundaries handle external index documents. The adapter
+supplies local DPoP challenges for explicitly authorised requests so the engine authenticates
+before any Pod operation; it never implements proofs, token caching or refresh itself.
+Preserve transport separation, nonce retries, memory-only credentials and redirect refusal.
+Keep cached index agents independent of caller signals; cancel individual waits and requests,
+and evict rejected initialization promises only when they are still the cached promise.
+Suppress stale profile results by epoch. Preserve serialized RDF strings as immutable Blobs
+for both creates and updates so imports keep their adapter-specific size limits.
+Preserve the effective request signal in the exported Pod fetch, including refresh and
+nonce retry transports; reject already-aborted requests before sending. Use per-request
+transport closures so concurrent callers keep separate signals, and compose any internal
+signal with the caller's using AbortSignal.any.
 
 Source login binds only `127.0.0.1`, with `/oauth-callback` as the fixed callback path.
-`connectors[id].callbackPort` (also accepted by authorizeLoopback's NodeOAuthConfig) selects a fixed port,
-validated as an integer from 1024 to 65535; omission uses an OS-assigned port. Adapters with OAuth
-`requiresCallbackPort: true` (Twitch) require this setting for both direct and proxy exchange: fail with a clear
-configuration error before opening the browser if missing. Register
-`http://127.0.0.1:<callbackPort>/oauth-callback` with the provider; never fall back to another port if binding
-fails. Validate Host, path, state, and code before S256 exchange. Reserved OAuth parameters cannot be overridden.
-Always close the listener on completion, timeout, cancellation, and errors. Access tokens remain memory-only;
-refresh credentials may use the injected CON-A1 encrypted vault. The state store requires an advertised
-in-container WAC ACL and installs owner-only grants before accessing JSON. Keep ETags and create-only writes; a
-failed import retains its prior successful cursor/counts/time, and failed state persistence must produce a nonzero
-exit. CLI tests use fixture source transports and a memory Pod; only callback tests open loopback sockets. Never
-include arbitrary server/exception text in CLI diagnostics.
+`connectors[id].callbackPort` (also accepted by authorizeLoopback's NodeOAuthConfig) selects
+a fixed port, validated as an integer from 1024 to 65535; omission uses an OS-assigned port.
+Adapters with OAuth `requiresCallbackPort: true` (Twitch) require this setting for both
+direct and proxy exchange: fail with a clear configuration error before opening the browser
+if missing. Register `http://127.0.0.1:<callbackPort>/oauth-callback` with the provider; never
+fall back to another port if binding fails. Validate Host, path, state,
+and code before S256 exchange. Reserved OAuth parameters cannot be overridden. Always
+close the listener on completion, timeout, cancellation, and errors. Keep access tokens in
+memory. Persist refresh credentials only in the opt-in encrypted vault.
+The state store installs owner-only grants from an advertised in-container WAC ACL before
+accessing JSON. Keep ETags and create-only writes. Write a checkpoint after confirming its
+payloads, and exit nonzero if saving or confirming it fails. CLI tests use fixtures and a
+memory Pod. Only callbacks open loopback sockets. Keep raw server and exception text out of diagnostics.
 
 Google Contacts (CON-05) writes the SolidOS vCard address book under `contacts/`, with `index.ttl#this`,
 `people.ttl`, and `Person/<pathId>/index.ttl#this`. Use its typed wrappers; keep vCard as the write model (V10).

@@ -72,7 +72,17 @@ the run signal throughout policy reads. A failed privacy proof resolves to `fals
 violation, abort, or failure while probing or creating a destination can reject. Use
 `checkOwnerOnly` directly for an existing resource or container.
 
-The function uses the same public `storage` and optional trusted `acpDialect: 'css' | 'ess'`
+Use `createOwnerOnlyDestinationChecks({ podRoot, ownerWebId, openStorage, signal? })` to
+verify before writing and confirm the written version afterward. It returns
+`verifyPrivateDestination(url)` and `confirmPrivateWrite(url, { etag }, observeEtag?)`.
+The factory passes the run signal to `openStorage` for verification and opens storage without
+that signal for confirmation. Confirmation requires an exact HEAD 200 with a strong ETag
+that matches the supplied write ETag, if present. The resource HEAD during policy discovery
+and the final revalidation must see the same version. Confirmation also checks the containing
+policy. If supplied, `observeEtag` receives the first strong validator before the policy checks.
+Treat false or rejection as a refusal.
+
+`checkOwnerOnly` uses the same public `storage` and optional trusted `acpDialect: 'css' | 'ess'`
 inputs as `createAccessClient`, plus `url` and `ownerWebId`. It follows advertised access
 links within `storage.root`, including ESS query-addressed ACRs. WAC uses the resource's own
 ACL or the nearest existing ancestor ACL's defaults after explicit 404s. ACP adds ancestor

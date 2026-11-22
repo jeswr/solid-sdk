@@ -2,7 +2,12 @@
 import type { StorageClient } from "@jeswr/storage-client";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
 import { describe, expect, it, vi } from "vitest";
-import { createOwnerOnlyDestinationVerifier, ownerPolicy, writeWac } from "./index.js";
+import {
+  createOwnerOnlyDestinationChecks,
+  createOwnerOnlyDestinationVerifier,
+  ownerPolicy,
+  writeWac,
+} from "./index.js";
 
 const TEST_POD_ROOT = "https://pod.example/alice/";
 const TEST_WEBID = "https://alice.example/profile#me";
@@ -210,6 +215,12 @@ describe("owner-only destination verifier", () => {
       openStorage: () => ({ ...storage, ...mismatch }),
     });
     expect(await verify(target)).toBe(false);
+    const checks = createOwnerOnlyDestinationChecks({
+      podRoot: root,
+      ownerWebId,
+      openStorage: () => ({ ...storage, ...mismatch }),
+    });
+    expect(await checks.confirmPrivateWrite(target, {})).toBe(false);
     expect(requests()).toEqual([]);
   });
 
@@ -258,6 +269,124 @@ describe("owner-only destination verifier", () => {
     const count = requests().length;
     await expect(verify(target)).rejects.toMatchObject({ name: "AbortError" });
     expect(requests()).toHaveLength(count);
-    expect(openStorage).toHaveBeenCalledTimes(1);
+    expect(openStorage).toHaveBeenCalledExactlyOnceWith();
+  });
+
+  it("confirms with an independent client after the run is cancelled", async () => {
+    const controller = new AbortController();
+    const { pod, storage, requests, fetch } = fixture();
+    const runHead = vi.fn(storage.head);
+    const openStorage = vi.fn((signal?: AbortSignal) =>
+      signal ? { ...storage, head: runHead } : storage,
+    );
+    const checks = createOwnerOnlyDestinationChecks({
+      podRoot: root,
+      ownerWebId,
+      openStorage,
+      signal: controller.signal,
+    });
+
+    expect(await checks.verifyPrivateDestination(target)).toBe(true);
+    expect(openStorage).toHaveBeenCalledExactlyOnceWith(controller.signal);
+    expect(runHead).toHaveBeenCalledWith(target, {
+      revalidate: true,
+      signal: controller.signal,
+    });
+    for (const [, init] of fetch.mock.calls.filter(([, init]) => init?.method === "PUT"))
+      expect(init?.signal).toBe(controller.signal);
+
+    await pod.fetch(target, { method: "PUT", body: "" });
+    const beforeAbort = runHead.mock.calls.length;
+    controller.abort();
+    fetch.mockClear();
+
+    const observe = vi.fn();
+    expect(await checks.confirmPrivateWrite(target, { etag: '"observed"' }, observe)).toBe(true);
+    expect(observe).toHaveBeenCalledExactlyOnceWith('"observed"');
+    expect(requests().filter((request) => request === `HEAD ${target}`)).toHaveLength(3);
+    expect(requests().every((request) => /^(HEAD|GET) /.test(request))).toBe(true);
+    expect(await checks.confirmPrivateWrite(target, {})).toBe(true);
+    expect(openStorage.mock.calls).toEqual([[controller.signal], []]);
+    expect(runHead).toHaveBeenCalledTimes(beforeAbort);
+  });
+
+  it.each([
+    ["missing ETag", null],
+    ["weak ETag", 'W/"observed"'],
+    ["different ETag", '"replacement"'],
+  ] as const)("refuses the first HEAD with %s", async (_case, etag) => {
+    const { pod, storage, requests } = fixture();
+    await pod.fetch(target, { method: "PUT" });
+    const head = storage.head;
+    vi.spyOn(storage, "head").mockImplementation(async (url, options) => ({
+      ...(await head(url, options)),
+      etag,
+    }));
+    const checks = createOwnerOnlyDestinationChecks({
+      podRoot: root,
+      ownerWebId,
+      openStorage: () => storage,
+    });
+    const observe = vi.fn();
+    expect(await checks.confirmPrivateWrite(target, { etag: '"observed"' }, observe)).toBe(false);
+    expect(requests()).toEqual([`HEAD ${target}`]);
+    expect(observe.mock.calls).toEqual(etag === '"replacement"' ? [[etag]] : []);
+  });
+
+  it.each([404, 410])("rejects confirmation when the target HEAD returns %s", async (status) => {
+    const { storage, requests } = fixture(() => new Response(null, { status }));
+    const checks = createOwnerOnlyDestinationChecks({
+      podRoot: root,
+      ownerWebId,
+      openStorage: () => storage,
+    });
+    await expect(checks.confirmPrivateWrite(target, {})).rejects.toMatchObject({ status });
+    expect(requests()).toEqual([`HEAD ${target}`]);
+  });
+
+  it.each([
+    target,
+    container,
+  ])("refuses confirmation when %s has public access", async (publicUrl) => {
+    const { pod, storage } = fixture();
+    await pod.fetch(target, { method: "PUT" });
+    // Keep the target's own policy private so the containing policy must be checked separately.
+    if (publicUrl === container)
+      await pod.fetch(`${target}.acl`, {
+        method: "PUT",
+        body: await writeWac(ownerPolicy(ownerWebId, false), target, `${target}.acl`),
+      });
+    await seedPublicRead(pod.fetch, publicUrl, publicUrl === container);
+    const checks = createOwnerOnlyDestinationChecks({
+      podRoot: root,
+      ownerWebId,
+      openStorage: () => storage,
+    });
+    expect(await checks.confirmPrivateWrite(target, { etag: '"observed"' })).toBe(false);
+  });
+
+  it.each([
+    ["after the policy reads", [3]],
+    ["during the policy reads", [2, 3]],
+    ["during the policy reads and then returns to the write ETag", [2]],
+  ] as const)("refuses confirmation when the version changes %s", async (_case, changedHeads) => {
+    let resourceHeads = 0;
+    const { pod, storage, requests } = fixture((url, init) => {
+      if (url !== target || init?.method !== "HEAD") return;
+      resourceHeads++;
+      if (changedHeads.some((n) => n === resourceHeads))
+        return new Response(null, {
+          headers: { etag: '"replacement"', link: `<${target}.acl>; rel="acl"` },
+        });
+    });
+    await pod.fetch(target, { method: "PUT" });
+    const checks = createOwnerOnlyDestinationChecks({
+      podRoot: root,
+      ownerWebId,
+      openStorage: () => storage,
+    });
+    expect(await checks.confirmPrivateWrite(target, { etag: '"observed"' })).toBe(false);
+    expect(resourceHeads).toBe(3);
+    expect(requests().at(-1)).toBe(`HEAD ${target}`);
   });
 });

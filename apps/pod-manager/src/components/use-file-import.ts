@@ -13,10 +13,7 @@
  */
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import {
-  createFetchPodWriter,
-  createSessionPrivateDestinationVerifier,
-} from "@jeswr/pod-connectors";
+import { createFetchPodWriter, createSessionPrivateDestinationChecks } from "@jeswr/pod-connectors";
 import { useCallback, useState } from "react";
 import { NoStorageError } from "@/lib/errors";
 import type { FileImportAdapter } from "@/lib/integrations/core/file-import";
@@ -59,7 +56,7 @@ export function useFileImport(adapter: FileImportAdapter | undefined) {
             profileDocumentUrl: profile.profileDocumentUrl,
             podRoot,
             fetch: podFetch,
-            verifyPrivateDestination: createSessionPrivateDestinationVerifier({
+            ...createSessionPrivateDestinationChecks({
               fetch: podFetch,
               storageUrl: podRoot,
               webId,

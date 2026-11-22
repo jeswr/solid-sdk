@@ -139,7 +139,6 @@ export async function lastSignedMandate(
   const keys = createWebIdKeyResolver({ fetch: profileReader(session) });
   for (const vc of loadedRecords(await readMandateCredentials(client)).slice(0, 32)) {
     const at = new Date(vc.validFrom as string);
-    if (!Number.isFinite(at.getTime())) continue;
     const mandate = await createVcMandateVerifier({
       read: async () => vc,
       ownerWebId: session.webId,

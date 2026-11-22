@@ -79,9 +79,20 @@ export class IntegrationSyncError extends IntegrationError {
 }
 
 export class PrivateDestinationError extends IntegrationSyncError {
-  constructor(adapterId: string) {
-    super(adapterId, "Could not verify an owner-private import destination.");
+  readonly phase: "before-write" | "after-write";
+  readonly removed?: boolean;
+
+  constructor(adapterId: string, written?: { url: string; removed: boolean }) {
+    super(
+      adapterId,
+      written
+        ? `A file was written to your pod and may be visible to other people. ${written.removed ? "The file was removed." : "Removal of the file could not be confirmed."}`
+        : "Could not verify an owner-private import destination.",
+      written,
+    );
     this.name = "PrivateDestinationError";
+    this.phase = written ? "after-write" : "before-write";
+    this.removed = written?.removed;
   }
 }
 

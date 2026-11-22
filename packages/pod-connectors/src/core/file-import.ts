@@ -23,7 +23,7 @@
  * container under the user's pod root (the slug-escape guard below).
  */
 import { abortablePodWriter, unlessAborted } from "./abort.js";
-import { IntegrationSyncError } from "./errors.js";
+import { IntegrationSyncError, PrivateDestinationError } from "./errors.js";
 import type { ImportReport } from "./import-runner.js";
 import { createImportSession } from "./import-session.js";
 import type {
@@ -136,9 +136,10 @@ export interface RunFileImportOptions extends ConnectorStateOptions {
    * aborts, the runner starts no further Pod read or write, progress report, Type Index
    * registration or provenance write, and rejects with its reason. The check runs at the
    * PodWriter boundary, immediately before each port call, so a cancel during a pending read
-   * still stops the write that follows. Pass the same signal to `createFetchPodWriter`. A
-   * cancelled run reports an error state that advances nothing, even when the cancel lands
-   * while the final provenance write is in flight (that write may still complete).
+   * still stops the write that follows. Pass the same signal to `createFetchPodWriter`.
+   * A cancelled run advances no state. Dispatched private writes finish and run confirmation
+   * before observing cancellation. A refusal still gets independent cleanup and reports the
+   * privacy error.
    */
   signal?: AbortSignal;
 }
@@ -210,7 +211,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
         "No importable records were found in that file. Double-check you selected the right export file.",
       );
     }
-    const { indexUrl } = await podWriter.registerType(session.registrations());
+    const { indexUrl } = await session.registerTypes();
     signal?.throwIfAborted();
     await session.finish();
     // A cancel during the final provenance write is still a cancel: never report success.
@@ -237,9 +238,15 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
     else
       try {
         await session.finish();
-      } catch {
-        /* Original failure takes priority. */
+      } catch (provenanceError) {
+        // A refused provenance write can expose data even when the adapter already failed.
+        if (
+          provenanceError instanceof PrivateDestinationError &&
+          provenanceError.phase === "after-write"
+        )
+          throw provenanceError;
       }
+    if (error instanceof PrivateDestinationError && error.phase === "after-write") throw error;
     opts.onState?.(session.state());
     // A cancel can surface as an adapter or write error; callers match the abort reason.
     throw signal?.aborted ? signal.reason : error;

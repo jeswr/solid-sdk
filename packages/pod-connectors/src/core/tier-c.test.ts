@@ -563,6 +563,7 @@ it.each(
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
     verifyPrivateDestination: async () => true,
+    confirmPrivateWrite: async () => true,
   });
   expect(writer.webId).toBe(TEST_WEBID);
   const report = await runFileImport({

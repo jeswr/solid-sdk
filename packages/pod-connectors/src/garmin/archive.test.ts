@@ -894,6 +894,7 @@ describe("Garmin archive budgets and cancellation", () => {
       podRoot: TEST_POD_ROOT,
       fetch: pod.fetch,
       verifyPrivateDestination: async () => true,
+      confirmPrivateWrite: async () => true,
     });
     await expect(
       runFileImport({

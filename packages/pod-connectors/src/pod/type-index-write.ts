@@ -88,6 +88,7 @@ export async function ensureTypeRegistrations(opts: {
   /** Storage-backed registration reuses the same document selection and validation. */
   storageFor?: (url: string) => StorageClient;
   signal?: AbortSignal;
+  finishMutations?: boolean;
 }): Promise<EnsureRegistrationsResult> {
   const { webId, podRoot, registrations } = opts;
   const profileDocument = documentUrl(opts.profileDocumentUrl ?? webId);
@@ -119,6 +120,7 @@ export async function ensureTypeRegistrations(opts: {
         options?.createOnly ? { ifNoneMatch: "*" } : { ifMatch: options?.etag ?? undefined },
         opts.signal,
         options?.prefixes ?? {},
+        opts.finishMutations,
       );
     } else await writeResource(url, dataset, options);
   };
@@ -129,6 +131,7 @@ export async function ensureTypeRegistrations(opts: {
   // copy would carry a stale ETag into If-Match (spurious 412 on the write).
   const { dataset: profileDs, etag: profileEtag } = await readRdf(profileDocument, profileFetch);
   const links = typeIndexLinks(webId, profileDs);
+  // Public Type Index fallback is existing behavior tracked separately from private import confirmation.
   let indexUrl = links.privateIndex ?? links.publicIndex;
   let bootstrapped = false;
   // The profile's trusted storage roots are independent of the import destination.

@@ -33,6 +33,7 @@ function run(adapter: IntegrationAdapter, limits: Partial<RunLimits> = {}, api?:
       podRoot: TEST_POD_ROOT,
       fetch: pod.fetch,
       verifyPrivateDestination: async () => true,
+      confirmPrivateWrite: async () => true,
     }),
     limits,
   });

@@ -57,42 +57,61 @@ slugs, so the factory requires a Solid backend.
 `typeIndex.storageFor(url)` can select a separately scoped client for the canonical profile
 or the index validated against the profile's advertised storage. Selection, bootstrap and
 registration logic are shared with the fetch writer, and these reads also use `readRdf`.
-Pass the run's `signal` to the writer to cancel every storage operation inside a port.
+Pass the run's `signal` to the writer to stop new operations and cancel in-flight reads.
 Hosts own cache policy; the Node transport forces revalidation.
 
-Garmin, WHOOP and bank statement runs require a `PodWriter.verifyPrivateDestination(url)`
-port. The runner invokes it before and after each write, including run provenance. The CLI
-uses `createOwnerOnlyDestinationVerifier` from `@jeswr/pod-connectors`. Hosts supply the pod root,
-owner WebID, a lazy `openStorage` callback and the run signal. The storage transport must also
-honor cancellation during access-policy reads.
+Garmin, WHOOP and bank statement runs require both `verifyPrivateDestination(url)` and
+`confirmPrivateWrite(url, { etag })` on their `PodWriter`. Hosts with a storage client can
+pass both checks from `createOwnerOnlyDestinationChecks` into the writer. The client transport
+must honor the run signal during pre-write access-policy reads. For the storage-backed writer, also pass
+an authenticated `cleanupFetch` independent of the run signal. The fetch-backed writer gets
+that transport in its existing `fetch` option and applies the run signal itself.
 
 ```ts
-import { createOwnerOnlyDestinationVerifier } from '@jeswr/pod-connectors';
+import { createOwnerOnlyDestinationChecks, createStoragePodWriter } from '@jeswr/pod-connectors';
 
-const verifyPrivateDestination = createOwnerOnlyDestinationVerifier({
+const checks = createOwnerOnlyDestinationChecks({
   podRoot: storage.root,
   ownerWebId: webId,
-  openStorage: () => storage,
+  openStorage: (signal) => openAuthenticatedStorage({ signal }),
   signal,
+});
+const podWriter = createStoragePodWriter({
+  storage, container, webId, typeIndex: { profileDocumentUrl },
+  signal, cleanupFetch: authenticatedFetch, ...checks,
 });
 ```
 
 The verifier checks the target's pod scope, the containing policy and any existing resource's
 own policy. It creates missing containers empty under verified owner-only defaults, then checks
 them before any payload write. Only an explicit `true` permits the write. Public, unreadable or
-unsupported policies fail closed. The post-write check examines the resource's now-discoverable
-policy. On refusal, the run fails and attempts to delete the just-written version using the
-strong ETag from the PUT response, when available.
+unsupported policies fail closed. A dispatched private mutation finishes even if the run is
+cancelled. Confirmation requires exact HEAD 200 responses for the resource before, during
+and after policy discovery. They must report the same strong ETag, matching the write's
+ETag if present. The effective policies of both the file and its container must be owner-only.
+Confirmation also covers run provenance and CLI checkpoints. The runners report no new
+cursor or successful checkpoint until their preceding writes are confirmed.
 
-These checks narrow the exposure window but cannot eliminate it. Policy reads and the PUT
-are separate requests, so permissions can change between them and another reader could
-retrieve the data before cleanup. A missing strong ETag or a denied or conflicting DELETE
-can prevent cleanup.
+A refusal blocks further mutations in the import before cleanup starts. Cleanup applies
+only to a mutation that successfully used a create-only precondition. It gets a fresh
+10-second timeout and sends DELETE with `If-Match` using the write's strong ETag, or the
+first confirmation HEAD's strong ETag if the write supplied none. Without a strong
+validator, the importer skips deletion. A DELETE 200, 204, 404 or 410 followed by a HEAD
+404 or 410 confirms removal. A refused replacement is preserved because deletion would
+erase earlier committed data. The import fails with `PrivateDestinationError` carrying
+`phase: "after-write"`, the destination `url`, and whether removal was confirmed
+(`removed`). The host warns that a file was written and may be visible to others.
 
-Suite and Pod Manager use `createSessionPrivateDestinationVerifier({ fetch, storageUrl, webId, signal })`.
+The server can change access policy between the pre-write and post-write checks. A grant
+opened and closed between those checks escapes detection, and someone could read the data
+before cleanup.
+
+Type Index registration retains the existing public-index fallback, which is tracked separately.
+
+Suite and Pod Manager use `createSessionPrivateDestinationChecks({ fetch, storageUrl, webId, signal })`.
 It discovers storage with the authenticated session fetch. For a legacy root without a
 storage-description link, it requires WAC and a typed storage root before verifying the
-destination policy.
+destination policy. The two existing `*Verifier` factories still return the pre-write check.
 
 Live imports take `sourceAuth: { fetch: authenticatedSourceFetch }`. The optional
 `createSourceAuth(id, adapter, token, sourceFetch)` helper adds bearer and adapter headers.
@@ -985,19 +1004,25 @@ the factory and vault wiring.
 The standalone CLI verifies owner-only WAC for Garmin, WHOOP and bank imports by default,
 using the authenticated Solid client that writes the payload. It checks the checkpoint destination
 before protecting the checkpoint and verifies every import and checkpoint destination before and
-after writing. A refused destination reports an import error. Node hosts can override the verifier through
-`runCli(args, { verifyPrivateDestination })`. The callback receives the exact URL, storage client,
-authenticated fetch, owner WebID and cancellation signal.
+after writing. The CLI prints the destination URL with an after-write refusal. Node hosts
+can supply `verifyPrivateDestination` and `confirmPrivateWrite` to `runCli`. Both receive the
+exact URL, storage client, authenticated fetch and owner WebID. Pre-write verification
+receives the run signal. Confirmation receives the write ETag when present and can report
+its first HEAD's strong ETag via `observeEtag` for conditional cleanup.
 
 The CLI stores `<podRoot>integrations/<id>/state.json`, including failed outcomes while
 retaining the last successful checkpoint. Before accessing JSON, it discovers the resource's
 `rel="acl"` link and writes a WAC ACL granting only the owner WebID Read, Write and Control.
 The ACL must be in the same connector container. Missing ACL discovery or rejected ACL
 writes fail closed; ACP/LWS state protection belongs to later storage integration.
-Conditional JSON PUTs reject stale ETags and concurrent creates. Once the CLI is cancelled it
-starts no further Pod or source request, so a cancelled run leaves the checkpoint unchanged.
-In-flight shared OAuth token and revocation requests keep their own timeout. State persistence failures
-fail the command even if import documents were already written; deterministic slugs allow retry.
+Conditional JSON PUTs reject stale ETags and concurrent creates. Cancellation stops new
+source requests and regular Pod operations. In-flight OAuth token and revocation requests
+keep their own timeout. A dispatched private PUT or DELETE finishes,
+and checkpoint confirmation and cleanup can continue after cancellation. The CLI writes a
+checkpoint only after all payloads and run provenance have been confirmed. If checkpoint
+confirmation fails, the CLI reports the refusal and intentionally keeps any surviving
+checkpoint because its cursor points to confirmed data and deleting it would force a full re-import.
+State persistence failures fail the command, and deterministic slugs allow retry.
 
 Exit codes: **0** success/help, **1** import/state failure, **2** usage/config/file error,
 **3** Pod/source login failure, **130** cancellation. Error output uses constant messages
