@@ -45,9 +45,11 @@
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-chat-interop": "workspace:*",
     "@jeswr/solid-dav-bridge": "workspace:*",
+    "@jeswr/solid-journal": "workspace:*",
     "@jeswr/solid-offline": "workspace:*",
     "@jeswr/solid-recipe": "workspace:*",
     "@jeswr/solid-sheets": "workspace:*",
+    "@jeswr/solid-slides": "workspace:*",
     "@jeswr/solid-money": "workspace:*",
     "@jeswr/solid-task-model": "workspace:*",
     "@jeswr/solid-vc": "workspace:*",
@@ -109,8 +111,7 @@
     "saxes": "6.0.0",
     "y-indexeddb": "9.0.12",
     "yjs": "13.6.27",
-    "zod": "4.4.3",
-    "@jeswr/solid-slides": "workspace:*"
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.1",

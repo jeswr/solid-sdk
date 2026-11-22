@@ -26,6 +26,9 @@ export default defineConfig({
       include: [
         "src/apps/forms/lib/**/*.ts",
         "src/apps/forms/state/**/*.{ts,tsx}",
+        "src/apps/journal/lib/**/*.ts",
+        "src/apps/journal/state/**/*.{ts,tsx}",
+        "src/apps/journal/demo/**/*.ts",
         "src/apps/recipes/lib/**/*.ts",
         "src/apps/recipes/state/*.{ts,tsx}",
         "src/apps/agent/lib/**/*.ts",

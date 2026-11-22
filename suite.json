@@ -111,7 +111,8 @@
     "@jeswr/suite-templates",
     "@jeswr/suite-groups",
     "@jeswr/solid-slides",
-    "@jeswr/solid-recipe"
+    "@jeswr/solid-recipe",
+    "@jeswr/solid-journal"
   ],
   "applications": [
     {
