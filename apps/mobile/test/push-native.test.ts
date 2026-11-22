@@ -7,6 +7,35 @@ import { expect, test } from "vitest";
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const project = read("ios/App/App.xcodeproj/project.pbxproj");
 
+test("renewal reminders are private, replaceable local notices and never accept a remote route", () => {
+  const android = read("android/app/src/main/java/org/jeswr/suite/PushRenewalReminder.java");
+  const androidPlugin = read("android/app/src/main/java/org/jeswr/suite/SuitePushPlugin.java");
+  const ios = read("ios/App/App/SuitePushCoordinator.swift");
+  const iosPlugin = read("ios/App/App/SuitePushPlugin.swift");
+  expect(read("android/app/src/main/AndroidManifest.xml")).toContain(
+    '<receiver android:name=".PushRenewalReminder" android:exported="false">',
+  );
+  expect(read("android/app/src/main/AndroidManifest.xml")).toContain(
+    "android.permission.RECEIVE_BOOT_COMPLETED",
+  );
+  expect(android).toContain("Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())");
+  expect(android).toContain("alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP");
+  expect(android).not.toContain("setExact");
+  expect(android).toContain("withRenewalReminder(expiry, System.currentTimeMillis()");
+  expect(androidPlugin).toContain("PushRenewalReminder.schedule(getContext(), null)");
+  expect(androidPlugin).toContain("store(getContext()).launchNotifications()");
+  expect(iosPlugin).toContain('CAPPluginMethod(name: "scheduleRenewalReminder"');
+  expect(iosPlugin).toContain("try SuitePushCoordinator.shared.cancelRenewalReminder()");
+  expect(ios).toContain("UNTimeIntervalNotificationTrigger");
+  expect(ios).toContain("!(notification.request.trigger is UNPushNotificationTrigger)");
+  expect(ios).toContain("try? PushStore.shared().launchNotifications()");
+  for (const source of [
+    read("android/app/src/main/java/org/jeswr/suite/PushPolicy.java"),
+    read("ios/App/Shared/PushPolicy.swift"),
+  ])
+    expect(source).toContain("Open Solid Suite to keep notifications on");
+});
+
 function object(id: string): string {
   const block = project.match(
     new RegExp(`^\\t\\t${id}(?: /\\*[^\\n]*?\\*/)? = \\{([\\s\\S]*?)^\\t\\t\\};`, "m"),

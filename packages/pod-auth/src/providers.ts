@@ -10,6 +10,7 @@ import {
   ClientIdClientProvider,
   type CodeProvider,
   type ContextKey,
+  CredentialBoundary,
   type CredentialRequest,
   type CredentialSource,
   createBrowserCaches,
@@ -690,6 +691,102 @@ export function createProviders(
         }
         return result;
       }),
+    fetchFor: (origins: readonly string[], account: Identity, assertSession: () => void) => {
+      if (
+        account.protocol !== "solid-oidc" ||
+        account.webId === null ||
+        sessionRequest === undefined
+      )
+        throw new Error("Extra resource origins require a Solid-OIDC account");
+      const target = sessionRequest;
+      const selected = { ...hint };
+      const context = contextFor(target, selected);
+      const resources = new CredentialBoundary(origins.map((origin) => `${origin}/`));
+      const provider = new DPoPTokenProvider(
+        redirectUri,
+        {
+          getCode: async () => {
+            throw new Error("Account session is unavailable");
+          },
+        },
+        {
+          getAuthorizationServer: async (request) =>
+            es256(
+              await asFor(selected).getAuthorizationServer(
+                new Request(target.url, { signal: request.signal }),
+              ),
+            ),
+        },
+        clientProvider,
+        // Share the normal provider's grant cache and its ownership checks.
+        persistence.credentials,
+        { ...sessionOptions, context: async () => await context, silentAfterRefreshFailure: false },
+      );
+      const assertIdentity = async (request: Request) => {
+        const identity = await provider.identity(request);
+        assertSession();
+        if (
+          identity?.webId !== account.webId ||
+          identity.issuer !== account.issuer ||
+          identity.subject !== account.subject ||
+          (identity.clientId ?? null) !== account.clientId
+        )
+          throw new Error("Account session is unavailable");
+      };
+      const scoped = new ReactiveFetchManager({
+        ...(options.maxReplayBodyBytes === undefined
+          ? {}
+          : { maxReplayBodyBytes: options.maxReplayBodyBytes }),
+        boundary: resources,
+        fetch: transport,
+        fence,
+        providers: [
+          {
+            fence,
+            // Reuse the normal Solid-only matcher (including exchange rejection and observation).
+            matches: observe(provider, "solid-oidc", true).matches,
+            upgrade: async (request, challenge) => {
+              assertSession();
+              // Inspect claims without starting a flow, then recheck after any refresh.
+              await assertIdentity(request);
+              const upgraded = await provider.upgrade(request, challenge);
+              await assertIdentity(request);
+              return upgraded;
+            },
+            invalidate: async (request) => await provider.invalidate(request),
+            assertAllowed: assertSession,
+          },
+        ],
+      });
+      return async (input: RequestInfo | URL, init?: RequestInit) => {
+        const body = init?.body;
+        const request = new Request(input, init);
+        const replay = body instanceof Blob ? { body } : undefined;
+        // Keep normal pod routing. Auxiliary servers refuse every redirect, including before a 401,
+        // so application-supplied headers such as Installation-Proof cannot cross origins either.
+        if (!resources.allows(request.url)) return await manager.fetch(request, replay);
+        const metadata = await asFor(selected).getAuthorizationServer(
+          new Request(target.url, { signal: request.signal }),
+        );
+        assertSession();
+        const destination = new URL(request.url);
+        // Credential endpoints are protocol-only, even when explicitly admitting their origin.
+        // Ignore query/fragment so an endpoint cannot be reclassified by adding a parameter.
+        if (
+          [metadata.token_endpoint, metadata.registration_endpoint].some((endpoint) => {
+            if (typeof endpoint !== "string") return false;
+            const url = new URL(endpoint);
+            // Compare hosts without a DNS trailing dot: "issuer.example." is the same server.
+            return sameServer(url, destination) && url.pathname === destination.pathname;
+          })
+        )
+          throw new Error("OIDC credential endpoints cannot be extra resources");
+        return await scoped.fetch(
+          new Request(request, { redirect: "error", credentials: "omit" }),
+          replay,
+        );
+      };
+    },
     restore: async (account: import("./sessions.js").ActiveAccount, signal: AbortSignal) => {
       const selected = { ...account.selected, issuer: account.issuer };
       // Pin discovery to the remembered issuer while retaining the original credential key.
@@ -837,4 +934,10 @@ export function createProviders(
     hint = selected;
     sessionRequest = request;
   }
+}
+
+/** Same scheme, port and host, treating a DNS trailing dot as the host it names. */
+function sameServer(a: URL, b: URL): boolean {
+  const host = (url: URL) => url.hostname.replace(/\.$/, "");
+  return a.protocol === b.protocol && a.port === b.port && host(a) === host(b);
 }

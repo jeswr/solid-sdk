@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, Input } from "@jeswr/suite-ui";
 import { useEffect, useId, useState } from "react";
+import { NativePushSettings } from "../push/settings";
 import { NotificationSummarySettings } from "./notification-summary";
 import { usePreferences } from "./preferences";
 
@@ -50,6 +52,7 @@ export function NotificationSettings() {
   }, []);
   return (
     <>
+      <NativePushSettings />
       <p>
         Every notification appears in the tray. These settings choose which ones also pop up on your
         desktop.

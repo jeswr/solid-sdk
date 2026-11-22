@@ -34,6 +34,36 @@ public class PushStateTest {
         }
         assertFalse(PushPolicy.route(null)); assertFalse(PushPolicy.route("/chat/" + new String(new char[512]).replace('\0', 'a')));
     }
+    @Test public void renewalArgumentsRequireFutureSafeIntegerMilliseconds() {
+        long now = 1000000L;
+        assertNull(PushPolicy.renewalExpiry(null, now));
+        assertEquals(Long.valueOf(now + 1), PushPolicy.renewalExpiry(now + 1, now));
+        assertEquals(Long.valueOf(9007199254740991L), PushPolicy.renewalExpiry(9007199254740991L, now));
+        for (Object invalid : new Object[] {true, false, "2000000", 2000000.5d, 2000000.0d, Double.NaN,
+            Double.POSITIVE_INFINITY, now, now - 1, 9007199254740992L}) {
+            assertThrows(Exception.class, () -> PushPolicy.renewalExpiry(invalid, now));
+        }
+        assertEquals(now + 6 * 86400000L, PushPolicy.renewalTrigger(now + 7 * 86400000L, now));
+        assertEquals(now + 1000, PushPolicy.renewalTrigger(now + 2000, now));
+    }
+    @Test public void renewalNoticeRechecksReplacementExpiryAndLocalSilence() throws Exception {
+        File root = temporary.newFolder(); PushStore store = new PushStore(root);
+        store.setTopics("a", topics()); store.setTopics("b", topics()); store.setRenewalExpiry(2000L);
+        assertEquals(Long.valueOf(2000), new PushStore(root).renewalExpiry());
+        assertTrue(new PushStore(root).withRenewalReminder(2000, 1000, () -> {}));
+        assertFalse(store.withRenewalReminder(1999, 1000, () -> fail("Replaced notice")));
+        assertFalse(store.withRenewalReminder(2000, 2000, () -> fail("Expired notice")));
+        store.silence("a"); assertTrue(store.withRenewalReminder(2000, 1000, () -> assertTrue(Thread.holdsLock(store))));
+        store.silence("b"); assertFalse(store.withRenewalReminder(2000, 1000, () -> fail("Silenced notice")));
+        store.setTopics("b", topics()); store.setRenewalExpiry(null);
+        assertNull(store.renewalExpiry());
+        assertFalse(store.withRenewalReminder(2000, 1000, () -> fail("Cancelled notice")));
+        store.launch("b", 1); store.launchNotifications();
+        Map<String, Object> route = new PushStore(root).consumeLaunch();
+        assertNull(route.get("registrationId")); assertEquals("/notifications", route.get("route"));
+        PushStore reopened = new PushStore(root); assertNull(reopened.consumeLaunch());
+        reopened.launchNotifications(); reopened.launch("b", 1); assertEquals("/chat/book", reopened.consumeLaunch().get("route"));
+    }
     @Test public void rejectsInvalidPlaintextAndDuplicateKeys() throws Exception {
         String valid = json("id", "chat", "b", 1); assertEquals("id", PushPolicy.plaintext(padded(valid)).id);
         for (String invalid : new String[] {valid.replace("\"v\":1", "\"v\":2"), valid.replace("\"v\":1", "\"v\":true"),

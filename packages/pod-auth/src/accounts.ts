@@ -198,6 +198,9 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
   };
   const anonymous: PodAuth = {
     fetch: transport,
+    fetchFor: () => {
+      throw new Error("Account session is unavailable");
+    },
     identity: async () => null,
     restore: async () => null,
     remembered: async () => [],

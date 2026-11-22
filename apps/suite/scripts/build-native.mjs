@@ -187,6 +187,7 @@ await new Promise((resolve, reject) => {
         NEXT_PUBLIC_APP_BASE_URL: info.appBaseUrl,
         NEXT_PUBLIC_PUBLIC_SUITE_URL: info.publicSuiteUrl,
         NEXT_PUBLIC_CLIENT_ID_URL: info.clientIdUrl,
+        NEXT_PUBLIC_PUSH_RELAY_URL: info.pushRelayUrl ?? "",
         // The demo pod is web-only; staging replaces it with inert stand-ins.
         NEXT_PUBLIC_SUITE_DEMO: "0",
         NEXT_TELEMETRY_DISABLED: "1",

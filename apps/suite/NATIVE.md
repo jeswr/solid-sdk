@@ -13,10 +13,40 @@ Native settings are baked into Next's client code and `www/build-info.json`:
 | `NEXT_PUBLIC_APP_BASE_URL` (or `APP_BASE_URL`) | `https://localhost` | `appBaseUrl` |
 | `NEXT_PUBLIC_PUBLIC_SUITE_URL` (or `PUBLIC_SUITE_URL`) | `https://solid-suite.vercel.app` | `publicSuiteUrl` |
 | `NEXT_PUBLIC_CLIENT_ID_URL` (or `CLIENT_ID_URL`) | public URL + `/.well-known/solid-client-id-mobile.jsonld` | `clientIdUrl` |
+| `NEXT_PUBLIC_PUSH_RELAY_URL` (or `PUSH_RELAY_URL`) | absent (push disabled) | `pushRelayUrl` |
 
 The app origin must be `https://localhost` or `capacitor://localhost`. Public and Client ID URLs
 must be https. Public bases reject userinfo, queries and fragments, and are canonicalized
 without a trailing slash before navigation and Client ID paths are appended.
+The optional push relay must be an exact canonical HTTPS origin, with no trailing slash,
+path, credentials, query or fragment. It is fixed in the signed native build. No production
+relay or provider credentials have been provisioned (MOB-P2f); omit the setting to hide
+push controls and avoid loading SuitePush. Web browsers never load the push binding.
+
+With a configured relay, Settings › Notifications enables push separately for each signed-in
+Solid account. The app discovers its inbox and joined chat containers (at most sixteen topics
+per storage), creates seven-day webhook subscriptions using the account's authenticated fetch,
+and retains each actual pod expiry. Labels and screen routes stay on the phone. Launch and
+resume renew within two days of expiry; a local notification asks the owner to open the app
+one day before the earliest expiry. Settings states: “Notifications pause if you don't open
+Solid Suite for a week”. LWS-only authentication remains unavailable pending MOB-P2g.
+
+Relay requests use `podAuth.fetchFor(account, { extraResourceOrigins: [RELAY_ORIGIN] })`;
+the registrar never reads tokens. Pod subscription endpoints must share the verified storage
+origin and stay in its credential boundary. Native policy explicitly admits the standard
+`/.notifications/` service path on verified storage origins; metadata cannot add other paths
+or origins. Turning push off
+or signing out silences native registrations before bounded pod and relay cleanup. Failed
+cleanup retains the local keys and metadata and retries on the next launch with connectivity.
+Notification taps resolve their registration to a live account and switch before navigating;
+the native `/chat/<ref>` alias maps to the suite's `/chat/r/<ref>`. Unknown or signed-out
+registrations open `/notifications`.
+
+Solid container notifications observe direct membership. For chats stored in daily message
+files, a new day's file produces a container event; later edits to that existing file may
+not produce one. LWS recursive subscriptions retain the server's semantics. Push text is
+therefore a hint to reconcile the tray and chat when the app opens, with delivery constrained
+by the pod's notification coverage.
 `appBaseUrl()` uses the live local scheme in the WebView so both platforms can
 consume the same bundle. Shared links use the public URL. The CSP permits executable assets
 only under `/_next/static/` at those two local origins and hashes each page's inline scripts.

@@ -27,6 +27,38 @@ final class PushStateTests: XCTestCase {
                       "/chat/\\x", "/chat/a?x", "/chat/a#x", "/chat/a\n", "/chat/a\0", "/chat/你好", "/chat/../a",
                       "/chat/" + String(repeating: "a", count: 512)] { XCTAssertFalse(PushPolicy.route(route), route) }
     }
+    func testRenewalRequiresFutureSafeIntegerMilliseconds() throws {
+        let now = 1000000.0
+        XCTAssertNil(try PushPolicy.renewalExpiry(NSNull(), now: now))
+        XCTAssertEqual(try PushPolicy.renewalExpiry(NSNumber(value: now + 1), now: now), now + 1)
+        XCTAssertEqual(try PushPolicy.renewalExpiry(NSNumber(value: 9007199254740991), now: now), 9007199254740991)
+        let invalid: [Any] = [true, false, "2000000", 2000000.5, Double.nan, Double.infinity, now, now - 1, 9007199254740992.0]
+        for value in invalid {
+            XCTAssertThrowsError(try PushPolicy.renewalExpiry(value, now: now))
+        }
+        XCTAssertThrowsError(try PushPolicy.renewalExpiry(nil, now: now))
+        XCTAssertEqual(PushPolicy.renewalTrigger(now + 7 * 86400000, now: now), now + 6 * 86400000)
+        XCTAssertEqual(PushPolicy.renewalTrigger(now + 2000, now: now), now + 1000)
+    }
+    func testRenewalReplacementExpirySilenceAndGenericOneShotTap() throws {
+        let store = try PushStore(root: root)
+        try store.setTopics(registration: "a", topics: topics); try store.setTopics(registration: "b", topics: topics)
+        try store.setRenewalExpiry(2000)
+        XCTAssertTrue(try PushStore(root: root).withRenewalReminder(2000, now: 1000))
+        XCTAssertFalse(try store.withRenewalReminder(1999, now: 1000))
+        XCTAssertFalse(try store.withRenewalReminder(2000, now: 2000))
+        try store.silence("a"); XCTAssertTrue(try store.withRenewalReminder(2000, now: 1000))
+        try store.silence("b"); XCTAssertFalse(try store.withRenewalReminder(2000, now: 1000))
+        XCTAssertFalse(try store.hasAnyActive())
+        try store.setTopics(registration: "b", topics: topics); try store.setRenewalExpiry(nil)
+        XCTAssertFalse(try store.withRenewalReminder(2000, now: 1000))
+        try store.launch(registration: "b", index: 1); try store.launchNotifications()
+        let launch = try XCTUnwrap(PushStore(root: root).consumeLaunch())
+        XCTAssertNil(launch.registrationId); XCTAssertEqual(launch.route, "/notifications")
+        XCTAssertNil(try store.consumeLaunch())
+        try store.launchNotifications(); try store.launch(registration: "b", index: 1)
+        XCTAssertEqual(try store.consumeLaunch()?.route, "/chat/book")
+    }
     func testStrictPlaintextAndPadding() throws {
         let valid = Self.json(); XCTAssertEqual(try PushPayload(Self.padded(valid)).id, "id")
         for invalid in [valid.replacingOccurrences(of: "\"v\":1", with: "\"v\":2"),

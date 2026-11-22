@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 import { validatePredecessorOrigins } from "@jeswr/suite-native";
 import { clientIdDocumentUrl, publicBaseUrl } from "../src/lib/public-url.ts";
+import { pushRelayUrl } from "../src/shell/push/config.ts";
 
 export function nativeSettings(env) {
   const publicSuiteUrl = publicBaseUrl(
@@ -32,5 +33,12 @@ export function nativeSettings(env) {
         : "PREDECESSOR_ORIGINS must contain canonical remote https origins",
     );
   const predecessorOrigins = [...new Set(plan.origins)];
-  return { target: "native", appBaseUrl, publicSuiteUrl, clientIdUrl, predecessorOrigins };
+  return {
+    target: "native",
+    appBaseUrl,
+    publicSuiteUrl,
+    clientIdUrl,
+    predecessorOrigins,
+    pushRelayUrl: pushRelayUrl(env.NEXT_PUBLIC_PUSH_RELAY_URL ?? env.PUSH_RELAY_URL ?? ""),
+  };
 }
