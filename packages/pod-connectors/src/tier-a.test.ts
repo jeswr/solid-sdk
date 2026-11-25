@@ -11,6 +11,7 @@ import {
   createMemoryPod,
   demoImport,
   type MemoryPod,
+  ownerOnlyFixtureChecks,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
   TEST_WEBID,
@@ -50,6 +51,7 @@ const root = (adapter: IntegrationAdapter) =>
   `${TEST_POD_ROOT}integrations/${adapter.metadata.id}/`;
 const writer = (adapter: IntegrationAdapter, pod: MemoryPod) =>
   createFetchPodWriter({
+    ...ownerOnlyFixtureChecks,
     adapterId: adapter.metadata.id,
     webId: TEST_WEBID,
     profileDocumentUrl: TEST_PROFILE_DOC,

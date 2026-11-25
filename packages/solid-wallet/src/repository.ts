@@ -20,6 +20,18 @@ export class WalletPrivacyError extends Error {
     this.name = "WalletPrivacyError";
   }
 }
+/**
+ * The settings folder or Type Index document Wallet registers itself in is shared, or its access
+ * could not be confirmed. The wallet folders themselves are not implicated.
+ */
+export class WalletIndexPrivacyError extends WalletPrivacyError {
+  constructor() {
+    super();
+    this.name = "WalletIndexPrivacyError";
+    this.message =
+      "The settings folder that holds your private Type Index is shared, or its effective access could not be confirmed. Make settings/ owner-only in Permissions so Wallet can register itself there. Your wallet folders were not changed.";
+  }
+}
 /** The pod's access model cannot be checked by Wallet; changing Permissions would not help. */
 export class WalletUnsupportedError extends Error {
   constructor(message = "This pod's access setup isn't supported by Wallet yet.") {
@@ -96,26 +108,35 @@ export function createWalletRepository(options: {
     ...storage,
     async readRdf(url, readOptions) {
       const result = await storage.readRdf(url, readOptions);
-      if (url !== profileDocument.href) await privateAccess(url);
+      if (url !== profileDocument.href) await privateIndexAccess(url);
       return result;
     },
     async writeRdf(url, dataset, writeOptions) {
-      if (url !== profileDocument.href) await privateAccess(url);
+      if (url !== profileDocument.href) await privateIndexAccess(url);
       return storage.writeRdf(url, dataset, writeOptions);
     },
     async create(parent, body, createOptions) {
-      await privateAccess(parent);
+      await privateIndexAccess(parent);
       return storage.create(parent, body, createOptions);
     },
   };
-  const index =
-    options.typeIndex ??
-    createTypeIndex({
-      storage: privateIndexStorage,
-      features: storage.features,
-      profile: webId,
-      fetch: transport,
-    });
+  // A WebID outside this storage cannot be registered through it: the Type Index SDK throws a
+  // `scope` error synchronously. That only disables discovery metadata, never the wallet.
+  let index: TypeIndex | undefined = options.typeIndex;
+  if (!index) {
+    try {
+      index = createTypeIndex({
+        storage: privateIndexStorage,
+        features: storage.features,
+        profile: webId,
+        fetch: transport,
+      });
+    } catch (error) {
+      if (!(error instanceof StorageError) || error.code !== "scope") throw error;
+    }
+  }
+  /** `unavailable`: the WebID profile is outside this storage, so Wallet is not registered. */
+  let registration: "pending" | "registered" | "unavailable" = index ? "pending" : "unavailable";
   function ownerOnly(url: string) {
     return checkOwnerOnly({
       storage,
@@ -128,6 +149,15 @@ export function createWalletRepository(options: {
     const result = await ownerOnly(url);
     if (!result.private)
       throw unsupported(result) ? new WalletUnsupportedError() : new WalletPrivacyError();
+  }
+  /** Same check, but a refusal names the Type Index location rather than the wallet folders. */
+  async function privateIndexAccess(url: string) {
+    try {
+      await privateAccess(url);
+    } catch (error) {
+      if (error instanceof WalletPrivacyError) throw new WalletIndexPrivacyError();
+      throw error;
+    }
   }
   // Runs before any folder is provisioned. A WAC wallet folder gets its own ACL, so nothing
   // above it is consulted. ACP always evaluates up to the storage root, so a model, dialect
@@ -192,10 +222,12 @@ export function createWalletRepository(options: {
         throw new Error("The pod assigned an unsupported wallet folder");
       await privateAccess(actualChild);
     }
+    if (!index) return;
     // The index library requires the private destination to be provisioned by its caller.
     const settings = await container(storage.root, "settings");
-    await privateAccess(settings);
+    await privateIndexAccess(settings);
     await index.register(WALLET_CLASS, { container: base }, { index: "private" });
+    registration = "registered";
   }
   async function list(onInvalidRecord?: (url: string) => void): Promise<WalletRecord[]> {
     await assertPrivate();
@@ -362,6 +394,9 @@ export function createWalletRepository(options: {
   }
   return {
     ...paths,
+    get registration() {
+      return registration;
+    },
     initialise,
     assertPrivate,
     list,

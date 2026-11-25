@@ -58,6 +58,11 @@ export function SlidesProvider({
     void (async () => {
       const repository = await connectSlides(session);
       await repository.initialise();
+      // Type Index registration only helps other apps find presentations; the deck list is usable.
+      if (active && repository.registration.state === "failed")
+        toast.warning(
+          "Presentations couldn't be registered in your Type Index, so other apps may not find them. They're still saved in your pod.",
+        );
       await seedSlides(session, repository);
       const listing = await repository.list();
       const local = createDraftStorage(key);

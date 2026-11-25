@@ -49,6 +49,7 @@ it("initialises once, respects returned container URLs and registers privately",
     owner,
     expect.any(Function),
     true,
+    undefined,
   );
   const other = fixture("lws");
   await other.store.initialize();
@@ -71,6 +72,41 @@ it("handles container creation races, and propagates non-404, failed create and 
   await store.initialize();
   vi.mocked(protectJournal).mockRejectedValueOnce(new Error("shared"));
   await expect(store.list()).rejects.toThrow("shared");
+});
+it("passes a trusted ACP dialect to every privacy check, and none by default", async () => {
+  const { storage, store } = fixture();
+  await store.initialize();
+  const entry = await store.save(data);
+  vi.mocked(verifyJournalResource).mockClear();
+  await store.read(entry.url);
+  expect(verifyJournalResource).toHaveBeenCalledWith(storage, entry.url, owner, undefined);
+  const acp = createJournalStore(storage, null, owner, vi.fn(), { acpDialect: "ess" });
+  await acp.initialize();
+  expect(protectJournal).toHaveBeenLastCalledWith(
+    storage,
+    acp.container,
+    owner,
+    expect.any(Function),
+    false,
+    "ess",
+  );
+  await acp.read(entry.url);
+  expect(verifyJournalResource).toHaveBeenLastCalledWith(storage, entry.url, owner, "ess");
+  vi.mocked(createPodClient).mockResolvedValue({
+    storage,
+    features: storage.features,
+    description: { protocol: "solid" },
+  } as PodClient);
+  const opened = await openJournal(vi.fn(), root, owner, { acpDialect: "css" });
+  await opened.list();
+  expect(protectJournal).toHaveBeenLastCalledWith(
+    storage,
+    opened.container,
+    owner,
+    expect.any(Function),
+    false,
+    "css",
+  );
 });
 it("round-trips and conditionally edits/deletes entries, preserving date order over all pages", async () => {
   const { storage, store } = fixture();
@@ -188,7 +224,14 @@ it("opens and provisions a journal with a WebID hosted outside the selected pod"
   const store = await openJournal(fetch, root, foreignOwner);
   await store.initialize();
   expect(store.container).toBe(`${root}journal/`);
-  expect(protectJournal).toHaveBeenCalledWith(storage, store.container, foreignOwner, fetch, true);
+  expect(protectJournal).toHaveBeenCalledWith(
+    storage,
+    store.container,
+    foreignOwner,
+    fetch,
+    true,
+    undefined,
+  );
   expect(fetch).not.toHaveBeenCalled();
   expect(await store.save(data)).toMatchObject({ text: data.text });
 });

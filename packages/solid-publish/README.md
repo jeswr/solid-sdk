@@ -65,7 +65,9 @@ It registers WebSite instances in the private Type Index through pod-type-index;
 index/preferences creation is sealed before RDF is written. It preserves the public
 profile's audience. A registration failure returns the saved site with a warning;
 failed index discovery falls back to the source folder, while expired authentication
-asks the user to reconnect. Only generated entities read/write the website and page RDF.
+asks the user to reconnect. A WebID outside the pod's storage cannot use this pod's
+Type Index (`createTypeIndex` throws a `scope` error): the repository still opens, lists
+from the source folder, and `createSite` reports the same registration warning. Only generated entities read/write the website and page RDF.
 
 `listSites()` and `listPages(site)` return `{ items, invalid }`, where each invalid entry
 contains its source `url`. Malformed, invalid (including abandoned empty creations) or
@@ -78,8 +80,12 @@ Public output is `public/sites/<site>/index.html`, `<slug>/index.html` and `feed
 Publishing requires first-time confirmation, saves the owner-only RDF source, rebuilds
 published pages/navigation/index/feed, then grants public **Read only** on that site's
 container and its members via pod-access. It never grants public access to ancestors or
-source RDF. Saving a private draft writes no public bytes. Editing a published page in
-the app stays in a local editor draft until Update. Unpublishing removes its HTML and
+source RDF. Saving a private draft writes no public bytes. `savePage` refuses a page that
+is, or would become, published (a `PublicationError` telling the caller to use `publish`
+or `unpublish`), judged against the stored page rather than the caller's copy, so
+`refreshPublic` can only ever re-render what an explicit `publish` call published. The one
+exception is a position-only change, which the app's re-order uses. Editing a published
+page in the app stays in a local editor draft until Update, which calls `publish`. Unpublishing removes its HTML and
 refreshes all remaining public navigation and RSS; removing the last published page
 also removes the index/feed, empty slug folders and the site's public grant, and clears
 the public URL. Rebuild/repair removes stale validated slug folders strictly within the
@@ -89,9 +95,12 @@ While any page source is in `listPages(site).invalid`, a rebuild deletes no slug
 removes only its own page's folder.
 It deletes only its `index.html` in a stale slug folder. If extra files prevent deleting
 the folder, it leaves them, installs owner-only folder permissions and warns with the
-folder URL. Rebuilds continue; reusing that slug restores its public folder grant and
-warns that the retained files are public again. An unreadable slug-folder ACL fails as
-a `PublicationError` naming the folder.
+folder URL. Rebuilds continue. Reusing that slug while retained files remain is refused
+with `RetainedFilesError` (a `PublicationError` carrying the `directory`): `publish`
+checks before saving the source or writing any public byte, and a rebuild checks every
+page it will rewrite before the first write (and again just before widening a folder), so
+nothing is half-published. Remove the files or choose another URL, then publish again. An
+unreadable slug-folder ACL fails as a `PublicationError` naming the folder.
 A failed permission change still surfaces rather than claiming the folder is private.
 It cannot recall reader copies.
 

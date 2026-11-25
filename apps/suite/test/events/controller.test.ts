@@ -35,6 +35,7 @@ function fixture() {
     update: vi.fn().mockResolvedValue(event),
     invitees: vi.fn(),
     notify: vi.fn(),
+    registerInTypeIndex: vi.fn(),
   };
   const failure = vi.fn();
   return { repository, failure, controller: new EventsController(repository, failure) };
@@ -69,6 +70,23 @@ it("paints a new invitation before the pod returns and uses its stable URL", asy
   await vi.waitFor(() =>
     expect(controller.snapshot()).toMatchObject({ saving: 0, events: [saved] }),
   );
+});
+it("reports a Type Index registration warning once the saved invitation is confirmed", async () => {
+  const { repository } = fixture();
+  const warn = vi.fn();
+  const controller = new EventsController(repository, vi.fn(), warn);
+  await controller.refresh();
+  repository.create.mockResolvedValueOnce({
+    ...event,
+    registrationWarning: "Not in your Type Index",
+  });
+  controller.save(event);
+  await controller.settled();
+  expect(warn).toHaveBeenCalledWith("Not in your Type Index");
+  warn.mockClear();
+  controller.save(event);
+  await controller.settled();
+  expect(warn).not.toHaveBeenCalled();
 });
 it("a failed earlier edit never erases a newer queued edit", async () => {
   const { repository, controller, failure } = fixture();
