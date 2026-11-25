@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 // Conditional-write semantics through the stubbed pod: the CAS primitive the
 // whole approval pipeline rests on (If-Match / If-None-Match / 412 mapping).
@@ -6,7 +7,6 @@ import {
   isHttpUrl,
   PreconditionFailedError,
   putIfMatch,
-  putIfNoneMatch,
   readRdf,
   WriteFailedError,
 } from "../../src/lib/http.js";
@@ -53,28 +53,26 @@ describe("putIfMatch", () => {
     expect(pod.body(URL_A)).toContain("racer"); // the winner's write survives
   });
 
-  it("degrades to unconditional PUT when the server sent no etag", async () => {
+  it.each([
+    null,
+    'W/"v1"',
+    "*",
+    "v1",
+    '"v1", "v2"',
+    '"bad\r\nvalue"',
+  ])("refuses the unsafe validator %j without sending a PUT", async (etag) => {
     const pod = createPodStub();
-    await putIfMatch(URL_A, "<https://x.example/s> a <https://x.example/T> .", null, pod.fetch);
-    expect(pod.has(URL_A)).toBe(true);
+    await expect(putIfMatch(URL_A, "unused", etag, pod.fetch)).rejects.toThrow("strong ETag");
+    expect(pod.log).toHaveLength(0);
+    expect(pod.has(URL_A)).toBe(false);
   });
 
   it("maps other failures to WriteFailedError", async () => {
     const pod = createPodStub();
     pod.intercept = () => new Response("nope", { status: 500 });
-    await expect(putIfMatch(URL_A, "x", null, pod.fetch)).rejects.toBeInstanceOf(WriteFailedError);
-  });
-});
-
-describe("putIfNoneMatch (create-only)", () => {
-  it("creates when absent; 412 when present", async () => {
-    const pod = createPodStub();
-    await putIfNoneMatch(URL_A, "<https://x.example/s> a <https://x.example/T> .", pod.fetch);
-    expect(pod.has(URL_A)).toBe(true);
-    await expect(putIfNoneMatch(URL_A, "other", pod.fetch)).rejects.toBeInstanceOf(
-      PreconditionFailedError,
+    await expect(putIfMatch(URL_A, "x", '"v1"', pod.fetch)).rejects.toBeInstanceOf(
+      WriteFailedError,
     );
-    expect(pod.body(URL_A)).toContain("x.example/s"); // first write survives
   });
 });
 

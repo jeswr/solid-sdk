@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 import {
+  DecisionPreviewConflictError,
   RequestConflictError,
   UnsupportedAccessModelError,
 } from "@jeswr/pod-access/requests-solid";
@@ -51,6 +52,7 @@ import {
   reviewError,
   selectedDataTypes,
   splitRequests,
+  targetRoleText,
 } from "../src/apps/home/lib/requests/model";
 
 const STEPS = `${NS.HEALTH}StepCountObservation`;
@@ -519,5 +521,15 @@ describe("errors and capabilities", () => {
     expect(
       requestCaps({ accessRequests: false, grantExpiry: true }, '{"accessRequests":true}'),
     ).toEqual({ accessRequests: false, grantExpiry: true });
+  });
+});
+
+describe("decision previews", () => {
+  it("names a stale preview apart from a lost race, and words each target's role", () => {
+    expect(reviewError(new DecisionPreviewConflictError(), true)).toEqual({
+      kind: "preview-changed",
+    });
+    expect(targetRoleText("editor")).toBe("Can change");
+    expect(targetRoleText("viewer")).toBe("Can see");
   });
 });

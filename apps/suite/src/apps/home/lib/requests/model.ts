@@ -8,6 +8,8 @@
 
 import {
   type AccessRequestEntry,
+  DecisionPreviewConflictError,
+  type DecisionTarget,
   RequestConflictError,
   type RequestMode,
   UnsupportedAccessModelError,
@@ -310,6 +312,8 @@ export function decidedText(entry: ReadableRequest, formatDate: (value: string) 
 
 export type ReviewError =
   | { kind: "conflict" }
+  /** What the approval would grant changed after the owner saw it: nothing was written. */
+  | { kind: "preview-changed" }
   | {
       kind: "error";
       category: "unsupported" | "unreachable" | "unknown";
@@ -385,6 +389,7 @@ const KNOWN_ERRORS: readonly {
  */
 export function reviewError(error: unknown, approve: boolean, online = true): ReviewError {
   if (error instanceof RequestConflictError) return { kind: "conflict" };
+  if (error instanceof DecisionPreviewConflictError) return { kind: "preview-changed" };
   if (error instanceof UnsupportedAccessModelError)
     return {
       kind: "error",
@@ -439,3 +444,12 @@ export function reviewError(error: unknown, approve: boolean, online = true): Re
   console.error("Access request decision failed", error);
   return { kind: "error", category: "unknown", message: NOT_SAVED, retry: true };
 }
+
+/** The role a previewed target gets, in the cards' words. */
+export function targetRoleText(role: DecisionTarget["role"]): string {
+  return role === "editor" ? "Can change" : "Can see";
+}
+
+/** Shown above the old and new target lists after `decide` refused a stale preview. */
+export const PREVIEW_CHANGED =
+  "What this would share changed after you reviewed it, so nothing was shared. Compare the lists, then share again if it still looks right.";

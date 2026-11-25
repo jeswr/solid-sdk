@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // Shared fixture pod: an owner with a profile (storage + inbox + type
@@ -13,8 +14,8 @@ export const BOB = "https://bob.example/profile/card#me";
 export const REQUESTER = "https://app.example/agents/reader#it";
 export const CONTACTS_CLASS = "http://www.w3.org/2006/vcard/ns#Individual";
 
-export const GRANTS = `${POD}access-manager/grants/`;
-export const RECEIPTS = `${POD}access-manager/receipts/`;
+export const GRANTS = `${POD}settings/access-records/`;
+export const RECEIPTS = `${POD}settings/access-records/`;
 export const INBOX = `${POD}inbox/`;
 
 export const PREFIXES = `

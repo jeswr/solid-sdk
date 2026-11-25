@@ -2,12 +2,13 @@
 import type { ReactNode } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { PodSession } from "../src/lib/session/pod-session";
-import { act, click, h, key, mount } from "./drive-ui-dom";
+import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 
 const mocks = vi.hoisted(() => ({
   session: undefined as unknown as PodSession,
   list: vi.fn(),
   decide: vi.fn(),
+  preview: vi.fn(),
   caps: {} as Record<string, boolean>,
   accounts: [] as { id: string; name: string; webId: string }[],
   switchTo: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock("@jeswr/pod-access/requests-solid", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   listRequests: mocks.list,
   decide: mocks.decide,
+  previewDecision: mocks.preview,
 }));
 vi.mock("../src/shell/environment", () => ({
   useSuiteEnvironment: () => ({ SUITE_TEST_CAPS: mocks.caps }),
@@ -58,18 +60,23 @@ vi.mock("next/link", () => ({
 
 import {
   type AccessRequestEntry,
+  type DecisionPreview,
+  DecisionPreviewConflictError,
   RequestConflictError,
   UnsupportedAccessModelError,
 } from "@jeswr/pod-access/requests-solid";
 import { PermissionsPage } from "../src/apps/home/components/permissions/permissions-page";
+import { PREVIEW_LOADING } from "../src/apps/home/components/requests/decision-preview";
 import {
   EXPIRY_UNAVAILABLE,
+  FINISH_PREVIEW_TITLE,
   FINISHING_ONLY_TEXT,
   FINISHING_TEXT,
   FROZEN_NOTE,
   RECORDED_ONLY_TEXT,
   RECORDED_TEXT,
   RequestReview,
+  SHARE_PREVIEW_TITLE,
 } from "../src/apps/home/components/requests/request-review";
 import {
   EMPTY_DECIDED,
@@ -77,7 +84,11 @@ import {
   RequestsPage,
   unreadableText,
 } from "../src/apps/home/components/requests/requests-page";
-import { EXPIRY_NOT_ENFORCED, NOT_SAVED } from "../src/apps/home/lib/requests/model";
+import {
+  EXPIRY_NOT_ENFORCED,
+  NOT_SAVED,
+  PREVIEW_CHANGED,
+} from "../src/apps/home/lib/requests/model";
 import { ACTIVITY_CLASS } from "../src/lib/demo-pod/seed-requests";
 
 vi.stubGlobal("HTMLFormElement", window.HTMLFormElement);
@@ -99,6 +110,32 @@ const request: Readable = {
   created: new Date().toISOString(),
 };
 
+/** A preview naming one folder per approved data type, as the SDK resolves them. */
+async function previewFor(
+  entry: Readable,
+  decision: { approve: boolean; dataTypes?: string[]; expiresAt?: Date },
+): Promise<DecisionPreview> {
+  const dataTypes = decision.dataTypes ?? entry.dataTypes;
+  return {
+    requestId: entry.id,
+    webId: `${ROOT}profile#me`,
+    storage: ROOT,
+    requester: entry.requester,
+    approve: decision.approve,
+    model: "wac",
+    dataTypes,
+    targets: decision.approve
+      ? dataTypes.map((type) => ({
+          url: `${ROOT}${type === SLEEP ? "health/sleep/" : "activity/"}`,
+          role: "viewer" as const,
+          modes: ["read" as const],
+          dataTypes: [type],
+        }))
+      : [],
+    ...(decision.expiresAt && { expiresAt: decision.expiresAt.toISOString() }),
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.caps = { accessRequests: true };
@@ -114,6 +151,7 @@ beforeEach(() => {
     reset: async () => {},
   };
   mocks.list.mockResolvedValue([request]);
+  mocks.preview.mockImplementation(previewFor);
   mocks.decide.mockResolvedValue({
     status: "approved",
     receiptUrl: `${ROOT}r`,
@@ -920,4 +958,136 @@ it("sends one decision for a double click", async () => {
     share.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
   expect(mocks.decide).toHaveBeenCalledTimes(1);
+});
+
+it("shows exactly what will be shared and sends that preview as the decision's pin", async () => {
+  await review();
+  const sheet = dialog();
+  const shared = sheet.querySelector<HTMLElement>(`[aria-label="${SHARE_PREVIEW_TITLE}"]`);
+  expect(shared?.textContent).toContain("activity/");
+  expect(shared?.textContent).toContain("health/sleep/");
+  expect(shared?.textContent).toContain("Can see");
+  // Unchecking a card reads a fresh preview for the new choices before Share is enabled.
+  await click(checkbox(sheet, "Vitals"));
+  expect(mocks.preview).toHaveBeenLastCalledWith(
+    request,
+    { approve: true, dataTypes: [ACTIVITY_CLASS] },
+    expect.objectContaining({ storage: ROOT }),
+  );
+  expect(sheet.querySelector(`[aria-label="${SHARE_PREVIEW_TITLE}"]`)?.textContent).not.toContain(
+    "health/sleep/",
+  );
+  await click(button(sheet, "Share"));
+  expect(mocks.decide).toHaveBeenCalledTimes(1);
+  const [, decision, options] = mocks.decide.mock.calls[0] ?? [];
+  const pinned = (await mocks.preview.mock.results.at(-1)?.value) as DecisionPreview;
+  // The decision sent is the one previewed, pinned to that preview.
+  expect(decision).toEqual({ approve: true, dataTypes: [ACTIVITY_CLASS] });
+  expect(options.expected).toEqual(pinned);
+  expect(options.expected.targets.map((target: { url: string }) => target.url)).toEqual([
+    `${ROOT}activity/`,
+  ]);
+});
+
+it("keeps Share disabled until the preview is read", async () => {
+  const pending = deferred<DecisionPreview>();
+  mocks.preview.mockReturnValueOnce(pending.promise);
+  await review();
+  expect(button(dialog(), "Share").disabled).toBe(true);
+  expect(dialog().textContent).toContain(PREVIEW_LOADING);
+  await click(button(dialog(), "Share"));
+  expect(mocks.decide).not.toHaveBeenCalled();
+  await act(async () => pending.resolve(await previewFor(request, { approve: true })));
+  expect(button(dialog(), "Share").disabled).toBe(false);
+});
+
+it("after a changed preview shows the old and new targets and asks again before sharing", async () => {
+  const { onDone } = await review();
+  const stale = (await mocks.preview.mock.results.at(-1)?.value) as DecisionPreview;
+  const fresh: DecisionPreview = {
+    ...stale,
+    targets: [
+      ...stale.targets,
+      {
+        url: `${ROOT}health/new-sleep/`,
+        role: "viewer",
+        modes: ["read"],
+        dataTypes: [SLEEP],
+      },
+    ],
+  };
+  mocks.decide.mockRejectedValueOnce(new DecisionPreviewConflictError());
+  mocks.preview.mockResolvedValueOnce(fresh);
+  await click(button(dialog(), "Share"));
+  expect(onDone).not.toHaveBeenCalled();
+  const sheet = dialog();
+  expect(sheet.textContent).toContain(PREVIEW_CHANGED);
+  expect(sheet.querySelector('[aria-label="Before"]')?.textContent).not.toContain(
+    "health/new-sleep/",
+  );
+  expect(sheet.querySelector('[aria-label="Now"]')?.textContent).toContain("health/new-sleep/");
+  // Nothing was written, so the choices are still editable and nothing is frozen.
+  expect(sheet.textContent).not.toContain(FROZEN_NOTE);
+  await click(button(sheet, "Share"));
+  expect(mocks.decide).toHaveBeenCalledTimes(2);
+  expect(mocks.decide.mock.calls[1]?.[2].expected).toEqual(fresh);
+  expect(onDone).toHaveBeenCalledWith("approved");
+});
+
+it("says approving is unavailable when the storage's access model can't be approved", async () => {
+  mocks.preview.mockRejectedValue(new UnsupportedAccessModelError("acp"));
+  mocks.decide.mockResolvedValue({
+    status: "denied",
+    receiptUrl: `${ROOT}r`,
+    notified: true,
+    expiryEnforced: false,
+  });
+  const { onDone } = await review();
+  const sheet = dialog();
+  expect(sheet.querySelector('[role="alert"]')?.textContent).toBe(
+    "Approving requests isn't available on this storage yet",
+  );
+  expect(button(sheet, "Share").disabled).toBe(true);
+  // Unsupported is final: there is nothing to check again.
+  expect([...sheet.querySelectorAll("button")].some((b) => b.textContent === "Check again")).toBe(
+    false,
+  );
+  await click(button(sheet, "Share"));
+  expect(mocks.decide).not.toHaveBeenCalled();
+  // Denying is still offered, and needs no preview.
+  await click(button(sheet, "Cancel"));
+  await click(button(document.querySelector('[role="alertdialog"]') as HTMLElement, "Deny"));
+  expect(mocks.decide).toHaveBeenCalledWith(request, { approve: false }, expect.anything());
+  expect(mocks.decide.mock.calls[0]?.[2]).not.toHaveProperty("expected");
+  expect(onDone).toHaveBeenCalledWith("denied");
+});
+
+it("offers Check again for a preview that failed for a passing reason", async () => {
+  mocks.preview.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  await review();
+  expect(button(dialog(), "Share").disabled).toBe(true);
+  await click(button(dialog(), "Check again"));
+  expect(button(dialog(), "Share").disabled).toBe(false);
+});
+
+it("turns a preview refusal of a pinned approval into Finish approving with its recorded targets", async () => {
+  mocks.preview.mockRejectedValueOnce(
+    new Error("An earlier approval of this request is still finishing with different choices"),
+  );
+  await review();
+  const sheet = dialog();
+  expect(sheet.textContent).toContain(RECORDED_TEXT);
+  expect(mocks.preview).toHaveBeenLastCalledWith(request, { approve: true }, expect.anything());
+  expect(sheet.querySelector(`[aria-label="${FINISH_PREVIEW_TITLE}"]`)?.textContent).toContain(
+    "activity/",
+  );
+  await click(button(sheet, "Finish approving"));
+  expect(mocks.decide.mock.calls[0]?.[1]).toEqual({ approve: true });
+});
+
+it("closes when the preview finds the request was already decided", async () => {
+  mocks.preview.mockRejectedValueOnce(new RequestConflictError(request.id, "approved"));
+  const { onDone } = await review();
+  expect(mocks.toast.info).toHaveBeenCalledWith("This request was already decided");
+  expect(onDone).toHaveBeenCalledWith("already-decided");
 });

@@ -1,9 +1,14 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 //
-// Regression guard for the P1 theme-mount bug: the REAL entry point
-// (src/main.tsx, the non-demo path) must mount the authenticated Shell —
+// AUTHORED-BY Claude Opus 5.5
+//
+// Regression guard for the P1 theme-mount bug: the legacy app mount
+// (src/legacy-entry.tsx — what src/main.tsx mounted before the app moved into
+// Solid Suite Permissions and its entry became a redirect) must mount the
+// authenticated Shell —
 // including the @jeswr/app-shell chrome (ThemeToggle / AccountMenu /
 // FeedbackButton) — without crashing. Before the fix, main.tsx rendered
 // <App> with NO <ThemeProvider>, so the first ThemeToggle render after login
@@ -40,6 +45,8 @@ const seam = vi.hoisted(() => ({
 vi.mock("../../src/auth/controller.js", () => ({
   buildController: () => ({
     authenticatedFetch: ((input: RequestInfo | URL, init?: RequestInit) =>
+      (seam.fetch as SolidFetch)(input, init)) as SolidFetch,
+    publicFetch: ((input: RequestInfo | URL, init?: RequestInit) =>
       (seam.fetch as SolidFetch)(input, init)) as SolidFetch,
     logout: async () => undefined,
   }),
@@ -79,11 +86,13 @@ function onWindowError(event: ErrorEvent): void {
 async function loadEntryAndLogIn(): Promise<void> {
   vi.resetModules();
   document.body.innerHTML = '<div id="root"></div>';
-  window.history.replaceState({}, "", "/"); // the REAL (non-demo) path
-  // The entry mounts its own createRoot (not RTL render), so wrap the mount +
+  window.history.replaceState({}, "", "/");
+  // The mount uses its own createRoot (not RTL render), so wrap the mount +
   // login click in act() ourselves.
   await act(async () => {
-    await import("../../src/main.jsx");
+    const { renderLegacyApp } = await import("../../src/legacy-entry.jsx");
+    const { createRoot } = await import("react-dom/client");
+    renderLegacyApp(createRoot(document.getElementById("root") as HTMLElement));
   });
   const login = await screen.findByTestId("stub-login", undefined, FIND);
   await act(async () => {
@@ -91,7 +100,7 @@ async function loadEntryAndLogIn(): Promise<void> {
   });
 }
 
-describe("main.tsx — the REAL authenticated Shell mounts (theme provider present)", () => {
+describe("legacy-entry.tsx — the authenticated Shell mounts (theme provider present)", () => {
   beforeEach(() => {
     renderErrors.length = 0;
     window.addEventListener("error", onWindowError);

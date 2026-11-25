@@ -31,6 +31,10 @@ describe("welcome app directory", () => {
       .map((app) => app.project.replace(/^solid-(?:sdk-)?/, ""));
     expect(new Set(companionApps.map((app) => app.id)).size).toBe(companionApps.length);
     for (const app of companionApps) {
+      if (app.statusLabel === "Now in Permissions") {
+        expect(app.href).toBe("/permissions");
+        continue;
+      }
       expect(app.href).toBe(
         app.statusLabel === "For developers"
           ? `https://github.com/jeswr/solid-sdk/tree/main/apps/${app.id}`
@@ -55,5 +59,11 @@ describe("welcome app directory", () => {
         "mcp-server",
       ]),
     );
+  });
+  it("points the moved Access Manager at Permissions", () => {
+    expect(companionApps.find((app) => app.id === "access-manager")).toMatchObject({
+      href: "/permissions",
+      statusLabel: "Now in Permissions",
+    });
   });
 });

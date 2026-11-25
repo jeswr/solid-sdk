@@ -1,3 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { DataFactory, Writer } from "n3";
+
 // AUTHORED-BY Claude Fable 5
 //
 // The in-memory pod stub behind the injectable-fetch seam. It implements the
@@ -52,11 +55,26 @@ function containerListing(url: string, resources: Map<string, StoredResource>): 
       children.add(url + rest.slice(0, slash + 1));
     }
   }
-  const lines = [...children].map((c) => `<${url}> <http://www.w3.org/ns/ldp#contains> <${c}> .`);
-  lines.push(
-    `<${url}> a <http://www.w3.org/ns/ldp#BasicContainer>, <http://www.w3.org/ns/ldp#Container> .`,
-  );
-  return `@prefix ldp: <http://www.w3.org/ns/ldp#> .\n${lines.join("\n")}\n`;
+  const { namedNode, quad } = DataFactory;
+  const writer = new Writer();
+  for (const child of children)
+    writer.addQuad(
+      quad(namedNode(url), namedNode("http://www.w3.org/ns/ldp#contains"), namedNode(child)),
+    );
+  for (const type of ["BasicContainer", "Container"])
+    writer.addQuad(
+      quad(
+        namedNode(url),
+        namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+        namedNode(`http://www.w3.org/ns/ldp#${type}`),
+      ),
+    );
+  let body = "";
+  writer.end((error, result) => {
+    if (error) throw error;
+    body = result;
+  });
+  return body;
 }
 
 export function createPodStub(initial: Record<string, string> = {}): PodStub {
@@ -109,15 +127,24 @@ export function createPodStub(initial: Record<string, string> = {}): PodStub {
 
       if (method === "GET" || method === "HEAD") {
         if (existing) {
-          return new Response(method === "HEAD" ? null : existing.body, {
-            status: 200,
-            headers: baseHeaders(existing),
-          });
+          return new Response(
+            method === "HEAD"
+              ? null
+              : isContainer
+                ? existing.body + containerListing(url, resources)
+                : existing.body,
+            {
+              status: 200,
+              headers: baseHeaders(existing),
+            },
+          );
         }
         if (isContainer) {
           // A container "exists" when anything lives under it.
           const listing = containerListing(url, resources);
-          const hasChildren = listing.includes("ldp#contains");
+          const hasChildren = [...resources.keys()].some(
+            (key) => key.startsWith(url) && key !== url,
+          );
           if (hasChildren) {
             const synthetic: StoredResource = {
               body: listing,
