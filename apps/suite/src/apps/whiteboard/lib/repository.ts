@@ -46,17 +46,30 @@ export class WhiteboardRepository extends DrawingIO {
     return boards.sort((a, b) => a.title.localeCompare(b.title));
   }
 }
+/** Definite "no usable index" outcomes. Anything else (network, timeout, 5xx, unknown) is
+ * transient: it must surface, never lead to creating or registering a second collection. */
+function indexUnusable(error: unknown): boolean {
+  return (
+    error instanceof StorageError &&
+    ["not-found", "scope", "forbidden", "unsupported", "invalid-response", "not-rdf"].includes(
+      error.code,
+    )
+  );
+}
 export async function prepareWhiteboards(
   storage: StorageClient,
   index: TypeIndex | undefined,
 ): Promise<WhiteboardRepository> {
   let container = new URL("whiteboards/", storage.root).href;
-  // A failed lookup (malformed preferences, a 403 on the index) only means there is no usable
-  // index: the conventional folder, which a later session finds again by name, is used instead.
+  // A definitive failure (absent, out-of-scope, forbidden or malformed index) only means there
+  // is no usable index: the conventional folder is used instead. A transient failure surfaces,
+  // so a registered folder is never missed and a duplicate created and registered.
   let locations: string[] = [];
   try {
     locations = (await index?.find(DRAW_SCENE_IRI)) ?? [];
-  } catch {}
+  } catch (error) {
+    if (!indexUnusable(error)) throw error;
+  }
   for (const url of locations.slice(0, 100)) {
     if (storage.isWithinStorage(url) && (await storage.head(url)).kind === "container") {
       container = url;

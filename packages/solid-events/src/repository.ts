@@ -375,6 +375,7 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
     data: EventData,
     invitees: readonly InviteeData[],
     after: () => Promise<void>,
+    restoreDraft = true,
   ): Promise<void> {
     try {
       await publishAccess(storage, url, data, invitees);
@@ -386,8 +387,10 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
       } catch {
         withdrawn = false;
       }
-      let restored = true;
+      // A reshare only repairs access: it never rewrites the stored document.
+      let restored = restoreDraft;
       try {
+        if (!restoreDraft) throw new Error("The stored document is left as it is");
         const head = await storage.head(url);
         if (!head.etag) throw new Error("No version to restore");
         await storage.write(
@@ -526,14 +529,39 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
       assertWithinPodScope(base, existing.url);
       if (existing.organizer !== owner)
         throw new TypeError("Only the organiser can share this invitation");
-      if (existing.publication !== "published")
-        throw new Error("Only a published invitation can be shared again");
+      if (!existing.etag) throw new Error("A version is required to share this invitation");
       const { storage } = await getClient();
-      const invitees = await this.invitees(existing);
+      // Decide from the stored invitation, never the caller's snapshot.
+      const stored = await readInvitation(fetch, existing.url);
+      if (stored.etag !== existing.etag)
+        throw new StorageError("precondition-failed", {
+          url: existing.url,
+          method: "PUT",
+          status: 412,
+        });
+      if (stored.organizer !== owner)
+        throw new TypeError("Only the organiser can share this invitation");
+      if (stored.publication !== "published")
+        throw new Error("Only a published invitation can be shared again");
+      const invitees = await this.invitees(stored);
       let result: Invitation | undefined;
-      await widen(storage, existing.url, existing, invitees, async () => {
-        result = await readInvitation(fetch, existing.url);
-      });
+      await widen(
+        storage,
+        stored.url,
+        stored,
+        invitees,
+        async () => {
+          const again = await readInvitation(fetch, stored.url);
+          if (again.etag !== stored.etag || again.publication !== "published")
+            throw new StorageError("precondition-failed", {
+              url: stored.url,
+              method: "PUT",
+              status: 412,
+            });
+          result = again;
+        },
+        false,
+      );
       return result as Invitation;
     },
     async invitees(event: Invitation): Promise<InviteeData[]> {

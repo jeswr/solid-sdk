@@ -263,13 +263,13 @@ export function createTripsStore(ports: StorePorts) {
     }
     for (const url of docs) {
       try {
-        // Only a verified owner-only manual container, and a document whose own policy is
-        // owner-only too, is user-entered; linked connector documents elsewhere keep their own
-        // email trust. Anything in the manual folder that is not verified is untrusted.
+        // Only a document in the verified owner-only manual container whose own policy is
+        // owner-only too is trusted. Everything else, including documents linked from a trip,
+        // parses as unverified: the RDF's own trust claim is never believed.
         const scoped = assertWithinPodScope(storage.root, url);
         const isManual = scoped.startsWith(manual) && scoped !== manual;
-        let verified = manualVerified;
-        if (isManual && verified) {
+        let verified = isManual && manualVerified;
+        if (verified) {
           try {
             await protect(scoped, false, false);
           } catch {
@@ -278,7 +278,7 @@ export function createTripsStore(ports: StorePorts) {
         }
         const parsed = parseReservations((await read(scoped, signal)).dataset, scoped, {
           manual: isManual,
-          untrusted: isManual && !verified,
+          untrusted: !verified,
         });
         reservations.push(...parsed);
         if (!parsed.length) notice.skipped++;
@@ -395,7 +395,9 @@ export function createTripsStore(ports: StorePorts) {
     for (const url of docs) {
       try {
         signal.throwIfAborted();
-        const parsed = parseReservations((await read(url, signal)).dataset, url);
+        const parsed = parseReservations((await read(url, signal)).dataset, url, {
+          untrusted: true,
+        });
         const remaining = 200 - results.length;
         results.push(...parsed.slice(0, remaining));
         if (parsed.length > remaining) {
