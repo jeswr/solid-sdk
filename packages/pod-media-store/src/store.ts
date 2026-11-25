@@ -55,6 +55,7 @@ import type {
   SkipCounts,
   SweepOptions,
   SweepSummary,
+  WithdrawResult,
 } from "./types.js";
 
 const MiB = 1024 * 1024;
@@ -909,6 +910,18 @@ export async function openMediaStore<T, I>(
     const attempt = async (): Promise<PutOutcome> => {
       const created: string[] = [];
       const shell: { url?: string } = {};
+      // Solid: the copy's URL is known now, so withdraw any pending delete BEFORE any write. A
+      // journal that cannot answer is remembered: an adopted copy then fails closed (a pending
+      // delete may exist), a freshly created one succeeds (nothing was written before).
+      let journalDown = false;
+      if (!lws) {
+        try {
+          await journal.delete(`${shardUrl}${sha256}`);
+        } catch {
+          journalDown = true;
+        }
+      }
+      let outcome: PutOutcome;
       try {
         const binaryUrl = await createMedia(
           shardUrl,
@@ -922,10 +935,8 @@ export async function openMediaStore<T, I>(
         const written = lws
           ? await writeLws(shardUrl, input, prepared, binaryUrl, created, shell)
           : await writeSolid(lib, shardUrl, input, prepared, binaryUrl, created);
-        // Adopted or created, the copy is live: withdraw any pending delete before reporting it.
-        await journalled(() => journal.delete(written.descriptionUrl));
         remember(shardUrl, written.descriptionUrl, binaryUrl, written.thumbnailUrl);
-        return {
+        outcome = {
           descriptionUrl: written.descriptionUrl,
           binaryUrl,
           thumbnailUrl: written.thumbnailUrl,
@@ -943,35 +954,56 @@ export async function openMediaStore<T, I>(
             : created;
         throw withOrphans(cause, left, signal);
       }
+      // Nothing was left half-done, so there are no orphans to report for this failure.
+      if (journalDown && outcome.existed) throw fail("failed", "journal");
+      return outcome;
     };
     return lws ? attempt() : withCopy(`${shardUrl}${sha256}`, signal, attempt);
   }
 
   // ---- per-copy serialisation ----------------------------------------------------------
   // Copies are named by content, so several records can share one. Everything that creates,
-  // adopts, deletes or resumes the deletion of one copy (keyed by its description URL) runs one
-  // at a time inside this store, so a `remove` and a `put` of the same bytes cannot interleave
-  // into a description without its binary (or the reverse).
+  // adopts, edits, deletes or resumes the deletion of one copy (keyed by its canonical
+  // description URL) runs one at a time inside this store, so a `remove` and a `put` of the
+  // same bytes cannot interleave into a description without its binary (or the reverse).
+  // The lock is per store instance; a request that hangs holds its copy until it settles or
+  // its caller aborts (waiting callers can abort and leave the queue).
+  // On LWS the server names a new pair, so a created pair is unlocked by design: it assumes a
+  // server never reuses the identifier of a deleted resource for a different one.
   const copyLocks = new Map<string, Promise<void>>();
+  const vetoing = new Set<string>();
+  const canonical = (url: string): string => {
+    try {
+      return new URL(url).href;
+    } catch {
+      return url;
+    }
+  };
 
   async function withCopy<R>(
     descriptionUrl: string,
     signal: AbortSignal | undefined,
     fn: () => Promise<R>,
   ): Promise<R> {
-    const previous = copyLocks.get(descriptionUrl) ?? Promise.resolve();
+    const key = canonical(descriptionUrl);
+    // A veto that calls back into the store for its own copy would wait for itself.
+    if (vetoing.has(key)) throw fail("conflict", "reentrant");
+    const previous = copyLocks.get(key) ?? Promise.resolve();
     let release!: () => void;
     const mine = new Promise<void>((resolve) => {
       release = resolve;
     });
     const tail = previous.then(() => mine);
-    copyLocks.set(descriptionUrl, tail);
+    copyLocks.set(key, tail);
+    // The entry goes only when the whole chain has drained, never when one waiter gives up.
+    void tail.then(() => {
+      if (copyLocks.get(key) === tail) copyLocks.delete(key);
+    });
     try {
       await abortable(signal, previous);
       return await fn();
     } finally {
       release();
-      if (copyLocks.get(descriptionUrl) === tail) copyLocks.delete(descriptionUrl);
     }
   }
 
@@ -1208,6 +1240,15 @@ export async function openMediaStore<T, I>(
     signal: AbortSignal | undefined,
   ): Promise<MediaItem<T>> {
     requireUrl(url);
+    const key = canonical(url);
+    return withCopy(key, signal, () => updateLocked(key, mutate, signal));
+  }
+
+  async function updateLocked(
+    url: string,
+    mutate: (current: Current) => Promise<SerializedDescription | undefined>,
+    signal: AbortSignal | undefined,
+  ): Promise<MediaItem<T>> {
     const lib = await resolveLibrary(signal);
     await memberOrFail(lib, url, signal);
     // An edit may change everything but where the media are: repointing a description at
@@ -1224,8 +1265,16 @@ export async function openMediaStore<T, I>(
 
   async function attachThumbnail(url: string, input: AttachThumbnailInput): Promise<MediaItem<T>> {
     if (!present(input)) throw fail("failed", "invalid-input");
-    const { signal } = input;
     requireUrl(url);
+    const key = canonical(url);
+    return withCopy(key, input.signal, () => attachThumbnailLocked(key, input));
+  }
+
+  async function attachThumbnailLocked(
+    url: string,
+    input: AttachThumbnailInput,
+  ): Promise<MediaItem<T>> {
+    const { signal } = input;
     const lib = await resolveLibrary(signal);
     const shardUrl = await memberOrFail(lib, url, signal);
     const current = await loadItem(lib, url, signal);
@@ -1287,7 +1336,11 @@ export async function openMediaStore<T, I>(
   type Veto = () => Promise<void>;
 
   class Skipped extends Error {
-    constructor(readonly why: "vetoed" | "veto-error") {
+    constructor(
+      readonly why: "vetoed" | "veto-error" | "withdrawn",
+      /** Drop the journal entry too (the veto said `"withdraw"`). */
+      readonly drop = false,
+    ) {
       super(why);
     }
   }
@@ -1380,7 +1433,8 @@ export async function openMediaStore<T, I>(
 
   async function remove(url: string, signal: AbortSignal | undefined): Promise<void> {
     requireUrl(url);
-    await withCopy(url, signal, () => removeLocked(url, signal));
+    const key = canonical(url);
+    await withCopy(key, signal, () => removeLocked(key, signal));
   }
 
   async function removeLocked(url: string, signal: AbortSignal | undefined): Promise<void> {
@@ -1435,30 +1489,47 @@ export async function openMediaStore<T, I>(
     });
   };
 
-  /** The veto for one entry: a throw or rejection is a `false`, and an abort stays an abort. */
+  const sameCopy = (a: string, b: string): boolean => canonical(a) === canonical(b);
+
+  const currentEntry = async (descriptionUrl: string): Promise<DeleteJournalEntry | undefined> =>
+    (await journalled(() => journal.list())).find((one) =>
+      sameCopy(one.descriptionUrl, descriptionUrl),
+    );
+
+  /**
+   * Run immediately before each destructive request of a resumed delete: the journal entry is
+   * re-read (a withdrawal by anyone sharing the journal ends the entry), then the caller's veto
+   * is asked. A throw or rejection is a `false`, and an abort stays an abort.
+   */
   const vetoFor =
     (
-      entry: DeleteJournalEntry,
-      shouldResume: ShouldResume,
+      descriptionUrl: string,
+      shouldResume: ShouldResume | undefined,
       signal: AbortSignal | undefined,
     ): Veto =>
     async () => {
-      const view = pendingView(entry);
-      let allowed = false;
+      const current = await currentEntry(descriptionUrl);
+      if (current === undefined) throw new Skipped("withdrawn");
+      if (shouldResume === undefined) return;
+      const view = pendingView(current);
+      const key = canonical(descriptionUrl);
+      let answer: unknown = false;
       let why: "vetoed" | "veto-error" = "vetoed";
+      vetoing.add(key);
       try {
-        allowed = (await abortable(signal, (async () => shouldResume(view))())) === true;
+        answer = await abortable(signal, (async () => shouldResume(view))());
       } catch {
         why = "veto-error";
+      } finally {
+        vetoing.delete(key);
       }
       throwIfAborted(signal);
-      if (!allowed) throw new Skipped(why);
+      if (answer === "withdraw") throw new Skipped("withdrawn", true);
+      if (answer !== true) throw new Skipped(why);
     };
 
-  async function resumePending(
-    signalOrOptions: AbortSignal | ResumeOptions | undefined,
-  ): Promise<ResumeSummary> {
-    const { signal, shouldResume } = resumeArgs(signalOrOptions);
+  async function resumePending(args: ResumeArgs): Promise<ResumeSummary> {
+    const { signal, shouldResume } = args;
     const entries = await journalled(() => journal.list());
     const results: ResumeEntryResult[] = [];
     const summary: ResumeSummary = {
@@ -1489,9 +1560,7 @@ export async function openMediaStore<T, I>(
     if (lib === null) return { outcome: "failed" };
     // The journal was listed before this entry's turn: a put may have adopted the copy and
     // withdrawn the intent since. Act only on what the journal holds now.
-    const entry = (await journalled(() => journal.list())).find(
-      (one) => one.descriptionUrl === listed.descriptionUrl,
-    );
+    const entry = await currentEntry(listed.descriptionUrl);
     if (entry === undefined) return { outcome: "skipped", reason: "withdrawn" };
     let ours: boolean;
     try {
@@ -1509,39 +1578,122 @@ export async function openMediaStore<T, I>(
       await journalled(() => journal.delete(entry.descriptionUrl));
       return { outcome: "rejected" };
     }
-    const before = shouldResume === undefined ? undefined : vetoFor(entry, shouldResume, signal);
+    const before = vetoFor(entry.descriptionUrl, shouldResume, signal);
     try {
+      let working = entry;
       // The description first; media only after it is confirmed gone.
-      if (entry.phase !== "deleted" && !(await removeDescription(lib, entry, signal, before))) {
-        await journalled(() => journal.delete(entry.descriptionUrl));
-        return { outcome: "rejected" };
+      if (entry.phase !== "deleted") {
+        if (!(await removeDescription(lib, entry, signal, before))) {
+          await journalled(() => journal.delete(entry.descriptionUrl));
+          return { outcome: "rejected" };
+        }
+        // Past the point of no return: record it, so a later start (and LWS, where a deleted
+        // description cannot be placed) still finishes or keeps the media.
+        working = { ...entry, phase: "deleted" };
+        // Unless somebody withdrew the entry while the description was going.
+        if ((await currentEntry(entry.descriptionUrl)) === undefined) {
+          return { outcome: "skipped", reason: "withdrawn" };
+        }
+        await journalled(() => journal.put(working));
       }
-      await removeMedia(lib, entry, signal, before);
+      await removeMedia(lib, working, signal, before);
       return { outcome: "completed" };
     } catch (cause) {
       if (signal?.aborted) throw cause;
-      if (cause instanceof Skipped) return { outcome: "skipped", reason: cause.why };
+      if (cause instanceof Skipped) {
+        if (cause.drop) await journalled(() => journal.delete(entry.descriptionUrl));
+        return { outcome: "skipped", reason: cause.why };
+      }
       return { outcome: "failed" };
     }
   }
 
-  async function withdrawPending(url: string, signal: AbortSignal | undefined): Promise<boolean> {
+  async function withdrawPending(
+    url: string,
+    signal: AbortSignal | undefined,
+  ): Promise<WithdrawResult> {
     requireUrl(url);
     return withCopy(url, signal, async () => {
-      const present = (await journalled(() => journal.list())).some(
-        (entry) => entry.descriptionUrl === url,
-      );
-      if (present) await journalled(() => journal.delete(url));
-      return present;
+      const entry = await currentEntry(url);
+      if (entry === undefined) return "none";
+      let gone = entry.phase === "deleted";
+      if (!gone && storage.isWithinStorage(entry.descriptionUrl)) {
+        try {
+          await storage.head(entry.descriptionUrl, { signal });
+        } catch (cause) {
+          if (!isStorageCode(cause, "not-found")) throw cause;
+          gone = true;
+        }
+      }
+      if (gone) {
+        // Half-finished: nothing can save the copy now. Keep the record, as `deleted`, so the
+        // leftover media are cleaned up (or the copy is repaired by a later put).
+        if (entry.phase !== "deleted")
+          await journalled(() => journal.put({ ...entry, phase: "deleted" }));
+        return "incomplete";
+      }
+      await journalled(() => journal.delete(entry.descriptionUrl));
+      return "withdrawn";
     });
   }
 
-  const resumeArgs = (
-    arg: AbortSignal | ResumeOptions | undefined,
-  ): { signal?: AbortSignal; shouldResume?: ShouldResume } =>
-    arg !== undefined && "aborted" in arg ? { signal: arg } : (arg ?? {});
+  interface ResumeArgs {
+    signal?: AbortSignal;
+    shouldResume?: ShouldResume;
+    bad?: boolean;
+  }
+
+  const isSignal = (value: unknown): value is AbortSignal =>
+    typeof value === "object" && value !== null && "aborted" in value;
+
+  const resumeArgs = (arg: unknown): ResumeArgs => {
+    if (arg === undefined || arg === null) return {};
+    if (isSignal(arg)) return { signal: arg };
+    if (typeof arg !== "object") return { bad: true };
+    const { signal, shouldResume } = arg as ResumeOptions;
+    if (
+      (signal !== undefined && !isSignal(signal)) ||
+      (shouldResume !== undefined && typeof shouldResume !== "function")
+    ) {
+      return { bad: true };
+    }
+    return { signal, shouldResume };
+  };
 
   // ---- sweep -----------------------------------------------------------------------------
+
+  /**
+   * Delete one unreferenced medium under its copy's lock, after re-checking there: a put may
+   * have adopted it since the listing, or a pending delete (possibly vetoed) may still name it.
+   * True when it was deleted.
+   */
+  async function sweepMedia(
+    lib: string,
+    shardUrl: string,
+    url: string,
+    signal: AbortSignal | undefined,
+  ): Promise<boolean> {
+    // On Solid the copy is `<shard>/<hash>`; LWS names are opaque, so the medium is its own key.
+    const hash = /^[0-9a-f]{64}/.exec(segmentOf(url))?.[0];
+    const copy = !lws && hash !== undefined ? `${shardUrl}${hash}` : url;
+    return withCopy(copy, signal, async () => {
+      const pending = await journalled(() => journal.list());
+      if (pending.some((one) => one.binaryUrl === url || one.thumbnailUrl === url)) return false;
+      if (copy !== url) {
+        try {
+          const loaded = await loadItem(lib, copy, signal);
+          const named =
+            loaded.state === "ok" ? [loaded.item.binaryUrl, loaded.item.thumbnailUrl] : undefined;
+          // An empty or unreadable description may be mid-write; one naming the medium owns it.
+          if (named === undefined || named.includes(url)) return false;
+        } catch (cause) {
+          if (!isStorageCode(cause, "not-found")) throw cause;
+        }
+      }
+      await deleteGuarded(url, signal);
+      return true;
+    });
+  }
 
   async function sweep(opts: SweepOptions): Promise<SweepSummary> {
     const { signal } = opts;
@@ -1586,11 +1738,9 @@ export async function openMediaStore<T, I>(
       }
       for (const entry of media) {
         if (referenced.has(entry.url)) continue;
-        if (!old(entry)) summary.retained++;
-        else {
-          await deleteGuarded(entry.url, signal);
-          summary.deleted++;
-        }
+        if (!old(entry) || !(await sweepMedia(lib, shard.url, entry.url, signal))) {
+          summary.retained++;
+        } else summary.deleted++;
       }
       for (const url of shells) if (await dropEmpty(url)) summary.deleted++;
     }
@@ -1619,7 +1769,13 @@ export async function openMediaStore<T, I>(
     update: (url, mutate, opts = {}) => run(opts.signal, () => update(url, mutate, opts.signal)),
     attachThumbnail: (url, input) => run(input?.signal, () => attachThumbnail(url, input)),
     remove: (url, signal) => run(signal, () => remove(url, signal)),
-    resumePending: (arg) => run(resumeArgs(arg).signal, () => resumePending(arg)),
+    resumePending: (arg) => {
+      const args = resumeArgs(arg);
+      return run(args.signal, async () => {
+        if (args.bad === true) throw fail("failed", "invalid-input");
+        return resumePending(args);
+      });
+    },
     withdrawPending: (url, signal) => run(signal, () => withdrawPending(url, signal)),
     sweepOrphans: (opts = {}) => run(opts.signal, () => sweep(opts)),
   };

@@ -33,11 +33,14 @@ Rules that must survive any change:
   having listed or created the resource this session.
 - The journal, cursor, type index and descriptions are untrusted input. `resumePending` acts only inside the library.
 - Copies are shared: content-named media serve every record that saved the same bytes. A journalled delete must not
-  outlive that: `put` withdraws a copy's pending delete when it adopts the copy (before reporting success, and
-  `put`/`remove`/`resumePending`/`withdrawPending` on one copy are serialised per store), `resumePending` re-reads the
-  journal per entry, and callers veto with `resumePending({ shouldResume })` (consulted immediately before each
-  destructive request; `false`, a throw or a non-`true` answer skips and leaves the entry) or drop an intent with
-  `withdrawPending(url)`. The veto runs inside the copy's lock, so it must not call back into the store for that copy.
+  outlive that. `put` withdraws a copy's pending delete BEFORE any write on Solid (an adopted copy with a dead
+  journal fails closed with no orphans; a fresh one succeeds); everything on one copy (`put`, `remove`, `update`,
+  `attachThumbnail`, each `resumePending` entry, `withdrawPending`, each sweep candidate) runs under one per-store
+  lock keyed by the canonical URL, which is released only when its queue drains (an aborted waiter never frees it).
+  `resumePending` re-reads the journal entry before EACH destructive request, writes phase `deleted` right after
+  the description delete, and takes `{ signal?, shouldResume? }`: the veto answers `true`, `false` or `"withdraw"`
+  and any other store call on its copy fails with `conflict`/`reentrant`. `withdrawPending(url)` answers
+  `withdrawn`, `none` or `incomplete`. `sweepOrphans` skips media a pending entry names and re-checks under the lock.
 - Exposure fails closed: the probe must say `private` for the library and for the shard before a write;
   `unknown` refuses unless `allowUnknownExposureFor(containerUrl)` returns exactly `true` for that container;
   `exposed`, a missing probe, a throwing probe and a nonsense answer always refuse (the override is not even

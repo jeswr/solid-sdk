@@ -7,42 +7,67 @@ import { StorageError } from "@jeswr/storage-client";
 import { describe, expect, it } from "vitest";
 import {
   allResources,
+  deferred,
+  flush,
+  gate,
   type Harness,
   harness,
   intercept,
   jpeg,
   must,
   putInput,
+  raced,
   shardOf,
 } from "../test/support.js";
 import { createMemoryJournal, type DeleteJournal, type DeleteJournalEntry } from "./journal.js";
 import type { PendingDelete, PutOutcome } from "./types.js";
 
 const offline = () => new StorageError("network", { url: "x:", method: "DELETE" });
-const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
-
-/** A gate: `wait()` blocks until `open()`. */
-function gate() {
-  let open!: () => void;
-  const opened = new Promise<void>((resolve) => {
-    open = resolve;
-  });
-  return { open, wait: () => opened };
-}
 
 describe.each(["solid", "lws"] as const)("shared copies (%s)", (protocol) => {
   /** A harness whose store can reach the same pod through a hooked storage. */
   async function seeded(journal: DeleteJournal = createMemoryJournal(), thumb = true) {
     const h = await harness(protocol, {
       journal,
-      // LWS names are the server's: converge on one copy through the caller's lookup.
-      ...(protocol === "lws" ? { findByHash: async () => found } : {}),
+      // Signals "a put has reached its copy's lock": on Solid its shard exposure check is the
+      // last request-free step before the lock; on LWS the caller's lookup is.
+      ...(protocol === "lws"
+        ? {
+            findByHash: async () => {
+              reached();
+              return found;
+            },
+          }
+        : {
+            exposureTtlMs: 0,
+            exposure: async (url: string) => {
+              if (url.endsWith("/2026/05/")) reached();
+              return "private" as const;
+            },
+          }),
     });
     const out = must(await h.store.put(putInput(thumb ? { thumbnail: { bytes: jpeg(1) } } : {})));
     found = { descriptionUrl: out.descriptionUrl };
     return { h, out, journal };
   }
   let found: { descriptionUrl: string } | undefined;
+  let fire: (() => void) | undefined;
+  const reached = () => {
+    const f = fire;
+    fire = undefined;
+    f?.();
+  };
+  /** Resolves when the next put reaches its copy's lock; `flush()` after it lets it queue. */
+  const arm = () => {
+    const d = deferred();
+    fire = d.fire;
+    return d.promise;
+  };
+  /** A started put is queued at the lock once its signal fired and the microtasks ran. */
+  const queued = async (promise: Promise<void>) => {
+    await promise;
+    await flush();
+  };
 
   /** Interrupt `remove` after its intent is journalled and before anything is deleted. */
   async function interrupt(h: Harness, descriptionUrl: string) {
@@ -250,7 +275,8 @@ describe.each(["solid", "lws"] as const)("shared copies (%s)", (protocol) => {
       });
       expect(seen).toHaveLength(1);
       expect(seen[0]).not.toHaveProperty("binaryUrl");
-      expect(seen[0]?.phase).toBe("intent");
+      // The description was already gone, so the point of no return is recorded before the veto.
+      expect(seen[0]?.phase).toBe("deleted");
       expect(seen[0]?.thumbnailUrl).toBe(out.thumbnailUrl);
     });
 
@@ -301,11 +327,15 @@ describe.each(["solid", "lws"] as const)("shared copies (%s)", (protocol) => {
       const { h, out, journal } = await seeded();
       await interrupt(h, out.descriptionUrl);
       const controller = new AbortController();
+      const asked = deferred();
       const pending = h.store.resumePending({
         signal: controller.signal,
-        shouldResume: () => new Promise<boolean>(() => {}),
+        shouldResume: () => {
+          asked.fire();
+          return new Promise<boolean>(() => {});
+        },
       });
-      await tick();
+      await asked.promise;
       controller.abort();
       expect(await pending).toEqual({ ok: false, error: { kind: "failed", reason: "aborted" } });
       expect(await journal.list()).toHaveLength(1);
@@ -327,7 +357,10 @@ describe.each(["solid", "lws"] as const)("shared copies (%s)", (protocol) => {
       const { h, out, journal } = await seeded();
       await interrupt(h, out.descriptionUrl);
       expect(await journal.list()).toHaveLength(1);
-      expect(await h.store.withdrawPending(out.descriptionUrl)).toEqual({ ok: true, value: true });
+      expect(await h.store.withdrawPending(out.descriptionUrl)).toEqual({
+        ok: true,
+        value: "withdrawn",
+      });
       expect(await journal.list()).toEqual([]);
       expect(must(await h.store.resumePending())).toMatchObject({ completed: 0 });
       expect(await allResources(h.storage)).toContain(out.binaryUrl);
@@ -336,11 +369,14 @@ describe.each(["solid", "lws"] as const)("shared copies (%s)", (protocol) => {
 
     it("is safe when none exists, and leaves other copies' intents alone", async () => {
       const { h, out, journal } = await seeded();
-      expect(await h.store.withdrawPending(out.descriptionUrl)).toEqual({ ok: true, value: false });
+      expect(await h.store.withdrawPending(out.descriptionUrl)).toEqual({
+        ok: true,
+        value: "none",
+      });
       await interrupt(h, out.descriptionUrl);
       expect(await h.store.withdrawPending(`${out.descriptionUrl}-other`)).toEqual({
         ok: true,
-        value: false,
+        value: "none",
       });
       expect(await journal.list()).toHaveLength(1);
     });
@@ -437,10 +473,13 @@ describe.each(["solid", "lws"] as const)("shared copies (%s)", (protocol) => {
   });
 
   describe("remove racing put of the same bytes", () => {
-    it("serialises them: never a description without its binary, never a false success", async () => {
-      const { h, out } = await seeded(undefined, false);
-      const hold = gate();
-      const log: string[] = [];
+    /** A store whose description delete blocks at the gate; LWS ids are warmed so no lookup waits. */
+    async function blocked(
+      h: Harness,
+      out: PutOutcome,
+      log: string[],
+      hold: ReturnType<typeof gate>,
+    ) {
       const store = await h.reopen({
         storage: intercept(h.storage, async (call) => {
           const url = String(call.args[0]);
@@ -451,12 +490,23 @@ describe.each(["solid", "lws"] as const)("shared copies (%s)", (protocol) => {
           if (call.method === "create") log.push(`create ${url}`);
         }),
       });
+      must(await store.get(out.descriptionUrl));
+      return store;
+    }
+
+    it("serialises them: never a description without its binary, never a false success", async () => {
+      const { h, out } = await seeded(undefined, false);
+      const hold = gate();
+      const log: string[] = [];
+      const store = await blocked(h, out, log, hold);
       const removing = store.remove(out.descriptionUrl);
-      await tick();
+      await hold.hit;
+      const arrived = arm();
       const saving = store.put(putInput());
-      await tick();
+      await queued(arrived);
       // The put has not touched the pod while the remove holds the copy.
       expect(log).toEqual([`delete ${out.descriptionUrl}`]);
+      expect(await raced(saving)).toBe("waiting");
       hold.open();
       expect(await removing).toEqual({ ok: true, value: undefined });
       const saved = must(await saving);
@@ -474,19 +524,16 @@ describe.each(["solid", "lws"] as const)("shared copies (%s)", (protocol) => {
     it("a put that queued behind a remove can be aborted and leaves the others running", async () => {
       const { h, out } = await seeded(undefined, false);
       const hold = gate();
-      const store = await h.reopen({
-        storage: intercept(h.storage, async (call) => {
-          if (call.method === "delete" && String(call.args[0]) === out.descriptionUrl) {
-            await hold.wait();
-          }
-        }),
-      });
+      const store = await blocked(h, out, [], hold);
       const removing = store.remove(out.descriptionUrl);
-      await tick();
+      await hold.hit;
       const controller = new AbortController();
+      const first = arm();
       const aborted = store.put(putInput({ signal: controller.signal }));
+      await queued(first);
+      const second = arm();
       const third = store.put(putInput());
-      await tick();
+      await queued(second);
       controller.abort();
       expect(await aborted).toEqual({ ok: false, error: { kind: "failed", reason: "aborted" } });
       hold.open();
@@ -495,25 +542,79 @@ describe.each(["solid", "lws"] as const)("shared copies (%s)", (protocol) => {
       expect(must(await store.get(saved.descriptionUrl)).binaryUrl).toBe(saved.binaryUrl);
     });
 
+    it("an aborted LAST waiter does not release the copy: a later put still waits for the remove", async () => {
+      const { h, out } = await seeded(undefined, false);
+      const hold = gate();
+      const log: string[] = [];
+      const store = await blocked(h, out, log, hold);
+      const removing = store.remove(out.descriptionUrl);
+      await hold.hit;
+      const controller = new AbortController();
+      const first = arm();
+      const aborted = store.put(putInput({ signal: controller.signal }));
+      await queued(first);
+      controller.abort();
+      expect(await aborted).toEqual({ ok: false, error: { kind: "failed", reason: "aborted" } });
+      const second = arm();
+      const saving = store.put(putInput());
+      await queued(second);
+      // It must not have adopted the description the remove is about to delete.
+      expect(log).toEqual([`delete ${out.descriptionUrl}`]);
+      expect(await raced(saving)).toBe("waiting");
+      hold.open();
+      expect(await removing).toEqual({ ok: true, value: undefined });
+      const saved = must(await saving);
+      expect(saved.existed).toBe(false);
+      expect(must(await store.get(saved.descriptionUrl)).binaryUrl).toBe(saved.binaryUrl);
+      expect(await allResources(h.storage)).toContain(saved.binaryUrl);
+    });
+
+    it("withdrawPending waits for the copy's lock too", async () => {
+      const { h, out } = await seeded(undefined, false);
+      const hold = gate();
+      const store = await blocked(h, out, [], hold);
+      const removing = store.remove(out.descriptionUrl);
+      await hold.hit;
+      const withdrawing = store.withdrawPending(out.descriptionUrl);
+      expect(await raced(withdrawing)).toBe("waiting");
+      hold.open();
+      expect(await removing).toEqual({ ok: true, value: undefined });
+      // The remove finished and cleared its own entry first.
+      expect(await withdrawing).toEqual({ ok: true, value: "none" });
+    });
+
     it("a resume that listed an entry before a put adopted the copy does not act on it", async () => {
       const { h, out, journal } = await seeded(undefined, false);
       await interrupt(h, out.descriptionUrl);
       const hold = gate();
+      const listed = deferred();
       let armed = false;
       const store = await h.reopen({
-        storage: intercept(h.storage, async (call) => {
-          if (armed && call.method === "read") {
-            armed = false;
-            await hold.wait();
-          }
-        }),
+        journal: {
+          put: (entry: DeleteJournalEntry) => journal.put(entry),
+          // The put's withdrawal is held at the gate while it owns the copy.
+          delete: async (url: string) => {
+            if (armed) {
+              armed = false;
+              await hold.wait();
+            }
+            await journal.delete(url);
+          },
+          list: async () => {
+            const entries = await journal.list();
+            listed.fire();
+            return entries;
+          },
+        },
       });
+      must(await store.get(out.descriptionUrl));
       armed = true;
       const saving = store.put(putInput());
-      await tick();
-      // The resume lists the journal now, while the put holds the copy mid-adoption.
+      await hold.hit;
+      // The put holds the copy mid-adoption; the resume lists the journal and queues behind it.
       const resuming = store.resumePending();
-      await tick();
+      await listed.promise;
+      await flush();
       hold.open();
       expect(must(await saving)).toMatchObject({ descriptionUrl: out.descriptionUrl });
       expect(must(await resuming)).toMatchObject({
@@ -549,8 +650,14 @@ describe("lookup adoption (lws)", () => {
   });
 
   it("a hit whose copy a remove is deleting waits, then sees it gone and saves anew", async () => {
+    const lookedUp = deferred();
     let hit: { descriptionUrl: string } | undefined;
-    const h = await harness("lws", { findByHash: async () => hit });
+    const h = await harness("lws", {
+      findByHash: async () => {
+        if (hit !== undefined) lookedUp.fire();
+        return hit;
+      },
+    });
     const out = must(await h.store.put(putInput()));
     hit = { descriptionUrl: out.descriptionUrl };
     const hold = gate();
@@ -561,10 +668,13 @@ describe("lookup adoption (lws)", () => {
         }
       }),
     });
+    must(await store.get(out.descriptionUrl));
     const removing = store.remove(out.descriptionUrl);
-    await tick();
+    await hold.hit;
     const saving = store.put(putInput());
-    await tick();
+    await lookedUp.promise;
+    await flush();
+    expect(await raced(saving)).toBe("waiting");
     hold.open();
     expect(await removing).toEqual({ ok: true, value: undefined });
     const saved = must(await saving);

@@ -195,9 +195,12 @@ during a `put` is the caller's bug.
   recorded binary; otherwise the entry is dropped as `rejected`), then the media. The result is
   `{ completed, failed, rejected, skipped, entries }`, with one `{ descriptionUrl, outcome, reason? }` per entry.
   See "Shared copies" below for `shouldResume`.
-- `withdrawPending(descriptionUrl, signal?)`: drops the pending delete recorded for a copy and answers whether
-  there was one (`true`), or not (`false`; never an error). It deletes nothing in the pod.
-
+- `withdrawPending(descriptionUrl, signal?)`: `"withdrawn"` (the record was dropped and the copy stays), `"none"` (no
+  record: not an error) or `"incomplete"` (the description is already gone, a half-finished delete: nothing can
+  save the copy now, so the record is kept, as phase `deleted`, for a later `resumePending` to clean up the
+  leftover media, or for a later `put` of the same bytes to repair the copy and withdraw it). It deletes nothing in
+  the pod. `resumePending` with a bad argument (not a signal or `{ signal?, shouldResume? }`) is `failed` /
+  `invalid-input`, never a throw.
 - `sweepOrphans({ minAgeMs = 24 h, signal? })`: in every shard, deletes media no description references and
   empty descriptions, only if older than `minAgeMs` (the grace period that protects a concurrent put), and
   leaves a shard alone if any description in it cannot be read or understood (`shardsSkipped`). A candidate is selected by
@@ -213,30 +216,44 @@ Resources are named by content hash, so every record that saved the same bytes s
 `<shard>/<hash>`; on LWS when `findByHash` converges them). A delete is journalled before it is carried out, and
 `resumePending` finishes it on a later start. The hazard: a delete is interrupted; the same bytes are saved again
 under another record (the copy is adopted); the next start resumes the old delete and destroys a copy that is in
-use again. Three defences, from innermost out:
+use again. Defences, from innermost out:
 
-1. **The store withdraws the intent when `put` adopts the copy.** The journal entry for the copy is deleted before
-   `put` reports success (a journal that cannot delete fails the put with `failed` / `journal`). All operations on
-   one copy (`put`, `remove`, `resumePending`, `withdrawPending`) run one at a time inside a store instance, so a
-   `remove` racing a `put` of the same bytes cannot leave a description without its binary: the put waits, then
-   finds the copy gone and writes a whole new pair. `resumePending` re-reads the journal for each entry when its turn
-   comes, so an entry withdrawn after the listing is reported `skipped` / `withdrawn` and never acted on. This
-   serialisation is per store instance. Two instances (two tabs, two devices) racing on one pod have only the
-   server's conditional requests, as before.
-2. **`shouldResume(entry)`: a per-entry veto**, for the caller who knows better than the journal (it keeps its own
+1. **The store withdraws the intent when `put` takes the copy.** On Solid the copy's URL is known after hashing,
+   so the journal entry is deleted BEFORE any write. A journal that cannot answer then fails an *adopted* copy
+   closed (`failed` / `journal`, nothing written, no `orphans`: a pending delete may exist), while a *freshly
+   created* copy succeeds (a put does not depend on the journal when nothing is pending; the residual window is a
+   journalled intent whose description was already deleted, on a pod whose journal is down). On LWS a created
+   pair has a server-chosen identifier, so the journal is not touched (this assumes a server never reuses the
+   identifier of a deleted resource for another); a `findByHash` adoption withdraws before it reports success.
+2. **One copy, one operation at a time (per store instance).** `put`, `remove`, `update`, `attachThumbnail`,
+   `resumePending` (each entry), `withdrawPending` and `sweepOrphans` (each candidate medium) take the copy's
+   lock, keyed by the canonical URL. A `remove` racing a `put` of the same bytes cannot leave a description
+   without its binary: the put waits, then finds the copy gone and writes a whole new pair. A waiter that aborts
+   leaves the queue without releasing the copy. A request that hangs holds its copy until it settles or its
+   caller aborts (there is no store-side timeout; pass `signal` and abort). `resumePending` re-reads the journal
+   for each entry and again immediately before EACH destructive request, so a withdrawal (by a put, by
+   `withdrawPending`, or by another instance sharing the same journal) ends the entry as `skipped` /
+   `withdrawn`. Two instances with SEPARATE journals, or two devices, have only the server's conditional
+   requests: the description delete is conditional on its ETag but a re-created description has identical URLs,
+   so share one journal (or use the veto) across instances.
+3. **`shouldResume(entry)`: a per-entry veto**, for the caller who knows better than the journal (it keeps its own
    records of what is in use). It is called with `{ descriptionUrl, shardUrl, binaryUrl?, thumbnailUrl?, phase,
    sha256? }` (frozen; `sha256` is the content hash from the name on Solid and absent on LWS), immediately before
    each destructive request: the description delete (not asked when the description is already gone), then each
-   media delete. `false` skips the entry and leaves its journal record untouched (`skipped` / `vetoed`); a throw, a
-   rejection, or any answer other than `true` counts as `false` (`skipped` / `veto-error` when it threw) and does
-   not stop other entries; an abort is honoured, including while the veto is pending. The veto runs inside the
-   copy's lock: it must not call `put`, `remove`, `resumePending` or `withdrawPending` on the same copy, and
-   should answer from memory.
-3. **`withdrawPending(descriptionUrl)`** when the caller decides outright that a copy must live: call it as the
-   record that now uses the copy is saved. Its absence is not an error.
+   media delete. `true` proceeds; `false` skips the entry and leaves its journal record untouched
+   (`skipped` / `vetoed`); `"withdraw"` skips it AND drops the record (`skipped` / `withdrawn`); a throw, a
+   rejection, or any other answer counts as `false` (`skipped` / `veto-error` when it threw) and does not stop
+   other entries; an abort is honoured, including while the veto is pending. The description delete is the
+   point of no return: the store records phase `deleted` right after it, so a veto that then says no leaves the
+   entry (and, on LWS, a restart still finds it). While a veto runs, any other store call on the same copy fails
+   fast with `conflict` / `reentrant` instead of queueing; keep it quick and answer from memory.
+4. **`withdrawPending(descriptionUrl)`** when the caller decides outright that a copy must live: call it as the
+   record that now uses the copy is saved. See its result values above.
+5. **`sweepOrphans` respects both**: it re-checks, under the copy's lock, that no description now names the
+   medium (Solid), and never deletes media a pending journal entry (vetoed or not) still names.
 
 A skipped entry stays in the journal, so a later `resumePending` without the veto (or with one that now answers
-`true`) finishes it.
+`true`) finishes it. Lock keys and journal keys are the canonical URL form (`new URL(url).href`).
 
 ## Exposure
 

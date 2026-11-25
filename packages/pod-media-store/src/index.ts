@@ -32,4 +32,5 @@ export type {
   SkipCounts,
   SweepOptions,
   SweepSummary,
+  WithdrawResult,
 } from "./types.js";

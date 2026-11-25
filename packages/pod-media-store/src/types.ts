@@ -193,10 +193,22 @@ export interface PendingDelete {
 
 /**
  * Per-entry veto, consulted IMMEDIATELY before each destructive request of a resumed delete
- * (the description delete, then each of the binary and thumbnail deletes). `false` skips the
- * entry and leaves it in the journal untouched. A throw or rejection counts as `false`.
+ * (the description delete, then each of the binary and thumbnail deletes), after the store has
+ * re-read the journal entry. `true` lets the request go ahead. `false` skips the entry and
+ * leaves it in the journal untouched. `"withdraw"` skips it AND drops the journal entry (the
+ * copy is in use). A throw, a rejection or any other answer counts as `false`.
+ *
+ * The description delete is the point of no return: a veto that says yes to it and no to a
+ * media delete leaves the media without a description until a put of the same bytes repairs
+ * the copy; `sweepOrphans` does not collect media a pending journal entry still names.
+ * Answers should be stable for one entry and come from memory: while the veto runs, any other
+ * store call on the same copy fails with `conflict` / `reentrant` instead of queueing behind it.
  */
-export type ShouldResume = (entry: PendingDelete) => boolean | Promise<boolean>;
+export type ShouldResume = (
+  entry: PendingDelete,
+) => boolean | "withdraw" | Promise<boolean | "withdraw">;
+
+export type WithdrawResult = "withdrawn" | "none" | "incomplete";
 
 export interface ResumeOptions {
   signal?: AbortSignal;
@@ -220,7 +232,11 @@ export interface ResumeSummary {
   completed: number;
   failed: number;
   rejected: number;
-  /** Entries a `shouldResume` veto declined (or threw on); they stay in the journal. */
+  /**
+   * Entries not acted on: a veto declined or threw on them (they stay in the journal), or they
+   * were withdrawn (by a put's adoption, `withdrawPending` or the veto's `"withdraw"`), so they
+   * are no longer there.
+   */
   skipped: number;
   /** One result per journal entry, in journal order. */
   entries: readonly ResumeEntryResult[];
@@ -313,10 +329,14 @@ export interface MediaStore<T, I> {
    */
   resumePending(signalOrOptions?: AbortSignal | ResumeOptions): Promise<Result<ResumeSummary>>;
   /**
-   * Drop the pending delete recorded for a copy, if any. True when one was withdrawn; false
-   * (not an error) when none existed. Deletes nothing in the pod.
+   * Drop the pending delete recorded for a copy. `"withdrawn"`: it was dropped and the copy
+   * stays. `"none"`: there was none (not an error). `"incomplete"`: the description is already
+   * gone (a half-finished delete), so the copy cannot be saved by withdrawing: the entry is
+   * kept (converted to phase `deleted`) so a later `resumePending` removes the leftover media,
+   * and a later `put` of the same bytes repairs the copy and withdraws it. Deletes nothing in
+   * the pod.
    */
-  withdrawPending(descriptionUrl: string, signal?: AbortSignal): Promise<Result<boolean>>;
+  withdrawPending(descriptionUrl: string, signal?: AbortSignal): Promise<Result<WithdrawResult>>;
   /**
    * Remove media no description references and empty descriptions a failed put left on LWS,
    * once they are old enough. A shard whose descriptions cannot all be read is left alone.

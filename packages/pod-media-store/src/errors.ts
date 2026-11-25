@@ -35,6 +35,7 @@ export type MediaStoreReason =
   | "name-unavailable"
   | "not-a-document"
   | "journal"
+  | "reentrant"
   | "shard-title"
   | "payload-too-large"
   | "insufficient-storage"

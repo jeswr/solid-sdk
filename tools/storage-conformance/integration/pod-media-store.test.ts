@@ -623,8 +623,8 @@ describe("pod-media-store against a real Community Solid Server", () => {
     expect(await status(first.binaryUrl)).toBe(200);
 
     // Explicit withdrawal: true once, false when none is left.
-    expect(ok(await sharing.withdrawPending(first.descriptionUrl))).toBe(true);
-    expect(ok(await sharing.withdrawPending(first.descriptionUrl))).toBe(false);
+    expect(ok(await sharing.withdrawPending(first.descriptionUrl))).toBe("withdrawn");
+    expect(ok(await sharing.withdrawPending(first.descriptionUrl))).toBe("none");
 
     // The hazard itself: interrupt again, save the same bytes under another record, resume.
     expect((await crashing.remove(first.descriptionUrl)).ok).toBe(false);
@@ -654,6 +654,84 @@ describe("pod-media-store against a real Community Solid Server", () => {
     ok(await sharing.remove(first.descriptionUrl));
     expect(await status(first.descriptionUrl)).toBe(404);
     expect(await status(first.binaryUrl)).toBe(404);
+  });
+
+  it("an aborted queued put does not release a copy a remove is deleting", async () => {
+    const bytes = pngBytes(92);
+    const first = ok(
+      await put({ bytes, contentType: "image/png", extension: ".png", name: "held" }),
+    );
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let holding!: () => void;
+    const holdingDelete = new Promise<void>((resolve) => {
+      holding = resolve;
+    });
+    const gated = new Proxy(storage, {
+      get(target, property) {
+        if (property === "delete") {
+          return async (url: string, options: never) => {
+            if (url === first.descriptionUrl) {
+              holding();
+              await released;
+            }
+            return target.delete(url, options);
+          };
+        }
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    // Each put signals when it is about to take the copy's lock (its shard exposure check).
+    let arrived: (() => void) | undefined;
+    const checking = ownerOnlyVia(informed(storage));
+    const exposure: typeof checking = async (url, signal) => {
+      if (url.endsWith("/2026/05/")) {
+        arrived?.();
+        arrived = undefined;
+      }
+      return checking(url, signal);
+    };
+    const holder = ok(await openStore({ exposure, exposureTtlMs: 0, storage: gated }));
+    const nextPut = async (signal?: AbortSignal) => {
+      const reached = new Promise<void>((resolve) => {
+        arrived = resolve;
+      });
+      const result = holder.put({
+        bytes,
+        contentType: "image/png",
+        extension: ".png",
+        createdAt: AT,
+        description: { name: "again" },
+        ...(signal ? { signal } : {}),
+      });
+      await reached;
+      for (let i = 0; i < 200; i++) await Promise.resolve();
+      return { result };
+    };
+    const removing = holder.remove(first.descriptionUrl);
+    await holdingDelete;
+    const controller = new AbortController();
+    const queued = (await nextPut(controller.signal)).result;
+    controller.abort();
+    expect((await queued).ok).toBe(false);
+    const later = (await nextPut()).result;
+    // The later put must still be waiting for the remove, not adopting the doomed description.
+    const early = await Promise.race([
+      later.then(() => "settled"),
+      new Promise<string>((resolve) => setTimeout(() => resolve("waiting"), 500)),
+    ]);
+    expect(early).toBe("waiting");
+    expect((await fetchOf(first.descriptionUrl, { method: "HEAD" })).status).toBe(200);
+    release();
+    expect((await removing).ok).toBe(true);
+    const saved = ok(await later);
+    expect(saved.existed).toBe(false);
+    expect((await fetchOf(saved.descriptionUrl, { method: "HEAD" })).status).toBe(200);
+    expect((await fetchOf(saved.binaryUrl, { method: "HEAD" })).status).toBe(200);
+    ok(await holder.remove(saved.descriptionUrl));
   });
 
   it("removes every item and leaves nothing on the server; sweeps planted orphans", async () => {

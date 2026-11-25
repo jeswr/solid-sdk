@@ -266,3 +266,45 @@ export function must<T>(result: { ok: true; value: T } | { ok: false; error: unk
   if (!result.ok) throw new Error(`unexpected failure ${JSON.stringify(result.error)}`);
   return result.value;
 }
+
+/** A gate: `wait()` blocks until `open()`; `hit` settles once something has reached `wait()`. */
+export function gate() {
+  let open!: () => void;
+  let reached!: () => void;
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  const hit = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  return {
+    open,
+    hit,
+    wait: () => {
+      reached();
+      return opened;
+    },
+  };
+}
+
+/** Let every pending microtask run: after a signal that only microtasks follow, nothing is left. */
+export async function flush(): Promise<void> {
+  for (let i = 0; i < 100; i++) await Promise.resolve();
+}
+
+/** Bounded wait: `"waiting"` when `promise` has not settled in 30 ms (a negative assertion). */
+export function raced<R>(promise: Promise<R>): Promise<R | "waiting"> {
+  return Promise.race([
+    promise,
+    new Promise<"waiting">((resolve) => setTimeout(() => resolve("waiting"), 30)),
+  ]);
+}
+
+/** A deferred signal a callback can fire and a test can await. */
+export function deferred() {
+  let fire!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    fire = resolve;
+  });
+  return { fire, promise };
+}
