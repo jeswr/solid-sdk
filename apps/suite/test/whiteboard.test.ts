@@ -142,6 +142,7 @@ describe("whiteboard pod orchestration", () => {
     "network",
     "server",
     "rate-limited",
+    "unauthenticated",
   ] as const)("surfaces a transient index failure (%s) and never creates or registers a folder", async (code) => {
     const storage = createMemoryStorage({ protocol: "solid", root });
     const flaky = index();
@@ -159,8 +160,44 @@ describe("whiteboard pod orchestration", () => {
         })(),
       ),
     ).rejects.toBeInstanceOf(TypeError);
+    vi.mocked(flaky.find).mockRejectedValue(new DOMException("timed out", "TimeoutError"));
+    await expect(prepareWhiteboards(storage, flaky)).rejects.toMatchObject({
+      name: "TimeoutError",
+    });
     expect(create).not.toHaveBeenCalled();
     expect(flaky.register).not.toHaveBeenCalled();
+  });
+  it.each([
+    "forbidden",
+    "not-rdf",
+    "invalid-response",
+  ] as const)("does not register after a degraded lookup (%s); a later clean lookup does", async (code) => {
+    const storage = createMemoryStorage({ protocol: "solid", root });
+    const degraded = index();
+    vi.mocked(degraded.find).mockRejectedValue(
+      new StorageError(code, { method: "GET", url: root }),
+    );
+    const repo = await prepareWhiteboards(storage, degraded);
+    expect(repo.container).toBe(`${root}whiteboards/`);
+    expect(repo.registration).toEqual({ state: "unavailable" });
+    expect(degraded.register).not.toHaveBeenCalled();
+    const clean = index();
+    vi.mocked(clean.find).mockResolvedValue([]);
+    expect((await prepareWhiteboards(storage, clean)).registration).toEqual({
+      state: "registered",
+    });
+    expect(clean.register).toHaveBeenCalledOnce();
+  });
+  it.each([
+    "not-found",
+    "scope",
+  ] as const)("still registers the folder after a %s lookup", async (code) => {
+    const storage = createMemoryStorage({ protocol: "solid", root });
+    const absent = index();
+    vi.mocked(absent.find).mockRejectedValue(new StorageError(code, { method: "GET", url: root }));
+    expect((await prepareWhiteboards(storage, absent)).registration).toEqual({
+      state: "registered",
+    });
   });
   it.each([
     "not-found",
@@ -190,7 +227,9 @@ describe("whiteboard pod orchestration", () => {
       new StorageError("forbidden", { method: "PUT", url: root }),
     );
     const first = await prepareWhiteboards(storage, broken);
-    expect(first.registration).toEqual({ state: "failed", reason: "forbidden" });
+    // A degraded lookup leaves registration unavailable and never attempts to register.
+    expect(first.registration).toEqual({ state: "unavailable" });
+    expect(broken.register).not.toHaveBeenCalled();
     const board = await first.create("Kept", scene());
     // Nothing is registered, so the next session finds the folder by its conventional name.
     const second = await prepareWhiteboards(storage, broken);

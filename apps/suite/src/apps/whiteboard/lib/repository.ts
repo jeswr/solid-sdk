@@ -56,6 +56,13 @@ function indexUnusable(error: unknown): boolean {
     )
   );
 }
+/** A lookup that may have missed an existing registration (an unreadable or malformed index). */
+function indexDegraded(error: unknown): boolean {
+  return (
+    error instanceof StorageError &&
+    ["forbidden", "invalid-response", "not-rdf"].includes(error.code)
+  );
+}
 export async function prepareWhiteboards(
   storage: StorageClient,
   index: TypeIndex | undefined,
@@ -65,10 +72,14 @@ export async function prepareWhiteboards(
   // is no usable index: the conventional folder is used instead. A transient failure surfaces,
   // so a registered folder is never missed and a duplicate created and registered.
   let locations: string[] = [];
+  // After a degraded lookup nothing is registered in this session: a failing public index must
+  // not make a duplicate collection get indexed. A later session with a clean lookup registers.
+  let degraded = false;
   try {
     locations = (await index?.find(DRAW_SCENE_IRI)) ?? [];
   } catch (error) {
     if (!indexUnusable(error)) throw error;
+    degraded = indexDegraded(error);
   }
   for (const url of locations.slice(0, 100)) {
     if (storage.isWithinStorage(url) && (await storage.head(url)).kind === "container") {
@@ -93,7 +104,7 @@ export async function prepareWhiteboards(
   // private index is ever targeted.
   let registration: WhiteboardRegistration = { state: "unavailable" };
   let hint: Awaited<ReturnType<TypeIndex["register"]>>;
-  if (index) {
+  if (index && !degraded) {
     try {
       hint = await index.register(DRAW_SCENE_IRI, { container }, { index: "private" });
       registration = { state: "registered" };
