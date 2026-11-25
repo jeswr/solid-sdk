@@ -57,6 +57,8 @@ const duplicateOf = (item: Outgoing, error: ChatModelError): Message => ({
 const invalidDestination = (error: unknown) =>
   error instanceof TypeError ||
   (error instanceof StorageError && (error.code === "scope" || error.code === "bad-request"));
+/** How often rows waiting on an unusable session check whether it is usable again. */
+const SESSION_POLL_MS = 2000;
 const documentOf = (item: Outgoing) => item.id.split("#")[0]!;
 /**
  * Chat presentation and delivery policy over the SDK's durable, cross-tab queue. Without a
@@ -88,6 +90,14 @@ export class ChatOutbox {
   private settled = new Set<string>();
   /** Replay failed while online (say, IndexedDB writes keep failing): rows show Retry. */
   private stalled = false;
+  /** A flush was requested during a pass: run another once it ends. */
+  private again = false;
+  /** A send was cut short by a session rebuild: it stays pending and a later pass resumes it. */
+  private interrupted = false;
+  /** Direct sends interrupted by a session rebuild, to resume once their turn has ended. */
+  private resend = new Set<string>();
+  /** Checks for a usable session while rows wait; no replay runs until it is. */
+  private waker: ReturnType<typeof setTimeout> | undefined;
   ready: Promise<void> = Promise.resolve();
   constructor(
     private client: Pick<ChatClient, "send" | "webId" | "storageUrl">,
@@ -100,6 +110,11 @@ export class ChatOutbox {
      * does: a send that fails then is not the message's fault, so it stays pending.
      */
     private active: () => boolean = () => true,
+    /**
+     * The identity of the current session. A send that fails after it changed (a same-account
+     * rebuild) was cut short by the rebuild, not refused: it stays pending.
+     */
+    private session: () => unknown = () => undefined,
   ) {}
   snapshot = (): Outgoing[] => this.entries;
   subscribe = (listener: () => void): (() => void) => {
@@ -368,16 +383,26 @@ export class ChatOutbox {
       this.direct.delete(item.id);
       if (this.lanes.get(document) === turn) this.lanes.delete(document);
     }
+    if (this.resend.delete(item.id)) void this.flush();
   }
   private async attempt(item: Outgoing): Promise<void> {
     // Discarded while waiting for its turn: never post it.
     if (!this.entries.some((entry) => entry.id === item.id)) return;
+    const started = this.session();
     try {
       let message: Message = item;
       try {
         message = await this.client.send(item.room, item.draft, { id: item.localId, at: item.at });
       } catch (error) {
-        if (!isDuplicate(error)) throw error;
+        if (!isDuplicate(error)) {
+          if (this.session() !== started) {
+            // Cut short by a session rebuild: stays pending, resumed once this turn has ended.
+            this.resend.add(item.id);
+            this.patch(item.id, (entry) => ({ ...entry, status: "sending" }));
+            return;
+          }
+          throw error;
+        }
         message = duplicateOf(item, error);
       }
       this.delivered(item, message);
@@ -403,7 +428,7 @@ export class ChatOutbox {
       this.connection = undefined;
       this.holdLegacy();
       this.ready = Promise.resolve();
-      return () => {};
+      return () => this.stopWaiting();
     }
     if (connection.outbox.webId !== this.client.webId) {
       connection.outbox.close();
@@ -428,6 +453,7 @@ export class ChatOutbox {
         const network = () => new StorageError("network", { url: delivery.url, method: "PATCH" });
         const fenced = () => !this.online() || !this.active() || this.connection !== connection;
         if (fenced()) throw network();
+        const started = this.session();
         let message: Message = item;
         try {
           message = await this.client.send(item.room, item.draft, {
@@ -440,6 +466,10 @@ export class ChatOutbox {
             // the entry waiting. Otherwise every failure (5xx, 429 and fetch errors included)
             // fails the row so Retry and Discard show.
             if (signal.aborted || fenced()) throw network();
+            if (this.session() !== started) {
+              this.interrupted = true;
+              throw network();
+            }
             throw new Error(error instanceof Error ? error.message : "Couldn't send the message");
           }
           message = duplicateOf(item, error);
@@ -452,6 +482,7 @@ export class ChatOutbox {
       if (!open) return;
       open = false;
       for (const stop of stops) stop();
+      this.stopWaiting();
       if (this.connection === connection) this.connection = undefined;
       connection.outbox.close();
     };
@@ -481,6 +512,7 @@ export class ChatOutbox {
       !this.flushing &&
       !this.unreachable &&
       this.online() &&
+      this.active() &&
       this.deliverable(connection)
     )
       void this.flush();
@@ -509,22 +541,53 @@ export class ChatOutbox {
     await this.refresh(connection);
     await this.flush();
   };
+  /**
+   * One pass at a time. A request that arrives during a pass (a rebuilt session's flush, say)
+   * is not lost: another pass runs once this one ends, and after a pass a rebuild cut short.
+   */
   flush = (): Promise<void> => {
-    this.flushing ??= (async () => {
+    if (this.flushing) {
+      this.again = true;
+      return this.flushing;
+    }
+    this.flushing = (async () => {
       let progressed = false;
       try {
-        progressed = await this.flushOnce();
+        do {
+          this.again = false;
+          this.interrupted = false;
+          progressed = await this.flushOnce();
+          if (this.interrupted && this.active()) this.again = true;
+        } while (this.again);
       } finally {
         this.flushing = undefined;
       }
       if (progressed) this.kick();
+      this.waitForSession();
     })();
     return this.flushing;
   };
+  /**
+   * While the session is unusable nothing replays: rows wait, and a timer checks (without any
+   * request) whether it is usable again, so the rows are retried exactly then.
+   */
+  private waitForSession() {
+    if (this.waker || this.active() || !this.entries.some((entry) => entry.status === "sending"))
+      return;
+    this.waker = setTimeout(() => {
+      this.waker = undefined;
+      if (this.active()) void this.flush();
+      else this.waitForSession();
+    }, SESSION_POLL_MS);
+  }
+  private stopWaiting() {
+    clearTimeout(this.waker);
+    this.waker = undefined;
+  }
   /** True only after a replay pass that changed the queue, so failures and holds never spin. */
   private async flushOnce(): Promise<boolean> {
     await this.ready;
-    if (!this.online()) return false;
+    if (!this.online() || !this.active()) return false;
     const direct = this.entries.filter(
       (entry) => entry.status === "sending" && this.local.has(entry.id),
     );

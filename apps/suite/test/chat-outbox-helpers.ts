@@ -59,6 +59,8 @@ export interface BoxOptions {
   storageUrl?: string;
   /** The account-liveness fence (false once the account was switched or signed out). */
   active?: () => boolean;
+  /** The identity of the current session; a change is a same-account rebuild. */
+  session?: () => unknown;
   /** The saved-message hook (Chat's notification chip). */
   onSaved?: (message: Message) => void;
 }
@@ -85,6 +87,7 @@ export function box(
     },
     options.onSaved,
     options.active,
+    options.session,
   );
   const close = queue.connect();
   stops.push(close);
