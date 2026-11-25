@@ -1,0 +1,72 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# No docs sector exists in solid-federation-vocab; this profile follows the app's
+# existing IRIs: documents/revisions are sparse; comments and quotes have MUSTs.
+# Narrowing: literals use exact XSD datatypes and singleton cardinality; malformed
+# optional fields drop at runtime. No new IRI scheme restriction is imposed.
+# Omissions/gaps: body/format legacy aliases are shared by Document and Revision,
+# which closed alias admission rejects; the facade alone carries those two aliases.
+# Cyclic/unbounded revision chains and motivation-dependent comment anchors remain
+# facade policy. Annotation's source/selector describe untyped target nodes read
+# through its generated Wrapper without mark(); version metadata similarly uses
+# Revision's fields without adding prov:Entity. Type Index blank-node/set views are
+# generic compatibility views outside this profile, rather than new domain classes.
+# Closed admission has no sh:maxLength guard; the facade retains the existing
+# UTF-16 quote/position bounds and Unicode context truncation.
+@prefix pd: <https://jeswr.org/ns/pod-docs#> .
+@prefix legacy: <https://w3id.org/jeswr/pod-docs#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix oa: <http://www.w3.org/ns/oa#> .
+@prefix schema: <https://schema.org/> .
+@prefix oldschema: <http://schema.org/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+[] a sh:NodeShape ; sh:targetClass pd:Document, legacy:Document ;
+  sh:property [ sh:path dct:identifier ; sh:name "instanceId" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:title ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path pd:body ; sh:name "body" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path pd:format ; sh:name "format" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:creator ; sh:name "creator" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path [ sh:alternativePath ( pd:updateLog legacy:updateLog ) ] ; sh:name "updateLog" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path [ sh:alternativePath ( pd:assets legacy:assets ) ] ; sh:name "assets" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path [ sh:alternativePath ( pd:comments legacy:comments ) ] ; sh:name "comments" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path [ sh:alternativePath ( pd:currentRevision legacy:currentRevision ) ] ; sh:name "currentRevision" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path [ sh:alternativePath ( schema:wordCount oldschema:wordCount ) ] ; sh:name "wordCount" ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:minInclusive 0 ] ;
+  sh:property [ sh:path prov:wasDerivedFrom ; sh:name "wasDerivedFrom" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .
+
+[] a sh:NodeShape ; sh:targetClass prov:Entity ;
+  sh:property [ sh:path pd:body ; sh:name "body" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path pd:format ; sh:name "format" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path rdfs:label ; sh:name "label" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+  sh:property [ sh:path prov:generatedAtTime ; sh:name "generatedAt" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+  sh:property [ sh:path prov:wasAttributedTo ; sh:name "attributedTo" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path prov:wasRevisionOf ; sh:name "wasRevisionOf" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:creator ; sh:name "creator" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path pd:snapshot ; sh:name "snapshot" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path pd:versionKind ; sh:name "kind" ; sh:datatype xsd:string ; sh:in ( "named" "automatic" ) ; sh:maxCount 1 ] .
+
+[] a sh:NodeShape ; sh:targetClass oa:Annotation ;
+  sh:property [ sh:path oa:bodyValue ; sh:name "text" ; sh:datatype xsd:string ; sh:pattern "\\S" ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:creator ; sh:name "creator" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path oa:motivatedBy ; sh:name "motivation" ; sh:nodeKind sh:IRI ; sh:in ( oa:commenting oa:replying ) ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path oa:hasTarget ; sh:name "target" ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path oa:hasSource ; sh:name "source" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path oa:hasSelector ; sh:name "selector" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path pd:anchorStart ; sh:name "start" ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path pd:anchorEnd ; sh:name "end" ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path pd:resolved ; sh:name "resolved" ; sh:datatype xsd:boolean ; sh:maxCount 1 ] ;
+  sh:property [ sh:path pd:resolvedBy ; sh:name "resolvedBy" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+  sh:property [ sh:path pd:resolvedAt ; sh:name "resolvedAt" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] .
+
+[] a sh:NodeShape ; sh:targetClass oa:TextQuoteSelector ;
+  sh:property [ sh:path oa:exact ; sh:name "exact" ; sh:datatype xsd:string ; sh:minLength 1 ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path oa:prefix ; sh:name "prefix" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+  sh:property [ sh:path oa:suffix ; sh:name "suffix" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] .
+
