@@ -325,6 +325,38 @@
     "./youtube/*": {
       "types": "./dist/youtube/*.d.ts",
       "default": "./dist/youtube/*.js"
+    },
+    "./adapters/letterboxd": {
+      "types": "./dist/letterboxd/file-adapter.d.ts",
+      "default": "./dist/letterboxd/file-adapter.js"
+    },
+    "./letterboxd/*": {
+      "types": "./dist/letterboxd/*.d.ts",
+      "default": "./dist/letterboxd/*.js"
+    },
+    "./adapters/pocket": {
+      "types": "./dist/pocket/file-adapter.d.ts",
+      "default": "./dist/pocket/file-adapter.js"
+    },
+    "./pocket/*": {
+      "types": "./dist/pocket/*.d.ts",
+      "default": "./dist/pocket/*.js"
+    },
+    "./adapters/storygraph": {
+      "types": "./dist/storygraph/file-adapter.d.ts",
+      "default": "./dist/storygraph/file-adapter.js"
+    },
+    "./storygraph/*": {
+      "types": "./dist/storygraph/*.d.ts",
+      "default": "./dist/storygraph/*.js"
+    },
+    "./adapters/telegram": {
+      "types": "./dist/telegram/file-adapter.d.ts",
+      "default": "./dist/telegram/file-adapter.js"
+    },
+    "./telegram/*": {
+      "types": "./dist/telegram/*.d.ts",
+      "default": "./dist/telegram/*.js"
     }
   },
   "files": [

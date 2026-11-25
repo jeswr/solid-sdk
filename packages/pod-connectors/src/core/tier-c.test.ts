@@ -9,8 +9,12 @@ import { appleHealthFileAdapter } from "../apple-health/file-adapter.js";
 import { bankStatementsFileAdapter } from "../bank-statements/file-adapter.js";
 import { chatgptFileAdapter } from "../chatgpt/file-adapter.js";
 import { goodreadsFileAdapter } from "../goodreads/file-adapter.js";
+import { letterboxdFileAdapter } from "../letterboxd/file-adapter.js";
 import { netflixFileAdapter } from "../netflix/file-adapter.js";
+import { pocketFileAdapter } from "../pocket/file-adapter.js";
 import { steamFileAdapter } from "../steam/file-adapter.js";
+import { storygraphFileAdapter } from "../storygraph/file-adapter.js";
+import { telegramFileAdapter } from "../telegram/file-adapter.js";
 import { uberFileAdapter } from "../uber/file-adapter.js";
 import { whatsappFileAdapter } from "../whatsapp/file-adapter.js";
 import { FEDERATION, FEDERATION_PROPERTIES } from "./federation-vocab.js";
@@ -299,6 +303,64 @@ const fixtures: {
     text: "OFXHEADER:100\r\n<OFX><CURDEF>GBP\r\n<STMTTRN><DTPOSTED>20260120<TRNAMT>-12.50<NAME>Synthetic groceries</STMTTRN></OFX>",
     types: [CLASSES.Invoice, FEDERATION.TransactionRecord, FEDERATION.Activity, FEDERATION.Agent],
     value: "GBP",
+  },
+  // AUTHORED-BY Claude Opus 5.5 (the four export adapters below)
+  {
+    adapter: letterboxdFileAdapter,
+    items: 2,
+    name: "diary.csv",
+    text: 'Date,Name,Year,Letterboxd URI,Rating,Rewatch,Tags,Watched Date\r\n2026-01-21,"Synthetic ""Orbit"", 🌍",2026,https://boxd.it/syn01,4.5,Yes,cosy,2026-01-20\r\n',
+    types: [
+      CLASSES.WatchAction,
+      FEDERATION.ListeningActivity,
+      CLASSES.Movie,
+      FEDERATION.CreativeWork,
+    ],
+    value: 'Synthetic "Orbit", 🌍',
+  },
+  {
+    adapter: pocketFileAdapter,
+    name: "ril_export.html",
+    text: '<!DOCTYPE html><h1>Unread</h1><!-- <a href="https://example.org/no">x</a> --><ul><li><a href="https://example.org/synthetic?q=1" time_added="1768900000" tags="a,b">Synthetic &amp; link 🌍</a></li></ul>',
+    types: [CLASSES.Bookmark],
+    value: "Synthetic & link 🌍",
+  },
+  {
+    adapter: storygraphFileAdapter,
+    name: "storygraph.csv",
+    text: 'Title,Authors,ISBN/UID,Read Status,Star Rating,Review\nSynthetic Stars,Synthetic Author,0441013597,read,3.5,"Good, 🌍"',
+    types: [CLASSES.Book, FEDERATION.CreativeWork],
+    value: "9780441013593",
+  },
+  {
+    adapter: telegramFileAdapter,
+    items: 2,
+    name: "result.json",
+    text: JSON.stringify({
+      name: "Synthetic Chat",
+      id: 42,
+      messages: [
+        { id: 1, type: "service", action: "create_group", text: "" },
+        {
+          id: 2,
+          type: "message",
+          date_unixtime: "1768900000",
+          from: "Synthetic Sender",
+          text: "Hello 🌍",
+        },
+        {
+          id: 3,
+          type: "message",
+          date_unixtime: "1768900060",
+          from: "Synthetic Peer",
+          reply_to_message_id: 2,
+          text: ["Hi ", { type: "bold", text: "there" }],
+          photo: "photos/photo_1.jpg",
+        },
+      ],
+    }),
+    types: [CLASSES.Message, FEDERATION.Note],
+    value: "Hello 🌍",
   },
 ];
 

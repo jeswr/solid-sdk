@@ -73,6 +73,31 @@ describe("connector catalogue", () => {
     expect(destinationsFor("netflix")).toEqual([{ domain: "media", label: "Media › Streaming" }]);
     expect(destinationsFor("future-adapter")).toEqual([{ domain: "other", label: "Other" }]);
   });
+  // AUTHORED-BY Claude Opus 5.5
+  it("lists the Letterboxd, Pocket, StoryGraph and Telegram file imports", () => {
+    const entries = catalogue(createRegistry());
+    for (const id of ["letterboxd", "pocket", "storygraph", "telegram"])
+      expect(entries.find((entry) => entry.id === id)).toMatchObject({
+        status: "import",
+        tier: "C",
+        logoId: id,
+      });
+    expect(entries.find((entry) => entry.id === "storygraph")?.name).toBe("The StoryGraph");
+    expect(destinationsFor("letterboxd")).toEqual([
+      { domain: "media", label: "Media › Streaming" },
+    ]);
+    expect(destinationsFor("pocket")).toEqual([
+      { domain: "documents", label: "Documents › Bookmarks" },
+    ]);
+    expect(destinationsFor("storygraph")).toEqual(destinationsFor("goodreads"));
+    expect(destinationsFor("telegram")).toEqual(destinationsFor("whatsapp"));
+    expect(destinationsFor("telegram")).toEqual([
+      { domain: "socials", label: "Socials › Following" },
+    ]);
+    expect(filterCatalogue(entries, ["documents"], "pocket").map((entry) => entry.id)).toEqual([
+      "pocket",
+    ]);
+  });
   it("uses source-aware destinations for Discord and Steam, retaining GitHub in Work", () => {
     expect(destinationsFor("discord")).toEqual([
       { domain: "socials", label: "Socials › Following" },

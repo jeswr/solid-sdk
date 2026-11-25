@@ -1,0 +1,7 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/pocket/documents/pocket-bookmarks.ttl#bookmark-example-org-synthetic-q-1-5bd795af2876d4dacbab68b92148e370> <http://purl.org/dc/terms/created> "2026-01-20T09:06:40.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <http://purl.org/dc/terms/title> "Synthetic & link \U0001f30d";
+    <http://schema.org/keywords> "a", "b";
+    <http://schema.org/url> <https://example.org/synthetic?q=1>;
+    a <https://jeswr.org/ns/bookmark#Bookmark>;
+    <https://jeswr.org/ns/bookmark#archived> false.

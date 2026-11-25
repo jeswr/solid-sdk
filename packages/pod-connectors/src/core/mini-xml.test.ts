@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it } from "vitest";
 import { decodeXmlEntities, extractBlocks, extractElements, firstTagText } from "./mini-xml.js";
 
@@ -12,6 +13,24 @@ describe("decodeXmlEntities", () => {
   });
   it("leaves unknown entities untouched", () => {
     expect(decodeXmlEntities("&nbsp;")).toBe("&nbsp;");
+  });
+  it("keeps references to code points XML 1.0 disallows literal", () => {
+    expect(decodeXmlEntities("&#9;&#xA;&#13;&#x10FFFF;&#xFFFD;")).toBe("\t\n\r\u{10FFFF}\uFFFD");
+    for (const ref of [
+      "&#0;",
+      "&#x0;",
+      "&#1;",
+      "&#x1F;",
+      "&#11;",
+      "&#xFFFE;",
+      "&#xFFFF;",
+      "&#xD800;",
+      "&#57343;",
+      "&#x110000;",
+      "&#1a;",
+      "&#99999999999999999999;",
+    ])
+      expect(decodeXmlEntities(`a${ref}b`), ref).toBe(`a${ref}b`);
   });
 });
 
