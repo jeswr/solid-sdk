@@ -4,6 +4,7 @@ import {
   appendRsvp,
   EVENT_STATUS,
   entities,
+  guestListAvailable,
   type Invitation,
   type Reply,
   RSVP_RESPONSE,
@@ -173,7 +174,7 @@ export function RsvpPanel({
               The reply deadline has passed. Your reply will be marked late.
             </p>
           )}
-          {event.guestListVisible && (
+          {guestListAvailable(event) && (
             <p className="ev-muted">
               Your name, response and note will be visible to other guests.
             </p>

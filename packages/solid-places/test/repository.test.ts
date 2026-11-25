@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
+import { readFileSync } from "node:fs";
 import { checkOwnerOnly, ownerPolicy, writeWac } from "@jeswr/pod-access";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
@@ -215,8 +216,12 @@ it("never registers in a shared private Type Index", async () => {
     body: await writeWac(ownerPolicy("https://stranger.example/me"), index, `${index}.acl`),
   });
   const before = await (await memory.read(index)).text();
-  await expect(repo.initialize()).rejects.toThrow();
+  // Registration is best-effort: the refusal is a visible warning, never a failed open.
+  await expect(repo.initialize()).resolves.toEqual({
+    registrationWarning: expect.stringContaining("Type Index"),
+  });
   expect(await (await memory.read(index)).text()).toBe(before);
+  expect((await repo.load()).places).toEqual([]);
 });
 it("refuses off-collection edits, invalid versions and uninitialised mutations", async () => {
   const { repo } = await fixture();
@@ -231,14 +236,18 @@ it("refuses off-collection edits, invalid versions and uninitialised mutations",
   await expect(repo.savePlace({ ...before, etag: null }, {})).rejects.toThrow();
 });
 it("re-checks an existing private index even when registration is already up to date", async () => {
-  const { repo, transport } = await fixture();
+  const { repo, transport, memory } = await fixture();
   await repo.initialize();
   const index = `${root}settings/privateTypeIndex.ttl`;
   await transport(`${index}.acl`, {
     method: "PUT",
     body: await writeWac(ownerPolicy("https://stranger.example/me"), index, `${index}.acl`),
   });
-  await expect(repo.initialize()).rejects.toThrow("owner-only");
+  const before = await (await memory.read(index)).text();
+  await expect(repo.initialize()).resolves.toMatchObject({
+    registrationWarning: expect.any(String),
+  });
+  expect(await (await memory.read(index)).text()).toBe(before);
 });
 it("rejects parent traversal and query/fragment aliases for place edits", async () => {
   const { repo } = await fixture();
@@ -375,8 +384,11 @@ it.each([
         method: "GET",
       });
     });
-  if (variant === "acl-read-denied" || variant === "acl-body-missing")
+  if (variant === "acl-body-missing")
     await expect(f.repo.initialize()).rejects.toThrow("owner-only");
+  else if (variant === "acl-read-denied")
+    // The policy cannot be read, so it can be neither sealed nor verified.
+    await expect(f.repo.initialize()).rejects.toThrow("Cannot protect");
   else await expect(f.repo.initialize()).rejects.toThrow();
   expect(
     vi.mocked(f.storage.create).mock.calls.every(([, , options]) => options?.kind === "container"),
@@ -398,17 +410,25 @@ it("refuses non-empty unsealed folders without changing their ACL", async () => 
 });
 it("does not ignore ACL PUT failures", async () => {
   const f = await fixture();
-  const fetch = vi.fn(async () => new Response("Denied", { status: 403 }));
+  // Discovery succeeds, the policy write is denied.
+  const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) =>
+    init?.method === "PUT" ? new Response("Denied", { status: 403 }) : f.transport(input, init),
+  );
   await expect(createPlacesRepository(f.storage, fetch, owner).initialize()).rejects.toThrow(
     "Cannot protect",
   );
   expect(fetch).toHaveBeenCalledWith(
     `${root}places/.acl`,
-    expect.objectContaining({
-      method: "PUT",
-      headers: { "Content-Type": "text/turtle", "If-None-Match": "*" },
-    }),
+    expect.objectContaining({ method: "PUT" }),
   );
+  // A transport that refuses everything cannot seal either.
+  await expect(
+    createPlacesRepository(
+      f.storage,
+      vi.fn(async () => new Response("Denied", { status: 403 })),
+      owner,
+    ).initialize(),
+  ).rejects.toThrow("Cannot protect");
 });
 it.each([
   false,
@@ -417,7 +437,7 @@ it.each([
   const f = await fixture();
   let raced = false;
   const fetch: typeof globalThis.fetch = async (url, init) => {
-    if (!raced) {
+    if (!raced && init?.method === "PUT") {
       raced = true;
       await f.transport(url, {
         ...init,
@@ -516,8 +536,9 @@ it("verifies containers once per operation, reuses sealed month folders and stil
   const heads = vi.mocked(f.storage.head);
   const reads = vi.mocked(f.storage.read);
   const month = `${root}places/visits/2026/11/`;
-  // Initial HEAD, post-create HEAD, then the shared proof, independent of record count.
-  expect(heads.mock.calls.filter(([url]) => url === month)).toHaveLength(3);
+  // Initial HEAD, post-create HEAD, the sealing helper's two discovery HEADs (served by the
+  // same transport), then the shared proof: independent of record count.
+  expect(heads.mock.calls.filter(([url]) => url === month)).toHaveLength(5);
   for (const loads of [1, 2]) {
     const headCount = heads.mock.calls.length;
     const readCount = reads.mock.calls.length;
@@ -534,8 +555,11 @@ it("verifies containers once per operation, reuses sealed month folders and stil
     expect(newReads.filter((url) => url === `${month}.acl`)).toHaveLength(1);
     expect(newHeads.filter((url) => url.endsWith(".ttl.acl"))).toHaveLength(27);
   }
+  const rootReads = () => reads.mock.calls.filter(([url]) => url === `${root}places/.acl`).length;
+  const beforeInitialize = rootReads();
   await f.repo.initialize();
-  expect(reads.mock.calls.filter(([url]) => url === `${root}places/.acl`)).toHaveLength(2);
+  // Opening again discards every proof and re-reads the collection root's policy exactly once.
+  expect(rootReads() - beforeInitialize).toBe(1);
 });
 it("re-checks containers shared between loads and imports instead of reusing old proofs", async () => {
   const f = await fixture();
@@ -806,7 +830,9 @@ it.each([
       : {}),
   }));
   if (shared) {
-    await expect(f.repo.initialize()).rejects.toThrow("owner-only");
+    await expect(f.repo.initialize()).resolves.toMatchObject({
+      registrationWarning: expect.any(String),
+    });
     expect(
       vi.mocked(f.storage.create).mock.calls.some(([parent]) => parent === `${root}settings/`),
     ).toBe(false);
@@ -987,5 +1013,146 @@ it("removes a legacy alias value when its field is edited", async () => {
   expect(entities.Place.parse(url, dataset)).toMatchObject({
     name: "My park",
     category: "outdoors",
+  });
+});
+
+describe("registration is best-effort discovery metadata (C14, C15)", () => {
+  it("opens when the WebID is outside the storage, with a recoverable warning", async () => {
+    const f = await fixture();
+    const foreign = "https://id.example/me";
+    const repo = createPlacesRepository(f.storage, f.transport, foreign);
+    // createTypeIndex throws a scope error for a profile outside the storage; that is not fatal.
+    await expect(repo.initialize()).resolves.toEqual({
+      registrationWarning: expect.stringContaining("Type Index"),
+    });
+    await repo.importTimeline(input);
+    const snapshot = await repo.load();
+    expect(snapshot.places).toHaveLength(1);
+    expect(snapshot.visits).toHaveLength(1);
+    expect((await repo.savePlace(snapshot.places[0]!, { name: "Edited" })).data.name).toBe(
+      "Edited",
+    );
+  });
+  it("opens on a pod with a public root and no settings folder", async () => {
+    const f = await fixture();
+    const rootAcl = `${root}.acl`;
+    const own = ownerPolicy(owner, true);
+    const policy = {
+      ...own,
+      grants: [
+        ...own.grants,
+        {
+          modes: new Set(["read" as const]),
+          who: [[{ kind: "public" as const }]],
+          except: [],
+          appliesTo: "both" as const,
+          source: { url: rootAcl, node: `${rootAcl}#public` },
+        },
+      ],
+    };
+    const current = await f.memory.read(rootAcl);
+    await f.memory.write(rootAcl, await writeWac(policy, root, rootAcl), {
+      ifMatch: current.etag ?? "missing",
+      contentType: "text/turtle",
+    });
+    // No private Type Index pointer: registration would have to bootstrap under the public root.
+    const card = await f.memory.read(`${root}profile/card`);
+    await f.memory.write(`${root}profile/card`, "", {
+      ifMatch: card.etag ?? "missing",
+      contentType: "text/turtle",
+    });
+    await expect(f.repo.initialize()).resolves.toMatchObject({
+      registrationWarning: expect.any(String),
+    });
+    expect(
+      vi.mocked(f.storage.create).mock.calls.some(([parent]) => parent === `${root}settings/`),
+    ).toBe(false);
+    await f.repo.importTimeline(input);
+    expect((await f.repo.load()).places).toHaveLength(1);
+    // The data folders stay owner-only even though the root is public.
+    expect(
+      await checkOwnerOnly({ storage: f.storage, url: `${root}places/`, ownerWebId: owner }),
+    ).toEqual({ private: true });
+  });
+  it("reports no warning when registration succeeds", async () => {
+    const f = await fixture();
+    await expect(f.repo.initialize()).resolves.toEqual({});
+  });
+});
+
+describe("documents name the server-assigned location (C18)", () => {
+  async function renamed(update?: (f: Awaited<ReturnType<typeof fixture>>) => void) {
+    const f = await fixture();
+    vi.mocked(f.storage.create).mockImplementation(async (parent, body, options) =>
+      f.memory.create(
+        parent,
+        body,
+        options?.name?.endsWith(".ttl")
+          ? { ...options, name: `assigned-${options.name}` }
+          : options,
+      ),
+    );
+    update?.(f);
+    await f.repo.initialize();
+    return f;
+  }
+  it("rewrites each imported record against the URL the server chose", async () => {
+    const f = await renamed();
+    await f.repo.importTimeline(input, undefined, new AbortController().signal);
+    const snapshot = await f.repo.load();
+    expect(snapshot.skipped).toBe(0);
+    expect(snapshot.places).toHaveLength(1);
+    expect(snapshot.visits).toHaveLength(1);
+    expect(snapshot.journeys).toHaveLength(1);
+    // Parsing succeeds only when the subject IRI names the document's own location.
+    expect(snapshot.places[0]?.url).toContain("/assigned-");
+    expect(snapshot.visits[0]?.data.place).toBe(entities.Place.subject(snapshot.places[0]!.url));
+  });
+  it("finds the version with a HEAD when the create response has none", async () => {
+    const f = await renamed();
+    const create = vi.mocked(f.storage.create).getMockImplementation()!;
+    vi.mocked(f.storage.create).mockImplementation(async (...args) => ({
+      ...(await create(...args)),
+      etag: null,
+    }));
+    await f.repo.importTimeline(input);
+    expect((await f.repo.load()).places).toHaveLength(1);
+  });
+  it.each([
+    ["no version at all", "head-without-etag"],
+    ["a vanished document", "head-missing"],
+  ])("fails without a version to write against (%s)", async (_name, mode) => {
+    const f = await renamed();
+    const create = vi.mocked(f.storage.create).getMockImplementation()!;
+    vi.mocked(f.storage.create).mockImplementation(async (...args) => ({
+      ...(await create(...args)),
+      etag: null,
+    }));
+    const original = vi.mocked(f.storage.head).getMockImplementation()!;
+    vi.mocked(f.storage.head).mockImplementation(async (url, ...rest) => {
+      if (!String(url).includes("/assigned-")) return original(url, ...rest);
+      if (mode === "head-missing")
+        throw new StorageError("not-found", { url: String(url), method: "HEAD", status: 404 });
+      return { ...(await original(url, ...rest)), etag: null };
+    });
+    await expect(f.repo.importTimeline(input)).rejects.toThrow("version");
+  });
+  it.each([
+    ["another folder", () => `${root}places/visits/stray.ttl`],
+    ["a query", (parent: string) => `${parent}x.ttl?q=1`],
+    ["a fragment", (parent: string) => `${parent}x.ttl#frag`],
+  ])("refuses a location in %s", async (_name, assign) => {
+    const f = await fixture();
+    await f.repo.initialize();
+    const create = vi.mocked(f.storage.create).getMockImplementation()!;
+    vi.mocked(f.storage.create).mockImplementation(async (parent, ...rest) => ({
+      ...(await create(parent, ...rest)),
+      url: assign(parent),
+    }));
+    await expect(f.repo.importTimeline(input)).rejects.toThrow("unexpected location");
+  });
+  it("never writes an access document itself", () => {
+    const source = readFileSync(new URL("../src/repository.ts", import.meta.url), "utf8");
+    expect(source).not.toMatch(/writeWac|writeAcp|ownerPolicy|\$\{[^}]*\}\.(acl|acr)/);
   });
 });

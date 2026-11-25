@@ -25,6 +25,15 @@ Discovery is cached per account store; LWS collection names alone are never adop
 Registrations that are missing, outside the storage or not containers are skipped, so a
 deleted collection is recreated. A new collection is registered before access is verified,
 because Solid servers drop the creation type link and the index is then the only way back.
+Registration is best-effort: a failure never blocks saving, listing or reading, only its
+error code is kept (`store.registration` is `pending`, `registered`, `unavailable` or
+`failed`), `onRegistrationError(reason)` is called, and `retryRegistration()` tries again.
+Access is still verified before any content write, and registration only ever targets the
+private index. A Solid WebID outside the storage cannot use this pod's Type Index (the SDK
+throws a `scope` error at construction); the store then opens with registration
+`unavailable`. Caveat: on a Solid server that drops the creation type link, a collection
+whose registration failed (or never existed) is not rediscovered by a later session, so
+registration should be retried until it succeeds.
 `ensurePrivateAccess(url, { created })` must establish or verify owner-only access before
 any content write; `created` is true only for a collection this store just created, which
 alone may be provisioned. The suite uses pod-access's `ensurePrivateContainerAccess`, which

@@ -27,6 +27,16 @@ export interface DeckListing {
   decks: StoredDeck[];
   broken: BrokenDeck[];
 }
+/**
+ * Type Index registration is discovery metadata, never a precondition for using the collection.
+ * `unavailable`: the WebID profile is outside this storage. `failed`: the attempt was refused or
+ * errored; `register()` (or the next `initialise()`) tries again. Only the error code is kept.
+ */
+export type Registration =
+  | { state: "pending" }
+  | { state: "registered" }
+  | { state: "unavailable" }
+  | { state: "failed"; reason: string };
 /** Largest presentation document read, enforced while streaming. */
 export const DECK_BYTE_LIMIT = 4 * 1024 * 1024;
 const LIST_CONCURRENCY = 4;
@@ -100,9 +110,17 @@ export function createDeckRepository(
   storage: StorageClient,
   options: { profile: string; index?: TypeIndex; now?: () => number },
 ) {
-  const index =
-    options.index ??
-    createTypeIndex({ storage, features: storage.features, profile: options.profile });
+  // A WebID outside this storage cannot be registered through it: `createTypeIndex` throws a
+  // `scope` error synchronously. The collection works without registration.
+  let index: TypeIndex | undefined = options.index;
+  if (!index) {
+    try {
+      index = createTypeIndex({ storage, features: storage.features, profile: options.profile });
+    } catch (error) {
+      if (!(error instanceof StorageError) || error.code !== "scope") throw error;
+    }
+  }
+  let registration: Registration = index ? { state: "pending" } : { state: "unavailable" };
   const now = options.now ?? Date.now;
   let container = new URL("slides/", storage.root).href;
   let hint: TypeHint | undefined;
@@ -162,10 +180,29 @@ export function createDeckRepository(
       return read(created.url);
     return { url: created.url, etag: saved.etag, deck };
   };
+  /** Best effort and never throws; registers the collection container exactly as before. */
+  const register = async (): Promise<Registration> => {
+    if (!index) return registration;
+    try {
+      hint = await index.register(PRESENTATION_CLASS, { container });
+      registration = { state: "registered" };
+    } catch (error) {
+      hint = undefined;
+      registration = {
+        state: "failed",
+        reason: error instanceof StorageError ? error.code : "unknown",
+      };
+    }
+    return registration;
+  };
   return {
     get container() {
       return container;
     },
+    get registration(): Registration {
+      return registration;
+    },
+    register,
     async initialise() {
       try {
         await storage.head(container);
@@ -181,7 +218,7 @@ export function createDeckRepository(
           await storage.head(container);
         }
       }
-      hint = await index.register(PRESENTATION_CLASS, { container });
+      await register();
     },
     read,
     /**
