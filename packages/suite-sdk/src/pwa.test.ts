@@ -135,6 +135,30 @@ describe("install prompt store", () => {
     expect(store.getSnapshot().status).toBe("unavailable");
   });
 
+  it("falls back to addListener on browsers without MediaQueryList.addEventListener", () => {
+    stop();
+    const listeners = new Set<() => void>();
+    const legacy = {
+      matches: false,
+      addListener: vi.fn((listener: () => void) => listeners.add(listener)),
+      removeListener: vi.fn((listener: () => void) => listeners.delete(listener)),
+    };
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn(() => legacy),
+    );
+    store = createInstallPromptStore();
+    stop = store.start(window);
+    expect(legacy.addListener).toHaveBeenCalledOnce();
+    legacy.matches = true;
+    for (const listener of listeners) listener();
+    expect(store.getSnapshot().status).toBe("installed");
+    stop();
+    expect(legacy.removeListener).toHaveBeenCalledOnce();
+    expect(listeners.size).toBe(0);
+    stop = () => {};
+  });
+
   it("does not restore a prompt dismissed after installation", async () => {
     const { prompt } = promptEvent("dismissed");
     prompt.mockImplementationOnce(async () => {

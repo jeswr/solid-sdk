@@ -13,6 +13,16 @@ interface InstallPromptEvent extends Event {
 }
 const serverSnapshot: InstallSnapshot = { status: "unavailable" };
 
+/** Subscribe to a media query list on browsers with either API; returns the unsubscribe. */
+function watchMediaQuery(list: MediaQueryList, listener: () => void): () => void {
+  if (typeof list.addEventListener === "function") {
+    list.addEventListener("change", listener);
+    return () => list.removeEventListener("change", listener);
+  }
+  list.addListener(listener);
+  return () => list.removeListener(listener);
+}
+
 /** Browser-lifetime prompt capture, independent of the Settings page's mount. */
 export function createInstallPromptStore() {
   let snapshot = serverSnapshot;
@@ -66,12 +76,13 @@ export function createInstallPromptStore() {
         };
         target.addEventListener("beforeinstallprompt", capture);
         target.addEventListener("appinstalled", installed);
-        displayMode.addEventListener("change", modeChanged);
+        // Safari before 14 has only the deprecated addListener; never let an optional feature throw.
+        const stopWatching = watchMediaQuery(displayMode, modeChanged);
         modeChanged();
         cleanup = () => {
           target.removeEventListener("beforeinstallprompt", capture);
           target.removeEventListener("appinstalled", installed);
-          displayMode.removeEventListener("change", modeChanged);
+          stopWatching();
         };
       }
       let stopped = false;
