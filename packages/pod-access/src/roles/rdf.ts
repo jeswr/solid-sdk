@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Sonnet 5.5
 // Adapted from Drive sharing/{rdf,sharing,apply}.ts (Codex GPT-6.1-Sol / Codex),
 // origin/main and claude/project-thread-okz5l7. No dependency on the application.
 import type { DatasetCore, Term } from "@rdfjs/types";

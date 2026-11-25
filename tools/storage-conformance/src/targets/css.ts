@@ -123,112 +123,137 @@ export async function seedCssAccount(base: string, transport: typeof fetch = fet
   return { root, webId, clientId: credentials.id, clientSecret: credentials.secret };
 }
 
-/** File-backed CSS in this process, a free loopback port and disposable data directory. */
-export const cssTarget: ConformanceTarget = {
-  name: "css",
-  async start() {
-    // Keep the slow Components.js module graph out of memory-only runs.
-    const { AppRunner } = await import("@solid/community-server");
-    const directory = await mkdtemp(join(tmpdir(), "storage-conformance-css-"));
-    let app: Awaited<ReturnType<InstanceType<typeof AppRunner>["create"]>> | undefined;
-    let auth: PodAuth | undefined;
-    let stopping: Promise<void> | undefined;
-    const stop = () => {
-      stopping ??= (async () => {
-        try {
-          await auth?.logout();
-        } finally {
+/**
+ * File-backed CSS in this process, a free loopback port and disposable data directory.
+ * `config` selects the server's access-control configuration; the default is WAC. The ACP
+ * variant (`@css:config/file-acp.json`) keeps CSS's own owner-only ACP defaults and has no
+ * WAC root ACL to seed.
+ */
+export function createCssTarget(
+  name: string,
+  config: string,
+  options: { acp?: boolean } = {},
+): ConformanceTarget {
+  return {
+    name,
+    async start() {
+      // Keep the slow Components.js module graph out of memory-only runs.
+      const { AppRunner } = await import("@solid/community-server");
+      const directory = await mkdtemp(join(tmpdir(), "storage-conformance-css-"));
+      let app: Awaited<ReturnType<InstanceType<typeof AppRunner>["create"]>> | undefined;
+      let auth: PodAuth | undefined;
+      let stopping: Promise<void> | undefined;
+      const stop = () => {
+        stopping ??= (async () => {
           try {
-            await app?.stop();
+            await auth?.logout();
           } finally {
-            await rm(directory, { recursive: true, force: true });
+            try {
+              await app?.stop();
+            } finally {
+              await rm(directory, { recursive: true, force: true });
+            }
           }
-        }
-      })();
-      return stopping;
-    };
-    try {
-      const port = await freePort();
-      const base = `http://localhost:${port}/`;
-      moduleStatePromise ??= moduleState();
-      app = await new AppRunner().create({
-        config: "@css:config/file.json",
-        loaderProperties: {
-          logLevel: "error",
-          moduleState: await moduleStatePromise,
-        },
-        shorthand: { port, baseUrl: base, rootFilePath: directory, loggingLevel: "error" },
-      });
-      await app.start();
-      const { root, webId, clientId, clientSecret } = await seedCssAccount(base);
-      auth = await forClientCredentials({
-        // Match CSS's configured issuer exactly; HTTP is confined to this local fixture.
-        issuer: base,
-        clientId,
-        clientSecret,
-        boundary: [root],
-        allowInsecureLoopback: true,
-      });
-      // CSS's default root is public. Seed an owner-only root ACL through the SDK;
-      // the separately managed public profile remains available for WebID verification.
-      const seed = await createPodClient({
-        fetch: auth.fetch,
-        storage: root,
-        capabilities: createMemoryCache(),
-      });
-      const acl = (await seed.storage.head(root)).links.get("acl")?.[0]?.target;
-      assert(acl, "CSS root must advertise its ACL");
-      const validator = (await seed.storage.head(acl)).etag;
-      assert(validator, "Root ACL must have a validator");
-      const rules = await parseRdf(
-        "@prefix acl: <http://www.w3.org/ns/auth/acl#>. <#owner> a acl:Authorization; acl:agent <profile/card#me>; acl:accessTo <./>; acl:default <./>; acl:mode acl:Read, acl:Write, acl:Append, acl:Control.",
-        "text/turtle",
-        { baseIRI: root },
-      );
-      await seed.storage.writeRdf(acl, rules, { ifMatch: validator });
-      const anonymous = await fetch(root, { redirect: "error" });
-      await anonymous.body?.cancel();
-      assert([401, 403].includes(anonymous.status), "CSS fixture root must be private");
-      const session = recordingSession("css", auth.fetch);
-      const { storage } = await createPodClient({
-        fetch: session.fetch,
-        storage: root,
-        capabilities: createMemoryCache(),
-      });
-      return {
-        root,
-        webId,
-        storage,
-        ...session,
-        serviceEndpoints: {
-          trash: `${root}.trash/`,
-          versioning: `${root}.versions/?resource={resource}`,
-        },
-        claims: {
-          protocol: "solid",
-          accessControl: {
-            state: "unknown",
-            evidence: "CSS OPTIONS omits ACL and WAC-Allow",
-            detail: { model: "none" },
-          },
-          move: {
-            state: "available",
-            evidence: "emulated",
-            detail: { native: false, containers: true, preservesIdentifier: false },
-          },
-          trash: { state: "unknown", evidence: "target", detail: {} },
-          versioning: { state: "unknown", evidence: "target", detail: {} },
-          typeIndex: { state: "available", evidence: "target", detail: { mode: "client" } },
-        },
-        async authFetchFor(identity) {
-          if (identity === webId) return session.fetch;
-          throw new StorageError("unsupported", { method: "AUTH", url: root });
-        },
-        stop,
+        })();
+        return stopping;
       };
-    } catch (error) {
-      await stop();
-      throw error;
-    }
+      try {
+        const port = await freePort();
+        const base = `http://localhost:${port}/`;
+        moduleStatePromise ??= moduleState();
+        app = await new AppRunner().create({
+          config,
+          loaderProperties: {
+            logLevel: "error",
+            moduleState: await moduleStatePromise,
+          },
+          shorthand: { port, baseUrl: base, rootFilePath: directory, loggingLevel: "error" },
+        });
+        await app.start();
+        const { root, webId, clientId, clientSecret } = await seedCssAccount(base);
+        auth = await forClientCredentials({
+          // Match CSS's configured issuer exactly; HTTP is confined to this local fixture.
+          issuer: base,
+          clientId,
+          clientSecret,
+          boundary: [root],
+          allowInsecureLoopback: true,
+        });
+        // CSS's default root is public. Seed an owner-only root ACL through the SDK;
+        // the separately managed public profile remains available for WebID verification.
+        const seed = await createPodClient({
+          fetch: auth.fetch,
+          storage: root,
+          capabilities: createMemoryCache(),
+        });
+        if (!options.acp) {
+          const acl = (await seed.storage.head(root)).links.get("acl")?.[0]?.target;
+          assert(acl, "CSS root must advertise its ACL");
+          const validator = (await seed.storage.head(acl)).etag;
+          assert(validator, "Root ACL must have a validator");
+          const rules = await parseRdf(
+            "@prefix acl: <http://www.w3.org/ns/auth/acl#>. <#owner> a acl:Authorization; acl:agent <profile/card#me>; acl:accessTo <./>; acl:default <./>; acl:mode acl:Read, acl:Write, acl:Append, acl:Control.",
+            "text/turtle",
+            { baseIRI: root },
+          );
+          await seed.storage.writeRdf(acl, rules, { ifMatch: validator });
+          const anonymous = await fetch(root, { redirect: "error" });
+          await anonymous.body?.cancel();
+          assert([401, 403].includes(anonymous.status), "CSS fixture root must be private");
+        }
+        const session = recordingSession("css", auth.fetch);
+        const { storage } = await createPodClient({
+          fetch: session.fetch,
+          storage: root,
+          capabilities: createMemoryCache(),
+        });
+        return {
+          root,
+          webId,
+          storage,
+          ...session,
+          serviceEndpoints: {
+            trash: `${root}.trash/`,
+            versioning: `${root}.versions/?resource={resource}`,
+          },
+          claims: {
+            protocol: "solid",
+            accessControl: {
+              state: "unknown",
+              evidence: "CSS OPTIONS omits ACL and WAC-Allow",
+              detail: { model: "none" },
+            },
+            move: {
+              state: "available",
+              evidence: "emulated",
+              detail: { native: false, containers: true, preservesIdentifier: false },
+            },
+            trash: { state: "unknown", evidence: "target", detail: {} },
+            versioning: { state: "unknown", evidence: "target", detail: {} },
+            typeIndex: { state: "available", evidence: "target", detail: { mode: "client" } },
+          },
+          async authFetchFor(identity) {
+            if (identity === webId) return session.fetch;
+            throw new StorageError("unsupported", { method: "AUTH", url: root });
+          },
+          stop,
+        };
+      } catch (error) {
+        await stop();
+        throw error;
+      }
+    },
+  };
+}
+
+/** The default WAC configuration. */
+export const cssTarget: ConformanceTarget = createCssTarget("css", "@css:config/file.json");
+
+/** CSS in its ACP configuration (opt-in integration use only). */
+export const cssAcpTarget: ConformanceTarget = createCssTarget(
+  "css-acp",
+  "@css:config/file-acp.json",
+  {
+    acp: true,
   },
-};
+);

@@ -24,10 +24,12 @@ Use root `checkOwnerOnly({ storage, url, ownerWebId, accessModel?, acpDialect? }
 sensitive data. Discovered features often carry no access model (CSS 7.2.0): when the caller does
 not know the model, call `checkOwnerOnlyAuto({ storage, url, ownerWebId })`, which runs
 `detectAccessControl` (closed result `wac` | `acp` + dialect `css`|`ess` | `undecided` + reason;
-link relation and access document only, never host names or URL shapes; 401/403 is
-`no-permission`, never private) and returns the same result plus `detected`, `decidedBy`
-(the effective ACL, which may be an ancestor's) and `evaluated`. An explicit `accessModel` beats
-features; one the document contradicts makes `checkOwnerOnly` throw an error for which
+link relation and access document only, never host names or URL shapes, and WAC only when the
+resource's HEAD carried `WAC-Allow` (else `no-wac-evidence`; an ACP server accepts WAC-shaped
+RDF in its ACR); 401/403 is `no-permission`, never private) and returns the same result plus `detected`, `decidedBy`
+(the effective ACL, which may be an ancestor's; `detected.accessDocument` is the model's) and
+`evaluated`. An explicit `accessModel` beats only unknown features; one that discovered features
+or the document contradict makes `checkOwnerOnly` throw an error for which
 `isOwnerOnlyConflictError` is true (never a silent choice). `private: true` is a read-time
 observation of the governing access documents, not a guarantee about operators, children with
 their own ACLs, or later writes (README: "What private means and does not mean"). `checkOwnerOnly` returns the discriminated `OwnerOnlyResult`: `{ private: true }` or

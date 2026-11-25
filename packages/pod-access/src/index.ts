@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 /** Solid/LWS sharing, WAC/ACP translation and bounded access proofs. */
 export { createAccessClient } from "./access.js";
 export {

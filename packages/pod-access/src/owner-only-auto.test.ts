@@ -50,7 +50,7 @@ const aclLink = (url: string) => ({ acl: [`${url}.acl`] });
 const acrLink = (url: string, relation = "acp") =>
   relation === "acp" ? { [`${ACP}accessControl`]: [`${url}.acr`] } : { acl: [`${url}.acr`] };
 
-function pod(spec: Spec, overrides: { protocol?: string; root?: string } = {}) {
+function pod(spec: Spec, overrides: { protocol?: string; root?: string; wacAllow?: boolean } = {}) {
   const memory = createMemoryStorage({ root: ROOT });
   const root = overrides.root ?? ROOT;
   const base = {} as Awaited<ReturnType<StorageClient["head"]>>;
@@ -80,6 +80,10 @@ function pod(spec: Spec, overrides: { protocol?: string; root?: string } = {}) {
       url,
       status: 200 as const,
       etag: '"r"',
+      allow:
+        overrides.wacAllow === false
+          ? null
+          : { read: true, write: true, append: true, control: true },
       kind: url.endsWith("/") ? ("container" as const) : ("resource" as const),
       links,
     };
@@ -127,7 +131,7 @@ describe("detectAccessControl", () => {
     const { storage } = wacPod({ [FILE]: wac(FILE), [ROOT]: wac(ROOT) });
     expect(await detectAccessControl({ storage, url: FILE })).toEqual({
       model: "wac",
-      decidedBy: `${FILE}.acl`,
+      accessDocument: `${FILE}.acl`,
     });
   });
 
@@ -135,7 +139,7 @@ describe("detectAccessControl", () => {
     const { storage } = wacPod({ [ROOT]: wac(ROOT, undefined, "acl:Read", "acl:default") });
     expect(await detectAccessControl({ storage, url: FILE })).toEqual({
       model: "wac",
-      decidedBy: `${ROOT}.acl`,
+      accessDocument: `${ROOT}.acl`,
     });
   });
 
@@ -160,7 +164,7 @@ describe("detectAccessControl", () => {
     expect(await detectAccessControl({ storage, url: FILE })).toEqual({
       model: "acp",
       dialect,
-      decidedBy: url,
+      accessDocument: url,
     });
   });
 
@@ -405,7 +409,7 @@ describe("checkOwnerOnlyAuto: WAC", () => {
     });
     expect(await checkOwnerOnlyAuto(options(storage))).toEqual({
       private: true,
-      detected: { model: "wac", decidedBy: `${FILE}.acl` },
+      detected: { model: "wac", accessDocument: `${FILE}.acl` },
       decidedBy: `${FILE}.acl`,
       evaluated: [`${FILE}.acl`],
     });
@@ -425,7 +429,7 @@ describe("checkOwnerOnlyAuto: WAC", () => {
       private: true,
       decidedBy: `${FOLDER}.acl`,
       evaluated: [`${FOLDER}.acl`],
-      detected: { model: "wac", decidedBy: `${FOLDER}.acl` },
+      detected: { model: "wac", accessDocument: `${FOLDER}.acl` },
     });
   });
 
@@ -497,17 +501,20 @@ describe("checkOwnerOnlyAuto: ACP", () => {
     root = acp(ROOT, dialect, undefined, "acp:memberAccessControl"),
     folder = acp(FOLDER, dialect, undefined, "acp:memberAccessControl"),
   ) =>
-    pod({
-      links: { [FILE]: acrLink(FILE), [FOLDER]: acrLink(FOLDER), [ROOT]: acrLink(ROOT) },
-      docs: { [`${FILE}.acr`]: own, [`${FOLDER}.acr`]: folder, [`${ROOT}.acr`]: root },
-    }).storage;
+    pod(
+      {
+        links: { [FILE]: acrLink(FILE), [FOLDER]: acrLink(FOLDER), [ROOT]: acrLink(ROOT) },
+        docs: { [`${FILE}.acr`]: own, [`${FOLDER}.acr`]: folder, [`${ROOT}.acr`]: root },
+      },
+      { wacAllow: false },
+    ).storage;
 
   describe.each(["css", "ess"] as const)("%s", (dialect) => {
     test("owner only everywhere is private; the resource's own ACR decides", async () => {
       const result = await checkOwnerOnlyAuto(options(acpPod(dialect, acp(FILE, dialect))));
       expect(result).toMatchObject({
         private: true,
-        detected: { model: "acp", dialect, decidedBy: `${FILE}.acr` },
+        detected: { model: "acp", dialect, accessDocument: `${FILE}.acr` },
         decidedBy: `${FILE}.acr`,
         evaluated: [`${FILE}.acr`, `${FOLDER}.acr`, `${ROOT}.acr`],
       });
@@ -577,6 +584,61 @@ describe("checkOwnerOnlyAuto: ACP", () => {
   });
 });
 
+describe("WAC needs server-side evidence", () => {
+  // An ACP server advertises its ACRs with rel="acl" as well, and accepts any RDF there.
+  const wacShapedOnAcpServer = () =>
+    pod(
+      {
+        links: { [FILE]: aclLink(FILE), [FOLDER]: aclLink(FOLDER), [ROOT]: aclLink(ROOT) },
+        docs: {
+          [`${FILE}.acl`]: wac(FILE),
+          [`${FOLDER}.acl`]: acp(
+            FOLDER,
+            "css",
+            "acp:agent acp:PublicAgent",
+            "acp:memberAccessControl",
+          ),
+        },
+      },
+      { wacAllow: false },
+    ).storage;
+
+  test("a WAC-shaped document without WAC-Allow is undecided, not WAC", async () => {
+    const storage = wacShapedOnAcpServer();
+    expect(await detectAccessControl({ storage, url: FILE })).toEqual({
+      model: "undecided",
+      reason: "no-wac-evidence",
+    });
+    expect(await checkOwnerOnlyAuto(options(storage))).toMatchObject({
+      private: false,
+      reasons: [{ reason: "undecided" }],
+    });
+    expect(await checkOwnerOnly({ ...options(storage), accessModel: "wac" })).toEqual(
+      refusal("no-wac-evidence"),
+    );
+  });
+
+  test("the inherited variant is undecided too, and an ACP relation met on the walk is not WAC", async () => {
+    const { storage } = pod(
+      {
+        links: { [FILE]: aclLink(FILE), [FOLDER]: aclLink(FOLDER) },
+        docs: { [`${FOLDER}.acl`]: wac(FOLDER, undefined, "acl:Read", "acl:default") },
+      },
+      { wacAllow: false },
+    );
+    expect(await detectAccessControl({ storage, url: FILE })).toMatchObject({
+      reason: "no-wac-evidence",
+    });
+    const walk = pod({
+      links: { [FILE]: aclLink(FILE), [FOLDER]: acrLink(FOLDER) },
+      docs: { [`${FOLDER}.acr`]: wac(FOLDER, undefined, "acl:Read", "acl:default") },
+    });
+    expect(await detectAccessControl({ storage: walk.storage, url: FILE })).toMatchObject({
+      reason: "mixed-models",
+    });
+  });
+});
+
 describe("checkOwnerOnlyAuto: document changes between detection and check", () => {
   test("is refused, with the detection reported", async () => {
     const { storage, read } = wacPod({ [FILE]: wac(FILE) });
@@ -593,7 +655,7 @@ describe("checkOwnerOnlyAuto: document changes between detection and check", () 
     const result = await checkOwnerOnlyAuto(options(storage));
     expect(result).toEqual({
       ...refusal("unknown"),
-      detected: { model: "wac", decidedBy: `${FILE}.acl` },
+      detected: { model: "wac", accessDocument: `${FILE}.acl` },
       evaluated: [],
     });
   });
@@ -620,13 +682,49 @@ describe("checkOwnerOnly explicit model and dialect", () => {
     });
   });
 
-  test("the explicit model wins over discovered features", async () => {
+  test("the explicit model wins over unknown features but not over contradicting ones", async () => {
     const { storage } = wacPod({ [FILE]: wac(FILE) });
     featuresOf(storage, "acp");
-    // Discovered ACP with no dialect is refused; the explicit WAC model wins and decides.
+    // Discovered ACP with no dialect is refused; an explicit WAC model contradicts it.
     expect(await checkOwnerOnly(options(storage))).toEqual(refusal("unrepresentable"));
+    const error = await checkOwnerOnly({ ...options(storage), accessModel: "wac" }).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toMatchObject({ aspect: "model", explicit: "wac", shown: "acp" });
+    featuresOf(storage, "wac");
     expect(await checkOwnerOnly({ ...options(storage), accessModel: "wac" })).toEqual({
       private: true,
+    });
+  });
+
+  test("an explicit WAC model without WAC-Allow evidence is a distinct refusal, never private", async () => {
+    const storage = pod(
+      { links: { [FILE]: aclLink(FILE) }, docs: { [`${FILE}.acl`]: wac(FILE) } },
+      { wacAllow: false },
+    ).storage;
+    expect(await checkOwnerOnly({ ...options(storage), accessModel: "wac" })).toEqual(
+      refusal("no-wac-evidence"),
+    );
+    featuresOf(storage, "wac");
+    expect(await checkOwnerOnly(options(storage))).toEqual(refusal("no-wac-evidence"));
+  });
+
+  test("a reserved percent-escape in an unrelated target is left alone", async () => {
+    const { storage } = wacPod({
+      [FILE]: wac(FILE) + wac(FILE.replace("secret.ttl", "other%2fttl"), `acl:agent <${BOB}>`),
+    });
+    expect((await checkOwnerOnlyAuto(options(storage))).private).toBe(true);
+  });
+
+  test("a percent-encoded spelling of the target is not private", async () => {
+    const { storage } = wacPod({
+      [FILE]:
+        wac(FILE) + wac(FILE.replace("secret.ttl", "secret%2Ettl"), "acl:agentClass foaf:Agent"),
+    });
+    expect(await checkOwnerOnlyAuto(options(storage))).toEqual({
+      ...refusal("unrepresentable"),
+      detected: { model: "wac", accessDocument: `${FILE}.acl` },
+      evaluated: [`${FILE}.acl`],
     });
   });
 

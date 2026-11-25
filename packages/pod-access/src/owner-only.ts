@@ -8,6 +8,7 @@ import { DataFactory } from "n3";
 import {
   type DetectedAccessControl,
   detectAccessControl,
+  hasWacEvidence,
   isOwnerOnlyConflictError,
   loadAccessDocument,
   locate,
@@ -26,10 +27,11 @@ export interface OwnerOnlyOptions extends Pick<AccessClientOptions, "storage" | 
   url: string;
   ownerWebId: string;
   /**
-   * The access-control model, when the caller knows it. An explicit value wins over
-   * `storage.features.accessControl`; discovered capabilities are then not consulted. If it
-   * contradicts what the access document (or its link relation) shows, `checkOwnerOnly`
-   * throws {@link OwnerOnlyConflict} instead of choosing a side. Use `checkOwnerOnlyAuto`
+   * The access-control model, when the caller knows it. It wins over unknown or absent
+   * `storage.features.accessControl`. If it contradicts discovered features that name the other
+   * model, or what the access document (or its link relation) shows, `checkOwnerOnly` throws
+   * {@link OwnerOnlyConflict} instead of choosing a side. WAC additionally needs the resource's
+   * HEAD to carry a `WAC-Allow` header (refusal `no-wac-evidence` otherwise). Use `checkOwnerOnlyAuto`
    * to have the model and dialect determined from the pod itself.
    */
   accessModel?: "wac" | "acp" | undefined;
@@ -45,7 +47,8 @@ export interface OwnerOnlyReason {
     | "unrepresentable"
     | "unsupported-model"
     | "not-storage-root"
-    | "undecided";
+    | "undecided"
+    | "no-wac-evidence";
 }
 
 export type OwnerOnlyResult = { private: true } | { private: false; reasons: OwnerOnlyReason[] };
@@ -55,6 +58,14 @@ const TARGETS = [`${ACL}accessTo`, `${ACL}default`, `${ACP}resource`];
 
 function refused(reason: OwnerOnlyReason["reason"]): OwnerOnlyResult {
   return { private: false, reasons: [{ subject: "unknown", modes: [], reason }] };
+}
+
+/** URL normalisation plus decoding of percent-escaped unreserved characters (`%2E` is `.`). */
+function canonicalIri(value: string): string {
+  return new URL(value).href.replace(/%([0-9a-f]{2})/gi, (match, hex: string) => {
+    const character = String.fromCharCode(Number.parseInt(hex, 16));
+    return /[A-Za-z0-9\-._~]/.test(character) ? character : match.toUpperCase();
+  });
 }
 
 // The neutral readers intentionally omit unknown modes and some inactive constructs for
@@ -70,7 +81,7 @@ function policy(
   const allowed = (["read", "append", "write", "control"] as const).map((mode) =>
     modeIri(mode).replace(ACL, vocabulary),
   );
-  const canonical = new URL(resource).href;
+  const canonical = canonicalIri(resource);
   for (const q of dataset) {
     if (q.graph.termType !== "DefaultGraph") throw new TypeError("Named access graph");
     for (const term of [q.subject, q.predicate, q.object]) {
@@ -87,7 +98,7 @@ function policy(
     if (
       TARGETS.includes(q.predicate.value) &&
       q.object.value !== resource &&
-      new URL(q.object.value).href === canonical
+      canonicalIri(q.object.value) === canonical
     )
       throw new TypeError("Non-canonical access target");
     if ([`${ACL}mode`, `${ACP}allow`, `${ACP}deny`].includes(q.predicate.value)) {
@@ -154,8 +165,11 @@ function assertAgrees(
   dialect: "css" | "ess" | undefined,
   explicitModel: boolean,
 ): void {
+  // Only an explicit `accessModel` can turn a disagreement into an error; every other caller
+  // keeps the non-throwing refusal.
+  if (!explicitModel) return;
   const shown = shownModel(dataset, acpLink);
-  if (explicitModel && (shown === "wac" || shown === "acp") && shown !== model)
+  if ((shown === "wac" || shown === "acp") && shown !== model)
     throw ownerOnlyConflict("model", model, shown);
   const dialectShown = model === "acp" ? shownDialect(dataset) : undefined;
   if (dialectShown !== undefined && dialectShown !== dialect)
@@ -205,6 +219,10 @@ async function inspect(
         if (explicitModel) throw ownerOnlyConflict("model", "wac", "acp");
         return done(refused("unknown"));
       }
+      // Positive server evidence that WAC is enforced: a document's vocabulary only shows what
+      // someone wrote, and an ACP server advertises its ACRs with rel="acl" as well.
+      if (model === "wac" && current === url && !hasWacEvidence(head))
+        return done(refused("no-wac-evidence"));
       // Only a revalidated WAC HEAD 404 establishes absence and permits inheritance.
       // An unreadable ACL, or any missing ACP ACR, never establishes private access.
       const document = await loadAccessDocument(storage, found.endpoint);
@@ -284,6 +302,14 @@ export async function checkOwnerOnly(options: OwnerOnlyOptions): Promise<OwnerOn
     storage.features.accessControl.state === "available"
       ? storage.features.accessControl.detail.model
       : "none";
+  // An explicit model wins over unknown or absent features only; features that positively name
+  // the other model are a contradiction, never silently resolved.
+  if (
+    options.accessModel !== undefined &&
+    (discovered === "wac" || discovered === "acp") &&
+    discovered !== options.accessModel
+  )
+    throw ownerOnlyConflict("model", options.accessModel, discovered);
   const model = options.accessModel ?? discovered;
   if (storage.protocol !== "solid" || (model !== "wac" && model !== "acp"))
     return refused("unsupported-model");

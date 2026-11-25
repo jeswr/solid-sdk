@@ -25,7 +25,9 @@ test("checkOwnerOnlyAuto answers private, then exposed once public read is grant
     const before = await checkOwnerOnlyAuto(options);
     expect(before).toMatchObject({ private: true, detected: { model: "wac" } });
     // No own ACL yet: the root's default ACL decides.
-    expect(before.decidedBy).toBe(before.detected.model === "wac" ? before.detected.decidedBy : "");
+    expect(before.decidedBy).toBe(
+      before.detected.model === "wac" ? before.detected.accessDocument : "",
+    );
     expect(before.evaluated.length).toBeGreaterThan(0);
 
     const granted = await addGrant(

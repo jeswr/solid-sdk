@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Sonnet 5.5
 import type { DatasetCore } from "@rdfjs/types";
 import { AclResource } from "@solid/object";
 import { DataFactory, Store } from "n3";

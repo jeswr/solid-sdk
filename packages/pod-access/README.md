@@ -63,7 +63,7 @@ the model. When you do not, let the pod say:
 import { checkOwnerOnlyAuto } from '@jeswr/pod-access';
 
 const r = await checkOwnerOnlyAuto({ storage, url: containerUrl, ownerWebId });
-// r.private, r.reasons?, r.detected, r.decidedBy, r.evaluated
+// r.private, r.reasons?, r.detected, r.decidedBy (the deciding document), r.evaluated
 if (!r.private) throw new Error('Not private or not provably private');
 ```
 
@@ -95,34 +95,50 @@ checkOwnerOnlyAuto(o: { storage; url; ownerWebId }): Promise<OwnerOnlyAutoResult
 isOwnerOnlyConflictError(error: unknown): error is OwnerOnlyConflict
 ```
 
-- **Precedence.** An explicit `accessModel` wins over `storage.features.accessControl`, which is
-  then not consulted. `acpDialect` is always explicit and is never read from features.
+- **Precedence.** An explicit `accessModel` wins over unknown or absent
+  `storage.features.accessControl`. Features that positively name the other model are a
+  contradiction and throw the conflict error below. `acpDialect` is always explicit and is never
+  read from features.
+- **WAC needs server evidence.** A document's vocabulary only shows what someone wrote: an ACP
+  server (CSS-ACP) advertises its ACRs with `rel="acl"` too and accepts any RDF there, so a
+  WAC-shaped owner-only document can sit beside a public ACP member policy. WAC (discovered,
+  explicit `accessModel: 'wac'`, and `checkOwnerOnlyAuto`) is therefore only decided when the
+  resource's HEAD carried a well-formed `WAC-Allow` header (presence only; its contents are never
+  trusted, since CSS reports the owner as `user="read"` once a public rule exists). Without it,
+  `detectAccessControl` returns `undecided` / `no-wac-evidence`, `checkOwnerOnlyAuto` refuses
+  (`undecided`), and `checkOwnerOnly` refuses with `no-wac-evidence`. A server that enforces WAC
+  but sends no `WAC-Allow` therefore cannot be shown private.
 - **Conflicts are errors.** `checkOwnerOnly` throws (the only thing it throws; all other
   uncertainty is a refusal) an error for which `isOwnerOnlyConflictError` is true, with
-  `aspect` (`model` or `dialect`), `explicit` and `shown`, when an explicit `accessModel` or
-  `acpDialect` contradicts what the access document shows (WAC authorizations versus ACP terms,
-  an `acp:accessControl` link relation on an explicit WAC resource, or acl:* versus acp:* modes
-  against the stated dialect). It never silently picks a side. A merely discovered model that the
-  document contradicts stays a refusal (`unrepresentable`/`unknown`). The message holds no
+  `aspect` (`model` or `dialect`), `explicit` and `shown`, and only for callers that pass
+  `accessModel`: when it contradicts positive discovered features, or what the access document
+  shows (WAC authorizations versus ACP terms, an `acp:accessControl` link relation on an
+  explicit WAC resource, or acl:* versus acp:* modes against the stated `acpDialect`). It never
+  silently picks a side. A caller that does not pass `accessModel` never gets a throw: a
+  discovered model or dialect the document contradicts stays a refusal
+  (`unrepresentable`/`unknown`), as before. The message holds no
   document text. No error class is exported, so there is no mutable prototype.
 - **`detectAccessControl`** never throws and returns a closed result: `{ model: 'wac',
-  decidedBy }`, `{ model: 'acp', dialect: 'css' | 'ess', decidedBy }` or `{ model: 'undecided',
+  accessDocument }`, `{ model: 'acp', dialect: 'css' | 'ess', accessDocument }` or `{ model: 'undecided',
   reason }`. It reads only what the package already trusts: the resource's `acl` /
   `acp:accessControl` link relation and the access document it names, through the storage
   view's revalidated, redirect-refusing HEAD/read, with the same 1 MiB, 10,000-quad, scope
   (`scoped` plus `storage.isWithinStorage`), validator and `@jeswr/fetch-rdf` parsing as
   `checkOwnerOnly` (the code is shared). It never uses host names or URL shapes (`.acr`,
-  `?ext=acr`). A WAC resource without its own ACL walks to the nearest ancestor ACL; an absent
+  `?ext=acr`); the one server-side signal it requires is `WAC-Allow` for WAC (above). A WAC resource without its own ACL walks to the nearest ancestor ACL; an absent
   ACP resource, or an `acp:accessControl` relation whose document is absent, is
-  `no-access-document`, never inherited. The model is the vocabulary the document shows (WAC
+  `no-access-document`, never inherited. The model is the vocabulary the document shows, with the WAC evidence rule (WAC
   `acl:Authorization` versus ACP terms; both, or an ACP relation on a WAC document, is
   `mixed-models`). The ACP dialect is the vocabulary of the modes in `acp:allow`/`acp:deny`:
   `acl:Read` etc. is `css`, `acp:Read` etc. is `ess`; none, unknown or both is
-  `ambiguous-dialect`. Reasons: `unsupported-protocol`, `out-of-scope`, `no-permission`
+  `ambiguous-dialect`. Reasons: `unsupported-protocol`, `no-wac-evidence`, `out-of-scope`, `no-permission`
   (401/403 on the resource or its access document: never reported as private), `unreadable`,
   `no-access-link`, `ambiguous-link`, `no-access-document`, `invalid-document` (wrong content
   type, malformed, oversized, bad validator), `mixed-models`, `unrecognised-document`,
-  `ambiguous-dialect`. This is a package-level detector over the storage view; the separate
+  `ambiguous-dialect`. ACP is decided from its vocabulary alone (ESS also sends `WAC-Allow`); its
+  evaluation examines every ancestor's member policies. On CSS-ACP a resource without its own
+  ACR yields `unknown`: ACRs are never inherited, so freshly created resources get no verdict
+  until they have one. This is a package-level detector over the storage view; the separate
   `accessModel({ fetch, storage })` of `./requests-solid` (raw fetch, `wac | acp | unknown`) is
   unchanged.
 - **`checkOwnerOnlyAuto`** is a separate function, not an option, because its result carries extra
@@ -130,7 +146,8 @@ isOwnerOnlyConflictError(error: unknown): error is OwnerOnlyConflict
   with the detected values as explicit options, and returns `OwnerOnlyResult & { detected,
   decidedBy?, evaluated }`. An undecided detection is `{ private: false, reasons: [{ subject:
   'unknown', modes: [], reason: 'undecided' }] }`. If the document changes between detection
-  and check it refuses (`unknown`) rather than throwing. `decidedBy` is the effective ACL for WAC
+  and check it refuses (`unknown`) rather than throwing. `decidedBy` (the document that decided the *answer*, unlike
+  `detected.accessDocument`, which decided the *model*) is the effective ACL for WAC
   (the resource's own, or the inherited ancestor's), for ACP private the resource's own ACR, and
   when exposed the document holding the first non-owner rule; `evaluated` lists every access
   document read, nearest first.
@@ -160,7 +177,11 @@ It does not mean: that nobody else can read the bytes (server administrators, th
 operator, backups, and any process holding a credential for the owner can); that the answer
 holds after the check (it is a read-time observation, not a lock; re-check before relying on it
 for a later write); that existing children are private (only the container's and ancestors'
-rules are inspected; a child with its own more permissive ACL is not examined); that a denial
+rules are inspected; a child with its own more permissive ACL is not examined); that the model was right when the server gave no evidence (WAC is only
+assumed with a `WAC-Allow` header); that the caller can see the truth (the answer is only
+meaningful when the caller holds Control, because a server that hides an ACL from callers
+without Control by answering 404 would send the walk to an ancestor; CSS answers 403); that a
+denial
 or exclusion protects anything (they never cancel a reported grant); or that anything unknown is
 fine: unreadable, forbidden, oversized, mixed-model, unrecognised or unrepresentable documents
 are never private. `undecided` and `private: false` therefore mean "not shown to be private",

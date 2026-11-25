@@ -12,13 +12,17 @@ type Head = Awaited<ReturnType<Storage["head"]>>;
 
 const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
 const STRONG_OR_WEAK_ETAG = /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/;
-const MODES = new RegExp(`^(${ACL}|${ACP})(?:Read|Write|Append|Control)$`);
+const MODE_NAMES = ["Read", "Write", "Append", "Control"];
+/** The vocabulary a standard mode IRI belongs to, by exact string comparison. */
+const modeVocabulary = (value: string) =>
+  [ACL, ACP].find((vocabulary) => MODE_NAMES.some((name) => value === vocabulary + name));
 const MAX_ANCESTORS = 64;
 const MAX_QUADS = 10_000;
 
 /** Why the access-control model could not be decided. Never carries URLs, text or server messages. */
 export type UndecidedReason =
   | "unsupported-protocol"
+  | "no-wac-evidence"
   | "out-of-scope"
   | "no-permission"
   | "unreadable"
@@ -30,10 +34,10 @@ export type UndecidedReason =
   | "unrecognised-document"
   | "ambiguous-dialect";
 
-/** Closed result of {@link detectAccessControl}. `decidedBy` is the access document that decided. */
+/** Closed result of {@link detectAccessControl}. `accessDocument` is the document whose vocabulary decided the model. */
 export type DetectedAccessControl =
-  | { model: "wac"; decidedBy: string }
-  | { model: "acp"; dialect: "css" | "ess"; decidedBy: string }
+  | { model: "wac"; accessDocument: string }
+  | { model: "acp"; dialect: "css" | "ess"; accessDocument: string }
   | { model: "undecided"; reason: UndecidedReason };
 
 /** The error `checkOwnerOnly` throws for a conflicting explicit option; see {@link isOwnerOnlyConflictError}. */
@@ -59,7 +63,7 @@ export function ownerOnlyConflict(
   shown: string,
 ): OwnerOnlyConflict {
   const error = new Error(
-    `Explicit ${aspect} "${explicit}" conflicts with the access document, which shows "${shown}"`,
+    `Explicit ${aspect} "${explicit}" conflicts with what the pod shows ("${shown}")`,
   ) as Error & { -readonly [K in keyof OwnerOnlyConflict]: OwnerOnlyConflict[K] };
   error.name = "OwnerOnlyConflictError";
   error.aspect = aspect;
@@ -73,6 +77,9 @@ export function ownerOnlyConflict(
 export function isOwnerOnlyConflictError(error: unknown): error is OwnerOnlyConflict {
   return typeof error === "object" && error !== null && conflicts.has(error);
 }
+
+/** Server-side evidence of WAC enforcement: the resource's HEAD carried a well-formed WAC-Allow header (presence only; its contents are never trusted). */
+export const hasWacEvidence = (head: Head) => Boolean(head.allow);
 
 /** The one access document a resource advertises, or why none can be used. */
 export function locate(
@@ -175,9 +182,9 @@ export function shownDialect(dataset: DatasetCore): "css" | "ess" | undefined {
   let ess = false;
   for (const predicate of ["allow", "deny"])
     for (const q of dataset.match(null, DataFactory.namedNode(`${ACP}${predicate}`))) {
-      const mode = MODES.exec(q.object.value);
-      if (mode?.[1] === ACP) ess = true;
-      if (mode?.[1] === ACL) css = true;
+      const vocabulary = modeVocabulary(q.object.value);
+      if (vocabulary === ACP) ess = true;
+      if (vocabulary === ACL) css = true;
     }
   if (css === ess) return undefined;
   return css ? "css" : "ess";
@@ -189,7 +196,7 @@ export function shownDialect(dataset: DatasetCore): "css" | "ess" | undefined {
  * ancestor access document when the resource has none (an absent WAC ACL is inherited; an
  * absent ACP access control resource is not). Every read goes through the storage view's
  * bounded, redirect-refusing, scope-checked HEAD/read. It never guesses from host names or URL
- * shapes and never throws: anything it cannot establish is `undecided` with a reason, a 401/403
+ * shapes, and decides WAC only when the resource's HEAD carried a WAC-Allow header and never throws: anything it cannot establish is `undecided` with a reason, a 401/403
  * as `no-permission`.
  */
 export async function detectAccessControl(options: {
@@ -197,6 +204,7 @@ export async function detectAccessControl(options: {
   url: string;
 }): Promise<DetectedAccessControl> {
   const { storage, url } = options;
+  let evidence = false;
   const undecided = (reason: UndecidedReason): DetectedAccessControl => ({
     model: "undecided",
     reason,
@@ -214,6 +222,7 @@ export async function detectAccessControl(options: {
     for (let depth = 0; current !== undefined && depth < MAX_ANCESTORS; depth++) {
       const head = await storage.head(current, { revalidate: true });
       if (head.url !== current || head.status !== 200) return undecided("unreadable");
+      if (current === url) evidence = hasWacEvidence(head);
       const found = locate(head, storage, root);
       if ("problem" in found) return undecided(found.problem);
       const document = await loadAccessDocument(storage, found.endpoint);
@@ -225,10 +234,13 @@ export async function detectAccessControl(options: {
       const shown = shownModel(document.dataset, found.acpLink);
       if (shown === "mixed") return undecided("mixed-models");
       if (shown === "none") return undecided("unrecognised-document");
-      if (shown === "wac") return { model: "wac", decidedBy: found.endpoint };
+      // A document's vocabulary shows what someone wrote, not what the server enforces: an
+      // ACP server advertises its ACRs with rel="acl" too. WAC needs the server's own say-so.
+      if (shown === "wac" && !evidence) return undecided("no-wac-evidence");
+      if (shown === "wac") return { model: "wac", accessDocument: found.endpoint };
       const dialect = shownDialect(document.dataset);
       if (!dialect) return undecided("ambiguous-dialect");
-      return { model: "acp", dialect, decidedBy: found.endpoint };
+      return { model: "acp", dialect, accessDocument: found.endpoint };
     }
     return undecided("no-access-document");
   } catch (error) {
