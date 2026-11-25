@@ -1,9 +1,10 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
-import { ACL, ACP, RDF, RdfNode, serialize } from "../../src/engine/rdf.js";
+import { ACL, ACP, RDF, serialize } from "../../src/engine/rdf.js";
 import { readAcp, writeAcp } from "../../src/engine/systems/acp.js";
 import { translatePolicy } from "../../src/engine/translation.js";
 import { FakePod } from "./fake-pod.js";
@@ -509,3 +510,5 @@ describe("round 2: source dialects and target execution phases", () => {
     expect(() => readAcp(dataset, file, source.acl(file), "css", true)).toThrow("Write/Append");
   });
 });
+
+import { RdfNode } from "./rdf-node.js";

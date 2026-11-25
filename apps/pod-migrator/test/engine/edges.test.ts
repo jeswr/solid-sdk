@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { DataFactory, Store, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
@@ -9,7 +10,7 @@ import {
   planMigration,
 } from "../../src/engine/index.js";
 import { assertNotWider, ownerPolicy, unionPolicies } from "../../src/engine/policy.js";
-import { RdfNode, serialize } from "../../src/engine/rdf.js";
+import { serialize } from "../../src/engine/rdf.js";
 import { writeAcp } from "../../src/engine/systems/acp.js";
 import { writeWac } from "../../src/engine/systems/wac.js";
 import { translatePolicy } from "../../src/engine/translation.js";
@@ -480,3 +481,5 @@ it("requires owner control even during placeholder creation", async () => {
   expect(() => finalizePlan(plan, resolve(plan))).toThrow("widens");
   expect(target.requests.some((request) => request.method === "PUT")).toBe(false);
 });
+
+import { RdfNode } from "./rdf-node.js";

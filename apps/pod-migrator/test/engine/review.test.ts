@@ -1,10 +1,11 @@
+// AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
 import { policiesEqual, scopePolicy } from "../../src/engine/policy.js";
-import { ACL, ACP, parse, RDF, RdfNode, serialize } from "../../src/engine/rdf.js";
+import { ACL, ACP, parse, RDF, serialize } from "../../src/engine/rdf.js";
 import { readAcp } from "../../src/engine/systems/acp.js";
 import { writeWac } from "../../src/engine/systems/wac.js";
 import { acl, grant, pods, policy, resolve, stranger } from "./helpers.js";
@@ -323,3 +324,5 @@ describe("review regressions: exclusive target access documents", () => {
     expect(result.failed[0]?.error).toBe("Target owner no longer controls the root");
   });
 });
+
+import { RdfNode } from "./rdf-node.js";
