@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { createAccountIdSet } from "@/lib/account-id-set";
+import { INBOX_SCAN_LIMIT } from "../lib/client/invitations";
 
 // AUTHORED-BY Codex GPT-6.1-Sol
 
@@ -8,8 +9,10 @@ export const INVITATIONS_JOINED = "chat-invitations-joined";
 export const DISMISSALS_CHANGED = "chat-invitation-dismissals-changed";
 export const invitationDismissalKey = (webId: string) =>
   `${PREFIX}invitation-dismissals:${JSON.stringify([webId])}`;
+/** Well above one scan's rows, so every dismissed room of the current scan fits. */
+export const MAX_DISMISSALS = 2 * INBOX_SCAN_LIMIT;
 export const invitationDismissals = (webId: string) =>
-  createAccountIdSet(invitationDismissalKey(webId), webId, 200);
+  createAccountIdSet(invitationDismissalKey(webId), webId, MAX_DISMISSALS);
 type Kind = "outbox" | "draft";
 const keyFor = (kind: Kind, webId: string, room: string) =>
   `${PREFIX}${kind}:${JSON.stringify([webId, room])}`;

@@ -4,6 +4,7 @@
 import { Button } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { trimIds } from "@/lib/account-id-set";
 import { encodeRef } from "@/lib/refs";
 import type { Invitation } from "../lib/client";
 import { useAsync, useChat } from "../state/chat-context";
@@ -12,6 +13,7 @@ import {
   INVITATIONS_JOINED,
   invitationDismissalKey,
   invitationDismissals,
+  MAX_DISMISSALS,
 } from "../state/local-state";
 
 /** Unverified rows listed before "Show all"; verified rows are always listed. */
@@ -139,6 +141,14 @@ export function Invitations() {
     window.addEventListener("focus", focus);
     return () => window.removeEventListener("focus", focus);
   }, [result.retry]);
+  // The activated button leaves the page: focus moves to the first revealed row.
+  useEffect(() => {
+    if (!showAll) return;
+    const target = section.current?.querySelector<HTMLElement>(
+      ".chat-invitations-more a, .chat-invitations-more button",
+    );
+    (target ?? section.current?.querySelector<HTMLElement>(".chat-invitations-more"))?.focus();
+  }, [showAll]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: dismissal commits remove the focused row before focus moves.
   useEffect(() => {
     if (nextFocus.current === undefined) return;
@@ -166,8 +176,10 @@ export function Invitations() {
       rows.slice(index + 1).find((row) => !rooms.includes(row.dataset.room as string))?.dataset
         .room ?? null;
     if (nextFocus.current === null) setRetainHeading(session.webId);
-    const saved = new Set([...hidden, ...rooms].slice(-200));
-    store.save(saved);
+    // Rooms the current scan still returns are never evicted; only others are trimmed.
+    const inScan = new Set(result.data?.invitations.map((invitation) => invitation.room));
+    const saved = new Set(trimIds([...hidden, ...rooms], MAX_DISMISSALS, inScan));
+    store.save(saved, inScan);
     setDismissals({ store, rooms: saved });
     window.dispatchEvent(
       new CustomEvent(DISMISSALS_CHANGED, { detail: { webId: session.webId, rooms: [...saved] } }),
@@ -194,12 +206,14 @@ export function Invitations() {
       </p>
     ),
     overflow.length > 0 && !showAll && (
-      <p key="more" className="chat-hint" role="status">
-        {overflow.length} more unverified invitations are hidden.{" "}
+      <div key="more">
+        <p className="chat-hint" role="status">
+          {overflow.length} more unverified invitations are hidden.
+        </p>
         <Button variant="ghost" size="sm" onClick={() => setShowAll(true)}>
           Show all
         </Button>
-      </p>
+      </div>
     ),
   ].filter(Boolean);
   if (!visible.length && !rest.length && retainHeading !== session.webId && !notices.length)
@@ -243,6 +257,7 @@ export function Invitations() {
       {!!rest.length && (
         <ul
           className="chat-invitations-more"
+          tabIndex={-1}
           aria-label="More unverified invitations"
           style={{ maxHeight: "24rem", overflowY: "auto" }}
         >

@@ -65,13 +65,14 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   means an own-pod room that loaded and names a claimed sender as a member. Unverified rows
   (foreign rooms, own rooms whose index could not be read, and own rooms the check budget did not
   reach) follow, own-pod ones first, ordered by room URL, never by the poster-supplied
-  `as:published` date, so the poster cannot choose which rows come first. Verified rows keep
+  `as:published` date. The poster does choose room URLs, so they can influence which unverified
+  rows come first; nothing is hidden by that, because “Show all” reveals every row. Verified rows keep
   inbox order, which is newest first by that poster-supplied date; that order is cosmetic. No
   limit is keyed on a claimed sender or any other poster-chosen value. `truncated` means only
   that the scan itself was cut off: the inbox held more children than were read, or more than 100
   existing own rooms were claimed, so the check budget ran out. The UI shows a static notice then.
   `ownUnchecked` is true when the own rooms listing failed.
-  The invitations list applies local dismissals first, then shows every verified row and the
+  Dismissals keep at most twice the scan limit (600) rooms and never evict a room the current scan still returns; only rooms the scan no longer returns are trimmed, oldest first. The invitations list applies local dismissals first, then shows every verified row and the
   first 20 unverified rows; when more remain it shows a static notice with a “Show all” button
   that reveals the rest in a bounded, scrollable list. With the pod-access
   reader, a missing inbox and any profile discovery failure are empty; inbox listing 5xx/network
@@ -108,7 +109,7 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   invitations” dismisses every shown row. The heading leaves with the last row once focus moves
   off it, and stays whenever a notice is shown.
   Dismissals use the shared account ID set with Chat's key prefix and an identity-checked
-  envelope, retaining at most 200 container URLs in guarded localStorage keyed by WebID; inbox
+  envelope, retaining at most 600 container URLs (twice the scan limit, never evicting rooms the current scan returns) in guarded localStorage keyed by WebID; inbox
   resources are never deleted. Sidebar and drawer copies synchronize local dismissals.
   A single reader per client retains profile/inbox discovery. Mount, explicit retry/join and
   focus refreshes (30-second throttle)
