@@ -5,7 +5,13 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import { safeIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Literal, NamedNode, Quad, Term } from "@rdfjs/types";
 import { LiteralAs, NamedNodeAs, SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
-import { DataFactory as df, BlankNode as N3BlankNode, Literal as N3Literal, Store } from "n3";
+import {
+  DataFactory as df,
+  BlankNode as N3BlankNode,
+  Literal as N3Literal,
+  Store,
+  termToId,
+} from "n3";
 import {
   UnsupportedBlankNodeLabelError,
   UnsupportedLiteralCharacterError,
@@ -64,6 +70,27 @@ const referenceFactory = {
   },
 };
 
+/**
+ * Language-tagged literals already stored, keyed by graph, subject, predicate,
+ * value and lower-cased tag. Held outside the instance because N3's constructor
+ * inserts quads before subclass fields are initialised.
+ */
+const languageKeys = new WeakMap<Store, Set<string>>();
+// N3 accepts external RDF/JS terms; @types/n3 narrows this helper to N3 terms.
+const termKey = termToId as (term: Term) => string;
+
+function languageKey(quad: Quad): string | undefined {
+  const { object } = quad;
+  if (object.termType !== "Literal" || !object.language) return undefined;
+  return JSON.stringify([
+    termKey(quad.graph),
+    termKey(quad.subject),
+    termKey(quad.predicate),
+    object.value,
+    object.language.toLowerCase(),
+  ]);
+}
+
 /** N3 also recreates terms on reads; retain tag spelling through every store. */
 export class ReferenceStore extends Store {
   constructor(quads: Quad[] = []) {
@@ -86,22 +113,41 @@ export class ReferenceStore extends Store {
     const quad = predicate
       ? df.quad(subjectOrQuad as Quad["subject"], predicate, object as Quad["object"], graph)
       : (subjectOrQuad as Quad);
-    const literal = quad.object;
-    if (literal.termType === "Literal" && literal.language) {
-      // RDFlib retains the first spelling of an equal language literal. Match
-      // only this statement's graph, subject and predicate, leaving its stored
-      // term untouched so serialization and assertion hashes keep that spelling.
-      for (const existing of this.getQuads(quad.subject, quad.predicate, null, quad.graph)) {
-        const other = existing.object;
-        if (
-          other.termType === "Literal" &&
-          other.value === literal.value &&
-          other.language.toLowerCase() === literal.language.toLowerCase()
-        )
-          return false;
-      }
+    // RDFlib retains the first spelling of an equal language literal. An index
+    // keyed by this statement's graph, subject, predicate, value and folded tag
+    // answers in constant time; the stored term is left untouched so
+    // serialization and assertion hashes keep that spelling.
+    const key = languageKey(quad);
+    let keys = languageKeys.get(this);
+    if (key !== undefined) {
+      if (keys?.has(key)) return false;
+      if (!keys) languageKeys.set(this, (keys = new Set()));
     }
-    return super.addQuad(quad);
+    const added = super.addQuad(quad);
+    if (key !== undefined && added) (keys as Set<string>).add(key);
+    return added;
+  }
+
+  override removeQuad(quad: Quad): boolean;
+  override removeQuad(
+    subject: Quad["subject"],
+    predicate: Quad["predicate"],
+    object: Quad["object"],
+    graph?: Quad["graph"],
+  ): boolean;
+  override removeQuad(
+    subjectOrQuad: Quad["subject"] | Quad,
+    predicate?: Quad["predicate"],
+    object?: Quad["object"],
+    graph?: Quad["graph"],
+  ): boolean {
+    const quad = predicate
+      ? df.quad(subjectOrQuad as Quad["subject"], predicate, object as Quad["object"], graph)
+      : (subjectOrQuad as Quad);
+    const removed = super.removeQuad(quad);
+    const key = removed ? languageKey(quad) : undefined;
+    if (key !== undefined) languageKeys.get(this)?.delete(key);
+    return removed;
   }
 }
 
