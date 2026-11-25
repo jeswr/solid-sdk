@@ -11,7 +11,8 @@ test("demo account changes shell language without reloading and supports Arabic 
   await expect(page).toHaveURL(/\/home$/);
   await page.goto("/settings/appearance");
   let navigations = 0;
-  page.on("framenavigated", () => {
+  // A document load is a reload; same-document history updates from the router are not.
+  page.on("load", () => {
     navigations++;
   });
   await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("es");

@@ -136,6 +136,12 @@ test("shows the Settings install row in both themes and handles dismissal", asyn
 });
 
 const offlineHeading = /You're offline/;
+// Launch routes whose page redirects to the app's own landing page.
+const redirects: Record<string, string> = {
+  "/mail": "/mail/inbox",
+  "/calendar": "/calendar/week",
+  "/tasks": "/tasks/inbox",
+};
 
 test("opens the installed app's launch routes offline and falls back only for unvisited routes", async ({
   page,
@@ -163,6 +169,8 @@ test("opens the installed app's launch routes offline and falls back only for un
   for (const path of launchRoutes) {
     const response = await page.goto(path);
     expect(response?.status(), path).toBe(200);
+    // Some launch routes redirect on the client; let that settle before leaving the page.
+    if (path in redirects) await expect(page).toHaveURL(new RegExp(`${redirects[path]}$`));
     // Both shell frames (the suite shell and the interim app frame) render this main landmark.
     await expect(page.locator("main#main-content"), path).toBeVisible();
     await expect(page.getByRole("heading", { name: offlineHeading }), path).toHaveCount(0);

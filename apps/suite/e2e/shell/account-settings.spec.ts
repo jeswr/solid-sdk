@@ -285,10 +285,13 @@ for (const [section, title] of [
   }, info) => {
     await page.goto(`/settings/${section}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
-    // The section's own controls load after its heading; a scrollable main is only keyboard
-    // reachable once one of them exists, so audit the loaded page rather than the placeholder.
+    // The section's own controls load after its heading, and a scrollable main is keyboard
+    // reachable only through an enabled control: audit the loaded page, not its placeholder.
     await expect(
-      page.locator("#main-content").getByRole("button").or(page.locator("#main-content a")).first(),
+      page
+        .locator("#main-content")
+        .locator("a, button:enabled, input:enabled, select:enabled, textarea:enabled")
+        .first(),
     ).toBeVisible();
     await capture(page, `settings-${section}`, info.project.name);
     if ((page.viewportSize()?.width ?? 1280) < 1024)
