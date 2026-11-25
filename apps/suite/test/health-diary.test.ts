@@ -3,7 +3,7 @@
 import { buildMeal, buildProtocol, buildSymptom, parseMealTtl } from "@jeswr/solid-health-diary";
 import { NamedNodeFrom, OptionalAs, TermWrapper } from "@rdfjs/wrapper";
 import { Authorization } from "@solid/object";
-import { DataFactory } from "n3";
+import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { ensureSample } from "../src/apps/health/demo/sample";
 import {
@@ -54,6 +54,12 @@ function fixture(intercept?: Interceptor) {
     diary: createDiaryStore(fetch, ROOT, OWNER),
     health: createHealthDataStore(fetch, ROOT, OWNER),
   };
+}
+function fixtureOn(pod: ReturnType<typeof createDemoPod>, intercept?: Interceptor) {
+  const fetch: typeof globalThis.fetch = intercept
+    ? (input, init) => intercept(input, init, pod.fetch)
+    : pod.fetch;
+  return { pod, fetch, diary: createDiaryStore(fetch, ROOT, OWNER) };
 }
 describe("private Health diary on the demo pod", () => {
   it("preserves product metadata, per-item ingredients and derived exposures when editing", async () => {
@@ -316,6 +322,95 @@ describe("private Health diary on the demo pod", () => {
     });
     await expect(diary.save(meal, "private")).rejects.toThrow("owner-private");
     expect(pod.has(`${diary.base}2026-11/private.ttl`)).toBe(false);
+  });
+  /** Another client of the pod grants the public read access to one resource, after our write. */
+  async function shareWithPublic(pod: ReturnType<typeof createDemoPod>, resource: string) {
+    const acl = new Store();
+    const rule = new Authorization(`${resource}.acl#public`, acl, DataFactory);
+    rule.type.add("http://www.w3.org/ns/auth/acl#Authorization");
+    rule.agentClass.add("http://xmlns.com/foaf/0.1/Agent");
+    rule.accessTo = resource;
+    rule.canRead = true;
+    const response = await pod.fetch(`${resource}.acl`, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: await toTurtle(acl),
+    });
+    expect(response.ok).toBe(true);
+  }
+  describe("after-write privacy confirmation", () => {
+    function loosenAfterPut(pod: ReturnType<typeof createDemoPod>, name: string) {
+      let loosened = false;
+      return async (
+        input: RequestInfo | URL,
+        init: RequestInit | undefined,
+        fetch: typeof globalThis.fetch,
+      ) => {
+        const response = await fetch(input, init);
+        if (init?.method === "PUT" && String(input).endsWith(name) && response.ok && !loosened) {
+          loosened = true;
+          await shareWithPublic(pod, String(input));
+        }
+        return response;
+      };
+    }
+    it("removes a file this run created when it is public by the time it is confirmed", async () => {
+      const pod = createDemoPod({ root: ROOT });
+      const { diary } = fixtureOn(pod, loosenAfterPut(pod, "exposed.ttl"));
+      await expect(diary.save(meal, "exposed")).rejects.toMatchObject({
+        name: "DiaryPrivacyError",
+        removed: true,
+      });
+      expect(pod.has(`${diary.base}2026-11/exposed.ttl`)).toBe(false);
+    });
+    it("never deletes a replaced file, and says it may still be stored", async () => {
+      const pod = createDemoPod({ root: ROOT });
+      const kept = fixtureOn(pod);
+      const first = await kept.diary.save(meal, "replaced");
+      const { diary } = fixtureOn(pod, loosenAfterPut(pod, "replaced.ttl"));
+      await expect(
+        diary.save({ ...meal, note: "Edited" }, "replaced", first),
+      ).rejects.toMatchObject({ name: "DiaryPrivacyError", removed: false });
+      expect(pod.has(first.url)).toBe(true);
+    });
+    it("leaves another writer's replacement alone when the ETag no longer matches", async () => {
+      const pod = createDemoPod({ root: ROOT });
+      let replaced = false;
+      const { diary } = fixtureOn(pod, async (input, init, fetch) => {
+        const response = await fetch(input, init);
+        if (init?.method === "PUT" && String(input).endsWith("raced.ttl") && !replaced) {
+          replaced = true;
+          const other = await fetch(input, {
+            method: "PUT",
+            headers: { "content-type": "text/turtle" },
+            body: "<#it> a <https://example.test/Other> .",
+          });
+          expect(other.ok).toBe(true);
+        }
+        return response;
+      });
+      await expect(diary.save(meal, "raced")).rejects.toMatchObject({
+        name: "DiaryPrivacyError",
+        removed: false,
+      });
+      expect(pod.has(`${diary.base}2026-11/raced.ttl`)).toBe(true);
+    });
+    it("does not report removal when the server refuses the delete", async () => {
+      const pod = createDemoPod({ root: ROOT });
+      const loosen = loosenAfterPut(pod, "stuck.ttl");
+      const { diary } = fixtureOn(pod, async (input, init, fetch) =>
+        init?.method === "DELETE" && String(input).endsWith("stuck.ttl")
+          ? new Response(null, { status: 500 })
+          : loosen(input, init, fetch),
+      );
+      await expect(diary.save(meal, "stuck")).rejects.toMatchObject({ removed: false });
+      expect(pod.has(`${diary.base}2026-11/stuck.ttl`)).toBe(true);
+    });
+    it("saves normally when the file, its container and the Health root stay owner-only", async () => {
+      const { diary, pod } = fixture();
+      const saved = await diary.save(meal, "fine");
+      expect(pod.has(saved.url)).toBe(true);
+    });
   });
   it("round trips meals and symptoms, edits across months, filters dates, deletes and restores", async () => {
     const { diary, pod } = fixture();

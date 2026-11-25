@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { EMERGENCY_GUIDANCE } from "@jeswr/health-insights";
 import { Button, EmptyState, ErrorState, Input, LoadingSkeleton } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -26,7 +27,9 @@ export function DiaryPatterns() {
   const [error, setError] = useState("");
   const entries = state.status === "ready" || state.status === "empty" ? state.data : [];
   const rows = diaryPatterns(entries, window.min, window.max, clock);
-  const triggers = mode.enabled ? likelyDiaryTriggers(entries) : [];
+  const { safetyRails, suspicions: triggers } = mode.enabled
+    ? likelyDiaryTriggers(entries)
+    : { safetyRails: [], suspicions: [] };
   return (
     <div className="hlt-page">
       <header className="hlt-page-header">
@@ -103,6 +106,24 @@ export function DiaryPatterns() {
       {mode.enabled && state.status !== "loading" && state.status !== "error" && (
         <section aria-label="Likely triggers">
           <h2>Likely triggers</h2>
+          {safetyRails.map((rail) =>
+            rail.kind === "emergency-anaphylaxis" ? (
+              <aside key={rail.kind} role="alert" aria-label="Medical emergency guidance">
+                <h3>{EMERGENCY_GUIDANCE.title}</h3>
+                <p>{EMERGENCY_GUIDANCE.intro}</p>
+                <ul>
+                  {EMERGENCY_GUIDANCE.actions.map((action) => (
+                    <li key={action}>{action}</li>
+                  ))}
+                </ul>
+                <p>{EMERGENCY_GUIDANCE.note}</p>
+              </aside>
+            ) : (
+              <aside key={rail.kind} role="note" aria-label="Safety information">
+                <p>{rail.message}</p>
+              </aside>
+            ),
+          )}
           <aside role="note" aria-label="Not medical advice">
             <p>
               This is information, not medical advice — decision support, not diagnosis. Always

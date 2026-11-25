@@ -32,6 +32,7 @@ export {
   MIN_MEALS_PER_CONTEXT,
 } from "./context-cluster.js";
 export { type CorrelateOptions, correlate } from "./correlate.js";
+export { type DiaryTriggers, diaryTriggers, EMERGENCY_GUIDANCE } from "./diary-triggers.js";
 export {
   type CurrentPlan,
   deriveCurrentPlan,

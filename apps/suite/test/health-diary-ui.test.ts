@@ -429,9 +429,14 @@ it("enables Coeliac for a visit, logs suspected exposure and keeps tracking only
   expect(await preferences.read()).toEqual({ enabled: true, trigger: "lactose" });
   await view.render(h(HealthProvider, { session, children: h(DiaryPatterns) }));
   await eventually(() =>
+    // The gluten meal was logged just now, so its follow-up window is still open and it is
+    // not counted as "not followed" (F6); the pre-diagnosis gluten warning still shows (F3).
     expect(view.host.querySelector('[aria-label="Likely triggers"]')?.textContent).toContain(
-      "of 1 exposures",
+      "Don't cut out gluten yet",
     ),
+  );
+  expect(view.host.querySelector('[aria-label="Likely triggers"]')?.textContent).toContain(
+    "No logged trigger exposures to compare yet.",
   );
   expect(view.host.textContent).toContain(
     "This is information, not medical advice — decision support, not diagnosis. Always discuss anything here with your clinician.",
@@ -754,4 +759,28 @@ it("revalidates legacy listings on storage-root notifications and retries failed
     expect(view.host.textContent).not.toContain("1 entry couldn't be read");
   });
   expect(gets.filter((url) => !url.endsWith("/"))).toEqual([added]);
+});
+
+it("shows the pre-diagnosis gluten warning above the likely triggers", async () => {
+  const { session, diary } = await setup();
+  const when = new Date(Date.now() - 4 * 86400000);
+  await diary.save(
+    {
+      kind: "meal",
+      at: when,
+      foods: ["Toast"],
+      ingredients: "",
+      tags: [],
+      note: "",
+      exposures: [{ trigger: "gluten", exposureLevel: "present", note: MANUAL_EXPOSURE_NOTE }],
+    },
+    "gluten-meal",
+  );
+  route.query = "mode=coeliac";
+  const view = await mount(h(HealthProvider, { session, children: h(DiaryPatterns) }));
+  await eventually(() =>
+    expect(view.host.querySelector('[aria-label="Likely triggers"]')?.textContent).toContain(
+      "Don't cut out gluten yet",
+    ),
+  );
 });

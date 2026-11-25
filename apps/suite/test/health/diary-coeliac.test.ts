@@ -4,6 +4,7 @@ import { buildMeal, buildSymptom, storeToTurtle } from "@jeswr/solid-health-diar
 import { expect, it, vi } from "vitest";
 import {
   createDiaryStore,
+  type DiaryEntry,
   type DiaryReadFailure,
   likelyDiaryTriggers,
   MANUAL_EXPOSURE_NOTE,
@@ -90,7 +91,10 @@ it("reads both diary layouts with model parsers, filters ranges, retains exposur
   await expect(pod.diary.remove(legacy)).rejects.toThrow("read-only");
   await expect(pod.diary.restore(legacy)).rejects.toThrow("Invalid diary entry URL");
   expect(pod.calls.every((call) => call.method === "GET")).toBe(true);
-  const scores = likelyDiaryTriggers(entries, new Date(at.getTime() + 100 * 3600000));
+  const { suspicions: scores } = likelyDiaryTriggers(
+    entries,
+    new Date(at.getTime() + 100 * 3600000),
+  );
   expect(scores[0]).toMatchObject({
     trigger: "gluten",
     exposureCount: 1,
@@ -392,4 +396,47 @@ it("round-trips suspected and present exposures, preserves them on edit and remo
   expect(present.kind === "meal" && present.exposures?.[0]?.exposureLevel).toBe("present");
   const removed = await diary.save({ ...draft, exposures: [] }, "manual", present);
   expect(removed.kind === "meal" && (removed.exposures ?? [])).toEqual([]);
+});
+
+it("keeps the pre-diagnosis gluten warning and emergency rail with the likely triggers", async () => {
+  const pod = await legacyFixture();
+  const entries = await pod.diary.list();
+  const soon = new Date(at.getTime() + 100 * 3600000);
+  const rails = likelyDiaryTriggers(entries, soon).safetyRails.map((rail) => rail.kind);
+  expect(rails).toContain("pre-diagnosis-gluten");
+  expect(likelyDiaryTriggers(entries, soon, { coeliacDiagnosed: true }).safetyRails).toEqual([]);
+  const emergency: DiaryEntry = {
+    kind: "symptom",
+    readOnly: false,
+    url: `${BASE}diary/2026-11/e.ttl`,
+    etag: null,
+    at: new Date(at.getTime() + 3600000),
+    symptomType: "anaphylaxis",
+    severity: null,
+    durationMinutes: null,
+    note: "",
+  };
+  const withEmergency = likelyDiaryTriggers([...entries, emergency], soon);
+  expect(withEmergency.safetyRails[0]?.kind).toBe("emergency-anaphylaxis");
+});
+it("does not count exposures whose follow-up window is still open as not followed", async () => {
+  const pod = await legacyFixture();
+  const entries = await pod.diary.list();
+  const recent: DiaryEntry = {
+    kind: "meal",
+    readOnly: false,
+    url: `${BASE}diary/2026-11/recent.ttl`,
+    etag: null,
+    at: new Date(at.getTime() + 99 * 3600000),
+    foods: ["Bread"],
+    ingredients: "",
+    tags: [],
+    note: "",
+    exposures: [{ trigger: "gluten", exposureLevel: "present" }],
+  };
+  const now = new Date(at.getTime() + 100 * 3600000);
+  const gluten = likelyDiaryTriggers([...entries, recent], now).suspicions.find(
+    (score) => score.trigger === "gluten",
+  );
+  expect(gluten).toMatchObject({ exposureCount: 1, followedCount: 1 });
 });

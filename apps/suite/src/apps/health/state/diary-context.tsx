@@ -56,6 +56,25 @@ export function DiaryProvider({ children }: { children: ReactNode }) {
     completed = useRef(0),
     pending = useRef(0);
   const [revision, setRevision] = useState(0);
+  // Undo toasts outlive renders, so they must not outlive this account's provider: a toast
+  // action must never write through a session that has been switched away from or signed out.
+  const live = useRef(false);
+  const undoToasts = useRef(new Set<string | number>());
+  useEffect(() => {
+    const toasts = undoToasts.current;
+    live.current = true;
+    return () => {
+      live.current = false;
+      for (const id of toasts) toast.dismiss(id);
+      toasts.clear();
+    };
+  }, []);
+  const undoable = useCallback(
+    (action: () => void) => () => {
+      if (live.current) action();
+    },
+    [],
+  );
   const [activated, setActivated] = useState(false);
   const activate = useCallback(() => setActivated(true), []);
   const [busy, setBusy] = useState<string[]>([]);
@@ -142,20 +161,21 @@ export function DiaryProvider({ children }: { children: ReactNode }) {
       setEdits((current) =>
         current.map((edit) => (edit.generation === token ? { ...edit, entry: saved } : edit)),
       );
-      toast.success(
+      const toastId = toast.success(
         existing && undo ? "Diary entry updated" : "Diary entry saved",
         existing && undo
           ? {
               duration: 8000,
               action: {
                 label: "Undo",
-                onClick: () => {
+                onClick: undoable(() => {
                   void persist(existing, id, saved, false).catch(() => {});
-                },
+                }),
               },
             }
           : undefined,
       );
+      if (existing && undo) undoToasts.current.add(toastId);
     } catch (error) {
       setEdits((current) => current.filter((edit) => edit.generation !== token));
       throw error;
@@ -175,15 +195,17 @@ export function DiaryProvider({ children }: { children: ReactNode }) {
         await diary.remove(entry);
         completed.current = token;
       });
-      toast.success("Diary entry deleted", {
-        duration: 8000,
-        action: {
-          label: "Undo",
-          onClick: () => {
-            void persist(entry, "restore", entry, false, true).catch(() => {});
+      undoToasts.current.add(
+        toast.success("Diary entry deleted", {
+          duration: 8000,
+          action: {
+            label: "Undo",
+            onClick: undoable(() => {
+              void persist(entry, "restore", entry, false, true).catch(() => {});
+            }),
           },
-        },
-      });
+        }),
+      );
     } catch (error) {
       setEdits((current) => current.filter((edit) => edit.generation !== token));
       throw error;

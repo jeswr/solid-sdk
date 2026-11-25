@@ -13,7 +13,13 @@ import { createDemoPod } from "../src/lib/demo-pod/pod";
 import type { PodSession } from "../src/lib/session/pod-session";
 import { act, deferred, h, mount } from "./drive-ui-dom";
 
-const notifications = vi.hoisted(() => ({ error: vi.fn(), success: vi.fn() }));
+const notifications = vi.hoisted(() => ({
+  error: vi.fn(),
+  success: vi.fn(
+    (_message: string, _options?: { action?: { onClick(): void } }) => `toast-${Math.random()}`,
+  ),
+  dismiss: vi.fn(),
+}));
 vi.mock("@jeswr/suite-ui", () => ({ toast: notifications }));
 const ROOT = "https://diary-state.test/",
   OWNER = `${ROOT}profile#me`;
@@ -68,16 +74,16 @@ async function setup(
     subscribe: pod.subscribe,
     reset: async () => {},
   };
-  await mount(h(HealthProvider, { session, children: h(Probe) }));
+  const view = await mount(h(HealthProvider, { session, children: h(Probe) }));
   await eventually(() => expect(context.state.status).toBe("empty"));
-  return { pod, diary: createDiaryStore(pod.fetch, ROOT, OWNER) };
+  return { pod, view, diary: createDiaryStore(pod.fetch, ROOT, OWNER) };
 }
 function undo(message: string) {
   const args = notifications.success.mock.calls.findLast(
     (args) => args[0] === message && args[1]?.action,
   );
   if (!args) throw new Error("Missing undo action");
-  args[1].action.onClick();
+  args[1]?.action?.onClick();
 }
 it("shows a meal immediately and rolls only that failed operation back", async () => {
   const write = deferred<Response>(),
@@ -213,4 +219,25 @@ it("loads only for diary consumers, reuses the account cache on navigation and i
   expect(reads).toHaveLength(before);
   await act(async () => context.save({ ...draft, note: "Diary write" }, "cached", entries()[0]));
   await eventually(() => expect(reads.length).toBeGreaterThan(before));
+});
+
+it("dismisses Undo toasts and ignores a late Undo once the account provider is gone", async () => {
+  const writes: string[] = [];
+  const { diary, view } = await setup(async (input, init, fetch) => {
+    if (init?.method === "PUT" || init?.method === "DELETE") writes.push(`${init.method} ${input}`);
+    return fetch(input, init);
+  });
+  notifications.dismiss.mockClear();
+  await act(async () => context.save(draft, "entry"));
+  await eventually(() => expect(entries()).toHaveLength(1));
+  await act(async () => context.remove(entries()[0] as DiaryEntry));
+  const args = notifications.success.mock.calls.findLast(
+    (call) => (call as unknown[])[0] === "Diary entry deleted",
+  ) as unknown as [string, { action: { onClick(): void } }];
+  const before = writes.length;
+  await view.unmount();
+  expect(notifications.dismiss).toHaveBeenCalledTimes(1);
+  await act(async () => args[1].action.onClick());
+  expect(writes).toHaveLength(before);
+  await expect(diary.list()).resolves.toEqual([]);
 });
