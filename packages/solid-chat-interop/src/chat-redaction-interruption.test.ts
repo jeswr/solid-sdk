@@ -15,6 +15,8 @@ const CHAT = `${ROOT}private/chats/claude/thread-1/`;
 const DAY1 = "2026-10-24T12:00:00.000Z";
 const DAY2 = "2026-10-25T12:00:00.000Z";
 const DAY3 = "2026-10-26T12:00:00.000Z";
+const DAY4 = "2026-10-27T12:00:00.000Z";
+const DAY5 = "2026-10-28T12:00:00.000Z";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -46,6 +48,8 @@ class FaultPod implements ChatPodPort {
   /** Operation number that fails; with `crash`, it and every later one fail. */
   failAt: number | undefined;
   crash = false;
+  /** Called after each successful write or delete, with its number. */
+  after: ((operation: number) => void) | undefined;
   async discoverAcl(url: string) {
     return `${url}.acl`;
   }
@@ -84,6 +88,7 @@ class FaultPod implements ChatPodPort {
     this.fault(url, cond.ifMatch);
     if (cond.ifNoneMatch === "*" && this.resources.has(url)) throw httpError(412);
     this.resources.set(url, { body, contentType });
+    this.after?.(this.operations - 1);
     return {};
   }
   async delete(url: string, cond: { ifMatch: string }) {
@@ -185,6 +190,35 @@ const SCENARIOS: { name: string; title: string; messages: Message[]; fragments: 
     fragments: ["fixtureTitleHalf", "fixtureMessageHalf"],
   },
   {
+    name: "a private key split over two messages, with ordinary messages after it",
+    title: "Plain title",
+    messages: [
+      {
+        role: "user",
+        text: "why does ssh reject this?\n-----BEGIN OPENSSH PRIVATE KEY-----\nHALFONEsecretkeybody",
+        createdAt: DAY1,
+      },
+      {
+        role: "user",
+        text: "HALFTWOsecretkeybody\n-----END OPENSSH PRIVATE KEY-----\nit worked yesterday",
+        createdAt: DAY2,
+      },
+      { role: "assistant", text: "ordinary reply three", createdAt: DAY3 },
+      { role: "user", text: "ordinary question four", createdAt: DAY4 },
+    ],
+    fragments: ["HALFONEsecretkeybody", "HALFTWOsecretkeybody"],
+  },
+  {
+    name: "a private key opened in the title and closed in the first message",
+    title: "-----BEGIN PRIVATE KEY----- TITLEHALFsecretbody",
+    messages: [
+      { role: "user", text: "MSGHALFsecretbody -----END PRIVATE KEY----- after", createdAt: DAY1 },
+      { role: "assistant", text: "ordinary reply two", createdAt: DAY2 },
+      { role: "user", text: "ordinary question three", createdAt: DAY5 },
+    ],
+    fragments: ["TITLEHALFsecretbody", "MSGHALFsecretbody"],
+  },
+  {
     name: "a secret split across two adjacent messages",
     title: "Plain title",
     messages: [
@@ -283,21 +317,87 @@ describe("an interrupted archive repair (round 2, A1)", () => {
     expect(pod.text(`${CHAT}m-b.ttl`)).toContain("ghp_fixtureStopToken654321");
   });
 
-  it("repairs, but never reports clean, when no write order is provably recoverable", async () => {
-    // A repeated unterminated quote: whichever line is written first changes how the other
-    // one redacts, so the run cannot show that an interruption would be recoverable.
+  it("redacts both of two identical tied messages that carry a marker, beside a cross-message secret (N5)", async () => {
     const pod = await seed(
       "Plain title",
       [
-        { role: "user", text: 'password="sk-fixtureRepeatedLine', createdAt: DAY1 },
-        { role: "user", text: 'password="sk-fixtureRepeatedLine', createdAt: DAY2 },
+        { role: "user", text: "tailpart99 was [REDACTED]", createdAt: DAY1 },
+        { role: "user", text: "tailpart99 was [REDACTED]", createdAt: DAY1 },
+        { role: "user", text: "my token is sk-abcdefghij", createdAt: DAY1 },
       ],
-      ["a", "b"],
+      ["a", "b", "c"],
     );
-    const first = await new ChatWriter(pod).migrateRedaction();
-    expect(first.failed).toBe(1);
-    expect(pod.everything()).not.toContain("fixtureRepeatedLine");
+    await new ChatWriter(pod).migrateRedaction();
+    expect(pod.everything()).not.toContain("tailpart99");
+    expect(pod.everything()).not.toContain("sk-abcdefghij");
     expect(await new ChatWriter(pod).migrateRedaction()).toMatchObject(CLEAN);
+  });
+
+  describe("when no write order can be proven recoverable (N7)", () => {
+    // A repeated unterminated quote: whichever line is written first changes how the other
+    // one redacts, so an interruption of the run would not be provably recoverable.
+    const repeated = (): Promise<FaultPod> =>
+      seed(
+        "Plain title",
+        [
+          { role: "user", text: 'password="sk-fixtureRepeatedLine', createdAt: DAY1 },
+          { role: "user", text: 'password="sk-fixtureRepeatedLine', createdAt: DAY2 },
+        ],
+        ["a", "b"],
+      );
+
+    it("reports clean, like the dry run, when every write lands and nothing is left to change", async () => {
+      const pod = await repeated();
+      const dry = await new ChatWriter(pod).migrateRedaction({ dryRun: true });
+      expect(dry).toMatchObject({ failed: 0, unverified: 0 });
+      const report = await new ChatWriter(pod).migrateRedaction();
+      expect(report).toMatchObject({ failed: 0, conflicts: 0, unverified: 0 });
+      expect(report.messagesRewritten).toBeGreaterThan(0);
+      expect(pod.everything()).not.toContain("fixtureRepeatedLine");
+      expect(await new ChatWriter(pod).migrateRedaction()).toMatchObject(CLEAN);
+    });
+
+    it.each([
+      [
+        "still changes",
+        (text: string) =>
+          text.replace(/as:content "[^"]*"/, 'as:content "ghp_fixtureLateToken123456"'),
+      ],
+      ["cannot be read", () => "not turtle at all {"],
+    ])("reports failed when the stored result %s on a fresh read", async (_, change) => {
+      const pod = await repeated();
+      pod.operations = 0;
+      // A concurrent writer disturbs a message after the run's last write.
+      pod.after = (operation) => {
+        if (operation === 1) pod.set(`${CHAT}m-a.ttl`, change(pod.text(`${CHAT}m-a.ttl`)));
+      };
+      expect(await new ChatWriter(pod).migrateRedaction()).toMatchObject({ failed: 1 });
+    });
+
+    it("reports failed when a write fails", async () => {
+      const pod = await repeated();
+      pod.operations = 0;
+      pod.failAt = 0;
+      expect(await new ChatWriter(pod).migrateRedaction()).toMatchObject({ failed: 1 });
+    });
+
+    it("reports clean past the order-check budget of a tied conversation once it completes", async () => {
+      const messages: Message[] = Array.from({ length: 49 }, (_, i) => ({
+        role: "user",
+        text: `note ${i} ghp_fixtureBudgetToken${String(i).padStart(6, "0")} end.`,
+        createdAt: DAY1,
+      }));
+      const pod = await seed(
+        "Plain title",
+        messages,
+        messages.map((_, i) => `m${String(i).padStart(3, "0")}`),
+      );
+      expect(await new ChatWriter(pod).migrateRedaction()).toMatchObject({
+        failed: 0,
+        unverified: 0,
+      });
+      expect(pod.everything()).not.toContain("ghp_fixtureBudgetToken");
+    });
   });
 });
 

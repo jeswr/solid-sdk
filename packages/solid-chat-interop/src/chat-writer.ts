@@ -448,8 +448,10 @@ export class ChatWriter {
    * different IDs and duplicate a repaired message. Uses `If-Match` on every write and
    * delete. Fields are written in an order checked to be recoverable (context last, title
    * last); a write that fails stops its conversation and the next run resumes, so a partly
-   * failed run never hides half a secret from the next. A conversation whose order cannot be
-   * proven recoverable counts one `failed`. A message named by a hash of its unredacted text
+   * failed run does not hide half a secret from the next, except in a conversation whose
+   * order cannot be proven recoverable (see the README). Such a conversation whose order cannot be
+   * proven recoverable counts one `failed` unless every write lands and a re-read
+   * of the stored state needs no further change. A message named by a hash of its unredacted text
    * moves to the ID a redacted save derives: the redacted copy is created owner-only (or a
    * replay's matching copy is kept), then the legacy message is deleted. Other messages are
    * rewritten in place under their ID. Metadata that cannot be read or validated counts as
@@ -480,52 +482,23 @@ export class ChatWriter {
       const failed = () => {
         report.failed++;
       };
-      let children: { url: string; isContainer: boolean }[];
-      try {
-        children = (await this.children(candidate.url)).filter((child) =>
-          isMessageChild(candidate.url, child),
-        );
-      } catch {
-        report.failed++;
-        continue;
-      }
-      const listed = new Set(children.map((child) => child.url));
-      const stored: StoredMessage[] = [];
-      for (const child of children) {
-        try {
-          stored.push(await this.readStoredMessage(candidate.url, child.url));
-        } catch (error) {
-          // Deleted since listing, for example by a concurrent migration.
-          if (chatPortStatus(error) !== 404) report.failed++;
-        }
-      }
-      stored.sort(
-        (a, b) =>
-          a.message.createdAt.localeCompare(b.message.createdAt) ||
-          a.message.id.localeCompare(b.message.id),
-      );
-      const metadata = await this.readMigrationMetadata(candidate, failed);
-      // Stored order is only reliable between different timestamps: messages sharing one
-      // sort by hash ID, so each run of equal timestamps may be in any order.
-      let tie = -1;
-      const labels = stored.map((entry, index) => {
-        if (entry.message.createdAt !== stored[index - 1]?.message.createdAt) tie++;
-        return tie;
-      });
-      const before = [metadata.title ?? "", ...stored.map(({ message }) => message.text)];
-      const keys = ["", ...stored.map(({ message }) => `${message.role}\n${message.createdAt}`)];
-      const redact = (fields: readonly string[]) => redactStored(fields, [-1, ...labels], keys);
-      const after = redact(before);
+      const loaded = await this.loadConversation(candidate, failed);
+      if (loaded === undefined) continue;
+      const { stored, metadata, listed, labels, before, after } = loaded;
       // Field 0 is the title, field n the nth message. Writes are ordered so an interrupted
       // run can always be finished by the next one (see safeWriteOrder).
       const plan = dryRun
         ? { order: after.map((_, index) => index).reverse(), proven: true }
-        : safeWriteOrder(before, after, redact);
-      // No proven order: the run still repairs (last field first) but cannot promise that an
-      // interruption is recoverable, so it never reports clean; the next run verifies.
+        : safeWriteOrder(before, after, loaded.redact, hasTies(labels));
+      // No proven order: the run still repairs (last field first), but an interruption of it
+      // would not be recoverable. If every write lands, the stored state is re-read below and
+      // the run is clean only when redacting it again changes nothing.
       const unproven = hasUnprovenTies([-1, ...labels]);
-      if (unproven) report.unverified++;
-      if (!plan.proven || unproven) report.failed++;
+      if (unproven) {
+        report.unverified++;
+        report.failed++;
+      }
+      let completed = true;
       const steps = plan.order.includes(0) ? plan.order : [...plan.order, 0];
       for (const [position, index] of steps.entries()) {
         let fixed = true;
@@ -564,12 +537,66 @@ export class ChatWriter {
         if (fixed || dryRun) continue;
         // A write that did not land stops the conversation: replacing the remaining fields
         // could destroy the context their redaction still needs. The next run resumes.
+        completed = false;
         for (const rest of steps.slice(position + 1))
           if (after[rest] !== before[rest]) report.conflicts++;
         break;
       }
+      if (!plan.proven && !unproven && !dryRun && completed) {
+        // The order could not be proven recoverable. Nothing was interrupted, so the result
+        // is complete when a fresh read of the stored state needs no further change.
+        let readable = true;
+        const again = await this.loadConversation(candidate, () => {
+          readable = false;
+        });
+        if (!readable || again?.after.some((text, index) => text !== again.before[index]))
+          report.failed++;
+      }
     }
     return report;
+  }
+  /** Read a conversation for repair and work out what its redaction would be. Undefined
+   * (counted by `failed`) when its messages cannot be listed. */
+  private async loadConversation(
+    candidate: { id: string; url: string; provider: string },
+    failed: () => void,
+  ) {
+    let children: { url: string; isContainer: boolean }[];
+    try {
+      children = (await this.children(candidate.url)).filter((child) =>
+        isMessageChild(candidate.url, child),
+      );
+    } catch {
+      failed();
+      return undefined;
+    }
+    const listed = new Set(children.map((child) => child.url));
+    const stored: StoredMessage[] = [];
+    for (const child of children) {
+      try {
+        stored.push(await this.readStoredMessage(candidate.url, child.url));
+      } catch (error) {
+        // Deleted since listing, for example by a concurrent migration.
+        if (chatPortStatus(error) !== 404) failed();
+      }
+    }
+    stored.sort(
+      (a, b) =>
+        a.message.createdAt.localeCompare(b.message.createdAt) ||
+        a.message.id.localeCompare(b.message.id),
+    );
+    const metadata = await this.readMigrationMetadata(candidate, failed);
+    // Stored order is only reliable between different timestamps: messages sharing one
+    // sort by hash ID, so each run of equal timestamps may be in any order.
+    let tie = -1;
+    const labels = stored.map((entry, index) => {
+      if (entry.message.createdAt !== stored[index - 1]?.message.createdAt) tie++;
+      return tie;
+    });
+    const before = [metadata.title ?? "", ...stored.map(({ message }) => message.text)];
+    const keys = ["", ...stored.map(({ message }) => `${message.role}\n${message.createdAt}`)];
+    const redact = (fields: readonly string[]) => redactStored(fields, [-1, ...labels], keys);
+    return { stored, metadata, listed, labels, before, after: redact(before), redact };
   }
   private async readStoredMessage(url: string, resource: string): Promise<StoredMessage> {
     const stored = await this.document(resource);
@@ -786,34 +813,41 @@ interface MigrationMetadata {
   captureWritten: boolean;
 }
 
-/** Most changed, mutually dependent fields of one conversation whose write order is proven. */
+/** Most changed fields whose write order is checked when runs of equal timestamps exist. */
 const MAX_ORDER_CHECKS = 48;
+/** The same budget without ties, where a redaction is linear in the conversation. */
+const MAX_UNTIED_ORDER_CHECKS = 1000;
+
+function hasTies(labels: readonly number[]): boolean {
+  return labels.some((label, index) => label === labels[index - 1]);
+}
 
 /**
  * Order in which to write the fields (0 = title, n = nth message) that redaction changes,
  * so that stopping after ANY number of writes leaves a state the next run finishes with
  * the same result. The next run sees the stored state, where a written field has lost the
- * context a still-raw field may need (a PEM header, a token prefix). A field is written
- * only when re-redacting the state after that write still gives `after` for every field,
- * which the check proves by running the redaction itself. Later fields are preferred, so
- * context normally goes last, and the title ends up last. When no remaining field can be
- * written that way (two fields that each need the other raw, such as a repeated unterminated
- * quote), the rest follow last-first and `proven` is false. Each step costs one redaction
- * of the conversation, so a run costs O(changed fields x conversation size).
+ * context a still-raw field may need (a PEM header, a token prefix), and a field whose
+ * partner is gone can redact further than it should (an END without its BEGIN wipes what
+ * follows). A field is written only when re-redacting the state after that write still
+ * gives `after` for every field, which the check proves by running the redaction itself,
+ * for every conversation (no shortcut for fields that redact alone). Later fields are
+ * preferred, so context normally goes last, and the title ends up last. When no remaining
+ * field can be written that way (two fields that each need the other raw, such as a
+ * repeated unterminated quote), the rest follow last-first and `proven` is false. Each
+ * step costs one redaction of the conversation, so a run costs
+ * O(changed fields x conversation size).
  */
 function safeWriteOrder(
   before: readonly string[],
   after: readonly string[],
   redact: (fields: readonly string[]) => string[],
+  tied: boolean,
 ): { order: number[]; proven: boolean } {
   const state = [...before];
   const pending = after.flatMap((text, index) => (text === state[index] ? [] : [index])).reverse();
-  // Every field redacts to what it does alone: nothing depends on another field, and any
-  // mixture of written and raw fields still redacts each at least that far.
-  if (after.every((text, index) => text === redactSecrets(before[index] as string)))
-    return { order: pending, proven: true };
   // Each check costs a redaction of the whole conversation; past the budget, no proof.
-  if (pending.length > MAX_ORDER_CHECKS) return { order: pending, proven: false };
+  if (pending.length > (tied ? MAX_ORDER_CHECKS : MAX_UNTIED_ORDER_CHECKS))
+    return { order: pending, proven: false };
   const order: number[] = [];
   while (pending.length) {
     const at = pending.findIndex((index) => {
@@ -835,9 +869,9 @@ function safeWriteOrder(
  * `redactSecretFields`). A message that is already the redacted copy of a sibling with the
  * same role and time (what an interrupted move leaves behind) is kept as it is and left out
  * of the redaction, so it neither widens the sibling's redaction nor is widened by it.
- * `keys` holds each message's role and time. A message is only trusted as a copy when it
- * needs no redaction itself and either a sibling redacts to exactly its text or an earlier
- * message is identical to it.
+ * `keys` holds each message's role and time. A message is only trusted as a copy when
+ * redaction does nothing to it alone and a sibling redacts to exactly its text. An identical
+ * earlier message is its twin: it receives the twin's redaction, so it is never skipped.
  */
 function redactStored(
   fields: readonly string[],
@@ -859,15 +893,24 @@ function redactStored(
   if (!suspects.length) return redact(all);
   const rest = all.filter((index) => !suspects.includes(index));
   const first = redact(rest);
+  // The earlier identical suspect of each one, if any. An identical later message is
+  // redacted exactly as that twin is (never skipped), and left out of the redaction itself.
+  const twin = (index: number) =>
+    suspects.find(
+      (other) => other < index && keys[other] === keys[index] && fields[other] === fields[index],
+    );
   const copies = suspects.filter(
     (index) =>
-      suspects.some(
-        (other) => other < index && keys[other] === keys[index] && fields[other] === fields[index],
-      ) || rest.some((other, at) => keys[other] === keys[index] && first[at] === fields[index]),
+      twin(index) !== undefined ||
+      rest.some((other, at) => keys[other] === keys[index] && first[at] === fields[index]),
   );
   const kept = all.filter((index) => !copies.includes(index));
   const result = [...fields];
   for (const [at, text] of redact(kept).entries()) result[kept[at] as number] = text;
+  for (const index of copies) {
+    const other = twin(index);
+    if (other !== undefined) result[index] = result[other] as string;
+  }
   return result;
 }
 
