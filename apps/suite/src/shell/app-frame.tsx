@@ -77,7 +77,11 @@ export function AppFrame(props: Omit<SuiteFrameProps, "app"> & { app: AppSlug })
         sidebar={
           props.sidebar === null
             ? null
-            : { label: `${title} navigation`, sections: [], header: props.sidebar }
+            : {
+                label: t("shell.appNavigation", { name: title }),
+                sections: [],
+                header: props.sidebar,
+              }
         }
         context={props.context}
         actions={props.actions}
@@ -85,7 +89,7 @@ export function AppFrame(props: Omit<SuiteFrameProps, "app"> & { app: AppSlug })
         {...(props.details
           ? {
               details: {
-                title: "Details",
+                title: t("shell.details"),
                 children: props.details,
                 open: true,
                 onOpenChange: (open: boolean) => !open && props.onDetailsClose?.(),

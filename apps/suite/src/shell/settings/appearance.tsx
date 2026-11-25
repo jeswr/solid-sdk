@@ -10,6 +10,7 @@ import { usePreferences } from "./preferences";
 export function AppearanceSettings() {
   const t = useT();
   const languageId = useId();
+  const helpId = `${languageId}-help`;
   const theme = usePreferences("theme");
   const density = usePreferences("density");
   const font = usePreferences("fontScale");
@@ -22,9 +23,9 @@ export function AppearanceSettings() {
         <legend>{t("settings.language")}</legend>
         <label htmlFor={languageId}>
           {t("settings.languageLabel")}
-          <LanguageSelect id={languageId} aria-describedby="language-help" />
+          <LanguageSelect id={languageId} aria-describedby={helpId} />
         </label>
-        <p id="language-help">{t("settings.languageHelp")}</p>
+        <p id={helpId}>{t("settings.languageHelp")}</p>
       </fieldset>
       <fieldset>
         <legend>{t("appearance.theme")}</legend>

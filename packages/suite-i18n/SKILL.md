@@ -25,18 +25,24 @@ TS string use `\\{` and `\\}`. This is the bounded subset documented in [README.
 without ICU offsets, ordinals or apostrophe quoting. Use the locale-bound Intl helpers from
 `useFormatters()` for dates, times, numbers, relative time and lists.
 
-The suite root owns `SuiteI18nProvider`: an account's explicit preference wins once loaded;
-before that (signed out, or while the session restores) the device choice applies, then
-browser languages. It mirrors each explicit choice to the device key, updates document
-`lang`/`dir` before paint, and wraps the tree in suite-ui's `DirectionProvider` so Radix
-menus and popovers follow RTL. Change the language only through `useLanguageChoice()` or
+The suite root owns `SuiteI18nProvider`: a signed-in account's own preference decides its
+language (an explicit choice wins; an account that never chose, or chose Automatic, follows the
+browser, never another account's choice). The device key `suite.locale.v1` is only the
+signed-out and pre-hydration default: the provider mirrors the active account's resolved choice
+to it (removing it for Automatic) on every account change, ignores cross-tab `storage` events
+for it while an account is active, and clears it when the last account signs out. It updates
+document `lang`/`dir` before paint, and wraps the tree in suite-ui's `DirectionProvider` so
+Radix menus and popovers follow RTL. Change the language only through `useLanguageChoice()` or
 `<LanguageSelect>` / `<LanguagePicker>` in `apps/suite/src/shell/i18n.tsx`; they write the
 account preference and the device key together. In the picker the empty string means automatic;
-the account stores that as `"auto"` (follow the browser even if another account left a device
-choice), while an account's `""` means never chosen, so the device choice applies. The device
-key is mirrored only when the account's choice changes, never in reaction to the key itself,
-because each tab has its own active account. The root
-layout inlines `localeBootScript()` so the first paint already has the right direction.
+the account stores that as `"auto"`. The root layout inlines `localeBootScript()` so the first
+paint already has the right direction; it validates the stored value exactly like
+`readDeviceLocale` and negotiates browser languages like `negotiateLocale`.
+
+String parameters are bidi-safe: embedded U+202A-U+202E and U+2066-U+2069 are stripped, and a
+value is wrapped in FSI...PDI only when it holds a right-to-left letter or runs against the
+locale's direction. A missing parameter renders an empty isolated value (and warns outside
+production), never the key or a `{name}` placeholder.
 
 Keep one copy of this package in the host and `@jeswr/suite-ui` (`workspace:*`); a duplicate
 gives suite-ui its own context and its components fall back to English. Store error and status

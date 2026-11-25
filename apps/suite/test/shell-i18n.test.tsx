@@ -81,14 +81,13 @@ it("isolates account choices and follows browser language while signed out", () 
   view.rerender(<Harness />);
   expect(document.documentElement.lang).toBe("fr");
   expect(document.documentElement.dir).toBe("ltr");
-  // Each account's explicit choice is mirrored to the device, so signing out keeps the last one.
+  // The active account's choice is mirrored for the pre-hydration boot script.
   expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBe("fr");
+  // Signing out leaves nothing of the last account's choice behind.
   account.id = null;
   view.rerender(<Harness />);
-  expect(document.documentElement.lang).toBe("fr");
-  localStorage.removeItem(DEVICE_LOCALE_KEY);
-  fireEvent(window, new StorageEvent("storage", { key: DEVICE_LOCALE_KEY }));
   expect(document.documentElement.lang).toBe("en");
+  expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBeNull();
 });
 it("works in memory when persistence is unavailable and rejects invalid stored locales", () => {
   expect(parsePreferences('{"locale":"invalid","theme":"dark"}')).toMatchObject({
@@ -136,7 +135,7 @@ it("applies a language picked while signed out, before any account or while it r
   expect(document.documentElement.lang).toBe("en");
   expect(screen.getByRole("combobox", { name: "Language" })).toHaveProperty("value", "en");
 });
-it("lets an account's explicit choice win once loaded, and keeps the device choice for automatic", () => {
+it("lets an account's explicit choice win once loaded, and never lends it to another account", () => {
   localStorage.setItem(DEVICE_LOCALE_KEY, "es");
   account.id = null;
   const view = render(<SignedOut />);
@@ -149,8 +148,10 @@ it("lets an account's explicit choice win once loaded, and keeps the device choi
   expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBe("ar");
   account.id = "second";
   view.rerender(<SignedOut />);
-  expect(document.documentElement.lang).toBe("ar");
-  fireEvent.change(screen.getByRole("combobox", { name: "اللغة" }), { target: { value: "de" } });
+  // A second account that never chose follows the browser, not the first account's Arabic.
+  expect(document.documentElement.lang).toBe("en");
+  expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBeNull();
+  fireEvent.change(screen.getByRole("combobox", { name: "Language" }), { target: { value: "de" } });
   expect(parsePreferences(localStorage.getItem(preferencesKey("second"))).locale).toBe("de");
   expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBe("de");
   fireEvent.change(screen.getByRole("combobox", { name: "Sprache" }), { target: { value: "" } });
@@ -195,10 +196,85 @@ it("stores Automatic per account, so it follows the browser rather than another 
   expect(document.documentElement.lang).toBe("pt");
   // Loading an Automatic account mirrors it: the device follows the browser too.
   expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBeNull();
-  // An account that never chose keeps the device's choice.
+  // An account that never chose does not inherit the device's (or another account's) choice.
   localStorage.setItem(DEVICE_LOCALE_KEY, "ar");
   account.id = "second";
   cleanup();
   render(<SignedOut />);
-  expect(document.documentElement.lang).toBe("ar");
+  expect(document.documentElement.lang).toBe("pt");
+  expect(document.documentElement.dir).toBe("ltr");
+  expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBeNull();
+});
+it("does not apply one account's language choice to another account", () => {
+  vi.spyOn(navigator, "languages", "get").mockReturnValue(["pt-PT"]);
+  localStorage.setItem(preferencesKey("first"), JSON.stringify({ locale: "fr" }));
+  const view = render(<SignedOut />);
+  expect(document.documentElement.lang).toBe("fr");
+  expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBe("fr");
+  account.id = "second"; // never chose a language
+  view.rerender(<SignedOut />);
+  expect(screen.getByTestId("copy").textContent).toBe("pt: Início");
+  expect(document.documentElement.lang).toBe("pt");
+  // The device mirror is overwritten with the new active account's resolved choice.
+  expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBeNull();
+  account.id = "first";
+  view.rerender(<SignedOut />);
+  expect(document.documentElement.lang).toBe("fr");
+  expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBe("fr");
+});
+it("ignores another tab's device-key change while an account is active", () => {
+  vi.spyOn(navigator, "languages", "get").mockReturnValue(["pt-PT"]);
+  render(<SignedOut />);
+  expect(document.documentElement.lang).toBe("pt");
+  // Another tab, signed in as an account that chose French, mirrors its choice.
+  localStorage.setItem(DEVICE_LOCALE_KEY, "fr");
+  fireEvent(window, new StorageEvent("storage", { key: DEVICE_LOCALE_KEY, newValue: "fr" }));
+  fireEvent(window, new StorageEvent("storage", { key: null }));
+  expect(document.documentElement.lang).toBe("pt");
+  expect(screen.getByTestId("copy").textContent).toBe("pt: Início");
+});
+it("still follows the device key across tabs while signed out", () => {
+  account.id = null;
+  render(<SignedOut />);
+  expect(document.documentElement.lang).toBe("en");
+  localStorage.setItem(DEVICE_LOCALE_KEY, "de");
+  fireEvent(window, new StorageEvent("storage", { key: DEVICE_LOCALE_KEY }));
+  expect(document.documentElement.lang).toBe("de");
+});
+it("clears the device key when signing out of all accounts", () => {
+  localStorage.setItem(preferencesKey("first"), JSON.stringify({ locale: "ar" }));
+  const view = render(<SignedOut />);
+  expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBe("ar");
+  expect(document.documentElement.dir).toBe("rtl");
+  account.id = null;
+  view.rerender(<SignedOut />);
+  expect(localStorage.getItem(DEVICE_LOCALE_KEY)).toBeNull();
+  expect(document.documentElement.lang).toBe("en");
+  expect(document.documentElement.dir).toBe("ltr");
+  expect(screen.getByTestId("direction").textContent).toBe("ltr");
+});
+it("copes with browsers that have no navigator.languages", () => {
+  vi.spyOn(navigator, "languages", "get").mockReturnValue(undefined as never);
+  vi.spyOn(navigator, "language", "get").mockReturnValue("de-AT");
+  render(<SignedOut />);
+  expect(document.documentElement.lang).toBe("de");
+  cleanup();
+  vi.spyOn(navigator, "language", "get").mockReturnValue(undefined as never);
+  render(<SignedOut />);
+  expect(document.documentElement.lang).toBe("en");
+});
+it("gives the language help text a per-instance id", () => {
+  render(
+    <>
+      <Harness />
+      <Harness />
+    </>,
+  );
+  const selects = screen.getAllByRole("combobox", { name: "Language" });
+  const ids = selects.map((select) => select.getAttribute("aria-describedby"));
+  expect(new Set(ids).size).toBe(2);
+  for (const id of ids)
+    expect(document.getElementById(id as string)?.textContent).toBe(
+      "Choose the language used across Solid Suite.",
+    );
 });

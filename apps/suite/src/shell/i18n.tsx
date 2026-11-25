@@ -22,6 +22,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useAccounts } from "./session/accounts-provider";
 import { useAllPreferences } from "./settings/preferences";
 
 type Choice = Locale | "";
@@ -45,18 +46,27 @@ function DocumentLocale({ resolved }: { resolved: boolean }) {
 
 /**
  * English on the server and first hydration; the stored choice and browser languages apply
- * before paint. An account's explicit choice wins once its preferences load. Until then (signed
- * out, or while the session restores) the device-level choice applies, which mirrors the last
- * explicit choice made here, so a reload or the sign-in page paints in it straight away.
+ * before paint. A signed-in account's own preference is the only thing that decides its
+ * language: an explicit choice wins, and an account that never chose (or chose Automatic)
+ * follows the browser, never another account's choice. The device key is the signed-out and
+ * pre-hydration default only. It mirrors the active account's resolved choice (removed for
+ * Automatic), is rewritten on every account switch, is ignored by cross-tab events while an
+ * account is active, and is cleared when the last account signs out.
  */
 export function SuiteI18nProvider({ children }: { children: ReactNode }) {
   const { preferences, ready, update } = useAllPreferences();
+  const accountId = useAccounts().active?.id ?? "";
   const [device, setDevice] = useState<Choice>("");
   const [languages, setLanguages] = useState<readonly string[]>([]);
   const [resolved, setResolved] = useState(false);
+  const signedIn = useRef(false);
+  signedIn.current = Boolean(accountId);
   useLayoutEffect(() => {
-    const browser = () => setLanguages(navigator.languages);
+    const browser = () =>
+      setLanguages(navigator.languages ?? (navigator.language ? [navigator.language] : []));
     const storage = (event: StorageEvent) => {
+      // Each tab has its own active account; another tab's key is never this account's choice.
+      if (signedIn.current) return;
       if (event.key === DEVICE_LOCALE_KEY || event.key === null) setDevice(readDeviceLocale());
     };
     browser();
@@ -69,25 +79,36 @@ export function SuiteI18nProvider({ children }: { children: ReactNode }) {
       removeEventListener("storage", storage);
     };
   }, []);
-  const account = ready ? preferences.locale : "";
-  // Mirror only when the account's choice changes, never in reaction to the device key: each
-  // tab has its own active account, so reacting to another tab's write would ping-pong.
+  const account = ready && accountId ? preferences.locale : null;
+  // "" (never chose) and "auto" both follow the browser.
+  const accountChoice: Choice = account === null || account === "auto" ? "" : account;
+  // Mirror only when the account or its choice changes, never in reaction to the device key:
+  // each tab has its own active account, so reacting to another tab's write would ping-pong.
   const mirrored = useRef("");
   useLayoutEffect(() => {
-    if (account === mirrored.current) return;
-    mirrored.current = account;
-    if (!account) return;
-    const next = account === "auto" ? "" : account;
-    writeDeviceLocale(next);
-    setDevice(next);
-  }, [account]);
-  // "auto" follows the browser even when another account left a device choice behind.
-  const value: Choice = account === "auto" ? "" : account || device;
+    if (account === null) return;
+    const tag = `${accountId}\n${account}`;
+    if (tag === mirrored.current) return;
+    mirrored.current = tag;
+    writeDeviceLocale(accountChoice);
+    setDevice(accountChoice);
+  }, [account, accountChoice, accountId]);
+  // Signing out of the last account must not leave its choice for the next person.
+  const previousAccount = useRef("");
+  useLayoutEffect(() => {
+    if (previousAccount.current && !accountId) {
+      mirrored.current = "";
+      writeDeviceLocale("");
+      setDevice("");
+    }
+    previousAccount.current = accountId;
+  }, [accountId]);
+  const value: Choice = account === null ? device : accountChoice;
   const choose = (next: Choice) => {
     writeDeviceLocale(next);
     setDevice(next);
-    mirrored.current = next || "auto";
-    // A no-op while signed out; the device choice carries over to the next sign-in.
+    mirrored.current = `${accountId}\n${next || "auto"}`;
+    // A no-op while signed out; the device choice only applies until an account loads.
     update("locale", next || "auto");
   };
   const locale = negotiateLocale(value, languages);
