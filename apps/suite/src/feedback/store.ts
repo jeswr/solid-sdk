@@ -1,20 +1,26 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { AudioFile } from "./audio";
 import { plainTitle, renderMarkdown } from "./markdown";
-import { type AudioReceipt, signReceipt } from "./receipts";
-import { type FeedbackEnv, FeedbackError } from "./security";
+import { type AudioReceipt, signReceipt, submissionIdSchema } from "./receipts";
+import { type FeedbackEnv, FeedbackError, githubBackoff } from "./security";
 import type { Submission } from "./validation";
 
 export interface FeedbackStore {
-  upload(audio: AudioFile): Promise<AudioReceipt>;
-  save(submission: Submission, audio: AudioReceipt[]): Promise<{ reference: number }>;
+  upload(audio: AudioFile, submissionId: string): Promise<AudioReceipt>;
+  save(
+    submission: Submission,
+    audio: AudioReceipt[],
+    submissionId: string,
+  ): Promise<{ reference: number }>;
 }
 const failure = () =>
   new FeedbackError(
     502,
     "We couldn't finish saving your feedback. Download a copy before trying again.",
   );
+// Coordinate overlapping requests even when each handler constructs a fresh store.
+const creatingIssues = new Set<string>();
 const checkedSha = (value: unknown): string => {
   if (typeof value !== "string" || !/^[a-f0-9]{40,64}$/.test(value)) throw failure();
   return value;
@@ -23,17 +29,24 @@ export function createGithubStore(
   env: FeedbackEnv,
   transport: typeof fetch = fetch,
   now = () => new Date(),
-  uuid: () => string = randomUUID,
   pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)),
 ): FeedbackStore {
   const token = env.FEEDBACK_GITHUB_TOKEN?.trim();
   const repo = env.FEEDBACK_GITHUB_REPO?.trim();
   const base = `https://api.github.com/repos/${repo}`;
-  const call = (path: string, method: string, body?: unknown) =>
-    transport(`${base}${path}`, {
+  const call = async (
+    path: string,
+    method: string,
+    body?: unknown,
+    options: { api?: string; signal?: AbortSignal } = {},
+  ) => {
+    // A secondary limit pauses every call; an interrupted save resumes on retry.
+    githubBackoff.check("secondary");
+    // Transport failures are upstream errors (502), never invalid input (400).
+    const response = await transport(`${options.api ?? base}${path}`, {
       method,
       redirect: "error",
-      signal: AbortSignal.timeout(30_000),
+      signal: options.signal ?? AbortSignal.timeout(30_000),
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
@@ -41,11 +54,18 @@ export function createGithubStore(
         "Content-Type": "application/json",
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
+    }).catch((error: unknown) => {
+      throw error instanceof FeedbackError ? error : failure();
     });
+    await githubBackoff.observe(response);
+    return response;
+  };
   const read = async (path: string, method = "GET", body?: unknown) => {
     const response = await call(path, method, body);
     if (!response.ok) throw failure();
-    return response.json();
+    return response.json().catch(() => {
+      throw failure();
+    });
   };
   let repository: Promise<{ branch: string }> | undefined;
   const metadata = () => {
@@ -80,47 +100,182 @@ export function createGithubStore(
     );
   const textBlob = (text: string) => blob(new TextEncoder().encode(text));
   return {
-    async upload(audio) {
+    async upload(audio, submissionId) {
+      githubBackoff.check();
       await metadata();
+      githubBackoff.check();
       const sha = await blob(audio.bytes);
-      return signReceipt({ sha, size: audio.bytes.length, ext: audio.ext }, env, now().getTime());
+      return signReceipt(
+        { submissionId, sha, size: audio.bytes.length, ext: audio.ext },
+        env,
+        now().getTime(),
+      );
     },
-    async save(submission, audio) {
+    async save(submission, audio, submissionId) {
+      githubBackoff.check();
+      const id = submissionIdSchema.parse(submissionId).toLowerCase();
+      // Identical requests must propose distinct commits: updating a ref to its
+      // current SHA is also successful and cannot act as an exclusive claim.
+      const writer = randomUUID();
       const { branch } = await metadata();
-      const id = uuid();
+      githubBackoff.check();
       const directory = `feedback/${now().toISOString().slice(0, 10)}/${id}`;
       const audioNames = audio.map((clip, i) => `audio-${i + 1}.${clip.ext}`);
-      const recordSha = await textBlob(
-        JSON.stringify(
-          {
-            ...submission,
-            id,
-            createdAt: now().toISOString(),
-            audio: audio.map(({ sha, size, ext }, i) => ({ path: audioNames[i], sha, size, ext })),
-          },
-          null,
-          2,
-        ),
+      const attachments = audio.map(({ sha, size, ext }, i) => ({
+        path: audioNames[i],
+        sha,
+        size,
+        ext,
+      }));
+      // Receipt signatures can be renewed; identity depends on the record and blobs.
+      const fingerprint = createHash("sha256")
+        .update(
+          JSON.stringify({ submission, audio: attachments }, (_key, value) =>
+            value && typeof value === "object" && !Array.isArray(value)
+              ? Object.fromEntries(
+                  Object.keys(value)
+                    .sort()
+                    .map((key) => [key, value[key]]),
+                )
+              : value,
+          ),
+        )
+        .digest("hex");
+      const indexPath = `feedback/submissions/${id}.json`;
+      const marker = `<!-- feedback-submission:${id} -->`;
+      const recordText = JSON.stringify(
+        {
+          ...submission,
+          id,
+          createdAt: now().toISOString(),
+          audio: attachments,
+        },
+        null,
+        2,
       );
-      const summarySha = await textBlob(renderMarkdown(submission, audioNames));
-      const tree = [
-        ...audio.map((clip, i) => ({ path: `${directory}/${audioNames[i]}`, sha: clip.sha })),
-        { path: `${directory}/submission.json`, sha: recordSha },
-        { path: `${directory}/summary.md`, sha: summarySha },
-      ].map((entry) => ({ ...entry, mode: "100644", type: "blob" }));
-      const ref = `heads/${encodeURIComponent(branch)}`;
+      const makeTree = async () => {
+        const recordSha = await textBlob(recordText);
+        const summarySha = await textBlob(renderMarkdown(submission, audioNames));
+        const indexSha = await textBlob(JSON.stringify({ fingerprint, directory }));
+        return [
+          ...audio.map((clip, i) => ({ path: `${directory}/${audioNames[i]}`, sha: clip.sha })),
+          { path: `${directory}/submission.json`, sha: recordSha },
+          { path: `${directory}/summary.md`, sha: summarySha },
+          { path: indexPath, sha: indexSha },
+        ].map((entry) => ({ ...entry, mode: "100644", type: "blob" }));
+      };
+      const finishIssue = async (commitSha: string, recordDirectory: string, recover = false) => {
+        const key = `${repo}:${id}`;
+        if (creatingIssues.has(key))
+          throw new FeedbackError(
+            503,
+            "Your feedback was saved and its reference is being created. Please try again later, or download your feedback.",
+            60,
+          );
+        creatingIssues.add(key);
+        try {
+          // Search and both possible POSTs share one completion deadline.
+          const options = { signal: AbortSignal.timeout(30_000) };
+          if (recover) {
+            githubBackoff.check("search");
+            // One bounded search includes closed issues and excludes pull requests.
+            const query = new URLSearchParams({
+              q: `repo:${repo} is:issue in:body "feedback-submission:${id}"`,
+              per_page: "1",
+            });
+            const response = await call(`/search/issues?${query}`, "GET", undefined, {
+              ...options,
+              api: "https://api.github.com",
+            });
+            if (!response.ok) throw failure();
+            const result = await response.json();
+            if (result.incomplete_results !== false || !Array.isArray(result.items))
+              throw failure();
+            const issue = result.items.find(
+              (candidate: { pull_request?: unknown; body?: unknown; number?: unknown }) =>
+                !candidate.pull_request &&
+                typeof candidate.body === "string" &&
+                candidate.body.endsWith(marker) &&
+                Number.isSafeInteger(candidate.number) &&
+                Number(candidate.number) > 0,
+            );
+            if (issue) return { reference: issue.number as number };
+            if (result.items.length) throw failure();
+          }
+          const url = (name: string) =>
+            `https://github.com/${repo}/blob/${commitSha}/${recordDirectory}/${name}`;
+          const first = String(
+            submission.answers.summary ?? submission.answers.general ?? "Pilot feedback",
+          );
+          const title = plainTitle(`${submission.pathway}: ${first}`);
+          const body = `${renderMarkdown(submission, audioNames.map(url), {
+            maxLength: 59_000,
+            recordUrl: url("submission.json"),
+          })}\n\n${marker}`;
+          const labels = [
+            "feedback",
+            `pathway:${submission.pathway}`,
+            ...(Array.isArray(submission.answers.apps)
+              ? submission.answers.apps.map((slug) => `app:${slug}`)
+              : []),
+          ];
+          let issue = await call("/issues", "POST", { title, body, labels }, options);
+          if (issue.status === 422) issue = await call("/issues", "POST", { title, body }, options);
+          if (!issue.ok)
+            throw new FeedbackError(
+              502,
+              "The recordings were saved but we couldn't create a reference. Download a copy before trying again.",
+            );
+          const reference: unknown = (await issue.json()).number;
+          if (!Number.isSafeInteger(reference) || (reference as number) < 1)
+            throw new FeedbackError(502, "We couldn't confirm your reference. Download a copy.");
+          return { reference: reference as number };
+        } finally {
+          creatingIssues.delete(key);
+        }
+      };
+      let tree: Awaited<ReturnType<typeof makeTree>> | undefined;
+      const ref = `heads/${branch.split("/").map(encodeURIComponent).join("/")}`;
       let commitSha = "";
       // A losing writer rebuilds on the new head; blobs stay immutable and are reused.
       for (let attempt = 0; attempt <= 5; attempt++) {
         const head = checkedSha((await read(`/git/ref/${ref}`)).object?.sha);
+        if (!tree) githubBackoff.check();
+        const existing = await call(`/contents/${indexPath}?ref=${head}`, "GET");
+        if (existing.ok) {
+          const data = await existing.json();
+          if (data.encoding !== "base64" || typeof data.content !== "string") throw failure();
+          const saved = JSON.parse(Buffer.from(data.content, "base64").toString("utf8"));
+          if (saved.fingerprint !== fingerprint)
+            throw new FeedbackError(
+              409,
+              "This submission ID has already been used for different feedback. Download your feedback to keep it.",
+            );
+          if (
+            typeof saved.directory !== "string" ||
+            saved.directory !== `feedback/${saved.directory.split("/")[1]}/${id}` ||
+            !/^feedback\/\d{4}-\d{2}-\d{2}\//.test(saved.directory)
+          )
+            throw failure();
+          return finishIssue(head, saved.directory, true);
+        }
+        if (existing.status !== 404) throw failure();
         const baseTree = checkedSha((await read(`/git/commits/${head}`)).tree?.sha);
+        // The index and record enter the branch together. Every competing writer
+        // checks the index again after a failed fast-forward, before opening an issue.
+        if (!tree) {
+          // Admit once, before the first write. A low successful response must
+          // never interrupt this submission after its record has been committed.
+          githubBackoff.check();
+          tree = await makeTree();
+        }
         const nextTree = checkedSha(
           (await read("/git/trees", "POST", { base_tree: baseTree, tree })).sha,
         );
         const commit = checkedSha(
           (
             await read("/git/commits", "POST", {
-              message: `Store pilot feedback ${id}`,
+              message: `Store pilot feedback ${id}\n\nFeedback-Writer: ${writer}`,
               tree: nextTree,
               parents: [head],
             })
@@ -141,34 +296,7 @@ export function createGithubStore(
         await pause(100 * 2 ** attempt + Math.floor(Math.random() * 150));
       }
       if (!commitSha) throw failure();
-      const url = (name: string) =>
-        `https://github.com/${repo}/blob/${commitSha}/${directory}/${name}`;
-      const first = String(
-        submission.answers.summary ?? submission.answers.general ?? "Pilot feedback",
-      );
-      const title = plainTitle(`${submission.pathway}: ${first}`);
-      const body = renderMarkdown(submission, audioNames.map(url), {
-        maxLength: 59_000,
-        recordUrl: url("submission.json"),
-      });
-      const labels = [
-        "feedback",
-        `pathway:${submission.pathway}`,
-        ...(Array.isArray(submission.answers.apps)
-          ? submission.answers.apps.map((slug) => `app:${slug}`)
-          : []),
-      ];
-      let issue = await call("/issues", "POST", { title, body, labels });
-      if (issue.status === 422) issue = await call("/issues", "POST", { title, body });
-      if (!issue.ok)
-        throw new FeedbackError(
-          502,
-          "The recordings were saved but we couldn't create a reference. Download a copy before trying again.",
-        );
-      const reference: unknown = (await issue.json()).number;
-      if (!Number.isSafeInteger(reference) || (reference as number) < 1)
-        throw new FeedbackError(502, "We couldn't confirm your reference. Download a copy.");
-      return { reference: reference as number };
+      return finishIssue(commitSha, directory);
     },
   };
 }
