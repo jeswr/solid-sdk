@@ -209,9 +209,9 @@ export function HistoryRow({
         </p>
         {entry.status === "approving" && (
           <p className="hm-request-muted">
-            Only some of this access may be in place. Finish or deny the request from{" "}
-            <Link href="/permissions/requests">Requests</Link>; you can't remove it from here until
-            then.
+            Only some of this access may be in place. Finish approving the request from{" "}
+            <Link href="/permissions/requests">Requests</Link>, or change access in{" "}
+            <Link href="/permissions">Permissions</Link>; you can't remove it from here until then.
           </p>
         )}
       </div>

@@ -856,7 +856,10 @@ record (even when the crash came before the request changed state, so the Type I
 again): a notification that claims to be Approving or Approved without one was written by the
 requester, so `decide` refuses to approve it (it can still be denied). Denying a request whose
 approval was pinned but never reached Approving turns that record into `denied`, so it can never be
-resumed. A finished record only matches a request in the same state, so when a new request arrives
+resumed. A half-applied approval (request Approving, record `approving`) that the owner has since
+revoked, so its grant record carries `revokedAt` or its receipt says consent was withdrawn, can be
+denied: `decide` then settles the record as `denied` and writes no access. Resuming such an approval throws the exported `ApprovalRevokedError`. Without a revocation
+`decide` still refuses to deny an approval that is being applied. A finished record only matches a request in the same state, so when a new request arrives
 at a reused notification URL, even an identical one, it is decided afresh under the next generation
 and never reuses the old decision. A pinned decision must name this requester, stay within the role
 its request maps to, and pass the same target checks as a new one. After 32 decisions at one

@@ -85,7 +85,7 @@ describe("public export boundary", () => {
       assert.equal(roles.modesToRole(["read"], "resource"), "viewer");
       const requests = await load("@jeswr/pod-access/requests-solid");
       assert.deepEqual(Object.keys(requests).sort(), [
-        "ACCM", "ACL", "DCT", "DPV", "FOAF", "LDP", "ODRL", "PIM", "PROV", "RDF", "RDFS", "SOLID", "XSD",
+        "ACCM", "ACL", "ApprovalRevokedError", "DCT", "DPV", "FOAF", "LDP", "ODRL", "PIM", "PROV", "RDF", "RDFS", "SOLID", "XSD",
         "DecisionPreviewConflictError", "MAX_MEMBERS", "MAX_NOTIFICATION_BYTES", "RequestConflictError",
         "UnsupportedAccessModelError", "accessModel", "accmAliases", "accmTerm", "canonicalizeAccmDataset",
         "decide", "deriveGrantId", "listRequests", "previewDecision",
@@ -97,7 +97,7 @@ describe("public export boundary", () => {
         assert.equal("copyDataset" in entry, false);
         for (const [name, value] of Object.entries(entry)) {
           if (typeof value !== "function") continue;
-          if (["UnsupportedAccessModelError", "RequestConflictError", "DecisionPreviewConflictError"].includes(name)) {
+          if (["UnsupportedAccessModelError", "RequestConflictError", "DecisionPreviewConflictError", "ApprovalRevokedError"].includes(name)) {
             assert.ok(value.prototype instanceof Error);
             continue;
           }

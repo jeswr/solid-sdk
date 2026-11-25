@@ -19,7 +19,7 @@ export class DecisionPreviewConflictError extends Error {
 export class ApprovalRevokedError extends Error {
   constructor() {
     super(
-      "This approval was revoked after it was recorded, so it will not be finished. Deny the request or ask for a new one",
+      "This approval was revoked after it was recorded, so it will not be finished. Deny the request to clear it, then ask for a new one if you still want to share",
     );
     this.name = "ApprovalRevokedError";
   }
