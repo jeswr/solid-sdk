@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
-import type { IWorkbookData } from "@univerjs/core";
+import type { ICellData, IWorkbookData } from "@univerjs/core";
 import type { FormulaDataModel } from "@univerjs/preset-sheets-core";
 import type { IFindQuery, IFindReplaceService } from "@univerjs/preset-sheets-find-replace";
 import { describe, expect, it, vi } from "vitest";
@@ -12,6 +12,7 @@ const headless = await vi.hoisted(async () => {
   const fromFilter = createRequire(require.resolve("@univerjs/preset-sheets-filter"));
   const fromSort = createRequire(require.resolve("@univerjs/preset-sheets-sort"));
   const fromFind = createRequire(require.resolve("@univerjs/preset-sheets-find-replace"));
+  const fromLink = createRequire(require.resolve("@univerjs/preset-sheets-hyper-link"));
   const core = require("@univerjs/core") as typeof import("@univerjs/core");
   const sheets = require("@univerjs/sheets") as typeof import("@univerjs/sheets");
   const { FUniver } = require("@univerjs/core/facade") as typeof import("@univerjs/core/facade");
@@ -20,11 +21,14 @@ const headless = await vi.hoisted(async () => {
   fromCore("@univerjs/engine-formula/facade");
   const sheetsFormula = fromCore("@univerjs/sheets-formula");
   const sheetsUI = fromCore("@univerjs/sheets-ui");
+  const docs = fromCore("@univerjs/docs");
   const sort = fromSort("@univerjs/sheets-sort");
   const filter = fromFilter("@univerjs/sheets-filter");
   fromFilter("@univerjs/sheets-filter/facade");
   const find = fromFind("@univerjs/find-replace");
   const sheetsFind = fromFind("@univerjs/sheets-find-replace");
+  const hyperlinks = fromLink("@univerjs/sheets-hyper-link");
+  fromLink("@univerjs/sheets-hyper-link/facade");
   fromFind("@univerjs/sheets-find-replace/facade");
   const render = fromFind("@univerjs/engine-render");
   const { BehaviorSubject } = fromFind("rxjs");
@@ -35,10 +39,12 @@ const headless = await vi.hoisted(async () => {
       locales: { [core.LocaleType.EN_US]: {} },
     });
     univer.registerPlugin(sheets.UniverSheetsPlugin);
+    univer.registerPlugin(docs.UniverDocsPlugin);
     univer.registerPlugin(formula.UniverFormulaEnginePlugin);
     univer.registerPlugin(sheetsFormula.UniverSheetsFormulaPlugin);
     univer.registerPlugin(sort.UniverSheetsSortPlugin);
     univer.registerPlugin(filter.UniverSheetsFilterPlugin);
+    univer.registerPlugin(hyperlinks.UniverSheetsHyperLinkPlugin);
     const injector = univer.__getInjector();
     injector.add([find.IFindReplaceService, { useClass: find.FindReplaceService }]);
     // Only the canvas is absent: real provider, search model, replace commands and DI.
@@ -65,6 +71,12 @@ const headless = await vi.hoisted(async () => {
     commands.registerCommand(sheetsUI.ScrollToCellCommand);
     for (const command of [find.OpenReplaceDialogOperation, find.ReplaceCurrentMatchCommand])
       commands.registerCommand(command);
+    const editLink = vi.fn(() => true);
+    for (const id of [
+      "sheet.operation.insert-hyper-link",
+      "sheet.operation.open-hyper-link-edit-panel",
+    ])
+      commands.registerCommand({ id, type: core.CommandType.OPERATION, handler: editLink });
     const api = FUniver.newAPI(univer);
     const dispose = univer.dispose.bind(univer);
     univer.dispose = () => {
@@ -73,7 +85,7 @@ const headless = await vi.hoisted(async () => {
       controller.dispose();
       dispose();
     };
-    return { univer, univerAPI: api, scrollToRange };
+    return { univer, univerAPI: api, scrollToRange, editLink };
   };
   return {
     core,
@@ -115,6 +127,11 @@ vi.mock("@univerjs/preset-sheets-filter", () => ({
 vi.mock("@univerjs/preset-sheets-find-replace", () => ({
   ...headless.find,
   UniverSheetsFindReplacePreset: () => ({}),
+}));
+vi.mock("@univerjs/preset-sheets-hyper-link", () => ({
+  UniverSheetsHyperLinkPreset: () => ({}),
+  InsertHyperLinkOperation: { id: "sheet.operation.insert-hyper-link" },
+  OpenHyperLinkEditPanelOperation: { id: "sheet.operation.open-hyper-link-edit-panel" },
 }));
 
 import { readCharts, withCharts } from "../src/apps/sheets/lib/charts/spec";
@@ -702,6 +719,210 @@ it("reports missing selections and sort commands refused after validation", asyn
     });
   } finally {
     guard.dispose();
+    f.engine.dispose();
+  }
+});
+
+it("persists native cell links in workbook.json, exports URL text and supports edit, remove and undo", async () => {
+  const f = await mount(snapshot("Label"));
+  const pod = await harness();
+  const changed = vi.fn();
+  f.engine.onChange(changed);
+  const cell = () => f.sheet().getRange("A1");
+  try {
+    await f.engine.editLink?.();
+    expect(f.current.editLink).toHaveBeenCalledOnce();
+    expect(await cell().setHyperLink("https://example.org/", "Example")).toBe(true);
+    expect(cell().getHyperLinks()).toEqual([
+      expect.objectContaining({ url: "https://example.org/", label: "Example" }),
+    ]);
+    await Promise.resolve();
+    expect(changed).toHaveBeenCalled();
+    expect(f.engine.exportCsv()).toBe("https://example.org/\r\n");
+    const book = await pod.service.create({ title: "Links", snapshot: f.engine.snapshot() });
+    await pod.service.save(book.container, book.snapshot, book.version);
+    const opened = await pod.service.open(book.container);
+    expect(opened.snapshot).toEqual(book.snapshot);
+    expect(await (await pod.fetch(`${book.container}sheets/1.csv`)).text()).toBe(
+      "https://example.org/\r\n",
+    );
+    f.engine.load(opened.snapshot);
+    f.current.univer
+      .__getInjector()
+      .get(headless.core.IUniverInstanceService)
+      .focusUnit(opened.snapshot.id as string);
+    expect(cell().getHyperLinks()[0]).toMatchObject({
+      url: "https://example.org/",
+      label: "Example",
+    });
+    expect(await cell().updateHyperLink("mailto:reader@example.org", "Email reader")).toBe(true);
+    expect(f.engine.exportCsv()).toBe("mailto:reader@example.org\r\n");
+    expect(cell().cancelHyperLink()).toBe(true);
+    expect(cell().getHyperLinks()).toEqual([]);
+    expect(f.engine.exportCsv()).toBe("Email reader\r\n");
+    expect(await f.current.univerAPI.undo()).toBe(true);
+    expect(cell().getHyperLinks()[0]?.url).toBe("mailto:reader@example.org");
+    expect(await f.current.univerAPI.redo()).toBe(true);
+    expect(cell().getHyperLinks()).toEqual([]);
+    // The native form serializes a typed mailto address as http://mailto:… .
+    expect(await cell().setHyperLink("http://mailto:reader@example.org", "Email reader")).toBe(
+      true,
+    );
+    expect(cell().getHyperLinks()[0]?.url).toBe("mailto:reader@example.org");
+    expect(
+      f.commands.syncExecuteCommand("sheets.mutation.update-rich-hyper-link", {
+        unitId: opened.snapshot.id,
+        subUnitId: "data",
+        row: 0,
+        col: 0,
+        id: cell().getHyperLinks()[0]?.id,
+        url: "http://example.org/",
+      }),
+    ).toBe(true);
+    expect(cell().getHyperLinks()[0]?.url).toBe("http://example.org/");
+    // A clear-cell mutation uses null, rather than a partial cell update.
+    expect(
+      f.commands.syncExecuteCommand(headless.sheets.SetRangeValuesMutation.id, {
+        unitId: opened.snapshot.id,
+        subUnitId: "data",
+        cellValue: { 0: { 0: null } },
+      }),
+    ).toBe(true);
+    expect(cell().getHyperLinks()).toEqual([]);
+  } finally {
+    f.engine.dispose();
+  }
+});
+
+it("renders an unsafe link from the initial stored snapshot as plain text", async () => {
+  const data = snapshot("Label") as unknown as IWorkbookData;
+  const sheet = data.sheets.data;
+  if (!sheet) throw new Error("Missing sheet");
+  sheet.cellData = {
+    0: {
+      0: {
+        t: 1,
+        p: {
+          id: "unsafe",
+          documentStyle: {},
+          body: {
+            dataStream: "\u001fLabel\u001e\r\n",
+            customRanges: [
+              {
+                rangeType: headless.core.CustomRangeType.HYPERLINK,
+                rangeId: "link",
+                startIndex: 0,
+                endIndex: 6,
+                properties: { url: "javascript:alert(1)" },
+              },
+            ],
+          },
+        },
+      },
+    },
+  };
+  const f = await mount(data as unknown as Parameters<typeof mount>[0], { readOnly: true });
+  try {
+    expect(f.sheet().getRange("A1").getHyperLinks()).toEqual([]);
+    expect(f.engine.exportCsv()).toBe("Label\r\n");
+    expect(JSON.stringify(f.engine.snapshot())).not.toContain("javascript:");
+    expect(JSON.stringify(data)).toContain("javascript:");
+  } finally {
+    f.engine.dispose();
+  }
+});
+
+it.each([
+  "javascript:alert(1)",
+  "data:text/html,bad",
+  "file:///etc/passwd",
+  "ftp://example.org/",
+  "java\nscript:alert(1)",
+])("refuses %s on insert/update and strips it from pasted rich text and loaded snapshots", async (url) => {
+  const f = await mount(snapshot("Label"));
+  const cell = () => f.sheet().getRange("A1");
+  try {
+    expect(await cell().setHyperLink(url, "Unsafe")).toBe(false);
+    expect(cell().getHyperLinks()).toEqual([]);
+    await cell().setHyperLink("https://example.org/", "Safe");
+    expect(await cell().updateHyperLink(url, "Unsafe")).toBe(false);
+    expect(cell().getHyperLinks()[0]?.url).toBe("https://example.org/");
+    expect(
+      f.commands.syncExecuteCommand("sheets.mutation.update-rich-hyper-link", {
+        unitId: "original",
+        subUnitId: "data",
+        row: 0,
+        col: 0,
+        id: cell().getHyperLinks()[0]?.id,
+        url,
+      }),
+    ).toBe(false);
+    // Also check both in-cell editor commands before they can touch a document.
+    for (const command of ["add", "update"]) {
+      expect(
+        await f.commands.executeCommand(`sheets.command.${command}-rich-hyper-link`, {
+          documentId: "editor",
+          link: { payload: url },
+          payload: { payload: url },
+        }),
+      ).toBe(false);
+    }
+    const unsafe = structuredClone(cell().getCellData()) as ICellData;
+    const range = unsafe.p?.body?.customRanges?.[0];
+    if (!range) throw new Error("Missing hyperlink range");
+    range.properties = { url };
+    cell().setValue(unsafe);
+    expect(cell().getHyperLinks()).toEqual([]);
+    expect(f.engine.exportCsv()).toBe("Safe\r\n");
+    const stored = f.engine.snapshot() as unknown as IWorkbookData;
+    const sheet = stored.sheets.data;
+    if (!sheet) throw new Error("Missing sheet");
+    sheet.cellData = { 0: { 0: JSON.parse(JSON.stringify(unsafe)) } };
+    f.engine.load(stored as unknown as Parameters<typeof f.engine.load>[0]);
+    expect(cell().getHyperLinks()).toEqual([]);
+    expect(f.engine.exportCsv()).toBe("Safe\r\n");
+    // CSV values, including formula-looking text, never become executable links.
+    expect(
+      f.engine.importCsv(
+        `"${url.replaceAll('"', '""')}"\n"=HYPERLINK(""javascript:bad"",""Label"")"`,
+        {
+          mode: "replace-active",
+        },
+      ),
+    ).toEqual({ status: "imported" });
+    expect(cell().getHyperLinks()).toEqual([]);
+    expect(cell().getValue()).toBe(url);
+    expect(f.sheet().getRange("A2").getFormula()).toBe("");
+  } finally {
+    f.engine.dispose();
+  }
+});
+
+it.each([
+  "view-only",
+  "comments-loading",
+] as const)("blocks native link editing, removal and app shortcuts while %s and preserves safe links", async (lock) => {
+  const f = await mount(snapshot("Label"));
+  const cell = () => f.sheet().getRange("A1");
+  try {
+    await cell().setHyperLink("https://example.org/", "Example");
+    if (lock === "view-only") f.engine.setReadOnly(true);
+    else f.engine.setCommentsLoading?.(true);
+    const before = f.engine.snapshot();
+    await f.engine.editLink?.();
+    expect(f.current.editLink).not.toHaveBeenCalled();
+    expect(await f.commands.executeCommand("sheet.operation.insert-hyper-link")).toBe(false);
+    expect(await cell().setHyperLink("https://other.example/", "Other")).toBe(false);
+    expect(await cell().updateHyperLink("https://other.example/", "Other")).toBe(false);
+    expect(cell().cancelHyperLink()).toBe(false);
+    expect(f.engine.snapshot()).toEqual(before);
+    expect(cell().getHyperLinks()[0]?.url).toBe("https://example.org/");
+    if (lock === "view-only") f.engine.setReadOnly(false);
+    else f.engine.setCommentsLoading?.(false);
+    await f.engine.editLink?.();
+    expect(f.current.editLink).toHaveBeenCalledOnce();
+    expect(cell().cancelHyperLink()).toBe(true);
+  } finally {
     f.engine.dispose();
   }
 });

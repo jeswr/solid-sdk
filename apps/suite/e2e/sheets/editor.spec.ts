@@ -6,6 +6,48 @@ import type { IWorkbookData } from "@univerjs/core";
 import { strFromU8, unzipSync } from "fflate";
 import { accessible, fileMenu, test, waitForEngine } from "./fixtures";
 
+test("inserts a labelled cell link, edits it with Ctrl+K and persists the target", async ({
+  page,
+}) => {
+  await page.goto("/sheets/new");
+  await waitForEngine(page);
+  await page.evaluate(() => {
+    const engine = window.__sheetsEngine;
+    const sheetId = engine?.activeSheet().id;
+    if (sheetId) engine?.selectCell?.({ sheetId, cell: "A1", deleted: false });
+  });
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  const insert = page.getByRole("menuitem", { name: "Insert or edit link", exact: true });
+  await expect(insert).toBeEnabled();
+  await insert.click();
+  await page.getByPlaceholder("Enter label", { exact: true }).fill("Example website");
+  await page.getByPlaceholder("Enter link", { exact: true }).fill("https://example.org/");
+  await page.getByRole("button", { name: "Confirm", exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.__sheetsEngine?.exportCsv()))
+    .toBe("https://example.org/\r\n");
+  const canvas = page
+    .getByTestId("univer-container")
+    .locator('canvas[data-u-comp="render-canvas"]')
+    .first();
+  await canvas.click({ position: { x: 80, y: 32 } });
+  await page.keyboard.press("Control+k");
+  await expect(page.getByPlaceholder("Enter label", { exact: true })).toHaveValue(
+    "Example website",
+  );
+  await page.getByPlaceholder("Enter link", { exact: true }).fill("mailto:reader@example.org");
+  await page.getByRole("button", { name: "Confirm", exact: true }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.__sheetsEngine?.exportCsv()))
+    .toBe("mailto:reader@example.org\r\n");
+  await expect(page.getByText("Saved to your pod", { exact: true })).toBeVisible();
+  await page.reload();
+  await waitForEngine(page);
+  await expect
+    .poll(() => page.evaluate(() => window.__sheetsEngine?.exportCsv()))
+    .toBe("mailto:reader@example.org\r\n");
+});
+
 test("creates formulas and formatting, adds a sheet and chart, exports CSV/XLSX and restores on reload", async ({
   page,
 }, info) => {

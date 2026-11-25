@@ -16,7 +16,7 @@ const mock = vi.hoisted(() => {
   const events = new Map<string, () => void>();
   const selectionSubscription = { unsubscribe: vi.fn() };
   const sheetSubscription = { dispose: vi.fn() };
-  const range = { getRow: () => 2, getColumn: () => 1 };
+  const range = { getRow: () => 2, getColumn: () => 1, getHyperLinks: () => [] };
   const sheet = { getRange: vi.fn((cell: string) => cell), setActiveRange: vi.fn() };
   const subscription = { dispose: vi.fn() };
   let selection: string | null = "B2:C4";
@@ -114,6 +114,7 @@ const mock = vi.hoisted(() => {
     preset: vi.fn((_options: unknown) => ({ plugins: ["core"] })),
     dataValidationPreset: vi.fn(() => ({ plugins: ["data-validation"] })),
     conditionalFormattingPreset: vi.fn(() => ({ plugins: ["conditional-formatting"] })),
+    hyperlinkPreset: vi.fn((_config: unknown) => ({ plugins: ["hyper-link"] })),
     mergeLocales: vi.fn((...values: object[]) => Object.assign({}, ...values)),
   };
 });
@@ -149,6 +150,14 @@ vi.mock("@univerjs/preset-sheets-sort/locales/en-US", () => ({ default: { sort: 
 vi.mock("@univerjs/preset-sheets-filter/locales/en-US", () => ({ default: { filter: "Filter" } }));
 vi.mock("@univerjs/preset-sheets-find-replace/locales/en-US", () => ({
   default: { find: "Find" },
+}));
+vi.mock("@univerjs/preset-sheets-hyper-link", () => ({
+  UniverSheetsHyperLinkPreset: mock.hyperlinkPreset,
+  InsertHyperLinkOperation: { id: "sheet.operation.insert-hyper-link" },
+  OpenHyperLinkEditPanelOperation: { id: "sheet.operation.open-hyper-link-edit-panel" },
+}));
+vi.mock("@univerjs/preset-sheets-hyper-link/locales/en-US", () => ({
+  default: { hyperlink: "Link" },
 }));
 vi.mock("@univerjs/core", async (original) => ({
   ...(await original<typeof import("@univerjs/core")>()),
@@ -205,6 +214,7 @@ describe("Univer engine adapter", () => {
       { sort: "Sort" },
       { filter: "Filter" },
       { find: "Find" },
+      { hyperlink: "Link" },
     );
     expect(mock.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -215,6 +225,7 @@ describe("Univer engine adapter", () => {
           { plugins: ["sort"] },
           { plugins: ["filter"] },
           { plugins: ["find-replace"] },
+          { plugins: ["hyper-link"] },
         ],
         locales: {
           "en-US": {
@@ -224,11 +235,34 @@ describe("Univer engine adapter", () => {
             sort: "Sort",
             filter: "Filter",
             find: "Find",
+            hyperlink: "Link",
           },
         },
       }),
     );
     engine.dispose();
+  });
+
+  it("checks every navigation target, including view-only clicks, and isolates the new tab", async () => {
+    const engine = await mount();
+    const config = mock.hyperlinkPreset.mock.calls[0]?.[0] as {
+      urlHandler: { navigateToOtherWebsite(url: string): void };
+    };
+    const open = vi.fn();
+    vi.stubGlobal("window", { open });
+    try {
+      engine.setReadOnly(true);
+      for (const url of ["javascript:alert(1)", "data:text/html,test", "file:///tmp/a", "bad"])
+        config.urlHandler.navigateToOtherWebsite(url);
+      expect(open).not.toHaveBeenCalled();
+      for (const url of ["https://example.org/", "http://example.org/", "mailto:a@example.org"]) {
+        config.urlHandler.navigateToOtherWebsite(url);
+        expect(open).toHaveBeenLastCalledWith(url, "_blank", "noopener,noreferrer");
+      }
+    } finally {
+      vi.unstubAllGlobals();
+      engine.dispose();
+    }
   });
 
   it.each([
