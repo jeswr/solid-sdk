@@ -120,7 +120,7 @@ describe("service worker source", () => {
   it("is self-contained and carries the version and routes", async () => {
     const source = serviceWorkerSource("abc");
     expect(source.startsWith('"use strict";\n(function installServiceWorker(')).toBe(true);
-    expect(source).toContain('"abc", ["/offline","/","/drive/my"');
+    expect(source).toContain('"abc", ["/offline","/","/home","/drive/my"');
     const context = scope();
     new Function("self", source)(context.sw);
     expect([...context.listeners.keys()]).toEqual(["install", "activate", "fetch", "message"]);
@@ -193,6 +193,55 @@ describe("install and activate", () => {
       ["app-shell-v2", "other-app", "suite-pages-v2"].sort(),
     );
     expect(context.sw.clients.claim).toHaveBeenCalledOnce();
+  });
+
+  it("precaches the launch and shortcut routes so an installed app opens offline", async () => {
+    const { stores } = await installed();
+    const shell = stores.get("app-shell-v2") as FakeCache;
+    for (const route of ["/home", "/docs", "/mail", "/calendar", "/tasks", "/drive/my"])
+      expect(shell.entries.has(`${origin}${route}`), route).toBe(true);
+    // Launched offline, /home and a shortcut open their own precached page, not /offline.
+    let online = true;
+    const launch = await installed(
+      Object.fromEntries(
+        ["/home", "/docs"].map((route) => [
+          route,
+          () => {
+            if (!online) throw new TypeError("Failed to fetch");
+            return page(route.slice(1));
+          },
+        ]),
+      ),
+    );
+    online = false;
+    for (const route of ["/home", "/docs"]) {
+      const served = await launch.dispatch("fetch", { request: navigate(route) });
+      expect(await served?.text()).toContain(`<h1>${route.slice(1)}</h1>`);
+    }
+  });
+
+  it("re-fetches remembered pages into the new build instead of dropping them", async () => {
+    const context = await installed({ "/notes/a": () => page("notes a fresh") });
+    const old = await context.sw.caches.open("suite-pages-v1");
+    await old.put(`${origin}/notes/a`, page("notes a stale"));
+    await old.put(`${origin}/notes/gone`, page("never refetchable"));
+    await context.dispatch("activate");
+    expect(context.stores.has("suite-pages-v1")).toBe(false);
+    const saved = context.stores.get("suite-pages-v2") as FakeCache;
+    expect(await (await saved.match(`${origin}/notes/a`))?.text()).toContain("notes a fresh");
+    // A path that no longer serves a page is not kept, and nothing stale survives.
+    expect(saved.entries.has(`${origin}/notes/gone`)).toBe(false);
+  });
+
+  it("never re-fetches an unsafe path from an old cache", async () => {
+    const context = await installed();
+    const old = await context.sw.caches.open("suite-pages-v1");
+    await old.put(`${origin}/search?q=secret`, page("q"));
+    await old.put(`${origin}/api/session`, page("api"));
+    await old.put("https://evil.example/x", page("x"));
+    const calls = context.fetcher.mock.calls.length;
+    await context.dispatch("activate");
+    expect(context.fetcher.mock.calls.length).toBe(calls);
   });
 
   it.each([false, true])("enables supported navigation preload (failure: %s)", async (fails) => {

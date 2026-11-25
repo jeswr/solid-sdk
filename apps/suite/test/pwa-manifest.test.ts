@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { oklchToHex, tokens } from "@jeswr/suite-ui/tokens";
 import { describe, expect, it } from "vitest";
 import manifest from "../src/app/manifest";
+import { SHELL_ROUTES } from "../src/shell/lib/service-worker";
 
 describe("PWA manifest", () => {
   it("declares the suite identity, standalone scope and light theme tokens", () => {
@@ -13,10 +14,10 @@ describe("PWA manifest", () => {
       id: "/",
       name: "Solid Suite",
       short_name: "Suite",
-      start_url: "/",
+      start_url: "/home",
       scope: "/",
       display: "standalone",
-      display_override: ["window-controls-overlay", "standalone"],
+      display_override: ["standalone"],
       // Hex, not oklch(): manifests and PWA tooling do not all accept CSS Color 4.
       theme_color: oklchToHex(background as string),
       background_color: oklchToHex(background as string),
@@ -61,5 +62,15 @@ describe("PWA manifest", () => {
         existsSync(resolve("src/app/(suite)", shortcut.url.slice(1), "page.tsx")),
         shortcut.url,
       ).toBe(true);
+  });
+
+  it("does not claim the title-bar area the shell does not lay out", () => {
+    expect(manifest().display_override).not.toContain("window-controls-overlay");
+  });
+
+  it("launches and shortcuts only to routes the service worker precaches", () => {
+    const targets = [manifest().start_url, ...(manifest().shortcuts ?? []).map(({ url }) => url)];
+    expect(targets).toHaveLength(6);
+    for (const target of targets) expect(SHELL_ROUTES, String(target)).toContain(target);
   });
 });

@@ -16,10 +16,20 @@
  * `Request`, `Promise`, `Set`), never module-level values.
  */
 
+/**
+ * Routes precached at install. `/home` is where `/` redirects to, and the manifest's
+ * `start_url` and shortcuts must all be listed here so an installed app opens offline
+ * (a test pins this). Sub-app pages are account-independent HTML shells.
+ */
 export const SHELL_ROUTES = [
   "/offline",
   "/",
+  "/home",
   "/drive/my",
+  "/docs",
+  "/mail",
+  "/calendar",
+  "/tasks",
   "/search",
   "/notifications",
   "/settings/account",
@@ -183,18 +193,34 @@ export function installServiceWorker(
     event.waitUntil(
       (async () => {
         const names = await sw.caches.keys();
-        await Promise.all(
-          names
-            .filter(
-              (name) =>
-                ownCaches.some((prefix) => name.startsWith(prefix)) &&
-                name !== shellName &&
-                name !== pagesName,
-            )
-            .map((name) => sw.caches.delete(name)),
+        const stale = names.filter(
+          (name) =>
+            ownCaches.some((prefix) => name.startsWith(prefix)) &&
+            name !== shellName &&
+            name !== pagesName,
         );
+        // Old pages reference the old build's hashed assets, which go with the old shell cache, so
+        // they are not kept as they are: their paths are re-fetched into this build's cache.
+        const remembered: string[] = [];
+        for (const name of stale.filter((item) => item.startsWith("suite-pages-"))) {
+          try {
+            for (const key of await (await sw.caches.open(name)).keys()) {
+              const url = new URL(key.url);
+              if (url.origin === origin && isPagePath(url.pathname) && !url.search)
+                remembered.push(url.pathname);
+            }
+          } catch {
+            /* Unreadable old cache: those pages are visited again. */
+          }
+        }
+        await Promise.all(stale.map((name) => sw.caches.delete(name)));
         await sw.registration?.navigationPreload?.enable().catch(() => {});
         await sw.clients.claim();
+        await Promise.all(
+          [...new Set(remembered)]
+            .slice(-pagesLimit)
+            .map((path) => storePage(pagesName, path).catch(() => false)),
+        );
       })(),
     );
   });
