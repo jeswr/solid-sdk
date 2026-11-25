@@ -45,7 +45,7 @@ export function validateCatalog(english: Catalog, translated: unknown): string[]
 export interface I18nWarning {
   key: string;
   locale: string;
-  reason: "missing" | "invalid";
+  reason: "missing" | "invalid" | "parameter";
 }
 export interface I18nOptions<C extends Catalog> {
   english: C;
@@ -68,27 +68,41 @@ export function createI18n<const C extends Catalog>({
   const locale = negotiateLocale(requested, [], ["en", ...Object.keys(catalogs)]);
   // Catalog strings are finite, so parse each one once per translator.
   const compiled = new Map<string, CompiledMessage>();
-  const formatMessage = (source: string, params: Parameters | undefined, target: string) => {
+  // A caller's missing or mistyped parameter is not the catalog's fault and no language fixes
+  // it, so render the message with empty isolated values rather than leaking a key or placeholder.
+  const formatMessage = (
+    key: string,
+    source: string,
+    params: Parameters | undefined,
+    target: string,
+  ) => {
     let message = compiled.get(source);
     if (!message) {
       message = compileMessage(source);
       compiled.set(source, message);
     }
-    return message(params, target);
+    try {
+      return message(params, target);
+    } catch {
+      warn?.({ key, locale: target, reason: "parameter" });
+      if (typeof process !== "undefined" && process.env?.NODE_ENV !== "production")
+        console.warn(`[suite-i18n] "${key}" was formatted with a missing or invalid parameter`);
+      return message(params, target, true);
+    }
   };
   const translate = (key: string, params?: Parameters): string => {
     const original = lookup(english, key);
     const localized = locale === "en" ? original : lookup(catalogs[locale], key);
     if (typeof localized === "string") {
       try {
-        return formatMessage(localized, params, locale);
+        return formatMessage(key, localized, params, locale);
       } catch {
         warn?.({ key, locale, reason: "invalid" });
       }
     } else warn?.({ key, locale, reason: "missing" });
     if (typeof original === "string" && localized !== original) {
       try {
-        return formatMessage(original, params, "en");
+        return formatMessage(key, original, params, "en");
       } catch {
         warn?.({ key, locale: "en", reason: "invalid" });
       }

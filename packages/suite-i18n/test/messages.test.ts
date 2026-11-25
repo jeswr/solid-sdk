@@ -228,7 +228,7 @@ describe("catalog contracts", () => {
     expect(i18n.t("files", { count: 0 })).toBe("0 files");
     expect(i18n.number(1234.5)).toBe(new Intl.NumberFormat("fr").format(1234.5));
   });
-  it("uses English for malformed translations, then key for malformed English or missing params", () => {
+  it("uses English for malformed translations, then key for malformed English", () => {
     const warn = vi.fn();
     const make = (english: string, translated: string) =>
       createI18n({
@@ -239,7 +239,8 @@ describe("catalog contracts", () => {
       });
     expect(make("English", "{").t("a", {})).toBe("English");
     expect(make("{", "{").t("a", {})).toBe("a");
-    expect((make("{name}", "{").t as (key: string) => string)("a")).toBe("a");
+    // A missing parameter never leaks the key or a placeholder (see "missing parameters").
+    expect((make("{name}", "{").t as (key: string) => string)("a")).toBe("\u2068\u2069");
     expect(
       createI18n({ english: { a: "{" }, catalogs: { es: {} }, locale: "es", warn }).t("a"),
     ).toBe("a");
@@ -247,5 +248,88 @@ describe("catalog contracts", () => {
     expect(make("{", "translated").t("a", {})).toBe("translated");
     expect(make("English", "translated").t("a", {})).toBe("translated");
     expect(createI18n({ english: { a: "{" } }).t("a")).toBe("a");
+  });
+});
+
+describe("bidi isolation of interpolated values", () => {
+  const Fsi = "\u2068";
+  const Pdi = "\u2069";
+  it("leaves same-direction values byte-identical so text lookups keep matching", () => {
+    expect(formatMessage("Account: {name}", { name: "Ada Lovelace" })).toBe(
+      "Account: Ada Lovelace",
+    );
+    expect(formatMessage("{n} items", { n: 3 }, "ar")).toBe("3 items");
+    expect(formatMessage("{name}", { name: "1234 -" }, "ar")).toBe("1234 -");
+    expect(formatMessage("{name}", { name: "日本" }, "ja")).toBe("日本");
+  });
+  it("isolates a right-to-left value inside left-to-right text", () => {
+    expect(formatMessage("Stored at {host}", { host: "مثال.com" })).toBe(
+      `Stored at ${Fsi}مثال.com${Pdi}`,
+    );
+    expect(formatMessage("Stored at {host}", { host: "שלום" }, "de")).toBe(
+      `Stored at ${Fsi}שלום${Pdi}`,
+    );
+  });
+  it("isolates a left-to-right host inside right-to-left text", () => {
+    expect(formatMessage("مخزن في {host}", { host: "pod.example.com" }, "ar")).toBe(
+      `مخزن في ${Fsi}pod.example.com${Pdi}`,
+    );
+  });
+  it("strips embedded bidi controls and isolates, so a name cannot reorder its surroundings", () => {
+    const hostile = "\u202Eevil\u202D\u2066x\u2069\u202A\u202B\u202C";
+    for (const locale of ["en", "ar"])
+      expect(formatMessage("Hi {name}!", { name: hostile }, locale)).toBe(`Hi ${Fsi}evilx${Pdi}!`);
+    expect(formatMessage("{name}", { name: "\u202E" })).toBe(`${Fsi}${Pdi}`);
+  });
+  it("never isolates select keys, branch text or formatted numbers", () => {
+    expect(
+      formatMessage("{r, select, admin {Admin {name}} other {x}}", { r: "admin", name: "Bo" }),
+    ).toBe("Admin Bo");
+    expect(formatMessage("{n, plural, other {# files}}", { n: 1234.5 }, "ar")).toBe(
+      `${new Intl.NumberFormat("ar").format(1234.5)} files`,
+    );
+  });
+});
+
+describe("missing parameters", () => {
+  const Fsi = "\u2068";
+  const Pdi = "\u2069";
+  const missing = (english: string, translated?: string, locale = "es") =>
+    createI18n({
+      english: { a: english },
+      catalogs: translated === undefined ? {} : { es: { a: translated } },
+      locale,
+    }).t as (key: string, params?: Record<string, unknown>) => string;
+  it("renders an empty isolated value instead of the key or a placeholder, warning in development", () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(missing("Account: {name}")("a")).toBe(`Account: ${Fsi}${Pdi}`);
+    expect(missing("Account: {name}", "Cuenta: {name}")("a", { name: undefined })).toBe(
+      `Cuenta: ${Fsi}${Pdi}`,
+    );
+    expect(log).toHaveBeenCalledTimes(2);
+    expect(log.mock.calls[0]?.[0]).toContain('"a"');
+    log.mockRestore();
+  });
+  it("is silent in production but still reports through the warn hook", () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      const warn = vi.fn();
+      const i18n = createI18n({ english: { a: "Hi {name}" }, warn });
+      expect((i18n.t as (key: string) => string)("a")).toBe(`Hi ${Fsi}${Pdi}`);
+      expect(warn).toHaveBeenCalledWith({ key: "a", locale: "en", reason: "parameter" });
+      expect(log).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+      log.mockRestore();
+    }
+  });
+  it("renders the other branch and no number for a missing plural or select parameter", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(missing("{n, plural, one {# file} other {# files}}")("a")).toBe(" files");
+    expect(missing("{r, select, admin {Admin} other {Member}}")("a")).toBe("Member");
+    expect(missing("{n, plural, other {{r, select, other {#}}}}")("a", { n: 1 })).toBe("1");
+    expect(formatMessage("#")).toBe("#");
+    vi.restoreAllMocks();
   });
 });

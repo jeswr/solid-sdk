@@ -1,5 +1,30 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { dir } from "./locale.js";
 import type { Parameters } from "./types.js";
+
+const FSI = "\u2068";
+const PDI = "\u2069";
+/** Embeddings, overrides and isolates: a value must not be able to reorder the text around it. */
+const bidiControls = /[\u202A-\u202E\u2066-\u2069]/gu;
+const rtlLetter =
+  /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Mandaic}\p{Script=Adlam}]/u;
+
+/**
+ * Neutralise a substituted string value. Embedded bidi controls are always stripped. The value
+ * is wrapped in FSI...PDI only when it could otherwise reorder its surroundings: it held bidi
+ * controls, contains a strong right-to-left letter, or its first strong letter runs against
+ * the locale's direction (a Latin host inside Arabic text). Ordinary same-direction values
+ * stay byte-identical, so text lookups and snapshots keep matching.
+ */
+export function isolateValue(value: string, locale: string): string {
+  const clean = value.replace(bidiControls, "");
+  let isolate = clean !== value || rtlLetter.test(clean);
+  if (!isolate) {
+    const first = /\p{L}/u.exec(clean);
+    isolate = first !== null && dir(locale) === "rtl";
+  }
+  return isolate ? `${FSI}${clean}${PDI}` : clean;
+}
 
 type Node =
   | { kind: "text"; value: string }
@@ -110,12 +135,17 @@ export function messageParameters(source: string): Record<string, "value" | "num
 }
 
 /** A parsed message, ready to format repeatedly without parsing again. */
-export type CompiledMessage = (params?: Parameters, locale?: string) => string;
+export type CompiledMessage = (
+  params?: Parameters,
+  locale?: string,
+  /** Render missing or wrong-typed parameters as empty isolated values instead of throwing. */
+  lenient?: boolean,
+) => string;
 
 /** Parse once; the returned formatter throws on missing or wrong parameter values. */
 export function compileMessage(source: string): CompiledMessage {
   const nodes = parseMessage(source);
-  return (params = {}, locale = "en") => {
+  return (params = {}, locale = "en", lenient = false) => {
     let rules: Intl.PluralRules | undefined;
     let numbers: Intl.NumberFormat | undefined;
     const render = (list: Node[], count?: number): string =>
@@ -124,17 +154,30 @@ export function compileMessage(source: string): CompiledMessage {
           if (node.kind === "text") return node.value;
           if (node.kind === "pound") {
             if (count === undefined) return "#";
+            if (Number.isNaN(count)) return "";
             numbers ??= new Intl.NumberFormat(locale);
             return numbers.format(count);
           }
           const value = Object.hasOwn(params, node.name) ? params[node.name] : undefined;
-          if (typeof value !== "string" && typeof value !== "number")
-            throw new TypeError(`Missing parameter ${node.name}`);
-          if (node.kind === "argument") return String(value);
-          if (node.kind === "plural" && (typeof value !== "number" || !Number.isFinite(value)))
-            throw new TypeError(`Expected finite number for ${node.name}`);
-          if (node.kind === "select" && typeof value !== "string")
-            throw new TypeError(`Expected string for ${node.name}`);
+          const invalid =
+            typeof value !== "string" && typeof value !== "number"
+              ? `Missing parameter ${node.name}`
+              : node.kind === "plural" && (typeof value !== "number" || !Number.isFinite(value))
+                ? `Expected finite number for ${node.name}`
+                : node.kind === "select" && typeof value !== "string"
+                  ? `Expected string for ${node.name}`
+                  : "";
+          if (invalid && !lenient) throw new TypeError(invalid);
+          if (invalid) {
+            if (node.kind === "argument") return `${FSI}${PDI}`;
+            // The parser requires an other branch; a missing count renders no number.
+            return render(
+              node.options.get("other") as Node[],
+              node.kind === "plural" ? NaN : count,
+            );
+          }
+          if (node.kind === "argument")
+            return typeof value === "string" ? isolateValue(value, locale) : String(value);
           let key = String(value);
           if (node.kind === "plural") {
             key = `=${value}`;
