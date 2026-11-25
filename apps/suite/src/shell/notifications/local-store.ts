@@ -65,9 +65,16 @@ export function createLocalNotificationStore(
   };
   // Serialize mutations so a read of an old IDB record cannot undo a pending local write.
   let queue: Promise<void> = Promise.resolve();
-  const mutate = (change: () => SuiteNotification[]) => {
+  /** Strict mutations (explicit user undo) report storage failures and roll memory back. */
+  const mutate = (change: () => SuiteNotification[], strict?: { revert(): void }) => {
     const operation = queue.then(async () => {
+      if (strict && factory && unavailable) {
+        // A retry gets a fresh attempt instead of inheriting an earlier failure.
+        unavailable = false;
+        database = undefined;
+      }
       await read();
+      if (strict && factory && unavailable) throw new Error("Notification storage is unavailable");
       const changed = change();
       if (!unavailable) {
         try {
@@ -79,7 +86,12 @@ export function createLocalNotificationStore(
             transaction.onerror = () => reject(transaction.error);
             transaction.onabort = () => reject(transaction.error);
           });
-        } catch {
+        } catch (error) {
+          if (strict) {
+            strict.revert();
+            database = undefined;
+            throw error;
+          }
           unavailable = true;
         }
       }
@@ -88,19 +100,31 @@ export function createLocalNotificationStore(
     queue = operation.catch(() => {});
     return operation;
   };
-  const setRead = (ids: string[], read: boolean) =>
-    mutate(() => {
-      const changed: SuiteNotification[] = [];
-      for (const id of ids) {
-        const item = memory.get(id);
-        if (item && item.read !== read) {
-          const next = { ...item, read };
-          memory.set(id, next);
-          changed.push(next);
+  const setRead = (ids: string[], read: boolean, strict = false) => {
+    const previous: SuiteNotification[] = [];
+    return mutate(
+      () => {
+        const changed: SuiteNotification[] = [];
+        for (const id of ids) {
+          const item = memory.get(id);
+          if (item && item.read !== read) {
+            previous.push(item);
+            const next = { ...item, read };
+            memory.set(id, next);
+            changed.push(next);
+          }
         }
-      }
-      return changed;
-    });
+        return changed;
+      },
+      strict
+        ? {
+            revert() {
+              for (const item of previous) memory.set(item.id, item);
+            },
+          }
+        : undefined,
+    );
+  };
   return {
     id: `local:${accountId}`,
     list(signal) {
@@ -123,7 +147,7 @@ export function createLocalNotificationStore(
         return [copy];
       }),
     markRead: (ids) => setRead(ids, true),
-    markUnread: (ids) => setRead(ids, false),
+    markUnread: (ids) => setRead(ids, false, true),
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

@@ -21,6 +21,16 @@ export interface NotificationsSnapshot {
   coreReady: boolean;
   error: string | null;
 }
+/** Tray actions stay undoable from anywhere for a few minutes, not for hours. */
+export const NOTIFICATION_UNDO_MS = 5 * 60_000;
+/** Persisting an undo failed before any local state changed, so the entry can run again. */
+export class RetryableUndoError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RetryableUndoError";
+  }
+}
+export const isRetryableUndoError = (error: unknown) => error instanceof RetryableUndoError;
 /** Account-scoped async boundary: source results and mutations cannot update another account. */
 export function createNotificationsController(
   sources: readonly NotificationSource[],
@@ -37,7 +47,11 @@ export function createNotificationsController(
   };
   let coreReady = false;
   let overlay: NotificationOverlay = { read: readState?.load() ?? new Set(), dismissed: new Set() };
-  const readOverrides = new Map<string, boolean>();
+  /** Explicit local unread intent, with the source's own flag when it was set. */
+  const readOverrides = new Map<string, { value: boolean; base: boolean }>();
+  /** Ids whose latest markRead is still in flight, so an undone write cannot report a stale error. */
+  const inflight = new Map<string, number>();
+  let writes = 0;
   let lifetime = 0;
   const outcomes = new Map<string, string>();
   const results = new Map<string, SuiteNotification[]>();
@@ -49,7 +63,7 @@ export function createNotificationsController(
   const publish = (loading: boolean, error: string | null) => {
     const items = mergeNotifications([...results.values()], overlay).map((item) => ({
       ...item,
-      read: readOverrides.get(item.id) ?? item.read,
+      read: readOverrides.get(item.id)?.value ?? item.read,
       ...(outcomes.has(item.id) ? { outcome: outcomes.get(item.id) ?? "" } : {}),
     }));
     snapshot = { items, unread: unreadCount(items), loading, coreReady, error };
@@ -75,6 +89,12 @@ export function createNotificationsController(
       else failed = true;
     });
     coreReady = !failed;
+    // Drop local unread intent once its item is gone or its source's flag changed since.
+    const reported = new Map<string, boolean>();
+    for (const items of results.values())
+      for (const item of items) reported.set(item.id, item.read);
+    for (const [id, { base }] of readOverrides)
+      if (reported.get(id) !== base) readOverrides.delete(id);
     overlay = { ...overlay, read: reconcileReadIds(overlay.read, [...results.values()]) };
     publish(false, failed ? "Couldn't load all notifications. Try again." : null);
     for (const item of snapshot.items) {
@@ -87,7 +107,11 @@ export function createNotificationsController(
   };
   const markRead = async (ids: string[]) => {
     const currentLifetime = lifetime;
-    for (const id of ids) readOverrides.delete(id);
+    const write = ++writes;
+    for (const id of ids) {
+      readOverrides.delete(id);
+      inflight.set(id, write);
+    }
     overlay = markNotificationsRead(overlay, ids);
     // Save before publishing or awaiting a source: opening an item can navigate immediately.
     // Keep these receipts even after a source confirms the in-memory overlay.
@@ -99,7 +123,11 @@ export function createNotificationsController(
         return owned.length ? source.markRead?.(owned) : undefined;
       }),
     );
+    // An undo during the write retires it: its late rejection is not news.
+    const current = ids.some((id) => inflight.get(id) === write);
+    for (const id of ids) if (inflight.get(id) === write) inflight.delete(id);
     if (
+      current &&
       currentLifetime === lifetime &&
       responses.some((response) => response.status === "rejected")
     )
@@ -127,29 +155,25 @@ export function createNotificationsController(
     },
     markRead: (id: string) => markRead([id]),
     markManyRead: (ids: readonly string[]) => markRead([...ids]),
-    markAllRead(pushUndo?: (entry: Omit<UndoEntry, "scope">) => void) {
-      const ids = snapshot.items.filter((item) => !item.read).map((item) => item.id);
+    markAllRead(pushUndo?: (entry: Omit<UndoEntry, "scope">) => void, only?: readonly string[]) {
+      const ids = snapshot.items
+        .filter((item) => !item.read && (!only || only.includes(item.id)))
+        .map((item) => item.id);
       if (!ids.length) return Promise.resolve();
       const previousRead = new Set(overlay.read);
       const currentLifetime = lifetime;
       const operation = markRead(ids);
+      const settled = () => {
+        if (currentLifetime !== lifetime) throw new Error("Notification session changed");
+      };
       pushUndo?.({
         label: `Marked ${ids.length} ${ids.length === 1 ? "notification" : "notifications"} as read`,
+        expiresAt: Date.now() + NOTIFICATION_UNDO_MS,
         async undo(signal) {
           signal.throwIfAborted();
-          if (currentLifetime !== lifetime) throw new Error("Notification session changed");
-          // Sources only support markRead. Explicit local unread intent must survive refreshes.
-          for (const id of ids) readOverrides.set(id, false);
-          overlay = {
-            ...overlay,
-            read: new Set(
-              [...overlay.read].filter((id) => !ids.includes(id) || previousRead.has(id)),
-            ),
-          };
+          settled();
           const restored = ids.filter((id) => !previousRead.has(id));
-          readState?.remove?.(new Set(restored));
-          publish(snapshot.loading, snapshot.error);
-          // Persist the unread state in sources that store read flags (local notifications).
+          // Persist first: a failure leaves every local flag as it was, so the entry can retry.
           const responses = await Promise.allSettled(
             sources.map((source) => {
               const owned = restored.filter((id) =>
@@ -159,11 +183,29 @@ export function createNotificationsController(
             }),
           );
           if (responses.some((response) => response.status === "rejected"))
-            throw new Error("Couldn't save the unread status");
+            throw new RetryableUndoError("Couldn't save the unread status");
+          signal.throwIfAborted();
+          settled();
+          // Sources only support markRead. Explicit local unread intent must survive refreshes.
+          const reported = new Map<string, boolean>();
+          for (const items of results.values())
+            for (const item of items) reported.set(item.id, item.read);
+          for (const id of ids) {
+            inflight.delete(id);
+            readOverrides.set(id, { value: false, base: reported.get(id) ?? false });
+          }
+          overlay = {
+            ...overlay,
+            read: new Set(
+              [...overlay.read].filter((id) => !ids.includes(id) || previousRead.has(id)),
+            ),
+          };
+          readState?.remove?.(new Set(restored));
+          publish(snapshot.loading, snapshot.error);
         },
         async redo(signal) {
           signal.throwIfAborted();
-          if (currentLifetime !== lifetime) throw new Error("Notification session changed");
+          settled();
           await markRead(ids);
         },
       });
@@ -177,6 +219,7 @@ export function createNotificationsController(
       publish(snapshot.loading, snapshot.error);
       return {
         label: "Notification dismissed",
+        expiresAt: Date.now() + NOTIFICATION_UNDO_MS,
         async undo(signal) {
           signal.throwIfAborted();
           if (currentLifetime !== lifetime) throw new Error("Notification session changed");
@@ -212,6 +255,8 @@ export function createNotificationsController(
     stop() {
       ++lifetime;
       ++revision;
+      readOverrides.clear();
+      inflight.clear();
       request?.abort();
     },
   };

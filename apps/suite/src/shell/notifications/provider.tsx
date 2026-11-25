@@ -255,12 +255,12 @@ export function useNotifications() {
   return {
     ...snapshot,
     refresh: controller.refresh,
-    markAllRead: () => controller.markAllRead(undo?.push),
+    markAllRead: () => controller.markAllRead(undo?.pushShell),
     markRead: controller.markRead,
-    markManyRead: controller.markManyRead,
+    markManyRead: (ids: readonly string[]) => controller.markAllRead(undo?.pushShell, ids),
     dismiss: (id: string) => {
       const entry = controller.dismiss(id);
-      if (entry) undo?.push(entry);
+      if (entry) undo?.pushShell(entry);
     },
     decide: controller.decide,
   };

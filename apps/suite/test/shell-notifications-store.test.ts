@@ -102,3 +102,43 @@ it("closes its connection on versionchange so saved copies can be cleared", asyn
   // The store reopens lazily on the next write.
   await expect(store.markRead!([item.id])).resolves.toBeUndefined();
 });
+
+it("F3: markUnread reports IndexedDB failures, rolls memory back and succeeds on retry", async () => {
+  const { createRequire } = await import("node:module");
+  const fake = createRequire(
+    new URL("../../../packages/solid-offline/package.json", import.meta.url),
+  )("fake-indexeddb") as { IDBFactory: new () => IDBFactory; IDBDatabase: typeof IDBDatabase };
+  const factory = new fake.IDBFactory();
+  const store = createLocalNotificationStore("strict", factory);
+  const item = { ...demoNotifications()[0]!, read: true };
+  await store.add(item);
+  const original = fake.IDBDatabase.prototype.transaction;
+  const transaction = vi
+    .spyOn(fake.IDBDatabase.prototype, "transaction")
+    .mockImplementation(function (this: IDBDatabase, ...args: Parameters<typeof original>) {
+      if (args[1] === "readwrite") throw new Error("quota");
+      return original.apply(this, args);
+    });
+  await expect(store.markUnread!([item.id])).rejects.toThrow("quota");
+  transaction.mockRestore();
+  const signal = new AbortController().signal;
+  expect((await store.list(signal))[0]?.read).toBe(true);
+  await expect(store.markUnread!([item.id])).resolves.toBeUndefined();
+  expect((await store.list(signal))[0]?.read).toBe(false);
+  // Non-strict writes keep their forgiving behaviour.
+  const reopened = createLocalNotificationStore("strict", factory);
+  expect((await reopened.list(signal))[0]?.read).toBe(false);
+});
+it("F3: markUnread rejects when IndexedDB cannot open, while markRead stays memory-only", async () => {
+  const factory = {
+    open() {
+      throw new Error("Storage blocked");
+    },
+  } as unknown as IDBFactory;
+  const store = createLocalNotificationStore("blocked-strict", factory);
+  const item = { ...demoNotifications()[0]!, read: false };
+  await store.add(item);
+  await store.markRead!([item.id]);
+  await expect(store.markUnread!([item.id])).rejects.toThrow("unavailable");
+  expect((await store.list(new AbortController().signal))[0]?.read).toBe(true);
+});

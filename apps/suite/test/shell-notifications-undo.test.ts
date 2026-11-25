@@ -1,7 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createUndoStack, type UndoEntry } from "@jeswr/suite-sdk/undo";
 import { expect, it, vi } from "vitest";
-import { createNotificationsController } from "../src/shell/notifications/controller";
+import {
+  createNotificationsController,
+  isRetryableUndoError,
+  NOTIFICATION_UNDO_MS,
+} from "../src/shell/notifications/controller";
 import {
   createDemoNotificationSource,
   demoNotifications,
@@ -154,7 +158,7 @@ it("persists restored unread state in sources that store read flags", async () =
   await controller.markAllRead((entry) => stack.push({ ...entry, scope: "home" }));
   expect(stack.entries()[0]?.label).toBe("Marked 1 notification as read");
   expect(store.get("n1")?.read).toBe(true);
-  expect(await stack.undo("home")).toEqual({ status: "done" });
+  expect(await stack.undo("home")).toMatchObject({ status: "done" });
   // Only the item this action marked is restored; the one read before stays read.
   expect(source.markUnread).toHaveBeenCalledWith(["n1"]);
   expect(store.get("n1")?.read).toBe(false);
@@ -163,4 +167,112 @@ it("persists restored unread state in sources that store read flags", async () =
   const reloaded = createNotificationsController([source]);
   await reloaded.refresh();
   expect(reloaded.getSnapshot().unread).toBe(1);
+});
+
+const rawItem = (id: string, read: boolean) => ({
+  ...present(demoNotifications()[0]),
+  id,
+  read,
+});
+function flaky(initial: Array<[string, boolean]>) {
+  const store = new Map(initial);
+  const fail = { unread: false, read: false };
+  let gate!: () => void;
+  const gated = new Promise<void>((resolve) => {
+    gate = resolve;
+  });
+  const source = {
+    id: "local:alice",
+    list: async () => [...store].map(([id, read]) => rawItem(id, read)),
+    markRead: vi.fn(async (ids: string[]) => {
+      if (fail.read) {
+        await gated;
+        throw new Error("offline");
+      }
+      for (const id of ids) store.set(id, true);
+    }),
+    markUnread: vi.fn(async (ids: string[]) => {
+      if (fail.unread) throw new Error("idb down");
+      for (const id of ids) store.set(id, false);
+    }),
+  };
+  return { store, fail, source, release: gate };
+}
+
+it("F3: a failed persist leaves local state untouched, stays retryable, then succeeds", async () => {
+  const { fail, source, store } = flaky([["n1", false]]);
+  const controller = createNotificationsController([source]);
+  await controller.refresh();
+  const stack = createUndoStack({ isRetryable: isRetryableUndoError });
+  await controller.markAllRead((entry) => stack.push({ ...entry, scope: "shell" }));
+  fail.unread = true;
+  const failed = await stack.undo("shell");
+  expect(failed.status).toBe("failed");
+  expect(controller.getSnapshot().unread).toBe(0);
+  expect(stack.canUndo("shell")).toBe(true);
+  fail.unread = false;
+  expect((await stack.undo("shell")).status).toBe("done");
+  expect(store.get("n1")).toBe(false);
+  expect(controller.getSnapshot().unread).toBe(1);
+});
+it("F3: an undone markRead whose write later rejects does not publish a stale error", async () => {
+  const { fail, source, release } = flaky([["n1", false]]);
+  const controller = createNotificationsController([source]);
+  await controller.refresh();
+  fail.read = true;
+  const stack = createUndoStack();
+  const writing = controller.markAllRead((entry) => stack.push({ ...entry, scope: "shell" }));
+  await stack.undo("shell");
+  release();
+  await writing;
+  expect(controller.getSnapshot().error).toBeNull();
+  // Without an undo the same rejection is still reported.
+  const second = flaky([["n1", false]]);
+  const other = createNotificationsController([second.source]);
+  await other.refresh();
+  second.fail.read = true;
+  const pending = other.markAllRead();
+  await Promise.resolve();
+  second.release();
+  await pending;
+  expect(other.getSnapshot().error).toMatch(/read status/);
+});
+it("F6: a source that later reports the item read wins over a stale unread override", async () => {
+  const { store, source } = flaky([["a", false]]);
+  const controller = createNotificationsController([
+    { id: source.id, list: source.list, markRead: source.markRead },
+  ]);
+  await controller.refresh();
+  const stack = createUndoStack();
+  await controller.markAllRead((entry) => stack.push({ ...entry, scope: "shell" }));
+  await stack.undo("shell");
+  expect(controller.getSnapshot().unread).toBe(1);
+  await controller.refresh();
+  // The source now reports the item read (it was read elsewhere): the override must not hide it.
+  expect(controller.getSnapshot().items.find((item) => item.id === "a")?.read).toBe(true);
+  store.delete("a");
+  await controller.refresh();
+  expect(controller.getSnapshot().items).toHaveLength(0);
+});
+it("F1/F12: tray entries expire after minutes and a subset can be marked through the same path", async () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(1_000_000);
+    const controller = createNotificationsController([createDemoNotificationSource()]);
+    await controller.refresh();
+    const dismissed = present(controller.dismiss(present(controller.getSnapshot().items[0]).id));
+    expect(dismissed.expiresAt).toBe(1_000_000 + NOTIFICATION_UNDO_MS);
+    let bulk!: Omit<UndoEntry, "scope">;
+    const target = present(controller.getSnapshot().items.find((item) => !item.read));
+    await controller.markAllRead(
+      (entry) => {
+        bulk = entry;
+      },
+      [target.id, "not-in-tray"],
+    );
+    expect(bulk.expiresAt).toBe(1_000_000 + NOTIFICATION_UNDO_MS);
+    expect(bulk.label).toBe("Marked 1 notification as read");
+  } finally {
+    vi.useRealTimers();
+  }
 });
