@@ -214,6 +214,7 @@ export default defineConfig({
         "src/apps/money/lib/data/**/*.ts",
         "src/apps/photos/lib/data/**/*.ts",
         "src/apps/sheets/lib/workbook/**/*.ts",
+        "src/apps/sheets/lib/versions/**/*.ts",
         "src/lib/session/extension-pod-session.ts",
         "src/apps/insights/lib/**/*.ts",
         "src/apps/insights/sources/**/*.ts",
