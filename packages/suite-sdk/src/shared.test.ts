@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { shareNotification } from "@jeswr/pod-access/notify";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   classifySharedItem,
   hideSharedItem,
   isHiddenSharedItem,
+  isPublicHttpsUrl,
   isSharedItemUrl,
   isSharedUrlEntry,
   isShareNotification,
@@ -13,6 +14,7 @@ import {
   latestSharedEntries,
   mergeSharedItems,
   parseSharedEntries,
+  readSharedInbox,
   removeSharedItem,
   SHARED_CLOCK_SKEW_MS,
   type SharedItem,
@@ -110,6 +112,7 @@ it("projects only share announcements, tolerating missing metadata and untrusted
       sharedAt: "2026-01-02T00:00:00Z",
       role: "Editor",
       source: "inbox",
+      announced: true,
     },
   ]);
   expect(sharedItemsFromInbox([{ ...base, content: " Team plan " }])[0]?.name).toBe("Team plan");
@@ -122,6 +125,7 @@ it("projects only share announcements, tolerating missing metadata and untrusted
     name: "plan.ttl",
     app: "docs",
     kind: "document",
+    announced: true,
     source: "inbox",
   });
   expect(
@@ -453,7 +457,7 @@ describe("share notifications in an inbox", () => {
         ? new Response(null, { status: 404 })
         : new Response(body, { headers: { "content-type": "text/turtle" } });
     };
-    return { webId, inbox, requested, fetch: fetch as typeof globalThis.fetch };
+    return { root, webId, inbox, requested, fetch: fetch as typeof globalThis.fetch };
   }
 
   it("reads only the profile, the inbox and the candidates, and keeps the shares", async () => {
@@ -462,6 +466,7 @@ describe("share notifications in an inbox", () => {
     const found = await shareNotificationUrls([...candidates, "not a url"], {
       fetch: pod.fetch,
       webId: pod.webId,
+      storageUrl: pod.root,
     });
     expect([...found]).toEqual([`${pod.inbox}share.ttl`]);
     // request.ttl was already placed by the caller: it is answered locally, never fetched.
@@ -477,6 +482,7 @@ describe("share notifications in an inbox", () => {
       fetch: pod.fetch,
       pinningFetch: pod.fetch,
       webId: pod.webId,
+      storageUrl: pod.root,
       signal: new AbortController().signal,
       maxItems: 10,
     });
@@ -489,6 +495,7 @@ describe("share notifications in an inbox", () => {
     const found = await shareNotificationUrls([`${pod.inbox}share.ttl`, `${pod.inbox}bad.ttl`], {
       fetch: pod.fetch,
       webId: pod.webId,
+      storageUrl: pod.root,
       inbox: pod.inbox,
     });
     expect([...found]).toEqual([`${pod.inbox}share.ttl`]);
@@ -501,13 +508,14 @@ describe("share notifications in an inbox", () => {
 
   it("finds nothing without candidates, an inbox, or before an abort", async () => {
     const pod = inboxPod("https://8.8.8.8/");
-    expect(await shareNotificationUrls([], { fetch: pod.fetch, webId: pod.webId })).toEqual(
-      new Set(),
-    );
+    expect(
+      await shareNotificationUrls([], { fetch: pod.fetch, webId: pod.webId, storageUrl: pod.root }),
+    ).toEqual(new Set());
     expect(pod.requested).toEqual([]);
     const noInbox = await shareNotificationUrls([`${pod.inbox}share.ttl`], {
       fetch: pod.fetch,
       webId: "https://8.8.8.8/nobody#me",
+      storageUrl: pod.root,
     });
     expect(noInbox).toEqual(new Set());
     // Aborted while the profile is read: discovery swallows it, the helper still rejects.
@@ -520,6 +528,7 @@ describe("share notifications in an inbox", () => {
       shareNotificationUrls([`${pod.inbox}share.ttl`], {
         fetch: aborting,
         webId: pod.webId,
+        storageUrl: pod.root,
         signal: during.signal,
       }),
     ).rejects.toThrow();
@@ -529,6 +538,246 @@ describe("share notifications in an inbox", () => {
       shareNotificationUrls([`${pod.inbox}share.ttl`], {
         fetch: pod.fetch,
         webId: pod.webId,
+        storageUrl: pod.root,
+        signal: controller.signal,
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("announced resources are public HTTPS only", () => {
+  it("classifies hosts by name and IP literal without I/O", () => {
+    for (const ok of ["https://bob.example/a.ttl", "https://8.8.8.8/a", "https://alice.demo.pod/"])
+      expect(isPublicHttpsUrl(ok), ok).toBe(true);
+    for (const bad of [
+      "http://bob.example/a.ttl",
+      "https://user:pw@bob.example/a",
+      "https://192.168.0.1/a",
+      "https://10.0.0.5/a",
+      "https://127.0.0.1/a",
+      "https://[::1]/a",
+      "https://2130706433/a",
+      "https://localhost/a",
+      "https://printer.local/a",
+      "https://intranet/a",
+      "https://metadata.google.internal/a",
+      "https://169.254.169.254/latest",
+      "ftp://bob.example/a",
+      "not a url",
+    ])
+      expect(isPublicHttpsUrl(bad), bad).toBe(false);
+  });
+
+  it("drops announcements of http: and private-network resources", () => {
+    const announce = (object: string) => ({
+      url: "https://alice.example/inbox/x.ttl",
+      ...shareNotification(object, "Editor"),
+    });
+    expect(
+      sharedItemsFromInbox([
+        announce("http://bob.example/a.ttl"),
+        announce("https://192.168.0.1/payroll"),
+        announce("https://localhost:3000/x"),
+        announce("https://bob.example/ok.ttl"),
+      ]).map((entry) => entry.url),
+    ).toEqual(["https://bob.example/ok.ttl"]);
+  });
+
+  it("keeps an announced item announced once an opened record is merged in", () => {
+    const [inbox] = sharedItemsFromInbox([
+      { url: "https://alice.example/inbox/x.ttl", ...shareNotification(url, "Editor") },
+    ]);
+    expect(inbox?.announced).toBe(true);
+    for (const order of [
+      [[inbox as SharedItem], [item({ source: "opened" })]],
+      [[item({ source: "opened" })], [inbox as SharedItem]],
+    ] as const) {
+      const [merged] = mergeSharedItems(...order);
+      expect(merged?.announced).toBe(true);
+    }
+    expect(mergeSharedItems([item({ source: "opened" })])[0]).not.toHaveProperty("announced");
+  });
+});
+
+describe("reading the inbox Shared with me lists", () => {
+  const as = "https://www.w3.org/ns/activitystreams#";
+  const ldp = "http://www.w3.org/ns/ldp#";
+  const turtle = (body: string) =>
+    new Response(body, { headers: { "content-type": "text/turtle" } });
+  const make = (
+    root: string,
+    opts: { members?: number; profile?: Response; container?: Response } = {},
+  ) => {
+    const inbox = `${root}inbox/`;
+    const count = opts.members ?? 2;
+    const names = Array.from({ length: count }, (_, i) => `n${String(i).padStart(3, "0")}.ttl`);
+    const requested: Array<{ url: string; credentialed: boolean; redirect?: string }> = [];
+    const fetcher: typeof fetch = async (input, init) => {
+      const target = input instanceof Request ? input.url : String(input);
+      requested.push({
+        url: target,
+        credentialed: init?.credentials !== "omit",
+        ...(init?.redirect ? { redirect: init.redirect } : {}),
+      });
+      if (target === `${root}profile/card`)
+        return opts.profile ?? turtle(`<#me> <${ldp}inbox> <${inbox}>.`);
+      if (target === inbox)
+        return (
+          opts.container ??
+          turtle(`<> <${ldp}contains> ${names.map((name) => `<${name}>`).join(", ")}.`)
+        );
+      const name = target.slice(inbox.length);
+      const index = names.indexOf(name);
+      if (index < 0) return new Response(null, { status: 404 });
+      const day = String(index + 1).padStart(2, "0");
+      return turtle(
+        `<#it> a <${as}Announce>; <${as}object> <https://bob.example/doc${index}.ttl>; ` +
+          `<${as}summary> "Shared with you as Editor"; <${as}published> "2026-01-${day}T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>.`,
+      );
+    };
+    return { root, inbox, webId: `${root}profile/card#me`, requested, fetch: fetcher };
+  };
+
+  it("reads an inbox inside the storage with the session fetch, without following redirects", async () => {
+    const pod = make("https://8.8.8.8/");
+    const result = await readSharedInbox({
+      webId: pod.webId,
+      storageUrl: pod.root,
+      fetch: pod.fetch,
+    });
+    expect(result).toMatchObject({ status: "ok", truncated: false, limit: 100 });
+    expect(result.status === "ok" && result.notifications).toHaveLength(2);
+    expect(pod.requested.every((entry) => entry.redirect === "error")).toBe(true);
+  });
+
+  it("never sends credentials to an inbox outside the storage", async () => {
+    const pod = make("https://8.8.8.8/");
+    const attacker = "https://203.0.113.9/inbox/";
+    const fetcher: typeof fetch = async (input, init) => {
+      const target = input instanceof Request ? input.url : String(input);
+      if (target === `${pod.root}profile/card`) return turtle(`<#me> <${ldp}inbox> <${attacker}>.`);
+      return pod.fetch(input, init);
+    };
+    const touched: string[] = [];
+    const spy: typeof fetch = (input, init) => {
+      touched.push(input instanceof Request ? input.url : String(input));
+      return fetcher(input, init);
+    };
+    expect(await readSharedInbox({ webId: pod.webId, storageUrl: pod.root, fetch: spy })).toEqual({
+      status: "failed",
+      reason: "outside-storage",
+    });
+    expect(touched).toEqual([`${pod.root}profile/card`]);
+    // Recognition is confined the same way: nothing is listed or read at the foreign inbox.
+    touched.length = 0;
+    expect(
+      await shareNotificationUrls([`${attacker}a.ttl`], {
+        webId: pod.webId,
+        storageUrl: pod.root,
+        fetch: spy,
+      }),
+    ).toEqual(new Set());
+    expect(touched).toEqual([`${pod.root}profile/card`]);
+  });
+
+  it("reads a WebID outside the storage credential-free, through the public fetch", async () => {
+    const pod = make("https://8.8.8.8/");
+    const foreignProfile = "https://8.8.4.4/profile/card";
+    const publicRequests: Array<{ url: string; credentials?: RequestCredentials }> = [];
+    const publicFetch: typeof fetch = async (input, init) => {
+      const target = input instanceof Request ? input.url : String(input);
+      publicRequests.push({
+        url: target,
+        ...(init?.credentials ? { credentials: init.credentials } : {}),
+      });
+      return turtle(`<#me> <${ldp}inbox> <${pod.inbox}>.`);
+    };
+    const session = vi.fn(pod.fetch);
+    const result = await readSharedInbox({
+      webId: `${foreignProfile}#me`,
+      storageUrl: pod.root,
+      fetch: session,
+      publicFetch,
+    });
+    expect(result.status).toBe("ok");
+    expect(publicRequests).toEqual([{ url: foreignProfile, credentials: "omit" }]);
+    expect(session.mock.calls.map(([target]) => String(target))).not.toContain(foreignProfile);
+    expect(session.mock.calls.some(([target]) => String(target) === pod.inbox)).toBe(true);
+  });
+
+  it("flags an inbox over the bound and keeps the newest", async () => {
+    const pod = make("https://8.8.8.8/", { members: 7 });
+    const result = await readSharedInbox({
+      webId: pod.webId,
+      storageUrl: pod.root,
+      fetch: pod.fetch,
+      maxItems: 5,
+    });
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.truncated).toBe(true);
+    expect(result.limit).toBe(5);
+    expect(result.notifications).toHaveLength(5);
+    // Newest first among those read.
+    expect(result.notifications[0]?.published).toBe("2026-01-06T00:00:00.000Z");
+    // Exactly at the bound is not truncation.
+    const exact = make("https://8.8.4.4/", { members: 5 });
+    expect(
+      await readSharedInbox({
+        webId: exact.webId,
+        storageUrl: exact.root,
+        fetch: exact.fetch,
+        maxItems: 5,
+      }),
+    ).toMatchObject({ truncated: false });
+  });
+
+  it("tells failures apart from an empty inbox", async () => {
+    const run = (pod: ReturnType<typeof make>, fetchImpl: typeof fetch = pod.fetch) =>
+      readSharedInbox({ webId: pod.webId, storageUrl: pod.root, fetch: fetchImpl });
+    expect(await run(make("https://8.8.8.8/", { members: 0 }))).toMatchObject({
+      status: "ok",
+      notifications: [],
+    });
+    expect(await run(make("https://8.8.8.8/", { profile: turtle("<#x> <#y> <#z>.") }))).toEqual({
+      status: "none",
+    });
+    expect(
+      await run(make("https://8.8.8.8/", { profile: new Response(null, { status: 403 }) })),
+    ).toEqual({ status: "failed", reason: "forbidden" });
+    expect(
+      await run(make("https://8.8.8.8/", { profile: new Response(null, { status: 500 }) })),
+    ).toEqual({ status: "failed", reason: "network" });
+    const offline = make("https://8.8.8.8/");
+    expect(
+      await run(offline, async () => {
+        throw new TypeError("offline");
+      }),
+    ).toEqual({ status: "failed", reason: "network" });
+    expect(
+      await run(
+        make("https://8.8.8.8/", {
+          profile: new Response("{}", { headers: { "content-type": "application/lws+json" } }),
+        }),
+      ),
+    ).toEqual({ status: "failed", reason: "lws-no-ldn" });
+    expect(
+      await run(make("https://8.8.8.8/", { container: new Response(null, { status: 403 }) })),
+    ).toEqual({ status: "failed", reason: "forbidden" });
+    expect(
+      await run(make("https://8.8.8.8/", { container: new Response(null, { status: 404 }) })),
+    ).toEqual({ status: "none" });
+  });
+
+  it("rejects when aborted instead of reporting a failure", async () => {
+    const pod = make("https://8.8.8.8/");
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      readSharedInbox({
+        webId: pod.webId,
+        storageUrl: pod.root,
+        fetch: pod.fetch,
         signal: controller.signal,
       }),
     ).rejects.toThrow();

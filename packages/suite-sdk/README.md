@@ -345,7 +345,12 @@ follow redirects (WebIDs often 303). Resolve foreign chips only on hover/focus.
 
 `sharedItemsFromInbox(notifications, { storageUrl?, now? })` projects only share Announce
 notifications into `SharedItem` records. Pass the user's `storageUrl`: resources inside it
-(pod-scope containment, not origin) are never "shared with me". A `published` claim later than
+(pod-scope containment, not origin) are never "shared with me". Announced resources outside it
+must be public HTTPS (`isPublicHttpsUrl`: no `http:`, credentials, loopback, private or
+link-local addresses, `.local`/single-label/cloud-internal names; judged by name and IP literal,
+no DNS); anything else is dropped. Every projected item carries `announced: true`, which
+`mergeSharedItems` keeps even when a local "opened" record merges in, so callers keep such items
+preview-only (`previewOnly: item.announced`) however the record was later merged. A `published` claim later than
 `now + SHARED_CLOCK_SKEW_MS` (5 minutes) is dropped, so a future date can neither pin an item to
 the top nor outrank a hide. Sender, title and role are unverified assertions. `fromAnotherPod`
 flags an actor that cannot be placed in the resource's pod: different origins always, and on
@@ -355,12 +360,24 @@ grants or resource reads occur here.
 
 `isShareNotification(n)` is the share Announce test `sharedItemsFromInbox` applies (summary
 `Shared with you as …` and an http(s) object without credentials), regardless of storage.
-`shareNotificationUrls(candidates, { fetch, webId, inbox?, pinningFetch?, signal?, maxItems? })`
+`shareNotificationUrls(candidates, { fetch, webId, storageUrl, publicFetch?, inbox?, pinningFetch?, signal?, maxItems? })`
 returns the candidate inbox members that are share Announces, read through the pod-access inbox
 reader. It requests only the profile (skipped when `inbox` is given), the inbox container and
 the candidates; every other URL is answered locally with 404, which the reader skips. Home's
 Requests page uses it so share notifications, which `listRequests` reports as unreadable, are
-not counted as unreadable requests. An abort rejects, even one during discovery.
+not counted as unreadable requests. An abort rejects, even one during discovery. Credentials stay
+inside `storageUrl` (`podScopedFetch`: session fetch, redirects refused); a profile outside it is
+read through `publicFetch` (or a credential-free global fetch), and an inbox outside it is never
+read.
+
+`readSharedInbox({ webId, storageUrl, fetch, publicFetch?, pinningFetch?, signal?, maxItems? })`
+is the Shared with me read, confined the same way. It returns `{ status: "ok", notifications,
+truncated, limit }`, `{ status: "none" }` (a profile naming no inbox, or a missing inbox) or
+`{ status: "failed", reason }` with `reason` one of `network`, `forbidden`, `lws-no-ldn` (an LWS
+profile has no LDN inbox) or `outside-storage`, so callers can show an error with Retry instead of
+an empty state. The bound is `SHARED_INBOX_LIMIT` (100, Requests' bound); one extra member is read
+to set `truncated`, and the newest `limit` notifications read are returned (the container listing
+order decides which members are read at all). Aborts reject.
 
 `resolveSuiteResource(hints, { encodeRef, encodeContactRef?, shared?, storageUrl?, previewOnly?, hints? })`
 is the single resource-to-app/route resolver for search and Shared. RDF types match canonical
