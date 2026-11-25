@@ -31,10 +31,17 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory as N3DataFactory, Store } from "n3";
-import { type DatatypeMapper, iriMapper, literalMapper, readLiteral, XSD } from "./datatypes.js";
+import {
+  type DatatypeMapper,
+  fieldLiteralMapper,
+  iriMapper,
+  readLiteral,
+  XSD,
+} from "./datatypes.js";
 import {
   httpIriOrUndefined,
   isSafeAbsoluteIri,
+  matchesStringPattern,
   sanitizeText,
   subjectIri,
   tryRead,
@@ -146,7 +153,10 @@ interface FieldPlan {
 }
 
 function planField(field: ManifestField): FieldPlan {
-  const mapper = field.kind === "iri" ? iriMapper() : literalMapper(field.datatype as string);
+  const mapper =
+    field.kind === "iri"
+      ? iriMapper()
+      : fieldLiteralMapper(field.datatype as string, field.decimal);
   return { field, mapper };
 }
 
@@ -184,6 +194,7 @@ function sanitizeLiteral(plan: FieldPlan, value: unknown): unknown {
     plan.mapper.jsType === "string" &&
     typeof value === "string" &&
     plan.mapper.lexicalValid === undefined &&
+    plan.field.guards?.stringPattern === undefined &&
     plan.field.guards?.sanitizeText !== false
     ? sanitizeText(value)
     : value;
@@ -274,6 +285,8 @@ function applyScalarGuards(field: ManifestField, value: unknown): unknown {
     // SHACL/XSD character-length semantics for astral characters.
     if (g.minLength !== undefined && [...value].length < g.minLength) return undefined;
     if (g.nonBlank === true && value.trim() === "") return undefined;
+    if (g.stringPattern !== undefined && !matchesStringPattern(g.stringPattern, value))
+      return undefined;
   }
   return value;
 }

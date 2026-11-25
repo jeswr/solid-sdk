@@ -24,8 +24,13 @@
 
 export {
   type DatatypeMapper,
+  type DecimalMapping,
+  EXACT_DECIMAL_MAX_LENGTH,
+  exactDecimalMapper,
   expandDatatype,
+  fieldLiteralMapper,
   iriMapper,
+  isExactDecimalLexical,
   isKnownDatatype,
   isXsdDate,
   isXsdDateTime,
@@ -42,6 +47,9 @@ export {
   isHttpIri,
   isSafeAbsoluteIri,
   isTurtlePrefixName,
+  isUpperAlpha3,
+  matchesStringPattern,
+  type StringPattern,
   sanitizeText,
   subjectIri,
   tryRead,

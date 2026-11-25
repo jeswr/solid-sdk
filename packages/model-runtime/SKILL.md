@@ -165,6 +165,14 @@ does not constrain a linked item. See federation-codegen's ordered admission tab
   clears the field silently. The generated `shapes.ttl` lowers `sh:class` to `sh:in`;
   validate pod data for such fields against that file, never the sector SHACL. Ordinary `in` enums keep
   their historical drop-invalid writes.
+- `"decimal": "exact"` on an `xsd:decimal` literal field (never an integer subtype)
+  surfaces a `string` in the closed grammar `[+-]?[0-9]+(\.[0-9]+)?`, at most 64 chars
+  (`isExactDecimalLexical`), preserved byte-for-byte (scale, leading zeros, sign). It
+  rejects `in`, numeric bounds, text guards and non-lexical defaults. Resolve a field's
+  mapper with `fieldLiteralMapper(datatype, field.decimal)`, never `literalMapper` alone.
+- `guards.stringPattern: "upper-alpha-3"` (xsd:string literals only) keeps exactly three
+  ASCII `A`-`Z` letters; values are checked raw (no write sanitization). It is the only
+  string pattern guard; add another only as a new reviewed enum value plus checker.
 - Read aliases are optional `aliasTypeIris` on flat entities/composite nodes and ordered
   `aliasPredicates` on flat fields (at most four distinct, Turtle-safe absolute http(s) IRIs per key).
   They exclude canonical IRIs; predicate aliases cannot overlap any canonical/alias
