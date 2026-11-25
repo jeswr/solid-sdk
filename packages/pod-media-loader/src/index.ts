@@ -5,12 +5,16 @@ export {
   type AcquireOptions,
   createMediaLoader,
   DEFAULT_ALLOWED_TYPES,
+  DEFAULT_MAX_CONCURRENT,
+  DEFAULT_MAX_PIXELS,
+  DEFAULT_READ_TIMEOUT_MS,
   INERT_TYPE,
   type MediaHandle,
   type MediaLoader,
   type MediaLoaderOptions,
   type MediaLoaderStats,
   type ObjectUrlApi,
+  SNIFF_WINDOW,
 } from "./loader.js";
 export { defaultSniff, type Sniffed, type Sniffer } from "./sniff.js";
 export type { MediaScope } from "./url.js";

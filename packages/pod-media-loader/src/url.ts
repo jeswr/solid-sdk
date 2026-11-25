@@ -42,7 +42,14 @@ export function scopeTest(scope: MediaScope): (canonicalUrl: string) => boolean 
       }
     };
   }
-  const containers = scope.map((container) => normalizePodBase(container));
+  const containers = scope.map((container) => {
+    try {
+      return normalizePodBase(container);
+    } catch {
+      // The guard's message can echo the container URL; ours is fixed.
+      throw new TypeError("scope containers must be absolute http(s) container URLs");
+    }
+  });
   return (url) =>
     containers.some((container) => isWithinPodScope(container, url, { allowRoot: false }));
 }

@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Claude Sonnet 5.5
-import { cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode, StrictMode } from "react";
 import { afterEach, describe, expect, test } from "vitest";
 import type { MediaError } from "../src/errors.js";
 import { createMediaLoader, type MediaHandle, type MediaLoader } from "../src/loader.js";
-import { useMedia } from "../src/react.js";
-import { deferred, fakeStorage, fakeUrls, MEDIA, png, served } from "./helpers.js";
+import { type UseMediaResult, useMedia } from "../src/react.js";
+import { deferred, type FakeRead, fakeStorage, fakeUrls, MEDIA, png, served } from "./helpers.js";
 
 afterEach(cleanup);
 
@@ -20,7 +20,7 @@ function tracked(overrides: Record<string, unknown> = {}) {
     storage: fake.storage,
     scope: [MEDIA],
     maxBytes: 1 << 20,
-    maxTotalBytes: 1 << 20,
+    maxTotalBytes: 16 << 20,
     maxEntries: 8,
     objectUrls: urls.api,
     ...overrides,
@@ -172,6 +172,7 @@ describe("useMedia", () => {
           },
         };
       },
+      subscribe: () => () => undefined,
     } as unknown as MediaLoader;
     const { unmount } = renderHook(() => useMedia(loader, at("a")));
     unmount();
@@ -186,6 +187,7 @@ describe("useMedia", () => {
         await gate.promise;
         return { ok: false as const, error: { code: "failed", message: "x" } };
       },
+      subscribe: () => () => undefined,
     } as unknown as MediaLoader;
     const { unmount, result } = renderHook(() => useMedia(loader, at("a")));
     unmount();
@@ -201,6 +203,7 @@ describe("useMedia", () => {
         signals.push(options?.signal as AbortSignal);
         return new Promise(() => undefined);
       },
+      subscribe: () => () => undefined,
     } as unknown as MediaLoader;
     const { unmount } = renderHook(() => useMedia(loader, at("a")));
     expect(signals[0]?.aborted).toBe(false);
@@ -241,5 +244,128 @@ describe("useMedia under StrictMode", () => {
     const { result } = renderHook(() => useMedia(loader, at("a")), { wrapper: strict });
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(urls.live()).toContain(result.current.url);
+  });
+});
+
+describe.each([
+  ["without StrictMode", undefined],
+  ["under StrictMode", strict],
+])("a released URL is never shown again (%s)", (_name, wrapper) => {
+  test("A, then no URL, then A again after eviction", async () => {
+    const { loader, urls } = tracked({ maxEntries: 2 });
+    const renders: UseMediaResult[] = [];
+    const { result, rerender } = renderHook(
+      ({ url }: { url: string | undefined }) => {
+        const value = useMedia(loader, url);
+        renders.push(value);
+        return value;
+      },
+      { initialProps: { url: at("a") as string | undefined }, ...(wrapper ? { wrapper } : {}) },
+    );
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    const first = result.current.url as string;
+    rerender({ url: undefined });
+    for (const name of ["bbbb", "cccc"]) {
+      const other = await loader.acquire(at(name));
+      if (other.ok) other.value.release();
+    }
+    expect(urls.revoked).toContain(first);
+    renders.length = 0;
+    rerender({ url: at("a") });
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    for (const seen of renders) expect(seen.url).not.toBe(first);
+    expect(result.current.url).not.toBe(first);
+  });
+
+  test("A, then B still loading, then A invalidated and requested again", async () => {
+    const urls = fakeUrls();
+    const gate = deferred<FakeRead>();
+    const fake = fakeStorage((url) => (url.endsWith("b.png") ? gate.promise : served(png())));
+    const loader = createMediaLoader({
+      storage: fake.storage,
+      scope: [MEDIA],
+      maxBytes: 1 << 20,
+      maxTotalBytes: 8 << 20,
+      maxEntries: 8,
+      objectUrls: urls.api,
+    });
+    const renders: UseMediaResult[] = [];
+    const { result, rerender } = renderHook(
+      ({ url }: { url: string }) => {
+        const value = useMedia(loader, url);
+        renders.push(value);
+        return value;
+      },
+      { initialProps: { url: at("a") }, ...(wrapper ? { wrapper } : {}) },
+    );
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    const first = result.current.url as string;
+    rerender({ url: at("b") });
+    expect(result.current.status).toBe("loading");
+    loader.invalidate(at("a"));
+    expect(urls.revoked).toContain(first);
+    renders.length = 0;
+    rerender({ url: at("a") });
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    for (const seen of renders) expect(seen.url).not.toBe(first);
+    gate.resolve(served(png()));
+  });
+});
+
+describe("purge reaches mounted hooks", () => {
+  test("a purge moves a ready hook to an error state without ever rendering a revoked URL", async () => {
+    const { loader, urls, holds } = tracked();
+    const renders: UseMediaResult[] = [];
+    const { result } = renderHook(() => {
+      const value = useMedia(loader, at("a"));
+      renders.push(value);
+      return value;
+    });
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    const url = result.current.url as string;
+    renders.length = 0;
+    act(() => loader.purge());
+    expect(urls.revoked).toContain(url);
+    expect(result.current).toMatchObject({
+      status: "error",
+      url: undefined,
+      error: { code: "purged" },
+    });
+    for (const seen of renders) expect(seen.url).toBeUndefined();
+    expect(holds.size).toBe(0);
+  });
+
+  test("after resume a remount loads again", async () => {
+    const { loader } = tracked();
+    const first = renderHook(() => useMedia(loader, at("a")));
+    await waitFor(() => expect(first.result.current.status).toBe("ready"));
+    act(() => loader.purge());
+    first.unmount();
+    loader.resume();
+    const second = renderHook(() => useMedia(loader, at("a")));
+    await waitFor(() => expect(second.result.current.status).toBe("ready"));
+  });
+
+  test("a session change purges mounted hooks too, and unmount unsubscribes", async () => {
+    let who = "alice";
+    const { loader, urls } = tracked({ getSessionKey: () => who });
+    const hook = renderHook(() => useMedia(loader, at("a")));
+    await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+    const url = hook.result.current.url as string;
+    who = "bob";
+    await act(async () => {
+      await loader.acquire(at("other"));
+    });
+    expect(urls.revoked).toContain(url);
+    expect(hook.result.current.status).toBe("error");
+    let unsubscribed = 0;
+    const fake = {
+      acquire: () => new Promise(() => undefined),
+      subscribe: () => () => {
+        unsubscribed++;
+      },
+    } as unknown as MediaLoader;
+    renderHook(() => useMedia(fake, at("a"))).unmount();
+    expect(unsubscribed).toBe(1);
   });
 });

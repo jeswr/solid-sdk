@@ -6,6 +6,7 @@ export type MediaErrorCode =
   | "not-found"
   | "forbidden"
   | "too-large"
+  | "over-budget"
   | "unsupported-type"
   | "offline"
   | "aborted"
@@ -27,6 +28,7 @@ const MESSAGES: Readonly<Record<MediaErrorCode, string>> = {
   "not-found": "The resource does not exist.",
   forbidden: "Access to the resource is not allowed.",
   "too-large": "The resource is too large to display.",
+  "over-budget": "The media memory budget is exhausted.",
   "unsupported-type": "The resource is not a supported media type.",
   offline: "The pod could not be reached.",
   aborted: "The request was cancelled.",
@@ -54,7 +56,12 @@ export class MediaFailure extends Error {
 
 /** Map a thrown storage-client error to a closed code by duck-typing its `code` string. */
 export function codeOfStorageError(error: unknown): MediaErrorCode {
-  const code = (error as { code?: unknown } | null)?.code;
+  let code: unknown;
+  try {
+    code = (error as { code?: unknown } | null)?.code;
+  } catch {
+    return "failed"; // a hostile getter
+  }
   switch (code) {
     case "not-found":
       return "not-found";

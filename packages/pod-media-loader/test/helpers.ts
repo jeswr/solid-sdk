@@ -64,8 +64,34 @@ export const jpeg = (w = 1, h = 1): Uint8Array =>
     [0xff, 0xd9],
   );
 
-export const gif = (w = 1, h = 1): Uint8Array =>
-  concat("GIF89a", u16le(w), u16le(h), [0, 0, 0], [0x3b]);
+/** A GIF whose single frame fills a screen of the same size. */
+export const gif = (w = 1, h = 1): Uint8Array => gifFrames([w, h], [[w, h]]);
+
+/** A GIF with the given logical screen and one image descriptor per [width, height] frame. */
+export const gifFrames = (
+  screen: readonly [number, number],
+  frames: readonly (readonly [number, number])[],
+  options: { globalTable?: boolean; localTable?: boolean; extension?: boolean } = {},
+): Uint8Array =>
+  concat(
+    "GIF89a",
+    u16le(screen[0]),
+    u16le(screen[1]),
+    [options.globalTable ? 0x80 : 0, 0, 0],
+    options.globalTable ? new Uint8Array(6) : [],
+    ...frames.map(([w, h]) =>
+      concat(
+        options.extension ? [0x21, 0xf9, 4, 0, 0, 0, 0, 0] : [],
+        [0x2c, 0, 0, 0, 0],
+        u16le(w),
+        u16le(h),
+        [options.localTable ? 0x80 : 0],
+        options.localTable ? new Uint8Array(6) : [],
+        [2, 2, 0x44, 0x01, 0],
+      ),
+    ),
+    [0x3b],
+  );
 
 const riff = (form: string, chunk: Uint8Array): Uint8Array =>
   concat("RIFF", u32le(4 + chunk.length), form, chunk);
@@ -82,7 +108,7 @@ export const webpExtended = (w = 1, h = 1): Uint8Array =>
     concat("VP8X", u32le(10), [0, 0, 0, 0], u32le(w - 1).slice(0, 3), u32le(h - 1).slice(0, 3)),
   );
 
-const box = (type: string, ...payload: Part[]): Uint8Array => {
+export const box = (type: string, ...payload: Part[]): Uint8Array => {
   const body = concat(...payload);
   return concat(u32(8 + body.length), type, body);
 };
@@ -96,7 +122,35 @@ export const avif = (w = 1, h = 1): Uint8Array =>
     box("mdat", [1, 2, 3, 4]),
   );
 export const heic = (w = 1, h = 1): Uint8Array =>
-  concat(ftyp("heic", "mif1"), box("meta", u32(0), box("ispe", u32(0), u32(w), u32(h))));
+  concat(
+    ftyp("heic", "mif1"),
+    box("meta", u32(0), box("iprp", box("ipco", box("ispe", u32(0), u32(w), u32(h))))),
+  );
+
+/** An AVIF image sequence: a tkhd of the given size (version 0 or 1) and, optionally, a decoy ispe. */
+export const avis = (
+  w: number,
+  h: number,
+  options: { version?: 0 | 1; ispe?: readonly [number, number] } = {},
+): Uint8Array => {
+  const prefix = options.version === 1 ? 88 : 76;
+  const tkhd = box(
+    "tkhd",
+    [options.version ?? 0],
+    new Uint8Array(prefix - 1),
+    u32(w * 65536),
+    u32(h * 65536),
+    new Uint8Array(4),
+  );
+  const meta = options.ispe
+    ? box(
+        "meta",
+        u32(0),
+        box("iprp", box("ipco", box("ispe", u32(0), u32(options.ispe[0]), u32(options.ispe[1])))),
+      )
+    : new Uint8Array(0);
+  return concat(ftyp("avis", "avis", "msf1"), meta, box("moov", box("trak", tkhd)));
+};
 export const mp4 = (): Uint8Array => concat(ftyp("isom", "isom", "mp42"), box("mdat", [0, 0]));
 export const m4a = (): Uint8Array => concat(ftyp("M4A ", "M4A ", "mp42"), box("mdat", [0, 0]));
 export const mov = (): Uint8Array => concat(ftyp("qt  ", "qt  "), box("mdat", [0, 0]));
@@ -113,14 +167,18 @@ export const matroska = (): Uint8Array =>
 
 export const wav = (): Uint8Array => riff("WAVE", concat("fmt ", u32le(16), new Uint8Array(16)));
 export const flac = (): Uint8Array => concat("fLaC", [0, 0, 0, 0x22], new Uint8Array(34));
-export const glb = (): Uint8Array => concat("glTF", u32le(2), u32le(12));
+export const glb = (): Uint8Array => {
+  const json = concat("{}  ");
+  return concat("glTF", u32le(2), u32le(12 + 8 + json.length), u32le(json.length), "JSON", json);
+};
 export const oggVorbis = (): Uint8Array =>
   concat("OggS", new Uint8Array(23), [1, 30], [1], "vorbis", new Uint8Array(24));
 export const oggOpus = (): Uint8Array =>
   concat("OggS", new Uint8Array(23), [1, 19], "OpusHead", new Uint8Array(11));
 export const oggTheora = (): Uint8Array =>
   concat("OggS", new Uint8Array(23), [1, 30], [0x80], "theora", new Uint8Array(24));
-export const id3 = (): Uint8Array => concat("ID3", [4, 0, 0, 0, 0, 0, 10], new Uint8Array(10));
+export const id3 = (): Uint8Array =>
+  concat("ID3", [4, 0, 0, 0, 0, 0, 10], new Uint8Array(10), [0xff, 0xfb, 0x90, 0x00]);
 
 /** A valid MPEG-1 Layer III 128 kbps 44.1 kHz frame (417 bytes) repeated `n` times. */
 export const mp3Frames = (n = 2): Uint8Array => {

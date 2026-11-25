@@ -4,6 +4,7 @@ import { describe, expect, test, vi } from "vitest";
 import { MediaFailure } from "../src/errors.js";
 import { createMediaLoader } from "../src/loader.js";
 import { abortion, raceAbort, readBounded } from "../src/read.js";
+import { prefixOf } from "../src/view.js";
 import {
   deferred,
   fakeStorage,
@@ -79,12 +80,18 @@ describe("readBounded", () => {
 
   test("concatenates chunks in order", async () => {
     const bytes = Uint8Array.from({ length: 1000 }, (_v, i) => i % 251);
-    expect(await readBounded(streamOf(bytes, 7), 1000, live)).toEqual(bytes);
+    const body = await readBounded(streamOf(bytes, 7), 1000, live);
+    expect(body.size).toBe(1000);
+    expect(body.chunks.length).toBeGreaterThan(1);
+    expect(prefixOf(body.chunks, 1000)).toEqual(bytes);
   });
 
   test("an empty stream and a null body are empty", async () => {
-    expect(await readBounded(streamOf(new Uint8Array(0)), 10, live)).toEqual(new Uint8Array(0));
-    expect(await readBounded(null, 10, live)).toEqual(new Uint8Array(0));
+    expect(await readBounded(streamOf(new Uint8Array(0)), 10, live)).toEqual({
+      chunks: [],
+      size: 0,
+    });
+    expect(await readBounded(null, 10, live)).toEqual({ chunks: [], size: 0 });
   });
 
   test("refuses the moment the running total passes the limit", async () => {
@@ -105,7 +112,8 @@ describe("readBounded", () => {
         controller.close();
       },
     });
-    expect(await readBounded(body, 10, live)).toEqual(new Uint8Array([1, 2, 3]));
+    const read = await readBounded(body, 10, live);
+    expect(prefixOf(read.chunks, 10)).toEqual(new Uint8Array([1, 2, 3]));
   });
 
   test("refuses non-byte chunks", async () => {
@@ -118,6 +126,19 @@ describe("readBounded", () => {
     await expect(readBounded(body as ReadableStream<Uint8Array>, 10, live)).rejects.toMatchObject({
       code: "failed",
     });
+  });
+
+  test("an abort that lands with the last chunk still counts as an abort", async () => {
+    const ac = new AbortController();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(3));
+        controller.close();
+      },
+    });
+    const pending = readBounded(body, 10, ac.signal);
+    ac.abort();
+    await expect(pending).rejects.toMatchObject({ code: "aborted" });
   });
 
   test("a pre-aborted signal refuses before any byte is consumed", async () => {

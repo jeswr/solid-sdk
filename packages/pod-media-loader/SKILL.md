@@ -18,11 +18,12 @@ import { createMediaLoader } from "@jeswr/pod-media-loader";
 
 const loader = createMediaLoader({
   storage, // the StorageClient from createPodClient; the only transport
+  getSessionKey: () => webId, // a changed key purges everything before anything is served
   scope: [`${storageRoot}media/`], // container URLs or (canonicalUrl) => boolean
   maxBytes: 25 * 1024 * 1024,
   maxTotalBytes: 128 * 1024 * 1024,
   maxEntries: 200,
-  maxPixels: 64_000_000,
+  // maxPixels defaults to 64_000_000 (raise it deliberately)
 });
 const result = await loader.acquire(url, { signal });
 if (result.ok) { img.src = result.value.url; /* ... */ result.value.release(); }
@@ -31,7 +32,21 @@ if (result.ok) { img.src = result.value.url; /* ... */ result.value.release(); }
 React: `useMedia(loader, url)` from `@jeswr/pod-media-loader/react` returns
 `{ status, url, error }`; it acquires on mount and releases on unmount or change.
 
+## GLB / glTF: external URIs
+
+glTF JSON can reference external URIs that loaders fetch without credentials or scope, so a shared
+model can beacon to any host. The loader validates the GLB header but never parses the JSON.
+Whoever feeds a `model/gltf-binary` blob to a loader (three.js and the like) must make that loader
+refuse every non-embedded URI (for example a `LoadingManager` URL modifier that only allows `blob:`
+and `data:`). Do not skip this because "the blob is safe".
+
 ## Rules to keep
+
+- One loader per signed-in session, with `getSessionKey` set to the WebID.
+- Memory is a hard budget: a read that does not fit is `over-budget`; size `maxTotalBytes` as a
+  multiple of `maxBytes` and release handles promptly. Reads run `maxConcurrent` at a time.
+- `useMedia` follows `purge()` on its own (status `error`, code `purged`); other holders of handles
+  must not use a URL after purge.
 
 - Every acquire must be matched by `release()`. Eviction only revokes entries at zero references; a
   leaked handle pins its entry and its bytes.
@@ -43,15 +58,17 @@ React: `useMedia(loader, url)` from `@jeswr/pod-media-loader/react` returns
   naming svg, xml, html or script, and for `application/*` and `text/*`. Never add a sniffed type
   to show it in an `<iframe>`, `<object>`, `<embed>` or a new tab.
 - Errors are a closed set; branch on `error.code` and never build UI text from a URL.
-- A media URL with a query, fragment or credentials is `out-of-scope`, with no request.
-- `inert: true` is download-only: show it as a file, never as media.
+- A media URL with a query, fragment, credentials or an encoded delimiter is `out-of-scope`, with no request.
+- With `maxPixels` set (it defaults to 64 MP) an allowed `image/*` type without a dimension reader is refused; use `inert` for such files.
+- `inert: true` is download-only and never fails for type or pixels: show it as a file, never as media.
 
 ## Maintaining the package
 
 - 100% statements, branches, functions and lines are enforced by `vitest.config.ts`; run
   `pnpm --filter @jeswr/pod-media-loader test`.
 - `src/sniff.ts` is a port of the pod-media-store sniffer: change both copies together until one
-  shared module exists. Pin every sniffing change with a polyglot test.
+  shared module exists. The type decision is magic bytes only (no text scan): safety is the passive output type, so
+  never add an active type to the sniffer or `allow`. Pin every sniffing change with a test.
 - Keep the purge guard (`purged || epoch !== flight.epoch`) synchronous with `createObjectURL`: no
   `await` may sit between them. The tests that pin it queue a purge in a microtask for that reason.
 - No new dependencies without `pnpm run check:packages <name>`. The core must not import React.

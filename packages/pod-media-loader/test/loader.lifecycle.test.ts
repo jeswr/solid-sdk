@@ -85,19 +85,20 @@ describe("sharing and reference counting", () => {
     expect(urls.live()).toEqual([b.url]);
   });
 
-  test("eviction never revokes an entry that is still held", async () => {
+  test("a held entry is never revoked: a read that cannot fit is refused instead", async () => {
     const { loader, urls } = rig({ maxEntries: 1 });
     const a = await must(loader.acquire(at("a")));
-    const b = await must(loader.acquire(at("b")));
-    // Both are held, so the bound is exceeded rather than a live URL revoked.
+    expect(await loader.acquire(at("b"))).toMatchObject({
+      ok: false,
+      error: { code: "over-budget" },
+    });
     expect(urls.revoked).toEqual([]);
-    expect(loader.stats().entries).toBe(2);
-    b.release();
-    // b is now unreferenced and over budget: it goes; a, still held, stays.
-    expect(urls.revoked).toEqual([b.url]);
-    expect(urls.live()).toEqual([a.url]);
+    expect(loader.stats().entries).toBe(1);
     a.release();
-    expect(urls.live()).toEqual([a.url]);
+    // Unreferenced now: the next read evicts it to make room.
+    const b = await must(loader.acquire(at("b")));
+    expect(urls.revoked).toEqual([a.url]);
+    expect(urls.live()).toEqual([b.url]);
   });
 
   test("double release is harmless and cannot drop another holder's hold", async () => {
@@ -107,14 +108,15 @@ describe("sharing and reference counting", () => {
     one.release();
     one.release();
     one.release();
-    // Pressure from another URL must not revoke a, which `two` still holds.
-    const other = await must(loader.acquire(at("b")));
-    other.release();
-    expect(urls.revoked).not.toContain(two.url);
+    // `two` still holds a: pressure from another URL is refused, never served by revoking a.
+    expect(await loader.acquire(at("b"))).toMatchObject({
+      ok: false,
+      error: { code: "over-budget" },
+    });
+    expect(urls.revoked).toEqual([]);
     two.release();
-    expect(urls.revoked).not.toContain(two.url);
     const next = await must(loader.acquire(at("c")));
-    expect(urls.revoked).toContain(two.url);
+    expect(urls.revoked).toEqual([two.url]);
     next.release();
   });
 

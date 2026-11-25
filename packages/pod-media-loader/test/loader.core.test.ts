@@ -1,7 +1,12 @@
 // AUTHORED-BY Claude Sonnet 5.5
 import { createSolidBackend } from "@jeswr/storage-client/solid";
 import { describe, expect, test, vi } from "vitest";
-import { createMediaLoader, DEFAULT_ALLOWED_TYPES, INERT_TYPE } from "../src/loader.js";
+import {
+  createMediaLoader,
+  DEFAULT_ALLOWED_TYPES,
+  DEFAULT_MAX_PIXELS,
+  INERT_TYPE,
+} from "../src/loader.js";
 import {
   avif,
   concat,
@@ -337,12 +342,12 @@ describe("sniffed types: every default format, and the server's type is never us
   test("a custom sniffer decides the type but the allowlist still gates it", async () => {
     const sniff = vi.fn((bytes: Uint8Array) =>
       bytes[0] === 0x58
-        ? { contentType: "image/x-custom", extension: ".x" }
+        ? { contentType: "audio/x-custom", extension: ".x" }
         : { contentType: "image/svg+xml", extension: ".svg" },
     );
-    const { loader, put, urls } = await setup({ sniff, allow: ["image/x-custom"] });
+    const { loader, put, urls } = await setup({ sniff, allow: ["audio/x-custom"] });
     const good = await loader.acquire((await put("good", concat("XYZ"))).url);
-    expect(good.ok && urls.blobOf(good.value.url).type).toBe("image/x-custom");
+    expect(good.ok && urls.blobOf(good.value.url).type).toBe("audio/x-custom");
     const bad = await loader.acquire((await put("bad", concat("abc"))).url);
     expect(bad).toMatchObject({ ok: false, error: { code: "unsupported-type" } });
   });
@@ -548,7 +553,9 @@ describe("bounded reads", () => {
 
   test("maxBytes is clamped to maxTotalBytes", async () => {
     const { loader, put } = await setup({ maxBytes: 1 << 20, maxTotalBytes: png().length });
-    expect((await loader.acquire((await put("a", png())).url)).ok).toBe(true);
+    const first = await loader.acquire((await put("a", png())).url);
+    expect(first.ok).toBe(true);
+    if (first.ok) first.value.release();
     const over = await put("b", concat(png(), [0]));
     expect(await loader.acquire(over.url)).toMatchObject({
       ok: false,
@@ -792,9 +799,18 @@ describe("image dimension guard", () => {
     expect((await loader.acquire((await put("v", mp4())).url)).ok).toBe(true);
   });
 
-  test("without maxPixels no header is read", async () => {
+  test("maxPixels defaults to 64 megapixels and can be raised", async () => {
+    expect(DEFAULT_MAX_PIXELS).toBe(64_000_000);
     const { loader, put } = await setup();
-    expect((await loader.acquire((await put("big", png(30000, 30000))).url)).ok).toBe(true);
+    expect((await loader.acquire((await put("ok", png(8000, 8000))).url)).ok).toBe(true);
+    expect(await loader.acquire((await put("big", png(8001, 8000))).url)).toMatchObject({
+      ok: false,
+      error: { code: "too-large" },
+    });
+    const raised = await setup({ maxPixels: 2 ** 40 });
+    expect((await raised.loader.acquire((await raised.put("big", png(30000, 30000))).url)).ok).toBe(
+      true,
+    );
   });
 
   test("inert fallbacks are not treated as images", async () => {

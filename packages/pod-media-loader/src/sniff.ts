@@ -4,6 +4,11 @@
 // `packages/pod-media-store/src/sniff.ts` (branch `feat/pod-media-store`, not yet on main), with
 // the same rules and the same polyglot guard. The two copies MUST converge into one shared module
 // once both packages are on main: fix a sniffing bug in both places until then.
+//
+// Deliberate differences from the port (review pod-media-loader-5810c65): the text/markup
+// polyglot guard is gone (safety rests on the passive output type, not on the bytes); an MP3 needs
+// a plausible frame after its ID3 tag; GLB validates its header; the sniffer may be told the full
+// resource size because it is handed only a prefix.
 
 /** What a sniffer decides about a byte string: the stored type and the file extension. */
 export interface Sniffed {
@@ -12,7 +17,8 @@ export interface Sniffed {
   readonly extension: string;
 }
 
-export type Sniffer = (bytes: Uint8Array) => Sniffed | undefined;
+/** `size` is the full resource length when `bytes` is only a prefix of it. */
+export type Sniffer = (bytes: Uint8Array, size?: number) => Sniffed | undefined;
 
 const startsWith = (bytes: Uint8Array, offset: number, text: string): boolean => {
   if (bytes.length < offset + text.length) return false;
@@ -31,13 +37,6 @@ const latin1 = (bytes: Uint8Array, start: number, end: number): string => {
     text += String.fromCharCode(bytes[i] as number);
   return text;
 };
-
-/** Markup that has no business in the first bytes of a media header (polyglot guard). */
-const MARKUP = ["<svg", "<html", "<script", "<!doctype"];
-/** How far into the bytes the polyglot guard looks. */
-const SCAN = 512;
-/** An XML prolog is only suspicious at the very start: photos carry XMP packets after it. */
-const PROLOG_SCAN = 64;
 
 const MP4_BRANDS = new Set([
   "isom",
@@ -89,17 +88,31 @@ function mpegFrameLength(bytes: Uint8Array, at: number): number | undefined {
   return Math.floor((factor * bitrate * 1000) / rate) + padding;
 }
 
-/** A valid ID3v2 header, or two consecutive MPEG frames (one sync pattern is far too weak). */
-function isMp3(bytes: Uint8Array): boolean {
+/**
+ * A valid ID3v2 header followed by a plausible MPEG frame (when the frame lies inside the bytes we
+ * were given), or two consecutive MPEG frame headers (one sync pattern is far too weak).
+ */
+function isMp3(bytes: Uint8Array, size: number): boolean {
   if (startsWith(bytes, 0, "ID3")) {
     const header = bytes.subarray(3, 10);
-    return (
+    const valid =
       header.length === 7 &&
-      (header[0] as number) < 0xff &&
+      (header[0] as number) >= 2 &&
+      (header[0] as number) <= 4 &&
       (header[1] as number) < 0xff &&
       ((header[2] as number) & 0x0f) === 0 &&
-      header.subarray(3).every((byte) => byte < 0x80)
-    );
+      header.subarray(3).every((byte) => byte < 0x80);
+    if (!valid) return false;
+    const tag =
+      ((header[3] as number) << 21) |
+      ((header[4] as number) << 14) |
+      ((header[5] as number) << 7) |
+      (header[6] as number);
+    const frameAt = 10 + tag + ((header[2] as number) & 0x10 ? 10 : 0);
+    // A tag with large cover art can end beyond the prefix; that cannot be checked here, but the
+    // frame must still fit inside the whole resource.
+    if (frameAt + 4 > size) return false;
+    return frameAt + 4 > bytes.length || mpegFrameLength(bytes, frameAt) !== undefined;
   }
   const first = mpegFrameLength(bytes, 0);
   return first !== undefined && mpegFrameLength(bytes, first) !== undefined;
@@ -135,7 +148,28 @@ const isOggAudio = (bytes: Uint8Array): boolean => {
   return head.includes("vorbis") || head.includes("OpusHead");
 };
 
-function magic(bytes: Uint8Array): Sniffed | undefined {
+const u32le = (bytes: Uint8Array, at: number): number =>
+  (bytes[at] as number) +
+  (bytes[at + 1] as number) * 0x100 +
+  (bytes[at + 2] as number) * 0x10000 +
+  (bytes[at + 3] as number) * 0x1000000;
+
+/**
+ * GLB 2: magic, version 2, a declared length equal to the real length, and a first chunk that is
+ * JSON and fits. The JSON is not parsed here: it may name external URIs (see the README).
+ */
+function isGlb(bytes: Uint8Array, size: number): boolean {
+  return (
+    startsWith(bytes, 0, "glTF") &&
+    bytes.length >= 20 &&
+    u32le(bytes, 4) === 2 &&
+    u32le(bytes, 8) === size &&
+    startsWith(bytes, 16, "JSON") &&
+    20 + u32le(bytes, 12) <= size
+  );
+}
+
+function magic(bytes: Uint8Array, size: number): Sniffed | undefined {
   if (startsWithBytes(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
     return { contentType: "image/png", extension: ".png" };
   }
@@ -163,28 +197,18 @@ function magic(bytes: Uint8Array): Sniffed | undefined {
     }
     return undefined;
   }
-  if (startsWith(bytes, 0, "glTF") && bytes.length >= 12 && bytes[4] === 2 && bytes[5] === 0) {
-    return { contentType: "model/gltf-binary", extension: ".glb" };
-  }
+  if (isGlb(bytes, size)) return { contentType: "model/gltf-binary", extension: ".glb" };
   if (startsWith(bytes, 0, "OggS")) {
     return isOggAudio(bytes) ? { contentType: "audio/ogg", extension: ".ogg" } : undefined;
   }
   if (startsWith(bytes, 0, "fLaC")) return { contentType: "audio/flac", extension: ".flac" };
-  return isMp3(bytes) ? { contentType: "audio/mpeg", extension: ".mp3" } : undefined;
+  return isMp3(bytes, size) ? { contentType: "audio/mpeg", extension: ".mp3" } : undefined;
 }
 
 /**
- * Default sniffer: magic bytes against a short allowlist (PNG, JPEG, GIF, WebP, AVIF, HEIC, MP4,
- * M4A, QuickTime, WebM, GLB, MP3, WAV, Ogg Vorbis/Opus, FLAC). It never returns SVG, HTML, XML
- * or any script-capable type, and it refuses bytes that carry markup in their first 512 bytes (an
- * XML prolog in the first 64), ignoring NULs so UTF-16 markup is seen too (a polyglot).
+ * Default sniffer: magic bytes only, against a short list (PNG, JPEG, GIF, WebP, AVIF, HEIC, MP4,
+ * M4A, QuickTime, WebM, GLB, MP3, WAV, Ogg Vorbis/Opus, FLAC). It never returns SVG, HTML, XML or
+ * any script-capable type. Bytes that carry markup after a valid magic are still typed by the
+ * magic: the output types are passive, which is the control (README, "Type rules").
  */
-export const defaultSniff: Sniffer = (bytes) => {
-  const found = magic(bytes);
-  if (found === undefined) return undefined;
-  const head = latin1(bytes, 0, SCAN).replaceAll("\0", "").toLowerCase();
-  const prolog = latin1(bytes, 0, PROLOG_SCAN).replaceAll("\0", "").toLowerCase();
-  return MARKUP.some((marker) => head.includes(marker)) || prolog.includes("<?xml")
-    ? undefined
-    : found;
-};
+export const defaultSniff: Sniffer = (bytes, size = bytes.length) => magic(bytes, size);

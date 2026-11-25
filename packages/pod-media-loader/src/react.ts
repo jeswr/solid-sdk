@@ -3,7 +3,7 @@
 // REACT IS AN OPTIONAL PEER DEPENDENCY. The core entry imports nothing from here; only an app
 // that already depends on React reaches for `@jeswr/pod-media-loader/react`.
 import { useEffect, useState } from "react";
-import type { MediaError } from "./errors.js";
+import { fail, type MediaError } from "./errors.js";
 import type { MediaLoader } from "./loader.js";
 
 export type UseMediaStatus = "idle" | "loading" | "ready" | "error";
@@ -28,11 +28,17 @@ const LOADING: UseMediaResult = Object.freeze({
   url: undefined,
   error: undefined,
 });
+const PURGED: UseMediaResult = Object.freeze({
+  status: "error",
+  url: undefined,
+  error: fail("purged").error,
+});
 
 /**
  * Show one pod media resource. Acquires on mount, releases on unmount or when the loader, URL or
- * `inert` flag changes. Correct under StrictMode's mount, cleanup, mount: the first acquire is
- * aborted (or released if it already finished), so exactly one hold survives.
+ * `inert` flag changes. The stored result is dropped in the same cleanup that releases its hold,
+ * so a released (possibly revoked) URL is never shown again, and a `purge()` moves the hook to
+ * an error state synchronously. Correct under StrictMode's mount, cleanup, mount.
  */
 export function useMedia(
   loader: MediaLoader,
@@ -47,6 +53,14 @@ export function useMedia(
     const controller = new AbortController();
     let cancelled = false;
     let release: (() => void) | undefined;
+    const settle = (result: UseMediaResult): void =>
+      setSettled({ loader, source: url, inert, result });
+    // Subscribe first: a purge at any point after this drops the hook out of "ready".
+    const unsubscribe = loader.subscribe(() => {
+      release?.();
+      release = undefined;
+      settle(PURGED);
+    });
     void loader.acquire(url, { signal: controller.signal, inert }).then((result) => {
       if (cancelled) {
         if (result.ok) result.value.release();
@@ -54,25 +68,17 @@ export function useMedia(
       }
       if (result.ok) {
         release = result.value.release;
-        setSettled({
-          loader,
-          source: url,
-          inert,
-          result: { status: "ready", url: result.value.url, error: undefined },
-        });
+        settle({ status: "ready", url: result.value.url, error: undefined });
       } else {
-        setSettled({
-          loader,
-          source: url,
-          inert,
-          result: { status: "error", url: undefined, error: result.error },
-        });
+        settle({ status: "error", url: undefined, error: result.error });
       }
     });
     return () => {
       cancelled = true;
+      unsubscribe();
       controller.abort();
       release?.();
+      setSettled(undefined);
     };
   }, [loader, url, inert]);
 

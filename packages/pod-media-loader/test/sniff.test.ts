@@ -23,6 +23,7 @@ import {
   png,
   svg,
   u32,
+  u32le,
   utf16,
   wav,
   webm,
@@ -169,47 +170,128 @@ describe("magic-byte sniffer: refusals", () => {
   });
 });
 
-describe("magic-byte sniffer: polyglot guard", () => {
+describe("type comes from magic bytes alone", () => {
   test.each([
     [
-      "svg in the first bytes after a PNG signature",
+      "markup after a PNG signature",
       concat(png().slice(0, 33), "<svg onload=alert(1)>"),
+      "image/png",
     ],
-    ["html with image magic later is refused (markup before magic)", concat(html(), png())],
-    ["PNG signature then html", concat(png().slice(0, 8), "<html><script>x</script>")],
+    [
+      "html after a PNG signature",
+      concat(png().slice(0, 8), "<html><script>x</script>"),
+      "image/png",
+    ],
     [
       "script after a GIF header",
-      concat("GIF89a", [1, 0, 1, 0, 0, 0, 0], "<script>alert(1)</script>"),
+      concat("GIF89a", [1, 0, 1, 0, 0, 0, 0], "<script>x</script>"),
+      "image/gif",
     ],
-    ["doctype in a JPEG comment", concat(jpeg().slice(0, 6), "<!DOCTYPE html>")],
-    ["case-insensitive markup", concat(png().slice(0, 33), "<SvG/onload=alert(1)>")],
+    ["doctype in a JPEG", concat(jpeg().slice(0, 6), "<!DOCTYPE html>"), "image/jpeg"],
     [
-      "xml prolog at the very start of a PNG body",
+      "an xml prolog after a PNG signature",
       concat(png().slice(0, 8), '<?xml version="1.0"?>'),
+      "image/png",
     ],
     [
-      "UTF-16LE markup after a PNG signature",
+      "UTF-16 markup after a PNG signature",
       concat(png().slice(0, 8), utf16("<svg onload=alert(1)>")),
+      "image/png",
     ],
-    ["UTF-16BE markup after a GIF header", concat("GIF89a", utf16("<html><body>", true))],
     [
-      "NUL-padded markup after a WebP header",
-      concat(webpLossy().slice(0, 30), utf16("<script>", false)),
+      "a GIF with an archive appended (GIFAR)",
+      concat(gif(), "PK", [3, 4], new Uint8Array(40)),
+      "image/gif",
     ],
-  ])("%s", (_name, bytes) => {
+    [
+      "markup after 512 bytes",
+      concat(gif(), new Uint8Array(600), "<script>alert(1)</script>"),
+      "image/gif",
+    ],
+  ])("%s is typed by its magic, which is a passive image", (_name, bytes, expected) => {
+    expect(type(bytes)).toBe(expected);
+  });
+
+  test.each([
+    ["html first", concat(html(), png())],
+    ["svg first", concat(svg(), png())],
+    ["UTF-16LE markup first", utf16("<svg onload=alert(1)>")],
+    ["UTF-16BE markup first", utf16("<html><body>", true)],
+    ["BOM then markup", concat([0xef, 0xbb, 0xbf], "<svg/>")],
+    ["text that only starts like ID3", concat("ID3  0abcdefghij", new Uint8Array(30))],
+    [
+      "ID3 followed by text instead of a frame",
+      concat("ID3", [4, 0, 0, 0, 0, 0, 10], new Uint8Array(10), "<html>"),
+    ],
+  ])("%s has no media type", (_name, bytes) => {
     expect(defaultSniff(bytes)).toBeUndefined();
   });
 
-  test("GIFAR-style: a GIF with a zip archive appended is typed as the GIF only", () => {
-    const zip = concat("PK", [3, 4], new Uint8Array(40), "META-INF/MANIFEST.MF");
-    expect(type(concat(gif(), zip))).toBe("image/gif");
+  test("an ID3 tag ending beyond the prefix cannot be checked and is accepted", () => {
+    // 4 MiB of tag (syncsafe 0x00200000), only the first bytes supplied.
+    const header = concat("ID3", [4, 0, 0, 0x01, 0x00, 0x00, 0x00], new Uint8Array(50));
+    expect(defaultSniff(header, 5_000_000)?.contentType).toBe("audio/mpeg");
+    // A tag that claims to end after the whole resource is not an MP3.
+    expect(defaultSniff(header)).toBeUndefined();
   });
 
-  test("magic that a server would call text/html is still just the image", () => {
-    expect(type(png())).toBe("image/png");
+  test.each([1, 5])("ID3 version %i is refused", (version) => {
+    expect(
+      defaultSniff(
+        concat("ID3", [version, 0, 0, 0, 0, 0, 10], new Uint8Array(10), [0xff, 0xfb, 0x90, 0x00]),
+      ),
+    ).toBeUndefined();
+  });
+
+  test("an ID3 footer flag moves the first frame ten bytes later", () => {
+    const withFooter = concat(
+      "ID3",
+      [4, 0, 0x10, 0, 0, 0, 4],
+      new Uint8Array(4),
+      new Uint8Array(10),
+      [0xff, 0xfb, 0x90, 0x00],
+    );
+    expect(type(withFooter)).toBe("audio/mpeg");
+    const missing = concat(
+      "ID3",
+      [4, 0, 0x10, 0, 0, 0, 4],
+      new Uint8Array(4),
+      [0xff, 0xfb, 0x90, 0x00],
+      new Uint8Array(10),
+    );
+    expect(defaultSniff(missing)).toBeUndefined();
   });
 
   test("a big-endian ftyp size field is read from the first four bytes", () => {
     expect(type(concat(u32(24), "ftypisom", u32(0), "isom", "mp42"))).toBe("video/mp4");
+  });
+});
+
+describe("GLB header", () => {
+  const json = concat("{}  ");
+  const glbOf = (version: number, length: number, chunkLength: number, kind = "JSON") =>
+    concat("glTF", u32le(version), u32le(length), u32le(chunkLength), kind, json);
+
+  test("a valid GLB 2 is model/gltf-binary", () => {
+    expect(type(glb())).toBe("model/gltf-binary");
+  });
+
+  test.each([
+    ["version 1", glbOf(1, 28, 4)],
+    ["version 3", glbOf(3, 28, 4)],
+    ["a version whose high bytes are set", glbOf(0x0001_0002, 28, 4)],
+    ["a declared length shorter than the file", glbOf(2, 27, 4)],
+    ["a declared length longer than the file", glbOf(2, 29, 4)],
+    ["a first chunk that is not JSON", glbOf(2, 28, 4, "BIN\0")],
+    ["a first chunk that overruns the file", glbOf(2, 28, 5)],
+    ["a header that is too short", concat("glTF", u32le(2), u32le(12))],
+  ])("%s is refused", (_name, bytes) => {
+    expect(defaultSniff(bytes)).toBeUndefined();
+  });
+
+  test("the declared length is compared with the full size, not the prefix handed in", () => {
+    const whole = glb();
+    expect(defaultSniff(whole.slice(0, 20), whole.length)?.contentType).toBe("model/gltf-binary");
+    expect(defaultSniff(whole.slice(0, 20), whole.length + 1)).toBeUndefined();
   });
 });
