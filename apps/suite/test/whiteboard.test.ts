@@ -157,8 +157,8 @@ describe("whiteboard pod orchestration", () => {
       webId: "https://id.example/card#me",
       displayName: "Fictional",
       fetch: pod.fetch,
+      publicFetch: pod.fetch,
       subscribe: pod.subscribe,
-      reset: async () => {},
     };
     const repo = await openWhiteboards(session);
     expect(repo.registration).toEqual({ state: "unavailable" });
