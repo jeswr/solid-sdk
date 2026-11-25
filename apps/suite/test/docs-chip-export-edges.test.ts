@@ -12,7 +12,7 @@ const doc = (...content: JSONContent[]): JSONContent => ({ type: "doc", content 
 
 async function documentXml(json: JSONContent): Promise<string> {
   const archive = await openArrayBuffer(await Packer.toArrayBuffer(await toDocx(json, vi.fn())));
-  return String(await archive.read("word/document.xml", "utf8"));
+  return String(await archive.read("word/document.xml", "utf-8"));
 }
 
 it("DOCX drops a chip with neither a label nor a safe IRI, and labels an IRI-only chip with the IRI", async () => {
