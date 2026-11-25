@@ -64,11 +64,17 @@ export interface MediaStoreOptions<T, I> {
   concurrency?: number;
   /** Attempts for `update` before it reports a conflict. Default 4. */
   updateAttempts?: number;
-  /** Read-only exposure probe for the library container. See {@link ExposureCheck}. */
+  /**
+   * Read-only exposure probe, asked about the library container and about each shard before
+   * anything is written into it. See {@link ExposureCheck}. Writes fail closed: an `exposed`
+   * answer, an inconclusive one, a failure of the probe, any value other than the three
+   * states, and a missing probe all refuse the write, unless `allowUnknownExposure` is set
+   * (which lets the inconclusive cases through, never an `exposed` answer).
+   */
   exposure?: ExposureCheck;
-  /** Also refuse `put` when the probe is inconclusive. Default false. */
-  refuseUnknownExposure?: boolean;
-  /** How long a "private" answer is reused, in milliseconds. Default 60 000. */
+  /** Let writes proceed when exposure is unknown or unchecked. Default false. */
+  allowUnknownExposure?: boolean;
+  /** How long a "private" answer is reused for one container, in milliseconds. Default 60 000. */
   exposureTtlMs?: number;
   /**
    * Optional dedupe lookup for servers that name resources themselves (LWS). Given a content
@@ -82,12 +88,6 @@ export interface MediaStoreOptions<T, I> {
   /** Durable delete journal. Default: in-memory. */
   journal?: DeleteJournal;
   now?: () => number;
-  /** Wait between polls of a description another writer is still filling. */
-  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
-  /** Polls of a pending description before `put` gives up. Default 5. */
-  pendingPolls?: number;
-  /** Milliseconds between those polls. Default 100. */
-  pendingDelayMs?: number;
 }
 
 export interface PutInput<I> {
@@ -100,17 +100,24 @@ export interface PutInput<I> {
   createdAt: Date;
   /** Passed to `build`. */
   description: I;
-  thumbnail?: { bytes: Blob | Uint8Array; contentType?: string };
+  /** Stored next to the binary. Its own sniffed type must be an image. */
+  thumbnail?: { bytes: Blob | Uint8Array };
   signal?: AbortSignal;
 }
 
 export interface PutOutcome {
   descriptionUrl: string;
   binaryUrl: string;
+  /** The thumbnail the description actually links, otherwise undefined. */
   thumbnailUrl: string | undefined;
+  /**
+   * True when a thumbnail was supplied but the description (which already existed) does not
+   * link one. Nothing was linked: call `attachThumbnail` to add it.
+   */
+  thumbnailMissing: boolean;
   /** Lowercase hex SHA-256 of the binary. */
   sha256: string;
-  /** True when every resource was already there and verified; nothing was written. */
+  /** True when the description and the binary were already there and verified. */
   existed: boolean;
 }
 
@@ -164,6 +171,32 @@ export interface ResumeSummary {
   rejected: number;
 }
 
+/** What `attachThumbnail` needs: the image and the edit that links it. */
+export interface AttachThumbnailInput {
+  bytes: Blob | Uint8Array;
+  /**
+   * Like `update`'s `mutate`, plus the thumbnail's URL. The result must locate that URL as the
+   * thumbnail and leave the binary alone.
+   */
+  mutate: (current: Current, thumbnailUrl: string) => Promise<SerializedDescription | undefined>;
+  signal?: AbortSignal;
+}
+
+export interface SweepOptions {
+  /** Only resources at least this old are touched. Default 24 hours. */
+  minAgeMs?: number;
+  signal?: AbortSignal;
+}
+
+export interface SweepSummary {
+  /** Unreferenced media and abandoned empty descriptions that were removed. */
+  deleted: number;
+  /** Unreferenced media left because they are younger than `minAgeMs`. */
+  retained: number;
+  /** Shards left alone because a description in them could not be read or understood. */
+  shardsSkipped: number;
+}
+
 export interface MediaStore<T, I> {
   /** The library container URL, or null until one is found or created. */
   readonly library: string | null;
@@ -184,10 +217,24 @@ export interface MediaStore<T, I> {
     mutate: (current: Current) => Promise<SerializedDescription | undefined>,
     options?: { signal?: AbortSignal },
   ): Promise<Result<MediaItem<T>>>;
-  /** Two-step journalled delete: the description first, then the binary and thumbnail. */
+  /** Store a thumbnail for an existing description and link it with a conditional edit. */
+  attachThumbnail(
+    descriptionUrl: string,
+    input: AttachThumbnailInput,
+  ): Promise<Result<MediaItem<T>>>;
+  /**
+   * Two-step journalled delete: the description first (conditional on its ETag), and only
+   * once it is confirmed gone, the binary and thumbnail. A description that stays is never
+   * left without its media.
+   */
   remove(descriptionUrl: string, signal?: AbortSignal): Promise<Result<void>>;
-  /** Finish deletes recorded in the journal. */
+  /** Finish deletes recorded in the journal, the description first. */
   resumePending(signal?: AbortSignal): Promise<Result<ResumeSummary>>;
+  /**
+   * Remove media no description references and empty descriptions a failed put left on LWS,
+   * once they are old enough. A shard whose descriptions cannot all be read is left alone.
+   */
+  sweepOrphans(options?: SweepOptions): Promise<Result<SweepSummary>>;
 }
 
 export type { MediaStoreError, Sniffed };

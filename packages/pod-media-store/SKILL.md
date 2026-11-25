@@ -14,20 +14,33 @@ Rules that must survive any change:
 - Storage I/O only through the public `StorageClient` (`createPodClient`); discovery only through
   `@jeswr/pod-type-index`. No raw `fetch`, no quads, no regex over Turtle, no ACL writes. The caller injects
   `parse`, `build` and `locate`; if something needs RDF in `src`, stop and extend the caller's model instead.
-- Never derive a URL from container plus name after a create. Use the returned URL. Finding an existing
-  Solid name reads the shard listing (`findChild`).
+- Use the URL a create returned, except where the name is exact (Solid) and the URL is known before the create:
+  the description at `<shard>/<hash>`, created atomically with its whole body. Never leave an empty description on
+  Solid. On LWS the empty shell is filled with a write conditional on its own validator, never on `*`.
+- Never delete media on a failed put (no compensation): media are content-named, so retries adopt them. The only
+  thing a failed put removes is an empty LWS shell it made itself, and only while still empty. `sweepOrphans`
+  (age-gated, shard left alone when any description is unreadable) is the cleanup.
 - Every outcome is a `Result` with the closed error union. Messages, URLs with queries and credentials never
-  appear in an error. An abort is `failed` / `aborted` and outranks other errors.
+  appear in an error. An abort is `failed` / `aborted` and outranks other errors. No operation throws.
 - "Already exists" is success only after the existing bytes hash to the expected value and the existing
   description parses and `locate`s that binary. Never overwrite what was found.
-- Compensation deletes only resources created by the same call, conditionally on the create response's ETag, and
-  never a binary or thumbnail while a description holds the content name (review D1). It ignores the caller's abort.
+- `remove` and `resumePending` delete the description first (conditional on its ETag, still locating the recorded
+  binary), and media only after it is confirmed gone and not recreated. Media deletes are limited to the item's own
+  shard, never a description-typed resource, never dot names, and on Solid only `<description name>[-thumb].<ext>`.
+- `update` may not change which binary or thumbnail a description locates; `attachThumbnail` is the one way to add one.
 - Media URLs from a parsed description are trusted only inside a shard of the library (`shardOfMember`). On Solid
   that is a path check; on LWS identifiers are opaque, so containment is proven with `storage.parentOf` or by
   having listed or created the resource this session.
-- The journal and the type index are untrusted input. `resumePending` deletes only inside a library shard.
-- The default sniffer never returns SVG, HTML or XML types and refuses a media header that carries markup.
+- The journal, cursor, type index and descriptions are untrusted input. `resumePending` acts only inside the library.
+- Exposure fails closed: the probe must say `private` for the library and for the shard before a write;
+  `unknown` and a missing probe refuse unless `allowUnknownExposure`; `exposed` always refuses; only `private`
+  is cached. Registration is private-index only.
+- The default sniffer never returns SVG, HTML or XML types and refuses bytes carrying markup in the first 512
+  bytes; MP3 needs an ID3v2 header or two consecutive valid frames.
 
 Test pattern: the storage-client memory pod in both `solid` and `lws` modes (`test/support.ts` has the harness,
-fault injection `intercept`, and `serverNames` for an LWS that picks its own names). Mutate the "already exists"
-checks and the compensation ETag logic after edits and confirm tests fail (`src/adversarial.test.ts`).
+fault injection `intercept`, `serverNames` for an LWS that picks its own names, and `withoutResponseEtags` for a
+server such as CSS whose create responses carry no ETag). Run the put and remove suites under that wrapper too.
+`src/review.test.ts` holds the regressions for the independent review; mutate the adoption checks, the
+conditional-write validators, the containment and delete-scope checks and the exposure gate after edits and
+confirm tests fail.

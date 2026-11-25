@@ -35,13 +35,17 @@ export type MediaStoreReason =
   | "name-unavailable"
   | "not-a-document"
   | "journal"
+  | "shard-title"
   | "storage"
   | "unexpected";
 
 export interface MediaStoreError {
   readonly kind: MediaStoreErrorKind;
   readonly reason: MediaStoreReason;
-  /** Resources this call created but could not remove (only on a failed `put`). */
+  /**
+   * Resources a failed call created and left behind: media (a retry adopts them by name on
+   * Solid, `sweepOrphans` removes them) and, on LWS, a description that could not be removed.
+   */
   readonly orphans?: readonly string[];
 }
 
@@ -116,4 +120,18 @@ export function throwIfAborted(signal: AbortSignal | undefined): void {
 
 export function isStorageCode(cause: unknown, ...codes: string[]): boolean {
   return cause instanceof StorageError && codes.includes(cause.code);
+}
+
+/** Reject as soon as `signal` aborts, whether or not the wrapped promise ever settles. */
+export function abortable<R>(signal: AbortSignal | undefined, promise: Promise<R>): Promise<R> {
+  if (signal === undefined) return promise;
+  return new Promise<R>((resolve, reject) => {
+    const onAbort = () => reject(fail("failed", "aborted"));
+    if (signal.aborted) {
+      promise.catch(() => undefined);
+      return onAbort();
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
 }

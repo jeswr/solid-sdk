@@ -3,18 +3,41 @@ import { isWithinPodScope } from "@jeswr/guarded-fetch";
 
 /** Absolute http(s) with no whitespace, control characters, backslash, query or fragment. */
 const ABSOLUTE = /^https?:\/\/[^\s\p{Cc}\\?#]+$/iu;
+/** Credentials in the authority. */
+const CREDENTIALS = /^https?:\/\/[^/]*@/i;
+/** Percent-encoded control characters, `.`, `/`, `\`, `?` and `#`: delimiters in disguise. */
+const DISGUISED = /%(?:[01][0-9a-f]|7f|2e|2f|5c|3f|23)/i;
 
 export const YEAR = /^\d{4}$/;
 export const MONTH = /^(0[1-9]|1[0-2])$/;
 
 /**
  * True only for a URL strictly inside the library container tree: same origin, real segment
- * boundary, no credentials, no query, no fragment, no encoded delimiters, and not the library
+ * boundary, no credentials, no query, no fragment, no encoded delimiters or control characters,
+ * no dot or empty path segments (written out or normalised away), no auxiliary resource names
+ * (a segment below the library that starts with a dot, such as `.acl`), and not the library
  * container itself. `libraryUrl` must be the container URL the store resolved.
  */
 export function isInsideLibrary(libraryUrl: string, url: string): boolean {
-  if (typeof url !== "string" || !ABSOLUTE.test(url)) return false;
-  return isWithinPodScope(libraryUrl, url, { allowRoot: false });
+  if (typeof url !== "string" || !ABSOLUTE.test(url) || CREDENTIALS.test(url)) return false;
+  if (DISGUISED.test(url)) return false;
+  const segments = url
+    .replace(/^https?:\/\/[^/]*/i, "")
+    .split("/")
+    .slice(1);
+  const last = segments.length - 1;
+  if (
+    segments.some(
+      (segment, i) => segment === "." || segment === ".." || (segment === "" && i !== last),
+    )
+  ) {
+    return false;
+  }
+  if (!isWithinPodScope(libraryUrl, url, { allowRoot: false })) return false;
+  const below = segments
+    .filter((segment) => segment !== "")
+    .slice(new URL(libraryUrl).pathname.split("/").filter((segment) => segment !== "").length);
+  return !below.some((segment) => segment.startsWith("."));
 }
 
 /** `yyyy/mm` for the UTC creation month; `undefined` outside 1970..9999 or for an invalid date. */

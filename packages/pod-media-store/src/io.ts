@@ -81,17 +81,3 @@ export function normaliseDescription(
   if (encoder.encode(body).byteLength > maxBytes) throw fail("too-large", "description-too-large");
   return { body, contentType };
 }
-
-export function defaultSleep(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(fail("failed", "aborted"));
-    };
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
-}

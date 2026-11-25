@@ -2,7 +2,8 @@
 
 /**
  * One two-step delete in flight. It is recorded before the description is deleted, because
- * once the description is gone nothing else says where its binary and thumbnail are.
+ * once the description is gone nothing else says where its binary and thumbnail are. Media are
+ * deleted only after the description is confirmed gone.
  */
 export interface DeleteJournalEntry {
   readonly descriptionUrl: string;
@@ -10,6 +11,11 @@ export interface DeleteJournalEntry {
   readonly shardUrl: string;
   readonly binaryUrl?: string;
   readonly thumbnailUrl?: string;
+  /**
+   * `intent` (or absent): the description has not been confirmed deleted, so a resume deletes
+   * it first. `deleted`: it is gone, and only the media remain.
+   */
+  readonly phase?: "intent" | "deleted";
 }
 
 /**

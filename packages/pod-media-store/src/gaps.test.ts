@@ -7,9 +7,7 @@ import {
   intercept,
   jpeg,
   must,
-  png,
   putInput,
-  sha256Of,
   shardOf,
 } from "../test/support.js";
 import { createMemoryJournal } from "./journal.js";
@@ -45,35 +43,22 @@ describe.each(["solid", "lws"] as const)("remaining edges (%s)", (protocol) => {
     });
     expect(await h.store.put(putInput({ signal: controller.signal }))).toEqual({
       ok: false,
-      error: { kind: "failed", reason: "aborted" },
+      error: expect.objectContaining({ kind: "failed", reason: "aborted" }),
     });
   });
 
-  it("a thumbnail name that is taken but cannot be found is a conflict", async () => {
+  it("a thumbnail name that is taken but is not there is a conflict", async () => {
     if (protocol === "lws") return;
-    const h = await harness(protocol);
-    must(await h.store.put(putInput({ seed: 9, description: { name: "seed" } })));
-    const shard = shardOf(h.store);
-    const hash = await sha256Of(png(1));
-    await h.storage.create(shard, jpeg(4), {
-      name: `${hash}-thumb.jpg`,
-      contentType: "image/jpeg",
-    });
-    const blind: StorageClient = new Proxy(h.storage, {
-      get(target, property) {
-        const value = Reflect.get(target, property) as unknown;
-        if (typeof value !== "function") return value;
-        if (property !== "listAll") return value.bind(target);
-        return (container: string, options: never) =>
-          container === shard
-            ? (async function* (): AsyncGenerator<Entry> {})()
-            : target.listAll(container, options);
-      },
-    });
-    const reopened = await h.reopen({ storage: blind });
-    expect(await reopened.put(putInput({ thumbnail: { bytes: jpeg(1) } }))).toEqual({
+    const h = await harness(protocol, {}, (s) =>
+      intercept(s, (call) => {
+        if ((call.args[2] as { name?: string } | undefined)?.name?.includes("-thumb")) {
+          throw new StorageError("conflict", { url: "x:", method: "PUT", status: 412 });
+        }
+      }),
+    );
+    expect(await h.store.put(putInput({ thumbnail: { bytes: jpeg(1) } }))).toEqual({
       ok: false,
-      error: { kind: "conflict", reason: "name-unavailable" },
+      error: expect.objectContaining({ kind: "conflict", reason: "name-unavailable" }),
     });
   });
 
@@ -114,23 +99,29 @@ describe.each(["solid", "lws"] as const)("remaining edges (%s)", (protocol) => {
 
   it("resume stops when the abort lands in the middle of finishing an entry", async () => {
     const journal = createMemoryJournal();
-    const h = await harness(protocol, { journal });
+    const controller = new AbortController();
+    let armed = false;
+    const h = await harness(protocol, { journal }, (s) =>
+      intercept(s, (call) => {
+        if (armed && call.method === "head") controller.abort();
+      }),
+    );
     const out = must(await h.store.put(putInput()));
+    await h.storage.delete(out.descriptionUrl, {
+      ifMatch: (await h.storage.head(out.descriptionUrl)).etag as string,
+    });
     await journal.put({
-      descriptionUrl: `${shardOf(h.store)}gone`,
+      descriptionUrl: out.descriptionUrl,
       shardUrl: shardOf(h.store),
       binaryUrl: out.binaryUrl,
+      phase: "deleted",
     });
-    const controller = new AbortController();
-    const store = await h.reopen({
-      storage: intercept(h.storage, (call) => {
-        if (call.method === "head") controller.abort();
-      }),
-    });
-    expect(await store.resumePending(controller.signal)).toEqual({
+    armed = true;
+    expect(await h.store.resumePending(controller.signal)).toEqual({
       ok: false,
       error: { kind: "failed", reason: "aborted" },
     });
+    expect(await journal.list()).toHaveLength(1);
   });
 
   it("a delete that fails for another reason is reported, not swallowed", async () => {

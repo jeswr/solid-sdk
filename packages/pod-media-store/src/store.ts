@@ -1,8 +1,9 @@
 // AUTHORED-BY Claude Sonnet 5.5
-import { displayNameOf, type Entry, type ReadResult, StorageError } from "@jeswr/storage-client";
+import { displayNameOf, type Entry } from "@jeswr/storage-client";
 import { isExactChildUrl, retryOnConflict } from "@jeswr/storage-client/helpers";
 import { decodeCursor, encodeCursor, type ListPosition } from "./cursor.js";
 import {
+  abortable,
   fail,
   isStorageCode,
   MediaFailure,
@@ -17,7 +18,6 @@ import {
   baseType,
   DESCRIPTION_ACCEPT,
   DESCRIPTION_TYPES,
-  defaultSleep,
   loadBytes,
   normaliseDescription,
   readBounded,
@@ -35,6 +35,7 @@ import {
 } from "./scope.js";
 import { defaultSniff, type Sniffed } from "./sniff.js";
 import type {
+  AttachThumbnailInput,
   Current,
   ListOptions,
   ListPage,
@@ -46,21 +47,18 @@ import type {
   ResumeSummary,
   SerializedDescription,
   SkipCounts,
+  SweepOptions,
+  SweepSummary,
 } from "./types.js";
 
 const MiB = 1024 * 1024;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const NAME_TAKEN = ["conflict", "precondition-failed"];
-
-/** A resource this call created. `etag` is the create response's own validator, if it had one. */
-interface Owned {
-  url: string;
-  etag: string | undefined;
-  role: "description" | "media";
-}
-
-type Loaded<T> =
-  | { state: "ok"; item: MediaItem<T> }
-  | { state: "pending" | "unparseable" | "outOfScope" };
+/** Media names this store creates on Solid: `<hash>.<ext>` and `<hash>-thumb.<ext>`. */
+const OWN_MEDIA = /^[0-9a-f]{64}(?:-thumb)?\.[a-z0-9]{1,8}$/;
+const MEDIA_TYPE = /^(?:image|audio|video|model)\//;
+/** Where LWS shard titles hang: a link to the container itself, carrying the title. */
+const TITLE_REL = "related";
 
 interface Document {
   etag: string | null;
@@ -70,6 +68,10 @@ interface Document {
   modified: Date | null;
 }
 
+type Loaded<T> =
+  | { state: "ok"; item: MediaItem<T> }
+  | { state: "pending" | "unparseable" | "outOfScope"; item?: undefined };
+
 interface Prepared {
   bytes: Uint8Array;
   sniffed: Sniffed;
@@ -78,9 +80,46 @@ interface Prepared {
   thumbnail: { bytes: Uint8Array; sniffed: Sniffed } | undefined;
 }
 
+interface Written {
+  descriptionUrl: string;
+  thumbnailUrl: string | undefined;
+  existed: boolean;
+  thumbnailMissing: boolean;
+}
+
+const present = (value: unknown): boolean => typeof value === "object" && value !== null;
+
 function normaliseExtension(value: string): string {
   const lower = value.trim().toLowerCase().replace(/^\./, "");
   return lower === "jpeg" ? "jpg" : lower;
+}
+
+/** A sniffer's answer is untrusted too: it names the stored type and the resource's extension. */
+const usable = (value: Sniffed | undefined): value is Sniffed =>
+  value !== undefined &&
+  /^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(value.contentType) &&
+  /^\.[a-z0-9]{1,8}$/.test(value.extension);
+
+const sameContainer = (a: string, b: string): boolean => {
+  try {
+    const left = new URL(a);
+    const right = new URL(b);
+    return left.origin === right.origin && left.pathname === right.pathname;
+  } catch {
+    return false;
+  }
+};
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+function withOrphans(
+  cause: unknown,
+  orphans: readonly string[],
+  signal: AbortSignal | undefined,
+): unknown {
+  if (orphans.length === 0) return cause;
+  const error = toError(cause, signal);
+  return new MediaFailure(error.kind, error.reason, orphans);
 }
 
 /**
@@ -90,6 +129,19 @@ function normaliseExtension(value: string): string {
 export async function openMediaStore<T, I>(
   options: MediaStoreOptions<T, I>,
 ): Promise<Result<MediaStore<T, I>>> {
+  const invalid = (): Result<MediaStore<T, I>> => ({
+    ok: false,
+    error: toError(fail("failed", "invalid-input"), undefined),
+  });
+  if (
+    !present(options) ||
+    !present(options.storage) ||
+    !present(options.typeIndex) ||
+    !present(options.features) ||
+    !Array.isArray(options.classes)
+  ) {
+    return invalid();
+  }
   const { storage, typeIndex, classes } = options;
   const name = options.defaultContainerName;
   const sniff = options.sniff ?? defaultSniff;
@@ -99,27 +151,28 @@ export async function openMediaStore<T, I>(
   const concurrency = options.concurrency ?? 4;
   const updateAttempts = options.updateAttempts ?? 4;
   const exposureTtlMs = options.exposureTtlMs ?? 60_000;
-  const pendingPolls = options.pendingPolls ?? 5;
-  const pendingDelayMs = options.pendingDelayMs ?? 100;
   const now = options.now ?? Date.now;
-  const sleep = options.sleep ?? defaultSleep;
   const journal = options.journal ?? createMemoryJournal();
   const positive = (value: number) => Number.isSafeInteger(value) && value > 0;
   if (
     options.features.protocol !== storage.protocol ||
     classes.length === 0 ||
+    typeof name !== "string" ||
     name === "" ||
     name === "." ||
     name === ".." ||
     /[/\\?#\p{Cc}]/u.test(name) ||
-    ![maxBytes, maxThumbnailBytes, maxDescriptionBytes, concurrency, updateAttempts].every(positive)
+    ![maxBytes, maxThumbnailBytes, maxDescriptionBytes, concurrency, updateAttempts].every(
+      positive,
+    ) ||
+    !(Number.isFinite(exposureTtlMs) && exposureTtlMs >= 0)
   ) {
-    return { ok: false, error: toError(fail("failed", "invalid-input"), undefined) };
+    return invalid();
   }
 
   let library: string | null = null;
   const children = new Map<string, string>();
-  let privateUntil = 0;
+  const privateUntil = new Map<string, number>();
 
   // ---- containment ---------------------------------------------------------------------
   // On Solid a URL's path says where it lives. On LWS identifiers are opaque and containment is
@@ -132,6 +185,27 @@ export async function openMediaStore<T, I>(
   /** A listed or created child of `shardUrl` (a listing is authoritative on LWS). */
   const isMember = (shardUrl: string, url: string): boolean =>
     lws ? storage.isWithinStorage(url) && !/[?#]/.test(url) : isExactChildUrl(shardUrl, url);
+
+  const remember = (shardUrl: string, ...urls: (string | undefined)[]): void => {
+    if (!lws) return;
+    for (const url of urls.filter((one): one is string => one !== undefined)) {
+      memberShard.set(url, shardUrl);
+    }
+  };
+
+  async function parentOf(
+    url: string,
+    signal: AbortSignal | undefined,
+  ): Promise<string | undefined> {
+    if (!storage.isWithinStorage(url) || /[?#]/.test(url)) return undefined;
+    try {
+      const parent = await abortable(signal, storage.parentOf(url));
+      return parent ?? undefined;
+    } catch (cause) {
+      if (signal?.aborted || isStorageCode(cause, "network")) throw cause;
+      return undefined;
+    }
+  }
 
   async function shardInLibrary(
     lib: string,
@@ -150,21 +224,6 @@ export async function openMediaStore<T, I>(
     return inside;
   }
 
-  async function parentOf(
-    url: string,
-    signal: AbortSignal | undefined,
-  ): Promise<string | undefined> {
-    if (!storage.isWithinStorage(url) || /[?#]/.test(url)) return undefined;
-    try {
-      const parent = await storage.parentOf(url);
-      throwIfAborted(signal);
-      return parent ?? undefined;
-    } catch (cause) {
-      if (signal?.aborted || isStorageCode(cause, "network")) throw cause;
-      return undefined;
-    }
-  }
-
   /** The shard container `url` is a direct member of, if that shard belongs to the library. */
   async function shardOfMember(
     lib: string,
@@ -180,16 +239,27 @@ export async function openMediaStore<T, I>(
     return parent;
   }
 
+  const requireUrl = (url: unknown): void => {
+    if (typeof url !== "string") throw fail("failed", "invalid-input");
+  };
+
   // ---- discovery and layout -------------------------------------------------------------
 
+  // LWS identifiers are opaque and may carry no trailing slash.
   const isCandidate = (url: string): boolean =>
-    url.endsWith("/") && url !== storage.root && !/[?#]/.test(url) && storage.isWithinStorage(url);
+    (lws || url.endsWith("/")) &&
+    url !== storage.root &&
+    !/[?#]/.test(url) &&
+    storage.isWithinStorage(url);
+
+  /** The container carrying the default name first, then lexicographic order. */
+  const preferNamed = (a: string, b: string): number =>
+    Number(segmentOf(b) === name) - Number(segmentOf(a) === name) || a.localeCompare(b);
 
   async function discover(signal: AbortSignal | undefined): Promise<string | null> {
-    const found = await typeIndex.findAll([...classes]);
-    throwIfAborted(signal);
+    const found = await abortable(signal, typeIndex.findAll([...classes]));
     for (const cls of classes) {
-      const urls = (found.get(cls) ?? []).filter(isCandidate).sort();
+      const urls = (found.get(cls) ?? []).filter(isCandidate).sort(preferNamed);
       if (urls[0] !== undefined) {
         library = urls[0];
         return library;
@@ -207,19 +277,40 @@ export async function openMediaStore<T, I>(
     return url ?? noLibrary();
   }
 
+  /** A child container by name: its title on LWS, its URL segment on Solid. */
   async function findChild(
     parent: string,
     childName: string,
-    kind: "container" | "resource",
     signal: AbortSignal | undefined,
   ): Promise<string | undefined> {
     for await (const entry of storage.listAll(parent, { signal })) {
-      const label = kind === "container" ? displayNameOf(entry) : segmentOf(entry.url);
-      if (entry.kind === kind && label === childName && isMember(parent, entry.url)) {
+      const label = lws ? displayNameOf(entry) : segmentOf(entry.url);
+      if (entry.kind === "container" && label === childName && isMember(parent, entry.url)) {
         return entry.url;
       }
     }
     return undefined;
+  }
+
+  /** A server that picks its own identifiers needs the name stored as the container's title. */
+  async function setTitle(
+    url: string,
+    title: string,
+    signal: AbortSignal | undefined,
+  ): Promise<void> {
+    try {
+      const { etag } = await abortable(signal, storage.metadata(url));
+      if (etag === null) throw fail("failed", "shard-title");
+      await abortable(
+        signal,
+        storage.setMetadata(url, [{ op: "add", rel: TITLE_REL, href: url, title }], {
+          ifMatch: etag,
+        }),
+      );
+    } catch (cause) {
+      if (signal?.aborted) throw cause;
+      throw fail("failed", "shard-title");
+    }
   }
 
   async function ensureChild(
@@ -230,16 +321,17 @@ export async function openMediaStore<T, I>(
     const cacheKey = `${parent}\n${childName}`;
     const cached = children.get(cacheKey);
     if (cached !== undefined) return cached;
-    let url = await findChild(parent, childName, "container", signal);
+    let url = await findChild(parent, childName, signal);
     if (url === undefined) {
       try {
         url = (await storage.create(parent, null, { kind: "container", name: childName, signal }))
           .url;
       } catch (cause) {
         if (!isStorageCode(cause, ...NAME_TAKEN)) throw cause;
-        url = await findChild(parent, childName, "container", signal);
+        url = await findChild(parent, childName, signal);
         if (url === undefined) throw fail("failed", "name-unavailable");
       }
+      if (lws && segmentOf(url) !== childName) await setTitle(url, childName, signal);
     }
     children.set(cacheKey, url);
     return url;
@@ -254,16 +346,22 @@ export async function openMediaStore<T, I>(
         url = (await storage.create(storage.root, null, { kind: "container", name, signal })).url;
       } catch (cause) {
         if (!isStorageCode(cause, ...NAME_TAKEN)) throw cause;
-        const adopted = await findChild(storage.root, name, "container", signal);
+        const adopted = await findChild(storage.root, name, signal);
         if (adopted === undefined) throw fail("failed", "name-unavailable");
         url = adopted;
       }
-      for (const cls of classes) await typeIndex.register(cls, { container: url });
+      for (const cls of classes) {
+        await abortable(signal, typeIndex.register(cls, { container: url }, { index: "private" }));
+      }
     } else {
       // LWS declares the class when the resource is created, so the hint comes first.
       const links = [];
       for (const cls of classes) {
-        links.push(...((await typeIndex.register(cls, { container: storage.root }))?.links ?? []));
+        const hint = await abortable(
+          signal,
+          typeIndex.register(cls, { container: storage.root }, { index: "private" }),
+        );
+        links.push(...(hint?.links ?? []));
       }
       url = (await storage.create(storage.root, null, { kind: "container", name, links, signal }))
         .url;
@@ -275,26 +373,31 @@ export async function openMediaStore<T, I>(
 
   // ---- exposure --------------------------------------------------------------------------
 
-  async function exposureState(signal: AbortSignal | undefined): Promise<ExposureState> {
+  /** Ask the probe about one container; anything but a clear answer is `unknown`. */
+  async function exposureOf(
+    target: string,
+    signal: AbortSignal | undefined,
+  ): Promise<ExposureState> {
     const probe = options.exposure;
     if (probe === undefined) return "unknown";
-    const target = library ?? (await discover(signal)) ?? storage.root;
     let state: ExposureState;
     try {
-      state = await probe(target, signal);
+      const answer = await abortable(signal, probe(target, signal));
+      state = answer === "private" || answer === "exposed" ? answer : "unknown";
     } catch (cause) {
       if (signal?.aborted) throw cause;
       state = "unknown";
     }
-    if (state === "private") privateUntil = now() + exposureTtlMs;
+    if (state === "private") privateUntil.set(target, now() + exposureTtlMs);
     return state;
   }
 
-  async function requireNotExposed(signal: AbortSignal | undefined): Promise<void> {
-    if (options.exposure === undefined || now() < privateUntil) return;
-    const state = await exposureState(signal);
+  /** Refuse a write into `target` unless it is known private (or unknown and allowed). */
+  async function requireNotExposed(target: string, signal: AbortSignal | undefined): Promise<void> {
+    if ((privateUntil.get(target) ?? 0) > now()) return;
+    const state = await exposureOf(target, signal);
     if (state === "exposed") throw fail("exposed", "library-exposed");
-    if (state === "unknown" && options.refuseUnknownExposure === true) {
+    if (state === "unknown" && options.allowUnknownExposure !== true) {
       throw fail("exposed", "exposure-unknown");
     }
   }
@@ -369,23 +472,33 @@ export async function openMediaStore<T, I>(
     return interpret(lib, url, await readDocument(url, signal), signal);
   }
 
-  /** A description for `hash` in the shard, if any resource carries that name. */
-  const findDescription = (shardUrl: string, hash: string, signal: AbortSignal | undefined) =>
-    findChild(shardUrl, hash, "resource", signal);
+  /** The reason a description that is not `ok` cannot be used. */
+  const reasonOf = (state: "pending" | "unparseable" | "outOfScope") =>
+    state === "pending"
+      ? "description-pending"
+      : state === "outOfScope"
+        ? "out-of-scope"
+        : "description-unparseable";
 
   // ---- put -------------------------------------------------------------------------------
+
+  /** A thumbnail's bytes, size-bounded and sniffed: it must be a recognised image. */
+  async function loadThumbnail(
+    source: Blob | Uint8Array,
+  ): Promise<{ bytes: Uint8Array; sniffed: Sniffed }> {
+    const bytes = await loadBytes(source, maxThumbnailBytes);
+    const sniffed = sniff(bytes);
+    if (!usable(sniffed) || !sniffed.contentType.startsWith("image/")) {
+      throw fail("unsupported", "unsniffable");
+    }
+    return { bytes, sniffed };
+  }
 
   async function prepare(input: PutInput<I>): Promise<Prepared> {
     const bytes = await loadBytes(input.bytes, maxBytes);
     throwIfAborted(input.signal);
     const sniffed = sniff(bytes);
-    if (
-      sniffed === undefined ||
-      !/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(sniffed.contentType) ||
-      !/^\.[a-z0-9]{1,8}$/.test(sniffed.extension)
-    ) {
-      throw fail("unsupported", "unsniffable");
-    }
+    if (!usable(sniffed)) throw fail("unsupported", "unsniffable");
     if (
       baseType(input.contentType) !== sniffed.contentType ||
       normaliseExtension(input.extension) !== normaliseExtension(sniffed.extension)
@@ -394,28 +507,12 @@ export async function openMediaStore<T, I>(
     }
     const key = shardKeyOf(input.createdAt);
     if (key === undefined) throw fail("failed", "invalid-input");
-    let thumbnail: Prepared["thumbnail"];
-    if (input.thumbnail !== undefined) {
-      const thumbBytes = await loadBytes(input.thumbnail.bytes, maxThumbnailBytes);
-      const thumbSniffed = sniff(thumbBytes);
-      if (thumbSniffed === undefined || !thumbSniffed.contentType.startsWith("image/")) {
-        throw fail("unsupported", "unsniffable");
-      }
-      thumbnail = { bytes: thumbBytes, sniffed: thumbSniffed };
-    }
+    const thumbnail =
+      input.thumbnail === undefined ? undefined : await loadThumbnail(input.thumbnail.bytes);
     const sha256 = await sha256Hex(bytes);
     throwIfAborted(input.signal);
     return { bytes, sniffed, sha256, key, thumbnail };
   }
-
-  const track = (
-    created: { url: string; etag: string | null; etagSource?: string },
-    role: Owned["role"],
-  ): Owned => ({
-    url: created.url,
-    etag: created.etagSource === "response" && created.etag !== null ? created.etag : undefined,
-    role,
-  });
 
   /** Hash the bytes behind `url`, reading at most `max`. */
   async function hashOf(
@@ -428,199 +525,266 @@ export async function openMediaStore<T, I>(
     return sha256Hex(bytes);
   }
 
-  /** Create `name`, or adopt the resource already at that name if its bytes hash to `hash`. */
-  async function createOrAdopt(
+  /**
+   * Create `fileName`, or adopt what is already at that name once `verify` accepts it. The
+   * name is exact on Solid, so the resource there is the one to verify; on LWS a taken name is
+   * never reported (the server picks another).
+   */
+  async function createMedia(
     shardUrl: string,
     fileName: string,
     bytes: Uint8Array,
     contentType: string,
-    hash: string,
+    verify: (existing: string) => Promise<void>,
     signal: AbortSignal | undefined,
-    owned: Owned[],
+    created: string[],
   ): Promise<string> {
     try {
-      const created = await storage.create(shardUrl, bytes, {
-        name: fileName,
-        contentType,
-        signal,
-      });
-      owned.push(track(created, "media"));
-      return created.url;
+      const made = await storage.create(shardUrl, bytes, { name: fileName, contentType, signal });
+      created.push(made.url);
+      return made.url;
     } catch (cause) {
       if (!isStorageCode(cause, ...NAME_TAKEN)) throw cause;
     }
-    const existing = await findChild(shardUrl, fileName, "resource", signal);
-    if (existing === undefined) throw fail("conflict", "name-unavailable");
-    if ((await hashOf(existing, maxBytes, signal)) !== hash)
-      throw fail("conflict", "hash-mismatch");
+    const existing = `${shardUrl}${fileName}`;
+    try {
+      await verify(existing);
+    } catch (cause) {
+      if (isStorageCode(cause, "not-found")) throw fail("conflict", "name-unavailable");
+      throw cause;
+    }
     return existing;
   }
 
-  /** A thumbnail already at its name is adopted when it is a sniffable image. */
-  async function createThumbnail(
+  /** A binary already at its name must hash to the same bytes. */
+  const verifyBinary =
+    (hash: string, signal: AbortSignal | undefined) =>
+    async (existing: string): Promise<void> => {
+      if ((await hashOf(existing, maxBytes, signal)) !== hash) {
+        throw fail("conflict", "hash-mismatch");
+      }
+    };
+
+  /** A thumbnail already at its name must be a recognisable image. */
+  const verifyThumbnail =
+    (signal: AbortSignal | undefined) =>
+    async (existing: string): Promise<void> => {
+      const result = await storage.read(existing, { signal });
+      const bytes = await readBounded(result, maxThumbnailBytes, () =>
+        fail("too-large", "bytes-too-large"),
+      );
+      if (!sniff(bytes)?.contentType.startsWith("image/")) throw fail("conflict", "hash-mismatch");
+    };
+
+  function createThumbnail(
     shardUrl: string,
     fileName: string,
     thumbnail: { bytes: Uint8Array; sniffed: Sniffed },
     signal: AbortSignal | undefined,
-    owned: Owned[],
+    created: string[],
   ): Promise<string> {
-    try {
-      const created = await storage.create(shardUrl, thumbnail.bytes, {
-        name: fileName,
-        contentType: thumbnail.sniffed.contentType,
-        signal,
-      });
-      owned.push(track(created, "media"));
-      return created.url;
-    } catch (cause) {
-      if (!isStorageCode(cause, ...NAME_TAKEN)) throw cause;
-    }
-    const existing = await findChild(shardUrl, fileName, "resource", signal);
-    if (existing === undefined) throw fail("conflict", "name-unavailable");
-    const result = await storage.read(existing, { signal });
-    const bytes = await readBounded(result, maxThumbnailBytes, () =>
-      fail("too-large", "bytes-too-large"),
+    return createMedia(
+      shardUrl,
+      `${fileName}${thumbnail.sniffed.extension}`,
+      thumbnail.bytes,
+      thumbnail.sniffed.contentType,
+      verifyThumbnail(signal),
+      signal,
+      created,
     );
-    if (!sniff(bytes)?.contentType.startsWith("image/")) throw fail("conflict", "hash-mismatch");
-    return existing;
+  }
+
+  /** Build the description for a known URL and check it parses and points where it should. */
+  async function buildChecked(
+    url: string,
+    binaryUrl: string,
+    thumbnailUrl: string | undefined,
+    input: PutInput<I>,
+    prepared: Prepared,
+  ): Promise<{ body: string; contentType: string }> {
+    const { signal } = input;
+    const built = normaliseDescription(
+      await abortable(
+        signal,
+        options.build(url, binaryUrl, input.description, {
+          sha256: prepared.sha256,
+          contentType: prepared.sniffed.contentType,
+          byteLength: prepared.bytes.byteLength,
+          createdAt: input.createdAt,
+          thumbnailUrl,
+        }),
+      ),
+      maxDescriptionBytes,
+    );
+    throwIfAborted(signal);
+    const check = await safely(signal, () => options.parse(url, built.body, built.contentType));
+    const where =
+      check === undefined ? undefined : await safely(signal, () => options.locate(check));
+    if (where?.binaryUrl !== binaryUrl || where.thumbnailUrl !== thumbnailUrl) {
+      throw fail("failed", "description-invalid");
+    }
+    return built;
+  }
+
+  /** What is at a Solid description's exact name: nothing, an empty shell, or a description. */
+  async function settle(
+    lib: string,
+    url: string,
+    binaryUrl: string,
+    signal: AbortSignal | undefined,
+  ): Promise<
+    { state: "none" } | { state: "empty"; etag: string } | { state: "adopted"; item: MediaItem<T> }
+  > {
+    let doc: Document;
+    try {
+      doc = await readDocument(url, signal);
+    } catch (cause) {
+      if (isStorageCode(cause, "not-found")) return { state: "none" };
+      throw cause;
+    }
+    const loaded = await interpret(lib, url, doc, signal);
+    if (loaded.state === "ok") {
+      if (loaded.item.binaryUrl !== binaryUrl) throw fail("conflict", "description-mismatch");
+      return { state: "adopted", item: loaded.item };
+    }
+    if (loaded.state !== "pending") throw fail("conflict", "description-mismatch");
+    if (doc.etag === null) throw fail("failed", "no-validator");
+    return { state: "empty", etag: doc.etag };
   }
 
   /**
-   * Check a description another writer left at the hash name: it must parse and point at our
-   * binary. A document still empty is being filled by a concurrent put, so poll; one that has
-   * vanished is `undefined` and the caller creates it afresh.
+   * Solid honours exact names, so the description's URL is known before it exists: the whole
+   * document is built first and created atomically at that name (`If-None-Match: *`). No empty
+   * document is ever visible. A taken name is adopted when it points at our binary; an empty
+   * shell left by another writer is taken over with a write conditional on its ETag.
    */
-  async function adoptDescription(
-    lib: string,
-    shardUrl: string,
-    hash: string,
-    binaryUrl: string,
-    signal: AbortSignal | undefined,
-  ): Promise<string | undefined> {
-    for (let poll = 0; poll <= pendingPolls; poll++) {
-      const url = await findDescription(shardUrl, hash, signal);
-      if (url === undefined) return undefined;
-      let loaded: Loaded<T>;
-      try {
-        loaded = await loadItem(lib, url, signal);
-      } catch (cause) {
-        if (isStorageCode(cause, "not-found")) return undefined;
-        throw cause;
-      }
-      if (loaded.state === "ok") {
-        if (loaded.item.binaryUrl !== binaryUrl) throw fail("conflict", "description-mismatch");
-        return url;
-      }
-      if (loaded.state !== "pending") throw fail("conflict", "description-mismatch");
-      await sleep(pendingDelayMs, signal);
-      throwIfAborted(signal);
-    }
-    throw fail("conflict", "description-pending");
-  }
-
-  async function writeDescription(
+  async function writeSolid(
     lib: string,
     shardUrl: string,
     input: PutInput<I>,
     prepared: Prepared,
     binaryUrl: string,
-    thumbnailUrl: string | undefined,
-    owned: Owned[],
-  ): Promise<{ url: string; existed: boolean }> {
+    created: string[],
+  ): Promise<Written> {
     const { signal } = input;
     const { sha256 } = prepared;
+    const descriptionUrl = `${shardUrl}${sha256}`;
+    let built: { body: string; contentType: string } | undefined;
+    let thumbnailUrl: string | undefined;
     for (let attempt = 0; attempt < 3; attempt++) {
-      let created: Owned | undefined;
-      try {
-        const response = await storage.create(shardUrl, "", {
-          name: sha256,
-          contentType: "text/turtle",
-          signal,
-        });
-        created = track(response, "description");
-        owned.push(created);
-        // The URL is only known now, so the document is built after the empty create.
-        const built = normaliseDescription(
-          await options.build(response.url, binaryUrl, input.description, {
-            sha256,
-            contentType: prepared.sniffed.contentType,
-            byteLength: prepared.bytes.byteLength,
-            createdAt: input.createdAt,
-            thumbnailUrl,
-          }),
-          maxDescriptionBytes,
-        );
-        throwIfAborted(signal);
-        const check = await safely(signal, () =>
-          options.parse(response.url, built.body, built.contentType),
-        );
-        const where =
-          check === undefined ? undefined : await safely(signal, () => options.locate(check));
-        if (where?.binaryUrl !== binaryUrl) throw fail("failed", "description-invalid");
-        const written = await storage.write(response.url, built.body, {
-          contentType: built.contentType,
-          ifMatch: created.etag ?? "*",
-          signal,
-        });
-        created.etag = track(written, "description").etag;
-        return { url: response.url, existed: false };
-      } catch (cause) {
-        if (created !== undefined || !isStorageCode(cause, ...NAME_TAKEN)) throw cause;
+      const found = await settle(lib, descriptionUrl, binaryUrl, signal);
+      if (found.state === "adopted") {
+        return {
+          descriptionUrl,
+          thumbnailUrl: found.item.thumbnailUrl,
+          existed: true,
+          thumbnailMissing:
+            prepared.thumbnail !== undefined && found.item.thumbnailUrl === undefined,
+        };
       }
-      const adopted = await adoptDescription(lib, shardUrl, sha256, binaryUrl, signal);
-      if (adopted !== undefined) return { url: adopted, existed: true };
+      if (built === undefined) {
+        thumbnailUrl =
+          prepared.thumbnail === undefined
+            ? undefined
+            : await createThumbnail(
+                shardUrl,
+                `${sha256}-thumb`,
+                prepared.thumbnail,
+                signal,
+                created,
+              );
+        built = await buildChecked(descriptionUrl, binaryUrl, thumbnailUrl, input, prepared);
+      }
+      try {
+        if (found.state === "none") {
+          const made = await storage.create(shardUrl, built.body, {
+            name: sha256,
+            contentType: built.contentType,
+            signal,
+          });
+          created.push(made.url);
+          if (made.url !== descriptionUrl) throw fail("failed", "name-unavailable");
+        } else {
+          await storage.write(descriptionUrl, built.body, {
+            contentType: built.contentType,
+            ifMatch: found.etag,
+            signal,
+          });
+        }
+        return { descriptionUrl, thumbnailUrl, existed: false, thumbnailMissing: false };
+      } catch (cause) {
+        if (!isStorageCode(cause, ...NAME_TAKEN)) throw cause;
+      }
     }
-    throw fail("conflict", "description-pending");
+    throw fail("conflict", "retries-exhausted");
   }
 
   /**
-   * Remove what this call created. The description goes first. The binary and thumbnail go
-   * only if no description carries the hash name any more, so another writer's description
-   * that now points at those bytes is never orphaned. Deletes are conditional on the create
-   * response's ETag; a resource without one is left and reported. Runs without the caller's
-   * signal so an abort cannot leak resources.
+   * LWS picks the identifier, so the description has to exist before its body can name it. The
+   * empty document is created, then filled with a write conditional on its own validator
+   * (never `*`). If anything fails in between, `dropEmpty` removes the shell, and `sweepOrphans`
+   * collects one that could not be removed.
    */
-  async function compensate(
+  async function writeLws(
     shardUrl: string,
-    hash: string,
-    owned: readonly Owned[],
-  ): Promise<string[]> {
-    const orphans: string[] = [];
-    const remove = async (item: Owned): Promise<void> => {
-      if (item.etag === undefined) {
-        orphans.push(item.url);
-        return;
-      }
-      try {
-        await storage.delete(item.url, { ifMatch: item.etag });
-      } catch (cause) {
-        if (!isStorageCode(cause, "not-found")) orphans.push(item.url);
-      }
-    };
-    for (const item of owned.filter((entry) => entry.role === "description")) await remove(item);
-    // Names are ours to reason about only on Solid; LWS names are server-chosen and unshared.
-    if (storage.protocol === "solid" && (await claimed(shardUrl, hash))) return orphans;
-    for (const item of owned.filter((entry) => entry.role === "media").reverse())
-      await remove(item);
-    return orphans;
+    input: PutInput<I>,
+    prepared: Prepared,
+    binaryUrl: string,
+    created: string[],
+    shell: { url?: string },
+  ): Promise<Written> {
+    const { signal } = input;
+    const { sha256 } = prepared;
+    const thumbnailUrl =
+      prepared.thumbnail === undefined
+        ? undefined
+        : await createThumbnail(shardUrl, `${sha256}-thumb`, prepared.thumbnail, signal, created);
+    const made = await storage.create(shardUrl, "", {
+      name: sha256,
+      contentType: "text/turtle",
+      signal,
+    });
+    created.push(made.url);
+    shell.url = made.url;
+    const built = await buildChecked(made.url, binaryUrl, thumbnailUrl, input, prepared);
+    const etag = made.etag ?? (await storage.head(made.url, { signal })).etag;
+    if (etag === null) throw fail("failed", "no-validator");
+    await storage.write(made.url, built.body, {
+      contentType: built.contentType,
+      ifMatch: etag,
+      signal,
+    });
+    return { descriptionUrl: made.url, thumbnailUrl, existed: false, thumbnailMissing: false };
   }
 
-  /** True when a description carries the hash name, or when that cannot be established. */
-  async function claimed(shardUrl: string, hash: string): Promise<boolean> {
+  /** Delete an empty document on the validator observed now; true if it is gone. */
+  async function dropEmpty(url: string): Promise<boolean> {
     try {
-      return (await findDescription(shardUrl, hash, undefined)) !== undefined;
-    } catch {
+      const doc = await readDocument(url, undefined);
+      if (doc.byteLength !== 0 || doc.etag === null) return false;
+      await storage.delete(url, { ifMatch: doc.etag });
       return true;
+    } catch (cause) {
+      return isStorageCode(cause, "not-found");
     }
   }
 
   /** A description the caller's lookup named: usable only if its binary hashes to `sha256`. */
-  async function verifyKnown(
-    descriptionUrl: string,
+  async function lookup(
     sha256: string,
+    wantsThumbnail: boolean,
     signal: AbortSignal | undefined,
   ): Promise<PutOutcome | undefined> {
-    const lib = await resolveLibrary(signal);
+    if (options.findByHash === undefined) return undefined;
+    const hit = await options.findByHash(sha256, signal);
+    throwIfAborted(signal);
+    const descriptionUrl = hit?.descriptionUrl;
+    if (typeof descriptionUrl !== "string") return undefined;
+    // No library yet, or a hit outside it: a miss, never a failure.
+    const found = library ?? (await discover(signal));
+    const placed = found === null ? undefined : await shardOfMember(found, descriptionUrl, signal);
+    if (placed === undefined) return undefined;
+    const lib = found as string;
     let loaded: Loaded<T>;
     try {
       loaded = await loadItem(lib, descriptionUrl, signal);
@@ -636,117 +800,117 @@ export async function openMediaStore<T, I>(
       descriptionUrl,
       binaryUrl: loaded.item.binaryUrl,
       thumbnailUrl: loaded.item.thumbnailUrl,
+      thumbnailMissing: wantsThumbnail && loaded.item.thumbnailUrl === undefined,
       sha256,
       existed: true,
     };
   }
 
   async function put(input: PutInput<I>): Promise<PutOutcome> {
+    if (!present(input)) throw fail("failed", "invalid-input");
     const { signal } = input;
     const prepared = await prepare(input);
     const { sha256 } = prepared;
-    await requireNotExposed(signal);
-    const known =
-      options.findByHash === undefined ? undefined : await options.findByHash(sha256, signal);
-    throwIfAborted(signal);
-    if (known !== undefined) {
-      const verified = await verifyKnown(known.descriptionUrl, sha256, signal);
-      if (verified !== undefined) return verified;
-    }
+    const known = await lookup(sha256, prepared.thumbnail !== undefined, signal);
+    if (known !== undefined) return known;
     const lib = await ensureLibrary(signal);
+    await requireNotExposed(lib, signal);
     const [year, month] = prepared.key.split("/") as [string, string];
     const shardUrl = await ensureChild(await ensureChild(lib, year, signal), month, signal);
+    await requireNotExposed(shardUrl, signal);
     verifiedShards.add(shardUrl);
-    const owned: Owned[] = [];
+    const created: string[] = [];
+    const shell: { url?: string } = {};
     try {
-      const binaryUrl = await createOrAdopt(
+      const binaryUrl = await createMedia(
         shardUrl,
         `${sha256}${prepared.sniffed.extension}`,
         prepared.bytes,
         prepared.sniffed.contentType,
-        sha256,
+        verifyBinary(sha256, signal),
         signal,
-        owned,
+        created,
       );
-      const thumbnailUrl =
-        prepared.thumbnail === undefined
-          ? undefined
-          : await createThumbnail(
-              shardUrl,
-              `${sha256}-thumb${prepared.thumbnail.sniffed.extension}`,
-              prepared.thumbnail,
-              signal,
-              owned,
-            );
-      const description = await writeDescription(
-        lib,
-        shardUrl,
-        input,
-        prepared,
-        binaryUrl,
-        thumbnailUrl,
-        owned,
-      );
-      for (const url of [description.url, binaryUrl, thumbnailUrl]) {
-        if (url !== undefined) memberShard.set(url, shardUrl);
-      }
+      const written = lws
+        ? await writeLws(shardUrl, input, prepared, binaryUrl, created, shell)
+        : await writeSolid(lib, shardUrl, input, prepared, binaryUrl, created);
+      remember(shardUrl, written.descriptionUrl, binaryUrl, written.thumbnailUrl);
       return {
-        descriptionUrl: description.url,
+        descriptionUrl: written.descriptionUrl,
         binaryUrl,
-        thumbnailUrl,
+        thumbnailUrl: written.thumbnailUrl,
+        thumbnailMissing: written.thumbnailMissing,
         sha256,
-        existed: description.existed && owned.length === 0,
+        existed: written.existed && !created.includes(binaryUrl),
       };
     } catch (cause) {
-      const orphans = await compensate(shardUrl, sha256, owned);
-      if (orphans.length === 0) throw cause;
-      const error = toError(cause, signal);
-      throw new MediaFailure(error.kind, error.reason, orphans);
+      // Nothing is deleted by guesswork: media are named by their content, so a retry adopts
+      // them and `sweepOrphans` removes any that never gain a description. Only an empty shell
+      // this call made is removed, because nothing else can have written into it.
+      const left =
+        shell.url !== undefined && (await dropEmpty(shell.url))
+          ? created.filter((url) => url !== shell.url)
+          : created;
+      throw withOrphans(cause, left, signal);
     }
   }
 
   // ---- list and get ----------------------------------------------------------------------
 
-  /** Shard containers, newest first, from `from` (inclusive) downwards. */
-  async function* shardsFrom(
-    lib: string,
-    from: string | undefined,
-    signal: AbortSignal | undefined,
-  ): AsyncGenerator<{ key: string; url: string }> {
-    const named = async (parent: string, pattern: RegExp) => {
-      const out: { label: string; url: string }[] = [];
-      for await (const entry of storage.listAll(parent, { signal })) {
-        const label = displayNameOf(entry);
-        if (entry.kind === "container" && pattern.test(label) && isMember(parent, entry.url)) {
-          out.push({ label, url: entry.url });
-        }
-      }
-      // A server that picks its own names leaves nothing to match in a fresh session; shards
-      // this session created are remembered by the name that was asked for.
-      for (const [key, url] of children) {
-        const [cachedParent, label] = key.split("\n") as [string, string];
-        if (cachedParent === parent && pattern.test(label) && !out.some((one) => one.url === url)) {
-          out.push({ label, url });
-        }
-      }
-      return out.sort((a, b) => b.label.localeCompare(a.label));
-    };
-    for (const year of await named(lib, YEAR)) {
-      if (from !== undefined && year.label > from.slice(0, 4)) continue;
-      for (const month of await named(year.url, MONTH)) {
-        const key = `${year.label}/${month.label}`;
-        if (from === undefined || key <= from) {
-          verifiedShards.add(month.url);
-          yield { key, url: month.url };
-        }
-      }
-    }
-  }
-
   const emptySkips = (): SkipCounts => ({ foreign: 0, unparseable: 0, pending: 0, outOfScope: 0 });
   const modifiedAt = (entry: Entry): number => entry.modified?.getTime() ?? 0;
   const newestFirst = (a: Entry, b: Entry): number =>
     modifiedAt(b) - modifiedAt(a) || a.url.localeCompare(b.url);
+
+  /** Could this listing entry be a description? Unknown types count while they are small. */
+  const isCandidateEntry = (entry: Entry): boolean =>
+    entry.kind === "resource" &&
+    (entry.contentType === null
+      ? (entry.size ?? 0) <= maxDescriptionBytes
+      : DESCRIPTION_TYPES.has(baseType(entry.contentType)));
+
+  interface Shard {
+    key: string;
+    url: string;
+  }
+
+  /** Shard containers, newest month first (equal labels by URL), from `from` onwards. */
+  async function collectShards(
+    lib: string,
+    from: { shard: string; shardUrl: string } | undefined,
+    signal: AbortSignal | undefined,
+    skipped: SkipCounts,
+  ): Promise<Shard[]> {
+    const named = async (parent: string, pattern: RegExp) => {
+      const out: { label: string; url: string }[] = [];
+      for await (const entry of storage.listAll(parent, { signal })) {
+        const label = lws ? displayNameOf(entry) : segmentOf(entry.url);
+        if (entry.kind === "container" && pattern.test(label) && isMember(parent, entry.url)) {
+          out.push({ label, url: entry.url });
+        } else {
+          skipped.foreign++;
+        }
+      }
+      return out;
+    };
+    const all: Shard[] = [];
+    for (const year of await named(lib, YEAR)) {
+      if (from !== undefined && year.label > from.shard.slice(0, 4)) continue;
+      for (const month of await named(year.url, MONTH)) {
+        all.push({ key: `${year.label}/${month.label}`, url: month.url });
+      }
+    }
+    // Two containers may carry one label on LWS (a POST never conflicts): the URL breaks ties,
+    // so a cursor naming one of them resumes in the right place.
+    all.sort((a, b) => b.key.localeCompare(a.key) || a.url.localeCompare(b.url));
+    const shards = all.filter(
+      (shard) =>
+        from === undefined ||
+        !(shard.key > from.shard || (shard.key === from.shard && shard.url < from.shardUrl)),
+    );
+    for (const shard of shards) verifiedShards.add(shard.url);
+    return shards;
+  }
 
   async function list(opts: ListOptions): Promise<ListPage<T>> {
     const { signal } = opts;
@@ -758,15 +922,15 @@ export async function openMediaStore<T, I>(
     const items: MediaItem<T>[] = [];
     const found = library ?? (await discover(signal));
     const walk = async (lib: string): Promise<ListPage<T>> => {
-      const shards = shardsFrom(lib, position?.shard, signal);
-      let moreShards = await shards.next();
-      while (!moreShards.done) {
-        const shard = moreShards.value;
+      const shards = await collectShards(lib, position, signal, skipped);
+      for (const [at, shard] of shards.entries()) {
         const resume: ListPosition | undefined =
-          position?.shard === shard.key ? position : undefined;
+          position?.shard === shard.key && position.shardUrl === shard.url ? position : undefined;
         let page: string | null = resume?.page ?? null;
         let offset = resume?.offset ?? 0;
-        if (page !== null && !page.startsWith(shard.url)) throw fail("failed", "invalid-cursor");
+        if (page !== null && !sameContainer(page, shard.url)) {
+          throw fail("failed", "invalid-cursor");
+        }
         for (;;) {
           const listing = await storage.list(shard.url, {
             ...(page === null ? {} : { cursor: { url: page } }),
@@ -774,17 +938,11 @@ export async function openMediaStore<T, I>(
           });
           const candidates: Entry[] = [];
           for (const entry of listing.items) {
-            if (!isMember(shard.url, entry.url)) {
-              skipped.outOfScope++;
-              continue;
-            }
-            memberShard.set(entry.url, shard.url);
-            if (entry.kind !== "resource") skipped.foreign++;
-            else if (entry.contentType === null) {
-              // Type unknown: it can only be a description if it is small enough to be one.
-              if ((entry.size ?? 0) > maxDescriptionBytes) skipped.foreign++;
-              else candidates.push(entry);
-            } else if (DESCRIPTION_TYPES.has(baseType(entry.contentType))) candidates.push(entry);
+            if (!isMember(shard.url, entry.url)) skipped.outOfScope++;
+            else if (isCandidateEntry(entry)) {
+              remember(shard.url, entry.url);
+              candidates.push(entry);
+            } else if (entry.kind !== "resource" || entry.contentType === null) skipped.foreign++;
           }
           candidates.sort(newestFirst);
           let index = offset;
@@ -803,19 +961,15 @@ export async function openMediaStore<T, I>(
           }
           const nextPage = listing.next?.url ?? null;
           if (items.length >= limit) {
-            const remains = index < candidates.length || nextPage !== null;
-            if (remains)
-              return {
-                items,
-                next: encodeCursor({ shard: shard.key, page, offset: index }),
-                skipped,
-              };
-            const following = await shards.next();
+            const resumeAt = (target: Shard, at: string | null, from: number) =>
+              encodeCursor({ shard: target.key, shardUrl: target.url, page: at, offset: from });
+            if (index < candidates.length || nextPage !== null) {
+              return { items, next: resumeAt(shard, page, index), skipped };
+            }
+            const following = shards[at + 1];
             return {
               items,
-              next: following.done
-                ? null
-                : encodeCursor({ shard: following.value.key, page: null, offset: 0 }),
+              next: following === undefined ? null : resumeAt(following, null, 0),
               skipped,
             };
           }
@@ -823,7 +977,6 @@ export async function openMediaStore<T, I>(
           page = nextPage;
           offset = 0;
         }
-        moreShards = await shards.next();
       }
       return { items, next: null, skipped };
     };
@@ -839,66 +992,69 @@ export async function openMediaStore<T, I>(
     try {
       return await loadItem(lib, url, signal);
     } catch (cause) {
-      if (signal?.aborted || (cause instanceof StorageError && cause.code === "network"))
-        throw cause;
+      if (signal?.aborted || isStorageCode(cause, "network")) throw cause;
       return { state: "unparseable" };
     }
   }
 
+  /** The shard of a member of this library, or a not-found failure. */
+  async function memberOrFail(
+    lib: string,
+    url: string,
+    signal: AbortSignal | undefined,
+  ): Promise<string> {
+    const shardUrl = await shardOfMember(lib, url, signal);
+    if (shardUrl === undefined) throw fail("not-found", "out-of-scope");
+    return shardUrl;
+  }
+
   async function get(url: string, signal: AbortSignal | undefined): Promise<MediaItem<T>> {
+    requireUrl(url);
     const lib = await resolveLibrary(signal);
-    if ((await shardOfMember(lib, url, signal)) === undefined) {
-      throw fail("not-found", "out-of-scope");
-    }
+    await memberOrFail(lib, url, signal);
     const loaded = await loadItem(lib, url, signal);
     if (loaded.state === "ok") return loaded.item;
-    throw fail(
-      "failed",
-      loaded.state === "pending"
-        ? "description-pending"
-        : loaded.state === "outOfScope"
-          ? "out-of-scope"
-          : "description-unparseable",
-    );
+    throw fail("failed", reasonOf(loaded.state));
   }
 
   // ---- update ----------------------------------------------------------------------------
 
-  async function update(
+  /**
+   * Conditional edit of one description. `accept` sees the item before and after and decides
+   * whether the edit may stand; the write is on the ETag the edit was computed from.
+   */
+  async function edit(
+    lib: string,
     url: string,
     mutate: (current: Current) => Promise<SerializedDescription | undefined>,
+    accept: (before: MediaItem<T>, after: MediaItem<T>) => boolean,
     signal: AbortSignal | undefined,
   ): Promise<MediaItem<T>> {
-    const lib = await resolveLibrary(signal);
-    if ((await shardOfMember(lib, url, signal)) === undefined) {
-      throw fail("not-found", "out-of-scope");
-    }
     let snapshot: Document | undefined;
     const attempt = async (etag: string | null): Promise<MediaItem<T>> => {
       const doc = snapshot as Document;
       if (etag === null) throw fail("failed", "no-validator");
-      if (doc.byteLength === 0) throw fail("failed", "description-pending");
+      const before = await interpret(lib, url, doc, signal);
+      if (before.state !== "ok") throw fail("failed", reasonOf(before.state));
       const output = await mutate({ url, body: doc.text, contentType: doc.contentType });
-      if (output === undefined) {
-        const unchanged = await interpret(lib, url, doc, signal);
-        if (unchanged.state !== "ok") throw fail("failed", "description-unparseable");
-        return unchanged.item;
-      }
+      if (output === undefined) return before.item;
       const next = normaliseDescription(output, maxDescriptionBytes);
-      const checked = await interpret(
+      const after = await interpret(
         lib,
         url,
         { ...doc, text: next.body, contentType: next.contentType, byteLength: next.body.length },
         signal,
       );
-      if (checked.state !== "ok") throw fail("failed", "description-invalid");
+      if (after.state !== "ok" || !accept(before.item, after.item)) {
+        throw fail("failed", "description-invalid");
+      }
       throwIfAborted(signal);
       const written = await storage.write(url, next.body, {
         contentType: next.contentType,
         ifMatch: etag,
         signal,
       });
-      return { ...checked.item, etag: written.etag, modified: null };
+      return { ...after.item, etag: written.etag, modified: null };
     };
     try {
       return await retryOnConflict(
@@ -915,6 +1071,62 @@ export async function openMediaStore<T, I>(
     }
   }
 
+  async function update(
+    url: string,
+    mutate: (current: Current) => Promise<SerializedDescription | undefined>,
+    signal: AbortSignal | undefined,
+  ): Promise<MediaItem<T>> {
+    requireUrl(url);
+    const lib = await resolveLibrary(signal);
+    await memberOrFail(lib, url, signal);
+    // An edit may change everything but where the media are: repointing a description at
+    // another item's binary would make a later `remove` delete it.
+    return edit(
+      lib,
+      url,
+      mutate,
+      (before, after) =>
+        after.binaryUrl === before.binaryUrl && after.thumbnailUrl === before.thumbnailUrl,
+      signal,
+    );
+  }
+
+  async function attachThumbnail(url: string, input: AttachThumbnailInput): Promise<MediaItem<T>> {
+    if (!present(input)) throw fail("failed", "invalid-input");
+    const { signal } = input;
+    requireUrl(url);
+    const lib = await resolveLibrary(signal);
+    const shardUrl = await memberOrFail(lib, url, signal);
+    const current = await loadItem(lib, url, signal);
+    if (current.state !== "ok") throw fail("failed", reasonOf(current.state));
+    if (current.item.thumbnailUrl !== undefined) return current.item;
+    const thumbnail = await loadThumbnail(input.bytes);
+    await requireNotExposed(lib, signal);
+    await requireNotExposed(shardUrl, signal);
+    const created: string[] = [];
+    try {
+      const thumbnailUrl = await createThumbnail(
+        shardUrl,
+        `${segmentOf(url)}-thumb`,
+        thumbnail,
+        signal,
+        created,
+      );
+      const item = await edit(
+        lib,
+        url,
+        (existing) => input.mutate(existing, thumbnailUrl),
+        (before, after) =>
+          after.binaryUrl === before.binaryUrl && after.thumbnailUrl === thumbnailUrl,
+        signal,
+      );
+      remember(shardUrl, thumbnailUrl);
+      return item;
+    } catch (cause) {
+      throw withOrphans(cause, created, signal);
+    }
+  }
+
   // ---- remove ----------------------------------------------------------------------------
 
   /** Conditional delete: observe the ETag, delete on it, retry a lost race. Gone is done. */
@@ -922,6 +1134,8 @@ export async function openMediaStore<T, I>(
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const head = await storage.head(url, { signal });
+        // A description is never media, whatever name points at it.
+        if (DESCRIPTION_TYPES.has(baseType(head.contentType ?? ""))) return;
         if (head.etag === null) throw fail("failed", "no-validator");
         await storage.delete(url, { ifMatch: head.etag, signal });
         return;
@@ -941,52 +1155,120 @@ export async function openMediaStore<T, I>(
     }
   };
 
-  /** Step two: the binary and thumbnail, only if they sit in the description's own shard. */
-  async function finish(
+  /**
+   * Step one: delete the description on the validator just read. It must still locate the
+   * binary the journal recorded; a description that has changed hands is left alone.
+   * Returns false for such a description.
+   */
+  async function removeDescription(
+    lib: string,
+    entry: DeleteJournalEntry,
+    signal: AbortSignal | undefined,
+  ): Promise<boolean> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let doc: Document;
+      try {
+        doc = await readDocument(entry.descriptionUrl, signal);
+      } catch (cause) {
+        if (isStorageCode(cause, "not-found")) return true;
+        throw cause;
+      }
+      const loaded = await interpret(lib, entry.descriptionUrl, doc, signal);
+      if (loaded.state === "unparseable" || loaded.item?.binaryUrl !== entry.binaryUrl) {
+        return false;
+      }
+      if (doc.etag === null) throw fail("failed", "no-validator");
+      try {
+        await storage.delete(entry.descriptionUrl, { ifMatch: doc.etag, signal });
+        return true;
+      } catch (cause) {
+        if (isStorageCode(cause, "not-found")) return true;
+        if (!isStorageCode(cause, "precondition-failed")) throw cause;
+      }
+    }
+    throw fail("conflict", "retries-exhausted");
+  }
+
+  /** May `target` be deleted as media of the item whose description is `entry`'s? */
+  async function isOwnMedia(
+    lib: string,
+    entry: DeleteJournalEntry,
+    target: string,
+    signal: AbortSignal | undefined,
+  ): Promise<boolean> {
+    if (target === entry.descriptionUrl) return false;
+    if ((await shardOfMember(lib, target, signal)) !== entry.shardUrl) return false;
+    // Solid names are ours: `<description name>[-thumb].<ext>` and nothing else.
+    return (
+      lws ||
+      new RegExp(
+        `^${escapeRegExp(segmentOf(entry.descriptionUrl))}(?:-thumb)?\\.[a-z0-9]{1,8}$`,
+      ).test(segmentOf(target))
+    );
+  }
+
+  /** Step two, only once the description is confirmed gone and has not been recreated. */
+  async function removeMedia(
     lib: string,
     entry: DeleteJournalEntry,
     signal: AbortSignal | undefined,
   ): Promise<void> {
-    for (const target of [entry.binaryUrl, entry.thumbnailUrl]) {
-      if (target !== undefined && (await shardOfMember(lib, target, signal)) === entry.shardUrl) {
-        await deleteGuarded(target, signal);
+    let recreated = true;
+    try {
+      await storage.head(entry.descriptionUrl, { signal });
+    } catch (cause) {
+      if (!isStorageCode(cause, "not-found")) throw cause;
+      recreated = false;
+    }
+    if (!recreated) {
+      for (const target of [entry.binaryUrl, entry.thumbnailUrl]) {
+        if (target !== undefined && (await isOwnMedia(lib, entry, target, signal))) {
+          await deleteGuarded(target, signal);
+        }
       }
     }
     await journalled(() => journal.delete(entry.descriptionUrl));
   }
 
   async function remove(url: string, signal: AbortSignal | undefined): Promise<void> {
+    requireUrl(url);
     const lib = await resolveLibrary(signal);
-    const shardUrl = await shardOfMember(lib, url, signal);
-    if (shardUrl === undefined) throw fail("not-found", "out-of-scope");
-    for (let attempt = 0; ; attempt++) {
-      if (attempt === 3) throw fail("conflict", "retries-exhausted");
-      const doc = await readDocument(url, signal);
-      const loaded = await interpret(lib, url, doc, signal);
-      if (loaded.state === "pending") throw fail("failed", "description-pending");
-      if (loaded.state === "unparseable") throw fail("failed", "description-unparseable");
-      const entry: DeleteJournalEntry =
-        loaded.state === "ok"
-          ? {
-              descriptionUrl: url,
-              shardUrl,
-              binaryUrl: loaded.item.binaryUrl,
-              ...(loaded.item.thumbnailUrl === undefined
-                ? {}
-                : { thumbnailUrl: loaded.item.thumbnailUrl }),
-            }
-          : { descriptionUrl: url, shardUrl };
-      if (doc.etag === null) throw fail("failed", "no-validator");
-      await journalled(() => journal.put(entry));
-      try {
-        await storage.delete(url, { ifMatch: doc.etag, signal });
-      } catch (cause) {
-        if (isStorageCode(cause, "precondition-failed")) continue;
-        if (!isStorageCode(cause, "not-found")) throw cause;
+    const shardUrl = await memberOrFail(lib, url, signal);
+    const doc = await readDocument(url, signal);
+    const loaded = await interpret(lib, url, doc, signal);
+    if (loaded.state === "unparseable") throw fail("failed", "description-unparseable");
+    const entry: DeleteJournalEntry = {
+      descriptionUrl: url,
+      shardUrl,
+      phase: "intent",
+      ...(loaded.item === undefined
+        ? {}
+        : {
+            binaryUrl: loaded.item.binaryUrl,
+            ...(loaded.item.thumbnailUrl === undefined
+              ? {}
+              : { thumbnailUrl: loaded.item.thumbnailUrl }),
+          }),
+    };
+    await journalled(() => journal.put(entry));
+    let gone: boolean;
+    try {
+      gone = await removeDescription(lib, entry, signal);
+    } catch (cause) {
+      // A definitive failure means the item stays, so the intent is withdrawn; being offline
+      // or aborted leaves it for `resumePending`.
+      if (!signal?.aborted && !isStorageCode(cause, "network")) {
+        await journalled(() => journal.delete(url));
       }
-      await finish(lib, entry, signal);
-      return;
+      throw cause;
     }
+    if (!gone) {
+      await journalled(() => journal.delete(url));
+      throw fail("conflict", "description-mismatch");
+    }
+    const deleted: DeleteJournalEntry = { ...entry, phase: "deleted" };
+    await journalled(() => journal.put(deleted));
+    await removeMedia(lib, deleted, signal);
   }
 
   async function resumePending(signal: AbortSignal | undefined): Promise<ResumeSummary> {
@@ -1001,7 +1283,11 @@ export async function openMediaStore<T, I>(
       }
       let ours: boolean;
       try {
-        ours = await shardInLibrary(lib, entry.shardUrl, signal);
+        // A deleted description can no longer be placed on LWS; its media are placed one by one.
+        ours =
+          (await shardInLibrary(lib, entry.shardUrl, signal)) &&
+          (entry.phase === "deleted" ||
+            (await shardOfMember(lib, entry.descriptionUrl, signal)) === entry.shardUrl);
       } catch (cause) {
         if (signal?.aborted) throw cause;
         summary.failed++;
@@ -1014,12 +1300,70 @@ export async function openMediaStore<T, I>(
         continue;
       }
       try {
-        await finish(lib, entry, signal);
+        // The description first; media only after it is confirmed gone.
+        if (entry.phase !== "deleted" && !(await removeDescription(lib, entry, signal))) {
+          await journalled(() => journal.delete(entry.descriptionUrl));
+          summary.rejected++;
+          continue;
+        }
+        await removeMedia(lib, entry, signal);
         summary.completed++;
       } catch (cause) {
         if (signal?.aborted) throw cause;
         summary.failed++;
       }
+    }
+    return summary;
+  }
+
+  // ---- sweep -----------------------------------------------------------------------------
+
+  async function sweep(opts: SweepOptions): Promise<SweepSummary> {
+    const { signal } = opts;
+    const minAgeMs = opts.minAgeMs ?? DAY_MS;
+    if (!(Number.isFinite(minAgeMs) && minAgeMs >= 0)) throw fail("failed", "invalid-input");
+    const summary: SweepSummary = { deleted: 0, retained: 0, shardsSkipped: 0 };
+    const lib = library ?? (await discover(signal));
+    if (lib === null) return summary;
+    const old = (entry: Entry): boolean =>
+      entry.modified !== null && now() - entry.modified.getTime() >= minAgeMs;
+    for (const shard of await collectShards(lib, undefined, signal, emptySkips())) {
+      const referenced = new Set<string>();
+      const shells: string[] = [];
+      const media: Entry[] = [];
+      let understood = true;
+      for await (const entry of storage.listAll(shard.url, { signal })) {
+        if (!isMember(shard.url, entry.url) || entry.kind !== "resource") continue;
+        if (!isCandidateEntry(entry)) {
+          if (
+            MEDIA_TYPE.test(entry.contentType ?? "") &&
+            (lws || OWN_MEDIA.test(segmentOf(entry.url)))
+          ) {
+            media.push(entry);
+          }
+          continue;
+        }
+        const loaded = await loadMember(lib, entry.url, signal);
+        if (loaded.state === "ok") {
+          referenced.add(loaded.item.binaryUrl);
+          if (loaded.item.thumbnailUrl !== undefined) referenced.add(loaded.item.thumbnailUrl);
+        } else if (loaded.state === "pending") {
+          if (old(entry)) shells.push(entry.url);
+        } else understood = false;
+      }
+      if (!understood) {
+        summary.shardsSkipped++;
+        continue;
+      }
+      for (const entry of media) {
+        if (referenced.has(entry.url)) continue;
+        if (!old(entry)) summary.retained++;
+        else {
+          await deleteGuarded(entry.url, signal);
+          summary.deleted++;
+        }
+      }
+      for (const url of shells) if (await dropEmpty(url)) summary.deleted++;
     }
     return summary;
   }
@@ -1033,18 +1377,21 @@ export async function openMediaStore<T, I>(
     isInsideLibrary: (url) =>
       library !== null &&
       (lws ? memberShard.has(url) || verifiedShards.has(url) : isInsideLibrary(library, url)),
-    checkExposure: (signal) => run(signal, () => exposureState(signal)),
-    put: (input) => run(input.signal, () => put(input)),
+    checkExposure: (signal) =>
+      run(signal, async () =>
+        exposureOf(library ?? (await discover(signal)) ?? storage.root, signal),
+      ),
+    put: (input) => run(input?.signal, () => put(input)),
     list: (opts = {}) => run(opts.signal, () => list(opts)),
     get: (url, signal) => run(signal, () => get(url, signal)),
     update: (url, mutate, opts = {}) => run(opts.signal, () => update(url, mutate, opts.signal)),
+    attachThumbnail: (url, input) => run(input?.signal, () => attachThumbnail(url, input)),
     remove: (url, signal) => run(signal, () => remove(url, signal)),
     resumePending: (signal) => run(signal, () => resumePending(signal)),
+    sweepOrphans: (opts = {}) => run(opts.signal, () => sweep(opts)),
   };
   const opened = await run(options.signal, () => discover(options.signal));
   return opened.ok
     ? { ok: true, value: store }
     : { ok: false, error: opened.error as MediaStoreError };
 }
-
-export type { ReadResult };

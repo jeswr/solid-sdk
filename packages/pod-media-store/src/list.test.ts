@@ -112,7 +112,12 @@ describe.each(["solid", "lws"] as const)("list and get (%s)", (protocol) => {
       cursor = page.next ?? undefined;
     } while (cursor);
     expect([...seen].sort()).toEqual(["item1", "item2", "item3", "item4", "item5"]);
-    const gone = encodeCursor({ shard: "2020/01", page: null, offset: 0 });
+    const gone = encodeCursor({
+      shard: "2020/01",
+      shardUrl: `${h.store.library}2020/01/`,
+      page: null,
+      offset: 0,
+    });
     expect(must(await h.store.list({ cursor: gone })).items).toEqual([]);
   });
 
@@ -122,9 +127,21 @@ describe.each(["solid", "lws"] as const)("list and get (%s)", (protocol) => {
     const invalid = { ok: false, error: { kind: "failed", reason: "invalid-cursor" } };
     expect(await h.store.list({ cursor: "!!!" })).toEqual(invalid);
     expect(
-      await h.store.list({ cursor: encodeCursor({ shard: "2026/05", page: null, offset: -1 }) }),
+      await h.store.list({
+        cursor: encodeCursor({
+          shard: "2026/05",
+          shardUrl: `${h.store.library}2026/05/`,
+          page: null,
+          offset: -1,
+        }),
+      }),
     ).toEqual(invalid);
-    const elsewhere = encodeCursor({ shard: "2026/05", page: `${ROOT}private/`, offset: 0 });
+    const elsewhere = encodeCursor({
+      shard: "2026/05",
+      shardUrl: `${h.store.library}2026/05/`,
+      page: `${ROOT}private/`,
+      offset: 0,
+    });
     expect(await h.store.list({ cursor: elsewhere })).toEqual(invalid);
     for (const limit of [0, 201, 1.5]) {
       expect(await h.store.list({ limit })).toEqual({

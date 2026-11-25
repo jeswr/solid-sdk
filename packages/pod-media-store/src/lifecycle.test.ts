@@ -223,6 +223,10 @@ describe("exposure", () => {
       urls.push(url);
       return answer;
     };
+  const refused = (reason: string) => ({
+    ok: false,
+    error: { kind: "exposed", reason },
+  });
 
   it.each([
     "solid",
@@ -230,30 +234,41 @@ describe("exposure", () => {
   ] as const)("refuses to write when the library is exposed (%s)", async (protocol: Protocol) => {
     const seen: string[] = [];
     const h = await harness(protocol, { exposure: exposure("exposed", seen) });
-    expect(await h.store.put(putInput())).toEqual({
-      ok: false,
-      error: { kind: "exposed", reason: "library-exposed" },
-    });
-    expect(seen).toEqual([ROOT]);
-    expect(h.store.library).toBeNull();
+    expect(await h.store.put(putInput())).toEqual(refused("library-exposed"));
+    // The library is probed after it is created (empty) and before anything is written into it.
+    expect(seen).toEqual([h.store.library]);
     expect(await allResources(h.storage)).toEqual([]);
-    const entries: string[] = [];
-    for await (const entry of h.storage.listAll(ROOT)) entries.push(entry.url);
-    expect(entries.some((url) => url.endsWith("media/"))).toBe(false);
   });
 
-  it("checks the library container once it exists, and caches a private answer", async () => {
+  it("probes each shard before writing into it, and refuses an exposed one", async () => {
+    const seen: string[] = [];
+    const h = await harness("solid", {
+      exposure: async (url) => {
+        seen.push(url);
+        return url.endsWith("/2026/05/") ? "exposed" : "private";
+      },
+    });
+    expect(await h.store.put(putInput())).toEqual(refused("library-exposed"));
+    expect(seen).toEqual([h.store.library, `${h.store.library}2026/05/`]);
+    expect(await allResources(h.storage)).toEqual([]);
+    must(await h.store.put(putInput({ createdAt: new Date("2026-04-02T00:00:00Z") })));
+  });
+
+  it("caches a private answer per container, for the ttl only", async () => {
     const seen: string[] = [];
     let clock = 0;
     const h = await harness("solid", { exposure: exposure("private", seen), now: () => clock });
     must(await h.store.put(putInput()));
     must(await h.store.put(putInput({ seed: 2 })));
-    expect(seen).toEqual([ROOT]);
+    const library = h.store.library as string;
+    expect(seen).toEqual([library, `${library}2026/05/`]);
+    must(await h.store.put(putInput({ seed: 3, createdAt: new Date("2026-04-02T00:00:00Z") })));
+    expect(seen).toEqual([library, `${library}2026/05/`, `${library}2026/04/`]);
     clock = 120_000;
-    must(await h.store.put(putInput({ seed: 3 })));
-    expect(seen).toEqual([ROOT, h.store.library]);
+    must(await h.store.put(putInput({ seed: 4 })));
+    expect(seen).toHaveLength(5);
     expect(must(await h.store.checkExposure())).toBe("private");
-    expect(seen).toHaveLength(3);
+    expect(seen).toHaveLength(6);
   });
 
   it("stops writing as soon as the library is later found to be exposed", async () => {
@@ -263,36 +278,56 @@ describe("exposure", () => {
     must(await h.store.put(putInput()));
     answer = "exposed";
     clock = 61_000;
-    expect(await h.store.put(putInput({ seed: 2 }))).toEqual({
-      ok: false,
-      error: { kind: "exposed", reason: "library-exposed" },
-    });
+    expect(await h.store.put(putInput({ seed: 2 }))).toEqual(refused("library-exposed"));
     expect(await allResources(h.storage)).toHaveLength(2);
   });
 
-  it("treats an inconclusive probe as unknown: allowed by default, refused on request", async () => {
-    const lenient = await harness("solid", { exposure: exposure("unknown") });
-    expect((await lenient.store.put(putInput())).ok).toBe(true);
-    const strict = await harness("solid", {
-      exposure: exposure("unknown"),
-      refuseUnknownExposure: true,
-    });
-    expect(await strict.store.put(putInput())).toEqual({
-      ok: false,
-      error: { kind: "exposed", reason: "exposure-unknown" },
-    });
-    const throwing = await harness("solid", {
-      exposure: async () => {
+  it("F-09: anything but a clear private answer refuses, unless unknown is allowed", async () => {
+    for (const probe of [
+      exposure("unknown"),
+      async () => {
         throw new Error("probe failed with token=secret");
       },
-      refuseUnknownExposure: true,
-    });
-    const result = await throwing.store.put(putInput());
-    expect(result).toEqual({ ok: false, error: { kind: "exposed", reason: "exposure-unknown" } });
-    expect(JSON.stringify(result)).not.toContain("secret");
-    expect(must(await throwing.store.checkExposure())).toBe("unknown");
-    const none = await harness("solid");
+      async () => "public" as never,
+      async () => undefined as never,
+    ]) {
+      const strict = await harness("solid", { exposure: probe });
+      const result = await strict.store.put(putInput());
+      expect(result).toEqual(refused("exposure-unknown"));
+      expect(JSON.stringify(result)).not.toContain("secret");
+      expect(must(await strict.store.checkExposure())).toBe("unknown");
+      expect(await allResources(strict.storage)).toEqual([]);
+    }
+    const none = await harness("solid", { exposure: undefined });
+    expect(await none.store.put(putInput())).toEqual(refused("exposure-unknown"));
     expect(must(await none.store.checkExposure())).toBe("unknown");
+    const lenient = await harness("solid", { exposure: undefined, allowUnknownExposure: true });
+    expect((await lenient.store.put(putInput())).ok).toBe(true);
+    // Allowing unknown never allows exposed.
+    const exposed = await harness("solid", {
+      exposure: exposure("exposed"),
+      allowUnknownExposure: true,
+    });
+    expect(await exposed.store.put(putInput())).toEqual(refused("library-exposed"));
+  });
+
+  it("M43: an unknown answer is never cached as private", async () => {
+    const seen: string[] = [];
+    const h = await harness("solid", {
+      exposure: exposure("unknown", seen),
+      allowUnknownExposure: true,
+    });
+    must(await h.store.put(putInput()));
+    const first = seen.length;
+    must(await h.store.put(putInput({ seed: 2 })));
+    expect(seen.length).toBe(first * 2);
+  });
+
+  it("probes the storage root when there is no library yet", async () => {
+    const seen: string[] = [];
+    const h = await harness("solid", { exposure: exposure("private", seen) });
+    expect(must(await h.store.checkExposure())).toBe("private");
+    expect(seen).toEqual([ROOT]);
   });
 
   it("propagates an abort that happens during the probe", async () => {
@@ -401,24 +436,6 @@ describe.each(["solid", "lws"] as const)("odd storage behaviour (%s)", (protocol
     );
     const out = must(await h.store.put(putInput()));
     expect(must(await h.store.get(out.descriptionUrl)).value.name).toBe("first");
-  });
-
-  it("uses the default sleep between polls of a pending description", async () => {
-    if (protocol === "lws") return;
-    const h = await harness(protocol);
-    const first = must(await h.store.put(putInput()));
-    await h.storage.delete(first.descriptionUrl, {
-      ifMatch: (await h.storage.head(first.descriptionUrl)).etag as string,
-    });
-    await h.storage.create(shardOf(h.store), "", {
-      name: first.sha256,
-      contentType: "text/turtle",
-    });
-    const real = await h.reopen({ sleep: undefined, pendingPolls: 2, pendingDelayMs: 1 });
-    expect(await real.put(putInput())).toEqual({
-      ok: false,
-      error: { kind: "conflict", reason: "description-pending" },
-    });
   });
 });
 

@@ -138,7 +138,7 @@ export async function harness(
     parse: parseModel,
     build: buildModel,
     locate: (value) => ({ binaryUrl: value.binaryUrl, thumbnailUrl: value.thumbnailUrl }),
-    sleep: async () => {},
+    exposure: async () => "private",
     ...overrides,
   };
   const reopen = async (more: Partial<MediaStoreOptions<Model, Input>> = {}) => {
@@ -195,6 +195,16 @@ export async function allResources(storage: StorageClient): Promise<string[]> {
   );
 }
 
+/** The description documents (RDF resources) under the storage root. */
+export async function descriptions(storage: StorageClient): Promise<string[]> {
+  const out: string[] = [];
+  for (const url of await allResources(storage)) {
+    const head = await storage.head(url);
+    if (/json|turtle/.test(head.contentType ?? "")) out.push(url);
+  }
+  return out;
+}
+
 export async function text(storage: StorageClient, url: string): Promise<string> {
   return (await storage.read(url)).text();
 }
@@ -214,6 +224,35 @@ export function serverNames(storage: StorageClient): StorageClient {
       if (property !== "create") return value.bind(target);
       return (container: string, body: unknown, options: Record<string, unknown> = {}) =>
         target.create(container, body as never, { ...options, name: `srv${++counter}` });
+    },
+  });
+}
+
+/**
+ * A server whose create and write responses carry no ETag (CSS 7.2.0 answers a `PUT` 201 with
+ * none, so the storage client falls back to a follow-up `HEAD` and reports `etagSource:
+ * "follow-up"`). With `etag: null` even the follow-up is missing.
+ */
+export function withoutResponseEtags(
+  storage: StorageClient,
+  etag: "follow-up" | null = "follow-up",
+): StorageClient {
+  return new Proxy(storage, {
+    get(target, property) {
+      const value = Reflect.get(target, property) as unknown;
+      if (typeof value !== "function") return value;
+      if (property !== "create" && property !== "write") return value.bind(target);
+      return async (...args: unknown[]) => {
+        const result = (await (value as (...a: unknown[]) => Promise<object>).apply(
+          target,
+          args,
+        )) as { etag: string | null };
+        return {
+          ...result,
+          etag: etag === null ? null : result.etag,
+          etagSource: "follow-up",
+        };
+      };
     },
   });
 }

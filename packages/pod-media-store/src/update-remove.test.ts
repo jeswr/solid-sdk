@@ -457,10 +457,9 @@ describe.each(["solid", "lws"] as const)("remove and resumePending (%s)", (proto
     );
     const find = async (suffix: string) =>
       (await allResources(h.storage)).find((url) => url.endsWith(suffix)) as string;
-    expect(await h.store.remove(await find("pend"))).toEqual({
-      ok: false,
-      error: { kind: "failed", reason: "description-pending" },
-    });
+    // An empty description (the shell of an interrupted LWS put) can be removed.
+    expect(await h.store.remove(await find("pend"))).toEqual({ ok: true, value: undefined });
+    expect(await allResources(h.storage)).not.toContain(`${shard}pend`);
     expect(await h.store.remove(await find("bad"))).toEqual({
       ok: false,
       error: { kind: "failed", reason: "description-unparseable" },

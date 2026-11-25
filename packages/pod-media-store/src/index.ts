@@ -10,6 +10,7 @@ export type { Sniffed, Sniffer } from "./sniff.js";
 export { defaultSniff } from "./sniff.js";
 export { openMediaStore } from "./store.js";
 export type {
+  AttachThumbnailInput,
   BuildContext,
   Current,
   ListOptions,
@@ -23,4 +24,6 @@ export type {
   ResumeSummary,
   SerializedDescription,
   SkipCounts,
+  SweepOptions,
+  SweepSummary,
 } from "./types.js";

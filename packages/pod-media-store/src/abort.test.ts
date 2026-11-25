@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
   allResources,
+  descriptions,
   type Harness,
   harness,
   intercept,
@@ -10,8 +11,12 @@ import {
   type Protocol,
   putInput,
 } from "../test/support.js";
+import { openMediaStore } from "./index.js";
 
-const aborted = { ok: false, error: { kind: "failed", reason: "aborted" } };
+const aborted = {
+  ok: false,
+  error: expect.objectContaining({ kind: "failed", reason: "aborted" }),
+};
 
 /** A harness whose storage aborts `controller` just before its `n`th hooked call. */
 async function abortingAt(protocol: Protocol, n: number, controller: AbortController) {
@@ -44,9 +49,9 @@ describe.each(["solid", "lws"] as const)("abort (%s)", (protocol) => {
     expect(await allResources(h.storage)).toEqual([]);
   });
 
-  it("put: abort at every storage call either completes or cleans up everything", async () => {
-    const put = (h: Harness, signal: AbortSignal) =>
-      h.store.put(putInput({ thumbnail: { bytes: jpeg(1) }, signal }));
+  it("put: abort at every storage call completes or leaves only retryable media", async () => {
+    const put = (h: Harness, signal?: AbortSignal) =>
+      h.store.put(putInput({ thumbnail: { bytes: jpeg(1) }, ...(signal ? { signal } : {}) }));
     const total = await countCalls(protocol, (h) => put(h, new AbortController().signal));
     expect(total).toBeGreaterThan(8);
     let aborts = 0;
@@ -54,14 +59,26 @@ describe.each(["solid", "lws"] as const)("abort (%s)", (protocol) => {
       const controller = new AbortController();
       const h = await abortingAt(protocol, n, controller);
       const result = await put(h, controller.signal);
-      const resources = await allResources(h.storage);
+      const found = await descriptions(h.storage);
       if (result.ok) {
-        expect(resources, `n=${n}`).toHaveLength(3);
+        expect(await allResources(h.storage), `n=${n}`).toHaveLength(3);
+        continue;
       } else {
         aborts++;
-        expect(result, `n=${n}`).toEqual(aborted);
-        expect(resources, `n=${n}`).toEqual([]);
+        expect(result.error, `n=${n}`).toMatchObject({ kind: "failed", reason: "aborted" });
+        // Never an empty or half-written description: it is complete or absent.
+        for (const url of found) {
+          expect(
+            (await h.storage.read(url).then((r) => r.text())).length,
+            `n=${n}`,
+          ).toBeGreaterThan(0);
+        }
       }
+      // Whatever was left, the same put works afterwards and the sweep clears any duplicates.
+      const retry = await put({ ...h, store: await h.reopen() } as Harness);
+      expect(retry.ok, `n=${n}`).toBe(true);
+      await (await h.reopen()).sweepOrphans({ minAgeMs: 0 });
+      expect(await allResources(h.storage), `n=${n}`).toHaveLength(3);
     }
     expect(aborts).toBeGreaterThanOrEqual(total - 1);
   });
@@ -94,7 +111,7 @@ describe.each(["solid", "lws"] as const)("abort (%s)", (protocol) => {
       const controller = new AbortController();
       const h = await harness(protocol, stage(controller) as never);
       expect(await h.store.put(putInput({ signal: controller.signal }))).toEqual(aborted);
-      expect(await allResources(h.storage)).toEqual([]);
+      expect(await descriptions(h.storage)).toEqual([]);
     }
     const controller = new AbortController();
     const h = await harness(protocol);
@@ -115,27 +132,29 @@ describe.each(["solid", "lws"] as const)("abort (%s)", (protocol) => {
       },
     });
     expect(await p.store.put(putInput({ signal: parsing.signal }))).toEqual(aborted);
-    expect(await allResources(p.storage)).toEqual([]);
+    expect(await descriptions(p.storage)).toEqual([]);
   });
 
-  it("put: aborting while waiting for a pending description stops the wait", async () => {
-    if (protocol === "lws") return;
+  it("a hung type index, registration or build ends at the abort", async () => {
+    const never = new Promise<never>(() => {});
+    const soon = () => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), 5);
+      return controller.signal;
+    };
     const h = await harness(protocol);
-    const first = must(await h.store.put(putInput()));
-    await h.storage.delete(first.descriptionUrl, {
-      ifMatch: (await h.storage.head(first.descriptionUrl)).etag as string,
-    });
-    await h.storage.create(`${h.store.library}2026/05/`, "", {
-      name: first.sha256,
-      contentType: "text/turtle",
-    });
-    const controller = new AbortController();
-    const waiting = await h.reopen({
-      sleep: async () => {
-        controller.abort();
-      },
-    });
-    expect(await waiting.put(putInput({ signal: controller.signal }))).toEqual(aborted);
+    const hungLookup = { findAll: () => never, register: () => never };
+    expect(await openMediaStore({ ...h.options, typeIndex: hungLookup, signal: soon() })).toEqual(
+      aborted,
+    );
+    const hungRegister = {
+      findAll: async () => new Map<string, string[]>(),
+      register: () => never,
+    };
+    const registering = await h.reopen({ typeIndex: hungRegister });
+    expect(await registering.put(putInput({ signal: soon() }))).toEqual(aborted);
+    const building = await h.reopen({ build: () => never });
+    expect(await building.put(putInput({ signal: soon() }))).toEqual(aborted);
   });
 
   it("list, get, update, remove and resume honour an abort at every storage call", async () => {
