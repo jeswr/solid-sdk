@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { type Grant, ownerPolicy, type Subject, writeWac } from "@jeswr/pod-access";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -558,6 +559,105 @@ describe("Calendar creation privacy", () => {
         PALETTE[0] as string,
       ),
     ).rejects.toBeInstanceOf(CalendarUnconfirmedError);
+  });
+  /** A fake pod serving a real WAC root ACL, with the account in "solid" mode (no seam, no demo). */
+  async function wacPod(extra?: (aclUrl: string) => Grant) {
+    const aclUrl = `${root}.acl`;
+    const policy = ownerPolicy(DEMO_WEBID, true);
+    if (extra) policy.grants.push(extra(aclUrl));
+    const body = await writeWac(policy, root, aclUrl);
+    const pod = createDemoPod({
+      root,
+      seed: (await buildDemoSeed(now, { calendar: false })).map((file) =>
+        file.path === ".acl" ? { ...file, body } : file,
+      ),
+      now: () => now,
+    });
+    const writes: string[] = [];
+    const account: CalendarAccount = {
+      webId: DEMO_WEBID,
+      storageUrl: root,
+      mode: "solid",
+      fetch: async (input, init) => {
+        const method = init?.method ?? "GET";
+        if (!["GET", "HEAD", "OPTIONS"].includes(method))
+          writes.push(`${method} ${new URL(String(input)).pathname}`);
+        return pod.fetch(input, init);
+      },
+    };
+    return { pod, account, writes, io: calendarIO(pod.fetch, root) };
+  }
+  const readGrant =
+    (subject: Subject) =>
+    (aclUrl: string): Grant => ({
+      modes: new Set(["read"]),
+      who: [[subject]],
+      except: [],
+      appliesTo: "members",
+      source: { url: aclUrl, node: `${aclUrl}#extra` },
+    });
+  it("creates a calendar through the real owner-only check when the WAC ACL is owner-only", async () => {
+    const { account, writes, io } = await wacPod();
+    const url = await createCalendar(account, "Real Owner", PALETTE[0] as string);
+    expect(url).toBe(`${root}calendar/real-owner.ttl`);
+    expect((await io.loadCalendar(url))?.data.title).toBe("Real Owner");
+    expect(writes).toContain("PUT /calendar/real-owner.ttl");
+    // The document is verified before its own write, and its container is created afterwards.
+    expect(writes.indexOf("PUT /calendar/real-owner.ttl")).toBeLessThan(
+      writes.indexOf("PUT /calendar/real-owner/"),
+    );
+  });
+  it.each([
+    ["public", { kind: "public" }],
+    ["another agent", { kind: "agent", webId: "https://bob.example/profile#me" }],
+  ] satisfies [
+    string,
+    Subject,
+  ][])("refuses a loose inherited ACL granting %s read, leaving nothing behind", async (_name, who) => {
+    const { account, writes, io } = await wacPod(readGrant(who));
+    const refused = createCalendar(account, "Loose Real", PALETTE[0] as string);
+    await expect(refused).rejects.toBeInstanceOf(CalendarPrivacyError);
+    await expect(refused).rejects.not.toThrow(/https?:|acl|public|bob/i);
+    expect(writes.filter((write) => write.includes("loose-real"))).toEqual([]);
+    await expect(io.loadCalendar(`${root}calendar/loose-real.ttl`)).rejects.toThrow();
+  });
+  it("refuses when the WAC ACL is unreadable, writing nothing", async () => {
+    const { account, writes } = await wacPod();
+    const unreadable: CalendarAccount = {
+      ...account,
+      fetch: async (input, init) =>
+        /\.acl$/.test(String(input))
+          ? new Response(null, { status: 403 })
+          : account.fetch(input, init),
+    };
+    await expect(
+      createCalendar(unreadable, "Unreadable Real", PALETTE[0] as string),
+    ).rejects.toBeInstanceOf(CalendarPrivacyError);
+    expect(writes).toEqual([]);
+  });
+  it("uses the real check, failing closed or allowing on the evidence, when the session carries no mode", async () => {
+    // A GroupsSession-shaped account has no `mode`, as family-space creation passes.
+    const allowed = await wacPod();
+    const { mode: _mode, ...modeless } = allowed.account;
+    expect("mode" in modeless).toBe(false);
+    expect(await createCalendar(modeless, "Modeless", PALETTE[0] as string)).toBe(
+      `${root}calendar/modeless.ttl`,
+    );
+    const loose = await wacPod(readGrant({ kind: "public" }));
+    const { mode: _loose, ...looseModeless } = loose.account;
+    await expect(
+      createCalendar(looseModeless, "Modeless Loose", PALETTE[0] as string),
+    ).rejects.toBeInstanceOf(CalendarPrivacyError);
+    expect(loose.writes).toEqual([]);
+  });
+  it("creates an exclusive family calendar on the default demo pod without a session mode (family spaces)", async () => {
+    // The demo pod serves an owner-only root ACL, so the real check passes with `mode` absent.
+    const { account, io } = await setup();
+    const { mode: _mode, ...modeless } = account;
+    const url = await createCalendar(modeless, "Family", PALETTE[0] as string, {
+      exclusive: true,
+    });
+    expect((await io.loadCalendar(url))?.data.title).toBe("Family");
   });
   it("fails closed outside the demo pod when storage cannot prove owner-only access", async () => {
     const { account } = await setup();
