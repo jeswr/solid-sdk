@@ -832,6 +832,15 @@
   gap: var(--space-3);
   min-height: 44px;
 }
+.pho-takeout-option {
+  flex-wrap: wrap;
+}
+.pho-takeout-option p {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}
 .pho-takeout-option input {
   width: 20px;
   height: 20px;

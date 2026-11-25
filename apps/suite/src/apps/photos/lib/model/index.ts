@@ -3,6 +3,7 @@ export * from "./album.js";
 export * from "./duration.js";
 export * from "./exif.js";
 export * from "./io.js";
+export * from "./location-copy.js";
 export * from "./mp4.js";
 export * from "./photograph.js";
 export * from "./timeline.js";

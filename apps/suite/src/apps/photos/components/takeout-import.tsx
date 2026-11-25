@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { planTakeout, type TakeoutPlan } from "../lib/data/takeout";
 import type { TakeoutImportResult } from "../lib/data/takeout-import";
+import { REMOVE_LOCATION_HELP } from "../lib/model/location-copy";
 import { usePhotos } from "../state/photos-context";
 
 const count = (value: number, noun: string, plural = `${noun}s`) =>
@@ -159,9 +160,11 @@ export function TakeoutImport() {
             type="checkbox"
             checked={strip}
             disabled={phase.name === "saving" || (phase.name === "done" && !!phase.retry)}
+            aria-describedby={`${stripId}-help`}
             onChange={(event) => changeStrip(event.target.checked)}
           />
           <label htmlFor={stripId}>Remove location from imported photos and videos</label>
+          <p id={`${stripId}-help`}>{REMOVE_LOCATION_HELP}</p>
         </div>
         {phase.name === "idle" && (
           <div className="pho-takeout-pick">
