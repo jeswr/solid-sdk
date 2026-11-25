@@ -248,6 +248,57 @@ test("scenario 4: recurring completion advances in place, Undo removes its copy,
   await accessible(page);
 });
 
+test("monthly ordinal editing, row skip and detail skip preserve history and support Undo", async ({
+  page,
+}) => {
+  let url = "";
+  let stateStore = "";
+  await seed(page, async (store, inbox) => {
+    stateStore = inbox.tracker.stateStore as string;
+    url = (
+      await store.createTask(inbox, {
+        title: "Monthly review",
+        state: "open",
+        allDay: "2026-11-20",
+        dueDate: new Date("2026-11-20T00:00:00Z"),
+        recurrence: { frequency: "MONTHLY", byDay: ["Friday"], bySetPos: 3, count: 3 },
+      })
+    ).url;
+  });
+  await page.goto("/tasks/inbox");
+  const row = rowFor(page, "Monthly review");
+  await row.focus();
+  await row.press("Shift+F10");
+  await page.getByRole("menuitem", { name: "Skip this occurrence", exact: true }).click();
+  const skipped = undoToast(page, "Skipped to Fri 18 Dec");
+  await expect(skipped).toBeVisible();
+  await expect.poll(async () => (await readTask(page, url)).allDay).toBe("2026-12-18");
+  await skipped.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect.poll(async () => (await readTask(page, url)).allDay).toBe("2026-11-20");
+  await row.getByRole("link", { name: "Monthly review", exact: true }).click();
+  const detail = page.locator(".tsk-detail");
+  await detail.getByRole("button", { name: "Repeat", exact: true }).click();
+  await page.getByRole("combobox", { name: "Which week", exact: true }).selectOption("-1");
+  await page.getByRole("combobox", { name: "Weekday", exact: true }).selectOption("Monday");
+  await page.keyboard.press("Escape");
+  await expect(detail).toContainText("Every month on the last Monday");
+  await detail.getByRole("button", { name: "Task actions", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Skip this occurrence", exact: true }).click();
+  await expect.poll(async () => (await readTask(page, url)).allDay).toBe("2026-11-30");
+  expect((await readTask(page, url)).recurrence?.count).toBe(3);
+  const pod = await durablePod(page);
+  const store = new TaskStore({
+    storage: DEMO_ROOT,
+    webId: DEMO_WEBID,
+    fetch: pod.fetch,
+    typeIndex: false,
+  });
+  expect(
+    (await store.listTasks(stateStore)).filter((item) => item.task.clonedFrom === `${url}#it`),
+  ).toHaveLength(0);
+  await accessible(page);
+});
+
 test("priority, selection, title editing, dates and Alt+Down persist through the model", async ({
   page,
 }) => {
