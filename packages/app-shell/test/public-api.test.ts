@@ -23,6 +23,9 @@ import * as api from "../src/index.js";
 const PUBLIC_EXPORTS = [
   // App header
   "AppHeader",
+  "AppFrame",
+  "AppMain",
+  "useSessionResource",
   // Account menu
   "AccountControl",
   "AccountMenu",
