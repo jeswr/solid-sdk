@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 // AUTHORED-BY Codex GPT-6
 import {
   type ChallengeBinding,
@@ -13,6 +14,7 @@ import {
 } from "@jeswr/reactive-authentication";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Parser, Store } from "n3";
+import { injectedFetchFailure } from "./injected-fetch.js";
 import { isLoopback, secureUrl, storageEndpointPaths } from "./options.js";
 import type { PodAuthOptions } from "./types.js";
 
@@ -62,7 +64,10 @@ export async function storageDescriptionRoots(
       .getSubjects(DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${PIM}Storage`), null)
       .filter((subject) => subject.termType === "NamedNode")
       .map((subject) => subject.value);
-  } catch {
+  } catch (error) {
+    // A refusal by the host's transport is a typed failure, not "no roots": the caller must not
+    // treat the WebID as learned.
+    if (injectedFetchFailure(error) !== undefined) throw error;
     return [];
   }
 }
@@ -206,7 +211,21 @@ export function createBoundary(
             // A description cannot grant an ancestor or sibling by itself. The same-origin
             // container must bind back to this LWS identifier, or identify itself as Solid
             // storage and either contain the identifier or name it as its storage description.
-            const confirmation = await head(root, { http, signal });
+            // The engine's head() reports every failure as undefined; remember a host refusal.
+            let refusal: unknown;
+            const probe: HttpOptions = {
+              ...http,
+              fetch: async (input, init) => {
+                try {
+                  return await http.fetch!(input, init);
+                } catch (error) {
+                  refusal ??= injectedFetchFailure(error);
+                  throw error;
+                }
+              },
+            };
+            const confirmation = await head(root, { http: probe, signal });
+            if (refusal !== undefined) throw refusal;
             if (confirmation === undefined || !describes(confirmation, root)) continue;
             const links = parseLinks(confirmation.headers.get("link"), root);
             const only = (rel: string) => {

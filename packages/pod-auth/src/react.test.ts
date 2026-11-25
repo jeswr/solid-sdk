@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 // Adapted from solid-auth-core/test/react.test.tsx (AUTHORED-BY Claude Fable 5).
 import { webcrypto } from "node:crypto";
 import { act, createElement, StrictMode, useEffect } from "react";
@@ -10,6 +11,7 @@ import {
   type AuthEventType,
   createPodAuth,
   type Identity,
+  InjectedFetchError,
   type PodAuth,
 } from "./index.js";
 import { PodAuthProvider, type PodAuthSession, usePodAuth } from "./react.js";
@@ -303,4 +305,13 @@ test("hook outside a provider throws a targeted error", async () => {
       root!.render(createElement(Probe));
     }),
   ).rejects.toThrow("inside a <PodAuthProvider>");
+});
+
+test("a refusal by the host's transport during restore is reported without ending the page", async () => {
+  const auth = new FakeAuth();
+  await mount(auth);
+  const refusal = new InjectedFetchError(new Error("origin not approved"));
+  await act(async () => auth.deferred.reject(refusal));
+  expect(session.status).toBe("unauthenticated");
+  expect(session.error).toBe(refusal.message);
 });

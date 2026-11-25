@@ -3,14 +3,14 @@
 // AUTHORED-BY Claude Sonnet 5.5
 import { type Identity as Claims, sameIssuer } from "@jeswr/reactive-authentication";
 import { createAgentAuth } from "./agent.js";
+import {
+  InjectedFetchError,
+  InvalidInjectedResponseError,
+  injectedFetchFailure,
+} from "./injected-fetch.js";
 import { StorageFailure } from "./kv.js";
 import { secureUrl, validateOptions } from "./options.js";
-import {
-  AmbiguousIssuerError,
-  createProviders,
-  InjectedFetchError,
-  injectedFetchFailure,
-} from "./providers.js";
+import { AmbiguousIssuerError, createProviders } from "./providers.js";
 import { decideSilentRestore } from "./session-restore.js";
 import type {
   AuthEvent,
@@ -33,7 +33,7 @@ export type {
   PodAuth,
   PodAuthOptions,
 } from "./types.js";
-export { AmbiguousIssuerError, InjectedFetchError };
+export { AmbiguousIssuerError, InjectedFetchError, InvalidInjectedResponseError };
 
 export function createPodAuth(options: PodAuthOptions): PodAuth {
   validateOptions(options);
@@ -284,8 +284,9 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         if (decision.outcome === "restored") return snapshot();
         current = null;
         // A missing credential (invalid_grant or unusable key) drops its pointer. Transient failures keep it.
+        let present = true;
         if (account !== null) {
-          const present = await providers.persistence.present(account);
+          present = await providers.persistence.present(account);
           signal.throwIfAborted();
           if (!present) {
             await providers.persistence.forgetPointer();
@@ -295,9 +296,10 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         }
         if (failure instanceof StorageFailure) throw failure.cause;
         // A refusal by the supplied transport is not a verdict on the session, which stays stored so
-        // the host can allow the origin and restore again.
+        // the host can allow the origin and restore again. When the session was dropped for another
+        // reason (a dead grant), that outcome is reported as it always was: null, never a refusal.
         const refusal = injectedFetchFailure(failure);
-        if (refusal !== undefined) throw refusal;
+        if (refusal !== undefined && present) throw refusal;
         return null;
       })().finally(() => {
         if (restoring === shared) {

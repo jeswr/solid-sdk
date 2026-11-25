@@ -54,15 +54,17 @@ export interface PodAuthOptions {
   maxReplayBodyBytes?: number;
   /**
    * Transport for pod-auth's OWN unauthenticated reads on the browser path, e.g. so a host that
-   * allow-lists origins (a desktop webview's CSP) can gate them. It receives a `Request` and only for
-   * body-less GET/HEAD requests with no Authorization, DPoP, Proxy-Authorization or Cookie header:
-   * issuer and authorization-server discovery, the Client Identifier Document, the WebID profile
-   * (including the engine's issuer verification), JWKS, storage descriptions and their confirming HEADs.
-   * It never sees token, registration or revocation requests (POSTs), refresh or DPoP-proof traffic,
-   * the PKCE verifier, or any request made through `auth.fetch`. Pod-auth's HTTPS/loopback checks run
-   * first, and redirect handling and size limits still apply to what it returns. A rejection surfaces
-   * from `login()`/`restore()` as `InjectedFetchError` whose `cause` is the rejection itself. Not
-   * accepted together with a CID agent subject (`lws.subject.cid`).
+   * allow-lists origins (a desktop webview's CSP) can gate them. Called with a single `Request`, which it
+   * must forward unchanged, and only for body-less GET/HEAD requests with no Authorization, DPoP,
+   * Proxy-Authorization or Cookie header, handed over with `credentials: "omit"`: authorization-server and
+   * challenge-driven metadata discovery, the Client Identifier Document, the WebID profile (including the
+   * engine's issuer verification), storage descriptions and their confirming HEADs. It never sees token,
+   * registration or revocation requests (POSTs), refresh or DPoP-proof traffic, the PKCE verifier, or any
+   * request made through `auth.fetch`, and it is not an enforcement point for those origins. Pod-auth's
+   * HTTPS/loopback check runs first; the result must be a `Response`, must not have followed a redirect the
+   * request did not ask for, and is read under a 1 MiB cap (`InvalidInjectedResponseError`). The engine's 8 s
+   * WebID-read deadline includes this function's time. A rejection surfaces as `InjectedFetchError` whose
+   * `cause` is the rejection itself. Not accepted together with a CID agent subject (`lws.subject.cid`).
    */
   fetch?: typeof fetch;
 }

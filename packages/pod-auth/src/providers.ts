@@ -29,6 +29,7 @@ import {
   XASProvider,
 } from "@jeswr/reactive-authentication";
 import { createBoundary } from "./boundary.js";
+import { isPublicRequest, viaSupplied } from "./injected-fetch.js";
 import { protectStore, scopedStore } from "./kv.js";
 import { createLwsProvider } from "./lws-provider.js";
 import { secureUrl } from "./options.js";
@@ -252,42 +253,6 @@ export function createAgentProviders(
   };
 }
 
-/**
- * Thrown (in place of whatever the engine would have wrapped it in) when the `PodAuthOptions.fetch`
- * transport rejects one of pod-auth's own unauthenticated requests. The supplied function's own error
- * is the unchanged `cause`; the message carries no URL.
- */
-export class InjectedFetchError extends Error {
-  constructor(cause: unknown) {
-    super("The supplied fetch transport refused or failed a pod-auth request", { cause });
-    this.name = "InjectedFetchError";
-  }
-}
-
-/** The injected transport's refusal anywhere in an error's cause chain, if there is one. */
-export function injectedFetchFailure(error: unknown): InjectedFetchError | undefined {
-  for (let depth = 0; depth < 16 && error instanceof Error; depth++) {
-    if (error instanceof InjectedFetchError) return error;
-    error = error.cause;
-  }
-  return undefined;
-}
-
-/**
- * Only requests that carry no credential may reach `PodAuthOptions.fetch`: body-less GET/HEAD with no
- * authorization, DPoP, proxy-authorization or cookie header. Token, registration and revocation
- * requests are POSTs, so they never qualify.
- */
-function isPublicRequest(request: Request) {
-  return (
-    (request.method === "GET" || request.method === "HEAD") &&
-    request.body === null &&
-    !["authorization", "dpop", "proxy-authorization", "cookie"].some((name) =>
-      request.headers.has(name),
-    )
-  );
-}
-
 export class AmbiguousIssuerError extends Error {
   constructor() {
     super("WebID lists several issuers; supply ui.chooseIssuer");
@@ -319,12 +284,7 @@ export function createProviders(
       // The guard runs before, and independently of, whichever transport is chosen.
       secureUrl(request.url, insecure, "protocol endpoint");
       if (supplied === undefined || !isPublicRequest(request)) return transport(request);
-      return Promise.resolve()
-        .then(() => supplied(request))
-        .catch((error: unknown) => {
-          // A cancelled attempt keeps its own abort reason.
-          throw request.signal.aborted ? error : new InjectedFetchError(error);
-        });
+      return viaSupplied(supplied, request);
     },
   };
   const boundary = createBoundary(options, http);
