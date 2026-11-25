@@ -86,6 +86,23 @@ function missingRoom(error: unknown): boolean {
   );
 }
 
+/**
+ * Inbox children read per scan, in listing order (the listing carries no dates, so the reader
+ * cannot choose the newest before fetching). Kind filtering happens after the fetch, so this is
+ * the scan's request bound, not a result cap.
+ */
+export const INBOX_SCAN_LIMIT = 300;
+/** Most invitation rows shown. */
+const MAX_INVITATIONS = 50;
+/** Own-pod rooms whose index is loaded for verification in one scan. */
+const MAX_ROOM_CHECKS = 100;
+/** Rows one claimed sender may occupy among unverified (foreign or unreachable) invitations. */
+const MAX_UNVERIFIED_PER_SENDER = 5;
+/** Rows foreign or unverified claims may occupy together, leaving the rest to verified rooms. */
+const MAX_UNVERIFIED = 20;
+/** Own-pod room claims checked per claimed sender, so one poster cannot spend every check. */
+const MAX_CLAIMS_PER_SENDER = 20;
+
 export async function readInvitations({
   reader,
   joinedFetch,
@@ -112,7 +129,7 @@ export async function readInvitations({
     webId,
     signal,
     kind: "invitation",
-    limit: 100,
+    limit: INBOX_SCAN_LIMIT,
     normalise(item) {
       if (!item.object) return null;
       const room = invitationRoom(item.object, storage);
@@ -125,8 +142,16 @@ export async function readInvitations({
     },
   });
   const claims = new Map<string, (string | undefined)[]>();
-  for (const item of items.filter((item) => item.own))
+  const perSender = new Map<string, number>();
+  // Newest first: one sender's flood of claims is cut off before it uses the room-check budget.
+  for (const item of items.filter((item) => item.own)) {
+    const sender = item.actor ?? "";
+    const count = perSender.get(sender) ?? 0;
+    if (count >= MAX_CLAIMS_PER_SENDER) continue;
+    if (!claims.has(item.room) && claims.size >= MAX_ROOM_CHECKS) continue;
+    perSender.set(sender, count + 1);
     claims.set(item.room, [...(claims.get(item.room) ?? []), item.actor]);
+  }
   for (const room of cache.keys()) {
     if (!claims.has(room)) cache.delete(room);
   }
@@ -168,14 +193,25 @@ export async function readInvitations({
     }),
   );
   signal.throwIfAborted();
-  const result: Invitation[] = [];
+  // Verified own-pod rooms are never crowded out by claims about rooms we cannot check: those
+  // (and verification-failed fallbacks) share a smaller budget, split per claimed sender.
+  const chosen = new Map<string, Invitation>();
+  const unverifiedBySender = new Map<string, number>();
+  let unverified = 0;
   for (const item of items) {
     const invitation = item.own
       ? verified.get(item.room)
       : { room: item.room, ...(item.actor ? { actor: item.actor } : {}) };
-    if (!invitation || result.some((found) => found.room === invitation.room)) continue;
-    result.push(invitation);
-    if (result.length === 50) break;
+    if (!invitation || chosen.has(invitation.room)) continue;
+    if (!invitation.name) {
+      const sender = invitation.actor ?? "";
+      const count = unverifiedBySender.get(sender) ?? 0;
+      if (unverified >= MAX_UNVERIFIED || count >= MAX_UNVERIFIED_PER_SENDER) continue;
+      unverifiedBySender.set(sender, count + 1);
+      unverified++;
+    }
+    chosen.set(invitation.room, invitation);
+    if (chosen.size === MAX_INVITATIONS) break;
   }
-  return result;
+  return [...chosen.values()];
 }

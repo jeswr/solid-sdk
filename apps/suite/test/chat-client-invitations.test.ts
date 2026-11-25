@@ -196,15 +196,46 @@ it("filters kinds, unsafe objects and joined rooms, deduplicating newest first",
   ]);
   expect(fetch.mock.calls.some(([url]) => String(url).includes("elsewhere"))).toBe(false);
 });
-it("caps invitations at 50 and bounds inbox reads", async () => {
+it("caps unverified invitations and bounds inbox reads", async () => {
   const { client, fetch } = await inboxFixture(
-    Array.from({ length: 210 }, (_, i) => offer(`${FOREIGN}chat/rooms/r${i}/`)),
+    Array.from({ length: 410 }, (_, i) => offer(`${FOREIGN}chat/rooms/r${i}/`)),
   );
-  expect(await client.invitations()).toHaveLength(50);
+  // One anonymous sender fills at most five rows; the scan reads at most 300 children.
+  expect(await client.invitations()).toHaveLength(5);
   expect(fetch.mock.calls.some(([url]) => String(url).endsWith("index.ttl"))).toBe(false);
   expect(
     fetch.mock.calls.filter(([url]) => /^https:\/\/8\.8\.8\.8\/inbox\/\d+\.ttl$/.test(String(url))),
-  ).toHaveLength(100);
+  ).toHaveLength(300);
+});
+const published = (day: number) =>
+  `; as:published "2026-11-${String(day).padStart(2, "0")}T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>`;
+it("finds a genuine invitation behind more than 100 junk inbox items", async () => {
+  const { client } = await inboxFixture([]);
+  const { url: room } = await client.createRoom({ name: "Real", members: [BOB] });
+  await client.leave(room);
+  // Genuine Offer is listed last and is the oldest, so it falls beyond the first 100 children.
+  await writeInbox(client, [
+    ...Array.from({ length: 150 }, (_, i) =>
+      offer(`${FOREIGN}chat/rooms/junk${i}/`, published(20)),
+    ),
+    offer(room, `; as:actor <${BOB}>${published(1)}`),
+  ]);
+  expect(await client.invitations()).toContainEqual({ room, actor: BOB, name: "Real" });
+});
+it("does not let one sender fill the result cap with newer foreign Offers", async () => {
+  const { client } = await inboxFixture([]);
+  const { url: room } = await client.createRoom({ name: "Real", members: [BOB] });
+  await client.leave(room);
+  const spammer = "https://6.6.6.6/profile#me";
+  await writeInbox(client, [
+    offer(room, `; as:actor <${BOB}>${published(1)}`),
+    ...Array.from({ length: 60 }, (_, i) =>
+      offer(`${FOREIGN}chat/rooms/spam${i}/`, `; as:actor <${spammer}>${published(10)}`),
+    ),
+  ]);
+  const found = await client.invitations();
+  expect(found).toContainEqual({ room, actor: BOB, name: "Real" });
+  expect(found.filter((item) => item.actor === spammer)).toHaveLength(5);
 });
 it("handles missing inboxes, surfaces read errors and cancels reads", async () => {
   expect(await fixture().client.invitations()).toEqual([]);
