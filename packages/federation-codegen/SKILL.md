@@ -78,8 +78,11 @@ package, and a drift test running `pnpm run codegen --out <tmp>` with a byte com
   caller from filling an optional child only partly; build then writes a non-conforming
   child (tracked as sst-ild.4.14), so facades must supply all or none of its MUST fields.
 - SHACL admission is closed: unsupported property/node constraint components and unknown
-  patterns are errors. Supported patterns are exactly `^https?://`, `^https://`, and `\S`
-  for string-valued nonblank fields. At the root, advisory flat class hints may only be
+  patterns are errors. Supported patterns are exactly `^https?://`, `^https://`, `\S`
+  for string-valued nonblank fields, and `^[A-Z]{3}$` on an `xsd:string` literal (the
+  ISO 4217 code shape, compiled to `guards.stringPattern: "upper-alpha-3"`). Patterns map
+  by exact text through `iriSchemeForPattern` / `stringPatternFor`; never compile a regex
+  from shape input, and treat equivalent spellings as unsupported. At the root, advisory flat class hints may only be
   omitted with a warning, because they cannot weaken a Violation MUST. Composite link targets must satisfy
   their class (explicit ontology subclass ancestry allowed when `sh:node` is present) and
   referenced node shape. A class-only link may project only a shape targeting that exact
@@ -114,6 +117,12 @@ package, and a drift test running `pnpm run codegen --out <tmp>` with a byte com
   Decimal/integer bounds and enums must preserve canonical decimal spelling through
   JS number conversion. Reject noncanonical literal enum members that the runtime
   writer cannot reproduce exactly; value-only projection must not broaden `sh:in`.
+- `"decimal": "exact"` in a field config (flat or composite node field) emits
+  `decimal: "exact"` into model.json and types the field `string`: an exact
+  `xsd:decimal` lexical, scale preserved. Compilation rejects it on any datatype but
+  exactly `xsd:decimal` (integer subtypes included), on IRI fields, and with `sh:in` or
+  numeric bounds; fidelity rejects a `decimal` key without config provenance. Without the
+  key every output is byte-identical to before.
 - Config may add guards (defaults, trims, sort, http(s) scheme) but never contradict the
   shape; the fidelity assertion fails if a required guard is missing or disagrees with SHACL.
   Config defaults on Violation `minCount >= 1` fields are rejected.
