@@ -810,6 +810,10 @@ and set ordering are supported. Exported types are `DecisionPreview`, `DecisionT
 `RequestDecision`, `DecideOptions` and `DecisionResult`. A preview does not lock the server: later
 transport failures, conditional-write conflicts and concurrent policy edits can still refuse a write.
 
+Finishing a half-applied approval refuses with exported `ApprovalRevokedError` when its grant
+record or receipt says it was revoked; the check runs before the first target and before each
+later one. A finish racing a revoke can still re-apply one target: revoke again afterwards.
+
 **WAC/ACP roles do not enforce expiry.** An explicit decision `expiresAt` is receipt metadata, persisted in
 the recovery snapshot. It does not expire or automatically revoke WAC/ACP access; results always report
 `expiryEnforced: false`. Requested expiry is displayed but never silently adopted. Purpose is DPV

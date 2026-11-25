@@ -256,6 +256,10 @@ DecisionTarget and the conflict class from requests-solid/index.ts; document pub
 in README and this skill together. Conditional-write and transport failures can still occur later;
 a preview is not a server transaction.
 
+Finishing a half-applied approval refuses with exported `ApprovalRevokedError` when its grant
+record or receipt says it was revoked; the check runs before the first target and before each
+later one. A finish racing a revoke can still re-apply one target: revoke again afterwards.
+
 Public profile UIs reuse exported `publicHttpsUrl(url)` and `publicTransport(publicFetch, signal?)`.
 The former validates public HTTPS URLs (URL classification only; DNS-checking fetch is required in
 Node). The latter forces `credentials: "omit"` and `redirect: "error"`, refuses 3xx and bounds
