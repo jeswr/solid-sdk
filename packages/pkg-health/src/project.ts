@@ -16,6 +16,7 @@ import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory as df } from "n3";
 import { codePointOrder } from "./assistant-import.js";
 import { entities } from "./generated/model.js";
+import { assertWithinLimits, MAX_PROJECTED_FACTS } from "./limits.js";
 import { health, LABEL, RDF_TYPE, ReadNode, S } from "./read.js";
 import { effectiveTime, readPeriod, temporalTime } from "./temporal.js";
 import {
@@ -346,6 +347,9 @@ export function projectHealthFacts(
       }
       return result;
     };
+    // Nanopubs sharing assertion graphs multiply facts: refuse before classifying.
+    assertWithinLimits(value.nanopubs);
+    const tooLarge = () => view.facts.length + view.unrecognised.length > MAX_PROJECTED_FACTS;
     for (const np of classifyNanopublications(value)) {
       const category = np.categories.some((c) => categories.has(c));
       let assertion = assertions.get(np.assertionId);
@@ -392,6 +396,7 @@ export function projectHealthFacts(
             view.facts.push(fact);
             view.byKind[kind].push(fact);
           } else view.unrecognised.push(metadata);
+          if (tooLarge()) throw new HealthGraphError("too-large");
         }
       }
       if (qualifies && !recognised) {
@@ -408,6 +413,7 @@ export function projectHealthFacts(
             candidates.find((n) => n.label) ??
             candidates.find((n) => n.terms(RDF_TYPE).length) ??
             candidates[0];
+          // At most one per nanopub, so bounded by the nanopub cap.
           if (node) view.unrecognised.push(base(provenance(np), np, node));
         }
       }
@@ -415,15 +421,18 @@ export function projectHealthFacts(
     }
     // Keyed by batch and IRI: another batch citing the same IRI adds its own record
     // and can never replace this batch's kind or title.
+    // Facts of one nanopub share its provenance object: visit each once so the
+    // work follows the sources in the file, not facts times sources.
     const sources = new Map(
-      [...view.facts, ...view.unrecognised].flatMap((f) =>
-        f.provenance.sources.map(
-          (s) =>
-            [
-              JSON.stringify([f.provenance.batch, s.iri]),
-              { ...s, batch: f.provenance.batch },
-            ] as const,
-        ),
+      [...new Set([...view.facts, ...view.unrecognised].map((f) => f.provenance))].flatMap(
+        (provenance) =>
+          provenance.sources.map(
+            (s) =>
+              [
+                JSON.stringify([provenance.batch, s.iri]),
+                { ...s, batch: provenance.batch },
+              ] as const,
+          ),
       ),
     );
     view.sources = [...sources.values()].sort(

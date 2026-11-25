@@ -122,7 +122,8 @@ export class HealthGraphError extends Error {
       | "unsupported-correction"
       | "invalid-correction"
       | "read-failed"
-      | "write-failed",
+      | "write-failed"
+      | "too-large",
   ) {
     super(`Health graph operation failed (${code})`);
     this.name = "HealthGraphError";

@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 
+import type { DatasetCore } from "@rdfjs/types";
 import type { Nanopublication, Nanopublications } from "./model.js";
 import { NS, RdfNode } from "./rdf.js";
 import { readNamedGraph as graph } from "./read-graph.js";
@@ -18,21 +19,39 @@ export interface ClassifiedNanopublication extends Nanopublication {
 }
 const past = new Set(["Superseded", "Historical", "Retracted"]);
 
+/** Nanopublications one classification accepts; more fail closed with a fixed error. */
+export const MAX_CLASSIFIED_NANOPUBLICATIONS = 20_000;
+/**
+ * Nanopublications that may share one assertion graph (corroborating envelopes).
+ * Replacement sets grow with the square of this count, so it is bounded.
+ */
+export const MAX_ENVELOPES_PER_ASSERTION = 64;
+
 /** Classify with graph-scoped provenance and cross-batch revision/contradiction links. */
 export function classifyNanopublications(value: Nanopublications): ClassifiedNanopublication[] {
   const affected = new Set(value.affected);
   const nanopubs = [...new Map(value.nanopubs.map((np) => [np.id, np])).values()];
+  if (nanopubs.length > MAX_CLASSIFIED_NANOPUBLICATIONS)
+    throw new Error("Too many nanopublications");
   const byId = new Map(nanopubs.map((np) => [np.id, np]));
   const byAssertion = new Map<string, Nanopublication[]>();
   for (const np of nanopubs) {
     const copies = byAssertion.get(np.assertionId) ?? [];
     copies.push(np);
+    if (copies.length > MAX_ENVELOPES_PER_ASSERTION)
+      throw new Error("Too many nanopublications share one assertion");
     byAssertion.set(np.assertionId, copies);
   }
   const replacements = new Map<string, Set<string>>();
   const inactive = new Set<string>();
+  // Heads may share one provenance graph; snapshot it once per classification.
+  const snapshots = new Map<string, DatasetCore>();
   for (const np of nanopubs) {
-    const provenance = graph(value.dataset, np.provenanceId);
+    let provenance = snapshots.get(np.provenanceId);
+    if (!provenance) {
+      provenance = graph(value.dataset, np.provenanceId);
+      snapshots.set(np.provenanceId, provenance);
+    }
     const targets = [...new RdfNode(np.id, provenance).terms(`${NS.prov}wasRevisionOf`)].filter(
       (target) => target.termType === "NamedNode",
     );

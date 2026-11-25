@@ -448,6 +448,23 @@ the optional `Nanopublications.affected` field through filtering/projection. It 
 derived context and is not serialized into RDF; serializing only retained graphs
 loses it. All-skipped input has an empty `affected` list.
 
+Tolerant results also carry `skippedTargets: string[]`: every safe IRI that a skipped
+envelope's updates pointed at, matched or not (unsafe IRIs cannot name a retained
+nanopub and are dropped). `mergeNanopublications` unions both inputs' lists and marks
+every merged nanopub they name, so a retraction skipped in one export still lowers the
+matching fact held by another. Keep `skippedTargets` beside `affected`.
+
+Reports never echo a rejected IRI: a skipped head whose own IRI fails validation is
+listed as `urn:pkg:skipped:<n>`, where `n` is its position among the sorted head IRIs.
+Error messages for unknown statuses and claim references are fixed text.
+
+Work bounds. Graph snapshots are cached within one read or classification only, so
+many heads sharing a provenance or pubinfo graph cost one copy of it, and nothing is
+cached across reads. `classifyNanopublications` throws fixed errors above
+`MAX_CLASSIFIED_NANOPUBLICATIONS` (20,000 nanopubs) and `MAX_ENVELOPES_PER_ASSERTION`
+(64 envelopes sharing one assertion graph; replacement sets grow with its square).
+`ReferenceStore.addQuad` keeps language-tag de-duplication in a constant-time index.
+
 `createNanopubProvenanceReader(value)` returns a provenance lookup with a per-invocation
 batch graph cache. Use it when projecting many nanopubs; the uncached
 `readNanopubProvenance(value, np)` remains available. Neither caches across reads or
@@ -504,7 +521,8 @@ rewrite a source's kind or thread ID, or make its provenance ambiguous. The help
 - refuses a private envelope graph (head, provenance or pubinfo) claimed by two
   nanopub IDs, and a dropped duplicate whose blank nodes are referenced elsewhere;
 - relabels blank nodes per input and returns nanopubs sorted by ID with `affected` as
-  the union of both lists.
+  the union of both lists, plus every merged nanopub named by either input's
+  `skippedTargets`.
 
 Every refusal throws `Error("Conflicting nanopublication merge")`, with no values.
 Splitting one batch across two exports therefore requires identical batch graphs in

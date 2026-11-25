@@ -157,7 +157,9 @@ function relabel<T extends Term>(term: T, prefix: string): T {
  * default-graph data are dropped, so planted data cannot block a later merge.
  * Where a graph is in both inputs the first argument's copy is kept. Shared
  * blank-node graphs are compared within fixed node and work bounds. `affected`
- * is the union of both inputs' lists. Any refusal throws one fixed error with
+ * is the union of both inputs' lists plus every merged nanopub that an unreadable
+ * update from either input (`skippedTargets`) names, so a retraction skipped in
+ * one export still lowers the matching fact in the other. Any refusal throws one fixed error with
  * no values.
  */
 export function mergeNanopublications(a: Nanopublications, b: Nanopublications): Nanopublications {
@@ -207,10 +209,16 @@ export function mergeNanopublications(a: Nanopublications, b: Nanopublications):
     const nanopubs = new Map<string, Nanopublication>();
     for (const np of [...a.nanopubs, ...b.nanopubs])
       if (!nanopubs.has(np.id)) nanopubs.set(np.id, np);
+    // An unreadable update in one input may name a nanopub only the other holds.
+    const skippedTargets = new Set([...(a.skippedTargets ?? []), ...(b.skippedTargets ?? [])]);
+    const affected = new Set([...(a.affected ?? []), ...(b.affected ?? [])]);
+    for (const np of nanopubs.values())
+      if (skippedTargets.has(np.id) || skippedTargets.has(np.assertionId)) affected.add(np.id);
     return {
       dataset: compactStore(quads) as ReferenceStore,
       nanopubs: [...nanopubs.values()].sort((x, y) => (x.id < y.id ? -1 : 1)),
-      affected: [...new Set([...(a.affected ?? []), ...(b.affected ?? [])])],
+      affected: [...affected],
+      skippedTargets: [...skippedTargets].sort(),
     };
   } catch {
     refuse();

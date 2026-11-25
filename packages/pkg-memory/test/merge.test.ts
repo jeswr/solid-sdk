@@ -2,7 +2,21 @@
 import type { Quad, Term } from "@rdfjs/types";
 import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { DataFactory as df, Store } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// Spy on the real hash so tests can bound work without wall-clock time.
+const { hashes } = vi.hoisted(() => ({ hashes: vi.fn() }));
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return {
+    ...actual,
+    createHash: (...args: Parameters<typeof actual.createHash>) => {
+      hashes(...args);
+      return actual.createHash(...args);
+    },
+  };
+});
+
 import {
   buildNanopublications,
   createFactAssertion,
@@ -240,17 +254,24 @@ describe("mergeNanopublications", () => {
       expect(() => mergeNanopublications(loop, cycle)).toThrow(conflict);
     });
 
-    it("refuses many tied blank nodes in a shared graph quickly, even when identical", async () => {
+    it("refuses many tied blank nodes in a shared graph within a fixed amount of work, even when identical", async () => {
       const tied = `ex:e ex:p ${Array.from({ length: 2000 }, (_, i) => `_:t${i}`).join(", ")} .`;
       const a = await withEntities(tied);
       const b = await withEntities(tied);
-      const started = performance.now();
+      // Count signature hashes (one per blank node per refinement round) rather than time.
+      hashes.mockClear();
       expect(() => mergeNanopublications(a, b)).toThrow(conflict);
+      // Over the blank-node cap: no refinement of the 2000 tied nodes.
+      expect(hashes.mock.calls.length).toBeLessThan(100);
       const few = `ex:e ex:p ${Array.from({ length: 200 }, (_, i) => `_:t${i}`).join(", ")} .`;
       const c = await withEntities(few);
       const d = await withEntities(few);
+      hashes.mockClear();
       expect(() => mergeNanopublications(c, d)).toThrow(conflict);
-      expect(performance.now() - started).toBeLessThan(1000);
+      // Tied nodes stop refinement after one round on each side (plus a few hashes
+      // for the other shared graphs), far below
+      // MAX_SHARED_GRAPH_ROUNDS rounds.
+      expect(hashes.mock.calls.length).toBeLessThanOrEqual(2 * 200 + 20);
     });
 
     it(`refuses more than ${MAX_SHARED_GRAPH_BLANK_NODES} blank nodes and over-long blank chains`, async () => {

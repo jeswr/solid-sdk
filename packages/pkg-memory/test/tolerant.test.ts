@@ -358,7 +358,9 @@ it("collects update targets even when the skipped head IRI itself fails validati
     ),
   );
   const result = await parseNanopublicationsTolerant(await raw(dataset));
-  expect(result.skipped).toEqual([{ id: invalidId, errorClass: "Error" }]);
+  // The rejected IRI is reported by position, never by value.
+  expect(result.skipped).toEqual([{ id: "urn:pkg:skipped:0", errorClass: "Error" }]);
+  expect(JSON.stringify(result.skipped)).not.toContain(invalidId);
   expect(result.affected).toEqual([a.id]);
   expect(result.nanopubs).toHaveLength(2);
   expect((await parseNanopublications(await serializeNanopublications(result))).nanopubs).toEqual(

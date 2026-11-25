@@ -113,3 +113,29 @@ export function claim(id: string, fact: Fact = condition()): Claim {
     categories: ["pd:MedicalHealth"],
   };
 }
+
+/**
+ * Like `batch`, but models a record from a foreign or older export that this builder did
+ * not write: the builder always adds `pd:MedicalHealth` to a claim whose assertion has a
+ * clinical type, so it is removed again for every claim whose own `categories` omit it.
+ */
+export async function foreignBatch(claims: Claim[], id = "health-test"): Promise<Nanopublications> {
+  const value = await batch(claims, id);
+  const medical = df.namedNode("https://w3id.org/dpv/pd#MedicalHealth");
+  const hasPersonalData = df.namedNode("https://w3id.org/dpv#hasPersonalData");
+  for (const c of claims) {
+    if (c.categories?.includes("pd:MedicalHealth")) continue;
+    const np = value.nanopubs.find((n) => n.identifier === `${id}/${c.id}`);
+    if (!np) throw new Error("Missing fixture nanopub");
+    value.dataset.removeQuad(
+      df.quad(
+        df.namedNode(np.assertionId),
+        hasPersonalData,
+        medical,
+        df.namedNode(np.provenanceId),
+      ),
+    );
+    np.categories = np.categories.filter((category) => category !== medical.value);
+  }
+  return value;
+}

@@ -3,7 +3,11 @@
 // AUTHORED-BY Claude Opus 5.5
 /** PKG nanopublication model, fact templates, belief, purpose policy and pod storage. */
 export type { Belief, ClassifiedNanopublication } from "./belief.js";
-export { classifyNanopublications } from "./belief.js";
+export {
+  classifyNanopublications,
+  MAX_CLASSIFIED_NANOPUBLICATIONS,
+  MAX_ENVELOPES_PER_ASSERTION,
+} from "./belief.js";
 export { containsCardNumber, findCardNumbers } from "./cards.js";
 export { SPECIAL_CATEGORIES } from "./categories.js";
 export {

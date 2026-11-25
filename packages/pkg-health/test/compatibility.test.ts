@@ -17,6 +17,7 @@ import {
   claim,
   condition,
   FixtureNode,
+  foreignBatch,
   H,
   medication,
   observation,
@@ -88,9 +89,12 @@ it.each([
     .link("http://www.w3.org/1999/02/22-rdf-syntax-ns#type", type)
     .link(type.startsWith("http://hl7") ? "http://hl7.org/fhir/subject" : `${S}subject`, owner);
   expect(
-    projectHealthFacts(await batch([{ ...claim("one"), assertion: store, categories: [] }]), {
-      owner,
-    }).facts,
+    projectHealthFacts(
+      await foreignBatch([{ ...claim("one"), assertion: store, categories: [] }]),
+      {
+        owner,
+      },
+    ).facts,
   ).toHaveLength(1);
 });
 it("keeps category-qualified records without a patient and ignores unqualified records without a patient", async () => {
@@ -98,7 +102,7 @@ it("keeps category-qualified records without a patient and ignores unqualified r
     name: "Unlinked health fact",
   });
   const view = projectHealthFacts(
-    await batch([
+    await foreignBatch([
       { ...claim("category"), assertion: graph },
       { ...claim("not-category"), assertion: graph, categories: [] },
     ]),
@@ -106,6 +110,15 @@ it("keeps category-qualified records without a patient and ignores unqualified r
   );
   expect(view.facts).toHaveLength(1);
   expect(view.excludedOtherSubjects).toBe(0);
+});
+it("tags a clinical-typed claim built with no categories as MedicalHealth and projects it", async () => {
+  const graph = entities.Condition.build("https://example.org/entities/auto-tagged", {
+    name: "Auto-tagged fact",
+  });
+  new FixtureNode("https://example.org/entities/auto-tagged", graph).link(`${S}subject`, owner);
+  const value = await batch([{ ...claim("auto"), assertion: graph, categories: [] }]);
+  expect(value.nanopubs[0]?.categories).toEqual(["https://w3id.org/dpv/pd#MedicalHealth"]);
+  expect(projectHealthFacts(value, { owner }).facts).toMatchObject([{ label: "Auto-tagged fact" }]);
 });
 it("reads blank linked products and codes and all recognized code systems", async () => {
   const inputs = [
@@ -344,7 +357,7 @@ it("recognises standalone owner-linked supporting records even without a categor
     new FixtureNode(subject, record).link(`${H}patient`, owner);
   }
   const view = projectHealthFacts(
-    await batch(
+    await foreignBatch(
       records.map((assertion, i) => ({ ...claim(String(i)), assertion, categories: [] })),
     ),
     { owner },
