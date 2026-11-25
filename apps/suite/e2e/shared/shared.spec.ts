@@ -5,7 +5,9 @@ import { seedDemoSession } from "../demo-session";
 
 test.beforeEach(({ page }) => seedDemoSession(page));
 
-test("demo Home card opens Shared with me, filters apps and previews a friend's document", async ({ page }) => {
+test("demo Home card opens Shared with me, filters apps and previews a friend's document", async ({
+  page,
+}) => {
   await page.goto("/home");
   const card = page.getByRole("region", { name: "Shared with you", exact: true });
   await expect(card.getByRole("link", { name: "Launch plan", exact: true })).toBeVisible();
