@@ -33,7 +33,8 @@ export class EventsController {
   };
   constructor(
     readonly repository: Repository,
-    readonly onFailure: () => void,
+    /** Receives the failure, so a `PublicationError` can be explained rather than hidden. */
+    readonly onFailure: (error: unknown) => void,
     readonly onWarning: (message: string) => void = () => {},
   ) {}
   snapshot = () => this.state;
@@ -79,8 +80,8 @@ export class EventsController {
         this.onWarning(result.registrationWarning);
     });
     this.queue = task
-      .catch(() => {
-        this.onFailure();
+      .catch((error: unknown) => {
+        this.onFailure(error);
       })
       .finally(() => {
         this.edits.delete(token);
