@@ -2,6 +2,12 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import type { DemoPodSnapshot } from "../../src/lib/demo-pod/pod";
+import { seedDemoSession } from "../demo-session";
+
+// Contacts sits behind the shell session guard, so every test starts with the demo account remembered.
+test.beforeEach(async ({ page }) => {
+  await seedDemoSession(page);
+});
 
 const rows = (page: Page) => page.locator("[data-collection-item]");
 const row = (page: Page, name: string) => page.getByRole("row", { name, exact: true });

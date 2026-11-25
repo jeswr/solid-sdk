@@ -62,7 +62,9 @@ test("signed-out language choice applies on the sign-in page and survives reload
   await picker.selectOption("ar");
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
-  await expect(page.getByRole("heading", { name: "تسجيل الدخول إلى Solid Suite" })).toBeAttached();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "تسجيل الدخول إلى Solid Suite" }),
+  ).toBeAttached();
   // Record every <html dir> change with the parser state: the inline head script runs while the
   // document is still loading, before any deferred Next.js chunk can hydrate.
   await page.addInitScript(() => {

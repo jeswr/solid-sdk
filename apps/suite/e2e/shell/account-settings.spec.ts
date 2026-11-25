@@ -269,6 +269,7 @@ test("desktop notifications need the account's own opt-in, saved per account", a
 
 for (const [section, title] of [
   ["account", "Account"],
+  ["legacy", "Recovery & legacy"],
   ["appearance", "Appearance"],
   ["groups", "Groups & family"],
   ["storage", "Storage"],
@@ -284,13 +285,18 @@ for (const [section, title] of [
   }, info) => {
     await page.goto(`/settings/${section}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
+    // The section's own controls load after its heading; a scrollable main is only keyboard
+    // reachable once one of them exists, so audit the loaded page rather than the placeholder.
+    await expect(
+      page.locator("#main-content").getByRole("button").or(page.locator("#main-content a")).first(),
+    ).toBeVisible();
     await capture(page, `settings-${section}`, info.project.name);
     if ((page.viewportSize()?.width ?? 1280) < 1024)
       await page.getByRole("button", { name: "Toggle sidebar", exact: true }).click();
     const sidebar = page
       .getByRole("navigation", { name: "Settings sections", exact: true })
       .filter({ visible: true });
-    await expect(sidebar.getByRole("link")).toHaveCount(8);
+    await expect(sidebar.getByRole("link")).toHaveCount(11);
     await expect(sidebar.getByRole("link", { name: title, exact: true })).toHaveAttribute(
       "aria-current",
       "page",
