@@ -1,7 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { checkOwnerOnly, createOwnerOnlyDestinationVerifier } from "@jeswr/pod-access";
 import { createPodClient } from "@jeswr/storage-client";
 import {
   Button,
@@ -20,6 +19,7 @@ import { sessionCapabilitiesCache } from "@/lib/session/capabilities-cache";
 import {
   CopyToDocsPrivacyError,
   createNoteDocsConverter,
+  createNoteDocsPrivacy,
   type NoteDocsMode,
 } from "../lib/copy-to-docs";
 import type { StoredNote } from "../lib/model/store";
@@ -56,24 +56,17 @@ export function NoteDocsActions({
       )
       .then((opened) => opened.storage);
   const privacy = () => {
-    storage.current ??= openStorage();
+    // A failed open is not cached: the next attempt retries capability discovery.
+    storage.current ??= openStorage().catch((error) => {
+      storage.current = undefined;
+      throw error;
+    });
     const open = () => storage.current as ReturnType<typeof openStorage>;
-    return {
-      destinationIsOwnerOnly: createOwnerOnlyDestinationVerifier({
-        podRoot: session.storageUrl,
-        ownerWebId: session.webId,
-        openStorage: open,
-      }),
-      // Only a note proven shared (every reason a non-owner grant) may go to a looser Docs.
-      noteTreatedAsPrivate: async (url: string) => {
-        const result = await checkOwnerOnly({
-          storage: await open(),
-          url,
-          ownerWebId: session.webId,
-        });
-        return result.private || result.reasons.some((reason) => reason.reason !== "non-owner");
-      },
-    };
+    return createNoteDocsPrivacy({
+      podRoot: session.storageUrl,
+      webId: session.webId,
+      openStorage: open,
+    });
   };
   const [ownOpen, setOwnOpen] = useState(false);
   const menuOpen = open ?? ownOpen;

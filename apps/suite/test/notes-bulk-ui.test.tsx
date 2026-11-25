@@ -713,6 +713,29 @@ it("dismisses the failure toast and refuses retry when the account changes", asy
   expect(mocks.context.move).not.toHaveBeenCalled();
 });
 
+it("stops a running batch from writing once the account changes (B1)", async () => {
+  const gate = deferred<StoredNote>();
+  mocks.context.move.mockImplementation((note) =>
+    note.title === "Alpha" ? gate.promise : Promise.resolve(note),
+  );
+  const ui = await mount(render());
+  await click(checkbox("Alpha"));
+  await click(checkbox("Beta"));
+  await click(checkbox("Gamma"));
+  await key(document.body, "#", true);
+  expect(mocks.context.move).toHaveBeenCalledTimes(1);
+  mocks.context = {
+    ...mocks.context,
+    session: { ...mocks.context.session, webId: "https://other.example/#me" },
+  };
+  await ui.render(render());
+  await act(async () => {
+    gate.resolve(mocks.context.notes[0] as StoredNote);
+    await gate.promise;
+  });
+  expect(mocks.context.move).toHaveBeenCalledTimes(1);
+});
+
 it.each([
   "trash",
   "deleteForever",

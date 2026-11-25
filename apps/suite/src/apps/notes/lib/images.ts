@@ -61,9 +61,9 @@ export async function readCappedBlob(response: Response, max: number): Promise<B
   const type = response.headers.get("content-type") ?? "";
   const reader = response.body?.getReader();
   if (!reader) {
-    const blob = await response.blob();
-    if (blob.size > max) throw new ByteLimitError(max);
-    return blob;
+    // No stream means no body (Fetch spec). Never buffer an unstreamed body past the cap.
+    if (declared !== null && Number(declared) > 0) throw new ByteLimitError(max);
+    return new Blob([], { type });
   }
   const chunks: Uint8Array<ArrayBuffer>[] = [];
   let size = 0;

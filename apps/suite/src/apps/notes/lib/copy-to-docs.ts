@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { refuseRedirects } from "@jeswr/guarded-fetch";
+import { checkOwnerOnly, createOwnerOnlyDestinationVerifier } from "@jeswr/pod-access";
+import type { StorageClient } from "@jeswr/storage-client";
 import { uploadPodImage } from "../../docs/lib/editor/image-upload";
 import { buildDocument, parseDocument } from "../../docs/lib/model/document";
 import { ResourceWriteError } from "../../docs/lib/model/errors";
@@ -26,6 +28,39 @@ export class CopyToDocsPrivacyError extends Error {
   }
 }
 
+/** The two privacy dependencies, built on the shared owner-only verifier and checker. */
+export function createNoteDocsPrivacy(options: {
+  podRoot: string;
+  webId: string;
+  openStorage: () => StorageClient | Promise<StorageClient>;
+}): Pick<Dependencies, "destinationIsOwnerOnly" | "noteTreatedAsPrivate"> {
+  const { podRoot, webId, openStorage } = options;
+  return {
+    destinationIsOwnerOnly: createOwnerOnlyDestinationVerifier({
+      podRoot,
+      ownerWebId: webId,
+      openStorage,
+    }),
+    // Only a note proven public-readable (every reason a non-owner grant, one a public read)
+    // may go to a Docs destination that is not owner-only. pod-access cannot compare two
+    // audiences, so a note shared with specific people still needs an owner-only destination.
+    noteTreatedAsPrivate: async (url) => {
+      const result = await checkOwnerOnly({
+        storage: await openStorage(),
+        url,
+        ownerWebId: webId,
+      });
+      return (
+        result.private ||
+        result.reasons.some((reason) => reason.reason !== "non-owner") ||
+        !result.reasons.some(
+          (reason) => reason.subject === "public" && reason.modes.includes("read"),
+        )
+      );
+    },
+  };
+}
+
 /** Matches validateImage's limit; enforced while reading, before the bytes are buffered. */
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
@@ -47,7 +82,10 @@ interface Dependencies {
   trash: (note: StoredNote) => Promise<unknown>;
   /** True only when the shared owner-only verifier proves the destination owner-only. */
   destinationIsOwnerOnly: (url: string) => Promise<boolean>;
-  /** False only when the shared verifier proves the note is already shared; unverifiable means true. */
+  /**
+   * False only when the shared verifier proves the note is public-readable; unverifiable, owner-only
+   * and shared-with-specific-people all mean true (audiences cannot be compared).
+   */
   noteTreatedAsPrivate: (url: string) => Promise<boolean>;
 }
 interface Upload {
@@ -98,7 +136,7 @@ export function createNoteDocsConverter() {
     if (mode === "move") await assertMovable(note);
     // A private note's text and images may only go to a verified owner-only destination. Never
     // loosen an ACL to pass this: refuse. An unverifiable note or destination counts as exposed;
-    // only a note that is verifiably not owner-only (already shared) may go to a looser Docs.
+    // only a note that is verifiably public-readable may go to a Docs that is not owner-only.
     let noteIsPrivate: boolean | undefined;
     const requireOwnerOnly = async (url: string) => {
       let destination = false;
@@ -120,7 +158,8 @@ export function createNoteDocsConverter() {
     const { uploads } = conversion;
     let preparedBody = note.body;
     const prepare = async (assets: string) => {
-      await requireOwnerOnly(assets);
+      // The verifier takes a prospective document URL, not a container: probe a child.
+      await requireOwnerOnly(`${assets}${crypto.randomUUID()}`);
       const body = await copyNoteImages(note.body, podRoot, async (source) => {
         const uploadKey = JSON.stringify([assets, source]);
         let upload = uploads.get(uploadKey);
@@ -148,6 +187,8 @@ export function createNoteDocsConverter() {
     };
     if (conversion.document && (conversion.title !== note.title || conversion.body !== note.body)) {
       const document = conversion.document;
+      // The stored document may have its own policy: verify it before any content write.
+      await requireOwnerOnly(document.url);
       const dataset = buildDocument(document.url, {
         ...document.data,
         ...input,

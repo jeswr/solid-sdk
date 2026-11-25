@@ -90,12 +90,32 @@ export function useNotesSelection(visible: readonly StoredNote[], scope: string)
     const current = latest.current;
     const startedFor = current.session?.webId;
     const fromSelection = targets.some((note) => keys.has(note.url));
+    // A batch outliving its account must stop writing: check before every note's write.
+    const stillSameAccount = () => {
+      if (!mounted.current || latest.current.session?.webId !== startedFor)
+        throw new Error("The account changed during this action");
+    };
     const result = await applyNotesBulk(targets, action, {
-      move: current.move,
-      save: current.mutations.save,
-      deleteForever: current.mutations.deleteForever,
-      pin: current.pin,
-      colour: current.colour,
+      move: (note, type) => {
+        stillSameAccount();
+        return current.move(note, type);
+      },
+      save: (note, changes) => {
+        stillSameAccount();
+        return current.mutations.save(note, changes);
+      },
+      deleteForever: (note) => {
+        stillSameAccount();
+        return current.mutations.deleteForever(note);
+      },
+      pin: (url) => {
+        stillSameAccount();
+        current.pin(url);
+      },
+      colour: (url, value) => {
+        stillSameAccount();
+        current.colour(url, value);
+      },
       prefs: current.prefs,
     });
     if (!mounted.current || latest.current.session?.webId !== startedFor) {

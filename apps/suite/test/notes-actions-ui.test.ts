@@ -17,8 +17,12 @@ const mocks = vi.hoisted(() => ({
   toast: { error: vi.fn(), success: vi.fn(), dismiss: vi.fn() },
   owner: {
     destination: true as boolean,
-    note: { private: true } as { private: boolean; reasons?: { reason: string }[] },
+    note: { private: true } as {
+      private: boolean;
+      reasons?: { reason: string; subject?: string; modes?: string[] }[];
+    },
     destinations: [] as string[],
+    openFailures: 0,
   },
   editor: undefined as Editor | undefined,
 }));
@@ -48,7 +52,10 @@ vi.mock("../src/apps/docs/lib/model/store", () => ({
 }));
 vi.mock("@jeswr/storage-client", async (original) => ({
   ...(await original<typeof import("@jeswr/storage-client")>()),
-  createPodClient: async () => ({ storage: {} }),
+  createPodClient: async () => {
+    if (mocks.owner.openFailures-- > 0) throw new Error("capability discovery failed");
+    return { storage: {} };
+  },
 }));
 vi.mock("@jeswr/pod-access", async (original) => ({
   ...(await original<typeof import("@jeswr/pod-access")>()),
@@ -126,6 +133,7 @@ beforeEach(() => {
   mocks.owner.destination = true;
   mocks.owner.note = { private: true };
   mocks.owner.destinations = [];
+  mocks.owner.openFailures = 0;
   mocks.createDoc.mockReset();
   localStorage.clear();
   const save = vi.fn(async (baseline, input) => ({ ...baseline, ...input, etag: '"v2"' }));
@@ -818,10 +826,50 @@ it("copies a private note when Docs is owner-only, and a shared note into a loos
     void work();
   };
   mocks.owner.destination = false;
-  mocks.owner.note = { private: false, reasons: [{ reason: "non-owner" }] };
+  mocks.owner.note = {
+    private: false,
+    reasons: [{ reason: "non-owner", subject: "public", modes: ["read"] }],
+  };
   await mount(h(NoteDialog, { note: note() }));
   await openDocs("Copy to Docs");
   expect(mocks.createDoc).toHaveBeenCalledOnce();
+});
+
+it("retries a failed storage open on the next copy instead of caching the failure (N7)", async () => {
+  mocks.createDoc.mockResolvedValue(createdDocument());
+  mocks.context.attempt = (work: () => Promise<unknown>) => {
+    void work();
+  };
+  // The real verifier is replaced here, so the open is reached through the note check.
+  mocks.owner.destination = false;
+  mocks.owner.note = {
+    private: false,
+    reasons: [{ reason: "non-owner", subject: "public", modes: ["read"] }],
+  };
+  mocks.owner.openFailures = 1;
+  await mount(h(NoteDialog, { note: note() }));
+  await openDocs("Copy to Docs");
+  expect(mocks.createDoc).not.toHaveBeenCalled();
+  await openDocs("Copy to Docs");
+  expect(mocks.createDoc).toHaveBeenCalledOnce();
+});
+
+it("refuses a note shared with specific people when Docs is not owner-only (N2)", async () => {
+  mocks.createDoc.mockResolvedValue(createdDocument());
+  mocks.context.attempt = (work: () => Promise<unknown>) => {
+    void work();
+  };
+  mocks.owner.destination = false;
+  mocks.owner.note = {
+    private: false,
+    reasons: [{ reason: "non-owner", subject: "agent", modes: ["read"] }],
+  };
+  await mount(h(NoteDialog, { note: note() }));
+  await openDocs("Copy to Docs");
+  expect(mocks.createDoc).not.toHaveBeenCalled();
+  expect(mocks.toast.error).toHaveBeenCalledWith(
+    expect.stringContaining("can't be confirmed as private"),
+  );
 });
 
 it("shows one More note actions menu in the editor, holding history and the Docs actions (M1)", async () => {

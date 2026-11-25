@@ -280,7 +280,9 @@ it("proceeds only after the owner-only verifier approves the Docs folder and the
   await f.convert(note, "copy", f.dependencies);
   const checked = f.dependencies.destinationIsOwnerOnly.mock.calls.map(([url]) => url);
   expect(checked[0]).toMatch(/^https:\/\/pod\.example\/docs\/[^/]+\.ttl$/);
-  expect(checked.some((url) => /\/docs\/[^/]+\/assets\/$/.test(url))).toBe(true);
+  // The verifier takes prospective documents, never a container URL.
+  expect(checked.some((url) => /\/docs\/[^/]+\/assets\/[^/]+$/.test(url))).toBe(true);
+  expect(checked.every((url) => !url.endsWith("/"))).toBe(true);
 });
 
 it.each([
