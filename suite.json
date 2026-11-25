@@ -82,6 +82,7 @@
     "@jeswr/agent-session-capture",
     "@jeswr/suite-vocab",
     "@jeswr/pod-connectors",
+    "@jeswr/pod-media-loader",
     "@jeswr/agent-model",
     "@jeswr/agent-channels",
     "@jeswr/agent-mandate",

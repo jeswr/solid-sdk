@@ -226,6 +226,13 @@ export function dateOf(value: string | null): Date | null {
   return Number.isNaN(time) ? null : new Date(time);
 }
 
+/** A declared Content-Length: decimal digits that are a safe integer, otherwise null. */
+export function lengthOf(value: string | null): number | null {
+  if (value === null || !/^\d{1,16}$/.test(value)) return null;
+  const length = Number(value);
+  return Number.isSafeInteger(length) ? length : null;
+}
+
 export interface ReadShape {
   status: 200 | 206 | 304;
   kind: ResourceKind;
@@ -321,6 +328,7 @@ export function readResultFrom(
     etag: response.headers.get("etag"),
     contentType,
     lastModified: dateOf(response.headers.get("last-modified")),
+    contentLength: lengthOf(response.headers.get("content-length")),
     mementoDatetime: dateOf(response.headers.get("memento-datetime")),
     body,
     bytes,
