@@ -73,4 +73,17 @@ describe("PWA manifest", () => {
     expect(targets).toHaveLength(6);
     for (const target of targets) expect(SHELL_ROUTES, String(target)).toContain(target);
   });
+
+  it("precaches the page a signed-out launch lands on", () => {
+    // start_url -> the session guard sends a signed-out visitor to /signin (and / to /welcome).
+    const guard = readFileSync(resolve("src/shell/session/session-guard.tsx"), "utf8");
+    const root = readFileSync(resolve("src/app/page.tsx"), "utf8");
+    expect(guard).toContain("/signin?next=");
+    expect(root).toContain('"/welcome"');
+    for (const landing of ["/signin", "/welcome"]) {
+      expect(SHELL_ROUTES, landing).toContain(landing);
+      const dir = landing === "/signin" ? "(public)" : "(welcome)";
+      expect(existsSync(resolve("src/app", dir, landing.slice(1), "page.tsx")), landing).toBe(true);
+    }
+  });
 });
