@@ -3,15 +3,9 @@
 "use client";
 
 import { isLoopbackHostname } from "@jeswr/pod-access/notify";
+import { Badge, Button, Card, CardContent, Skeleton } from "@jeswr/suite-ui";
 import { AlertCircle, ArrowUpRight, Bell, Inbox as InboxIcon, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  Skeleton,
-} from "@jeswr/suite-ui";
 import { type InboxNotification, readInbox } from "@/lib/inbox";
 import { activityLabel, formatPublished, hostOf, notificationTitle } from "@/lib/inbox-display";
 
@@ -160,6 +154,16 @@ export function InboxView({
   );
 }
 
+/** True only for a well-formed http: or https: URL (no javascript:/data: hrefs). */
+function isHttpUrl(value: string): boolean {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 function NotificationCard({ notification: n }: { notification: InboxNotification }) {
   const when = formatPublished(n.published);
   return (
@@ -179,18 +183,24 @@ function NotificationCard({ notification: n }: { notification: InboxNotification
               From {hostOf(n.actor)}
             </span>
           )}
-          {n.object && (
-            <a
-              href={n.object}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
-              title={n.object}
-            >
-              Open {hostOf(n.object)}
-              <ArrowUpRight className="size-3" aria-hidden />
-            </a>
-          )}
+          {n.object &&
+            (isHttpUrl(n.object) ? (
+              <a
+                href={n.object}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+                title={n.object}
+              >
+                Open {hostOf(n.object)}
+                <ArrowUpRight className="size-3" aria-hidden />
+              </a>
+            ) : (
+              // Pod data is untrusted: a non-http(s) object is shown as text, never an href.
+              <span className="truncate" title={n.object}>
+                {n.object}
+              </span>
+            ))}
         </div>
       </CardContent>
     </Card>

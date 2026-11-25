@@ -121,3 +121,23 @@ it.each([
     expect(readInbox).toHaveBeenCalledWith(WEBID, OWN, undefined, 500, mode !== "production"),
   );
 });
+it("renders a non-http(s) notification object as plain text, never a link", async () => {
+  readInbox.mockResolvedValue({
+    inboxUrl: `${OWN[0]}inbox/`,
+    notifications: [
+      {
+        url: "https://pod.example/alice/inbox/n2.ttl",
+        types: [`${AS}Announce`],
+        actor: "https://bob.example/profile#me",
+        object: "javascript:alert(1)",
+        summary: "Suspicious",
+      },
+    ],
+    totalMembers: 1,
+    truncated: false,
+  });
+  const { container } = render(<InboxView webId={WEBID} ownStorageUrls={OWN} />);
+  await waitFor(() => expect(screen.getByText("Suspicious")).toBeTruthy());
+  expect(container.querySelector("a[href]")).toBeNull();
+  expect(screen.getByText("javascript:alert(1)")).toBeTruthy();
+});

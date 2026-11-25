@@ -7,6 +7,8 @@ import {
   assignRole,
   grantPublicRead,
   listRoleAssignments,
+  lowerCopiedAccess,
+  PartialSharingError,
   revokeAccess,
   revokeCopiedAccess,
   SharingError,
@@ -341,5 +343,67 @@ describe("sharing via @jeswr/pod-access/roles (WAC)", () => {
     );
     expect(error).toMatchObject({ code: "partial-scope" });
     expect(pod.puts()).toHaveLength(0);
+  });
+
+  describe("copies of a tracker grant on issues with their own ACL", () => {
+    const Bad = `${TRACKER}bad.ttl`;
+    const BadAcl = `${Bad}.acl`;
+    const badAcl = `@prefix acl: <${ACL}>.
+<${BadAcl}#owner> a acl:Authorization; acl:agent <${OWNER}>; acl:accessTo <${Bad}>; acl:mode acl:Read, acl:Write, acl:Control.
+<${BadAcl}#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${Bad}>; acl:mode acl:Read, acl:Write.`;
+    const copy = (mode: string) =>
+      aclWith(
+        `<${ACL_URL}#bob> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${RES}>; acl:mode ${mode}.`,
+      );
+
+    it("removes copies that map to no role (Append only)", async () => {
+      const pod = aclPod({ [ACL_URL]: copy("acl:Read, acl:Append") });
+      await revokeCopiedAccess([RES], OWNER, BOB, pod.impl);
+      expect(modesOf(pod.acl(ACL_URL), ACL_URL, BOB, RES)).toEqual([]);
+    });
+
+    it("continues past a failing member, removes the rest and reports a partial failure", async () => {
+      const pod = aclPod({
+        [`${TRACKER}.acl`]: trackerAcl(BOB),
+        [BadAcl]: badAcl,
+        [ACL_URL]: copy("acl:Read, acl:Write"),
+      });
+      const failing = (async (input: RequestInfo | URL, init?: RequestInit) =>
+        String(input) === BadAcl && (init?.method ?? "GET").toUpperCase() === "PUT"
+          ? new Response(null, { status: 500 })
+          : pod.impl(input, init)) as typeof fetch;
+      const error = await revokeCopiedAccess([Bad, RES], OWNER, BOB, failing).catch((e) => e);
+      expect(error).toBeInstanceOf(PartialSharingError);
+      expect(error.message).toMatch(/only partly removed/);
+      expect(error.message).toMatch(/Try again/);
+      expect(error.failedUrls).toEqual([Bad]);
+      expect(modesOf(pod.acl(ACL_URL), ACL_URL, BOB, RES)).toEqual([]);
+      // The tracker grant is untouched, so the person stays listed and the revoke is retryable.
+      expect(await listRoleAssignments(TRACKER, OWNER, pod.impl)).toContainEqual({
+        subject: BOB,
+        kind: "agent",
+        role: "editor",
+      });
+      await revokeCopiedAccess([Bad, RES], OWNER, BOB, pod.impl);
+      expect(modesOf(pod.acl(BadAcl), BadAcl, BOB, Bad)).toEqual([]);
+    });
+
+    it("lowers a copied role without touching members that inherit or already hold less", async () => {
+      const pod = aclPod({
+        [`${TRACKER}.acl`]: trackerAcl(BOB),
+        [ACL_URL]: copy("acl:Read, acl:Write, acl:Control"),
+        [BadAcl]: badAcl.replace("acl:Read, acl:Write.", "acl:Read."),
+      });
+      const inheriting = `${TRACKER}inherits.ttl`;
+      await lowerCopiedAccess([RES, Bad, inheriting], OWNER, BOB, "editor", pod.impl);
+      expect(modesOf(pod.acl(ACL_URL), ACL_URL, BOB, RES)).toEqual(["Append", "Read", "Write"]);
+      expect(pod.puts().some((p) => p.url === BadAcl || p.url === `${inheriting}.acl`)).toBe(false);
+    });
+
+    it("removes a copied partial grant when lowering rather than rounding it up", async () => {
+      const pod = aclPod({ [ACL_URL]: copy("acl:Read, acl:Append") });
+      await lowerCopiedAccess([RES], OWNER, BOB, "viewer", pod.impl);
+      expect(modesOf(pod.acl(ACL_URL), ACL_URL, BOB, RES)).toEqual([]);
+    });
   });
 });
