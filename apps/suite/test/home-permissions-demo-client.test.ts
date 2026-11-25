@@ -98,7 +98,9 @@ it("only serves the exact two fixture URLs and leaves ordinary public metadata o
   ])
     expect(await demoClientResource(url)).toBeUndefined();
   expect(getDemoPod).not.toHaveBeenCalled();
-  const publicFetch = vi.fn<typeof fetch>(async () => Response.json({ client_name: "Public app" }));
+  const publicFetch = vi.fn<typeof fetch>(async (input) =>
+    Response.json({ client_id: String(input), client_name: "Public app" }),
+  );
   vi.stubGlobal("fetch", publicFetch);
   expect(await resolveClientName("https://public-fixture.example/client.json")).toEqual({
     name: "Public app",

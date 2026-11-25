@@ -5,6 +5,7 @@ import {
   isDeniedHostname,
   isPublicAddress,
   normalizeHostForClassification,
+  readBoundedText,
 } from "@jeswr/guarded-fetch";
 import { httpUrl } from "../model/rdf";
 import { demoClientResource } from "./demo-client";
@@ -21,6 +22,8 @@ const DAY = 24 * 60 * 60 * 1000;
 /** A failed or timed-out lookup is retried after this, never held for a day. */
 export const CLIENT_RETRY_MS = 5 * 60 * 1000;
 export const CLIENT_TIMEOUT_MS = 5000;
+/** A Client ID Document is a few hundred bytes; anything past this is not one. */
+export const CLIENT_MAX_BYTES = 64 * 1024;
 function https(value: unknown): value is string {
   const url = typeof value === "string" ? httpUrl(value) : undefined;
   if (url?.protocol !== "https:") return false;
@@ -78,13 +81,20 @@ export async function resolveClientName(
         return {};
       let json: unknown;
       try {
-        json = await Promise.race([response.json(), timeout]);
+        json = JSON.parse(
+          await Promise.race([
+            readBoundedText(response, CLIENT_MAX_BYTES, controller.signal),
+            timeout,
+          ]),
+        );
       } catch (error) {
         if (controller.signal.aborted) throw error;
         return {};
       }
       if (!json || typeof json !== "object" || Array.isArray(json)) return {};
       const doc = json as Record<string, unknown>;
+      // The document must describe the client it was fetched for.
+      if (doc.client_id !== clientId) return {};
       const result: ClientMetadata = {};
       if (typeof doc.client_name === "string") result.name = doc.client_name;
       for (const [field, property] of [
