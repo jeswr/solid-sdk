@@ -7,6 +7,7 @@
 
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { PodDataError } from "@jeswr/pod-connectors/pod/resource";
+import type { RoleError } from "@jeswr/pod-access/roles";
 export { PodDataError } from "@jeswr/pod-connectors/pod/resource";
 
 /** The WebID profile has no `solid:storage` / `pim:storage` — no pod to browse. */
@@ -76,21 +77,22 @@ export class AclWriteError extends PodDataError {
   }
 }
 
+// AUTHORED-BY Claude Opus 5.5
 /**
- * The resource's access-control document uses ACP (`.acr` / Access Control
- * Policy), not WAC. The per-resource Sharing panel only writes WAC today; it
- * fails closed here rather than parsing an ACP document as an empty WAC ACL
- * (which would under-report access) or writing WAC triples into it.
+ * Why the Sharing panel could not read or change a resource's access, as
+ * classified by `@jeswr/pod-access/roles` (`RoleError["code"]`), plus `failed`
+ * for anything unclassified (network, parser). The message is plain-language
+ * copy the UI shows as-is; the original error is kept as `cause`.
  */
-export class AcpUnsupportedError extends PodDataError {
-  readonly resourceUrl: string;
-  constructor(resourceUrl: string, options?: { cause?: unknown }) {
-    super(
-      `This resource uses a newer access-control format this view can't edit yet (${resourceUrl}).`,
-      options,
-    );
-    this.name = "AcpUnsupportedError";
-    this.resourceUrl = resourceUrl;
+export type SharingErrorCode = RoleError["code"] | "failed";
+
+/** A refused or failed sharing read/change. Fail-closed: re-read before retrying. */
+export class SharingError extends PodDataError {
+  readonly code: SharingErrorCode;
+  constructor(code: SharingErrorCode, message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "SharingError";
+    this.code = code;
   }
 }
 
