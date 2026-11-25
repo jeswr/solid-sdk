@@ -7,7 +7,13 @@ import { fixtureFetch } from "./fixture-fetch.js";
 import { adapterContainerUrl, createSourceAuth, runImport } from "./import-runner.js";
 import { createFetchPodWriter } from "./pod-writer.js";
 import { Provenance } from "./provenance.js";
-import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "./testing.js";
+import {
+  createMemoryPod,
+  ownerOnlyFixtureChecks,
+  TEST_POD_ROOT,
+  TEST_PROFILE_DOC,
+  TEST_WEBID,
+} from "./testing.js";
 import type { IntegrationAdapter, NormalisedDoc } from "./types.js";
 import { CLASSES, MusicRecording, PodThing } from "./vocab.js";
 
@@ -51,6 +57,7 @@ function setup() {
     profileDocumentUrl: TEST_PROFILE_DOC,
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
+    ...ownerOnlyFixtureChecks,
   });
   const url = writer.resolve("items.ttl");
   const subject = (id: string) => `${url}#${id}`;
@@ -101,6 +108,7 @@ describe("demo attribution", () => {
       profileDocumentUrl: TEST_PROFILE_DOC,
       podRoot: TEST_POD_ROOT,
       fetch: pod.fetch,
+      ...ownerOnlyFixtureChecks,
     });
     const options = {
       adapter: {
@@ -155,6 +163,7 @@ describe("demo attribution", () => {
       profileDocumentUrl: TEST_PROFILE_DOC,
       podRoot: TEST_POD_ROOT,
       fetch: pod.fetch,
+      ...ownerOnlyFixtureChecks,
     });
     const report = await runImport({
       adapter: { ...adapter, fixtures: () => [] },
