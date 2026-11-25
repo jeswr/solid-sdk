@@ -3,12 +3,21 @@ import { type StorageClient, StorageError, type StorageErrorCode } from "@jeswr/
 import { canonicalize, LEGACY_NAMESPACES } from "@jeswr/suite-vocab";
 import type { RegistrationOptions, TypeLocation } from "./types.js";
 
+// Regex literals are hoisted to named module-level constants: an inline literal after `(`, `!` or
+// `||` can be misread as division by bundler import-analysis lexers (see regex-literals.test.ts).
+// None carries the `g` or `y` flag, so `.test()` keeps no `lastIndex` state between calls.
+/** Absolute IRI: scheme, colon, then no whitespace, control characters or IRI-forbidden characters. */
+export const CLASS_IRI_PATTERN = /^[a-z][a-z0-9+.-]*:[^\s\p{Cc}<>"{}|^`\\]+$/iu;
+const HTTP_PROTOCOL_PATTERN = /^https?:$/;
+const HTTP_SCHEME_PREFIX_PATTERN = /^https?:\/\//i;
+const UNSAFE_URL_CHARS_PATTERN = /[\s\p{Cc}\\]/u;
+
 export function error(code: StorageErrorCode, url: string, method = "GET"): StorageError {
   return new StorageError(code, { url, method, feature: "typeIndex" });
 }
 
 export function classIri(value: string): string {
-  if (!/^[a-z][a-z0-9+.-]*:[^\s\p{Cc}<>"{}|^`\\]+$/iu.test(value)) {
+  if (!CLASS_IRI_PATTERN.test(value)) {
     throw new TypeError("Expected an absolute class IRI");
   }
   return canonicalize(value);
@@ -31,11 +40,11 @@ export function scoped(storage: StorageClient, value: string): string | undefine
   try {
     const url = new URL(value);
     if (
-      !/^https?:$/.test(url.protocol) ||
+      !HTTP_PROTOCOL_PATTERN.test(url.protocol) ||
       url.username ||
       url.password ||
-      !/^https?:\/\//i.test(value) ||
-      /[\s\p{Cc}\\]/u.test(value) ||
+      !HTTP_SCHEME_PREFIX_PATTERN.test(value) ||
+      UNSAFE_URL_CHARS_PATTERN.test(value) ||
       !storage.isWithinStorage(value)
     )
       return undefined;
