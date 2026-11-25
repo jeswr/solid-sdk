@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Sonnet 5.5
 import type { PodAuthOptions } from "./types.js";
 
 export function isLoopback(url: URL): boolean {
@@ -96,6 +97,11 @@ export function validateOptions(options: PodAuthOptions): void {
     (options.ui.chooseIssuer !== undefined && typeof options.ui.chooseIssuer !== "function")
   )
     throw new TypeError("ui requires getWebId, getCode and an optional chooseIssuer function");
+  if (options.fetch !== undefined) {
+    if (typeof options.fetch !== "function") throw new TypeError("fetch must be a function");
+    if (options.lws !== undefined && options.lws.subject !== "oidc-id-token")
+      throw new TypeError("fetch is not supported with a CID agent subject");
+  }
   if (options.clock !== undefined && typeof options.clock !== "function")
     throw new TypeError("clock must be a function");
   if (

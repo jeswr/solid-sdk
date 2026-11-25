@@ -3,6 +3,7 @@ name: pod-auth
 description: Use when integrating @jeswr/pod-auth login, multi-account managers, bounded auth.fetch, restore, React sessions, Node agents, CSS self-registration or Client Identifier Documents, or migrating deprecated suite client authentication.
 ---
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Sonnet 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # Work with `@jeswr/pod-auth`
@@ -159,6 +160,20 @@ first; storage failures are harmless. Providers use monograms by default; host-s
   gain resource access, and the first inherits the bootstrap session as in browser login.
 - Fence login, refresh, restore, persistence and logout against stale work after each awaited boundary.
   Do not expose identity until credentials and refresh rotation are durable.
+
+## Gate pod-auth's own requests (`fetch`)
+
+`PodAuthOptions.fetch` (browser path only; rejected with a CID subject) carries only body-less GET/HEAD
+requests with no Authorization, DPoP, Proxy-Authorization or Cookie header: discovery, the Client
+Identifier Document, the WebID profile (engine `verifyWebId` and boundary learning), storage descriptions
+and their HEADs, RFC 9728 metadata and JWKS. Token exchange, refresh, registration, revocation and every
+`auth.fetch` request stay on the global non-reactive transport, so never route them through it. The HTTPS
+and loopback check runs before the supplied function, and redirect, size and timeout guards wrap its
+responses. A rejection becomes `InjectedFetchError` (URL-free message, the function's error as `cause`);
+abort reasons pass through; a refusal during `restore()` rejects but keeps the stored session, while a real
+issuer-verification failure behaves as before. WebID-hinted login lets an origin gate approve the WebID
+origin before authentication; issuer-only login needs approve-then-retry. Deferring WebID verification in
+the engine is an unimplemented follow-up that needs maintainer sign-off. See the README section.
 
 ## Session lifecycle
 

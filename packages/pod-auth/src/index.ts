@@ -1,10 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Sonnet 5.5
 import { type Identity as Claims, sameIssuer } from "@jeswr/reactive-authentication";
 import { createAgentAuth } from "./agent.js";
 import { StorageFailure } from "./kv.js";
 import { secureUrl, validateOptions } from "./options.js";
-import { AmbiguousIssuerError, createProviders } from "./providers.js";
+import {
+  AmbiguousIssuerError,
+  createProviders,
+  InjectedFetchError,
+  injectedFetchFailure,
+} from "./providers.js";
 import { decideSilentRestore } from "./session-restore.js";
 import type {
   AuthEvent,
@@ -27,7 +33,7 @@ export type {
   PodAuth,
   PodAuthOptions,
 } from "./types.js";
-export { AmbiguousIssuerError };
+export { AmbiguousIssuerError, InjectedFetchError };
 
 export function createPodAuth(options: PodAuthOptions): PodAuth {
   validateOptions(options);
@@ -288,6 +294,10 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
           }
         }
         if (failure instanceof StorageFailure) throw failure.cause;
+        // A refusal by the supplied transport is not a verdict on the session, which stays stored so
+        // the host can allow the origin and restore again.
+        const refusal = injectedFetchFailure(failure);
+        if (refusal !== undefined) throw refusal;
         return null;
       })().finally(() => {
         if (restoring === shared) {
@@ -370,7 +380,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         } catch (error) {
           // A grant obtained before the abort was observed must not outlive the abandoned attempt.
           if (abort?.aborted && granted) await discard(started);
-          throw error;
+          throw injectedFetchFailure(error) ?? error;
         }
         if (abort?.aborted) {
           await discard(started);
