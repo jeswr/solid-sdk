@@ -109,8 +109,8 @@
       "locations": [
         {
           "file": "apps/issues/src/lib/session-context.tsx",
-          "startLine": 123,
-          "endLine": 157,
+          "startLine": 124,
+          "endLine": 158,
           "tokens": 120
         },
         {
@@ -124,35 +124,6 @@
           "startLine": 189,
           "endLine": 225,
           "tokens": 120
-        }
-      ]
-    },
-    "03c97b4d23313c4364cf7a11bf2474455a52d1ca81d291d36cf8a1e1330d33f8": {
-      "tokens": 143,
-      "locations": [
-        {
-          "file": "apps/pod-docs/src/document.ts",
-          "startLine": 181,
-          "endLine": 202,
-          "tokens": 143
-        },
-        {
-          "file": "apps/pod-mail/src/model/thread.ts",
-          "startLine": 34,
-          "endLine": 62,
-          "tokens": 143
-        },
-        {
-          "file": "apps/suite/src/apps/docs/lib/model/document.ts",
-          "startLine": 246,
-          "endLine": 267,
-          "tokens": 143
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/thread.ts",
-          "startLine": 36,
-          "endLine": 64,
-          "tokens": 143
         }
       ]
     },
@@ -179,29 +150,6 @@
         }
       ]
     },
-    "04abb76c649c34047b85eff3e43ff98a58679165b4edf96187ad47e210a151ff": {
-      "tokens": 125,
-      "locations": [
-        {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 43,
-          "endLine": 67,
-          "tokens": 125
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 53,
-          "endLine": 77,
-          "tokens": 125
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 155,
-          "endLine": 174,
-          "tokens": 125
-        }
-      ]
-    },
     "04c6b2921855fa87175809d190f93b129cf49c9a5caa342248161e8fca39f077": {
       "tokens": 150,
       "locations": [
@@ -213,8 +161,8 @@
         },
         {
           "file": "apps/pod-photos/src/ui/PhotoGallery.tsx",
-          "startLine": 50,
-          "endLine": 78,
+          "startLine": 60,
+          "endLine": 88,
           "tokens": 150
         }
       ]
@@ -523,29 +471,23 @@
           "startLine": 241,
           "endLine": 264,
           "tokens": 129
-        },
-        {
-          "file": "packages/solid-task-model/src/task.ts",
-          "startLine": 242,
-          "endLine": 267,
-          "tokens": 129
         }
       ]
     },
     "0b88d83c9fe6e31f1372f8bc854ac8c97bf9d872687452b06f1f7bd82b8e8df1": {
-      "tokens": 136,
+      "tokens": 158,
       "locations": [
         {
           "file": "apps/pod-health/src/model.ts",
           "startLine": 323,
-          "endLine": 354,
-          "tokens": 136
+          "endLine": 363,
+          "tokens": 158
         },
         {
           "file": "apps/suite/src/apps/health/lib/model/model.ts",
           "startLine": 334,
-          "endLine": 365,
-          "tokens": 136
+          "endLine": 374,
+          "tokens": 158
         }
       ]
     },
@@ -654,23 +596,6 @@
         }
       ]
     },
-    "0ee19ec7115de7816110b91a04058afad772998952c67aaf93dc834fc38244fc": {
-      "tokens": 134,
-      "locations": [
-        {
-          "file": "apps/pod-health/src/model.ts",
-          "startLine": 334,
-          "endLine": 363,
-          "tokens": 134
-        },
-        {
-          "file": "apps/suite/src/apps/health/lib/model/model.ts",
-          "startLine": 345,
-          "endLine": 374,
-          "tokens": 134
-        }
-      ]
-    },
     "0f50b04a29e37f10db366a254ba6e3f5d27f8cc4db0cdc40af5f76724b886697": {
       "tokens": 121,
       "locations": [
@@ -696,12 +621,6 @@
           "file": "apps/suite/src/apps/drive/lib/operations/trash-index.ts",
           "startLine": 103,
           "endLine": 120,
-          "tokens": 121
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 164,
-          "endLine": 183,
           "tokens": 121
         }
       ]
@@ -743,23 +662,6 @@
           "startLine": 1145,
           "endLine": 1179,
           "tokens": 151
-        }
-      ]
-    },
-    "130916df91d1a558f41968fa2281d16a5cb2d9adf45a0ad3217784c03f11ee9c": {
-      "tokens": 120,
-      "locations": [
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/album.ts",
-          "startLine": 29,
-          "endLine": 43,
-          "tokens": 120
-        },
-        {
-          "file": "packages/pod-connectors/src/core/vocab.ts",
-          "startLine": 62,
-          "endLine": 77,
-          "tokens": 120
         }
       ]
     },
@@ -1140,8 +1042,8 @@
         },
         {
           "file": "apps/issues/src/lib/session-context.tsx",
-          "startLine": 131,
-          "endLine": 166,
+          "startLine": 132,
+          "endLine": 167,
           "tokens": 127
         },
         {
@@ -1286,8 +1188,8 @@
         },
         {
           "file": "apps/suite/src/apps/money/components/money-app.tsx",
-          "startLine": 102,
-          "endLine": 127,
+          "startLine": 104,
+          "endLine": 129,
           "tokens": 132
         }
       ]
@@ -1302,27 +1204,9 @@
           "tokens": 120
         },
         {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 42,
-          "endLine": 63,
-          "tokens": 120
-        },
-        {
           "file": "apps/pod-money/src/typeIndex.ts",
           "startLine": 39,
           "endLine": 60,
-          "tokens": 120
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 52,
-          "endLine": 73,
-          "tokens": 120
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 154,
-          "endLine": 170,
           "tokens": 120
         },
         {
@@ -1336,23 +1220,6 @@
           "startLine": 95,
           "endLine": 111,
           "tokens": 120
-        }
-      ]
-    },
-    "20b85cf8ba8e5736ccf84844d41bd6d91ac07fc090dc64fc786c7fd3d2bc8573": {
-      "tokens": 136,
-      "locations": [
-        {
-          "file": "apps/pod-photos/src/photos/photograph.ts",
-          "startLine": 147,
-          "endLine": 163,
-          "tokens": 136
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 183,
-          "endLine": 199,
-          "tokens": 136
         }
       ]
     },
@@ -1477,23 +1344,6 @@
         }
       ]
     },
-    "23056e8ccb10f2c201f49156be9ea1c2d76a6783b6f3c7fc38a84bf7e08eb431": {
-      "tokens": 178,
-      "locations": [
-        {
-          "file": "apps/pod-docs/src/document.ts",
-          "startLine": 43,
-          "endLine": 75,
-          "tokens": 178
-        },
-        {
-          "file": "apps/suite/src/apps/docs/lib/model/document.ts",
-          "startLine": 55,
-          "endLine": 87,
-          "tokens": 178
-        }
-      ]
-    },
     "24031577484473e9043f89753402852a66affd400cfa60ee1a26cc70e3c3dc49": {
       "tokens": 161,
       "locations": [
@@ -1553,12 +1403,6 @@
           "file": "apps/suite/src/apps/drive/lib/operations/trash-index.ts",
           "startLine": 114,
           "endLine": 132,
-          "tokens": 141
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 177,
-          "endLine": 195,
           "tokens": 141
         }
       ]
@@ -1620,29 +1464,6 @@
         }
       ]
     },
-    "2b7cc1dc0c0a717ff977acc66247f68c462bd828cc704cba1e2ff2b1fa63c5f6": {
-      "tokens": 143,
-      "locations": [
-        {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 89,
-          "endLine": 120,
-          "tokens": 143
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 99,
-          "endLine": 130,
-          "tokens": 143
-        },
-        {
-          "file": "packages/pod-connectors/src/mail/vocab.ts",
-          "startLine": 65,
-          "endLine": 86,
-          "tokens": 143
-        }
-      ]
-    },
     "2ce79569194b35c6629edfe731b1f5e2a3aae869f0b6c3b93400ad5755405cf9": {
       "tokens": 140,
       "locations": [
@@ -1692,12 +1513,6 @@
           "file": "apps/suite/src/apps/drive/lib/operations/trash-index.ts",
           "startLine": 65,
           "endLine": 85,
-          "tokens": 140
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/album.ts",
-          "startLine": 31,
-          "endLine": 50,
           "tokens": 140
         },
         {
@@ -1771,35 +1586,6 @@
         }
       ]
     },
-    "300541b54bbc68453fb88209bbb851d7cd5e377e64d9357123ed3bd60feb05a1": {
-      "tokens": 125,
-      "locations": [
-        {
-          "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 198,
-          "endLine": 214,
-          "tokens": 125
-        },
-        {
-          "file": "apps/pod-manager/src/lib/tasks.ts",
-          "startLine": 105,
-          "endLine": 122,
-          "tokens": 125
-        },
-        {
-          "file": "apps/suite/src/apps/contacts/lib/model/trash.ts",
-          "startLine": 52,
-          "endLine": 68,
-          "tokens": 125
-        },
-        {
-          "file": "apps/suite/src/apps/drive/lib/operations/trash-index.ts",
-          "startLine": 100,
-          "endLine": 116,
-          "tokens": 125
-        }
-      ]
-    },
     "301e72895d06c4324a0ee56c5799a39a5c8b8c30ce658cf0010a8469c65db63b": {
       "tokens": 124,
       "locations": [
@@ -1814,23 +1600,6 @@
           "startLine": 22,
           "endLine": 55,
           "tokens": 124
-        }
-      ]
-    },
-    "30202393ecec5d821dddc7be51ec562c57b03579328e051506f51c181c200338": {
-      "tokens": 125,
-      "locations": [
-        {
-          "file": "apps/pod-mail/src/model/mailbox.ts",
-          "startLine": 19,
-          "endLine": 55,
-          "tokens": 125
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/mailbox.ts",
-          "startLine": 21,
-          "endLine": 57,
-          "tokens": 125
         }
       ]
     },
@@ -1939,12 +1708,6 @@
           "tokens": 125
         },
         {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 175,
-          "endLine": 191,
-          "tokens": 125
-        },
-        {
           "file": "packages/pod-connectors/src/core/vocab.ts",
           "startLine": 120,
           "endLine": 137,
@@ -1977,66 +1740,48 @@
       ]
     },
     "32685ed25373f2e8f018aa714bfddabd0c9afe08cae80b8280e1dcb38839d61d": {
-      "tokens": 138,
+      "tokens": 144,
       "locations": [
         {
           "file": "apps/pod-manager/src/lib/schedule.ts",
           "startLine": 195,
-          "endLine": 213,
-          "tokens": 138
+          "endLine": 214,
+          "tokens": 144
         },
         {
           "file": "apps/pod-manager/src/lib/tasks.ts",
           "startLine": 102,
-          "endLine": 121,
-          "tokens": 138
+          "endLine": 122,
+          "tokens": 144
         },
         {
           "file": "apps/suite/src/apps/contacts/lib/model/trash.ts",
           "startLine": 49,
-          "endLine": 67,
-          "tokens": 138
+          "endLine": 68,
+          "tokens": 144
         },
         {
           "file": "apps/suite/src/apps/drive/lib/operations/trash-index.ts",
           "startLine": 97,
-          "endLine": 115,
-          "tokens": 138
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/album.ts",
-          "startLine": 37,
-          "endLine": 58,
-          "tokens": 138
+          "endLine": 116,
+          "tokens": 144
         }
       ]
     },
     "328845f64f61dc7ea89f007c98e88bc2256fa4f89ae22b6b5de2a5145b5c8825": {
-      "tokens": 120,
+      "tokens": 140,
       "locations": [
         {
           "file": "apps/pod-manager/src/lib/tasks.ts",
           "startLine": 121,
-          "endLine": 140,
-          "tokens": 120
+          "endLine": 142,
+          "tokens": 140
         },
         {
           "file": "apps/pod-photos/src/photos/photograph.ts",
           "startLine": 114,
-          "endLine": 133,
-          "tokens": 120
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 150,
-          "endLine": 169,
-          "tokens": 120
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 208,
-          "endLine": 227,
-          "tokens": 120
+          "endLine": 135,
+          "tokens": 140
         }
       ]
     },
@@ -2100,23 +1845,6 @@
           "startLine": 10,
           "endLine": 78,
           "tokens": 220
-        }
-      ]
-    },
-    "33b167f3e958f75702e32179a7c9c61ae73239d47b8d135114be45a9a9c0d44e": {
-      "tokens": 143,
-      "locations": [
-        {
-          "file": "apps/pod-photos/src/photos/photograph.ts",
-          "startLine": 274,
-          "endLine": 294,
-          "tokens": 143
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 347,
-          "endLine": 367,
-          "tokens": 143
         }
       ]
     },
@@ -2229,23 +1957,6 @@
         }
       ]
     },
-    "37e51a963197cb9c2f076cb3cc35f1220d48a388517bd4301475cd878a398847": {
-      "tokens": 138,
-      "locations": [
-        {
-          "file": "apps/issues/src/lib/issue.ts",
-          "startLine": 229,
-          "endLine": 250,
-          "tokens": 138
-        },
-        {
-          "file": "packages/solid-task-model/src/task.ts",
-          "startLine": 195,
-          "endLine": 223,
-          "tokens": 138
-        }
-      ]
-    },
     "37f4004be14e5cf35fe6b2cd817c34f8ddf681f705c19fe2d922626e6c013ee8": {
       "tokens": 139,
       "locations": [
@@ -2260,23 +1971,6 @@
           "startLine": 9,
           "endLine": 52,
           "tokens": 139
-        }
-      ]
-    },
-    "38f5d377a5d9dff406103811ee535e8e7d73fd997ec989fe452f9d643ae7bbe6": {
-      "tokens": 184,
-      "locations": [
-        {
-          "file": "apps/pod-docs/src/document.ts",
-          "startLine": 186,
-          "endLine": 216,
-          "tokens": 184
-        },
-        {
-          "file": "apps/suite/src/apps/docs/lib/model/document.ts",
-          "startLine": 251,
-          "endLine": 281,
-          "tokens": 184
         }
       ]
     },
@@ -2320,29 +2014,6 @@
         }
       ]
     },
-    "3b33382f32cac8bfaa56282d856cb81acb20c931c9c4dfa2cae34a8912029dd5": {
-      "tokens": 125,
-      "locations": [
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/album.ts",
-          "startLine": 29,
-          "endLine": 45,
-          "tokens": 125
-        },
-        {
-          "file": "packages/pod-connectors/src/core/vocab.ts",
-          "startLine": 62,
-          "endLine": 80,
-          "tokens": 125
-        },
-        {
-          "file": "packages/solid-chat-interop/src/chat-writer.ts",
-          "startLine": 73,
-          "endLine": 89,
-          "tokens": 125
-        }
-      ]
-    },
     "3ba9569e43bf62e055e3f7b558bb971815763240f8a4fa8e06be592c3e378acc": {
       "tokens": 127,
       "locations": [
@@ -2361,31 +2032,31 @@
       ]
     },
     "3d7f3be8ae9948f4ac171602da313a95beb2106c437c341c20575dbc8fd7308b": {
-      "tokens": 136,
+      "tokens": 140,
       "locations": [
         {
           "file": "apps/pod-manager/src/lib/notify-send.ts",
           "startLine": 107,
-          "endLine": 123,
-          "tokens": 136
+          "endLine": 125,
+          "tokens": 140
         },
         {
           "file": "apps/suite/src/apps/drive/lib/operations/trash-index.ts",
           "startLine": 64,
-          "endLine": 81,
-          "tokens": 136
+          "endLine": 83,
+          "tokens": 140
         },
         {
           "file": "packages/solid-agent-notify/src/activity.ts",
           "startLine": 118,
-          "endLine": 134,
-          "tokens": 136
+          "endLine": 136,
+          "tokens": 140
         },
         {
           "file": "packages/solid-agent-notify/src/task.ts",
           "startLine": 110,
-          "endLine": 128,
-          "tokens": 136
+          "endLine": 130,
+          "tokens": 140
         }
       ]
     },
@@ -2423,12 +2094,6 @@
           "tokens": 132
         },
         {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 39,
-          "endLine": 59,
-          "tokens": 132
-        },
-        {
           "file": "apps/pod-money/src/model.ts",
           "startLine": 206,
           "endLine": 226,
@@ -2439,18 +2104,6 @@
           "startLine": 36,
           "endLine": 56,
           "tokens": 132
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 41,
-          "endLine": 69,
-          "tokens": 178
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 143,
-          "endLine": 168,
-          "tokens": 178
         },
         {
           "file": "packages/pod-connectors/src/core/file-vocab-map.ts",
@@ -2500,8 +2153,8 @@
         },
         {
           "file": "packages/pod-connectors/src/google-drive/vocab.ts",
-          "startLine": 17,
-          "endLine": 37,
+          "startLine": 18,
+          "endLine": 38,
           "tokens": 123
         }
       ]
@@ -2597,14 +2250,14 @@
       "locations": [
         {
           "file": "apps/coeliac/src/lib/pod/type-index.ts",
-          "startLine": 40,
-          "endLine": 54,
+          "startLine": 42,
+          "endLine": 56,
           "tokens": 122
         },
         {
           "file": "packages/pod-connectors/src/google-drive/vocab.ts",
-          "startLine": 16,
-          "endLine": 34,
+          "startLine": 17,
+          "endLine": 35,
           "tokens": 122
         }
       ]
@@ -2661,8 +2314,8 @@
       "locations": [
         {
           "file": "apps/suite/src/apps/chat/components/chat-app.tsx",
-          "startLine": 249,
-          "endLine": 294,
+          "startLine": 285,
+          "endLine": 330,
           "tokens": 207
         },
         {
@@ -2721,23 +2374,6 @@
           "startLine": 1566,
           "endLine": 1622,
           "tokens": 132
-        }
-      ]
-    },
-    "4b10c5120e6748e7797889cdea0976da07c648baa70a35012eb6c18d7a9c4c1b": {
-      "tokens": 227,
-      "locations": [
-        {
-          "file": "apps/pod-mail/src/model/folder.ts",
-          "startLine": 34,
-          "endLine": 90,
-          "tokens": 227
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/folder.ts",
-          "startLine": 36,
-          "endLine": 92,
-          "tokens": 227
         }
       ]
     },
@@ -2855,8 +2491,8 @@
         },
         {
           "file": "packages/pod-connectors/src/google-drive/vocab.ts",
-          "startLine": 35,
-          "endLine": 56,
+          "startLine": 36,
+          "endLine": 57,
           "tokens": 122
         }
       ]
@@ -2918,29 +2554,6 @@
         }
       ]
     },
-    "53019f6c04912119ff4340a80ac3ed99fba53d14f035ce5a66e83510da7e248d": {
-      "tokens": 121,
-      "locations": [
-        {
-          "file": "apps/pod-health/src/model.ts",
-          "startLine": 561,
-          "endLine": 593,
-          "tokens": 121
-        },
-        {
-          "file": "apps/pod-mail/src/model/mailbox.ts",
-          "startLine": 21,
-          "endLine": 55,
-          "tokens": 121
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/mailbox.ts",
-          "startLine": 23,
-          "endLine": 57,
-          "tokens": 121
-        }
-      ]
-    },
     "5306bac36076953c6f8bbe514153517701ef18f228ca47ed9556bf52ba0b36d7": {
       "tokens": 183,
       "locations": [
@@ -2981,8 +2594,8 @@
         },
         {
           "file": "apps/issues/src/lib/session-context.tsx",
-          "startLine": 134,
-          "endLine": 182,
+          "startLine": 135,
+          "endLine": 183,
           "tokens": 121
         },
         {
@@ -3077,23 +2690,6 @@
           "startLine": 114,
           "endLine": 156,
           "tokens": 136
-        }
-      ]
-    },
-    "55c9424a6405eb23fbf497ee7d978586215068cd944e424f9dcca3b20e1d784f": {
-      "tokens": 246,
-      "locations": [
-        {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 96,
-          "endLine": 146,
-          "tokens": 246
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 106,
-          "endLine": 156,
-          "tokens": 246
         }
       ]
     },
@@ -3250,18 +2846,6 @@
           "startLine": 152,
           "endLine": 176,
           "tokens": 135
-        },
-        {
-          "file": "packages/solid-task-model/src/task.ts",
-          "startLine": 191,
-          "endLine": 215,
-          "tokens": 135
-        },
-        {
-          "file": "packages/solid-task-model/src/task.ts",
-          "startLine": 241,
-          "endLine": 265,
-          "tokens": 135
         }
       ]
     },
@@ -3301,12 +2885,6 @@
           "file": "apps/pod-photos/src/photos/photograph.ts",
           "startLine": 148,
           "endLine": 168,
-          "tokens": 143
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 184,
-          "endLine": 204,
           "tokens": 143
         },
         {
@@ -3354,23 +2932,6 @@
           "startLine": 1183,
           "endLine": 1220,
           "tokens": 132
-        }
-      ]
-    },
-    "5b3dac5763f4456bf27757af0365c2a29f79f9588316faf333a75f2de15b4744": {
-      "tokens": 141,
-      "locations": [
-        {
-          "file": "apps/pod-photos/src/photos/photograph.ts",
-          "startLine": 153,
-          "endLine": 171,
-          "tokens": 141
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 189,
-          "endLine": 207,
-          "tokens": 141
         }
       ]
     },
@@ -3557,23 +3118,6 @@
           "startLine": 15,
           "endLine": 93,
           "tokens": 244
-        }
-      ]
-    },
-    "603f145f5f22473a0bf06dd3000ed3f977f255dcd7a9391011794188ed04c6d5": {
-      "tokens": 264,
-      "locations": [
-        {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 50,
-          "endLine": 115,
-          "tokens": 264
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 60,
-          "endLine": 125,
-          "tokens": 264
         }
       ]
     },
@@ -3785,8 +3329,8 @@
       "locations": [
         {
           "file": "apps/issues/src/lib/session-context.tsx",
-          "startLine": 124,
-          "endLine": 158,
+          "startLine": 125,
+          "endLine": 159,
           "tokens": 120
         },
         {
@@ -3931,23 +3475,6 @@
         }
       ]
     },
-    "684d2fdcabdab9a286fa6c0e26391da914b1db4a10c332e883e1e3db7db82fc0": {
-      "tokens": 187,
-      "locations": [
-        {
-          "file": "apps/pod-photos/src/photos/photograph.ts",
-          "startLine": 159,
-          "endLine": 183,
-          "tokens": 187
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 195,
-          "endLine": 219,
-          "tokens": 187
-        }
-      ]
-    },
     "69094680cd4e6311aab4f8f7bd29c90166b3118c3e58b5d92a1518daa25cc69f": {
       "tokens": 133,
       "locations": [
@@ -3997,23 +3524,6 @@
           "startLine": 1156,
           "endLine": 1210,
           "tokens": 222
-        }
-      ]
-    },
-    "69377b8317a4fa1e503635c07c0fa3bfe974ab311032fb7eb7808e3d8019f3de": {
-      "tokens": 129,
-      "locations": [
-        {
-          "file": "apps/pod-docs/src/document.ts",
-          "startLine": 137,
-          "endLine": 158,
-          "tokens": 129
-        },
-        {
-          "file": "apps/suite/src/apps/docs/lib/model/document.ts",
-          "startLine": 163,
-          "endLine": 184,
-          "tokens": 129
         }
       ]
     },
@@ -4087,12 +3597,6 @@
           "file": "apps/pod-photos/src/photos/photograph.ts",
           "startLine": 148,
           "endLine": 165,
-          "tokens": 124
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 184,
-          "endLine": 201,
           "tokens": 124
         },
         {
@@ -4194,12 +3698,6 @@
           "tokens": 122
         },
         {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 91,
-          "endLine": 112,
-          "tokens": 122
-        },
-        {
           "file": "packages/pod-connectors/src/core/vocab.ts",
           "startLine": 115,
           "endLine": 135,
@@ -4226,36 +3724,19 @@
       ]
     },
     "70266d47d03bc5c3cad33246de27ca8d7054df938901195037f960b90eb0cd47": {
-      "tokens": 120,
+      "tokens": 131,
       "locations": [
         {
           "file": "apps/suite/src/apps/contacts/lib/model/discovery.ts",
           "startLine": 33,
-          "endLine": 53,
-          "tokens": 120
+          "endLine": 56,
+          "tokens": 131
         },
         {
           "file": "packages/pod-connectors/src/google-drive/vocab.ts",
-          "startLine": 37,
-          "endLine": 57,
-          "tokens": 120
-        }
-      ]
-    },
-    "71d623e0972088a98f0f21e191df1109dde2330a39a5a37d9a0f48239dd8d8dc": {
-      "tokens": 232,
-      "locations": [
-        {
-          "file": "apps/pod-docs/src/document.ts",
-          "startLine": 117,
-          "endLine": 149,
-          "tokens": 232
-        },
-        {
-          "file": "apps/suite/src/apps/docs/lib/model/document.ts",
-          "startLine": 143,
-          "endLine": 175,
-          "tokens": 232
+          "startLine": 38,
+          "endLine": 67,
+          "tokens": 131
         }
       ]
     },
@@ -4470,18 +3951,6 @@
           "file": "apps/suite/src/apps/drive/lib/operations/trash-index.ts",
           "startLine": 109,
           "endLine": 126,
-          "tokens": 121
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 92,
-          "endLine": 112,
-          "tokens": 121
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 170,
-          "endLine": 189,
           "tokens": 121
         },
         {
@@ -4902,28 +4371,10 @@
           "tokens": 122
         },
         {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 40,
-          "endLine": 63,
-          "tokens": 122
-        },
-        {
           "file": "apps/pod-money/src/typeIndex.ts",
           "startLine": 37,
           "endLine": 60,
           "tokens": 122
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 42,
-          "endLine": 73,
-          "tokens": 168
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 144,
-          "endLine": 170,
-          "tokens": 168
         },
         {
           "file": "packages/pod-connectors/src/mail/vocab.ts",
@@ -5084,23 +4535,6 @@
         }
       ]
     },
-    "7e26c10358f0f892ada94cdacf8887e4a5398b4892a7fb06d4653cd0ac67aa2b": {
-      "tokens": 188,
-      "locations": [
-        {
-          "file": "apps/pod-mail/src/model/thread.ts",
-          "startLine": 41,
-          "endLine": 85,
-          "tokens": 188
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/thread.ts",
-          "startLine": 43,
-          "endLine": 87,
-          "tokens": 188
-        }
-      ]
-    },
     "7e2ac03879d78aca905995dedb883fcc36cf7073785449c6c5b8043f22a2c55f": {
       "tokens": 207,
       "locations": [
@@ -5194,31 +4628,31 @@
       ]
     },
     "8312342714eeb0cddd70fc5c5e1165961cd2c0ee795da2d327ffb102ca6eb47d": {
-      "tokens": 133,
+      "tokens": 136,
       "locations": [
         {
           "file": "apps/pod-chat/src/message.ts",
           "startLine": 105,
-          "endLine": 123,
-          "tokens": 133
+          "endLine": 124,
+          "tokens": 136
         },
         {
           "file": "apps/pod-health/src/model.ts",
           "startLine": 147,
-          "endLine": 170,
-          "tokens": 133
+          "endLine": 171,
+          "tokens": 136
         },
         {
           "file": "apps/pod-money/src/model.ts",
           "startLine": 201,
-          "endLine": 224,
-          "tokens": 133
+          "endLine": 225,
+          "tokens": 136
         },
         {
           "file": "packages/pod-connectors/src/mail/vocab.ts",
           "startLine": 83,
-          "endLine": 101,
-          "tokens": 133
+          "endLine": 102,
+          "tokens": 136
         }
       ]
     },
@@ -5236,23 +4670,6 @@
           "startLine": 87,
           "endLine": 107,
           "tokens": 124
-        }
-      ]
-    },
-    "83d2fb03383a3de16934e8789d1fb1bb25a9c1d9c15e3841f39bed96d866b5f4": {
-      "tokens": 259,
-      "locations": [
-        {
-          "file": "apps/pod-photos/src/photos/photograph.ts",
-          "startLine": 55,
-          "endLine": 97,
-          "tokens": 259
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 63,
-          "endLine": 105,
-          "tokens": 259
         }
       ]
     },
@@ -5316,29 +4733,6 @@
           "startLine": 19,
           "endLine": 35,
           "tokens": 123
-        }
-      ]
-    },
-    "84cacb4dfec0b22efb5a4d5e9806c9237144002cd0d5bd4239599d7ed90a2435": {
-      "tokens": 137,
-      "locations": [
-        {
-          "file": "apps/pod-manager/src/lib/schedule.ts",
-          "startLine": 194,
-          "endLine": 210,
-          "tokens": 137
-        },
-        {
-          "file": "apps/pod-manager/src/lib/tasks.ts",
-          "startLine": 101,
-          "endLine": 118,
-          "tokens": 137
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/album.ts",
-          "startLine": 36,
-          "endLine": 52,
-          "tokens": 137
         }
       ]
     },
@@ -5468,8 +4862,8 @@
         },
         {
           "file": "packages/pod-connectors/src/google-drive/vocab.ts",
-          "startLine": 27,
-          "endLine": 55,
+          "startLine": 28,
+          "endLine": 56,
           "tokens": 147
         }
       ]
@@ -5654,12 +5048,6 @@
           "tokens": 138
         },
         {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 166,
-          "endLine": 185,
-          "tokens": 138
-        },
-        {
           "file": "packages/pod-connectors/src/core/vocab.ts",
           "startLine": 174,
           "endLine": 193,
@@ -5781,12 +5169,6 @@
           "startLine": 78,
           "endLine": 101,
           "tokens": 140
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 86,
-          "endLine": 109,
-          "tokens": 140
         }
       ]
     },
@@ -5873,12 +5255,6 @@
           "file": "apps/suite/src/apps/drive/lib/operations/trash-index.ts",
           "startLine": 69,
           "endLine": 87,
-          "tokens": 122
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/album.ts",
-          "startLine": 34,
-          "endLine": 51,
           "tokens": 122
         }
       ]
@@ -6000,79 +5376,61 @@
       ]
     },
     "93fa6c707b6be7fa9945c9c5afd89ed8d1856c52fd797f87674e60943d7593ce": {
-      "tokens": 213,
+      "tokens": 217,
       "locations": [
         {
           "file": "apps/access-manager/src/lib/records.ts",
           "startLine": 98,
-          "endLine": 115,
-          "tokens": 121
+          "endLine": 116,
+          "tokens": 125
         },
         {
           "file": "apps/access-manager/src/lib/records.ts",
           "startLine": 158,
-          "endLine": 189,
-          "tokens": 213
+          "endLine": 190,
+          "tokens": 217
         },
         {
           "file": "apps/pod-chat/src/message.ts",
           "startLine": 85,
-          "endLine": 100,
-          "tokens": 121
+          "endLine": 101,
+          "tokens": 125
         },
         {
           "file": "apps/pod-chat/src/message.ts",
           "startLine": 109,
-          "endLine": 132,
-          "tokens": 167
+          "endLine": 133,
+          "tokens": 171
         },
         {
           "file": "apps/pod-health/src/model.ts",
           "startLine": 153,
-          "endLine": 172,
-          "tokens": 121
-        },
-        {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 40,
-          "endLine": 59,
-          "tokens": 121
+          "endLine": 173,
+          "tokens": 125
         },
         {
           "file": "apps/pod-money/src/model.ts",
           "startLine": 207,
-          "endLine": 226,
-          "tokens": 121
+          "endLine": 227,
+          "tokens": 125
         },
         {
           "file": "apps/pod-money/src/typeIndex.ts",
           "startLine": 37,
-          "endLine": 56,
-          "tokens": 121
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 42,
-          "endLine": 69,
-          "tokens": 167
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 144,
-          "endLine": 168,
-          "tokens": 167
+          "endLine": 57,
+          "tokens": 125
         },
         {
           "file": "packages/pod-connectors/src/mail/vocab.ts",
           "startLine": 34,
-          "endLine": 56,
-          "tokens": 167
+          "endLine": 57,
+          "tokens": 171
         },
         {
           "file": "packages/pod-connectors/src/mail/vocab.ts",
           "startLine": 87,
-          "endLine": 109,
-          "tokens": 167
+          "endLine": 110,
+          "tokens": 171
         }
       ]
     },
@@ -6190,23 +5548,6 @@
         }
       ]
     },
-    "9856b86f04644723731d095a8f7c291a29b591168cd50f57833f47bda8c2ff7a": {
-      "tokens": 125,
-      "locations": [
-        {
-          "file": "apps/pod-photos/src/photos/photograph.ts",
-          "startLine": 192,
-          "endLine": 222,
-          "tokens": 125
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 233,
-          "endLine": 263,
-          "tokens": 125
-        }
-      ]
-    },
     "98e0e55c4f7008450c8c10f97d60699458da6ef4235d6135c790ba699725a0be": {
       "tokens": 140,
       "locations": [
@@ -6302,12 +5643,6 @@
           "startLine": 194,
           "endLine": 217,
           "tokens": 130
-        },
-        {
-          "file": "apps/suite/src/apps/docs/lib/model/document.ts",
-          "startLine": 160,
-          "endLine": 177,
-          "tokens": 130
         }
       ]
     },
@@ -6348,18 +5683,6 @@
           "startLine": 241,
           "endLine": 262,
           "tokens": 120
-        },
-        {
-          "file": "packages/solid-task-model/src/task.ts",
-          "startLine": 192,
-          "endLine": 215,
-          "tokens": 120
-        },
-        {
-          "file": "packages/solid-task-model/src/task.ts",
-          "startLine": 242,
-          "endLine": 265,
-          "tokens": 120
         }
       ]
     },
@@ -6368,8 +5691,8 @@
       "locations": [
         {
           "file": "apps/issues/src/lib/session-context.tsx",
-          "startLine": 120,
-          "endLine": 157,
+          "startLine": 121,
+          "endLine": 158,
           "tokens": 127
         },
         {
@@ -6493,23 +5816,6 @@
           "startLine": 585,
           "endLine": 639,
           "tokens": 145
-        }
-      ]
-    },
-    "9cc50f2a6b398f39ea4913992889b75bbaf8f0fc44d4c256b57805aba17f36bd": {
-      "tokens": 176,
-      "locations": [
-        {
-          "file": "apps/pod-mail/src/model/thread.ts",
-          "startLine": 21,
-          "endLine": 57,
-          "tokens": 176
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/thread.ts",
-          "startLine": 23,
-          "endLine": 59,
-          "tokens": 176
         }
       ]
     },
@@ -6643,12 +5949,6 @@
           "startLine": 127,
           "endLine": 147,
           "tokens": 136
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 163,
-          "endLine": 183,
-          "tokens": 136
         }
       ]
     },
@@ -6744,41 +6044,6 @@
         }
       ]
     },
-    "a4210d8a2137d6b5cb329ad6871beaa8d6ecaf6df515b97b16e8c3e485ab4075": {
-      "tokens": 126,
-      "locations": [
-        {
-          "file": "apps/pod-health/src/model.ts",
-          "startLine": 324,
-          "endLine": 357,
-          "tokens": 126
-        },
-        {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 43,
-          "endLine": 70,
-          "tokens": 126
-        },
-        {
-          "file": "apps/suite/src/apps/health/lib/model/model.ts",
-          "startLine": 335,
-          "endLine": 368,
-          "tokens": 126
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 53,
-          "endLine": 80,
-          "tokens": 126
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 155,
-          "endLine": 177,
-          "tokens": 126
-        }
-      ]
-    },
     "a58294dc6c15cd8af5b4e5ac2968d770660b990f867adfdb4c6bd16c2c4399d6": {
       "tokens": 120,
       "locations": [
@@ -6868,12 +6133,6 @@
           "file": "apps/pod-money/src/model.ts",
           "startLine": 194,
           "endLine": 219,
-          "tokens": 140
-        },
-        {
-          "file": "apps/suite/src/apps/docs/lib/model/document.ts",
-          "startLine": 160,
-          "endLine": 179,
           "tokens": 140
         },
         {
@@ -6980,12 +6239,6 @@
           "startLine": 78,
           "endLine": 97,
           "tokens": 120
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 86,
-          "endLine": 105,
-          "tokens": 120
         }
       ]
     },
@@ -7009,23 +6262,6 @@
           "startLine": 553,
           "endLine": 589,
           "tokens": 123
-        }
-      ]
-    },
-    "ac45210c8e4290006c9cab79ccd4df12ac3602bd4bf802557d0562a3826cd1fb": {
-      "tokens": 275,
-      "locations": [
-        {
-          "file": "apps/pod-mail/src/model/mailbox.ts",
-          "startLine": 21,
-          "endLine": 98,
-          "tokens": 275
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/mailbox.ts",
-          "startLine": 23,
-          "endLine": 100,
-          "tokens": 275
         }
       ]
     },
@@ -7078,23 +6314,6 @@
           "startLine": 554,
           "endLine": 594,
           "tokens": 138
-        }
-      ]
-    },
-    "ad1ac0f3d2295e714ea1d87cdd4e164309aa1e3c29682a07e05a56102ca6edce": {
-      "tokens": 173,
-      "locations": [
-        {
-          "file": "apps/pod-photos/src/photos/photograph.ts",
-          "startLine": 119,
-          "endLine": 145,
-          "tokens": 173
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 155,
-          "endLine": 181,
-          "tokens": 173
         }
       ]
     },
@@ -7261,23 +6480,6 @@
         }
       ]
     },
-    "b5128e5658a90725579babb7c485558e68ca6ba7385dd915ac352c4abc671983": {
-      "tokens": 287,
-      "locations": [
-        {
-          "file": "apps/pod-docs/src/document.ts",
-          "startLine": 158,
-          "endLine": 198,
-          "tokens": 287
-        },
-        {
-          "file": "apps/suite/src/apps/docs/lib/model/document.ts",
-          "startLine": 223,
-          "endLine": 263,
-          "tokens": 287
-        }
-      ]
-    },
     "b5e0b50ae85da5c84ad21de9608bc109f4270ed8e346640796ef0bb243d52ffa": {
       "tokens": 122,
       "locations": [
@@ -7310,23 +6512,6 @@
           "startLine": 297,
           "endLine": 332,
           "tokens": 122
-        }
-      ]
-    },
-    "b6432f7ba2af7c8ba2aed523af3e487a145db60036cb504e8af9065b35f9205a": {
-      "tokens": 161,
-      "locations": [
-        {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 23,
-          "endLine": 57,
-          "tokens": 161
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 25,
-          "endLine": 59,
-          "tokens": 161
         }
       ]
     },
@@ -7482,18 +6667,6 @@
           "tokens": 132
         },
         {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 96,
-          "endLine": 116,
-          "tokens": 132
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 174,
-          "endLine": 190,
-          "tokens": 132
-        },
-        {
           "file": "packages/pod-connectors/src/core/vocab.ts",
           "startLine": 67,
           "endLine": 84,
@@ -7583,41 +6756,6 @@
         }
       ]
     },
-    "ba7e9779ea9190a7522eb5b65ae7cee6ec0650e4d218b12320f785ae1ab91abc": {
-      "tokens": 123,
-      "locations": [
-        {
-          "file": "apps/pod-manager/src/lib/notify-send.ts",
-          "startLine": 108,
-          "endLine": 125,
-          "tokens": 123
-        },
-        {
-          "file": "apps/suite/src/apps/drive/lib/operations/trash-index.ts",
-          "startLine": 65,
-          "endLine": 83,
-          "tokens": 123
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/album.ts",
-          "startLine": 31,
-          "endLine": 48,
-          "tokens": 123
-        },
-        {
-          "file": "packages/solid-agent-notify/src/activity.ts",
-          "startLine": 119,
-          "endLine": 136,
-          "tokens": 123
-        },
-        {
-          "file": "packages/solid-agent-notify/src/task.ts",
-          "startLine": 111,
-          "endLine": 130,
-          "tokens": 123
-        }
-      ]
-    },
     "bb28946096277f32bacb152646242beb6c6201366ced1c3336a0008f9b31304b": {
       "tokens": 352,
       "locations": [
@@ -7688,12 +6826,6 @@
           "tokens": 122
         },
         {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 175,
-          "endLine": 192,
-          "tokens": 122
-        },
-        {
           "file": "packages/pod-connectors/src/core/vocab.ts",
           "startLine": 324,
           "endLine": 344,
@@ -7735,14 +6867,14 @@
       "locations": [
         {
           "file": "apps/suite/src/apps/docs/components/document-list.tsx",
-          "startLine": 227,
-          "endLine": 249,
+          "startLine": 229,
+          "endLine": 251,
           "tokens": 121
         },
         {
           "file": "apps/suite/src/apps/sheets/components/sheets-list.tsx",
-          "startLine": 115,
-          "endLine": 137,
+          "startLine": 117,
+          "endLine": 139,
           "tokens": 121
         }
       ]
@@ -7958,12 +7090,6 @@
           "tokens": 141
         },
         {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 169,
-          "endLine": 189,
-          "tokens": 141
-        },
-        {
           "file": "packages/pod-connectors/src/core/vocab.ts",
           "startLine": 177,
           "endLine": 203,
@@ -8052,23 +7178,6 @@
         }
       ]
     },
-    "c62101d36b7b30d59dd6a475103f7cb6f23401be68ce01ff89c9c0598ac14b2b": {
-      "tokens": 131,
-      "locations": [
-        {
-          "file": "apps/pod-docs/src/document.ts",
-          "startLine": 235,
-          "endLine": 261,
-          "tokens": 131
-        },
-        {
-          "file": "apps/suite/src/apps/docs/lib/model/document.ts",
-          "startLine": 301,
-          "endLine": 327,
-          "tokens": 131
-        }
-      ]
-    },
     "c6fc31795982e82e5c7a921303b0ab646cd7b3122f5133adac7a470489032e8d": {
       "tokens": 122,
       "locations": [
@@ -8100,23 +7209,6 @@
           "startLine": 145,
           "endLine": 241,
           "tokens": 519
-        }
-      ]
-    },
-    "c861a5e4d780a8a172655faed52e658e5b96ed3baf513c2dcf4a7f33e6d5efd2": {
-      "tokens": 369,
-      "locations": [
-        {
-          "file": "apps/pod-photos/src/photos/exif.ts",
-          "startLine": 63,
-          "endLine": 149,
-          "tokens": 369
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/exif.ts",
-          "startLine": 65,
-          "endLine": 151,
-          "tokens": 369
         }
       ]
     },
@@ -8383,12 +7475,6 @@
           "tokens": 122
         },
         {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 167,
-          "endLine": 186,
-          "tokens": 122
-        },
-        {
           "file": "packages/pod-connectors/src/core/vocab.ts",
           "startLine": 175,
           "endLine": 200,
@@ -8400,27 +7486,9 @@
       "tokens": 124,
       "locations": [
         {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 42,
-          "endLine": 64,
-          "tokens": 124
-        },
-        {
           "file": "apps/pod-money/src/typeIndex.ts",
           "startLine": 39,
           "endLine": 61,
-          "tokens": 124
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 52,
-          "endLine": 74,
-          "tokens": 124
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 154,
-          "endLine": 171,
           "tokens": 124
         },
         {
@@ -8438,19 +7506,19 @@
       ]
     },
     "ce287b8debef1eb49870ec334a714be468ffd2d496117d0bb6af94087658957d": {
-      "tokens": 176,
+      "tokens": 122,
       "locations": [
         {
           "file": "apps/suite/src/apps/money/components/money-app.tsx",
-          "startLine": 112,
-          "endLine": 146,
-          "tokens": 176
+          "startLine": 114,
+          "endLine": 137,
+          "tokens": 122
         },
         {
           "file": "apps/suite/src/apps/music/components/music-app.tsx",
-          "startLine": 136,
-          "endLine": 170,
-          "tokens": 176
+          "startLine": 141,
+          "endLine": 164,
+          "tokens": 122
         }
       ]
     },
@@ -8473,18 +7541,6 @@
           "file": "apps/pod-chat/src/message.ts",
           "startLine": 112,
           "endLine": 131,
-          "tokens": 123
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 45,
-          "endLine": 68,
-          "tokens": 123
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 147,
-          "endLine": 167,
           "tokens": 123
         },
         {
@@ -8800,18 +7856,6 @@
           "tokens": 123
         },
         {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 44,
-          "endLine": 65,
-          "tokens": 123
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 146,
-          "endLine": 164,
-          "tokens": 123
-        },
-        {
           "file": "packages/pod-connectors/src/mail/vocab.ts",
           "startLine": 36,
           "endLine": 52,
@@ -8822,23 +7866,6 @@
           "startLine": 89,
           "endLine": 105,
           "tokens": 123
-        }
-      ]
-    },
-    "d7dcf4e22446fb678f8bc03192511418b447ed998cf18eab8e471d7d78ef7c43": {
-      "tokens": 235,
-      "locations": [
-        {
-          "file": "apps/pod-photos/src/photos/photograph.ts",
-          "startLine": 154,
-          "endLine": 188,
-          "tokens": 235
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 190,
-          "endLine": 224,
-          "tokens": 235
         }
       ]
     },
@@ -8956,12 +7983,6 @@
           "tokens": 120
         },
         {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 91,
-          "endLine": 111,
-          "tokens": 120
-        },
-        {
           "file": "packages/pod-connectors/src/core/vocab.ts",
           "startLine": 115,
           "endLine": 134,
@@ -9026,8 +8047,8 @@
         },
         {
           "file": "apps/issues/src/lib/session-context.tsx",
-          "startLine": 131,
-          "endLine": 171,
+          "startLine": 132,
+          "endLine": 172,
           "tokens": 145
         },
         {
@@ -9134,12 +8155,6 @@
           "startLine": 80,
           "endLine": 102,
           "tokens": 137
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 88,
-          "endLine": 110,
-          "tokens": 137
         }
       ]
     },
@@ -9214,23 +8229,6 @@
           "startLine": 92,
           "endLine": 113,
           "tokens": 130
-        }
-      ]
-    },
-    "e413388f60b45a21c5ad649294f92332d43cd7c1954d1a84879248e0dad28ead": {
-      "tokens": 540,
-      "locations": [
-        {
-          "file": "apps/pod-photos/src/photos/exif.ts",
-          "startLine": 168,
-          "endLine": 264,
-          "tokens": 540
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/exif.ts",
-          "startLine": 170,
-          "endLine": 266,
-          "tokens": 540
         }
       ]
     },
@@ -9352,35 +8350,6 @@
           "startLine": 868,
           "endLine": 939,
           "tokens": 149
-        }
-      ]
-    },
-    "e8b05f9ede9b30b43fcffac607c0399eb6561a14320378555adfb0eb591bb9b7": {
-      "tokens": 125,
-      "locations": [
-        {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 42,
-          "endLine": 66,
-          "tokens": 125
-        },
-        {
-          "file": "apps/pod-money/src/typeIndex.ts",
-          "startLine": 39,
-          "endLine": 61,
-          "tokens": 125
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 52,
-          "endLine": 76,
-          "tokens": 125
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 154,
-          "endLine": 173,
-          "tokens": 125
         }
       ]
     },
@@ -9689,57 +8658,10 @@
           "tokens": 140
         },
         {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 178,
-          "endLine": 197,
-          "tokens": 140
-        },
-        {
           "file": "packages/pod-connectors/src/core/vocab.ts",
           "startLine": 356,
           "endLine": 376,
           "tokens": 140
-        }
-      ]
-    },
-    "f0f45acf0e0aefbf1216f0dbd31d79167c3a05d4e795e68068bca96bbad3d37f": {
-      "tokens": 122,
-      "locations": [
-        {
-          "file": "apps/pod-chat/src/message.ts",
-          "startLine": 106,
-          "endLine": 124,
-          "tokens": 122
-        },
-        {
-          "file": "apps/pod-health/src/model.ts",
-          "startLine": 148,
-          "endLine": 171,
-          "tokens": 122
-        },
-        {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 31,
-          "endLine": 58,
-          "tokens": 122
-        },
-        {
-          "file": "apps/pod-money/src/model.ts",
-          "startLine": 202,
-          "endLine": 225,
-          "tokens": 122
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 33,
-          "endLine": 60,
-          "tokens": 122
-        },
-        {
-          "file": "packages/pod-connectors/src/mail/vocab.ts",
-          "startLine": 84,
-          "endLine": 102,
-          "tokens": 122
         }
       ]
     },
@@ -9756,18 +8678,6 @@
           "file": "apps/pod-chat/src/message.ts",
           "startLine": 111,
           "endLine": 129,
-          "tokens": 133
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 44,
-          "endLine": 66,
-          "tokens": 133
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 146,
-          "endLine": 165,
           "tokens": 133
         },
         {
@@ -9931,29 +8841,6 @@
           "startLine": 13,
           "endLine": 56,
           "tokens": 179
-        }
-      ]
-    },
-    "f49dbf9ddb503fe5f299520be41cab78f158d4062a48bd530d522a091abfc79a": {
-      "tokens": 139,
-      "locations": [
-        {
-          "file": "apps/pod-manager/src/lib/tasks.ts",
-          "startLine": 122,
-          "endLine": 142,
-          "tokens": 139
-        },
-        {
-          "file": "apps/pod-photos/src/photos/photograph.ts",
-          "startLine": 115,
-          "endLine": 135,
-          "tokens": 139
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 151,
-          "endLine": 171,
-          "tokens": 139
         }
       ]
     },
@@ -10146,23 +9033,6 @@
         }
       ]
     },
-    "f79ff7353d5fc48c34a4f9be3e4dce043b2304435e0fc9d24c69897dc926b12a": {
-      "tokens": 147,
-      "locations": [
-        {
-          "file": "apps/pod-photos/src/photos/photograph.ts",
-          "startLine": 105,
-          "endLine": 133,
-          "tokens": 147
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 141,
-          "endLine": 169,
-          "tokens": 147
-        }
-      ]
-    },
     "f8086899553ff4693a304256caec93613d6d6154a26b0ad3528e662ccd1faa52": {
       "tokens": 185,
       "locations": [
@@ -10187,12 +9057,6 @@
           "file": "apps/pod-photos/src/photos/photograph.ts",
           "startLine": 145,
           "endLine": 162,
-          "tokens": 122
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 181,
-          "endLine": 198,
           "tokens": 122
         },
         {
@@ -10323,28 +9187,10 @@
           "tokens": 121
         },
         {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 31,
-          "endLine": 58,
-          "tokens": 121
-        },
-        {
           "file": "apps/pod-money/src/model.ts",
           "startLine": 202,
           "endLine": 225,
           "tokens": 121
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 33,
-          "endLine": 68,
-          "tokens": 167
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 139,
-          "endLine": 167,
-          "tokens": 167
         },
         {
           "file": "packages/pod-connectors/src/mail/vocab.ts",
@@ -10432,29 +9278,6 @@
           "startLine": 27,
           "endLine": 173,
           "tokens": 1059
-        }
-      ]
-    },
-    "fd982b58c6584945214e6a98bd0f5b2490c74e3e1cd540e0346b4478a171d9d2": {
-      "tokens": 147,
-      "locations": [
-        {
-          "file": "apps/pod-mail/src/model/message.ts",
-          "startLine": 47,
-          "endLine": 80,
-          "tokens": 147
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 57,
-          "endLine": 90,
-          "tokens": 147
-        },
-        {
-          "file": "apps/suite/src/apps/mail/lib/model/message.ts",
-          "startLine": 158,
-          "endLine": 185,
-          "tokens": 147
         }
       ]
     },

@@ -98,9 +98,9 @@ describe("calendar documents", () => {
     expect(["Work", "Other"]).toContain(data?.title);
   });
   it("keeps a tagged colour with a tagged title", async () => {
-    expect(await cal(`<#it> a j:Calendar; dct:title "Work"@en; s:color "#336699"@en.`)).toEqual({
+    expect(await cal(`<#it> a j:Calendar; dct:title "Work"@en; s:color "calendar"@en.`)).toEqual({
       title: "Work",
-      color: "#336699",
+      color: "calendar",
     });
   });
   it("still rejects a calendar with no title and ignores other types", async () => {
@@ -110,9 +110,9 @@ describe("calendar documents", () => {
   it("lists a calendar typed only with the legacy w3id class", async () => {
     expect(
       await cal(
-        `<#it> a <https://w3id.org/jeswr/sectors/scheduling#Calendar>; dct:title "Legacy"; s:color "#123456".`,
+        `<#it> a <https://w3id.org/jeswr/sectors/scheduling#Calendar>; dct:title "Legacy"; s:color "calendar".`,
       ),
-    ).toEqual({ title: "Legacy", color: "#123456" });
+    ).toEqual({ title: "Legacy", color: "calendar" });
   });
 });
 
