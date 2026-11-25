@@ -25,8 +25,16 @@ export interface ChatOutboxConnection {
   outbox: Outbox;
   storage(): Promise<StorageClient>;
 }
-const isDuplicate = (error: unknown) =>
+const isDuplicate = (error: unknown): error is ChatModelError =>
   error instanceof ChatModelError && error.code === "duplicate";
+/**
+ * The message a resend that reported a duplicate refers to. A v2 room stores it in the sender's
+ * member container, so the stored ID (not the room-level intent ID) is the one the timeline holds.
+ */
+const duplicateOf = (item: Outgoing, error: ChatModelError): Message => ({
+  ...item,
+  id: error.subject ?? item.id,
+});
 /** The SDK's rejection of a destination it can never replay (enqueue's `describeRequest`). */
 const invalidDestination = (error: unknown) =>
   error instanceof TypeError ||
@@ -58,6 +66,8 @@ export class ChatOutbox {
   private lanes = new Map<string, Promise<void>>();
   /** In-memory rows whose legacy localStorage copy is kept until they are sent or discarded. */
   private legacy = new Set<string>();
+  /** Intent IDs delivered under another stored ID (v2 rooms) whose record is not yet pruned. */
+  private settled = new Set<string>();
   /** Replay failed while online (say, IndexedDB writes keep failing): rows show Retry. */
   private stalled = false;
   ready: Promise<void> = Promise.resolve();
@@ -160,12 +170,15 @@ export class ChatOutbox {
     if (this.connection !== connection || revision !== this.revision) return;
     const live = new Set(pending.map((item) => item.id));
     for (const id of this.intents.keys()) if (!live.has(id)) this.intents.delete(id);
+    const decoded = new Set(entries.map((entry) => entry?.id));
+    for (const id of this.settled) if (!decoded.has(id)) this.settled.delete(id);
     const kept = this.entries.filter((entry) => !entry.queueId || !entry.status);
     const byId = new Map(kept.map((entry) => [entry.id, entry]));
     for (const entry of entries)
       if (
         entry &&
         !this.removing.has(entry.id) &&
+        !this.settled.has(entry.id) &&
         (!byId.has(entry.id) || byId.get(entry.id)?.status !== undefined)
       )
         byId.set(entry.id, entry);
@@ -276,6 +289,7 @@ export class ChatOutbox {
   }
   private delivered(item: Outgoing, message: Message) {
     this.forget(item);
+    if (message.id !== item.id) this.settled.add(item.id);
     this.onSaved?.(message);
     this.patch(item.id, (entry) => ({
       ...entry,
@@ -312,6 +326,7 @@ export class ChatOutbox {
         message = await this.client.send(item.room, item.draft, { id: item.localId, at: item.at });
       } catch (error) {
         if (!isDuplicate(error)) throw error;
+        message = duplicateOf(item, error);
       }
       this.delivered(item, message);
     } catch {
@@ -372,6 +387,7 @@ export class ChatOutbox {
             if (!this.online()) throw network();
             throw new Error(error instanceof Error ? error.message : "Couldn't send the message");
           }
+          message = duplicateOf(item, error);
         }
         if (this.connection === connection) this.delivered(item, message);
       }),
