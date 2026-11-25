@@ -9,7 +9,13 @@ import { runImport } from "../core/import-runner.js";
 import { buildAuthorizationUrl } from "../core/oauth.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
 import { PROV } from "../core/provenance.js";
-import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "../core/testing.js";
+import {
+  createMemoryPod,
+  ownerOnlyFixtureChecks,
+  TEST_POD_ROOT,
+  TEST_PROFILE_DOC,
+  TEST_WEBID,
+} from "../core/testing.js";
 import type { ConnectorState, ImportContext, NormalisedDoc } from "../core/types.js";
 import { MusicPlaylist } from "../core/vocab.js";
 import { spotifyAdapter } from "./adapter.js";
@@ -37,6 +43,7 @@ function writer(pod = createMemoryPod()) {
     profileDocumentUrl: TEST_PROFILE_DOC,
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
+    ...ownerOnlyFixtureChecks,
   });
 }
 async function imported(
