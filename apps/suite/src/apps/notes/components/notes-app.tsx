@@ -3,7 +3,7 @@
 "use client";
 import { IconButton, LoadingSkeleton, Toaster, toast } from "@jeswr/suite-ui";
 import { Grid2X2, List } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { TemplateLauncher } from "@/components/templates/template-picker";
@@ -12,6 +12,7 @@ import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { ShortcutsProvider } from "@/shell/shortcuts/provider";
 import type { NoteFailure, StoredNote } from "../lib/model/store";
+import { noteSearchHref, parseNoteSearch } from "../lib/search-filters";
 import { noteLink } from "../lib/shared-note";
 import { NotesProvider, useNotesContext } from "../state/notes-context";
 import { useNoteReminders } from "../state/reminders";
@@ -25,7 +26,7 @@ import { NotesSidebar } from "./sidebar";
 const purged = new Set<string>();
 function NotesRoutes() {
   const pathname = useRoutePathname();
-  const query = useSearchParams().get("q") ?? "";
+  const filters = parseNoteSearch(useSearchParams());
   const { notes, active, archived, trashed, refresh } = useNotesContext();
   const reference = pathname.startsWith("/notes/n/")
     ? pathname.slice("/notes/n/".length)
@@ -90,13 +91,15 @@ function NotesRoutes() {
                     : "active"
         }
         {...(label === undefined ? {} : { label })}
-        query={query}
+        filters={filters}
       />
       {reference && selected && !invalid && <NoteDialog key={reference} note={selected} />}
     </>
   );
 }
 function NotesChrome({ children }: { children: ReactNode }) {
+  const filters = parseNoteSearch(useSearchParams());
+  const router = useRouter();
   const { store, session, refresh, prefs, updatePrefs, notes, openNote } = useNotesContext();
   const [purgeFailures, setPurgeFailures] = useState<NoteFailure[]>([]);
   useNoteReminders(
@@ -127,7 +130,13 @@ function NotesChrome({ children }: { children: ReactNode }) {
     <SuiteFrame
       app="notes"
       sidebar={<NotesSidebar />}
-      search={{ placeholder: "Search notes", action: "/notes/search", scopeLabel: "in Notes" }}
+      search={{
+        placeholder: "Search notes",
+        action: "/notes/search",
+        scopeLabel: "in Notes",
+        query: filters.q,
+        onSubmit: (q) => router.push(noteSearchHref({ ...filters, q })),
+      }}
       actions={
         <>
           <TemplateLauncher app="notes" session={session} beforeOpen={refresh} />

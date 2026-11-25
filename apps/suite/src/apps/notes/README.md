@@ -58,3 +58,13 @@ the pending draft. Missing permission hints allow editing until storage responds
 Cards show Shared only when a readable own ACL confirms non-owner or public access.
 Discovery never creates ACLs, never blocks the list, caps concurrent reads at four,
 and leaves missing, inherited, unsupported and unreadable policies unmarked.
+
+Search at `/notes/search` combines text with type (`images`, `lists`, `reminders`,
+`links`), local colour, exact label and collaborator filters. The URL stores these as
+`q`, `type`, `colour`, `label` and `shared`; `shared=any` includes every confirmed shared
+note, including public links. Specific collaborator WebIDs come from the same read-only
+discovery as the Shared indicator. Unknown sharing stays out of these filters.
+Archived notes are searchable; Trash is excluded. Images use the approved image projection,
+lists require checklist items, and links match HTTP(S) destinations or plain text URLs.
+Start with the entry tiles or use Add filters while searching. Each chip removes one field;
+Clear all also clears the text query. Filter links support bookmarks and browser history.
