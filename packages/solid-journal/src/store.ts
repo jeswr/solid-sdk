@@ -10,7 +10,12 @@ import {
   serializeEntry,
   validateEntry,
 } from "./model.js";
-import { JournalPrivacyError, protectJournal, verifyJournalResource } from "./privacy.js";
+import {
+  type JournalAcpDialect,
+  JournalPrivacyError,
+  protectJournal,
+  verifyJournalResource,
+} from "./privacy.js";
 import { privateJournalIndex } from "./registration.js";
 
 export interface JournalEntry extends EntryData {
@@ -43,11 +48,14 @@ export function createJournalStore(
   index: TypeIndex | null,
   owner: string,
   fetch: typeof globalThis.fetch,
+  options: { acpDialect?: JournalAcpDialect } = {},
 ): JournalStore {
+  const { acpDialect } = options;
   const interrupted = new WeakMap<EntryData, { url: string; etag: string | null }>();
   let container = new URL("journal/", storage.root).href;
   let registrationWarning: string | undefined;
-  const privacy = (created = false) => protectJournal(storage, container, owner, fetch, created);
+  const privacy = (seal = false) =>
+    protectJournal(storage, container, owner, fetch, seal, acpDialect);
   const owned = (url: string) => {
     const canonical = assertWithinPodScope(container, url, { allowRoot: false });
     if (
@@ -60,7 +68,7 @@ export function createJournalStore(
   };
   const readEntry = async (url: string): Promise<JournalEntry | null> => {
     owned(url);
-    await verifyJournalResource(storage, url, owner, fetch);
+    await verifyJournalResource(storage, url, owner, acpDialect);
     const read = await storage.readRdf(url, { maxBytes: ENTRY_MAX_BYTES });
     if (read.dataset.size === 0) return null;
     const data = entryEntity.parse(url, read.dataset);
@@ -146,7 +154,7 @@ export function createJournalStore(
       await privacy();
       if (existing) {
         owned(existing.url);
-        await verifyJournalResource(storage, existing.url, owner, fetch);
+        await verifyJournalResource(storage, existing.url, owner, acpDialect);
         if (!existing.etag) throw new Error("Reload this entry before editing it");
         const result = await storage.write(
           existing.url,
@@ -182,7 +190,7 @@ export function createJournalStore(
           message: "The interrupted journal entry changed. Save your draft as a new entry.",
           cause,
         });
-      await verifyJournalResource(storage, url, owner, fetch);
+      await verifyJournalResource(storage, url, owner, acpDialect);
       const { body, etag, contentType } = await storage
         .read(url, { maxBytes: ENTRY_MAX_BYTES, headers: { "Cache-Control": "no-cache" } })
         .then(async (read) => ({
@@ -207,7 +215,7 @@ export function createJournalStore(
       }
       if (reservation.etag && reservation.etag !== etag) throw changed();
       reservation.etag = etag;
-      await verifyJournalResource(storage, url, owner, fetch);
+      await verifyJournalResource(storage, url, owner, acpDialect);
       const result = await storage.write(url, turtle, {
         contentType: "text/turtle",
         ifMatch: etag,
@@ -224,7 +232,7 @@ export function createJournalStore(
       owned(entry.url);
       if (!entry.etag) throw new Error("Reload this entry before deleting it");
       await privacy();
-      await verifyJournalResource(storage, entry.url, owner, fetch);
+      await verifyJournalResource(storage, entry.url, owner, acpDialect);
       await storage.delete(entry.url, { ifMatch: entry.etag });
     },
     async attach(file) {
@@ -241,7 +249,7 @@ export function createJournalStore(
     async photo(url) {
       owned(url);
       await privacy();
-      await verifyJournalResource(storage, url, owner, fetch);
+      await verifyJournalResource(storage, url, owner, acpDialect);
       const read = await storage.read(url, { maxBytes: PHOTO_MAX_BYTES });
       if (!PHOTO_TYPES.has(read.contentType?.split(";")[0] ?? "")) {
         void read.body?.cancel().catch(() => {});
@@ -258,7 +266,7 @@ export async function openJournal(
   fetch: typeof globalThis.fetch,
   storageUrl: string,
   owner: string,
-  options: { solidFixture?: boolean } = {},
+  options: { solidFixture?: boolean; acpDialect?: JournalAcpDialect } = {},
 ): Promise<JournalStore> {
   const root = normalizePodBase(storageUrl);
   let storage: StorageClient;
@@ -288,5 +296,7 @@ export async function openJournal(
     // A profile on a separate host cannot be registered through this pod.
     if (!(error instanceof StorageError) || error.code !== "scope") throw error;
   }
-  return createJournalStore(storage, index, owner, fetch);
+  return createJournalStore(storage, index, owner, fetch, {
+    ...(options.acpDialect && { acpDialect: options.acpDialect }),
+  });
 }

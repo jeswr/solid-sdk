@@ -3,4 +3,5 @@
 export * from "./model.js";
 export * from "./planning.js";
 export * from "./store.js";
+export { TypeIndexSetupError } from "./type-index.js";
 export * from "./types.js";

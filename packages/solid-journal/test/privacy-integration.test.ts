@@ -1,10 +1,10 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
-import { type EffectivePolicy, readWac, writeWac } from "@jeswr/pod-access";
+import { checkOwnerOnly, type EffectivePolicy, readWac, writeWac } from "@jeswr/pod-access";
 import { readGrants } from "@jeswr/pod-access/roles";
 import type { TypeIndex } from "@jeswr/pod-type-index";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
 import { expect, it, vi } from "vitest";
-import { isOwnerOnly, isOwnerOnlyPolicy, protectJournal } from "../src/privacy.js";
+import { JournalPrivacyError, protectJournal } from "../src/privacy.js";
 import { createJournalStore } from "../src/store.js";
 
 const root = "https://pod.example/";
@@ -26,8 +26,12 @@ function policyFor(partial: boolean): EffectivePolicy {
     denials: [],
   };
 }
-async function fixture(partial = false, divergeDuringSeal = false) {
-  let body = await writeWac(policyFor(partial), container, acl);
+// One authorisation naming both principals: sealing removes the other agent cleanly.
+const sharedSingleRule = `@prefix acl: <http://www.w3.org/ns/auth/acl#>.
+<#shared> a acl:Authorization; acl:agent <${owner}>, <${other}>; acl:accessTo <${container}>;
+  acl:default <${container}>; acl:mode acl:Read, acl:Write, acl:Control.`;
+async function fixture(partial = false, divergeDuringSeal = false, singleRule = false) {
+  let body = singleRule ? sharedSingleRule : await writeWac(policyFor(partial), container, acl);
   let divergentBody = divergeDuringSeal ? await writeWac(policyFor(true), container, acl) : null;
   const initial = body;
   let version = 1;
@@ -59,28 +63,64 @@ async function fixture(partial = false, divergeDuringSeal = false) {
       return response;
     },
   ) as typeof globalThis.fetch;
-  const storage = createSolidBackend({ root, fetch });
+  const backend = createSolidBackend({ root, fetch });
+  // The demo backend has no discovery document; state the access model the fake server speaks.
+  const storage = {
+    ...backend,
+    features: {
+      ...backend.features,
+      accessControl: {
+        state: "available" as const,
+        evidence: "fixture",
+        detail: { model: "wac" as const },
+      },
+    },
+  };
   const store = createJournalStore(storage, {} as TypeIndex, owner, fetch);
   return { store, storage, fetch, writes, body: () => body, initial };
 }
 it("makes an existing shared own ACL private using the real conditional ownOnly path", async () => {
-  const { store, storage, fetch, writes } = await fixture();
-  const options = { fetch, root, kind: "folder" as const, webId: owner, model: "wac" as const };
-  expect(isOwnerOnly((await readGrants(container, options)).grants, owner)).toBe(false);
-  await store.makePrivate(); // Includes the real post-seal readGrants and full-policy verification.
+  const { store, storage, fetch, writes } = await fixture(false, false, true);
+  const options = { fetch, root, kind: "folder" as const, webId: owner };
+  const onlyOwner = (grants: Awaited<ReturnType<typeof readGrants>>["grants"]) =>
+    grants.length > 0 &&
+    grants.every((g) => g.agent.type === "webid" && g.agent.id === owner && g.role === "manager");
+  expect(onlyOwner((await readGrants(container, options)).grants)).toBe(false);
+  // The shared verifier sees the same pod as shared before sealing, and never writes.
+  expect(await checkOwnerOnly({ storage, url: container, ownerWebId: owner })).toMatchObject({
+    private: false,
+  });
+  await expect(protectJournal(storage, container, owner, fetch)).rejects.toMatchObject({
+    canMakePrivate: true,
+  });
+  expect(writes).toHaveLength(0);
+  await store.makePrivate(); // Ends with the shared verifier's independent verdict.
   expect(writes).toHaveLength(1);
   expect(writes[0]?.get("if-match")).toBe('"1"');
-  const grants = (await readGrants(container, options)).grants;
-  expect(isOwnerOnly(grants, owner)).toBe(true);
-  expect(grants.every((grant) => grant.agent.type === "webid" && grant.agent.id === owner)).toBe(
-    true,
-  );
+  expect(onlyOwner((await readGrants(container, options)).grants)).toBe(true);
   const read = await storage.readRdf(acl);
   const policy = readWac(read.dataset, container, acl, "css", true);
-  expect(isOwnerOnlyPolicy(policy, owner)).toBe(true);
   expect(policy.grants.every((grant) => grant.appliesTo === "both")).toBe(true);
+  expect(await checkOwnerOnly({ storage, url: container, ownerWebId: owner })).toEqual({
+    private: true,
+  });
   await protectJournal(storage, container, owner, fetch);
   expect(writes).toHaveLength(1);
+});
+it("never reports a sealed folder as private unless the shared verifier agrees", async () => {
+  // Separate owner and other authorisations: the role writer detaches the other rule's
+  // targets but can leave an inert principal-less rule that the strict verifier refuses.
+  // Either outcome is acceptable; claiming privacy that checkOwnerOnly disputes is not.
+  const { store, storage } = await fixture();
+  const outcome = await store.makePrivate().then(
+    () => "sealed" as const,
+    (error: unknown) => error,
+  );
+  if (outcome === "sealed")
+    expect(await checkOwnerOnly({ storage, url: container, ownerWebId: owner })).toEqual({
+      private: true,
+    });
+  else expect(outcome).toBeInstanceOf(JournalPrivacyError);
 });
 it("explains partial folder/member scopes and leaves the ACL unchanged", async () => {
   const { store, writes, body, initial } = await fixture(true);
