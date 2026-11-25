@@ -4,9 +4,68 @@ import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { IntegrationSyncError, PrivateDestinationError } from "./errors.js";
 import type { MutationGuard, PodWriter } from "./types.js";
 
-/** The health and finance imports that require a host-verified write destination. */
+/**
+ * Privacy classification of every registered connector id. `private` imports require a
+ * host-verified owner-only destination before any write, confirmation after it and clean-up on
+ * refusal. `public-ok` is an explicit decision that the connector writes no health, location,
+ * finance, message, contact, calendar or personal-document data (see the README table).
+ *
+ * The policy is default-private: an id missing from this table is private, so a new adapter
+ * fails closed until someone classifies it. A registry test fails for an unclassified adapter.
+ */
+export const CONNECTOR_PRIVACY = {
+  // Health and location.
+  "activity-files": "private",
+  "apple-health": "private",
+  fitbit: "private",
+  garmin: "private",
+  strava: "private",
+  whoop: "private",
+  // Finance and purchases.
+  "amazon-orders": "private",
+  "bank-statements": "private",
+  uber: "private",
+  // Messages, mail, contacts, calendar and personal documents.
+  chatgpt: "private",
+  gmail: "private",
+  "google-calendar": "private",
+  "google-contacts": "private",
+  "google-drive": "private",
+  "google-takeout": "private",
+  whatsapp: "private",
+  // Public-profile, catalogue or metadata-only imports.
+  discord: "public-ok",
+  dropbox: "public-ok",
+  facebook: "public-ok",
+  github: "public-ok",
+  goodreads: "public-ok",
+  "google-photos": "public-ok",
+  instagram: "public-ok",
+  linkedin: "public-ok",
+  netflix: "public-ok",
+  notion: "public-ok",
+  pinterest: "public-ok",
+  reddit: "public-ok",
+  slack: "public-ok",
+  spotify: "public-ok",
+  steam: "public-ok",
+  tiktok: "public-ok",
+  twitch: "public-ok",
+  vesync: "public-ok",
+  "x-twitter": "public-ok",
+  youtube: "public-ok",
+} as const satisfies Record<string, "private" | "public-ok">;
+
+type ConnectorId = keyof typeof CONNECTOR_PRIVACY;
+
+/** Whether a connector id has an explicit privacy classification. */
+export function isClassifiedConnector(id: string): boolean {
+  return Object.hasOwn(CONNECTOR_PRIVACY, id);
+}
+
+/** Imports that require a host-verified write destination. */
 export function requiresPrivateDestination(id: string): boolean {
-  return id === "garmin" || id === "whoop" || id === "bank-statements";
+  return Object.hasOwn(CONNECTOR_PRIVACY, id) && CONNECTOR_PRIVACY[id as ConnectorId] === "private";
 }
 
 export async function requirePrivateDestination(

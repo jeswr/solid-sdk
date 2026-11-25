@@ -12,6 +12,7 @@ import {
   createMemoryPod,
   demoImport,
   fixtureFetch,
+  ownerOnlyFixtureChecks,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
   TEST_WEBID,
@@ -83,6 +84,7 @@ function setup(maxBytes?: number) {
     maxBytes === undefined ? googleDriveAdapter : createGoogleDriveAdapter({ maxBytes });
   const pod = createMemoryPod();
   const podWriter = createFetchPodWriter({
+    ...ownerOnlyFixtureChecks,
     adapterId: "google-drive",
     webId: TEST_WEBID,
     profileDocumentUrl: TEST_PROFILE_DOC,
@@ -607,7 +609,12 @@ describe("Drive incremental sync", () => {
     ).result;
     expect(pendingEtag).toEqual(expect.any(String));
     expect(pendingEtag).not.toBe(before?.etag);
-    expect(remove).toHaveBeenLastCalledWith(`${path(DOC.id)}meta.ttl`, { ifMatch: pendingEtag });
+    // Private imports pass the session's mutation guard as a third argument.
+    expect(remove).toHaveBeenLastCalledWith(
+      `${path(DOC.id)}meta.ttl`,
+      { ifMatch: pendingEtag },
+      expect.any(Function),
+    );
   });
 
   it("restores every export when a same-version file returns after interrupted deletion", async () => {
@@ -1089,6 +1096,7 @@ describe("Drive staged representations", () => {
       const podFetch = vi.fn(pod.fetch);
       // A distinct writer must still share the claim for this connector container.
       const otherWriter = createFetchPodWriter({
+        ...ownerOnlyFixtureChecks,
         adapterId: "google-drive",
         webId: TEST_WEBID,
         profileDocumentUrl: TEST_PROFILE_DOC,
@@ -1154,6 +1162,7 @@ describe("Drive staged representations", () => {
     try {
       // Another process writes directly, outside this process's import-session claim.
       const writer = createFetchPodWriter({
+        ...ownerOnlyFixtureChecks,
         adapterId: "google-drive",
         webId: TEST_WEBID,
         profileDocumentUrl: TEST_PROFILE_DOC,
@@ -1725,6 +1734,7 @@ describe("Drive content retry list", () => {
         // Time passes outside any source request (which has its own response timeout): while
         // the retry list is read, after the change set is stored.
         const podWriter = createFetchPodWriter({
+          ...ownerOnlyFixtureChecks,
           adapterId: "google-drive",
           webId: TEST_WEBID,
           profileDocumentUrl: TEST_PROFILE_DOC,
