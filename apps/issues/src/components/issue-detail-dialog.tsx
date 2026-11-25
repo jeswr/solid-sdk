@@ -3,17 +3,21 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
+  Badge,
+  Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Textarea,
+} from "@jeswr/suite-ui";
 import { Ban, Boxes, CalendarClock, CheckCircle2, CircleDot, Clock, Copy as CopyIcon, Download, GitBranch, Link2, Loader2, MessageSquare, Milestone, Paperclip, Pencil, Plus, Tag, Upload, X } from "lucide-react";
 import { formatDuration, parseDuration } from "@/lib/dates";
 
@@ -223,7 +227,7 @@ export function IssueDetailDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] gap-0 overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85vh] gap-0 overflow-y-auto sm:max-w-2xl sm:w-2xl!">
         <DialogHeader>
           {/* The DialogContent renders its own close (X) button absolutely at
               top-2 right-2; reserve that corner (pr-10) so the Edit button never
@@ -642,7 +646,7 @@ export function IssueDetailDialog({
               <Input
                 aria-label="Time spent"
                 placeholder="1h 30m"
-                className="h-8 sm:w-28"
+                className="h-8 sm:w-28! sm:flex-none"
                 value={logDuration}
                 onChange={(e) => setLogDuration(e.target.value)}
               />

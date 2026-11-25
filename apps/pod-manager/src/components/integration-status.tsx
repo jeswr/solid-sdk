@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { Badge } from "@/components/ui/badge";
+import {
+  Badge,
+} from "@jeswr/suite-ui";
 import type { IntegrationStatus } from "@/lib/integrations/registry";
 
 /** Tier-honest status chip copy (docs/integrations-catalog.md). */

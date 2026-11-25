@@ -16,11 +16,13 @@ import { contactsStore, type Contact } from "@/lib/contacts";
 import { useStore, useItem } from "@/components/use-productivity";
 import { ErrorState } from "@/components/states";
 import { ResourceWriteError } from "@/lib/errors";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Button,
+  Input,
+  Label,
+  Skeleton,
+  Textarea,
+} from "@jeswr/suite-ui";
 
 export default function ContactEditorPage() {
   // useSearchParams requires a Suspense boundary in a prerendered page.

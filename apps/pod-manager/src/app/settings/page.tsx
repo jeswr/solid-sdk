@@ -13,9 +13,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "@/components/session-provider";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Skeleton,
+} from "@jeswr/suite-ui";
 
 export default function SettingsPage() {
   const { profile, webId, activeStorage, logout } = useSession();

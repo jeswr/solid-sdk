@@ -7,8 +7,10 @@ import { categoryIcon } from "@/components/category-icon";
 import { ErrorState } from "@/components/states";
 import { commonCategories, otherCategories, type DataCategory } from "@/lib/categories";
 import type { CategorySummary } from "@/lib/pod-data";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Badge,
+  Skeleton,
+} from "@jeswr/suite-ui";
 
 export default function MyDataPage() {
   const { data: summaries, loading, error } = useCategorySummaries();

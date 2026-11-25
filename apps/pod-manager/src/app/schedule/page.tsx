@@ -19,12 +19,14 @@ import { useStore, useItems, useItem } from "@/components/use-productivity";
 import { EmptyState, ErrorState } from "@/components/states";
 import { ItemRowSkeleton } from "@/components/item-row";
 import { PeoplePicker } from "@/components/people-picker";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Badge,
+  Button,
+  Input,
+  Label,
+  Skeleton,
+  Textarea,
+} from "@jeswr/suite-ui";
 import {
   scheduleStore,
   tallyRsvps,

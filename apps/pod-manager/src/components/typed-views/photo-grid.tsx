@@ -15,7 +15,10 @@ import { usePodMedia } from "@/components/use-pod-media";
 import { ImageIcon } from "lucide-react";
 import type { Photo, PhotoModel } from "@/lib/typed-views/photo-view";
 import { safeLinkHref } from "@/lib/pod-scope";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+} from "@jeswr/suite-ui";
 import { SourceActionButton } from "@/components/typed-views/source-action";
 
 /** The thumbnail grid for a photos resource. */

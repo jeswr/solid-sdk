@@ -31,6 +31,14 @@ import {
   roleForModes,
   type CategoryAccess,
 } from "@/lib/permissions";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Skeleton,
+} from "@jeswr/suite-ui";
 
 /** A refusal explains itself; anything else is most likely the network. */
 function revokeFailure(error: unknown): string {
@@ -38,9 +46,6 @@ function revokeFailure(error: unknown): string {
     ? error.message
     : "Nothing was changed. Check your connection and try again.";
 }
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ConnectedAppPage() {
   // useSearchParams requires a Suspense boundary in a prerendered page.

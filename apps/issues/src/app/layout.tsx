@@ -7,7 +7,9 @@ import { AppShell } from "@/components/app-shell";
 import { RoutedErrorBoundary } from "@/components/routed-error-boundary";
 import { SuiteRedirect } from "@/components/suite-redirect";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/sonner";
+import {
+  Toaster,
+} from "@jeswr/suite-ui";
 import { SolidSessionProvider } from "@/lib/session-context";
 
 const geistSans = localFont({

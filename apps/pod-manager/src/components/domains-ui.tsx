@@ -10,8 +10,10 @@ import { CheckCircle2, Copy, Globe, LoaderCircle, type LucideIcon } from "lucide
 import { toast } from "sonner";
 import { useSession } from "@/components/session-provider";
 import { EmptyState, ErrorState } from "@/components/states";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import {
+  Badge,
+  Button,
+} from "@jeswr/suite-ui";
 import {
   bindingBadge,
   describeState,

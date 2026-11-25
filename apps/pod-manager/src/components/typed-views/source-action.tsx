@@ -9,7 +9,9 @@
  */
 import { CalendarDays, ExternalLink, type LucideIcon } from "lucide-react";
 import type { SourceMatch } from "@/lib/typed-views/sources";
-import { Button } from "@/components/ui/button";
+import {
+  Button,
+} from "@jeswr/suite-ui";
 
 /** Map an icon name (from the pure layer) to a Lucide component. */
 const ICONS: Record<string, LucideIcon> = {
