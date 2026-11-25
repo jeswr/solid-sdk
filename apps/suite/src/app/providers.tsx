@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { installPrompt } from "@jeswr/suite-sdk/pwa";
 import { ThemeProvider, useTheme } from "next-themes";
 import { Suspense, useEffect } from "react";
 import { NativePreviewCleanup } from "@/components/native-preview-cleanup";
@@ -34,6 +35,7 @@ export function Providers({
   children: React.ReactNode;
   environment: SuiteEnv;
 }) {
+  useEffect(() => installPrompt.start(window), []);
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem enableColorScheme>
       <ThemeAttribute />
