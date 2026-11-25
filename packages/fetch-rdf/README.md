@@ -104,6 +104,12 @@ them. Discard observations if a later budget check, insertion, or callback fails
 token instead of after the whole body has been tokenised; use it for untrusted or
 large local input.
 
+The default parser also accepts `factory` (an RDF/JS term factory) and
+`storeFactory` (returning a fresh empty N3 Store). Matching factories let callers
+retain term spelling through parsing and store reads without a second parse.
+Construction budgets still wrap the supplied factory; discard a custom store on
+failure. Both hooks work with `parseRdfSync` and are ignored when using `engine`.
+
 `ParseRdfOptions` and `FetchRdfOptions` accept these finite, nonnegative integer
 limits (`maxContextConcurrency` must be positive). Increase them explicitly for
 larger trusted resources. Exceeding a budget rejects with `RdfFetchError`
