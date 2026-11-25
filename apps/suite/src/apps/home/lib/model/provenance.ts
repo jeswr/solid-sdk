@@ -61,6 +61,9 @@ export const CONNECTORS: readonly Connector[] = [
   { id: "google-takeout", label: "Google Takeout", hosts: [] },
 ];
 
+/** Demo markers count under every catalogue adapter's root, not only labelled connectors. */
+export const CATALOGUE_IDS: readonly string[] = allCatalogEntries().map(({ id }) => id);
+
 export function connectorForUrl(value: string): Connector | undefined {
   const url = httpUrl(value);
   if (!url) return undefined;
@@ -77,7 +80,7 @@ export function connectorForUrl(value: string): Connector | undefined {
 
 export interface ProvenanceContext {
   userWebId?: string;
-  /** Pre-resolved identity metadata: no implicit third-party requests while classifying RDF. */
+  /** Pre-resolved identity metadata: classifying RDF makes no request itself; the resolver below may fetch public client metadata. */
   identities?: ReadonlyMap<string, { kind: "app" | "person"; label: string }>;
   storage?: string;
   /** URL of the document Home actually read, independent of its selected RDF subject. */
@@ -171,7 +174,17 @@ export function identitiesIn(
  * Home retains only in-flight work and the set of agents admitted to this session's budget.
  * No pending lookup means undefined, allowing the hook to avoid a redundant state update.
  */
-export function createIdentityResolver(publicFetch: typeof fetch = globalThis.fetch) {
+export function createIdentityResolver(baseFetch: typeof fetch = globalThis.fetch) {
+  // The agent IRI comes from item data, so the lookup tells that host the user's IP and the
+  // time. Send no Referer; a name-resolves-privately address is tolerable only because the
+  // request is a credential-free simple GET with redirects refused.
+  const publicFetch: typeof fetch = (input, init) =>
+    baseFetch(input, {
+      ...init,
+      referrerPolicy: "no-referrer",
+      credentials: "omit",
+      redirect: "error",
+    });
   const inFlight = new Map<string, ReturnType<typeof resolveClientName>>();
   const admitted = new Set<string>();
   return (dataset: DatasetCore, subject: string | Term, userWebId?: string) => {
@@ -263,9 +276,7 @@ export function provenanceOf(
       inStorage(storage, storage) &&
       inStorage(value, storage) &&
       url.href.split("#")[0] === document.href.split("#")[0] &&
-      CONNECTORS.some((connector) =>
-        inStorage(documentUrl, adapterContainerUrl(storage, connector.id)),
-      ) &&
+      CATALOGUE_IDS.some((id) => inStorage(documentUrl, adapterContainerUrl(storage, id))) &&
       subjectOf(dataset, subject).iris(`${NS.PROV}wasAttributedTo`).includes(DEMO_CONNECTOR.iri),
   );
   const source = sourceOf(dataset, subject, containerUrl, context, demo);
@@ -309,9 +320,13 @@ function sourceOf(
   // Folder attribution uses the same exact connector import roots as the demo marker.
   const storage = context.storage;
   if (storage && inStorage(storage, storage)) {
-    const connector = CONNECTORS.find((connector) =>
-      inStorage(containerUrl, adapterContainerUrl(storage, connector.id)),
-    );
+    const connector =
+      CONNECTORS.find((connector) =>
+        inStorage(containerUrl, adapterContainerUrl(storage, connector.id)),
+      ) ??
+      allCatalogEntries()
+        .map(({ id, name }): Connector => ({ id, label: name, hosts: [] }))
+        .find((entry) => inStorage(containerUrl, adapterContainerUrl(storage, entry.id)));
     if (connector) return providedBy(connector);
   }
   if (attributedToPerson) return { kind: "person", label: "another person" };

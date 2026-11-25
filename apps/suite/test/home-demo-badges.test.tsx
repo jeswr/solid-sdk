@@ -169,9 +169,9 @@ describe.each(["card", "detail"] as const)("Home %s app provenance", (surface) =
   }) => {
     // Each surface has a separate client URL so the shared Permissions cache stays cold.
     const client = `${agent}?surface=${surface}`;
-    const publicFetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+    const publicFetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       if (!name) throw new Error("Unavailable");
-      return Response.json({ client_name: name });
+      return Response.json({ client_id: String(input), client_name: name });
     });
     const item = await setup(false, false, client);
     const view = await mount(
@@ -213,7 +213,9 @@ it("shares lookups between cards and ignores late names after switching items or
   const publicFetch = vi
     .spyOn(globalThis, "fetch")
     .mockImplementation(async (input) =>
-      String(input) === oldClient ? delayed.promise : Response.json({ client_name: "Current app" }),
+      String(input) === oldClient
+        ? delayed.promise
+        : Response.json({ client_id: String(input), client_name: "Current app" }),
     );
   const oldItem = await setup(false, false, oldClient);
   const session = current.session as HomeSession;
@@ -238,7 +240,9 @@ it("shares lookups between cards and ignores late names after switching items or
   expect(view.host.textContent).toBe("Current app");
   await view.render(h(ProvenanceProbe, { item: newItem, session: { ...session } }));
   expect(view.host.textContent).toBe("Current app");
-  await act(async () => delayed.resolve(Response.json({ client_name: "Stale app" })));
+  await act(async () =>
+    delayed.resolve(Response.json({ client_id: oldClient, client_name: "Stale app" })),
+  );
   expect(view.host.textContent).toBe("Current app");
   expect(publicFetch).toHaveBeenCalledTimes(2);
   await view.unmount();

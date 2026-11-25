@@ -8,6 +8,7 @@ import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { DEMO_CONNECTOR } from "../../src/apps/home/lib/connect/catalogue";
 import {
+  CATALOGUE_IDS,
   CONNECTORS,
   connectorForUrl,
   createIdentityResolver,
@@ -128,7 +129,9 @@ describe("external provenance names", () => {
     expect(externalName(name, "agent.example")).toBe(expected);
     const iri = `https://agent.example/client-${cases.findIndex((row) => row[0] === name)}.jsonld`;
     const dataset = attributedClient(iri);
-    const publicFetch = vi.fn<typeof fetch>(async () => Response.json({ client_name: name }));
+    const publicFetch = vi.fn<typeof fetch>(async (input) =>
+      Response.json({ client_id: String(input), client_name: name }),
+    );
     const identities = await createIdentityResolver(publicFetch)(dataset, clientSubject);
     expect(identities?.get(iri)?.label).toBe(expected);
     if (name?.trim()) {
@@ -159,7 +162,9 @@ describe("Home Client ID Document attribution", () => {
   it("uses the Permissions resolver and its credential-free request for client_name", async () => {
     const iri = "https://notenest.example/client.jsonld";
     const dataset = attributedClient(iri);
-    const publicFetch = vi.fn<typeof fetch>(async () => Response.json({ client_name: "NoteNest" }));
+    const publicFetch = vi.fn<typeof fetch>(async (input) =>
+      Response.json({ client_id: String(input), client_name: "NoteNest" }),
+    );
     const identities = await createIdentityResolver(publicFetch)(dataset, clientSubject);
     expect(
       provenanceOf(dataset, clientSubject, STORAGE, { identities: identities ?? new Map() }),
@@ -168,6 +173,7 @@ describe("Home Client ID Document attribution", () => {
       headers: { accept: "application/ld+json, application/json" },
       credentials: "omit",
       redirect: "error",
+      referrerPolicy: "no-referrer",
       signal: expect.any(AbortSignal),
     });
   });
@@ -179,8 +185,8 @@ describe("Home Client ID Document attribution", () => {
     "https://www.w3.org/ns/activitystreams#Application",
   ])("fetches graph-typed software (%s)", async (type) => {
     const iri = `https://typed.example/client.jsonld?type=${encodeURIComponent(type)}`;
-    const publicFetch = vi.fn<typeof fetch>(async () =>
-      Response.json({ client_name: "Typed app" }),
+    const publicFetch = vi.fn<typeof fetch>(async (input) =>
+      Response.json({ client_id: String(input), client_name: "Typed app" }),
     );
     expect(
       (await createIdentityResolver(publicFetch)(attributedClient(iri, type), clientSubject))?.get(
@@ -211,8 +217,8 @@ describe("Home Client ID Document attribution", () => {
     const iri = "https://activity-agent.example/client.jsonld";
     new ItemProvenance(clientSubject, dataset, DataFactory).generatedBy.add(activity);
     new ItemProvenance(activity, dataset, DataFactory).associatedWith = iri;
-    const publicFetch = vi.fn<typeof fetch>(async () =>
-      Response.json({ client_name: "Import app" }),
+    const publicFetch = vi.fn<typeof fetch>(async (input) =>
+      Response.json({ client_id: String(input), client_name: "Import app" }),
     );
     const identities = await createIdentityResolver(publicFetch)(dataset, clientSubject);
     expect(publicFetch).toHaveBeenCalledExactlyOnceWith(iri, expect.anything());
@@ -239,7 +245,9 @@ describe("Home Client ID Document attribution", () => {
 
   it("keeps only in-flight work and delegates subsequent cache decisions to Permissions", async () => {
     const iri = "https://cached-notenest.example/client.jsonld";
-    const publicFetch = vi.fn<typeof fetch>(async () => Response.json({ client_name: "NoteNest" }));
+    const publicFetch = vi.fn<typeof fetch>(async (input) =>
+      Response.json({ client_id: String(input), client_name: "NoteNest" }),
+    );
     const sharedResolver = vi.spyOn(permissions, "resolveClientName");
     try {
       const resolve = createIdentityResolver(publicFetch);
@@ -267,7 +275,9 @@ describe("Home Client ID Document attribution", () => {
     const publicFetch = vi
       .fn<typeof fetch>()
       .mockRejectedValueOnce(new Error("Offline"))
-      .mockResolvedValue(Response.json({ client_name: "Recovered app" }));
+      .mockImplementation(async (input) =>
+        Response.json({ client_id: String(input), client_name: "Recovered app" }),
+      );
     const resolve = createIdentityResolver(publicFetch);
     const now = Date.now();
     const time = vi.spyOn(Date, "now").mockReturnValue(now);
@@ -288,8 +298,8 @@ describe("Home Client ID Document attribution", () => {
     const second = "https://second-agent.example/client.jsonld";
     new ItemProvenance(clientSubject, dataset, DataFactory).attributedTo.add(second);
     new PodThing(second, dataset, DataFactory).types.add(SOFTWARE);
-    const publicFetch = vi.fn<typeof fetch>(async () =>
-      Response.json({ client_name: "First app" }),
+    const publicFetch = vi.fn<typeof fetch>(async (input) =>
+      Response.json({ client_id: String(input), client_name: "First app" }),
     );
     const resolve = createIdentityResolver(publicFetch);
     await resolve(dataset, clientSubject);
@@ -299,8 +309,8 @@ describe("Home Client ID Document attribution", () => {
   });
 
   it("caps a Home session at 20 distinct agents, with host fallbacks thereafter", async () => {
-    const publicFetch = vi.fn<typeof fetch>(async () =>
-      Response.json({ client_name: "Counted app" }),
+    const publicFetch = vi.fn<typeof fetch>(async (input) =>
+      Response.json({ client_id: String(input), client_name: "Counted app" }),
     );
     const resolve = createIdentityResolver(publicFetch);
     for (let n = 0; n < 20; n++) {
@@ -323,6 +333,23 @@ describe("Home Client ID Document attribution", () => {
     // A new Home session has a fresh budget.
     await createIdentityResolver(publicFetch)(dataset, clientSubject);
     expect(publicFetch).toHaveBeenCalledTimes(21);
+  });
+
+  it("sends the agent lookup with no referrer, no credentials and redirects refused", async () => {
+    const iri = "https://agent.example/client-opts.jsonld";
+    const publicFetch = vi.fn<typeof fetch>(async () =>
+      Response.json(
+        { client_id: iri, client_name: "Opts" },
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    await createIdentityResolver(publicFetch)(attributedClient(iri), clientSubject);
+    expect(publicFetch).toHaveBeenCalledTimes(1);
+    expect(publicFetch.mock.calls[0]?.[1]).toMatchObject({
+      referrerPolicy: "no-referrer",
+      credentials: "omit",
+      redirect: "error",
+    });
   });
 
   it("preserves graph names without resolving self, demo, people, services or opaque agents", () => {
@@ -379,6 +406,23 @@ describe("Home §5.3 provenance", () => {
       label: DEMO_CONNECTOR.label,
       demo: true,
     });
+  });
+
+  it("covers every catalogue adapter, not only the labelled connectors", () => {
+    expect([...CATALOGUE_IDS].sort()).toEqual(
+      allCatalogEntries()
+        .map(({ id }) => id)
+        .sort(),
+    );
+    for (const { id } of allCatalogEntries()) {
+      const subject = `${STORAGE}integrations/${id}/item.ttl#it`;
+      const dataset = new Store();
+      new ItemProvenance(subject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
+      expect(
+        provenanceOf(dataset, subject, STORAGE, { ...context, documentUrl: subject }).demo,
+        id,
+      ).toBe(true);
+    }
   });
 
   it("keeps live connector items without a demo marker unflagged", () => {
