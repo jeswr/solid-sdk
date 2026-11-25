@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 import { StorageError } from "@jeswr/storage-client";
 import { Store } from "n3";
 import { createLwsAccess } from "./lws.js";
@@ -48,14 +49,14 @@ export function createAccessClient(options: AccessClientOptions): AccessClient {
     }
   }
 
-  async function document(url: string, mutate: boolean) {
+  async function document(url: string) {
     const selected = model();
     if (storage.protocol !== "solid" || (selected !== "wac" && selected !== "acp")) unsupported();
     if (selected === "acp") dialect();
     const head = await storage.head(url);
-    if (mutate && head.allow !== null && !head.allow.control) {
-      throw new StorageError("forbidden", { url: head.url, method: "PUT", status: 403 });
-    }
+    // WAC-Allow is advisory: CSS reports the owner as user="read" once a public rule exists
+    // although Control is kept. The ACL read and the If-Match write below are authorised by the
+    // server, and a real 401/403 propagates as the storage client's `forbidden` error.
     const rels = selected === "wac" ? ["acl"] : ["acl", `${ACP}accessControl`];
     const links = rels.flatMap((rel) => head.links.get(rel) ?? []);
     if (links.length === 0) return unsupported();
@@ -148,7 +149,7 @@ export function createAccessClient(options: AccessClientOptions): AccessClient {
     },
     async grants(url) {
       if (storage.protocol === "lws") return lws.grants(url);
-      const doc = await document(url, false);
+      const doc = await document(url);
       return parse(doc.url, () =>
         doc.model === "wac"
           ? wacGrants(doc.dataset, doc.target, doc.url)
@@ -174,7 +175,7 @@ export function createAccessClient(options: AccessClientOptions): AccessClient {
         )
       )
         unsupported();
-      const doc = await document(url, true);
+      const doc = await document(url);
       if (inherit && doc.kind !== "container")
         throw new TypeError("Inheritance requires a container");
       const id = `${doc.url}#grant-${crypto.randomUUID()}`;
@@ -192,7 +193,7 @@ export function createAccessClient(options: AccessClientOptions): AccessClient {
     async revoke(url, key) {
       if (storage.protocol === "lws") return lws.revoke(url, key);
       const value = validateRevokeKey(key);
-      const doc = await document(url, true);
+      const doc = await document(url);
       const changed = parse(doc.url, () =>
         doc.model === "wac"
           ? revokeWac(doc.dataset, doc.target, value, doc.url)

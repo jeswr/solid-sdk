@@ -112,9 +112,10 @@ See the [WAC discovery rules](https://solidproject.org/TR/wac#acl-link-relation)
 Edits clone the complete dataset and call `storage.writeRdf` with the access document's ETag,
 preserving unrelated RDF. Missing/empty/wildcard validators fail with `precondition-required`;
 412 conflicts propagate without retry. Missing, unreadable or unparsable documents propagate
-their storage errors. A reported lack of Control fails locally with `forbidden`; when
-WAC-Allow is absent, the server remains responsible for authorizing the conditional write.
-Server 401/403 errors propagate unchanged. Named graphs and unexpected 304s are rejected.
+their storage errors. `WAC-Allow` is never used to refuse a share or revoke (CSS reports
+the owner as `user="read"` once a public rule exists although Control is kept): the server
+authorises the ACL read and the conditional write. Server 401/403 errors propagate unchanged
+as `forbidden`. Named graphs and unexpected 304s are rejected.
 
 ## Solid grants
 
