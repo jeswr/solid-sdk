@@ -143,6 +143,9 @@ export function createLocalNotificationStore(
     add: (notification) =>
       mutate(() => {
         const copy = structuredClone(notification);
+        // A producer re-announcing the same event (the legacy warning on every session start)
+        // must not turn an event the person already read back into an unread one.
+        if (memory.get(copy.id)?.read) copy.read = true;
         memory.set(copy.id, copy);
         return [copy];
       }),

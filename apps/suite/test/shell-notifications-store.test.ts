@@ -34,6 +34,15 @@ it("falls back to isolated memory with dates, dedupe, subscriptions, read writes
   abort.abort();
   await expect(store.list(abort.signal)).rejects.toThrow();
 });
+it("keeps a read event read when its producer announces it again", async () => {
+  const store = createLocalNotificationStore("again", undefined);
+  const item = demoNotifications()[0]!;
+  await store.add({ ...item, read: false });
+  await store.markRead!([item.id]);
+  await store.add({ ...item, read: false });
+  const [saved] = await store.list(new AbortController().signal);
+  expect(saved?.read).toBe(true);
+});
 it("recovers from an IndexedDB open error and shares the app-local entry point", async () => {
   const factory = {
     open() {

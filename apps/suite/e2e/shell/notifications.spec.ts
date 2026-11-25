@@ -34,11 +34,13 @@ async function demo(page: Page) {
 }
 async function open(page: Page) {
   const mobile = (page.viewportSize()?.width ?? 1280) < 768;
+  // Five demo events are unread. The demo pod's seeded legacy plan adds a sixth while its warning
+  // window is open (a calendar-dependent state) and the tray lists it only once it is stored.
   const bell = page
-    .getByRole(mobile ? "link" : "button", { name: "Notifications, 5 unread", exact: true })
+    .getByRole(mobile ? "link" : "button", { name: /^Notifications, [56] unread$/ })
     .filter({ visible: true });
   await expect(bell).toBeVisible();
-  await expect(bell.getByRole("status", { name: "5 unread", exact: true })).toBeVisible();
+  await expect(bell.getByRole("status", { name: /^[56] unread$/ })).toBeVisible();
   await bell.focus();
   await bell.press("Enter");
   if (mobile) await expect(page).toHaveURL(/\/notifications$/);
@@ -69,11 +71,9 @@ test("demo tray groups notifications, approves Editor, marks read and dismisses 
     .filter({ visible: true });
   await expect(bell).toBeVisible();
   await expect(bell.getByRole("status")).toHaveCount(0);
-  for (let i = 0; i < 11; i++)
-    await page
-      .getByRole("button", { name: /^Dismiss / })
-      .first()
-      .click();
+  // The demo pod's seeded legacy warning may join the tray, so dismiss until none is left.
+  const dismiss = page.getByRole("button", { name: /^Dismiss / });
+  while (await dismiss.count()) await dismiss.first().click();
   await expect(page.getByText("You're all caught up", { exact: true })).toBeVisible();
   await capture(page, "empty", info.project.name);
   if ((page.viewportSize()?.width ?? 1280) >= 768) {
