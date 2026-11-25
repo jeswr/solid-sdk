@@ -737,7 +737,7 @@ if (request) {
   const preview = await previewDecision(request, decision, options);
   // Show preview.targets (url, dataTypes, role, modes) and preview.model for consent.
   const result = await decide(request, decision, { ...options, expected: preview });
-  // result.status, grantUrl, receiptUrl, notified, expiryEnforced, choices
+  // result.status, grantUrl, receiptUrl, notified, expiryEnforced, choices, recorded
 }
 // Deny: await decide(request, { approve: false }, options).
 // Detect: await accessModel({ fetch: authenticatedFetch, storage, target? }).
@@ -751,8 +751,16 @@ missing, or non-request member becomes `{ id, status: "unreadable" }`; container
 Other statuses are `pending`, `approving`, `approved`, and `denied`. Entries carry `requester`,
 notification-local `requesterName?`, `purpose?` (IRI or label), `dataTypes`, `modes`
 (`read`, `write`, `append`), `modesByType` (a rule targeting a data type applies to that type
-only; a rule with any other target applies to every requested type), `requestedDuration?`, `expiresAt?`, `created?`, and `decidedAt?`.
-Foreign dates and durations retain lexical strings. Listing never dereferences requesters or purposes.
+only; a rule with any other target applies to every requested type), `requestedDuration?`, `expiresAt?`, `created?`, `decidedAt?`,
+and `recorded?`. Foreign dates and durations retain lexical strings. Listing never dereferences requesters or purposes.
+A pending or Approving entry carries `recorded` (the same `{ dataTypes, grantedTypes, role,
+expiresAt? }` shape `decide` returns, below) when the owner's own records already pin an approval of
+it, for example one another tab started and did not finish. That lookup reads only: it writes
+nothing (not even sealing the records folder), runs at most four record lookups at once, attaches
+nothing while the records folder is missing, unsealed, shared, lacking the owner's full control, or
+advertised as not WAC by its own Link header (then nothing further is probed), and leaves out a
+record that can't be read, names another request or doesn't validate. Cancellation propagates.
+Passing the recorded `dataTypes`, `role` and `expiresAt` back to `decide` finishes that approval.
 Discovery/listing failures and cancellation propagate; an individual bad notification does not.
 
 `decide(entry, { approve, role?, expiresAt?, dataTypes? }, options)` re-reads `entry.id`.
@@ -797,7 +805,21 @@ from their pinned modes; omit `role` or repeat that inferred role to resume them
 different role is refused with the recorded role in the error. Different choices fail with an error saying an earlier approval is still
 finishing, rather than silently granting something other than what the owner just chose.
 Completed decisions are idempotent; reversing
-approval/denial is rejected. Denial receipt writes can also be retried. Requester-supplied grant/receipt
+approval/denial is rejected. Denial receipt writes can also be retried.
+
+An approval's result carries `recorded: { dataTypes, grantedTypes, role, expiresAt? }`: the choices
+its pinned decision recorded, which is what was applied. They can differ from the call's own choices
+when another call (another tab) pinned or finished the approval first, so word confirmations from
+`recorded`, not from what was sent. `dataTypes` are the approved types, sorted (the request's own
+when none were chosen). `grantedTypes` are those of them that were granted a mode, sorted: a type
+with no permission of its own, or one that asked only to change data under `role: "viewer"`, is
+left out, so name `grantedTypes` when saying what was shared. `role` is `viewer` when the approval narrowed to Read, otherwise `editor`
+(each target got the role its requested modes map to, as `RequestDecision.role` means); `expiresAt`
+is absent for access until revoked. A denial has no `recorded`. A pinned snapshot is refused as
+invalid unless its chosen and granted data types are sorted, unique strings, the chosen ones are all
+requested, every granted one was chosen, and its end date is exactly the instant `decide` wrote.
+
+Requester-supplied grant/receipt
 references never select write locations.
 
 Approval results include `choices: { dataTypes, role, targetRoles, expiresAt? }`: the types actually granted,

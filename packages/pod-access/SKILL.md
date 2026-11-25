@@ -211,6 +211,13 @@ with the actual granted types, strongest applied `role`, exact roles per target 
 completed replays that ignore new choices. A lost pin or CAS reports the request's re-read status
 in `RequestConflictError`.
 
+An approval's `DecisionResult` also returns the pin's `recorded` `{ dataTypes, grantedTypes, role,
+expiresAt? }` (what was applied, even when another call finished first; name `grantedTypes` in
+confirmations; `choices` stays the applied-role view). `listRequests` attaches the same `recorded` to
+pending/Approving entries with an owner-pinned approval, read-only (`recordsKey(..., undefined, true)`
+never seals or writes), at most four lookups at once, fail-closed. Snapshot validation requires
+sorted, unique chosen/granted type lists, chosen within the request, granted within chosen.
+
 For ACP records, use the roles layer's raw bounded ACR discovery, preserving all triples rather
 than projecting conditions to role rows. Verify every reachable local control/policy/matcher and
 all additive ancestor ACRs through the origin root, including ancestors above storage. Privacy-check
