@@ -57,7 +57,9 @@ export function useNoteDraft(
   const save = useCallback<NotesStore["save"]>(
     async (...args) => {
       const saved = await store.save(...args);
-      if (session)
+      // A restore brings back old chips nobody typed (a collaborator may have written them):
+      // never deliver mention notifications for them from this user's session.
+      if (session && !args[1].preserveCurrent)
         void notifySavedHtml(session, saved.url, args[0].body, saved.body, saved.title).catch(
           () => {},
         );

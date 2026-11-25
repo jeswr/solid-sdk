@@ -44,6 +44,7 @@ beforeEach(() => {
   mocks.scan.mockResolvedValue(plan);
   mocks.remove.mockResolvedValue({ deleted: 1, kept: 0, failed: 0 });
   mocks.context = {
+    session: { webId: "https://pod.example/profile/card#me" },
     labels: [],
     persistLabels: vi.fn(),
     store: { imageCleanup: { scan: mocks.scan, delete: mocks.remove } },
@@ -63,7 +64,11 @@ it("opens from maintenance actions, previews count and total size, then requires
   expect(text()).toContain("1 unused image · 2 KB. Nothing has been deleted.");
   await vi.waitFor(() => expect(dialog?.contains(document.activeElement)).toBe(true));
   await click(button("Delete unused images"));
-  expect(mocks.remove).toHaveBeenCalledExactlyOnceWith(plan, expect.any(Function));
+  expect(mocks.remove).toHaveBeenCalledExactlyOnceWith(
+    plan,
+    expect.any(Function),
+    expect.any(Function),
+  );
   expect(text()).toContain("Deleted 1 image. Kept 0 images. Failed 0 images.");
   await click(button("Close"));
   await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
@@ -195,4 +200,17 @@ it("uses current connectivity during deletion and keeps partial counts visible o
   expect(text()).toContain("Deleted 1 image. Kept 0 images. Failed 0 images.");
   await click(button("Scan again"));
   expect(mocks.scan).toHaveBeenCalledTimes(2);
+});
+
+it("says why images added in the last day were kept, and surfaces the cause of a blocked scan", async () => {
+  mocks.scan.mockResolvedValueOnce({ ...plan, recent: 2 });
+  await mount(h(NotesSidebar));
+  await open();
+  expect(text()).toContain("2 images added or changed in the last day were kept.");
+  const { ImageCleanupBlockedError } = await import("../src/apps/notes/lib/image-cleanup");
+  mocks.scan.mockRejectedValueOnce(
+    new ImageCleanupBlockedError("A note could not be read. Check or remove notes/stray.txt."),
+  );
+  await click(button("Scan again"));
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain("notes/stray.txt");
 });

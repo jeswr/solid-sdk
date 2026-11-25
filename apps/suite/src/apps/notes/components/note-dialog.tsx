@@ -55,7 +55,7 @@ import { NotesAvailability } from "./notes-states";
 import { ReminderChip, ReminderPicker } from "./reminder-picker";
 import { hasOpenItems, SendToTasksDialog } from "./send-to-tasks";
 import { ShareNote } from "./share-note";
-import { NoteVersionHistory } from "./version-history";
+import { NoteVersionHistory, restoredTitle } from "./version-history";
 
 export function NoteDialog({ note }: { note: StoredNote }) {
   const {
@@ -232,13 +232,29 @@ export function NoteDialog({ note }: { note: StoredNote }) {
       // writer preserves normal ETag conflicts, permission changes and retry recovery.
       const saved = await flush();
       if (!canRestore.current || saved.readOnly) throw new Error("This note is view only.");
-      change({ title: revision.title ?? saved.title, body: revision.body, preserveCurrent: true });
+      change({
+        title: restoredTitle(revision.title, saved.title),
+        body: revision.body,
+        preserveCurrent: true,
+      });
       await flush();
       setHistoryOpen(false);
     } finally {
       unlock();
     }
   };
+  const versionHistoryButton = (
+    <Button
+      variant="ghost"
+      disabled={trashed || busy}
+      onClick={() => {
+        setHistoryOpen(true);
+        setMoreOpen(false);
+      }}
+    >
+      Version history
+    </Button>
+  );
   const age = Math.max(0, Math.floor((now - Date.parse(modified ?? "")) / 60_000));
   const relative =
     !Number.isFinite(age) || age < 1
@@ -494,36 +510,29 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           <LabelChips links={false} labels={draft.labels} />
           <ReminderChip value={note.reminder} now={new Date(now)} />
           <div className="notes-dialog-actions">
-            <Popover open={moreOpen} onOpenChange={setMoreOpen}>
-              <PopoverTrigger asChild>
-                <IconButton
-                  ref={moreButton}
-                  label="More note actions"
-                  variant="ghost"
-                  disabled={busy}
-                >
-                  <MoreHorizontal size={18} aria-hidden="true" />
-                </IconButton>
-              </PopoverTrigger>
-              <PopoverContent
-                className="notes-popover notes-more-menu"
-                aria-label="More note actions"
-                onCloseAutoFocus={(event) => {
-                  if (historyOpen) event.preventDefault();
-                }}
-              >
-                <Button
-                  variant="ghost"
-                  disabled={trashed || busy}
-                  onClick={() => {
-                    setHistoryOpen(true);
-                    setMoreOpen(false);
+            {(viewOnly || trashed) && (
+              <Popover open={moreOpen} onOpenChange={setMoreOpen}>
+                <PopoverTrigger asChild>
+                  <IconButton
+                    ref={moreButton}
+                    label="More note actions"
+                    variant="ghost"
+                    disabled={busy}
+                  >
+                    <MoreHorizontal size={18} aria-hidden="true" />
+                  </IconButton>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="notes-popover notes-more-menu"
+                  aria-label="More note actions"
+                  onCloseAutoFocus={(event) => {
+                    if (historyOpen) event.preventDefault();
                   }}
                 >
-                  Version history
-                </Button>
-              </PopoverContent>
-            </Popover>
+                  {versionHistoryButton}
+                </PopoverContent>
+              </Popover>
+            )}
             {viewOnly ? null : trashed ? (
               <Button
                 variant="outline"
@@ -607,7 +616,19 @@ export function NoteDialog({ note }: { note: StoredNote }) {
                 >
                   <Trash2 size={18} aria-hidden="true" />
                 </IconButton>
-                <NoteDocsActions disabled={busy} run={act} onCopied={unlock} />
+                <NoteDocsActions
+                  disabled={busy}
+                  run={act}
+                  onCopied={unlock}
+                  open={moreOpen}
+                  onOpenChange={setMoreOpen}
+                  triggerRef={moreButton}
+                  onCloseAutoFocus={(event) => {
+                    if (historyOpen) event.preventDefault();
+                  }}
+                >
+                  {versionHistoryButton}
+                </NoteDocsActions>
                 {hasOpenItems(checklist) && (
                   <Button variant="ghost" disabled={busy} onClick={() => setSendingTasks(true)}>
                     <ListTodo size={16} aria-hidden="true" />

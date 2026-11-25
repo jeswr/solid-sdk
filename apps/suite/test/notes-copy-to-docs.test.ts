@@ -3,7 +3,12 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { uploadPodImage } from "../src/apps/docs/lib/editor/image-upload";
 import { DocsStore } from "../src/apps/docs/lib/model/store";
-import { copyNoteImages, createNoteDocsConverter } from "../src/apps/notes/lib/copy-to-docs";
+import {
+  CopyToDocsPrivacyError,
+  copyNoteImages,
+  createNoteDocsConverter,
+  readCappedImage,
+} from "../src/apps/notes/lib/copy-to-docs";
 import type { StoredNote } from "../src/apps/notes/lib/model/store";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import "./drive-ui-dom";
@@ -41,6 +46,8 @@ async function fixture() {
     webId: `${ROOT}profile/card#me`,
     assertMovable: vi.fn(async () => {}),
     trash: vi.fn(async () => {}),
+    destinationIsOwnerOnly: vi.fn<(url: string) => Promise<boolean>>(async () => true),
+    noteTreatedAsPrivate: vi.fn<(url: string) => Promise<boolean>>(async () => true),
   };
   const convert = createNoteDocsConverter();
   const documents = () =>
@@ -263,4 +270,83 @@ it("updates recovered Docs to include note edits made after a lost publication r
   expect(result.data.body).toContain("Recent body");
   expect(f.documents()).toHaveLength(1);
   expect(f.images()).toHaveLength(2);
+});
+
+const writes = (f: Awaited<ReturnType<typeof fixture>>) =>
+  f.http.mock.calls.filter(([, init]) => ["PUT", "POST", "PATCH"].includes(init?.method ?? ""));
+
+it("proceeds only after the owner-only verifier approves the Docs folder and the new assets (D1)", async () => {
+  const f = await fixture();
+  await f.convert(note, "copy", f.dependencies);
+  const checked = f.dependencies.destinationIsOwnerOnly.mock.calls.map(([url]) => url);
+  expect(checked[0]).toMatch(/^https:\/\/pod\.example\/docs\/[^/]+\.ttl$/);
+  expect(checked.some((url) => /\/docs\/[^/]+\/assets\/$/.test(url))).toBe(true);
+});
+
+it.each([
+  ["a shared or public Docs folder", async () => false],
+  ["an unverifiable Docs folder", async () => Promise.reject(new Error("no policy"))],
+])("refuses %s for a private note and writes nothing (D1)", async (_name, verdict) => {
+  for (const mode of ["copy", "move"] as const) {
+    const f = await fixture();
+    f.dependencies.destinationIsOwnerOnly.mockImplementation(verdict);
+    await expect(f.convert(note, mode, f.dependencies)).rejects.toBeInstanceOf(
+      CopyToDocsPrivacyError,
+    );
+    expect(writes(f)).toEqual([]);
+    expect(f.documents()).toEqual([]);
+    expect(f.images()).toEqual([]);
+    expect(f.dependencies.trash).not.toHaveBeenCalled();
+  }
+});
+
+it("refuses when the note's own exposure cannot be verified, but allows an already shared note (D1)", async () => {
+  const f = await fixture();
+  f.dependencies.destinationIsOwnerOnly.mockResolvedValue(false);
+  f.dependencies.noteTreatedAsPrivate.mockRejectedValue(new Error("unreadable"));
+  await expect(f.convert(note, "copy", f.dependencies)).rejects.toBeInstanceOf(
+    CopyToDocsPrivacyError,
+  );
+  expect(writes(f)).toEqual([]);
+  f.dependencies.noteTreatedAsPrivate.mockResolvedValue(false);
+  await f.convert(note, "copy", f.dependencies);
+  expect(f.documents()).toHaveLength(1);
+});
+
+it("never writes ACLs to make a destination pass (D1)", async () => {
+  const f = await fixture();
+  f.dependencies.destinationIsOwnerOnly.mockResolvedValue(false);
+  await expect(f.convert(note, "copy", f.dependencies)).rejects.toThrow();
+  expect(f.http.mock.calls.some(([url]) => /\.(acl|acr)$/.test(String(url)))).toBe(false);
+});
+
+it("caps image bytes while streaming, before they are buffered (D3)", async () => {
+  const declared = new Response("x", { headers: { "content-length": "100" } });
+  await expect(readCappedImage(declared, 10)).rejects.toThrow("under 20 MB");
+  let pulled = 0;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulled++;
+      controller.enqueue(new Uint8Array(8));
+    },
+  });
+  await expect(readCappedImage(new Response(stream), 20)).rejects.toThrow("under 20 MB");
+  expect(pulled).toBeLessThan(10);
+  const ok = await readCappedImage(
+    new Response("abc", { headers: { "content-type": "image/png" } }),
+    10,
+  );
+  expect(ok.size).toBe(3);
+  expect(ok.type).toBe("image/png");
+});
+
+it("refuses an over-cap source image without publishing (D3)", async () => {
+  const f = await fixture();
+  f.dependencies.fetchImpl = vi.fn<typeof fetch>(async (input, init) =>
+    String(input) === SOURCE && !init?.method
+      ? new Response("x", { headers: { "content-length": String(21 * 1024 * 1024) } })
+      : f.pod.fetch(input, init),
+  );
+  await expect(f.convert(note, "copy", f.dependencies)).rejects.toThrow("under 20 MB");
+  expect(f.documents()).toEqual([]);
 });

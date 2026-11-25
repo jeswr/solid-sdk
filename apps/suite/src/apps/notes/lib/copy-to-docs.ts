@@ -4,7 +4,7 @@ import { refuseRedirects } from "@jeswr/guarded-fetch";
 import { uploadPodImage } from "../../docs/lib/editor/image-upload";
 import { buildDocument, parseDocument } from "../../docs/lib/model/document";
 import { ResourceWriteError } from "../../docs/lib/model/errors";
-import { docContainerUrls, isDirectChild } from "../../docs/lib/model/layout";
+import { DOCS_SLUG, docContainerUrls, isDirectChild } from "../../docs/lib/model/layout";
 import { writeRdf } from "../../docs/lib/model/rdf-io";
 import {
   type CreatePreparation,
@@ -12,16 +12,43 @@ import {
   type StoredDocument,
 } from "../../docs/lib/model/store";
 import { PREFIXES } from "../../docs/lib/model/vocab";
-import { noteImageSource, notesMediaContainer } from "./images";
+import { ByteLimitError, noteImageSource, notesMediaContainer, readCappedBlob } from "./images";
 import type { StoredNote } from "./model/store";
 
 export type NoteDocsMode = "copy" | "move";
+/** Raised before anything is written when the Docs destination could expose private text. */
+export class CopyToDocsPrivacyError extends Error {
+  constructor() {
+    super(
+      "Docs can't be confirmed as private, so this note wasn't copied. Make your Docs folder private (only you) and try again.",
+    );
+    this.name = "CopyToDocsPrivacyError";
+  }
+}
+
+/** Matches validateImage's limit; enforced while reading, before the bytes are buffered. */
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+
+/** Read an image body through the 20 MB byte cap. */
+export async function readCappedImage(response: Response, max = MAX_IMAGE_BYTES): Promise<Blob> {
+  try {
+    return await readCappedBlob(response, max);
+  } catch (error) {
+    if (error instanceof ByteLimitError) throw new Error("Images must be under 20 MB");
+    throw error;
+  }
+}
+
 interface Dependencies {
   fetchImpl: typeof fetch;
   podRoot: string;
   webId: string;
   assertMovable: (note: StoredNote) => Promise<void>;
   trash: (note: StoredNote) => Promise<unknown>;
+  /** True only when the shared owner-only verifier proves the destination owner-only. */
+  destinationIsOwnerOnly: (url: string) => Promise<boolean>;
+  /** False only when the shared verifier proves the note is already shared; unverifiable means true. */
+  noteTreatedAsPrivate: (url: string) => Promise<boolean>;
 }
 interface Upload {
   id: string;
@@ -65,9 +92,25 @@ export function createNoteDocsConverter() {
     mode: NoteDocsMode,
     dependencies: Dependencies,
   ): Promise<StoredDocument> {
-    const { podRoot, webId, assertMovable, trash } = dependencies;
+    const { podRoot, webId, assertMovable, trash, destinationIsOwnerOnly, noteTreatedAsPrivate } =
+      dependencies;
     const fetchImpl = refuseRedirects(dependencies.fetchImpl);
     if (mode === "move") await assertMovable(note);
+    // A private note's text and images may only go to a verified owner-only destination. Never
+    // loosen an ACL to pass this: refuse. An unverifiable note or destination counts as exposed;
+    // only a note that is verifiably not owner-only (already shared) may go to a looser Docs.
+    let noteIsPrivate: boolean | undefined;
+    const requireOwnerOnly = async (url: string) => {
+      let destination = false;
+      try {
+        destination = await destinationIsOwnerOnly(url);
+      } catch {
+        // An unverifiable destination is a refusal.
+      }
+      if (destination) return;
+      noteIsPrivate ??= await noteTreatedAsPrivate(note.url).catch(() => true);
+      if (noteIsPrivate) throw new CopyToDocsPrivacyError();
+    };
     const key = JSON.stringify([webId, podRoot, note.url]);
     let conversion = conversions.get(key);
     if (!conversion) {
@@ -77,6 +120,7 @@ export function createNoteDocsConverter() {
     const { uploads } = conversion;
     let preparedBody = note.body;
     const prepare = async (assets: string) => {
+      await requireOwnerOnly(assets);
       const body = await copyNoteImages(note.body, podRoot, async (source) => {
         const uploadKey = JSON.stringify([assets, source]);
         let upload = uploads.get(uploadKey);
@@ -88,7 +132,7 @@ export function createNoteDocsConverter() {
           if (!upload.file) {
             const response = await fetchImpl(source);
             if (!response.ok) throw new Error("Image unavailable");
-            upload.file = await response.blob();
+            upload.file = await readCappedImage(response);
           }
           upload.src = await uploadPodImage(upload.file, assets, fetchImpl, upload.id);
         }
@@ -130,6 +174,8 @@ export function createNoteDocsConverter() {
       }
     }
     if (!conversion.document) {
+      // Check the Docs folder itself before reserving anything under it.
+      await requireOwnerOnly(`${new URL(DOCS_SLUG, podRoot).href}${crypto.randomUUID()}.ttl`);
       if (!conversion.preparation) conversion.preparation = { prepare };
       conversion.preparation.prepare = prepare;
       conversion.document = await createDocsStore({ fetchImpl, podRoot, webId }).create(

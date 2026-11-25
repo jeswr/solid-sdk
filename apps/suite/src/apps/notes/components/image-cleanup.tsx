@@ -13,7 +13,12 @@ import {
 import { ImageMinus } from "lucide-react";
 import { useRef, useState } from "react";
 import { useConnectionState } from "@/shell/sync/connection-state";
-import type { NoteImageCleanupPlan, NoteImageCleanupResult } from "../lib/image-cleanup";
+import {
+  ImageCleanupBlockedError,
+  type NoteImageCleanupPlan,
+  type NoteImageCleanupResult,
+} from "../lib/image-cleanup";
+import { getPendingDrafts } from "../state/draft-registry";
 import { useNotesContext } from "../state/notes-context";
 
 type Phase =
@@ -21,28 +26,41 @@ type Phase =
   | { kind: "review"; plan: NoteImageCleanupPlan }
   | { kind: "deleting" }
   | ({ kind: "done" } & NoteImageCleanupResult)
-  | { kind: "error"; deleting: boolean };
+  | { kind: "error"; deleting: boolean; reason?: string };
 
 const imageCount = (count: number, unused = false) =>
   `${count} ${unused ? "unused " : ""}${count === 1 ? "image" : "images"}`;
 
 export function ImageCleanup() {
-  const { store } = useNotesContext();
+  const { store, session } = useNotesContext();
   const online = useConnectionState() === "online";
   const connection = useRef(online);
   connection.current = online;
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>({ kind: "scanning" });
   const request = useRef(0);
+  // In-memory drafts of this tab, including any whose durable copy could not be written.
+  const unsaved = () =>
+    getPendingDrafts(session.webId)
+      .all()
+      .flatMap(({ note, draft }) => [
+        draft.body,
+        note.body,
+        ...note.revisions.map((revision) => revision.body),
+      ]);
+  const reasonOf = (error: unknown) =>
+    error instanceof ImageCleanupBlockedError ? error.message : undefined;
   const busy = phase.kind === "scanning" || phase.kind === "deleting";
   const scan = async () => {
     const current = ++request.current;
     setPhase({ kind: "scanning" });
     try {
-      const plan = await store.imageCleanup.scan();
+      const plan = await store.imageCleanup.scan(unsaved);
       if (current === request.current) setPhase({ kind: "review", plan });
-    } catch {
-      if (current === request.current) setPhase({ kind: "error", deleting: false });
+    } catch (error) {
+      const reason = reasonOf(error);
+      if (current === request.current)
+        setPhase({ kind: "error", deleting: false, ...(reason && { reason }) });
     }
   };
   const remove = async (plan: NoteImageCleanupPlan) => {
@@ -51,10 +69,12 @@ export function ImageCleanup() {
       const result = await store.imageCleanup.delete(
         plan,
         () => connection.current && navigator.onLine,
+        unsaved,
       );
       setPhase({ kind: "done", ...result });
-    } catch {
-      setPhase({ kind: "error", deleting: true });
+    } catch (error) {
+      const reason = reasonOf(error);
+      setPhase({ kind: "error", deleting: true, ...(reason && { reason }) });
     }
   };
   return (
@@ -79,8 +99,9 @@ export function ImageCleanup() {
       <DialogContent className="notes-image-cleanup" showCloseButton={phase.kind !== "deleting"}>
         <DialogTitle>Clean up unused images</DialogTitle>
         <DialogDescription>
-          Check images against all notes, including Archive, Trash and note history. Review the size
-          before permanently deleting unused images.
+          Check images against all notes, including Archive, Trash, note history, unsaved drafts and
+          Docs history. Images from the last day are always kept. Review the size before permanently
+          deleting unused images.
         </DialogDescription>
         <div aria-live="polite" aria-busy={online && busy}>
           {phase.kind === "done" ? (
@@ -102,11 +123,15 @@ export function ImageCleanup() {
               {phase.plan.images.length === 0
                 ? "No unused images found."
                 : `${imageCount(phase.plan.images.length, true)} · ${formatBytes(phase.plan.totalBytes)}. Nothing has been deleted.`}
+              {phase.plan.recent
+                ? ` ${imageCount(phase.plan.recent)} added or changed in the last day ${phase.plan.recent === 1 ? "was" : "were"} kept.`
+                : ""}
             </p>
           ) : phase.kind === "deleting" ? (
             <p role="status">Rechecking notes and deleting unused images…</p>
           ) : (
             <p role="alert">
+              {phase.reason ? `${phase.reason} ` : ""}
               {phase.deleting
                 ? "Couldn't safely recheck every note. Nothing was deleted. Deleted 0 images. Kept 0 images. Failed 0 images. Try scanning again."
                 : "Couldn't safely check every note and image. Nothing was deleted. Try scanning again."}

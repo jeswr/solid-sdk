@@ -14,7 +14,12 @@ const mocks = vi.hoisted(() => ({
   context: {} as Record<string, unknown>,
   push: vi.fn(),
   createDoc: vi.fn(),
-  toast: { error: vi.fn(), success: vi.fn() },
+  toast: { error: vi.fn(), success: vi.fn(), dismiss: vi.fn() },
+  owner: {
+    destination: true as boolean,
+    note: { private: true } as { private: boolean; reasons?: { reason: string }[] },
+    destinations: [] as string[],
+  },
   editor: undefined as Editor | undefined,
 }));
 vi.mock("../src/apps/notes/state/notes-context", () => ({ useNotesContext: () => mocks.context }));
@@ -40,6 +45,18 @@ vi.mock("../src/apps/docs/lib/model/store", () => ({
       };
     },
   }),
+}));
+vi.mock("@jeswr/storage-client", async (original) => ({
+  ...(await original<typeof import("@jeswr/storage-client")>()),
+  createPodClient: async () => ({ storage: {} }),
+}));
+vi.mock("@jeswr/pod-access", async (original) => ({
+  ...(await original<typeof import("@jeswr/pod-access")>()),
+  checkOwnerOnly: async () => mocks.owner.note,
+  createOwnerOnlyDestinationVerifier: () => async (url: string) => {
+    mocks.owner.destinations.push(url);
+    return mocks.owner.destination;
+  },
 }));
 vi.mock("@jeswr/suite-ui", async (original) => ({
   ...(await original<typeof import("@jeswr/suite-ui")>()),
@@ -106,6 +123,9 @@ async function fill(label: string, value: string) {
 afterEach(() => vi.useRealTimers());
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.owner.destination = true;
+  mocks.owner.note = { private: true };
+  mocks.owner.destinations = [];
   mocks.createDoc.mockReset();
   localStorage.clear();
   const save = vi.fn(async (baseline, input) => ({ ...baseline, ...input, etag: '"v2"' }));
@@ -771,4 +791,45 @@ it.each([
   expect(link?.textContent).toBe("Open document");
   expect(link?.getAttribute("href")).toBe(`/docs/d/${encodeRef(document.url)}`);
   if (surface === "editor") expect(mocks.editor?.isEditable).toBe(true);
+});
+
+it.each([
+  "editor",
+  "card",
+])("refuses Copy to Docs from the %s with a clear message when Docs is not owner-only, writing nothing (D1)", async (surface) => {
+  mocks.owner.destination = false;
+  mocks.context.attempt = (work: () => Promise<unknown>) => {
+    void work();
+  };
+  await mount(h(surface === "editor" ? NoteDialog : NoteCard, { note: note() }));
+  await openDocs("Copy to Docs");
+  expect(mocks.createDoc).not.toHaveBeenCalled();
+  expect(mocks.toast.success).not.toHaveBeenCalled();
+  expect(mocks.toast.error).toHaveBeenCalledWith(
+    expect.stringContaining("can't be confirmed as private"),
+  );
+  expect(mocks.context.move).not.toHaveBeenCalled();
+  if (surface === "editor") expect(mocks.editor?.isEditable).toBe(true);
+});
+
+it("copies a private note when Docs is owner-only, and a shared note into a looser Docs (D1)", async () => {
+  mocks.createDoc.mockResolvedValue(createdDocument());
+  mocks.context.attempt = (work: () => Promise<unknown>) => {
+    void work();
+  };
+  mocks.owner.destination = false;
+  mocks.owner.note = { private: false, reasons: [{ reason: "non-owner" }] };
+  await mount(h(NoteDialog, { note: note() }));
+  await openDocs("Copy to Docs");
+  expect(mocks.createDoc).toHaveBeenCalledOnce();
+});
+
+it("shows one More note actions menu in the editor, holding history and the Docs actions (M1)", async () => {
+  await mount(h(NoteDialog, { note: note() }));
+  const menus = [...document.querySelectorAll("button")].filter(
+    (element) => element.getAttribute("aria-label") === "More note actions",
+  );
+  expect(menus).toHaveLength(1);
+  await click(menus[0] as HTMLButtonElement);
+  for (const label of ["Version history", "Copy to Docs", "Move to Docs"]) button(label);
 });

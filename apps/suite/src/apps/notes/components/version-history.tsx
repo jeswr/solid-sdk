@@ -167,3 +167,11 @@ export function NoteVersionHistory({
     </Dialog>
   );
 }
+
+/** The Docs model rejects titles over 200 characters; an over-long revision keeps the current one. */
+export const MAX_NOTE_TITLE = 200;
+export function restoredTitle(revisionTitle: string | undefined, current: string): string {
+  return revisionTitle !== undefined && revisionTitle.length <= MAX_NOTE_TITLE
+    ? revisionTitle
+    : current;
+}

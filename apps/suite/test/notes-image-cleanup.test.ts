@@ -2,10 +2,14 @@
 // AUTHORED-BY Codex GPT-6
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { buildDocument } from "../src/apps/docs/lib/model/document";
 import { serializeTurtle, writeRdf } from "../src/apps/docs/lib/model/rdf-io";
-import { NoteImageCleanup, planUnusedNoteImages } from "../src/apps/notes/lib/image-cleanup";
+import {
+  ImageCleanupBlockedError,
+  NoteImageCleanup,
+  planUnusedNoteImages,
+} from "../src/apps/notes/lib/image-cleanup";
 import { buildNote, type Note, parseNote } from "../src/apps/notes/lib/model/note";
 import { createNotesStore } from "../src/apps/notes/lib/model/store";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -68,10 +72,8 @@ it.each([
   expect(planUnusedNoteImages(POD, [url], [])).toEqual([]);
 });
 
-it("fails closed for unreadable notes, unparseable references and absent DOM support", () => {
+it("fails closed for unreadable notes and absent DOM support", () => {
   expect(() => planUnusedNoteImages(POD, [IMAGE], [undefined])).toThrow("could not be read");
-  expect(() => planUnusedNoteImages(POD, [IMAGE], [note('<img src="http://[">')])).toThrow();
-  expect(() => planUnusedNoteImages(POD, [IMAGE], [note('<img src="media/bad%xx">')])).toThrow();
   const browser = window;
   try {
     vi.stubGlobal("window", undefined);
@@ -81,7 +83,23 @@ it("fails closed for unreadable notes, unparseable references and absent DOM sup
   }
 });
 
+const DAY = 24 * 60 * 60 * 1000;
+afterEach(() => vi.useRealTimers());
+it("never blocks on a malformed img src, but a malformed src naming an image protects it (C4)", () => {
+  const bad = [note('<img src="http://["><img src="media/bad%xx">')];
+  expect(planUnusedNoteImages(POD, [IMAGE], bad)).toEqual([IMAGE]);
+  expect(
+    planUnusedNoteImages(POD, [IMAGE], [note('<img src="http://[/notes/media/bird.png">')]),
+  ).toEqual([]);
+  expect(planUnusedNoteImages(POD, [IMAGE], [note('<img src="media/bird.png%xx">')], [])).toEqual(
+    [],
+  );
+});
+
 async function fixture() {
+  // Images are written two days in the past, so the 24 hour grace period has expired.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const present = Date.now();
   const pod = createDemoPod({ root: POD });
   const override = vi.fn<(url: string, init?: RequestInit) => Promise<Response | undefined>>();
   const http = vi.fn<typeof fetch>(
@@ -89,9 +107,15 @@ async function fixture() {
   );
   const store = createNotesStore({ fetch: http, podRoot: POD, webId: `${POD}#me` });
   await store.create({ title: "Plain note" });
-  const put = async (url: string, body = "pixels", type = "image/png") => {
-    await pod.fetch(url, { method: "PUT", headers: { "content-type": type }, body });
+  const putAt = async (age: number, url: string, body = "pixels", type = "image/png") => {
+    vi.setSystemTime(present - age);
+    try {
+      await pod.fetch(url, { method: "PUT", headers: { "content-type": type }, body });
+    } finally {
+      vi.setSystemTime(present);
+    }
   };
+  const put = (url: string, body = "pixels", type = "image/png") => putAt(2 * DAY, url, body, type);
   await put(IMAGE);
   const addNote = async (url: string, body: string) => {
     await writeRdf(url, buildNote(url, { title: "", body }), {
@@ -100,7 +124,7 @@ async function fixture() {
     });
   };
   http.mockClear();
-  return { pod, http, override, store, put, addNote };
+  return { pod, http, override, store, put, putAt, addNote };
 }
 const deletes = (http: ReturnType<typeof vi.fn<typeof fetch>>) =>
   http.mock.calls.filter(([, init]) => init?.method === "DELETE");
@@ -111,6 +135,7 @@ it("dry-runs count/size without mutations, then conditionally deletes an unrefer
   expect(plan).toEqual({
     images: [{ url: IMAGE, bytes: 6, etag: expect.stringMatching(/^"/) }],
     totalBytes: 6,
+    recent: 0,
   });
   expect(deletes(http)).toEqual([]);
   http.mockClear();
@@ -126,7 +151,8 @@ it("dry-runs count/size without mutations, then conditionally deletes an unrefer
       },
     ],
   ]);
-  expect(http.mock.calls.filter(([url]) => String(url).endsWith("/"))).toHaveLength(5);
+  // notes/media/, notes/, archive/, .trash/, docs/ and pod-docs/ plus the pod-level Drive trash.
+  expect(http.mock.calls.filter(([url]) => String(url).endsWith("/"))).toHaveLength(6);
   for (const [, init] of http.mock.calls) expect(init?.redirect).toBe("manual");
 });
 
@@ -140,7 +166,7 @@ it("reads active, archive and trash notes afresh, preserving images shared by co
   await addNote(`${POD}notes/second-copy.ttl`, img());
   await addNote(`${POD}notes/archive/archived.ttl`, img(archived));
   await addNote(`${POD}notes/.trash/trashed.ttl`, img(trashed));
-  expect(await store.imageCleanup.scan()).toEqual({ images: [], totalBytes: 0 });
+  expect(await store.imageCleanup.scan()).toEqual({ images: [], totalBytes: 0, recent: 0 });
   expect(deletes(http)).toEqual([]);
 });
 
@@ -214,7 +240,7 @@ it.each([404, 410])("treats a missing collection as empty (%s)", async (status) 
   override.mockImplementation(async (url) =>
     url.endsWith("/") ? new Response(null, { status }) : undefined,
   );
-  expect(await store.imageCleanup.scan()).toEqual({ images: [], totalBytes: 0 });
+  expect(await store.imageCleanup.scan()).toEqual({ images: [], totalBytes: 0, recent: 0 });
 });
 
 it.each([
@@ -262,7 +288,12 @@ it.each([
   const { store, override } = await fixture();
   override.mockImplementation(async (_url, init) =>
     init?.method === "HEAD"
-      ? new Response(null, { headers: length === null ? {} : { "content-length": length } })
+      ? new Response(null, {
+          headers: {
+            "last-modified": "Mon, 01 Jan 2024 00:00:00 GMT",
+            ...(length === null ? {} : { "content-length": length }),
+          },
+        })
       : undefined,
   );
   await expect(store.imageCleanup.scan()).rejects.toThrow("size could not be checked");
@@ -334,10 +365,15 @@ it("rescans every note once before the batch and only deletes images from the pl
   http.mockClear();
   expect(await store.imageCleanup.delete(plan)).toEqual({ deleted: 2, kept: 0, failed: 0 });
   expect(deletes(http).map(([url]) => url)).toEqual(plan.images.map((image) => image.url));
-  const reads = http.mock.calls.filter(([, init]) => init?.method !== "DELETE");
-  expect(reads).toHaveLength(8);
+  // The complete rescan comes first (8 listings and notes, plus the pod-level Drive trash);
+  // each image is then re-checked with a HEAD immediately before its own DELETE.
+  const reads = http.mock.calls.filter(
+    ([, init]) => !["DELETE", "HEAD"].includes(init?.method ?? ""),
+  );
+  expect(reads).toHaveLength(9);
   expect(reads.filter(([url]) => !String(url).endsWith("/"))).toEqual(noteReads);
-  expect(http.mock.calls.slice(0, 8)).toEqual(reads);
+  expect(http.mock.calls.slice(0, 9)).toEqual(reads);
+  expect(http.mock.calls.filter(([, init]) => init?.method === "HEAD")).toHaveLength(2);
   for (const [url, init] of deletes(http)) {
     expect(init?.headers).toEqual({
       "if-match": plan.images.find((image) => image.url === url)?.etag,
@@ -533,4 +569,163 @@ it("keeps images that Docs converted from notes still reference, and fails close
     url === doc ? new Response(null, { status: 403 }) : undefined,
   );
   await expect(store.imageCleanup.scan()).rejects.toThrow();
+});
+
+const urls = (plan: { images: readonly { url: string }[] }) =>
+  plan.images.map((image) => image.url);
+
+it("never offers an image changed in the last 24 hours, or one with no usable Last-Modified (C1b)", async () => {
+  const { store, put, putAt, override } = await fixture();
+  await putAt(60 * 60 * 1000, `${MEDIA}fresh.png`);
+  await putAt(DAY - 60_000, `${MEDIA}almost.png`);
+  await put(`${MEDIA}old.png`);
+  const plan = await store.imageCleanup.scan();
+  expect(urls(plan).sort()).toEqual([IMAGE, `${MEDIA}old.png`].sort());
+  expect(plan.recent).toBe(2);
+  for (const header of [null, "not a date"]) {
+    override.mockImplementation(async (_url, init) =>
+      init?.method === "HEAD"
+        ? new Response(null, {
+            headers: {
+              "content-length": "6",
+              ...(header === null ? {} : { "last-modified": header }),
+            },
+          })
+        : undefined,
+    );
+    expect(await store.imageCleanup.scan()).toEqual({ images: [], totalBytes: 0, recent: 4 });
+  }
+});
+
+it("keeps images that an unsaved draft in this or any other tab references (C1a)", async () => {
+  const { store, put } = await fixture();
+  await put(`${MEDIA}other-tab.png`);
+  await put(`${MEDIA}memory.png`);
+  localStorage.setItem(
+    `suite.notes.pending-drafts.${POD}#me:${POD}notes/x.ttl:another-tab`,
+    JSON.stringify({ snapshot: { draft: { body: `<img src="${IMAGE}">` } } }),
+  );
+  localStorage.setItem("notes-capture-draft:tab", `<img src='${MEDIA}other-tab.png'>`);
+  try {
+    expect(urls(await store.imageCleanup.scan(() => [`<img src="${MEDIA}memory.png">`]))).toEqual(
+      [],
+    );
+    localStorage.clear();
+    expect(
+      urls(await store.imageCleanup.scan(() => [`<img src="${MEDIA}memory.png">`])).sort(),
+    ).toEqual([IMAGE, `${MEDIA}other-tab.png`].sort());
+  } finally {
+    localStorage.clear();
+  }
+});
+
+it("fails closed when unsaved drafts cannot be read", async () => {
+  const { store } = await fixture();
+  localStorage.setItem("suite.notes.pending-drafts.x", "y");
+  const getItem = vi
+    .spyOn(Object.getPrototypeOf(localStorage), "getItem")
+    .mockImplementation(() => {
+      throw new Error("blocked");
+    });
+  try {
+    await expect(store.imageCleanup.scan()).rejects.toThrow("Unsaved drafts couldn't be checked");
+  } finally {
+    getItem.mockRestore();
+    localStorage.clear();
+  }
+});
+
+it("re-checks drafts and age immediately before each delete (C1c)", async () => {
+  const { store, put, http, override } = await fixture();
+  await put(`${MEDIA}second.png`);
+  await put(`${MEDIA}third.png`);
+  const plan = await store.imageCleanup.scan();
+  expect(plan.images).toHaveLength(3);
+  http.mockClear();
+  // A draft starts using the second image after the batch's rescan.
+  let calls = 0;
+  override.mockImplementation(async (url, init) => {
+    // The third image was just replaced by a fresh upload at the same URL.
+    if (init?.method === "HEAD" && url === `${MEDIA}third.png`)
+      return new Response(null, {
+        headers: { etag: '"x"', "last-modified": new Date().toUTCString() },
+      });
+    return undefined;
+  });
+  const result = await store.imageCleanup.delete(
+    plan,
+    () => true,
+    () => {
+      calls++;
+      // Calls 1 is the batch rescan; each image then checks once more.
+      return calls >= 3 ? [`<img src="${MEDIA}second.png">`] : [];
+    },
+  );
+  expect(result).toEqual({ deleted: 1, kept: 2, failed: 0 });
+  expect(deletes(http).map(([url]) => url)).toEqual([IMAGE]);
+});
+
+it("treats a missing notes/ folder next to existing media as a fault, not as no notes (C3)", async () => {
+  const { store, override } = await fixture();
+  override.mockImplementation(async (url) =>
+    url === `${POD}notes/` ? new Response(null, { status: 404 }) : undefined,
+  );
+  await expect(store.imageCleanup.scan()).rejects.toThrow("Notes folder couldn't be found");
+  await expect(store.imageCleanup.scan()).rejects.toBeInstanceOf(ImageCleanupBlockedError);
+});
+
+it("names the file that blocks clean-up when a note cannot be read (C4)", async () => {
+  const { pod } = await fixture();
+  const cleanup = new NoteImageCleanup({
+    podRoot: POD,
+    fetch: pod.fetch,
+    readNote: async () => undefined,
+  });
+  await expect(cleanup.scan()).rejects.toThrow(/Check or remove notes\/plain-note\.ttl/);
+});
+
+async function withDocsHistory(path: string, body: string) {
+  const f = await fixture();
+  const doc = `${POD}docs/history.ttl`;
+  await writeRdf(doc, buildDocument(doc, { title: "History", body: "<p>now</p>" }), {
+    createOnly: true,
+    fetchImpl: f.pod.fetch,
+  });
+  await f.pod.fetch(path, {
+    method: "PUT",
+    headers: { "content-type": "application/octet-stream" },
+    body,
+  });
+  return f;
+}
+
+it.each([
+  ["a Docs version snapshot", `${POD}docs/history/versions/v1.bin`],
+  ["a Docs update log entry", `${POD}docs/history/updates/u1.bin`],
+  ["Drive's trash", `${POD}.trash/abc/old-note.ttl`],
+])("keeps an image named in %s (C2)", async (_name, path) => {
+  const { store } = await withDocsHistory(path, `\u0001\u0002 ${MEDIA}bird.png \u0003`);
+  expect(urls(await store.imageCleanup.scan())).toEqual([]);
+});
+
+it("offers the image when Docs history does not mention it, and fails closed when that history cannot be read (C2)", async () => {
+  const { store, override } = await withDocsHistory(
+    `${POD}docs/history/versions/v1.bin`,
+    "other.png",
+  );
+  expect(urls(await store.imageCleanup.scan())).toEqual([IMAGE]);
+  override.mockImplementation(async (url) =>
+    url === `${POD}docs/history/versions/v1.bin` ? new Response(null, { status: 403 }) : undefined,
+  );
+  await expect(store.imageCleanup.scan()).rejects.toThrow("couldn't be read");
+  override.mockImplementation(async (url) =>
+    url === `${POD}docs/history/versions/` ? new Response(null, { status: 500 }) : undefined,
+  );
+  await expect(store.imageCleanup.scan()).rejects.toThrow("couldn't be checked for images");
+  override.mockImplementation(async (url) =>
+    url === `${POD}docs/history/versions/v1.bin`
+      ? new Response("x", { headers: { "content-length": String(9 * 1024 * 1024) } })
+      : undefined,
+  );
+  await expect(store.imageCleanup.scan()).rejects.toThrow("too much Docs history");
 });

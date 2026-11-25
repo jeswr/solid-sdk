@@ -11,7 +11,7 @@ import {
   within,
 } from "../../../packages/suite-ui/node_modules/@testing-library/react";
 import { NoteDialog } from "../src/apps/notes/components/note-dialog";
-import { NoteVersionHistory } from "../src/apps/notes/components/version-history";
+import { NoteVersionHistory, restoredTitle } from "../src/apps/notes/components/version-history";
 import type { StoredNote } from "../src/apps/notes/lib/model/store";
 import { createNotesStore } from "../src/apps/notes/lib/model/store";
 import { getPendingDrafts } from "../src/apps/notes/state/draft-registry";
@@ -314,4 +314,26 @@ it("shows an empty history and ignores a duplicate confirmation while restoring"
   await waitFor(() =>
     expect(screen.queryByRole("dialog", { name: "Restore this version?" })).toBeNull(),
   );
+});
+
+it("restores a revision whose title is over the 200 character limit, keeping the current title (F5)", async () => {
+  const revisions = stored.revisions.map((revision) =>
+    revision.label === "First draft" ? { ...revision, title: "x".repeat(300) } : revision,
+  );
+  render(<NoteDialog note={{ ...stored, revisions }} />);
+  await openHistory();
+  await selectFirst();
+  fireEvent.click(button("Restore this version"));
+  fireEvent.click(button("Restore"));
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Version history" })).toBeNull());
+  expect(screen.queryByText("Couldn't restore this version")).toBeNull();
+  const saved = await store.read(stored.url);
+  expect(saved).toMatchObject({ title: "Current title", body: "<p>Original body</p>" });
+  expect(getPendingDrafts(webId).get(stored.url)).toBeUndefined();
+});
+
+it("picks a revision title only when it fits (F5)", () => {
+  expect(restoredTitle("x".repeat(200), "Now")).toBe("x".repeat(200));
+  expect(restoredTitle("x".repeat(201), "Now")).toBe("Now");
+  expect(restoredTitle(undefined, "Now")).toBe("Now");
 });
