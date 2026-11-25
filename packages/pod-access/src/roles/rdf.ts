@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 // Adapted from Drive sharing/{rdf,sharing,apply}.ts (Codex GPT-6.1-Sol / Codex),
 // origin/main and claude/project-thread-okz5l7. No dependency on the application.
 import type { DatasetCore, Term } from "@rdfjs/types";
@@ -342,13 +343,18 @@ export function materialize(
   }
   return result;
 }
-/** Split changed WAC principals from shared authorizations; preserve all other targets/defaults. */
+/**
+ * Split changed WAC principals from shared authorizations; preserve all other targets/defaults.
+ * With `members`, `memberModes` (default `modes`) is the principal's contents access: equal
+ * modes share one rule, different modes get a resource-only and a default-only rule.
+ */
 export function replaceWac(
   dataset: Store,
   resource: string,
   agent: AgentRef,
   modes: readonly Mode[],
   members = false,
+  memberModes: readonly Mode[] = modes,
 ): void {
   const selector =
     agent.type === "webid" ? "agent" : agent.type === "group" ? "agentGroup" : "agentClass";
@@ -375,13 +381,22 @@ export function replaceWac(
     }
     copy.values(ACL + selector).delete(principal);
   }
-  if (modes.length) {
+  const same =
+    modes.length === memberModes.length && modes.every((mode) => memberModes.includes(mode));
+  const rules: [readonly Mode[], string[]][] =
+    !members || same
+      ? [[modes, ["accessTo", ...(members ? ["default"] : [])]]]
+      : [
+          [modes, ["accessTo"]],
+          [memberModes, ["default"]],
+        ];
+  for (const [ruleModes, scopes] of rules) {
+    if (!ruleModes.length) continue;
     const rule = properties(DataFactory.blankNode(), dataset);
     rule.add(`${RDF}type`, `${ACL}Authorization`);
-    rule.add(`${ACL}accessTo`, resource);
-    if (members) rule.add(`${ACL}default`, resource);
+    for (const scope of scopes) rule.add(ACL + scope, resource);
     rule.add(ACL + selector, principal);
-    for (const mode of modes) rule.add(`${ACL}mode`, modeIri(mode));
+    for (const mode of ruleModes) rule.add(`${ACL}mode`, modeIri(mode));
   }
 }
 /** Detach only resource and own ACR controls; defaults and policy metadata remain intact. */
@@ -497,15 +512,21 @@ function acpResourceRoot(
     "The access control resource's canonical subject is used by other statements, so ESS would not read new grants written elsewhere",
   );
 }
-/** Write the unconditional subset using the trusted dialect's modes and management. */
+/**
+ * Write the unconditional subset using the trusted dialect's modes and management. `members`
+ * also applies each control to the folder's members; `"only"` applies it to the members alone
+ * (CSS dialect only: ESS own-ACR management has no members-only form).
+ */
 export function appendAcp(
   dataset: Store,
   resource: string,
   url: string,
   rows: Iterable<{ agent: AgentRef; modes: Set<Mode> }>,
   implementation: PodImplementation,
-  members = false,
+  members: boolean | "only" = false,
 ): void {
+  if (members === "only" && implementation === "ess")
+    throw roleError("unsupported", url, "ESS management has no members-only form");
   const root = acpResourceRoot(dataset, resource, url, implementation);
   root.add(`${RDF}type`, `${ACP}AccessControlResource`);
   root.add(`${ACP}resource`, resource);
@@ -527,7 +548,7 @@ export function appendAcp(
     policy.terms(`${ACP}allOf`).add(matcher as Term);
     const control = properties(DataFactory.blankNode(), dataset);
     control.terms(`${ACP}apply`).add(policy as Term);
-    root.terms(`${ACP}accessControl`).add(control as Term);
+    if (members !== "only") root.terms(`${ACP}accessControl`).add(control as Term);
     if (members) root.terms(`${ACP}memberAccessControl`).add(control as Term);
     const resourceModes = new Set(row.modes);
     if (implementation === "ess") resourceModes.delete("control");
@@ -541,8 +562,13 @@ export function appendAcp(
       root.terms(`${ACP}access`).add(management as Term);
     }
   }
-  // Detached policy/matcher RDF must not acquire meaning on a later read. Keep
-  // annotations, and retain semantic nodes still shared by member/other controls.
+  pruneAcp(dataset);
+}
+/**
+ * Detached policy/matcher RDF must not acquire meaning on a later read. Keep annotations, and
+ * retain semantic nodes still shared by member/other controls.
+ */
+export function pruneAcp(dataset: Store): void {
   const reachable = new Set<string>();
   const visit = (term: Term) => {
     const key = JSON.stringify([term.termType, term.value]);
