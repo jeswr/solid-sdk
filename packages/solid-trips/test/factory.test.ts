@@ -116,23 +116,31 @@ it.each([
   vi.mocked(checkOwnerOnly).mockImplementation(async (options) =>
     options.url === url ? { private: false, reasons: [] } : { private: true },
   );
-  await expect((await openTripsStore(fetch, root, owner)).initialise()).rejects.toThrow(
-    "already be owner-only",
-  );
+  const store = await openTripsStore(fetch, root, owner);
+  await store.initialise(); // Registration failure is non-fatal: Trips still opens.
+  expect(store.registration).toMatchObject({
+    status: "failed",
+    message: expect.stringContaining("already be owner-only"),
+  });
   expect(register).not.toHaveBeenCalled();
   expect(vi.mocked(setGrants).mock.calls.flatMap((call) => call[0])).not.toContain(url);
 });
 it("refuses unlinked and off-storage preferences without creating settings", async () => {
   const { storage } = await fixture(`<${owner}> <http://schema.org/name> "Example" .`);
-  await expect((await openTripsStore(fetch, root, owner)).initialise()).rejects.toThrow(
-    "Set up a private Type Index",
-  );
+  const unlinked = await openTripsStore(fetch, root, owner);
+  await unlinked.initialise();
+  expect(unlinked.registration).toMatchObject({
+    status: "failed",
+    message: expect.stringContaining("Set up a private Type Index"),
+  });
   await expect(storage.head(`${root}settings/`)).rejects.toMatchObject({ code: "not-found" });
   fetch.mockClear();
   const { register } = await fixture(
     `<${owner}> <http://www.w3.org/ns/pim/space#preferencesFile> <https://foreign.example/prefs> .`,
   );
-  await expect((await openTripsStore(fetch, root, owner)).initialise()).rejects.toThrow();
+  const offStorage = await openTripsStore(fetch, root, owner);
+  await offStorage.initialise();
+  expect(offStorage.registration.status).toBe("failed");
   expect(register).not.toHaveBeenCalled();
   expect(fetch).toHaveBeenCalledTimes(1);
 });

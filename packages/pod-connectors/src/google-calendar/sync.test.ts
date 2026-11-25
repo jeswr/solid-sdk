@@ -7,6 +7,7 @@ import { PROV } from "../core/provenance.js";
 import {
   createMemoryPod,
   fixtureFetch,
+  ownerOnlyFixtureChecks,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
   TEST_WEBID,
@@ -33,6 +34,7 @@ function calendarData(pod: ReturnType<typeof createMemoryPod>): string[] {
 function setup() {
   const pod = createMemoryPod();
   const podWriter = createFetchPodWriter({
+    ...ownerOnlyFixtureChecks,
     adapterId: "google-calendar",
     webId: TEST_WEBID,
     profileDocumentUrl: TEST_PROFILE_DOC,
