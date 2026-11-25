@@ -5,6 +5,7 @@ import { feedbackGithub } from "./helpers/feedback-github";
 
 const env = {
   FEEDBACK_GITHUB_TOKEN: "secret",
+  FEEDBACK_RECEIPT_SECRET: "receipt-secret",
   FEEDBACK_GITHUB_REPO: "private/feedback",
   FEEDBACK_ALLOWED_ORIGINS: "https://suite.test",
 };
@@ -111,14 +112,14 @@ it("preserves identity across restarts, dates, object key ordering and renewed r
   expect(api.issues).toHaveLength(1);
 });
 
-it("recovers a closed reference with one search despite 10,000 newer issues and pull requests", async () => {
+it("reads the issue number recorded in the repository first, ignoring unrelated issues", async () => {
   const api = github();
   const h = await client();
   expect((await h.submit()).status).toBe(200);
   const original = api.issues[0];
   if (!original) throw new Error("Missing saved issue");
   original.state = "closed";
-  for (let i = 0; i < 10_000; i++)
+  for (let i = 0; i < 1_000; i++)
     api.issues.push({
       number: 124 + i,
       body: i % 2 ? "Unrelated demo feedback" : original.body,
@@ -128,23 +129,173 @@ it("recovers a closed reference with one search despite 10,000 newer issues and 
   const retry = await h.submit();
   expect(retry.status).toBe(200);
   expect(await retry.json()).toEqual({ reference: 123 });
-  expect(api.calls.length - calls).toBe(4); // Metadata, head, index, one search.
-  const searches = api.calls.filter(({ url }) => new URL(url).pathname === "/search/issues");
-  expect(searches).toHaveLength(1);
-  const search = new URL(searches[0]?.url ?? "");
-  expect(search.searchParams.get("q")).toBe(
-    `repo:private/feedback is:issue in:body "feedback-submission:${submissionId}"`,
+  // Metadata, head, index, recorded issue number: no search and no issue listing at all.
+  expect(api.calls.length - calls).toBe(4);
+  const paths = api.calls.slice(calls).map(({ url }) => new URL(url).pathname);
+  expect(paths).toContain(
+    `/repos/private/feedback/contents/feedback/submissions/${submissionId}.issue.json`,
   );
-  expect(search.searchParams.get("per_page")).toBe("1");
-  expect(
-    api.calls.some(
-      ({ url, method }) =>
-        new URL(url).pathname === "/repos/private/feedback/issues" && method === "GET",
-    ),
-  ).toBe(false);
+  expect(paths.some((path) => path.includes("/search/"))).toBe(false);
+  expect(paths.some((path) => path.endsWith("/issues"))).toBe(false);
   expect(
     api.calls.filter(({ url, method }) => url.endsWith("/issues") && method === "POST"),
   ).toHaveLength(1);
+});
+
+// M1/L3: GitHub search is eventually consistent. A retry right after a lost POST response
+// must find the issue through the consistent list endpoint, not open a second one.
+it("recovers a lost issue response while search lags, without searching or duplicating", async () => {
+  const api = github();
+  api.lagSearch();
+  const h = await client();
+  api.loseIssueResponse();
+  expect((await h.submit()).status).toBe(502);
+  expect(api.issues).toHaveLength(1);
+  const retry = await h.submit();
+  expect(retry.status).toBe(200);
+  expect(await retry.json()).toEqual({ reference: 123 });
+  expect(api.issues).toHaveLength(1);
+  expect(api.calls.some(({ url }) => new URL(url).pathname === "/search/issues")).toBe(false);
+  const listings = api.calls.filter(
+    ({ url, method }) => new URL(url).pathname.endsWith("/issues") && method === "GET",
+  );
+  expect(listings).toHaveLength(1);
+  const query = new URL(listings[0]?.url ?? "").searchParams;
+  expect(query.get("state")).toBe("all");
+  expect(query.get("sort")).toBe("created");
+  expect(query.get("direction")).toBe("asc");
+  expect(query.get("per_page")).toBe("100");
+  expect(Date.parse(query.get("since") ?? "")).not.toBeNaN();
+  // The reference is then recorded, so a third attempt needs no listing.
+  const calls = api.calls.length;
+  expect(await (await h.submit()).json()).toEqual({ reference: 123 });
+  expect(api.calls.slice(calls).some(({ url }) => new URL(url).pathname.endsWith("/issues"))).toBe(
+    false,
+  );
+});
+
+it("does not let unrelated issues that quote the marker block recovery", async () => {
+  const api = github();
+  api.lagSearch();
+  const h = await client();
+  api.loseIssueResponse();
+  expect((await h.submit()).status).toBe(502);
+  const marker = `<!-- feedback-submission:${submissionId} -->`;
+  // A pull request, a triage issue quoting the marker mid-body, and an unrelated issue.
+  api.issues.push(
+    {
+      number: 500,
+      body: `quote ${marker} and more text`,
+      created_at: "2999-01-01T00:00:00Z",
+      updated_at: "2999-01-01T00:00:00Z",
+    },
+    { number: 501, body: `pr ${marker}`, pull_request: {}, updated_at: "2999-01-01T00:00:00Z" },
+    { number: 502, body: "Unrelated", updated_at: "2999-01-01T00:00:00Z" },
+  );
+  const retry = await h.submit();
+  expect(retry.status).toBe(200);
+  expect(await retry.json()).toEqual({ reference: 123 });
+  expect(api.issues).toHaveLength(4); // Nothing new was opened.
+});
+
+it("recovers when only a quoting issue still holds the marker after a maintainer edit", async () => {
+  const api = github();
+  api.lagSearch();
+  const h = await client();
+  api.loseIssueResponse();
+  expect((await h.submit()).status).toBe(502);
+  const original = api.issues[0];
+  if (!original) throw new Error("Missing saved issue");
+  original.body = `${original.body}\n\nTriaged by a maintainer.`;
+  const retry = await h.submit();
+  expect(retry.status).toBe(200);
+  expect(await retry.json()).toEqual({ reference: 123 });
+  expect(api.issues).toHaveLength(1);
+});
+
+it("pages through the list and refuses to guess when it cannot finish", async () => {
+  const api = github();
+  api.lagSearch();
+  const h = await client();
+  api.loseIssueResponse();
+  expect((await h.submit()).status).toBe(502);
+  const original = api.issues[0];
+  if (!original) throw new Error("Missing saved issue");
+  // 250 unrelated issues were created earlier than ours: the match is on the third page.
+  const later = api.issues.splice(0);
+  for (let i = 0; i < 250; i++)
+    api.issues.push({ number: 1 + i, body: "Unrelated", updated_at: new Date().toISOString() });
+  api.issues.push(...later.map((issue) => ({ ...issue, number: 1_000 })));
+  const retry = await h.submit();
+  expect(retry.status).toBe(200);
+  expect(await retry.json()).toEqual({ reference: 1_000 });
+  const pages = api.calls
+    .filter(
+      ({ url }) =>
+        new URL(url).pathname.endsWith("/issues") && new URL(url).searchParams.has("page"),
+    )
+    .map(({ url }) => new URL(url).searchParams.get("page"));
+  expect(pages).toEqual(["1", "2", "3"]);
+});
+
+it("returns a retry-later answer instead of opening a duplicate when the list is too long", async () => {
+  const api = github();
+  api.lagSearch();
+  const h = await client();
+  api.loseIssueResponse();
+  expect((await h.submit()).status).toBe(502);
+  const original = api.issues[0];
+  if (!original) throw new Error("Missing saved issue");
+  const later = api.issues.splice(0);
+  for (let i = 0; i < 600; i++)
+    api.issues.push({ number: 1 + i, body: "Unrelated", updated_at: new Date().toISOString() });
+  api.issues.push(...later.map((issue) => ({ ...issue, number: 10_000 })));
+  const retry = await h.submit();
+  expect(retry.status).toBe(503);
+  expect(retry.headers.get("retry-after")).toBe("60");
+  expect(await retry.json()).toMatchObject({ code: "storage_busy" });
+  expect(
+    api.issues.filter((issue) => issue.body.endsWith(`feedback-submission:${submissionId} -->`)),
+  ).toHaveLength(1);
+});
+
+it("opens one issue when the list proves none exists, even with search lagging", async () => {
+  const api = github();
+  api.lagSearch();
+  const h = await client();
+  api.holdIssue(async () => {
+    throw new Error("Issue creation failed");
+  });
+  expect((await h.submit()).status).toBe(502);
+  api.holdIssue(async () => {});
+  api.issues.push({ number: 7, body: "Unrelated", updated_at: new Date().toISOString() });
+  const retry = await h.submit();
+  expect(retry.status).toBe(200);
+  expect(api.issues).toHaveLength(2);
+});
+
+it("ignores a malformed or unreadable recorded issue number and falls back to the list", async () => {
+  const api = github();
+  const h = await client();
+  expect((await h.submit()).status).toBe(200);
+  api.corruptIssueRecord();
+  expect(await (await h.submit()).json()).toEqual({ reference: 123 });
+  api.corruptIssueRecord("{}");
+  expect(await (await h.submit()).json()).toEqual({ reference: 123 });
+  expect(api.issues).toHaveLength(1);
+});
+
+it("still returns the reference when recording the issue number fails", async () => {
+  const api = github();
+  const h = await client();
+  api.failIssueRecord();
+  const response = await h.submit();
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ reference: 123 });
+  api.failIssueRecord(false);
+  // The record was never written, so the next retry finds the issue by listing.
+  expect(await (await h.submit()).json()).toEqual({ reference: 123 });
+  expect(api.issues).toHaveLength(1);
 });
 
 it("a retry during issue creation waits without creating a second issue", async () => {
@@ -188,33 +339,6 @@ it("recovers the reference after an issue was created but its response was lost"
   expect(api.issues).toHaveLength(1);
 });
 
-it.each([
-  29, 5,
-])("recovery at search budget %i/30 keeps new submissions available", async (remaining) => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-11-11T12:00:00Z"));
-  const api = github();
-  const h = await client();
-  api.searchBudget(remaining);
-  expect((await h.submit()).status).toBe(200);
-  expect((await h.submit()).status).toBe(200);
-  const calls = api.calls.length;
-  const retry = await h.submit();
-  expect(retry.status).toBe(remaining <= 5 ? 503 : 200);
-  expect(api.calls.length - calls).toBe(remaining <= 5 ? 3 : 4);
-  if (remaining <= 5) expect(retry.headers.get("retry-after")).toBe("60");
-  const next = await h.submit(
-    { ...record, transcript: [{ role: "user", content: "Another demo note", audio: [] }] },
-    [],
-    "22222222-2222-4222-8222-222222222222",
-  );
-  expect(next.status).toBe(200);
-  expect(api.records).toHaveLength(2);
-  expect(api.issues).toHaveLength(2);
-  vi.advanceTimersByTime(60_000);
-  expect((await h.submit()).status).toBe(200);
-});
-
 it("resumes a committed submission without an issue, linking the original files after a restart", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-11-11T12:00:00Z"));
@@ -231,7 +355,8 @@ it("resumes a committed submission without an issue, linking the original files 
   const retry = await restarted.submit();
   expect(retry.status).toBe(200);
   expect(await retry.json()).toEqual({ reference: 123 });
-  expect(api.calls.length - calls).toBe(5); // Recovery plus one issue POST, no new Git writes.
+  // Recorded-number read, one list page, one issue POST, then the number is recorded.
+  expect(api.calls.length - calls).toBe(12);
   expect(api.records).toHaveLength(1);
   expect(api.issues).toHaveLength(1);
   expect(api.issues[0]?.body).toContain(`/feedback/2026-11-11/${submissionId}/submission.json`);
@@ -270,7 +395,7 @@ it("resumes an unattempted issue after the committed ref response was lost", asy
   const retry = await restarted.submit();
   expect(retry.status).toBe(200);
   expect(await retry.json()).toEqual({ reference: 123 });
-  expect(api.calls.length - calls).toBe(5);
+  expect(api.calls.length - calls).toBe(12);
   expect(api.records).toHaveLength(1);
   expect(api.issues).toHaveLength(1);
   expect(
@@ -278,7 +403,7 @@ it("resumes an unattempted issue after the committed ref response was lost", asy
   ).toHaveLength(1);
 });
 
-it("shares a 30-second deadline across recovery search and resumed issue creation", async () => {
+it("shares a 30-second deadline across the recovery listing and resumed issue creation", async () => {
   vi.useFakeTimers();
   vi.spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
     const controller = new AbortController();
@@ -292,12 +417,13 @@ it("shares a 30-second deadline across recovery search and resumed issue creatio
   });
   expect((await h.submit()).status).toBe(502);
   api.holdIssue(async () => {});
-  let searches = 0;
+  let listings = 0;
   let posts = 0;
   vi.mocked(fetch).mockImplementation(async (input, options) => {
     const path = new URL(String(input)).pathname;
-    if (path === "/search/issues" || (path.endsWith("/issues") && options?.method === "POST")) {
-      if (path === "/search/issues") searches++;
+    const slow = path.endsWith("/issues") && ["GET", "POST"].includes(options?.method ?? "GET");
+    if (slow) {
+      if (options?.method === "GET") listings++;
       else posts++;
       await new Promise<void>((resolve, reject) => {
         const abort = () => {
@@ -318,7 +444,7 @@ it("shares a 30-second deadline across recovery search and resumed issue creatio
     status = response.status;
   });
   await vi.advanceTimersByTimeAsync(30_000);
-  expect(searches).toBe(1);
+  expect(listings).toBe(1);
   expect(posts).toBe(1);
   expect(status).toBe(502);
   await retry;

@@ -2,13 +2,41 @@
 import { isIP } from "node:net";
 
 export type FeedbackEnv = Readonly<Record<string, string | undefined>>;
+/** Machine-readable reason sent as `code`, so the client never has to parse prose. */
+export type FeedbackCode =
+  | "invalid"
+  | "receipts_invalid"
+  | "too_large"
+  | "unsupported"
+  | "conflict"
+  | "unavailable"
+  | "rate_limited"
+  | "storage_busy"
+  | "upstream";
+export const defaultCode = (status: number): FeedbackCode =>
+  status === 400 || status === 422
+    ? "invalid"
+    : status === 409
+      ? "conflict"
+      : status === 413
+        ? "too_large"
+        : status === 415
+          ? "unsupported"
+          : status === 429
+            ? "rate_limited"
+            : status === 503
+              ? "unavailable"
+              : "upstream";
 export class FeedbackError extends Error {
+  readonly code: FeedbackCode;
   constructor(
     readonly status: number,
     message: string,
     readonly retryAfter?: number,
+    code?: FeedbackCode,
   ) {
     super(message);
+    this.code = code ?? defaultCode(status);
   }
 }
 export const json = (value: unknown, status = 200, extra: Record<string, string> = {}) =>
@@ -67,13 +95,15 @@ export function visitorKey(address: string): string {
     .join(":")}::/64`;
 }
 export function visitorOf(request: Request): string {
-  // The deployment proxy must overwrite these headers; never expose the origin server directly.
+  // Trusted only because the deployment edge overwrites x-real-ip / x-forwarded-for; never expose
+  // the origin server directly. Limiter counters are per instance (in-memory), not shared.
   return visitorKey(
     request.headers.get("x-real-ip")?.trim() ||
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       "unknown",
   );
 }
+// Counters live in this instance's memory: allowances reset on restart and are not shared.
 const DAY = 86_400_000;
 export function createLimiter(
   now = Date.now,
@@ -155,6 +185,7 @@ export function createGithubBackoff(now = () => Date.now()) {
         503,
         "Feedback storage is busy. Please try again later, or download your feedback to keep a copy.",
         Math.ceil((until[resource] - now()) / 1000),
+        "storage_busy",
       );
   }
   return {

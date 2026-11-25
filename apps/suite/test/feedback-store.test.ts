@@ -28,7 +28,11 @@ const submission: Submission = {
   contact: { name: "", email: "" },
   metadata: { version: "preview", commit: "", userAgent: "test", walkthrough: ["drive"] },
 };
-const env = { FEEDBACK_GITHUB_TOKEN: "secret-token", FEEDBACK_GITHUB_REPO: "private/feedback" };
+const env = {
+  FEEDBACK_GITHUB_TOKEN: "secret-token",
+  FEEDBACK_GITHUB_REPO: "private/feedback",
+  FEEDBACK_RECEIPT_SECRET: "receipt-secret",
+};
 const sha = "a".repeat(40);
 const head = "b".repeat(40);
 const baseTree = "c".repeat(40);
@@ -90,6 +94,7 @@ it("creates one atomic commit with audio, JSON and Markdown, then an issue with 
     ["/git/refs/heads/team/main", "PATCH"],
     ["/issues", "POST"],
     ["/issues", "POST"],
+    ["/git/blobs", "POST"], // Records the issue number beside the stored submission.
   ]);
   const data = bodies(transport);
   const record = JSON.parse(Buffer.from(data[4].content, "base64").toString());
@@ -165,7 +170,7 @@ it("uploads a base64 Git blob, signs its receipt and reads private repository me
     transport.mock.calls.filter(([url]) => String(url).endsWith("/private/feedback")),
   ).toHaveLength(1);
   expect(transport.mock.calls.filter(([url]) => String(url).endsWith("/git/blobs"))).toHaveLength(
-    4,
+    5,
   );
 });
 it("retries a competing branch update with a fresh head and tree, reusing blobs", async () => {
@@ -183,9 +188,9 @@ it("retries a competing branch update with a fresh head and tree, reusing blobs"
   expect(data[14].parents).toEqual(["e".repeat(40)]);
   expect(pause).toHaveBeenCalledWith(expect.any(Number));
   expect(transport.mock.calls.filter(([url]) => String(url).endsWith("/git/blobs"))).toHaveLength(
-    3,
+    4,
   );
-  expect(transport.mock.calls.at(-1)?.[0]).toContain("/issues");
+  expect(transport.mock.calls.some(([url]) => String(url).endsWith("/issues"))).toBe(true);
 });
 it.each(["commit", "conflict", "ref"])("never opens an issue if the %s fails", async (kind) => {
   const transport = vi.fn<typeof fetch>();
@@ -224,6 +229,16 @@ it("refuses missing config or a public repository before any writes", async () =
     status: 503,
   });
   expect(transport).toHaveBeenCalledTimes(1);
+});
+it("fails closed before any GitHub call when the receipt secret is missing", async () => {
+  const transport = vi.fn<typeof fetch>();
+  const { FEEDBACK_RECEIPT_SECRET: _omitted, ...tokenOnly } = env;
+  const store = createGithubStore(tokenOnly, transport);
+  await expect(store.save(submission, [], submissionId)).rejects.toMatchObject({ status: 503 });
+  await expect(
+    store.upload({ bytes: new Uint8Array([1, 2]), ext: "webm", type: "audio/webm" }, submissionId),
+  ).rejects.toMatchObject({ status: 503 });
+  expect(transport).not.toHaveBeenCalled();
 });
 it("bounds long issue answers and transcript before closing details and appending the record link", () => {
   const large = {
@@ -292,7 +307,7 @@ it("finishes the label fallback when its 422 response starts a low-budget cooldo
       retryAfter: 120,
     },
   );
-  expect(transport).toHaveBeenCalledTimes(12);
+  expect(transport).toHaveBeenCalledTimes(13);
 });
 it("stops on a low GitHub budget and shares the reset cooldown across fresh stores", async () => {
   vi.useFakeTimers();

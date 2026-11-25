@@ -8,7 +8,17 @@ export function feedbackGithub() {
   const trees = new Map<string, Map<string, string>>([[hash("tree"), new Map()]]);
   const commits = new Map([[hash("head"), { tree: hash("tree"), parents: [] as string[] }]]);
   let head = hash("head");
-  const issues: { number: number; body: string; state?: string; pull_request?: object }[] = [];
+  const issues: {
+    number: number;
+    body: string;
+    state?: string;
+    pull_request?: object;
+    created_at?: string;
+    updated_at?: string;
+  }[] = [];
+  // GitHub search is eventually consistent: while lagging, new issues never reach the index.
+  let searchLags = false;
+  const unindexed = new Set<object>();
   let beforeIssue = async () => {};
   let issueHeaders = {};
   let refHeaders = {};
@@ -16,6 +26,7 @@ export function feedbackGithub() {
   let loseIssueResponse = false;
   let loseRefResponse = false;
   let conflicts = 0;
+  let failIssueRecord = false;
   const calls: { url: string; method: string | undefined }[] = [];
   const transport: typeof fetch = async (input, options) => {
     calls.push({ url: String(input), method: options?.method });
@@ -47,6 +58,8 @@ export function feedbackGithub() {
       return Response.json({ sha });
     }
     if (path === "/git/commits") {
+      if (failIssueRecord && String(body.message).startsWith("Record pilot feedback issue"))
+        return Response.json({}, { status: 500 });
       const sha = hash(JSON.stringify(body));
       commits.set(sha, body);
       return Response.json({ sha });
@@ -63,20 +76,49 @@ export function feedbackGithub() {
     }
     if (path === "/issues" && method === "POST") {
       await beforeIssue();
-      const issue = { number: 123 + issues.length, body: body.body };
+      const at = new Date().toISOString();
+      const issue = {
+        number: 123 + issues.length,
+        body: body.body,
+        created_at: at,
+        updated_at: at,
+      };
       issues.push(issue);
+      if (searchLags) unindexed.add(issue);
       if (loseIssueResponse) throw new Error("Connection lost after GitHub accepted the issue");
       return Response.json(issue, { status: 201, headers: issueHeaders });
     }
+    if (path === "/issues" && method === "GET") {
+      // Strongly consistent list endpoint; honours the parameters the code sends.
+      const since = url.searchParams.get("since");
+      const state = url.searchParams.get("state") ?? "open";
+      const perPage = Number(url.searchParams.get("per_page") ?? 30);
+      const page = Number(url.searchParams.get("page") ?? 1);
+      const direction = url.searchParams.get("direction") === "asc" ? 1 : -1;
+      const matching = issues
+        .filter(
+          (issue) =>
+            (state === "all" || (issue.state ?? "open") === state) &&
+            (!since || Date.parse(issue.updated_at ?? "") >= Date.parse(since)),
+        )
+        .sort((a, b) => (a.number - b.number) * direction);
+      return Response.json(matching.slice((page - 1) * perPage, page * perPage));
+    }
     if (path === "/search/issues") {
-      const id = url.searchParams.get("q")?.match(/[a-f0-9-]{36}/)?.[0];
+      const q = url.searchParams.get("q") ?? "";
+      const id = q.match(/[a-f0-9-]{36}/)?.[0];
+      const perPage = Number(url.searchParams.get("per_page") ?? 30);
       return Response.json(
         {
           incomplete_results: false,
-          items: issues.filter(
-            (issue) =>
-              !issue.pull_request && issue.body.endsWith(`<!-- feedback-submission:${id} -->`),
-          ),
+          items: issues
+            .filter(
+              (issue) =>
+                !unindexed.has(issue) &&
+                !issue.pull_request &&
+                issue.body.includes(`feedback-submission:${id}`),
+            )
+            .slice(0, perPage),
         },
         {
           headers: {
@@ -107,6 +149,22 @@ export function feedbackGithub() {
     },
     holdIssue(callback: () => Promise<void>) {
       beforeIssue = callback;
+    },
+    /** New issues stay out of the search index (the list endpoint still returns them). */
+    failIssueRecord(fail = true) {
+      failIssueRecord = fail;
+    },
+    /** Overwrites the recorded issue number in the current head with unusable content. */
+    corruptIssueRecord(content = "not json") {
+      const tree = trees.get(commits.get(head)?.tree ?? "");
+      const path = [...(tree?.keys() ?? [])].find((name) => name.endsWith(".issue.json"));
+      if (!tree || !path) throw new Error("No recorded issue number to corrupt");
+      const sha = hash(`corrupt:${content}`);
+      blobs.set(sha, Buffer.from(content).toString("base64"));
+      tree.set(path, sha);
+    },
+    lagSearch() {
+      searchLags = true;
     },
     searchBudget(remaining: number) {
       searchRemaining = remaining;

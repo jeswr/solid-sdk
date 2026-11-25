@@ -67,7 +67,7 @@ Configure these variables on the deployed server. Never prefix secrets with `NEX
 | `ANTHROPIC_API_KEY` | Enables the interviewer. Without it the same guide works as a plain form. |
 | `FEEDBACK_MODEL` | Interview model, defaults to `claude-opus-5-5`. Uses low effort and structured JSON output. |
 | `FEEDBACK_GITHUB_TOKEN` | Fine-grained token restricted to the destination repository, with Contents and Issues write permission and repository metadata read access. |
-| `FEEDBACK_RECEIPT_SECRET` | Optional dedicated secret for audio receipts; otherwise a signing key is derived from `FEEDBACK_GITHUB_TOKEN`. Rotating the signing secret invalidates outstanding receipts. |
+| `FEEDBACK_RECEIPT_SECRET` | **Required** dedicated secret that signs audio receipts. It is never derived from `FEEDBACK_GITHUB_TOKEN`; without it uploads and submissions answer 503 before any GitHub call. Rotating it invalidates outstanding receipts, and the page then re-uploads recordings still open in the tab. |
 | `FEEDBACK_GITHUB_REPO` | Existing **private** repository as `owner/name`. The store checks privacy before writing. |
 | `FEEDBACK_ALLOWED_ORIGINS` | Comma-separated exact origins permitted to call feedback routes. Defaults to the request deployment origin, `NEXT_PUBLIC_PUBLIC_SUITE_URL` (or `https://solid-suite.vercel.app`), `VERCEL_PROJECT_PRODUCTION_URL` if set, and HTTP/HTTPS localhost origins. An explicit list replaces these defaults. Include the web deployment and `https://localhost,capacitor://localhost` for native clients. |
 
@@ -94,10 +94,14 @@ Submissions create one atomic Git Data API commit containing all receipt audio b
 The UUID is the client's submission ID. The same commit reserves it in
 `feedback/submissions/<uuid>.json` with a digest of the record and audio and the record directory.
 Concurrent writers check this index against each branch head before committing; an ID cannot
-save different feedback (409). Identical retries make one GitHub search scoped to the feedback repository
-and the issue body's submission marker, including closed issues and excluding pull requests.
-Recovery never paginates through the repository's issue history. If the search finds no issue,
-the store resumes issue creation using the original record directory, without another record commit.
+save different feedback (409). Identical retries first read `feedback/submissions/<uuid>.issue.json`, committed after the
+issue is created and holding its number. If that is absent (for example the POST response was
+lost), recovery lists issues with the strongly consistent issues list endpoint (`state=all`,
+oldest first, `since` the commit time, at most five pages of 100) and matches the submission
+marker, ignoring pull requests and unrelated issues that merely quote it. GitHub search is
+eventually consistent and is not used for recovery. If the list cannot be exhausted the request
+answers 503 rather than risk a duplicate. If no issue exists the store resumes issue creation
+using the original record directory, without another record commit.
 Overlapping issue creation within one instance returns 503 until the current request finishes.
 The first submit attempt freezes the serialized record and keeps it with its submission ID and
 recording receipts in `suite.feedback.draft.v1` local storage. Retries, including after a reload,
@@ -115,11 +119,9 @@ returned to the participant. Participant Markdown and HTML are escaped and menti
 titles use plain text sanitisation. Full verbatim records remain in the private JSON file.
 The issue body stays under 60k characters with a closed transcript disclosure and an external
 full-record link. An issue failure may leave a committed record without an issue; participants
-can retry to recover its reference or resume creation. Recovery uses at most six GitHub calls
-(metadata, head, index, one search and up to two issue POSTs for the label fallback). Reads
-have 30-second timeouts; search and issue creation share one 30-second deadline. GitHub search
-indexing and in-memory coordination cannot guarantee exactly-once issue creation across
-instances or after an uncertain POST response. Abandoned uploads can leave unreferenced Git
+can retry to recover its reference or resume creation. Reads have 30-second timeouts; the recovery listing
+and issue creation share one 30-second deadline. In-memory coordination cannot guarantee
+exactly-once issue creation when two instances finish the same submission at the same moment. Abandoned uploads can leave unreferenced Git
 blobs; uploading a recording does not create an issue.
 
 All three POST routes require an allowed Origin, validate and rebuild inputs, and stream-read
@@ -140,9 +142,6 @@ Uploads and new submissions check it before their first write. An admitted submi
 its commit and issue creation even if a successful response starts the cooldown; an actual
 403/429 still fails without retrying. Uploads and submissions share an instance cooldown
 until the primary reset or `Retry-After` deadline (60 seconds when neither is available).
-The `x-ratelimit-resource: search` budget has its own cooldown at five or fewer requests
-remaining (out of GitHub's 30-request search limit). It skips recovery searches until reset,
-asking only the affected submissions to retry later; uploads and new submissions remain available.
 The API returns a friendly 503 with `Retry-After`; the page asks participants to try later
 and keeps their answers and audio available through **Download my feedback**.
 

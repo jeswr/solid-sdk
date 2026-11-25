@@ -18,6 +18,7 @@ afterEach(() => {
 });
 const env = {
   FEEDBACK_GITHUB_TOKEN: "secret",
+  FEEDBACK_RECEIPT_SECRET: "receipt-secret",
   ANTHROPIC_API_KEY: "key",
   FEEDBACK_ALLOWED_ORIGINS: "https://suite.test",
 };
@@ -346,10 +347,152 @@ it("returns a friendly error with Retry-After on a GitHub limit and blocks later
       expect(response.status).toBe(503);
       expect(Number(response.headers.get("retry-after"))).toBeGreaterThanOrEqual(89);
       expect(response.headers.get("access-control-expose-headers")).toBe("Retry-After");
-      expect(await response.json()).toEqual({ error: expect.stringContaining("try again later") });
+      expect(await response.json()).toEqual({
+        error: expect.stringContaining("try again later"),
+        code: "storage_busy",
+      });
     }
     expect(transport).toHaveBeenCalledTimes(1);
   } finally {
     transport.mockRestore();
   }
+});
+
+// M4: validation that needs no body runs before the allowance is charged; the body is read
+// only after the charge, so anonymous callers cannot make the server buffer it for free.
+it.each([
+  [
+    "a submit with the wrong content type",
+    (h: ReturnType<typeof handlers>) =>
+      h.submit(
+        new Request("https://suite.test/api/feedback/submit", {
+          method: "POST",
+          headers: { Origin: "https://suite.test", "Content-Type": "text/plain" },
+          body: "x",
+        }),
+      ),
+    415,
+  ],
+  [
+    "a submit declaring an oversized body",
+    (h: ReturnType<typeof handlers>) =>
+      h.submit(
+        new Request("https://suite.test/api/feedback/submit", {
+          method: "POST",
+          headers: {
+            Origin: "https://suite.test",
+            "Content-Type": "application/json",
+            "Content-Length": "1000001",
+          },
+          body: "{}",
+        }),
+      ),
+    413,
+  ],
+  [
+    "a turn with the wrong content type",
+    (h: ReturnType<typeof handlers>) =>
+      h.turn(
+        new Request("https://suite.test/api/feedback/turn", {
+          method: "POST",
+          headers: { Origin: "https://suite.test", "Content-Type": "text/plain" },
+          body: "x",
+        }),
+      ),
+    415,
+  ],
+  [
+    "a turn declaring an oversized body",
+    (h: ReturnType<typeof handlers>) =>
+      h.turn(
+        new Request("https://suite.test/api/feedback/turn", {
+          method: "POST",
+          headers: {
+            Origin: "https://suite.test",
+            "Content-Type": "application/json",
+            "Content-Length": "240001",
+          },
+          body: "{}",
+        }),
+      ),
+    413,
+  ],
+  [
+    "an upload without a submission id",
+    (h: ReturnType<typeof handlers>) => {
+      const audio = audioRequest();
+      const url = new URL(audio.url);
+      url.searchParams.delete("submissionId");
+      return h.audio(new Request(url, audio));
+    },
+    400,
+  ],
+  [
+    "an upload that is not audio",
+    (h: ReturnType<typeof handlers>) =>
+      h.audio(
+        new Request(`https://suite.test/api/feedback/audio?submissionId=${submissionId}`, {
+          method: "POST",
+          headers: { Origin: "https://suite.test", "Content-Type": "text/plain" },
+          body: "x",
+        }),
+      ),
+    400,
+  ],
+  [
+    "an upload declaring more than 3 MB",
+    (h: ReturnType<typeof handlers>) =>
+      h.audio(
+        new Request(`https://suite.test/api/feedback/audio?submissionId=${submissionId}`, {
+          method: "POST",
+          headers: {
+            Origin: "https://suite.test",
+            "Content-Type": "audio/webm",
+            "Content-Length": String(3 * 1024 * 1024 + 1),
+          },
+          body: "x",
+        }),
+      ),
+    413,
+  ],
+])("does not charge the allowance for %s", async (_name, call, status) => {
+  const limiter = vi.fn(() => undefined);
+  const response = await call(handlers({ limiter, store: { save: vi.fn(), upload: vi.fn() } }));
+  expect(response.status).toBe(status);
+  expect(limiter).not.toHaveBeenCalled();
+  expect(response.headers.get("access-control-allow-origin")).toBe("https://suite.test");
+  expect(await response.json()).toMatchObject({ code: expect.any(String) });
+});
+it("charges the allowance once a request passes its cheap checks, before reading the body", async () => {
+  const limiter = vi.fn(() => 5_000);
+  const response = await handlers({ limiter }).submit(
+    request({ submissionId, record: submission, receipts: [] }),
+  );
+  expect(limiter).toHaveBeenCalledWith("unknown", "submit");
+  expect(response.status).toBe(429);
+  expect(await response.json()).toMatchObject({ code: "rate_limited" });
+  expect(response.headers.get("retry-after")).toBe("5");
+});
+it("sends machine-readable codes for invalid bodies and unexpected failures", async () => {
+  const h = handlers({
+    limiter: () => undefined,
+    store: { save: vi.fn().mockRejectedValue(new Error("boom")), upload: vi.fn() },
+  });
+  const invalid = await h.submit(request({ submissionId, record: "nope", receipts: [] }));
+  expect(invalid.status).toBe(400);
+  expect(await invalid.json()).toMatchObject({ code: "invalid" });
+  const missing = await h.submit(
+    request({
+      submissionId,
+      record: { ...submission, transcript: [{ role: "user", content: "x", audio: [3] }] },
+      receipts: [],
+    }),
+  );
+  expect(missing.status).toBe(400);
+  expect(await missing.json()).toMatchObject({ code: "receipts_invalid" });
+  const upstream = await h.submit(
+    request({ submissionId, record: { ...submission, transcript: [] }, receipts: [] }),
+  );
+  expect(upstream.status).toBe(502);
+  expect(await upstream.json()).toMatchObject({ code: "upstream" });
 });

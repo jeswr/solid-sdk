@@ -19,8 +19,16 @@ export const receiptSchema = z
 export type AudioReceipt = z.infer<typeof receiptSchema>;
 type BlobReceipt = Omit<AudioReceipt, "sig">;
 function signature(receipt: BlobReceipt, expiry: number, env: FeedbackEnv): string {
-  const secret = env.FEEDBACK_RECEIPT_SECRET?.trim() || env.FEEDBACK_GITHUB_TOKEN?.trim();
-  if (!secret) throw new FeedbackError(503, "Feedback storage is unavailable. Download a copy.");
+  // A dedicated secret only: a write-capable GitHub token must never double as a MAC key,
+  // and rotating the token must not silently invalidate outstanding receipts.
+  const secret = env.FEEDBACK_RECEIPT_SECRET?.trim();
+  if (!secret)
+    throw new FeedbackError(
+      503,
+      "Feedback storage is unavailable. Download a copy.",
+      undefined,
+      "unavailable",
+    );
   const key = createHmac("sha256", secret)
     .update(`solid-suite-feedback-receipts:v2:${env.FEEDBACK_GITHUB_REPO?.trim() ?? ""}`)
     .digest();
@@ -36,6 +44,8 @@ export function signReceipt(
   const expiry = now + LIFETIME;
   return { ...receipt, sig: `${expiry}.${signature(receipt, expiry, env)}` };
 }
+/** True when the secret that signs receipts is configured; storage fails closed without it. */
+export const receiptSecretConfigured = (env: FeedbackEnv) => !!env.FEEDBACK_RECEIPT_SECRET?.trim();
 export function verifyReceipts(
   input: unknown,
   submissionId: string,
@@ -62,6 +72,8 @@ export function verifyReceipts(
       throw new FeedbackError(
         400,
         "A recording receipt is invalid or expired. Download your feedback to keep it.",
+        undefined,
+        "receipts_invalid",
       );
     seen.add(receipt.sha);
   }
