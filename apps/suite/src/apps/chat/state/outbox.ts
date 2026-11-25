@@ -98,6 +98,8 @@ export class ChatOutbox {
   private resend = new Set<string>();
   /** Checks for a usable session while rows wait; no replay runs until it is. */
   private waker: ReturnType<typeof setTimeout> | undefined;
+  /** True once the queue was disconnected (or before it first connects): no timer may be armed. */
+  private closed = true;
   ready: Promise<void> = Promise.resolve();
   constructor(
     private client: Pick<ChatClient, "send" | "webId" | "storageUrl">,
@@ -417,6 +419,11 @@ export class ChatOutbox {
   }
   /** Open storage and register the delegate only after React commits. */
   connect = (): (() => void) => {
+    this.closed = false;
+    const close = (): void => {
+      this.closed = true;
+      this.stopWaiting();
+    };
     this.intents.clear();
     this.unreachable = false;
     this.stalled = false;
@@ -428,7 +435,7 @@ export class ChatOutbox {
       this.connection = undefined;
       this.holdLegacy();
       this.ready = Promise.resolve();
-      return () => this.stopWaiting();
+      return close;
     }
     if (connection.outbox.webId !== this.client.webId) {
       connection.outbox.close();
@@ -502,20 +509,19 @@ export class ChatOutbox {
       },
     );
     void this.ready.then(() => this.flush());
-    return disconnect;
+    // Unmount closes the queue even when the open-failure path already disconnected it.
+    return () => {
+      close();
+      disconnect();
+    };
   };
   /** Flush again after a completed pass, or on change, while this tab has work it could send. */
   private kick() {
     const connection = this.connection;
-    if (
-      connection &&
-      !this.flushing &&
-      !this.unreachable &&
-      this.online() &&
-      this.active() &&
-      this.deliverable(connection)
-    )
-      void this.flush();
+    if (!connection || this.flushing) return;
+    // A row that arrived (or was retried) while the session is unusable resumes once it is.
+    if (!this.active()) return this.waitForSession();
+    if (!this.unreachable && this.online() && this.deliverable(connection)) void this.flush();
   }
   send = async (room: string, draft: string): Promise<void> => {
     const item = this.outgoing(room, draft, crypto.randomUUID(), new Date());
@@ -572,10 +578,16 @@ export class ChatOutbox {
    * request) whether it is usable again, so the rows are retried exactly then.
    */
   private waitForSession() {
-    if (this.waker || this.active() || !this.entries.some((entry) => entry.status === "sending"))
+    if (
+      this.closed ||
+      this.waker ||
+      this.active() ||
+      !this.entries.some((entry) => entry.status === "sending")
+    )
       return;
     this.waker = setTimeout(() => {
       this.waker = undefined;
+      if (this.closed) return;
       if (this.active()) void this.flush();
       else this.waitForSession();
     }, SESSION_POLL_MS);
@@ -635,6 +647,8 @@ export class ChatOutbox {
       /* The row stays failed (or waiting) with Retry and Discard. */
     }
     await this.refresh(connection);
+    // Retried while the session is unusable: the row waits for it, with a timer to resume it.
+    this.waitForSession();
   };
   private remove = async (ids: ReadonlySet<string>): Promise<void> => {
     if (!ids.size) return;
