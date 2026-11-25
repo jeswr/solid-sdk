@@ -37,6 +37,7 @@ import { ShortcutsProvider, useShortcutSettings } from "./shortcuts/provider";
 import { useRecentTitle } from "./sync/offline-provider";
 import { useSyncSnapshot } from "./sync/online";
 import { ShellSyncSheet } from "./sync/shell-sync-sheet";
+import { UndoShortcuts } from "./undo/shortcuts";
 
 export interface SuiteShellProps {
   app: AppSlug;
@@ -198,19 +199,22 @@ function Frame({
 function ReadyShortcuts({ hasSidebar }: { hasSidebar: boolean }) {
   const { status } = useAccounts();
   return status === "ready" ? (
-    <GlobalShortcuts
-      hasSidebar={hasSidebar}
-      onOpenApps={() => {
-        // The rail and mobile tab bar own their launchers. Activate the visible native
-        // trigger once the palette has closed, so focus and cleanup match pointer entry.
-        setTimeout(() => {
-          const triggers = document.querySelectorAll<HTMLButtonElement>(
-            '[data-slot="app-launcher-trigger"]',
-          );
-          [...triggers].find((trigger) => trigger.getClientRects().length > 0)?.click();
-        }, 0);
-      }}
-    />
+    <>
+      <UndoShortcuts />
+      <GlobalShortcuts
+        hasSidebar={hasSidebar}
+        onOpenApps={() => {
+          // The rail and mobile tab bar own their launchers. Activate the visible native
+          // trigger once the palette has closed, so focus and cleanup match pointer entry.
+          setTimeout(() => {
+            const triggers = document.querySelectorAll<HTMLButtonElement>(
+              '[data-slot="app-launcher-trigger"]',
+            );
+            [...triggers].find((trigger) => trigger.getClientRects().length > 0)?.click();
+          }, 0);
+        }}
+      />
+    </>
   ) : null;
 }
 

@@ -19,6 +19,7 @@ import { AccountsProvider } from "@/shell/session/accounts-provider";
 import { AppearanceEffect, PreferencesProvider } from "@/shell/settings/preferences";
 import { OutboxSessionProvider } from "@/shell/sync/outbox-session";
 import { ServiceWorkerRegistration } from "@/shell/sync/service-worker";
+import { UndoProvider } from "@/shell/undo/provider";
 import { WalkthroughProvider } from "@/welcome/walkthrough-provider";
 
 function ThemeAttribute() {
@@ -52,11 +53,13 @@ export function Providers({
                 <SuiteI18nProvider>
                   <AppearanceEffect />
                   <ShellSearchProvider>
-                    <NotificationsProvider>
-                      <LegacyProvider>
-                        <WalkthroughProvider>{children}</WalkthroughProvider>
-                      </LegacyProvider>
-                    </NotificationsProvider>
+                    <UndoProvider>
+                      <NotificationsProvider>
+                        <LegacyProvider>
+                          <WalkthroughProvider>{children}</WalkthroughProvider>
+                        </LegacyProvider>
+                      </NotificationsProvider>
+                    </UndoProvider>
                   </ShellSearchProvider>
                 </SuiteI18nProvider>
               </PreferencesProvider>

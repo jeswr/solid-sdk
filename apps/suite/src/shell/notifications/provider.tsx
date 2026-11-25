@@ -18,6 +18,7 @@ import type { Preferences } from "../lib/settings-preferences";
 import { type AccountsContextValue, useAccounts } from "../session/accounts-provider";
 import type { SuiteAccount } from "../session/types";
 import { useOptionalPreferences } from "../settings/preferences";
+import { useOptionalUndo } from "../undo/provider";
 import { createNotificationsController, type NotificationsController } from "./controller";
 import { demoNotificationDate } from "./demo-digest";
 import { createDemoNotificationSource } from "./demo-source";
@@ -244,6 +245,7 @@ export function NotificationsProvider({
 }
 export function useNotifications() {
   const controller = useContext(NotificationsContext);
+  const undo = useOptionalUndo();
   if (!controller) throw new Error("useNotifications requires NotificationsProvider");
   const snapshot = useSyncExternalStore(
     controller.subscribe,
@@ -253,10 +255,13 @@ export function useNotifications() {
   return {
     ...snapshot,
     refresh: controller.refresh,
-    markAllRead: controller.markAllRead,
+    markAllRead: () => controller.markAllRead(undo?.push),
     markRead: controller.markRead,
     markManyRead: controller.markManyRead,
-    dismiss: controller.dismiss,
+    dismiss: (id: string) => {
+      const entry = controller.dismiss(id);
+      if (entry) undo?.push(entry);
+    },
     decide: controller.decide,
   };
 }

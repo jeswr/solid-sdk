@@ -51,6 +51,10 @@
     "./pod-scoped-fetch": {
       "types": "./dist/pod-scoped-fetch.d.ts",
       "default": "./dist/pod-scoped-fetch.js"
+    },
+    "./undo": {
+      "types": "./dist/undo.d.ts",
+      "default": "./dist/undo.js"
     }
   },
   "files": [

@@ -1,6 +1,6 @@
 ---
 name: suite-sdk
-description: Use when working on @jeswr/suite-sdk accounts, PWA installation, registration, notifications, smart chips and mentions, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, pod-backed preferences and offline preference replay, or pure notification digests and scheduling.
+description: Use when working on @jeswr/suite-sdk accounts, PWA installation, registration, notifications, smart chips and mentions, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, pod-backed preferences and offline preference replay, pure notification digests and scheduling, or scoped undo/redo history and useUndoStack.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- // AUTHORED-BY Codex GPT-6 -->
@@ -270,3 +270,30 @@ adapter. `createChipSearch` adapts shell results and known people without a new 
 skips self/nonpeople, isolates per-ref failures and never retries an ambiguous send. Receipts
 must be durable and account scoped. Browser receipts provide at-most-once attempts on that
 browser, without cross-device guarantees; distributed deduplication needs a shared receipt store.
+
+## Undo (`./undo`, UX-6)
+
+`createUndoStack({ limit?: number, now?: () => number, isRetryable?: (error) => boolean })`
+is framework-independent. Push `UndoEntry` (`label`, `scope`, async `undo(signal)`, optional
+`redo(signal)` and epoch-ms `expiresAt`) and retain its ID for the toast. `undo(scope)` and
+`redo(scope)` select latest live history; `undoById(id)` addresses one pending undo.
+Results: `done`, `nothing`, `busy`, `expired`, or `failed` with `error`. One operation runs
+at a time across scopes. Failed entries are dropped unless explicitly retryable; retries
+keep their original position. Expired entries never run. Push clears only its scope's
+redo history, including a running undo's future redo. History defaults to 50 entries per
+scope (undo plus redo); the positive integer limit drops oldest entries.
+
+`entries(scope?)` lists pending undo entries oldest first; `canRedo` means a redo callback
+exists. Unfiltered snapshots are stable between changes. `subscribe` returns cleanup.
+`useUndoStack(stack)` is exported from the existing React root and uses
+`useSyncExternalStore`, with an empty server snapshot. Keep this hook and stack at 100%
+coverage. `UndoItem`, `UndoStackOptions`, `UndoEntry`, `UndoStack` and `UndoResult` are
+exported from `./undo`. There is no API report in this package.
+
+Own the stack per authenticated session; clear on replacement/sign-out. `clear()` aborts
+in-flight work and fences late settlements. Callbacks must pass/check the signal before
+I/O and local mutations. No auth, React, toast or app policy belongs in the stack module.
+The shell's `useUndo()` injects the current app scope and supplies the toast and shortcuts.
+Capture completion state before a Tasks change, push only after success, and undo/redo
+through the existing persistence adapter (see README). Do not duplicate app undo logic
+in this package. Update README and this skill together for public API changes.
