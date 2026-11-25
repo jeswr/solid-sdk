@@ -13,6 +13,7 @@ const packages = [
   "storage-capabilities",
   "storage-client",
   "pod-auth",
+  "desktop-auth",
   "pod-notifications",
   "pod-access",
   "pod-type-index",

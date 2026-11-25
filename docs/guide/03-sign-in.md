@@ -284,6 +284,41 @@ headers yourself.
 `auth.identity()` tells you who is signed in without any network traffic. Do not treat a public
 profile read as proof that the user signed in.
 
+## Desktop apps
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+
+A desktop app (Tauri, Electron) signs in like a mobile app: the provider's page opens in the
+user's own browser, never inside the app, and comes back through a private-use URL scheme
+(RFC 8252). `@jeswr/desktop-auth` supplies `ui.getCode` for this. It needs two functions from the
+app's shell: one that opens a URL in the browser, and one that listens for URLs routed to the app.
+Tauri's `openUrl` and `onOpenUrl` plugins have exactly these shapes.
+
+```ts
+import { createDesktopCodeDriver } from '@jeswr/desktop-auth';
+import { createPodAuth } from '@jeswr/pod-auth';
+
+declare const shell: {
+  openUrl(url: string): Promise<void>;
+  onOpenUrl(listener: (urls: string[]) => void): Promise<() => void>;
+};
+declare function askForWebId(): Promise<string>;
+
+const redirectUri = 'com.example.app:/oauth/callback';
+const auth = createPodAuth({
+  clientId: 'https://example.github.io/app/solid-client-id.jsonld',
+  redirectUri,
+  nativeRedirect: true,
+  ui: { getWebId: askForWebId, getCode: createDesktopCodeDriver({ host: shell, redirectUri }) },
+});
+```
+
+Publish the matching Client Identifier Document with `desktopClientIdDocument`. It sets
+`application_type: native`, which providers need before they accept a scheme redirect. Register
+the scheme with the operating system, and on Windows and Linux make a second launch hand its URL
+to the running app (Tauri's single-instance plugin), or the callback never arrives. Tokens and
+keys stay in the webview; the shell only ever sees the authorization URL and the callback.
+
 ## Server-side agents
 
 Bots, importers and MCP servers use `@jeswr/pod-auth/node`:

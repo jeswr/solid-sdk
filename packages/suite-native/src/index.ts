@@ -4,6 +4,8 @@ export {
   createNativeCodeDriver,
   type GetCode,
   type NativeCodeDriverOptions,
+  parseRedirect,
+  type Redirect,
   USER_CANCELLED,
 } from "./auth-session.js";
 export {
@@ -12,6 +14,8 @@ export {
   MOBILE_REDIRECT_URI,
   type MobileClientIdOptions,
   mobileClientIdDocument,
+  type NativeClientIdOptions,
+  nativeClientIdDocument,
 } from "./client-id.js";
 export {
   AuthorizationError,

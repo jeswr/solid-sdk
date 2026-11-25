@@ -17,7 +17,9 @@ The seams the Solid Suite web app uses when it runs inside the iOS and Android s
 | `createSecureStore(plugin)`, `refreshTokenKey({ issuer, webId, clientId })` | Validated native refresh-token storage, versioned writes, cancellable unlocks and session identity keys (MOB-P4 S11/S12). |
 | `openPdf(plugin, name, bytes, signal?)` | Drive's native "Open PDF" (MOB-P3 E5): checks the 25 MiB cap and `%PDF-` signature, sends 1 MiB base64 chunks to `SuiteFiles`, opens the platform viewer; aborting `signal` stops before the next native call. Failures are `PdfPreviewError` with code `too-large`, `not-pdf`, `no-viewer`, `cancelled` or `failed`. |
 | `clearPdfPreviews(plugin)` | Call on sign-out or account switch: drops any transfer, closes QuickLook on iOS and deletes every cached preview file. Failures are `PdfPreviewError` with code `failed`. |
+| `parseRedirect(redirectUri)` | Validates a private-use scheme redirect (reverse-domain, lowercase, `<scheme>:/<path>`, no authority, query or fragment) and returns its parts; throws `TypeError` otherwise. Shared with `@jeswr/desktop-auth`. |
 | `mobileClientIdDocument({ origin })` | The `application_type: native` Client Identifier Document for `org.jeswr.suite:/oauth/callback`. |
+| `nativeClientIdDocument({ clientId, clientName, clientUri, redirectUri, logoUri? })` | Owns the fixed native Client Identifier Document metadata. Callers validate the strings; the redirect is checked with `parseRedirect`. `mobileClientIdDocument` and `@jeswr/desktop-auth` build through it. |
 | `@jeswr/suite-native/capacitor` | Native plugin bindings (`SuiteAuthSession`, `SuiteShareIntake`, `SuiteShareStaging`, `SuiteFiles`, `SuiteSecureStore`, `Share`). Import only inside the app shell. |
 
 ```ts

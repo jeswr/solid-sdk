@@ -24,6 +24,7 @@
     "@jeswr/auth-solid",
     "create-solid-app",
     "create-solid-demo",
+    "@jeswr/desktop-auth",
     "@jeswr/federation-client",
     "@jeswr/federation-registry",
     "@jeswr/federation-trust",
