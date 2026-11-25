@@ -179,7 +179,42 @@ function MonthView({ events }: { events: Occurrence[] }) {
     } else setFocused(date);
     setAgendaDay(date);
   }, [date, focusRequest]);
+  /** Backward traversal leaves the grid: a continued bar earlier in the DOM must not trap it. */
+  function leaveGridBackwards(cell: HTMLElement) {
+    const table = root.current;
+    if (!table) return false;
+    const earlierBar = [
+      ...(cell.closest("tr")?.querySelectorAll<HTMLElement>("button.cal-month-bar") ?? []),
+    ].some((bar) => bar.tabIndex === 0 && !cell.contains(bar));
+    if (!earlierBar) return false;
+    const before = [
+      ...document.querySelectorAll<HTMLElement>(
+        "a[href], button, input, select, textarea, summary, [tabindex]",
+      ),
+    ].filter(
+      (element) =>
+        element.tabIndex >= 0 &&
+        !(element as HTMLButtonElement).disabled &&
+        !table.contains(element) &&
+        !element.contains(table) &&
+        table.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_PRECEDING,
+    );
+    const previous = before[before.length - 1];
+    if (previous) previous.focus();
+    else (document.activeElement as HTMLElement | null)?.blur();
+    return true;
+  }
   function onKey(event: KeyboardEvent, key: string) {
+    if (
+      event.key === "Tab" &&
+      event.shiftKey &&
+      !phone &&
+      event.target === event.currentTarget &&
+      leaveGridBackwards(event.currentTarget as HTMLElement)
+    ) {
+      event.preventDefault();
+      return;
+    }
     if (event.key === "Tab" && !phone && event.target instanceof HTMLButtonElement) {
       const cell = root.current?.querySelector<HTMLElement>(`[data-day="${focused}"]`);
       const bars = [
