@@ -1,5 +1,5 @@
 // AUTHORED-BY GPT-6.1 Sol
-export { EnvSessionGate, type EnvSessionGateProps, type SessionGateEnv } from "./EnvSessionGate.js";
+export { EnvLoginScreen, type EnvLoginScreenProps, type LoginScreenEnv } from "./EnvLoginScreen.js";
 export {
   issuerChoiceProviders,
   LoginScreen,
