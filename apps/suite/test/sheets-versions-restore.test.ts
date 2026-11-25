@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import { afterEach, expect, it, vi } from "vitest";
 import type { WorkbookService } from "../src/apps/sheets/lib/contract";
-import { WorkbookConflictError } from "../src/apps/sheets/lib/contract";
+import { WorkbookConflictError, WorkbookPartialSaveError } from "../src/apps/sheets/lib/contract";
 import { pendingSaves } from "../src/apps/sheets/lib/pending-saves";
 import { act, h, mount } from "./drive-ui-dom";
 import { harness, snapshot } from "./sheets-workbook-helpers";
@@ -99,7 +99,7 @@ it("blocks restore for a viewer", async () => {
   await f.ui.unmount();
 });
 
-it("blocks restore when capturing the current state fails and preserves it for retry", async () => {
+it("blocks restore when capturing the current state fails and does not leave the restore queued", async () => {
   const f = await fixture();
   const current = snapshot("Current edits");
   const historical = snapshot("Historical");
@@ -117,27 +117,36 @@ it("blocks restore when capturing the current state fails and preserves it for r
   await act(async () => {
     await expect(state.restore(historical, loaded)).rejects.toThrow("restore");
   });
-  expect(state.status).toBe("error");
-  expect(pendingSaves.get(f.book.container)?.dirty).toBe(true);
+  // The failure is surfaced to the caller; nothing stays queued for autosave.
+  expect(state.status).toBe("saved");
+  expect(pendingSaves.get(f.book.container)?.dirty).toBe(false);
+  expect(state.workbook?.snapshot).toEqual(current);
   expect(loaded).not.toHaveBeenCalled();
   expect((await f.storage.loadSnapshot(f.book.container)).value).toEqual(current);
   expect(f.calls.some((call) => call.method === "PUT" && call.url.endsWith("workbook.json"))).toBe(
     false,
   );
 
+  // Connectivity returning or a retry must never apply the abandoned restore.
   f.setHook(() => undefined);
-  await act(() => state.retry());
+  await act(async () => {
+    await state.retry();
+    await state.flush();
+  });
   expect(state.status).toBe("saved");
-  expect((await f.storage.loadSnapshot(f.book.container)).value).toEqual(historical);
-  const history = f.service.versions?.(f.book.container);
-  const versions = await history?.list();
-  expect(await Promise.all((versions ?? []).map((v) => history?.load(v.url)))).toContainEqual(
-    current,
+  expect((await f.storage.loadSnapshot(f.book.container)).value).toEqual(current);
+  expect(f.calls.some((call) => call.method === "PUT" && call.url.endsWith("workbook.json"))).toBe(
+    false,
   );
+  // An explicit second attempt still works.
+  await act(async () => {
+    await state.restore(historical);
+  });
+  expect((await f.storage.loadSnapshot(f.book.container)).value).toEqual(historical);
   await f.ui.unmount();
 });
 
-it("retains failed restore in the normal conflict queue and can discard or retry it", async () => {
+it("drops a restore that hits a conflict instead of queueing it behind the conflict dialog", async () => {
   const f = await fixture();
   const save = vi
     .spyOn(f.service, "save")
@@ -145,15 +154,32 @@ it("retains failed restore in the normal conflict queue and can discard or retry
   await act(async () => {
     await expect(state.restore(snapshot("Historical"))).rejects.toThrow("restore");
   });
-  expect(state.status).toBe("conflict");
-  expect(pendingSaves.get(f.book.container)?.dirty).toBe(true);
-  await act(() => state.retry(true));
-  expect(save.mock.calls.at(-1)?.[3]).toMatchObject({ force: true, snapshotCurrent: true });
   expect(state.status).toBe("saved");
+  expect(pendingSaves.get(f.book.container)?.dirty).toBe(false);
+  await act(() => state.retry(true));
+  expect(save).toHaveBeenCalledTimes(1);
   await act(async () => {
     state.scheduleSave(() => snapshot("New edit"));
     await state.flush();
   });
   expect(save.mock.calls.at(-1)?.[3]?.snapshotCurrent).toBeUndefined();
+  await f.ui.unmount();
+});
+
+it("treats a partial save of the restored workbook as published so the caller reloads it", async () => {
+  const f = await fixture();
+  const historical = snapshot("Historical");
+  const loaded = vi.fn();
+  const real = f.service.save.bind(f.service);
+  vi.spyOn(f.service, "save").mockImplementation(async (container, snap, base, options) => {
+    const result = await real(container, snap, base, options);
+    throw new WorkbookPartialSaveError(result.version, new Error("index write failed"));
+  });
+  await act(async () => {
+    await state.restore(historical, loaded);
+  });
+  expect(state.status).toBe("saved");
+  expect(pendingSaves.get(f.book.container)?.dirty).toBe(false);
+  expect(loaded).toHaveBeenCalled();
   await f.ui.unmount();
 });

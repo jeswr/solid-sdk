@@ -255,7 +255,11 @@ export interface SheetEngine {
     options: { mode: "new-sheet" | "replace-active"; name?: string },
   ): CsvImportResult;
   setDark(dark: boolean): void;
-  setReadOnly(readOnly: boolean): void;
+  /**
+   * Locks editing. `collaborationReadOnly` is the workbook's real access (default: `readOnly`);
+   * pass it separately for a UI-only lock such as viewing version history.
+   */
+  setReadOnly(readOnly: boolean, collaborationReadOnly?: boolean): void;
   dispose(): void;
 }
 

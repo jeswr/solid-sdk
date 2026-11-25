@@ -42,7 +42,7 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
 
   const histories = new Map<string, ReturnType<typeof createVersionHistory>>();
   function versions(container: string) {
-    const own = container.startsWith(root);
+    const own = container.startsWith(root) && directChild(root, container);
     container = own ? checked(container) : assertSharedWorkbook(root, container);
     let history = histories.get(container);
     if (!history) {

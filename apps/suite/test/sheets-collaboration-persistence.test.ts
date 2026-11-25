@@ -665,3 +665,91 @@ it("re-reads a legacy ID migration that loses its If-Match race", async () => {
   expect(raced).toBe(true);
   expect(opened.snapshot.id).toBe(winner);
 });
+
+it("opens from the readable updates and warns when a log member is corrupt, oversized or forbidden", async () => {
+  const t = transport();
+  const seeded = await t.open();
+  await seeded.runtime.destroy();
+  t.updates.set(`${container}junk`, new Uint8Array([255]));
+  t.updates.set(`${container}empty`, new Uint8Array());
+  class Hostile extends t.FakeStore {
+    override async listUpdateUrls() {
+      return [...(await super.listUpdateUrls()), `${container}huge`, `${container}forbidden`];
+    }
+    override async loadUpdates() {
+      const out = [];
+      for (const url of await this.listUpdateUrls()) {
+        const update = await this.readUpdate(url);
+        if (update) out.push({ url, update });
+      }
+      return out;
+    }
+    override async readUpdate(url: string) {
+      if (url.endsWith("huge"))
+        throw new Error(`[y-solid] resource ${url} exceeds max size (> 64 bytes); refused`);
+      if (url.endsWith("forbidden"))
+        throw new Error(`[y-solid] readUpdate ${url} failed: 403 Forbidden`);
+      return super.readUpdate(url);
+    }
+  }
+  const runtime = new WorkbookCollaboration(container, t.fetch, false, new Hostile());
+  await runtime.open(snapshot);
+  expect(JSON.stringify(sheetStates(runtime.doc).toJSON())).toContain("Seed");
+  expect(runtime.skippedUpdates).toBe(4);
+  // A skipped member is not an append failure, so saves are not blocked or repaired.
+  edit(runtime, "After warning");
+  await runtime.flush();
+  await runtime.destroy();
+
+  // Transient failures still fail the open instead of silently dropping updates.
+  class Flaky extends t.FakeStore {
+    override async readUpdate(url: string): Promise<Uint8Array | null> {
+      if (url.endsWith("empty")) throw new Error("[y-solid] readUpdate x failed: 503 Unavailable");
+      return super.readUpdate(url);
+    }
+    override async loadUpdates() {
+      const out = [];
+      for (const url of await this.listUpdateUrls()) {
+        const update = await this.readUpdate(url);
+        if (update) out.push({ url, update });
+      }
+      return out;
+    }
+  }
+  await expect(
+    new WorkbookCollaboration(container, t.fetch, false, new Flaky()).open(snapshot),
+  ).rejects.toThrow("503");
+});
+
+it("still fails the open on real load or seed errors, which are not skipped-member warnings", async () => {
+  const t = transport();
+  const holder: { runtime?: WorkbookCollaboration } = {};
+  const emit = (message: string) =>
+    (
+      (holder.runtime as WorkbookCollaboration).provider as unknown as {
+        emit(e: string, v: Error): void;
+      }
+    ).emit("error", new Error(message));
+  class LoadFails extends t.FakeStore {
+    override async loadUpdates() {
+      await Promise.resolve();
+      emit("Integration failed");
+      return [];
+    }
+  }
+  holder.runtime = new WorkbookCollaboration(container, t.fetch, false, new LoadFails());
+  await expect(holder.runtime.open(snapshot)).rejects.toThrow("Integration failed");
+
+  const seedFails = new t.FakeStore();
+  const runtime = new WorkbookCollaboration(
+    container,
+    async () => {
+      emit("Sync failed");
+      return new Response(null, { status: 201 });
+    },
+    false,
+    seedFails,
+  );
+  holder.runtime = runtime;
+  await expect(runtime.open(snapshot)).rejects.toThrow("Sync failed");
+});

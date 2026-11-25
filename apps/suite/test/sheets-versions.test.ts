@@ -402,6 +402,7 @@ describe("workbook save hooks", () => {
     const history = required(recipient.versions?.(h.book.container));
     const [version] = await history.list();
     expect(await history.load(required(version).url)).toEqual(h.book.snapshot);
+    expect(publicFetch).toHaveBeenCalled();
     expect(
       publicFetch.mock.calls.every(
         ([, init]) => init?.credentials === "omit" && init.redirect === "manual",
@@ -409,5 +410,73 @@ describe("workbook save hooks", () => {
     ).toBe(true);
     await expect(history.name(required(version), "No")).rejects.toThrow("View-only");
     expect(() => recipient.versions?.("https://foreign.example/book/")).toThrow();
+  });
+
+  it("caps sidecar and snapshot bodies and the number of sidecars fetched", async () => {
+    const h = await fixture();
+    await h.history.capture("Valid");
+    const [valid] = await h.history.list();
+    const stem = required(valid).url.replace(".meta.json", "");
+    // Oversized sidecar (declared and streamed) is skipped, not buffered.
+    h.setHook((call) => {
+      if (call.url === required(valid).url && call.method === "GET")
+        return new Response("x".repeat(20 * 1024));
+    });
+    expect(await h.history.list()).toEqual([]);
+    h.setHook((call) => {
+      if (call.url === required(valid).url && call.method === "GET")
+        return new Response("{}", { headers: { "content-length": String(1 << 20) } });
+    });
+    expect(await h.history.list()).toEqual([]);
+    // A sidecar without a body, and an oversized declaration without a body, are skipped.
+    h.setHook((call) => {
+      if (call.url === required(valid).url && call.method === "GET")
+        return new Response(null, { headers: { "content-length": String(1 << 20) } });
+    });
+    expect(await h.history.list()).toEqual([]);
+    h.setHook((call) => {
+      if (call.url === required(valid).url && call.method === "GET") return new Response(null);
+    });
+    expect(await h.history.list()).toEqual([]);
+    // Snapshot bodies: declared length and an undeclared stream both fail closed.
+    h.setHook((call) => {
+      if (call.url === `${stem}.json` && call.method === "GET")
+        return new Response("{}", { headers: { "content-length": String(1 << 30) } });
+    });
+    await expect(h.history.load(required(valid).url)).rejects.toThrow("exceeds");
+    const big = new Uint8Array(1 << 20);
+    h.setHook((call) => {
+      if (call.url === `${stem}.json` && call.method === "GET")
+        return new Response(
+          new ReadableStream({
+            pull(controller) {
+              controller.enqueue(big);
+            },
+          }),
+        );
+    });
+    await expect(h.history.load(required(valid).url)).rejects.toThrow("exceeds");
+    // Capture refuses to copy an oversized workbook.json into history.
+    h.setHook((call) => {
+      if (call.url.endsWith("workbook.json") && call.method === "GET")
+        return new Response("{}", { headers: { "content-length": String(1 << 30) } });
+    });
+    await expect(h.history.capture("Huge")).rejects.toThrow("exceeds");
+    // Listing only fetches the newest 500 well-formed sidecars; other members are never read.
+    const members = Array.from({ length: 600 }, (_, i) => ({
+      url: `${h.root}${String(1000 + i)}-a.meta.json`,
+      container: false,
+    }));
+    h.setHook((call) => {
+      if (call.url === h.root)
+        return listing(h.root, [...members, { url: `${h.root}note.txt`, container: false }]);
+      return new Response("{}", { status: 404 });
+    });
+    h.calls.length = 0;
+    expect(await h.history.list()).toEqual([]);
+    const fetched = h.calls.filter((call) => call.url.endsWith(".meta.json"));
+    expect(fetched).toHaveLength(500);
+    expect(fetched[0]?.url).toBe(`${h.root}1599-a.meta.json`);
+    expect(h.calls.some((call) => call.url.endsWith("note.txt"))).toBe(false);
   });
 });

@@ -535,7 +535,8 @@ it("opens File version history, previews independently and restores through the 
     await import("../src/apps/sheets/components/version-history");
   });
   expect(document.querySelector('[aria-label="Spreadsheet versions"]')).not.toBeNull();
-  expect(engine.setReadOnly).toHaveBeenLastCalledWith(true);
+  // History locks only the editing UI; collaboration access is unchanged.
+  expect(engine.setReadOnly).toHaveBeenLastCalledWith(true, false);
   const version = [
     ...document.querySelectorAll<HTMLButtonElement>('[aria-label="Spreadsheet versions"] button'),
   ].find((node) => node.textContent?.includes("Original workbook"));
@@ -545,11 +546,17 @@ it("opens File version history, previews independently and restores through the 
   expect(engine.load).not.toHaveBeenCalled();
   await click(button(document, "Restore this version"));
   await click(button(document, "Restore"));
-  await vi.waitFor(() => expect(engine.load).toHaveBeenCalled());
+  // Restore remounts the grid on a fresh collaboration instance instead of loading the
+  // old cells into an engine bound to the current log.
+  await vi.waitFor(() => expect(mocks.mount.mock.calls.length).toBeGreaterThan(2));
   const opened = await service.open(book.container);
-  expect(engine.load).toHaveBeenCalledWith(book.snapshot, opened.version.snapshotEtag);
+  const remounted = mocks.mount.mock.calls.at(-1)?.[1].snapshot as Snapshot;
+  expect(engine.load).not.toHaveBeenCalled();
+  expect(engine.dispose).toHaveBeenCalled();
+  expect(remounted.id).not.toBe(book.snapshot.id);
+  expect({ ...remounted, id: undefined }).toEqual({ ...book.snapshot, id: undefined });
+  expect(opened.snapshot).toEqual(remounted);
   expect(opened.version.snapshotEtag).not.toBe(changed.version.snapshotEtag);
   expect(load).toHaveBeenCalled();
-  expect(engine.setReadOnly).toHaveBeenLastCalledWith(false);
   await editor.unmount();
 });

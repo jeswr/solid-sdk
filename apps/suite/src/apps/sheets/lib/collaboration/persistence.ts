@@ -27,6 +27,14 @@ export async function clearWorkbookMirrors(webId: string, workbook: string) {
   }
 }
 
+const CORRUPT_UPDATE = "[y-solid] skipped a corrupt update";
+
+/** Size-cap refusals and 4xx responses will not succeed on retry. 404/410 never reach here. */
+function permanentReadFailure(error: unknown) {
+  const { message } = error as Error;
+  return /exceeds max size/.test(message) || /readUpdate .* failed: 4\d\d\b/.test(message);
+}
+
 /** One append-only update log, with an atomic, create-only initial seed. */
 export class WorkbookCollaboration {
   readonly doc = new Y.Doc();
@@ -40,6 +48,9 @@ export class WorkbookCollaboration {
   private confirmedVector = "AA==";
   private retired: Error | undefined;
   localMirrorUnavailable = false;
+  /** Log members that could not be read or decoded and were skipped. Non-blocking. */
+  skippedUpdates = 0;
+  private skipCause: Error | undefined;
   readOnly: boolean;
 
   constructor(
@@ -59,8 +70,28 @@ export class WorkbookCollaboration {
       if (this.readOnly) return Promise.reject(new Error("This spreadsheet is view only"));
       return append(update);
     };
+    // One oversized, forbidden or otherwise permanently unreadable member must not make
+    // the whole workbook unopenable. Skip it (the store keeps its size caps) and open
+    // from the snapshot plus the readable updates. Transient failures still propagate.
+    const read = store.readUpdate.bind(store);
+    store.readUpdate = async (url) => {
+      try {
+        return await read(url);
+      } catch (error) {
+        if (!permanentReadFailure(error)) throw error;
+        ++this.skippedUpdates;
+        this.skipCause ??= error as Error;
+        return null;
+      }
+    };
     this.provider = new SolidPersistence({ doc: this.doc, store });
     this.provider.on("error", (error) => {
+      // A corrupt member is skipped by y-solid; it is a warning, not an append failure.
+      if (error.message.startsWith(CORRUPT_UPDATE)) {
+        ++this.skippedUpdates;
+        this.skipCause ??= error;
+        return;
+      }
       this.failure = error;
       ++this.failureVersion;
     });
@@ -74,6 +105,8 @@ export class WorkbookCollaboration {
         await this.openMirror(snapshot);
         return;
       }
+      // Nothing readable survived: fail closed rather than seed beside a damaged log.
+      if (this.skipCause) throw this.skipCause;
       if (this.readOnly) {
         // Legacy view-only workbooks render their snapshot without creating a log.
         return;
@@ -99,7 +132,8 @@ export class WorkbookCollaboration {
         }
         await this.provider.sync();
         if (this.failure) throw this.failure;
-        if (!sheetStates(this.doc).size) throw new Error("Couldn't load spreadsheet collaboration");
+        if (!sheetStates(this.doc).size)
+          throw this.skipCause ?? new Error("Couldn't load spreadsheet collaboration");
       } finally {
         seed.destroy();
       }

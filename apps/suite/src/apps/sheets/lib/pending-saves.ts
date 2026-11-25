@@ -29,6 +29,8 @@ export function createPendingSaves() {
     let storedTitle = title;
     let dropped = false;
     let snapshotCurrent = false;
+    let restoring = false;
+    let restorePublished = false;
     let local = initial.snapshot;
     let read = () => local;
     const savedListeners = new Set<SnapshotSaved>();
@@ -71,6 +73,7 @@ export function createPendingSaves() {
             if ("status" in cause && cause.status === 403) opened = { ...opened, readOnly: true };
           }
           if (error instanceof WorkbookPartialSaveError) {
+            if (restoring) restorePublished = true;
             opened = { ...opened, version: error.version };
             // Verification failures can carry a previous write's ETag. Only a
             // confirmed snapshot write in this attempt acknowledges this value.
@@ -118,10 +121,28 @@ export function createPendingSaves() {
         await flush();
         if (opened.readOnly || queue.status !== "saved")
           throw new Error("Save your changes online before restoring a version");
+        const previousLocal = local;
+        const previousRead = read;
+        restoring = true;
+        restorePublished = false;
         snapshotCurrent = true;
-        schedule(() => snapshot);
-        await flush();
-        if (queue.status !== "saved") throw new Error("Could not restore this version");
+        try {
+          schedule(() => snapshot);
+          await flush();
+          if (queue.status === "saved") return;
+          // A partial save already published the restored workbook.json; the caller's
+          // reload shows what is on the pod. Any other failure must not stay queued, or
+          // autosave would overwrite the workbook with this version later, unannounced.
+          if (!restorePublished) {
+            local = previousLocal;
+            read = previousRead;
+            throw new Error("Could not restore this version");
+          }
+        } finally {
+          restoring = false;
+          if (queue.status !== "saved") queue.reset();
+          snapshotCurrent = false;
+        }
       },
       setReadOnly(readOnly = true) {
         if (!readOnly && !opened.readOnly) return;

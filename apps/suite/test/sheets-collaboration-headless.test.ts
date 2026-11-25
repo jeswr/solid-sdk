@@ -92,7 +92,7 @@ vi.mock("@/lib/session/pod-session", () => ({
 
 import * as Y from "yjs";
 import { type ChartSpec, readCharts, withCharts } from "../src/apps/sheets/lib/charts/spec";
-import { seedSheets } from "../src/apps/sheets/lib/collaboration/model";
+import { LOCAL_ORIGIN, seedSheets, sheetStates } from "../src/apps/sheets/lib/collaboration/model";
 import type { WorkbookCollaboration } from "../src/apps/sheets/lib/collaboration/persistence";
 import { currentCommentAnchor } from "../src/apps/sheets/lib/comments/anchors";
 import { CellCommentStore } from "../src/apps/sheets/lib/comments/store";
@@ -865,5 +865,66 @@ it("keeps a concurrently entered reversed range attached to its values", async (
     });
   } finally {
     p.dispose();
+  }
+});
+
+it("captures cut/paste and drag-move (move-range) so reconcile keeps the move and peers receive it", async () => {
+  const p = await pair();
+  try {
+    const rect = (row: number, column: number) => ({
+      startRow: row,
+      endRow: row,
+      startColumn: column,
+      endColumn: column,
+    });
+    // Move B3 ("Below") to D5, then force the reconcile that used to revert it.
+    await p.left.execute("sheet.command.move-range", {
+      fromRange: rect(2, 1),
+      toRange: rect(4, 3),
+    });
+    p.sync();
+    for (const replica of [p.left, p.right]) {
+      expect(replica.data()?.cellData?.[4]?.[3]?.v).toBe("Below");
+      expect(replica.data()?.cellData?.[2]?.[1]?.v).toBeUndefined();
+    }
+    p.left.doc.transact(() => {}, "reconcile-probe");
+    expect(p.left.data()?.cellData?.[4]?.[3]?.v).toBe("Below");
+    await p.left.undo();
+    p.sync();
+    for (const replica of [p.left, p.right]) {
+      expect(replica.data()?.cellData?.[2]?.[1]?.v).toBe("Below");
+      expect(replica.data()?.cellData?.[4]?.[3]?.v).toBeUndefined();
+    }
+  } finally {
+    p.dispose();
+  }
+});
+
+it("does not capture the destination side of a move into a sheet the log has not seeded yet", async () => {
+  const two = initial();
+  (two.sheetOrder as string[]).push("other");
+  (two.sheets as Record<string, object>).other = {
+    id: "other",
+    name: "Other",
+    rowCount: 6,
+    columnCount: 4,
+    cellData: {},
+  };
+  const a = new Y.Doc();
+  a.transact(() => seedSheets(a, initial()));
+  const left = await mounted(a, two);
+  try {
+    // The engine seeds added sheets on mount; model a peer log that has not got it yet.
+    a.transact(() => sheetStates(a).delete("other"), LOCAL_ORIGIN);
+    await left.execute("sheet.command.move-range", {
+      fromRange: { startRow: 2, endRow: 2, startColumn: 1, endColumn: 1 },
+      toRange: { startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 },
+      toSubUnitId: "other",
+    });
+    // The destination sheet is seeded by the command's commit, not by the move capture.
+    expect([...a.getMap("sheets").keys()]).toEqual(["data", "other"]);
+  } finally {
+    left.engine.dispose();
+    a.destroy();
   }
 });

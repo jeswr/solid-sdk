@@ -89,6 +89,12 @@ const statusText: Record<SaveStatus, string> = {
 
 export { SheetNotFound } from "./sheets-states";
 
+/** Access read-only locks the engine and collaboration; a history lock locks only the engine. */
+function applyLock(engine: SheetEngine, readOnly: boolean, locked: boolean) {
+  if (locked && !readOnly) engine.setReadOnly(true, false);
+  else engine.setReadOnly(readOnly);
+}
+
 function Grid({
   container,
   snapshot,
@@ -98,6 +104,7 @@ function Grid({
   engineRef,
   onReady,
   readOnly,
+  locked,
 }: {
   container: string;
   snapshot: Snapshot;
@@ -106,7 +113,10 @@ function Grid({
   onSaved: (listener: SnapshotSaved) => (() => void) | undefined;
   engineRef: { current: SheetEngine | null };
   onReady: (engine: SheetEngine | null) => void;
+  /** The workbook's real access. Only this decides how collaboration is built. */
   readOnly: boolean;
+  /** A UI-only editing lock (version history). It never changes collaboration access. */
+  locked: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const service = useWorkbookService();
@@ -117,12 +127,15 @@ function Grid({
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
   const [localMirrorUnavailable, setLocalMirrorUnavailable] = useState(false);
+  const [skippedUpdates, setSkippedUpdates] = useState(0);
   const [attempt, setAttempt] = useState(0);
-  const viewOnly = useRef(readOnly);
-  viewOnly.current = readOnly;
+  const access = useRef(readOnly);
+  access.current = readOnly;
+  const viewOnly = useRef(readOnly || locked);
+  viewOnly.current = readOnly || locked;
   useEffect(() => {
-    engineRef.current?.setReadOnly(readOnly);
-  }, [readOnly, engineRef]);
+    if (engineRef.current) applyLock(engineRef.current, readOnly, locked);
+  }, [readOnly, locked, engineRef]);
   useEffect(() => {
     dark.current = resolvedTheme === "dark";
     engineRef.current?.setDark(dark.current);
@@ -137,19 +150,21 @@ function Grid({
     setFailed(false);
     setReady(false);
     setLocalMirrorUnavailable(false);
+    setSkippedUpdates(0);
     void (async () => {
       const mount = await loadEngine();
       if (!live || !host.current) return;
       collaboration = await service.collaborate?.(
         container,
         latestSnapshot.current.snapshot,
-        viewOnly.current,
+        access.current,
       );
       if (!live) {
         await collaboration?.destroy();
         return;
       }
       setLocalMirrorUnavailable(collaboration?.localMirrorUnavailable === true);
+      setSkippedUpdates(collaboration?.skippedUpdates ?? 0);
       engine = await mount(host.current, {
         collaboration,
         snapshot: latestSnapshot.current.snapshot,
@@ -166,7 +181,7 @@ function Grid({
       engineRef.current = engine;
       onReady(engine);
       engine.setDark(dark.current);
-      engine.setReadOnly(viewOnly.current);
+      applyLock(engine, access.current, viewOnly.current && !access.current);
       const active = engine;
       unsubscribeSaved = onSaved((data, savedRevision) =>
         active.setWorkbookRevision?.(savedRevision, data),
@@ -201,6 +216,11 @@ function Grid({
         This grid is rendered by the spreadsheet engine. Screen reader cell navigation is limited.
       </p>
       {localMirrorUnavailable && <p role="status">Offline edits won't be kept on this device.</p>}
+      {skippedUpdates > 0 && (
+        <p role="status">
+          Some earlier edits couldn't be read and were skipped. The rest of this spreadsheet loaded.
+        </p>
+      )}
       {!ready && (
         <div className="sht-grid-loading">
           {failed ? (
@@ -272,9 +292,18 @@ export function SheetEditor({ container }: { container: string }) {
     }
   };
   const reloadGrid = async (restored?: Snapshot) => {
+    if (restored) {
+      // The collaboration log is authoritative for cells, so loading an old snapshot
+      // into an engine bound to the current log would be reverted by reconcile. Save the
+      // version under a fresh instance id (as "Make a copy" does) and remount the grid,
+      // which tears the old collaboration down and seeds a new log from the version.
+      await state.restore({ ...restored, id: crypto.randomUUID() });
+      setChartRevision((revision) => revision + 1);
+      setGrid((current) => ({ container, revision: (current?.revision ?? 0) + 1 }));
+      return;
+    }
     const loaded: SnapshotSaved = (snapshot, revision) => engine.current?.load(snapshot, revision);
-    if (restored) await state.restore(restored, loaded);
-    else await state.reload(loaded);
+    await state.reload(loaded);
     setChartRevision((revision) => revision + 1);
     if (!engine.current)
       setGrid((current) => ({ container, revision: (current?.revision ?? 0) + 1 }));
@@ -511,7 +540,8 @@ export function SheetEditor({ container }: { container: string }) {
                 onSaved={state.onSaved}
                 engineRef={engine}
                 onReady={setChartEngine}
-                readOnly={state.readOnly || viewingHistory}
+                readOnly={state.readOnly}
+                locked={viewingHistory}
               />
               <Suspense fallback={null}>
                 <ChartWorkspace

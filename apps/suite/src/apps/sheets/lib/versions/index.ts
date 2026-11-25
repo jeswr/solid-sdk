@@ -24,6 +24,56 @@ export interface VersionHistory {
   capture(name: string): Promise<void>;
 }
 
+/** Sidecars are tiny; snapshots are whole workbooks. Foreign pods control both on the shared path. */
+const MAX_SIDECAR_BYTES = 16 * 1024;
+const MAX_SNAPSHOT_BYTES = 32 * 1024 * 1024;
+/** Sidecar fetches per listing. Names start with a timestamp, so these are the newest. */
+const MAX_VERSIONS = 500;
+
+class BodyTooLargeError extends Error {
+  constructor(max: number) {
+    super(`Version body exceeds ${max} bytes`);
+  }
+}
+
+async function discard(stream: { cancel(): Promise<void> } | null) {
+  try {
+    await stream?.cancel();
+  } catch {
+    // Releasing an already-failed stream is best effort.
+  }
+}
+
+/** Read a body under a byte cap: Content-Length first, then while streaming, never after. */
+async function readCappedText(response: Response, max: number): Promise<string> {
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > max) {
+    await discard(response.body);
+    throw new BodyTooLargeError(max);
+  }
+  const reader = response.body?.getReader();
+  if (!reader) return "";
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await discard(reader);
+      throw new BodyTooLargeError(max);
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 /** Workbook-specific JSON history; transport and LDP parsing come from the SDK. */
 export function createVersionHistory(options: {
   fetch: typeof globalThis.fetch;
@@ -40,10 +90,11 @@ export function createVersionHistory(options: {
   let lastSaved: number | undefined;
   let pending: { etag: string | null; time: number } | undefined;
 
+  const isMetadataUrl = (url: string) =>
+    url.startsWith(root) && /^[\w-]+\.meta\.json$/.test(url.slice(root.length));
   function metadataUrl(url: string) {
     // Only our direct, canonical JSON sidecars can designate a snapshot.
-    if (!url.startsWith(root) || !/^[\w-]+\.meta\.json$/.test(url.slice(root.length)))
-      throw new TypeError("Invalid spreadsheet version URL");
+    if (!isMetadataUrl(url)) throw new TypeError("Invalid spreadsheet version URL");
     return url;
   }
   function writable() {
@@ -65,7 +116,7 @@ export function createVersionHistory(options: {
   async function readMetadata(url: string): Promise<SheetVersion> {
     const response = await request(metadataUrl(url));
     return {
-      ...metadataSchema.parse(await response.json()),
+      ...metadataSchema.parse(JSON.parse(await readCappedText(response, MAX_SIDECAR_BYTES))),
       url,
       etag: response.headers.get("etag"),
     };
@@ -73,9 +124,12 @@ export function createVersionHistory(options: {
   async function list(): Promise<SheetVersion[]> {
     const members = await readContainerMembers(http, root, { scope: container });
     const versions: SheetVersion[] = [];
-    for (const member of members ?? []) {
+    let urls = (members ?? []).map((member) => member.url).filter(isMetadataUrl);
+    if (urls.length > MAX_VERSIONS)
+      urls = urls.sort((a, b) => b.localeCompare(a)).slice(0, MAX_VERSIONS);
+    for (const url of urls) {
       try {
-        versions.push(await readMetadata(member.url));
+        versions.push(await readMetadata(url));
       } catch {
         // Malformed, foreign, vanished and unreadable entries do not hide valid versions.
       }
@@ -99,7 +153,7 @@ export function createVersionHistory(options: {
     const response = await request(new URL("workbook.json", container).href);
     const etag = response.headers.get("etag");
     if (expected !== undefined && etag !== expected) throw new WorkbookConflictError(container);
-    const body = await response.text();
+    const body = await readCappedText(response, MAX_SNAPSHOT_BYTES);
     await decode(body);
     const time = now().getTime();
     const stem = `${time}-${crypto.randomUUID()}`;
@@ -138,7 +192,7 @@ export function createVersionHistory(options: {
     list,
     async load(url: string) {
       const response = await request(metadataUrl(url).replace(".meta.json", ".json"));
-      return decode(await response.text());
+      return decode(await readCappedText(response, MAX_SNAPSHOT_BYTES));
     },
     async name(version: SheetVersion, name: string) {
       writable();

@@ -391,7 +391,7 @@ export const mountUniver: MountEngine = async (container, options) => {
       const params = command.params as {
         cellValue: Record<number, Record<number, ICellData | null>>;
       };
-      for (const row of Object.values(params.cellValue))
+      for (const row of Object.values(params.cellValue ?? {}))
         for (const [column, cell] of Object.entries(row))
           if (cell) row[Number(column)] = sanitizeCellLinks(cell);
     }
@@ -912,11 +912,11 @@ export const mountUniver: MountEngine = async (container, options) => {
     setDark(dark) {
       univerAPI.toggleDarkMode(dark);
     },
-    setReadOnly(value) {
+    setReadOnly(value, collaborationReadOnly = value) {
       const previous = readOnly;
       const data = snapshot();
       readOnly = value;
-      if (options.collaboration) options.collaboration.readOnly = value;
+      if (options.collaboration) options.collaboration.readOnly = collaborationReadOnly;
       if (!previous && value) filterBaseline = data.resources;
       if (previous && !value) load(data, false);
       ++generation;
