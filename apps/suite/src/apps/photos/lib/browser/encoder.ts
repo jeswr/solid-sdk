@@ -215,7 +215,7 @@ export const browserEncoder: ImageEncoder = {
       return new Blob([stripVideoLocation(await original.arrayBuffer())], { type: original.type });
     if (original.type.startsWith("video/"))
       throw new LocationStripError(
-        "Location cannot be removed safely from WebM videos here. Turn off Remove location for this video.",
+        "Location can't be removed from WebM videos here, so this video wasn't uploaded.",
       );
     if (original.type === "image/jpeg") return stripJpeg(original);
     if (original.type === "image/webp") return stripWebp(original);

@@ -251,7 +251,7 @@ describe("bounded ISO BMFF metadata", () => {
   it("preserves box extents and clears unreferenced media when scrubbing legacy location", () => {
     for (const size of ["normal", "large"] as const) {
       const source = concat(
-        box("ftyp", text("isom")),
+        box("ftyp", text("isom0000")),
         box("moov", concat(mvhd(), box("udta", concat(xyz(), xyz("+20.0+030.0/", size))))),
         box("mdat", text("original media bytes")),
       );
@@ -302,7 +302,7 @@ describe("bounded ISO BMFF metadata", () => {
     for (const bytes of malformed) {
       expect(readVideoMetadata(bytes)).toEqual({});
       expect(() => stripVideoLocation(bytes)).toThrow(VideoLocationError);
-      expect(() => stripVideoLocation(bytes)).toThrow("Turn off Remove location for this video");
+      expect(() => stripVideoLocation(bytes)).toThrow("wasn't uploaded");
     }
     expect(readVideoMetadata(new Uint8Array())).toEqual({});
   });

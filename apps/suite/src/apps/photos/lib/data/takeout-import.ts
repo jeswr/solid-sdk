@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 
+import { PrivateDestinationError } from "../model/io";
 import { VideoLocationError } from "../model/mp4";
 import { statusOf } from "./shared";
 import type { TakeoutItem, TakeoutPlan } from "./takeout";
@@ -37,7 +38,8 @@ export function takeoutFailure(
       kind: "photo",
       reason: `Your pod refused this ${type.startsWith("video/") ? "video" : "photo"} (error ${status}).`,
     };
-  if (error instanceof VideoLocationError) return { kind: "photo", reason: error.message };
+  if (error instanceof VideoLocationError || error instanceof PrivateDestinationError)
+    return { kind: "photo", reason: error.message };
   if (type.startsWith("video/"))
     return {
       kind: "photo",

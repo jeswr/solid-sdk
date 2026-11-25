@@ -21,6 +21,8 @@ export interface UploadOptions {
   stripLocation: boolean;
   now: string;
   id: () => string;
+  /** Owner-only check for each destination container; required by every production caller. */
+  verifyDestination?: ((container: string) => Promise<boolean>) | undefined;
   onProgress?: (index: number, progress: number) => void;
 }
 export type UploadResult =
@@ -33,6 +35,24 @@ export async function uploadFiles(
   options: UploadOptions,
 ): Promise<UploadResult[]> {
   const results: UploadResult[] = [];
+  // Each container is verified once per batch; only a positive result is remembered.
+  const verified = new Map<string, Promise<boolean>>();
+  const verifyDestination = options.verifyDestination
+    ? (container: string) => {
+        let known = verified.get(container);
+        if (!known) {
+          known = (options.verifyDestination as (container: string) => Promise<boolean>)(
+            container,
+          ).then((ok) => {
+            if (!ok) verified.delete(container);
+            return ok;
+          });
+          known.catch(() => verified.delete(container));
+          verified.set(container, known);
+        }
+        return known;
+      }
+    : undefined;
   for (const [index, file] of files.entries()) {
     const id = options.id();
     let prepared: PreparedPhoto | undefined;
@@ -65,7 +85,7 @@ export async function uploadFiles(
         stripLocation: async () => ready.original,
         thumbnail: async () => ready.thumbnail,
       };
-      await io.uploadPhotos([input], encoder, now);
+      await io.uploadPhotos([input], encoder, now, verifyDestination);
       options.onProgress?.(index, 100);
       io.forgetBinary(prepared.photo.contentUrl);
       io.forgetBinary(prepared.photo.thumbnailUrl as string);

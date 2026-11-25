@@ -26,6 +26,7 @@ import {
 } from "../lib/data/albums";
 import { preferenceStore, setFavourites } from "../lib/data/favourites";
 import { createKeywordWriter, type LibraryPhoto, listLibrary } from "../lib/data/library";
+import { destinationGuard } from "../lib/data/private-destination";
 import { type Failure, statusOf } from "../lib/data/shared";
 import { photoDataStorage } from "../lib/data/storage";
 import type { TakeoutItem, TakeoutPlan } from "../lib/data/takeout";
@@ -45,7 +46,7 @@ import {
   trashPhoto,
 } from "../lib/data/trash";
 import { type UploadResult, uploadFiles } from "../lib/data/upload";
-import type { CaptureMetadata } from "../lib/model";
+import { type CaptureMetadata, PrivateDestinationError } from "../lib/model";
 import { VideoLocationError } from "../lib/model/mp4";
 
 interface Snapshot {
@@ -69,6 +70,7 @@ const Context = createContext<ReturnType<typeof usePhotosState> | null>(null);
 
 function usePhotosState(session: PodSession) {
   const io = useMemo(() => photoDataStorage(session.fetch, session.storageUrl), [session]);
+  const verifyDestination = useMemo(() => destinationGuard(session), [session]);
   const preferences = useMemo(() => preferenceStore(session.fetch, session.storageUrl), [session]);
   const writeKeywords = useMemo(() => createKeywordWriter(io), [io]);
   const writeAlbum = useMemo(() => createAlbumWriter(io), [io]);
@@ -458,6 +460,7 @@ function usePhotosState(session: PodSession) {
               {
                 encoder: browserEncoder,
                 stripLocation: input.stripLocation,
+                verifyDestination,
                 now: new Date().toISOString(),
                 id: () => id,
                 onProgress: (_index, percent) =>
@@ -487,7 +490,8 @@ function usePhotosState(session: PodSession) {
                 : result &&
                     !result.ok &&
                     (result.error instanceof LocationStripError ||
-                      result.error instanceof VideoLocationError)
+                      result.error instanceof VideoLocationError ||
+                      result.error instanceof PrivateDestinationError)
                   ? result.error.message
                   : `Couldn't upload ${input.name}. Retry in the upload panel.`,
             );
@@ -499,7 +503,7 @@ function usePhotosState(session: PodSession) {
         },
       ).then(() => saved);
     },
-    [io, run],
+    [io, run, verifyDestination],
   );
   const upload = useCallback(
     (files: File[], stripLocation: boolean) => {
@@ -564,6 +568,7 @@ function usePhotosState(session: PodSession) {
                   {
                     encoder: browserEncoder,
                     stripLocation,
+                    verifyDestination,
                     now: new Date().toISOString(),
                     id: () => {
                       const item = items[next++] as TakeoutItem;
@@ -600,7 +605,7 @@ function usePhotosState(session: PodSession) {
         if (alive.current) await refresh();
       }
     },
-    [io, run, editAlbum, newAlbum, refresh],
+    [io, run, editAlbum, newAlbum, refresh, verifyDestination],
   );
   const cancelUpload = (id: string) => {
     // The model's atomic file pipeline cannot be interrupted safely. Queued files

@@ -2,6 +2,7 @@
 import type { PodSession } from "../../../lib/session/pod-session";
 import { changeMembers, coverAlbum, createAlbum, saveAlbum } from "../lib/data/albums";
 import { preferenceStore, setFavourites } from "../lib/data/favourites";
+import { destinationGuard } from "../lib/data/private-destination";
 import { statusOf } from "../lib/data/shared";
 import { photoDataStorage } from "../lib/data/storage";
 import { uploadFiles } from "../lib/data/upload";
@@ -72,7 +73,13 @@ async function seed(session: PodSession) {
               : blob(scene[0], "image/png"),
           },
         ],
-        { encoder, stripLocation: false, now: date, id: () => `sample-${index + 1}` },
+        {
+          encoder,
+          stripLocation: false,
+          now: date,
+          id: () => `sample-${index + 1}`,
+          verifyDestination: destinationGuard(session),
+        },
       )
     )[0];
     if (!result?.ok) throw new Error("Couldn't create sample photos");

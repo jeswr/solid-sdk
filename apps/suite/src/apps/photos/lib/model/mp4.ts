@@ -35,7 +35,12 @@ const CONTAINERS = new Set([
 ]);
 const METADATA = new Set(["moov", "trak", "udta", "meta", "ilst", "keys", "xml ", "uuid", "XMP_"]);
 const MAX_BOXES = 100_000;
-const UNREADABLE = "This video's metadata is unreadable. Turn off Remove location for this video.";
+const UNREADABLE =
+  "This video's structure couldn't be fully checked, so it wasn't uploaded. Location can only be removed from videos that can be read completely.";
+const JPEG_TRACK =
+  "This video holds still pictures stored as JPEG, which can carry their own location and can't be cleaned here, so it wasn't uploaded.";
+const refusal = (what: string) =>
+  `This video has ${what} that can't be kept safely while removing location, so it wasn't uploaded. Saving it without that track would silently lose it.`;
 function typeAt(bytes: Uint8Array, offset: number): string {
   return String.fromCharCode(...bytes.subarray(offset, offset + 4));
 }
@@ -172,6 +177,13 @@ const SAMPLE_FORMATS = new Set([
   ),
   "raw ",
 ]);
+const JPEG_FORMATS = new Set(["jpeg", "mjpa", "mjpb"]);
+const AV_HANDLERS = new Set(["vide", "soun", "tmcd"]);
+// Timed-metadata tracks can carry location (phone, action-camera and drone telemetry). They are
+// removed on purpose, and that never needs a refusal.
+const TIMED_METADATA_HANDLERS = new Set(["meta", "mebx", "gpmd", "djmd", "rtmd", "gps ", "camm"]);
+const TIMED_METADATA_FORMATS = new Set(["mebx", "gpmd", "djmd", "rtmd", "gps ", "camm"]);
+const TEXT_HANDLERS = new Set(["text", "sbtl", "subt", "clcp", "cc  ", "tx3g"]);
 const CODEC_BOXES = new Set(
   "avcC hvcC dvcC dvvC av1C vpcC esds dOps dfLa alac dac3 dec3 btrt pasp colr clap fiel gama chan wave mdcv clli CoLL SmDm".split(
     " ",
@@ -245,6 +257,8 @@ interface Atom {
   keep: boolean;
   origin: number;
   meta: Atom | undefined;
+  /** Retained leaf boxes keep only this many payload bytes; the rest is zero-filled. */
+  defined?: number | undefined;
 }
 const cursor = (bytes: Uint8Array, atom: Atom) => new Cursor(bytes, atom.end, atom.payload);
 function one(atom: Atom, ...types: string[]): Atom {
@@ -252,6 +266,69 @@ function one(atom: Atom, ...types: string[]): Atom {
   readable(matches.length === 1);
   return matches[0] as Atom;
 }
+
+/** Payload length a retained leaf box's own fields account for; trailing bytes are not kept. */
+function definedLength(bytes: Uint8Array, atom: Atom): number | undefined {
+  const size = atom.end - atom.payload;
+  const version = size > 0 ? (bytes[atom.payload] as number) : 0;
+  const fixed = (...lengths: [number, number]) => {
+    readable(version <= 1);
+    const length = lengths[version] as number;
+    readable(size >= length);
+    return length;
+  };
+  const counted = (header: number, each: number) => {
+    const reader = cursor(bytes, atom);
+    reader.uint(4);
+    const length = header + reader.uint(4) * each;
+    readable(Number.isSafeInteger(length) && length <= size);
+    return length;
+  };
+  switch (atom.type) {
+    case "ftyp":
+    case "styp":
+      readable(size >= 8);
+      return size - ((size - 8) % 4);
+    case "mvhd":
+      return fixed(100, 112);
+    case "tkhd":
+      return fixed(84, 96);
+    case "mdhd":
+      return fixed(24, 36);
+    case "mehd":
+    case "tfdt":
+      return fixed(8, 12);
+    case "vmhd":
+      readable(size >= 12);
+      return 12;
+    case "smhd":
+    case "mfhd":
+    case "mfro":
+      readable(size >= 8);
+      return 8;
+    case "stts":
+    case "ctts":
+      return counted(8, 8);
+    case "stss":
+    case "stps":
+      return counted(8, 4);
+    case "elst":
+      readable(version <= 1);
+      return counted(8, version === 1 ? 20 : 12);
+    case "sidx": {
+      readable(version <= 1);
+      const header = version === 1 ? 32 : 24;
+      readable(size >= header);
+      const length = header + 12 * cursorAt(bytes, atom, header - 2).uint(2);
+      readable(length <= size);
+      return length;
+    }
+    default:
+      return undefined;
+  }
+}
+const cursorAt = (bytes: Uint8Array, atom: Atom, offset: number) =>
+  new Cursor(bytes, atom.end, atom.payload + offset);
 
 /** Iterative tree walk: codec bitstreams and mdat are always opaque. */
 function layout(bytes: Uint8Array): { roots: Atom[]; atoms: Atom[] } {
@@ -319,6 +396,7 @@ function layout(bytes: Uint8Array): { roots: Atom[]; atoms: Atom[] } {
           atom.keep = SAMPLE_GROUPS.has(group);
         }
       }
+      if (atom.keep) atom.defined = definedLength(bytes, atom);
       let prefix: number | undefined;
       let count = -1;
       if (sample && SAMPLE_FORMATS.has(type)) {
@@ -558,6 +636,32 @@ function fragmentSamples(
   }
 }
 
+function refuse(message: string): never {
+  throw new VideoLocationError(message);
+}
+/**
+ * Decide a retained track's fate. Only timed-metadata tracks may be dropped; a track whose loss
+ * would change what the video is (audio, subtitles, chapters, unknown kinds) refuses instead.
+ */
+function trackIsRemoved(handler: string, descriptions: Atom[]): boolean {
+  const formats = descriptions.map((entry) => entry.type);
+  if (TIMED_METADATA_HANDLERS.has(handler)) return true;
+  if (AV_HANDLERS.has(handler)) {
+    if (formats.every((format) => SAMPLE_FORMATS.has(format))) {
+      if (formats.some((format) => JPEG_FORMATS.has(format))) refuse(JPEG_TRACK);
+      return false;
+    }
+    if (formats.every((format) => TIMED_METADATA_FORMATS.has(format))) return true;
+    const kind = handler === "soun" ? "audio" : handler === "vide" ? "video" : "timecode";
+    refuse(refusal(`a ${kind} track in a format`));
+  }
+  return refuse(
+    refusal(
+      TEXT_HANDLERS.has(handler) ? "a subtitle, caption or chapter track" : "a track of a kind",
+    ),
+  );
+}
+
 /** Validate all references first; refusal never changes the caller's single buffer. */
 export function stripVideoLocation(
   input: Uint8Array<ArrayBuffer> | ArrayBuffer,
@@ -599,10 +703,7 @@ export function stripVideoLocation(
     handler.uint(4);
     const table = one(one(mdia, "minf"), "stbl");
     const descriptions = one(table, "stsd").children;
-    const remove =
-      !atom.keep ||
-      !["vide", "soun", "tmcd"].includes(handlerType) ||
-      descriptions.some((entry) => !SAMPLE_FORMATS.has(entry.type));
+    const remove = !atom.keep || trackIsRemoved(handlerType, descriptions);
     const track = { remove, descriptions: descriptions.length };
     tracks.set(id, track);
     staticSamples(bytes, table, track, ranges);
@@ -678,6 +779,7 @@ export function stripVideoLocation(
     } else if (["free", "skip", "wide"].includes(atom.type)) bytes.fill(0, atom.payload, atom.end);
     else if (atom.type === "hdlr") bytes.fill(0, atom.payload + 24, atom.end);
     else if (DATA_REFERENCES.has(atom.type)) bytes.fill(0, atom.payload + 4, atom.end);
+    else if (atom.defined !== undefined) bytes.fill(0, atom.payload + atom.defined, atom.end);
     else if (SAMPLE_FORMATS.has(atom.type) && atom.type !== "tmcd" && !AUDIO_FORMATS.has(atom.type))
       bytes.fill(0, atom.payload + 42, atom.payload + 74);
   }
