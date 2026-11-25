@@ -4,7 +4,10 @@
     "sched": "https://w3id.org/jeswr/sectors/scheduling#",
     "core": "https://w3id.org/jeswr/core#",
     "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-    "xsd": "http://www.w3.org/2001/XMLSchema#"
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "jsched": "https://jeswr.org/ns/sectors/scheduling#",
+    "schema": "https://schema.org/",
+    "dct": "http://purl.org/dc/terms/"
   },
   "entities": [
     {
@@ -17,15 +20,24 @@
           "fragment": "it",
           "fields": {
             "summary": {},
-            "description": { "emptyStringDrop": true },
+            "description": {
+              "emptyStringDrop": true
+            },
             "startTime": {},
             "dueTime": {},
             "completed": {},
             "completedAt": {},
-            "organizer": { "iriScheme": "http-https" },
-            "inCalendar": { "rename": "calendar", "iriScheme": "http-https" }
+            "organizer": {
+              "iriScheme": "http-https"
+            },
+            "inCalendar": {
+              "rename": "calendar",
+              "iriScheme": "http-https"
+            }
           },
-          "links": { "recurrence": "recurrence" }
+          "links": {
+            "recurrence": "recurrence"
+          }
         },
         "recurrence": {
           "targetClass": "https://w3id.org/jeswr/sectors/scheduling#RecurrenceRule",
@@ -42,10 +54,41 @@
     {
       "targetClass": "https://w3id.org/jeswr/sectors/scheduling#Calendar",
       "name": "Calendar",
-      "subject": { "convention": "hash-it" },
+      "subject": {
+        "convention": "hash-it"
+      },
       "fields": {
-        "description": { "emptyStringDrop": true },
-        "organizer": { "iriScheme": "http-https" }
+        "description": {
+          "emptyStringDrop": true
+        },
+        "organizer": {
+          "iriScheme": "http-https"
+        }
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/sectors/scheduling#Calendar",
+      "name": "CalendarDocument",
+      "subject": {
+        "convention": "hash-it"
+      }
+    },
+    {
+      "targetClass": "https://jeswr.org/ns/sectors/scheduling#CalendarEvent",
+      "name": "CalendarEvent",
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": {
+        "name": {
+          "sanitizeText": false
+        },
+        "timeZone": {
+          "sanitizeText": false
+        },
+        "uid": {
+          "sanitizeText": false
+        }
       }
     }
   ]

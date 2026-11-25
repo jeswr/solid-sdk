@@ -2580,6 +2580,9 @@ importers:
       '@jeswr/solid-recipe':
         specifier: workspace:*
         version: link:../../packages/solid-recipe
+      '@jeswr/solid-scheduling':
+        specifier: workspace:*
+        version: link:../../packages/solid-scheduling
       '@jeswr/solid-sheets':
         specifier: workspace:*
         version: link:../../packages/solid-sheets

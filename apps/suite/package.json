@@ -61,6 +61,7 @@
     "@jeswr/solid-photos": "workspace:*",
     "@jeswr/solid-places": "workspace:*",
     "@jeswr/solid-recipe": "workspace:*",
+    "@jeswr/solid-scheduling": "workspace:*",
     "@jeswr/solid-sheets": "workspace:*",
     "@jeswr/solid-slides": "workspace:*",
     "@jeswr/solid-task-model": "workspace:*",

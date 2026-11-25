@@ -11,7 +11,20 @@
 # Namespace: this package writes the legacy `https://w3id.org/jeswr/` identifiers (see
 # src/vocab.ts). The sector has since re-minted to `https://jeswr.org/ns/`; moving the
 # package is a normative call tracked outside this input.
+#
+# Suite Calendar terms (src/suite-calendar.ts): the Suite Calendar app already writes the
+# re-minted `https://jeswr.org/ns/sectors/scheduling#` namespace (prefix `jsched`), with
+# `https://schema.org/` and `dct:` for the fields it shares with schema:Event. Those exact
+# on-pod IRIs are projected here so the generated CalendarDocument / CalendarEvent
+# entities write what pods already hold. Labels and definitions of jsched:Calendar and
+# jsched:CalendarEvent are copied from the sector; jsched:timeZone is a Suite extension
+# the sector does not declare yet, and the schema.org/dct definitions state only the
+# Suite's use of those standard terms.
 @prefix sched: <https://w3id.org/jeswr/sectors/scheduling#> .
+@prefix jsched: <https://jeswr.org/ns/sectors/scheduling#> .
+@prefix schema: <https://schema.org/> .
+@prefix dct:   <http://purl.org/dc/terms/> .
+@prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
 @prefix core:  <https://w3id.org/jeswr/core#> .
 @prefix owl:   <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
@@ -36,3 +49,53 @@ sched:Calendar a owl:Class ;
     rdfs:subClassOf core:InformationResource ;
     rdfs:label "Calendar"@en ;
     skos:definition "A named collection of calendar entries (events, tasks) — an information resource the Calendar app manages. Aligns to iCalendar VCALENDAR and schema:Schedule's host context."@en .
+
+jsched:Calendar a owl:Class ;
+    rdfs:label "Calendar"@en ;
+    skos:definition "A named collection of calendar entries (events, tasks) — an information resource the Calendar app manages. Aligns to iCalendar VCALENDAR and schema:Schedule's host context."@en .
+
+jsched:CalendarEvent a owl:Class ;
+    rdfs:label "Calendar Event"@en ;
+    skos:definition "A scheduled occurrence located in time and (optionally) place that agents participate in — a meeting, appointment, concert. The gufo:Event sub-type the Calendar app holds; aligns to iCalendar VEVENT and schema:Event."@en .
+
+jsched:timeZone a owl:DatatypeProperty ;
+    rdfs:label "time zone"@en ;
+    skos:definition "The IANA time zone a calendar event's wall-clock recurrence is expanded in (Suite Calendar extension)."@en ;
+    rdfs:domain jsched:CalendarEvent ;
+    rdfs:range xsd:string .
+
+dct:title a owl:DatatypeProperty ;
+    rdfs:label "title"@en ;
+    skos:definition "The name of a Suite calendar document."@en ;
+    rdfs:domain jsched:Calendar ;
+    rdfs:range xsd:string .
+
+schema:color a owl:DatatypeProperty ;
+    rdfs:label "color"@en ;
+    skos:definition "The display colour of a Suite calendar document."@en ;
+    rdfs:domain jsched:Calendar ;
+    rdfs:range xsd:string .
+
+schema:name a owl:DatatypeProperty ;
+    rdfs:label "name"@en ;
+    skos:definition "The title of a Suite calendar event, written beside jsched:summary."@en ;
+    rdfs:domain jsched:CalendarEvent ;
+    rdfs:range xsd:string .
+
+schema:location a owl:DatatypeProperty ;
+    rdfs:label "location"@en ;
+    skos:definition "The free-text venue of a Suite calendar event."@en ;
+    rdfs:domain jsched:CalendarEvent ;
+    rdfs:range xsd:string .
+
+schema:description a owl:DatatypeProperty ;
+    rdfs:label "description"@en ;
+    skos:definition "The free-text description of a Suite calendar event."@en ;
+    rdfs:domain jsched:CalendarEvent ;
+    rdfs:range xsd:string .
+
+schema:identifier a owl:DatatypeProperty ;
+    rdfs:label "identifier"@en ;
+    skos:definition "The persistent iCalendar UID of a Suite calendar event."@en ;
+    rdfs:domain jsched:CalendarEvent ;
+    rdfs:range xsd:string .

@@ -23,10 +23,42 @@
 # the re-minted https://jeswr.org/ns/ namespace, sh:or date/dateTime unions, and
 # dcterms:title on sched:Calendar. Reconciling the package with the sector is a normative
 # call tracked on the Phase S bead (sst-ild.7.5).
+#
+# Suite Calendar shapes (CalendarDocumentShape, CalendarEventShape; tracker bead sst-q6hu)
+# project the exact IRIs the Suite Calendar app writes today: the re-minted jsched:
+# namespace plus schema.org and dct. Mapping from the sector's CalendarShape and
+# CalendarEventShape, with each narrowing:
+#   - jsched:Calendar keeps the sector's dcterms:title but grades it sh:Violation with
+#     sh:datatype xsd:string and sh:maxCount 1 (the sector: minCount 1, sh:Warning): the
+#     app has always required one title. schema:color is a Suite extension.
+#   - jsched:CalendarEvent projects only the fields the generator can express exactly:
+#     schema:name, schema:location, schema:description, schema:identifier (renamed uid)
+#     and the Suite extension jsched:timeZone. The sector requires sched:summary; the app
+#     writes it beside schema:name and reads either, so neither is required here.
+#   - Extra sh:targetClass values are read-only legacy aliases: schema:Event (the
+#     Pod Manager schema-only form), http://schema.org/Event and the w3id CalendarEvent.
+#     sh:alternativePath members after the first are read-only http://schema.org/ or
+#     w3id aliases of the same field. Writes use only the first IRI.
+# Not projected, because the generator cannot express them (the facade and the app keep
+# them; see README "Suite Calendar"):
+#   - start/end (schema:startDate + jsched:startTime, schema:endDate + jsched:endTime),
+#     recurrence until and exception dates: each is an xsd:date OR xsd:dateTime value
+#     (the sector's sh:or union); a field carries exactly one datatype.
+#   - jsched:summary and jsched:inCalendar: their legacy w3id aliases are the canonical
+#     sched:summary / sched:inCalendar of TaskShape and CalendarShape above, and one
+#     manifest cannot alias another owner's canonical predicate.
+#   - jsched:recurrence / jsched:hasReminder: the app writes blank-node rule and reminder
+#     nodes (any number of reminders, untyped legacy rules); composite links follow one
+#     named node per link.
+#   - The second type: the app writes jsched:CalendarEvent AND schema:Event, while a
+#     generated entity stamps exactly one canonical class.
 @prefix schsh: <https://w3id.org/jeswr/sectors/scheduling/shapes#> .
 @prefix sched: <https://w3id.org/jeswr/sectors/scheduling#> .
 @prefix sh:    <http://www.w3.org/ns/shacl#> .
 @prefix xsd:   <http://www.w3.org/2001/XMLSchema#> .
+@prefix jsched: <https://jeswr.org/ns/sectors/scheduling#> .
+@prefix schema: <https://schema.org/> .
+@prefix dct:   <http://purl.org/dc/terms/> .
 
 schsh:TaskShape
     a sh:NodeShape ;
@@ -137,6 +169,65 @@ schsh:CalendarShape
     sh:property [
         sh:path sched:organizer ;
         sh:nodeKind sh:IRI ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] .
+
+schsh:CalendarDocumentShape
+    a sh:NodeShape ;
+    sh:targetClass jsched:Calendar ;
+    sh:property [
+        sh:path dct:title ;
+        sh:name "title" ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:severity sh:Violation ;
+    ] ;
+    sh:property [
+        sh:path [ sh:alternativePath ( schema:color <http://schema.org/color> ) ] ;
+        sh:name "color" ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] .
+
+schsh:CalendarEventShape
+    a sh:NodeShape ;
+    sh:targetClass jsched:CalendarEvent, schema:Event, <http://schema.org/Event>,
+        <https://w3id.org/jeswr/sectors/scheduling#CalendarEvent> ;
+    sh:property [
+        sh:path [ sh:alternativePath ( schema:name <http://schema.org/name> ) ] ;
+        sh:name "name" ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path [ sh:alternativePath ( schema:location <http://schema.org/location> ) ] ;
+        sh:name "location" ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path [ sh:alternativePath ( schema:description <http://schema.org/description> ) ] ;
+        sh:name "description" ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path [ sh:alternativePath ( schema:identifier <http://schema.org/identifier> ) ] ;
+        sh:name "uid" ;
+        sh:datatype xsd:string ;
+        sh:maxCount 1 ;
+        sh:severity sh:Info ;
+    ] ;
+    sh:property [
+        sh:path [ sh:alternativePath ( jsched:timeZone <https://w3id.org/jeswr/sectors/scheduling#timeZone> ) ] ;
+        sh:name "timeZone" ;
+        sh:datatype xsd:string ;
         sh:maxCount 1 ;
         sh:severity sh:Info ;
     ] .
