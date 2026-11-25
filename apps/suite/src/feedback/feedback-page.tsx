@@ -5,7 +5,23 @@ import { Mic, Square } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { publicBaseUrl } from "@/lib/public-url";
+import { useOptionalAccounts } from "@/shell/session/accounts-context";
+import { onBeforeSignOut } from "@/shell/session/sign-out-cleanup";
+import { asFailure, FeedbackFailure, failureMessage, feedbackResponse } from "./client-errors";
 import { feedbackArchive, saveFeedbackArchive } from "./download";
+import {
+  audioIndices,
+  loadDraft,
+  lostRecordings,
+  MAX_RECORDINGS,
+  ownerOf,
+  purgeDrafts,
+  receiptUsable,
+  clearDraft as removeDraft,
+  type StoredDraft,
+  saveDraft as storeDraft,
+  withoutRecordings,
+} from "./draft";
 import {
   type Answer,
   type Answers,
@@ -22,12 +38,6 @@ import { useVoice, type VoiceClip, voiceInThisBuild } from "./speech";
 import { type Message, type Submission, validateAnswers, validateSubmission } from "./validation";
 
 type TranscriptMessage = Message & { audio?: number[] };
-const draftKey = "suite.feedback.draft.v1";
-class FeedbackRetryLater extends Error {}
-// The server validates before it writes anything, so a rejected record can still be edited.
-class FeedbackRejected extends Error {}
-const retryLaterMessage =
-  "Feedback storage is busy. Please try again later. Your answers and recordings are still here. Use Download my feedback to keep a copy.";
 export function feedbackApiBase(): string {
   if (process.env.NEXT_PUBLIC_SUITE_TARGET !== "native") return "";
   try {
@@ -38,18 +48,15 @@ export function feedbackApiBase(): string {
     return "";
   }
 }
-/** Platform errors may be HTML or plain text; never display upstream error bodies. */
-async function feedbackResponse(response: Response) {
-  if ([429, 503].includes(response.status) && response.headers.has("Retry-After"))
-    throw new FeedbackRetryLater();
-  if ([400, 413, 415, 422].includes(response.status)) throw new FeedbackRejected();
-  if (!response.ok || !response.headers.get("content-type")?.includes("application/json"))
-    throw new Error("Feedback request failed.");
-  const value = await response.json().catch(() => undefined);
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("Feedback response is unavailable.");
-  return value;
-}
+const browserStorage = (): Storage | undefined => {
+  try {
+    return localStorage;
+  } catch {
+    return undefined;
+  }
+};
+const recordingsLostMessage = (maybeSaved: boolean) =>
+  `Your recordings can no longer be sent: audio only stays while this page is open, and the saved copies have expired or were never kept. You can submit your answers without the recordings, or remove them and record again.${maybeSaved ? " If an earlier attempt already reached the team, they may receive this feedback twice." : ""}`;
 function Controls({
   question: q,
   onAnswer,
@@ -153,7 +160,19 @@ function localSummary(answers: Answers): string {
     "• You shared the answers recorded above. You can add anything else before submitting."
   );
 }
+/** Drafts belong to the active account; switching account remounts the form and restores nothing. */
 export function FeedbackPage() {
+  const accounts = useOptionalAccounts();
+  if (accounts?.status === "loading")
+    return (
+      <main id="main-content" className="mx-auto max-w-3xl px-4 py-10">
+        <p role="status">Loading your account...</p>
+      </main>
+    );
+  const owner = ownerOf(accounts?.active?.id);
+  return <FeedbackForm key={owner} owner={owner} />;
+}
+function FeedbackForm({ owner }: { owner: string }) {
   const [hosted, setHosted] = useState<boolean | null>(null);
   const [pathway, setPathway] = useState<Pathway>();
   const [answers, setAnswers] = useState<Answers>({});
@@ -181,10 +200,18 @@ export function FeedbackPage() {
   // Set once an attempt may have reached storage (a failed save or a restored draft).
   // After that, a rejection must not unfreeze a record GitHub may already hold.
   const uncertain = useRef(false);
+  const [pendingDraft, setPendingDraft] = useState<StoredDraft>();
+  // Why the recordings can no longer be sent; empty while they can.
+  const [goneReason, setGoneReason] = useState("");
+  const [confirmingNew, setConfirmingNew] = useState(false);
+  const [notice, setNotice] = useState("");
+  const draftHeading = useRef<HTMLHeadingElement>(null);
+  const newHeading = useRef<HTMLHeadingElement>(null);
+  const startNewButton = useRef<HTMLButtonElement>(null);
   const voice = useVoice(
     (text) => setInput([voiceBase.current, text].filter(Boolean).join(" ").slice(0, 4000)),
     (clip) => {
-      if (clipsRef.current.length >= 10 || clip.blob.size > 3 * 1024 * 1024) {
+      if (clipsRef.current.length >= MAX_RECORDINGS || clip.blob.size > 3 * 1024 * 1024) {
         setError("You can attach up to ten recordings of 3 MB each. Please use a shorter answer.");
         return;
       }
@@ -193,42 +220,14 @@ export function FeedbackPage() {
       setClips(clipsRef.current);
       setPending((current) => [...current, index]);
       void uploadRecording(clip, index).catch((error) =>
-        setError(
-          error instanceof FeedbackRetryLater
-            ? retryLaterMessage
-            : "We couldn't save that recording. Your audio is still here. Try submitting again, or use Download my feedback.",
-        ),
+        setError(failureMessage(asFailure(error).kind, { recordingsHere: true, stage: "upload" })),
       );
     },
   );
   useEffect(() => {
-    try {
-      const draft = JSON.parse(localStorage.getItem(draftKey) ?? "null");
-      if (draft) {
-        if (
-          typeof draft.record !== "string" ||
-          !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(
-            draft.submissionId,
-          ) ||
-          !Array.isArray(draft.receipts) ||
-          draft.receipts.length > 10
-        )
-          throw new Error("Invalid feedback draft.");
-        const saved = validateSubmission(JSON.parse(draft.record));
-        submissionId.current = draft.submissionId;
-        receipts.current = draft.receipts;
-        uncertain.current = true;
-        setFrozenRecord(draft.record);
-        setPathway(saved.pathway);
-        setAnswers(saved.answers);
-        setMessages(saved.transcript.map(({ audio, ...m }) => (audio ? { ...m, audio } : m)));
-        setName(saved.contact.name);
-        setEmail(saved.contact.email);
-        setDone(true);
-      }
-    } catch {
-      /* Private browsing or an invalid local draft must not prevent a new interview. */
-    }
+    // Drafts are offered, never restored silently, and only ever to the account that saved them.
+    purgeDrafts(browserStorage());
+    setPendingDraft(loadDraft(browserStorage(), owner));
     try {
       setWalkthrough(readWalkthrough(localStorage.getItem("suite.walkthrough.v1")));
     } catch {
@@ -248,7 +247,48 @@ export function FeedbackPage() {
       controller.abort();
       clearTimeout(timer);
     };
-  }, []);
+  }, [owner]);
+  // The account's draft holds a transcript, name and email: it must not outlive its session.
+  useEffect(
+    () =>
+      onBeforeSignOut(async (account) => {
+        removeDraft(browserStorage(), ownerOf(account.id));
+      }),
+    [],
+  );
+  useEffect(() => {
+    if (pendingDraft) draftHeading.current?.focus();
+  }, [pendingDraft]);
+  useEffect(() => {
+    if (confirmingNew) newHeading.current?.focus();
+  }, [confirmingNew]);
+  function restoreDraft(draft: StoredDraft) {
+    setPendingDraft(undefined);
+    try {
+      const saved = validateSubmission(JSON.parse(draft.record));
+      submissionId.current = draft.submissionId;
+      receipts.current = draft.receipts.map((receipt) => receipt ?? undefined);
+      uncertain.current = true;
+      setFrozenRecord(draft.record);
+      setPathway(saved.pathway);
+      setAnswers(saved.answers);
+      setMessages(saved.transcript.map(({ audio, ...m }) => (audio ? { ...m, audio } : m)));
+      setName(saved.contact.name);
+      setEmail(saved.contact.email);
+      setDone(true);
+      // Audio never survives a reload, so only receipts that are still valid can be sent.
+      if (lostRecordings(saved, draft.receipts, () => false).length)
+        setGoneReason(recordingsLostMessage(true));
+    } catch {
+      /* An invalid local draft must not prevent a new interview. */
+      removeDraft(browserStorage(), owner);
+      setNotice("That saved draft couldn't be restored and was discarded.");
+    }
+  }
+  function discardDraft() {
+    removeDraft(browserStorage(), owner);
+    setPendingDraft(undefined);
+  }
   useEffect(() => {
     if (messages.length) transcriptEnd.current?.scrollIntoView?.({ block: "nearest" });
   }, [messages.length]);
@@ -282,7 +322,9 @@ export function FeedbackPage() {
           receipts.current[index] = receipt;
           return receipt;
         } catch (error) {
-          if (error instanceof FeedbackRetryLater) throw error;
+          // A definite answer (rejected, too large, limited) will not change on a second try.
+          if (error instanceof FeedbackFailure && !error.mayHaveStored) throw error;
+          if (error instanceof FeedbackFailure && error.kind === "retry-later") throw error;
           if (attempt === 1) throw new Error("Recording could not be saved.");
           await new Promise((resolve) => setTimeout(resolve, 300));
         }
@@ -298,6 +340,9 @@ export function FeedbackPage() {
     uncertain.current = false;
     setFrozenRecord(undefined);
     clearDraft();
+    setGoneReason("");
+    setConfirmingNew(false);
+    setNotice("");
     setInput("");
     setName("");
     setEmail("");
@@ -466,25 +511,39 @@ export function FeedbackPage() {
       },
     };
   }
-  async function submit() {
+  const clipHere = (index: number) => index < clipsRef.current.length;
+  async function submit(override?: string) {
     if (sending.current || voice.listening || voice.starting || uploading.current) return;
     setError("");
+    setNotice("");
     sending.current = true;
     setBusy(true);
+    let stage: "upload" | "submit" = "upload";
+    let serialized = "";
     try {
       // The ID reserves this exact record, even if GitHub commits it but issue creation fails.
-      const serialized = frozenRecord ?? JSON.stringify(record());
+      serialized = override ?? frozenRecord ?? JSON.stringify(record());
+      const parsed = JSON.parse(serialized) as Submission;
       setFrozenRecord(serialized);
       saveDraft(serialized);
-      for (const [i, clip] of clipsRef.current.entries()) {
-        const receipt = receipts.current[i];
-        // Re-upload ten minutes early, so a device clock running slow cannot send expired receipts.
-        const expires = Number(receipt?.sig.split(".")[0] ?? 0);
-        receipts.current[i] =
-          receipt && expires - 10 * 60_000 > Date.now() ? receipt : await uploadRecording(clip, i);
+      // Recordings that cannot be renewed (the audio is gone) fail before any request.
+      if (lostRecordings(parsed, receipts.current, clipHere).length) {
+        setGoneReason(recordingsLostMessage(uncertain.current));
+        return;
       }
-      const saved = receipts.current.filter((receipt): receipt is AudioReceipt => !!receipt);
+      const count = Math.max(clipsRef.current.length, Math.max(-1, ...audioIndices(parsed)) + 1);
+      for (let i = 0; i < count; i++) {
+        const clip = clipsRef.current[i];
+        if (clip && !receiptUsable(receipts.current[i], Date.now()))
+          receipts.current[i] = await uploadRecording(clip, i);
+      }
+      // Receipts go by position: a gap would shift every later recording on the server. The
+      // check above guarantees each slot has a usable receipt or a clip just uploaded.
+      const saved = Array.from({ length: count }, (_, i) => receipts.current[i]).filter(
+        (receipt): receipt is AudioReceipt => !!receipt,
+      );
       saveDraft(serialized);
+      stage = "submit";
       const r = await fetch(`${feedbackApiBase()}/api/feedback/submit`, {
         method: "POST",
         signal: AbortSignal.timeout(75_000),
@@ -498,56 +557,95 @@ export function FeedbackPage() {
       setReference(result.reference);
       clearDraft();
     } catch (error) {
-      if (error instanceof FeedbackRejected && !uncertain.current) {
+      const failure = asFailure(error);
+      // Only an answer that may have reached storage makes the record uncertain; a limiter
+      // refusal or a rejected upload never did.
+      if (stage === "submit" && failure.mayHaveStored) uncertain.current = true;
+      let parsed: Submission | undefined;
+      try {
+        parsed = JSON.parse(serialized) as Submission;
+      } catch {
+        parsed = undefined;
+      }
+      const here = !parsed || audioIndices(parsed).every(clipHere);
+      if (failure.kind === "receipts") receipts.current = []; // Stale: never resend them.
+      if (failure.kind === "receipts" && parsed && lostRecordings(parsed, [], clipHere).length)
+        setGoneReason(recordingsLostMessage(uncertain.current));
+      else if (stage === "upload" && ["invalid", "too-large", "unsupported"].includes(failure.kind))
+        setGoneReason(failureMessage(failure.kind, { recordingsHere: here, stage }));
+      else setError(failureMessage(failure.kind, { recordingsHere: here, stage }));
+      // The server validates before it writes anything, so a rejected first attempt can be edited.
+      if (
+        stage === "submit" &&
+        !uncertain.current &&
+        ["invalid", "too-large", "unsupported", "receipts"].includes(failure.kind)
+      ) {
         setFrozenRecord(undefined);
         clearDraft();
-        setError(
-          "We couldn't accept this feedback. Check your answers and contact details (for example, the email address) and submit again, or use Download my feedback to keep a copy.",
-        );
-        return;
       }
-      uncertain.current = true;
-      setError(
-        error instanceof FeedbackRetryLater
-          ? retryLaterMessage
-          : "We couldn't submit your feedback. Your answers and recordings are still here. Try again, or use Download my feedback to keep a copy.",
-      );
     } finally {
       sending.current = false;
       setBusy(false);
     }
   }
+  /** A new submission ID with every recording reference removed; nothing is sent yet. */
+  function removeRecordings(): string {
+    const current: Submission = frozenRecord ? JSON.parse(frozenRecord) : record();
+    const stripped = withoutRecordings(current);
+    submissionId.current = crypto.randomUUID();
+    clipsRef.current = [];
+    setClips([]);
+    receipts.current = [];
+    setPending([]);
+    uncertain.current = false;
+    setGoneReason("");
+    setError("");
+    clearDraft();
+    setMessages(stripped.transcript as TranscriptMessage[]);
+    return JSON.stringify(stripped);
+  }
+  async function submitWithoutRecordings() {
+    await submit(removeRecordings());
+  }
+  function recordAgain() {
+    removeRecordings();
+    setFrozenRecord(undefined);
+    setDone(false);
+    setQuestion(questionById("confirmed"));
+    setNotice(
+      "Recordings removed. Type or record what you'd like to add, press Send answer, then Submit.",
+    );
+  }
   function saveDraft(serialized: string) {
-    try {
-      localStorage.setItem(
-        draftKey,
-        JSON.stringify({
-          submissionId: submissionId.current,
-          record: serialized,
-          receipts: receipts.current.filter(Boolean),
-        }),
-      );
-    } catch {
-      /* Keep the in-memory record available when local storage is blocked or full. */
-    }
+    storeDraft(browserStorage(), owner, {
+      submissionId: submissionId.current,
+      record: serialized,
+      receipts: Array.from(
+        { length: receipts.current.length },
+        (_, i) => receipts.current[i] ?? null,
+      ),
+    });
   }
   function clearDraft() {
-    try {
-      localStorage.removeItem(draftKey);
-    } catch {
-      /* Private browsing may block storage. */
-    }
+    removeDraft(browserStorage(), owner);
   }
   async function download() {
     setError("");
+    setNotice("");
     setBusy(true);
     try {
-      const bytes = await feedbackArchive(
-        frozenRecord ? JSON.parse(frozenRecord) : record(),
-        clips,
-      );
-      if (!(await saveFeedbackArchive(bytes)))
+      const current: Submission = frozenRecord ? JSON.parse(frozenRecord) : record();
+      const bytes = await feedbackArchive(current, clips);
+      if (!(await saveFeedbackArchive(bytes))) {
         setError("The save was cancelled. Your feedback is still here.");
+      } else {
+        // Audio never survives a reload, so say so rather than imply the archive holds it.
+        const missing = audioIndices(current).filter((i) => !clips[i]);
+        if (missing.length)
+          setNotice(
+            `Downloaded your answers without ${missing.length === 1 ? "recording" : "recordings"} ${missing.map((i) => i + 1).join(", ")}: the audio is no longer in this browser.`,
+          );
+      }
     } catch {
       setError("The download couldn't be created. Please try again before leaving this page.");
     } finally {
@@ -584,16 +682,52 @@ export function FeedbackPage() {
           it. The guide is available as a plain form.
         </p>
       )}
+      {pendingDraft && !pathway && (
+        <section
+          role="alert"
+          aria-labelledby="feedback-draft-heading"
+          className="space-y-3 rounded-xl border p-4"
+        >
+          <h2
+            id="feedback-draft-heading"
+            tabIndex={-1}
+            ref={draftHeading}
+            className="text-lg font-semibold"
+          >
+            Restore your unsent feedback?
+          </h2>
+          <p>
+            You have feedback from {new Date(pendingDraft.savedAt).toLocaleString()} that wasn't
+            sent. It includes your answers and any name or email you entered, and is kept in this
+            browser for this account only. Recordings are not kept across a reload.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={() => restoreDraft(pendingDraft)}>Restore it</Button>
+            <Button variant="outline" onClick={discardDraft}>
+              Discard it
+            </Button>
+          </div>
+        </section>
+      )}
+      {notice && (
+        <p role="status" className="rounded-lg border p-3">
+          {notice}
+        </p>
+      )}
       {reference ? (
         <div role="status" className="rounded-xl border p-6 text-lg">
           Thanks, your reference is #{reference}.
         </div>
       ) : !pathway ? (
         <div className="flex flex-wrap gap-3">
-          <Button disabled={hosted === null} onClick={() => start("guided")}>
+          <Button disabled={hosted === null || !!pendingDraft} onClick={() => start("guided")}>
             Guided interview
           </Button>
-          <Button disabled={hosted === null} variant="outline" onClick={() => start("quick")}>
+          <Button
+            disabled={hosted === null || !!pendingDraft}
+            variant="outline"
+            onClick={() => start("quick")}
+          >
             Just tell us
           </Button>
           <p className="w-full text-sm text-muted-foreground">
@@ -757,11 +891,75 @@ export function FeedbackPage() {
               {error}
             </p>
           )}
+          {goneReason && (
+            <section
+              role="alert"
+              aria-labelledby="feedback-recordings-heading"
+              className="space-y-3 rounded-lg border p-3"
+            >
+              <h2 id="feedback-recordings-heading" className="font-semibold">
+                Recordings can't be sent
+              </h2>
+              <p>{goneReason}</p>
+              <div className="flex flex-wrap gap-3">
+                <Button disabled={locked} onClick={() => void submitWithoutRecordings()}>
+                  Submit without recordings
+                </Button>
+                <Button variant="outline" disabled={locked} onClick={recordAgain}>
+                  Remove recordings and record again
+                </Button>
+              </div>
+            </section>
+          )}
+          {confirmingNew && (
+            <section
+              role="alert"
+              aria-labelledby="feedback-new-heading"
+              className="space-y-3 rounded-lg border p-3"
+              onKeyDown={(e) => {
+                if (e.key !== "Escape") return;
+                setConfirmingNew(false);
+                startNewButton.current?.focus();
+              }}
+            >
+              <h2
+                id="feedback-new-heading"
+                tabIndex={-1}
+                ref={newHeading}
+                className="font-semibold"
+              >
+                Discard this submission?
+              </h2>
+              <p>
+                Starting a new submission permanently removes your answers, contact details and
+                recordings from this page. If it may already have reached the team, they keep that
+                copy. Download first if you want your own.
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <Button variant="outline" disabled={locked} onClick={() => void download()}>
+                  Download my feedback first
+                </Button>
+                <Button disabled={locked} onClick={() => start(pathway)}>
+                  Discard and start a new submission
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setConfirmingNew(false);
+                    startNewButton.current?.focus();
+                  }}
+                >
+                  Keep this submission
+                </Button>
+              </div>
+            </section>
+          )}
           <div className="flex flex-wrap gap-3">
             <Button
               disabled={
                 locked ||
                 savingRecordings > 0 ||
+                !!goneReason ||
                 (messages.length < 2 && !input.trim() && !pending.length)
               }
               onClick={() => void submit()}
@@ -777,9 +975,10 @@ export function FeedbackPage() {
             </Button>
             {frozenRecord !== undefined && (
               <Button
+                ref={startNewButton}
                 variant="outline"
                 disabled={locked || savingRecordings > 0}
-                onClick={() => start(pathway)}
+                onClick={() => setConfirmingNew(true)}
               >
                 Start a new submission
               </Button>

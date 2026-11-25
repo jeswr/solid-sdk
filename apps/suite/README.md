@@ -104,10 +104,18 @@ answers 503 rather than risk a duplicate. If no issue exists the store resumes i
 using the original record directory, without another record commit.
 Overlapping issue creation within one instance returns 503 until the current request finishes.
 The first submit attempt freezes the serialized record and keeps it with its submission ID and
-recording receipts in `suite.feedback.draft.v1` local storage. Retries, including after a reload,
-resend that record verbatim. Answers and contact details stay read-only until completion;
-**Start a new submission** clears the frozen draft and starts a fresh interview with a new ID.
-Completion clears the local draft. Audio files remain in the open page for download and receipt renewal.
+recording receipts in local storage, under `suite.feedback.draft.v2:<owner>` where the owner is
+the active suite account (or `signed-out`). A draft expires after 24 hours, is removed when its
+account signs out, and is never offered to another account. After a reload the page asks whether
+to restore it; the unowned `suite.feedback.draft.v1` key of earlier builds is deleted, never restored.
+Retries resend the frozen record verbatim, and answers stay read-only until completion.
+Recording audio lives only in the open page. After a reload, receipts that are missing, corrupt or
+near expiry cannot be renewed, so the page says the recordings are gone and offers **Submit without
+recordings** (a new submission ID) or **Remove recordings and record again**; receipts are stored by
+recording number, never compacted. **Start a new submission** asks for confirmation (with a download
+option) before discarding anything. The server answers errors with a machine-readable `code`; the page
+treats 400, 409, 413 and 415 as permanent, a limiter 429 and a not-configured 503 as never having
+reached storage, and only an answer that may have reached storage as uncertain. Completion clears the draft.
 The store reads the private repo's default branch once and uses the current head tree as the
 base, preserving path segments in branch names such as `team/main`. A non-fast-forward 422
 re-reads the head and retries the tree/commit/ref update up to
