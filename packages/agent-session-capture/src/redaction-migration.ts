@@ -9,14 +9,22 @@ import type { CaptureOptions } from "./capture.js";
 export interface RedactionMigrationOptions extends Pick<CaptureOptions, "home" | "env" | "fetch"> {
   /** Receives the content-free counts; defaults to one JSON line on stdout. */
   report?: (report: ChatRedactionReport) => void;
+  /** Receives a fixed, content-free warning when the archive is not fully repaired;
+   * defaults to one line on stderr. */
+  warn?: (message: string) => void;
 }
+
+/** Never carries a URL, an ID or remote text. */
+export const REDACTION_INCOMPLETE_MESSAGE =
+  "redact-archive: the archive is NOT fully redacted. Resources counted in failed or conflicts still hold their original text; run it again.";
 
 /**
  * Owner-run `solid-capture redact-archive [--dry-run]` (sst-5ax.39): re-redact titles and
  * messages stored before every chat save path redacted, and remove the duplicates that
  * replays left beside them. Uses the same MCP configuration and DPoP transport as imports.
- * Returns 1 on any failure, including a run that could not check or fix every chat
- * (`failed` above 0), without exposing content, credentials or remote errors.
+ * Returns 1 on any failure, including a run that left a chat unchecked or unfixed
+ * (`failed` or `conflicts` above 0: those resources still hold their original text),
+ * without exposing content, credentials or remote errors.
  */
 export async function runRedactionMigration(
   args: string[],
@@ -52,8 +60,11 @@ export async function runRedactionMigration(
     );
     const report = await writer.migrateRedaction({ dryRun });
     (options.report ?? ((value) => process.stdout.write(`${JSON.stringify(value)}\n`)))(report);
-    // The counts are printed either way; anything left unchecked or unfixed is a failure.
-    return report.failed === 0 ? 0 : 1;
+    // The counts are printed either way. A conflict left its resource unredacted, so it is
+    // a failure just like an unreadable one: a script must not read exit 0 as a clean archive.
+    if (report.failed === 0 && report.conflicts === 0) return 0;
+    (options.warn ?? ((text) => process.stderr.write(`${text}\n`)))(REDACTION_INCOMPLETE_MESSAGE);
+    return 1;
   } catch {
     return 1;
   }

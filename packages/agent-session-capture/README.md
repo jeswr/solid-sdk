@@ -150,9 +150,11 @@ stored before every save path redacted (or before a newer rule), and deletes the
 unredacted originals that a later replay duplicated. Every write and delete uses
 `If-Match`. It prints one JSON line of counts (`conversations`, `titles`,
 `messagesRewritten`, `messagesReplaced`, `conflicts`, `failed`) and nothing from the chats.
-On `conflicts` above 0, run it again. One chat that cannot be read or fixed does not stop
-the run; it is counted in `failed`. Exit status is **0** when everything was checked, or
-**1** with a fixed, content-free message when `failed` is above 0 or the run could not start.
+A conflict (a resource changed between read and write, or a server whose weak ETags make every
+`If-Match` fail) leaves that resource unredacted. One chat that cannot be read or fixed does not
+stop the run; it is counted in `failed`. Exit status is **0** only when the whole archive was
+repaired. It is **1**, with a fixed, content-free line on stderr saying the archive is NOT fully
+redacted, when `failed` or `conflicts` is above 0 or the run could not start; run it again.
 
 ## Content and opt-out
 
