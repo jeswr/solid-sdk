@@ -12,8 +12,8 @@
 // in the public type index so peers can discover the data.
 //
 // The HTTP surface (`fetch`) and the RDF reader (`fetchRdf`) are injectable so
-// the whole store is unit-testable without a live pod; auth is the ambient
-// `globalThis.fetch` patched by @solid/reactive-authentication in production.
+// the whole store is unit-testable without a live pod. Hosts pass pod-auth's
+// bounded auth.fetch explicitly; the default global fetch stays public.
 
 import { fetchRdf as defaultFetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
@@ -45,9 +45,9 @@ export type FetchRdf = (url: string) => Promise<{
 export interface MoneyStoreOptions {
   /** The pod root URL (must end in `/`), e.g. "https://alice.pod.example/". */
   podRoot: string;
-  /** The RDF reader. Defaults to the published `@jeswr/fetch-rdf` `fetchRdf`. */
+  /** The RDF reader. Defaults to `@jeswr/fetch-rdf` using the supplied fetch. */
   fetchRdf?: FetchRdf;
-  /** The HTTP `fetch` used for PUTs. Defaults to `globalThis.fetch`. */
+  /** The HTTP `fetch` used for reads and PUTs. Defaults to `globalThis.fetch`. */
   fetch?: typeof fetch;
 }
 
@@ -120,8 +120,8 @@ export class MoneyStore {
       throw new TypeError(`podRoot must end with '/': ${options.podRoot}`);
     }
     this.podRoot = options.podRoot;
-    this.#fetchRdf = options.fetchRdf ?? defaultFetchRdf;
     this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#fetchRdf = options.fetchRdf ?? ((url) => defaultFetchRdf(url, { fetch: this.#fetch }));
   }
 
   /** The finance container URL (`<podRoot>finance/`). */
