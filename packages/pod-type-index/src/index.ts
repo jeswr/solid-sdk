@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 import { classIri, error, locations, registration, selectSources } from "./common.js";
 import { lwsIndex } from "./lws.js";
 import { solidIndex } from "./solid.js";

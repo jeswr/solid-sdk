@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 import type { RdfReadResult, StorageClient } from "@jeswr/storage-client";
 import { StorageError } from "@jeswr/storage-client";
 import { canonicalize, NS } from "@jeswr/suite-vocab";
@@ -77,27 +78,28 @@ export function solidIndex(storage: StorageClient, webId: string) {
   }
 
   /**
-   * Documents to read, keyed by URL, private before public. A document linked by both pointer kinds
-   * is labelled private when private is requested. Excluded kinds are never followed or fetched
-   * (the preferences document is read only when private is requested).
+   * Documents to read, keyed by URL (fragment-insensitive), private before public: legacy direct
+   * profile pointers, then preferences pointers, then public. Fail closed: a document that the
+   * profile's public pointers also name is `public`, never `private`, whatever `sources` is (the
+   * profile is already read, so this costs no request). Excluded kinds are never fetched; the
+   * preferences document is read only when private is requested.
    */
   async function discovery(read: ReturnType<typeof reader>, sources: Set<TypeSource>) {
     const card = await read(profileUrl);
     if (!card) throw error("not-found", profileUrl);
     const owner = resource(card, profile);
+    const listed = new Set(links(owner, PUBLIC));
     const indexes = new Map<string, "private" | "public">();
     if (sources.has("private")) {
-      for (const url of links(owner, PRIVATE)) indexes.set(url, "private");
+      for (const url of links(owner, PRIVATE)) if (!listed.has(url)) indexes.set(url, "private");
       for (const url of links(owner, PREFS)) {
         const preferences = await read(url);
         if (preferences)
           for (const index of links(resource(preferences, profile), PRIVATE))
-            indexes.set(index, "private");
+            if (!listed.has(index)) indexes.set(index, "private");
       }
     }
-    if (sources.has("public"))
-      for (const index of links(owner, PUBLIC))
-        if (!indexes.has(index)) indexes.set(index, "public");
+    if (sources.has("public")) for (const index of listed) indexes.set(index, "public");
     return { indexes };
   }
 
@@ -112,6 +114,8 @@ export function solidIndex(storage: StorageClient, webId: string) {
     for (const iri of classes) wanted.set(canonicalize(iri), new Map());
     const read = reader(storage, AbortSignal.timeout(30_000));
     const { indexes } = await discovery(read, sources);
+    // The cap counts distinct locations per class, as before sources existed.
+    const distinct = new Map<string, Set<string>>();
     let count = 0;
     for (const [url, source] of indexes) {
       const document = await read(url);
@@ -122,12 +126,17 @@ export function solidIndex(storage: StorageClient, webId: string) {
           if (!targets) continue;
           for (const value of [...reg.iris(INSTANCE), ...reg.iris(CONTAINER)]) {
             const target = scoped(storage, value);
+            if (!target) continue;
             // One entry per (source, location): never merged across sources.
             const key = `${source} ${target}`;
-            if (target && !targets.has(key)) {
+            if (targets.has(key)) continue;
+            const seen = distinct.get(canonicalize(iri)) ?? new Set<string>();
+            distinct.set(canonicalize(iri), seen);
+            if (!seen.has(target)) {
+              seen.add(target);
               if (++count > MAX_RESULTS) throw error("invalid-response", storage.root);
-              targets.set(key, { location: target, source });
             }
+            targets.set(key, { location: target, source });
           }
         }
       }

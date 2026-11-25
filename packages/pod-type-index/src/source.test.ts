@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Sonnet 5.5
 import type { Features } from "@jeswr/storage-capabilities";
-import type { StorageClient } from "@jeswr/storage-client";
+import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { NS } from "@jeswr/suite-vocab";
 import { describe, expect, it, vi } from "vitest";
@@ -108,6 +108,8 @@ describe("registration source (Solid)", () => {
     [["private"]],
     { 0: "private", length: 1 },
     null,
+    // biome-ignore lint/suspicious/noSparseArray: a hole must be rejected
+    [, "private"],
   ])("rejects malformed sources %j before any I/O", async (sources) => {
     const { storage, index } = await setup(reg("p", PRIVATE_DIR), "");
     const read = vi.spyOn(storage, "readRdf");
@@ -117,6 +119,31 @@ describe("registration source (Solid)", () => {
       "Invalid type index sources",
     );
     expect(read).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["an array", ["private"]],
+    ["a string", "private"],
+    ["null", null],
+    ["a number", 1],
+    ["a typo key", { source: ["private"] }],
+    ["an extra key", { sources: ["private"], extra: true }],
+    ["a class instance", new (class Options {})()],
+    ["a symbol key", { [Symbol("x")]: 1 }],
+  ])("rejects options that are %s before any I/O", async (_name, options) => {
+    const { storage, index } = await setup(reg("p", PRIVATE_DIR), reg("evil", HOSTILE_DIR));
+    const read = vi.spyOn(storage, "readRdf");
+    await expect(index.find(CLASS, options as never)).rejects.toThrow("Invalid type index options");
+    await expect(index.findAll([CLASS], options as never)).rejects.toThrow(TypeError);
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("accepts a null-prototype options object and an explicit undefined sources", async () => {
+    const { index } = await setup(reg("p", PRIVATE_DIR), reg("pub", HOSTILE_DIR));
+    const bare = Object.assign(Object.create(null), { sources: ["private"] });
+    expect(await index.find(CLASS, bare)).toEqual([PRIVATE_DIR]);
+    expect(await index.find(CLASS, { sources: undefined })).toEqual([PRIVATE_DIR, HOSTILE_DIR]);
+    expect(await index.find(CLASS, {})).toEqual([PRIVATE_DIR, HOSTILE_DIR]);
   });
 
   it("labels legacy direct profile pointers private and honours restriction", async () => {
@@ -140,22 +167,98 @@ describe("registration source (Solid)", () => {
     expect(requested(read)).toEqual([CARD, PRIVATE]);
   });
 
-  it("labels a document linked by both pointer kinds private, or public when only public is asked", async () => {
+  it.each([
+    [
+      "a legacy profile pointer",
+      (url: string) => `<${WEBID}> solid:privateTypeIndex <${url}>.`,
+      "",
+    ],
+    [
+      "a legacy pointer with a fragment",
+      (url: string) => `<${WEBID}> solid:privateTypeIndex <${url}#x>.`,
+      "",
+    ],
+    ["a preferences pointer", () => "", `<${WEBID}> solid:privateTypeIndex <${PUBLIC}>.`],
+    [
+      "a preferences pointer with a fragment",
+      () => "",
+      `<${WEBID}> solid:privateTypeIndex <${PUBLIC}#x>.`,
+    ],
+  ])("a document also listed publicly is public, never private (%s)", async (_name, card, prefs) => {
     const storage = createMemoryStorage({ root: ROOT });
     await put(
       storage,
       CARD,
-      `<${WEBID}> solid:privateTypeIndex <${PRIVATE}>; solid:publicTypeIndex <${PRIVATE}>.`,
+      `<${WEBID}> solid:publicTypeIndex <${PUBLIC}>; pim:preferencesFile <${PREFS}>. ${card(PUBLIC)}`,
     );
-    await put(storage, PRIVATE, reg("p", PRIVATE_DIR));
+    await put(storage, PREFS, prefs);
+    await put(storage, PUBLIC, reg("evil", HOSTILE_DIR));
     const index = createTypeIndex({ storage, features: storage.features, profile: WEBID });
-    expect(await index.findRegistrations(CLASS)).toEqual([
+    const read = vi.spyOn(storage, "readRdf");
+    const expected = [{ location: HOSTILE_DIR, source: "public" }];
+    // The label never depends on `sources`.
+    expect(await index.findRegistrations(CLASS)).toEqual(expected);
+    expect(await index.findRegistrations(CLASS, { sources: ["public"] })).toEqual(expected);
+    expect(await index.findRegistrations(CLASS, { sources: ["public", "private"] })).toEqual(
+      expected,
+    );
+    read.mockClear();
+    expect(await index.findRegistrations(CLASS, { sources: ["private"] })).toEqual([]);
+    expect(await index.find(CLASS, { sources: ["private"] })).toEqual([]);
+    expect(requested(read)).not.toContain(PUBLIC);
+  });
+
+  it("a private-only lookup succeeds while the public index is unreadable", async () => {
+    const { storage, index } = await setup(reg("p", PRIVATE_DIR), reg("pub", HOSTILE_DIR));
+    const original = storage.readRdf.bind(storage);
+    vi.spyOn(storage, "readRdf").mockImplementation(async (url, options) => {
+      if (String(url) === PUBLIC)
+        throw new StorageError("forbidden", { url: PUBLIC, status: 403, method: "GET" });
+      return original(url, options);
+    });
+    expect(await index.find(CLASS, { sources: ["private"] })).toEqual([PRIVATE_DIR]);
+    await expect(index.find(CLASS)).rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it("missing preferences or private index under a private restriction yield nothing", async () => {
+    const storage = createMemoryStorage({ root: ROOT });
+    await put(
+      storage,
+      CARD,
+      `<${WEBID}> pim:preferencesFile <${PREFS}>; solid:publicTypeIndex <${PUBLIC}>.`,
+    );
+    await put(storage, PUBLIC, reg("evil", HOSTILE_DIR));
+    const index = createTypeIndex({ storage, features: storage.features, profile: WEBID });
+    expect(await index.findRegistrations(CLASS, { sources: ["private"] })).toEqual([]);
+    await put(storage, PREFS, `<${WEBID}> solid:privateTypeIndex <${PRIVATE}>.`);
+    expect(await index.findRegistrations(CLASS, { sources: ["private"] })).toEqual([]);
+  });
+
+  it("handles legacy class aliases and registrations naming both instance and container", async () => {
+    const { index } = await setup(
+      `<#r> a solid:TypeRegistration; solid:forClass <https://w3id.org/jeswr/pod-docs#Document>;
+        solid:instance <${ROOT}one.ttl>; solid:instanceContainer <${PRIVATE_DIR}>.`,
+      "",
+    );
+    expect(await index.findRegistrations(CLASS, { sources: ["private"] })).toEqual([
+      { location: `${ROOT}one.ttl`, source: "private" },
       { location: PRIVATE_DIR, source: "private" },
     ]);
-    expect(await index.findRegistrations(CLASS, { sources: ["public"] })).toEqual([
-      { location: PRIVATE_DIR, source: "public" },
-    ]);
   });
+
+  it("caps distinct locations, not (source, location) pairs, for find and findAll", async () => {
+    const many = (prefixPath: string, count: number) =>
+      Array.from({ length: count }, (_, i) => reg(`r${i}`, `${ROOT}${prefixPath}${i}/`)).join("");
+    // 6,000 locations asserted by both indexes: 12,000 pairs but only 6,000 distinct locations.
+    const body = many("loc", 6000);
+    const { index } = await setup(body, body);
+    expect(await index.find(CLASS)).toHaveLength(6000);
+    expect((await index.findAll([CLASS])).get(CLASS)).toHaveLength(6000);
+    expect(await index.findRegistrations(CLASS)).toHaveLength(12000);
+    // Over 10,000 distinct locations still fails closed.
+    const over = await setup(many("a", 5001), many("b", 5000));
+    await expect(over.index.find(CLASS)).rejects.toMatchObject({ code: "invalid-response" });
+  }, 60_000);
 
   it("returns the same location twice when both indexes assert it, once per source", async () => {
     const { index } = await setup(reg("a", PRIVATE_DIR), reg("b", PRIVATE_DIR));
@@ -227,5 +330,42 @@ describe("registration source (LWS)", () => {
     expect(await index.findAllRegistrations([CLASS], { sources })).toEqual(new Map([[CLASS, []]]));
     expect(await index.find(CLASS, { sources })).toEqual([]);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('labels every page of a multi-page search "lws-search"', async () => {
+    const storage = createMemoryStorage({ protocol: "lws", root: LwsRoot });
+    const next = await storage.create(
+      LwsRoot,
+      JSON.stringify({
+        type: "ContainerPage",
+        items: [{ id: `${LwsRoot}b`, type: CLASS }],
+      }),
+      { name: "next", contentType: "application/lws+json" },
+    );
+    const features: Features = {
+      ...storage.features,
+      typeIndex: {
+        state: "available",
+        evidence: "fixture",
+        detail: { mode: "server", searchEndpoint: Search, indexEndpoint: `${LwsRoot}types` },
+      },
+    };
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({ type: "ContainerPage", items: [{ id: `${LwsRoot}a`, type: CLASS }] }),
+          {
+            headers: {
+              "content-type": "application/lws+json",
+              link: `<${next.url}>; rel="next"`,
+            },
+          },
+        ),
+    );
+    const index = createTypeIndex({ storage, features, profile: "https://id.example/#me", fetch });
+    expect(await index.findRegistrations(CLASS)).toEqual([
+      { location: `${LwsRoot}a`, source: "lws-search" },
+      { location: `${LwsRoot}b`, source: "lws-search" },
+    ]);
   });
 });

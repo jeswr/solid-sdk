@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Sonnet 5.5 -->
 # @jeswr/pod-type-index
 
 **Experimental — AI-agent-generated.** Discover RDF classes across Solid Type Index documents
@@ -32,12 +33,20 @@ nothing about visibility).
 const dirs = await index.findRegistrations(mediaClass, { sources: ['private'] });
 ```
 
-`options.sources` restricts discovery to a subset (`[]` returns nothing; unknown values throw
-`TypeError`). Excluded documents are never fetched: `['private']` does not read the public index,
+`options.sources` restricts discovery to a subset (`[]` returns nothing; unknown values, sparse arrays, non-plain options or unknown option keys
+throw `TypeError`). Excluded documents are never fetched: `['private']` does not read the public index,
 `['public']` reads neither preferences nor the private index, and a Solid-only or LWS-only
 restriction that excludes the active protocol's source makes no request at all. Order is private
-before public (within each, document then registration order); LWS results keep server order.
-A document linked by both pointer kinds is labelled `private` unless only `public` is requested.
+documents (legacy direct profile pointers, then preferences pointers) before public; LWS keeps server order.
+The profile document is read for any Solid source; preferences only when `private` is requested.
+Fail closed: a document the profile also lists via `solid:publicTypeIndex` is `public` (fragment
+variants included), never `private`, regardless of `sources`; private-only lookups skip it.
+Within a document the order is unspecified but stable. `find`/`findAll` count at most 10,000 distinct
+locations per call, as before.
+
+On LWS only `'lws-search'` applies: `sources: ['private']` (or `['public']`, `[]`) returns `[]`
+with no request, which is "not applicable", not "nothing registered". LWS callers should not pass
+a private-only restriction; they get server-asserted types with no private/public distinction.
 
 **Security note.** The private index is *unlisted*, not access-controlled: `source` tells a
 consumer which document asserted the registration, nothing more. It does not prove the document is

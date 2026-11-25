@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 import type { Features } from "@jeswr/storage-capabilities";
 import type { CreateOptions, StorageClient } from "@jeswr/storage-client";
 
@@ -42,7 +43,10 @@ export type TypeSource = "private" | "public" | "lws-search";
 
 /** Restrict discovery. Excluded documents and services are never requested. */
 export interface FindOptions {
-  /** Default: every source. `[]` returns nothing without any request. Unknown values throw. */
+  /**
+   * Default: every source. `[]` returns nothing without any request. Unknown values, sparse
+   * arrays, non-plain options and unknown option keys throw `TypeError` before any I/O.
+   */
   sources?: readonly TypeSource[];
 }
 
@@ -57,8 +61,9 @@ export interface FoundRegistration {
 export interface TypeIndex {
   /**
    * Both instances and instance containers, de-duplicated by location across sources (use
-   * {@link TypeIndex.findRegistrations} when the source matters). Order: private, then public,
-   * each in document and registration order; LWS results in server order.
+   * {@link TypeIndex.findRegistrations} when the source matters). Order: private documents (legacy
+   * direct profile pointers, then preferences pointers), then public; within a document the order is
+   * unspecified but stable. LWS results keep server order.
    */
   find(classIri: string, options?: FindOptions): Promise<string[]>;
   /** One read of each Solid document, or one batched LWS query plus its pages. */

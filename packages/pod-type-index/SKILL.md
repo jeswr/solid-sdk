@@ -4,6 +4,7 @@ description: Use when discovering or registering Solid classes with @jeswr/pod-t
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Sonnet 5.5 -->
 
 # @jeswr/pod-type-index
 
@@ -25,7 +26,7 @@ Results carry provenance: `findRegistrations`/`findAllRegistrations` return `{ l
 with `source` `"private" | "public" | "lws-search"`, one entry per (source, location), private before
 public; `find`/`findAll` stay string-valued and de-duplicate by location. `{ sources: [...] }`
 restricts discovery and excluded documents are never fetched (no request at all when nothing
-applies). Code that writes private data must use `sources: ["private"]`. The private index is
+applies). On Solid, code that writes private data must use `sources: ["private"]`; a document the profile also lists publicly is `public`. On LWS only `"lws-search"` applies, so a private-only restriction returns `[]` ("not applicable", not "unregistered"): do not use it there. The private index is
 unlisted, not access-controlled: `source` only names the asserting document.
 
 Find all requested classes with one request per Solid document. Accept legacy namespace aliases,

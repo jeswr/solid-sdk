@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 import { type StorageClient, StorageError, type StorageErrorCode } from "@jeswr/storage-client";
 import { canonicalize, LEGACY_NAMESPACES } from "@jeswr/suite-vocab";
 import type {
@@ -11,11 +12,22 @@ import type {
 
 const ALL_SOURCES: readonly TypeSource[] = ["private", "public", "lws-search"];
 
-/** Validate `sources` before any I/O; unknown or malformed values fail closed. */
+/** Validate `options` and `sources` before any I/O; anything unexpected fails closed. */
 export function selectSources(options?: FindOptions): Set<TypeSource> {
-  const requested = options?.sources;
+  if (options === undefined) return new Set(ALL_SOURCES);
+  if (
+    options === null ||
+    typeof options !== "object" ||
+    (Object.getPrototypeOf(options) !== Object.prototype &&
+      Object.getPrototypeOf(options) !== null) ||
+    Reflect.ownKeys(options).some((key) => key !== "sources")
+  ) {
+    throw new TypeError("Invalid type index options");
+  }
+  const requested = options.sources;
   if (requested === undefined) return new Set(ALL_SOURCES);
-  if (!Array.isArray(requested) || requested.some((value) => !ALL_SOURCES.includes(value))) {
+  // Array.from turns holes into undefined, so sparse arrays are rejected too.
+  if (!Array.isArray(requested) || Array.from(requested).some((v) => !ALL_SOURCES.includes(v))) {
     throw new TypeError("Invalid type index sources");
   }
   return new Set(requested);
