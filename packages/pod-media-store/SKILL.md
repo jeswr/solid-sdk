@@ -37,6 +37,13 @@ Rules that must survive any change:
   `exposed`, a missing probe, a throwing probe and a nonsense answer always refuse (the override is not even
   asked); a throwing or non-boolean override is `false`; the override is asked per refusal and never cached;
   only `private` is cached. Registration is private-index only.
+- `ensureLibrary` finds or creates (private-index registration) the library without writing media and RETURNS the
+  probe's answer for it (`{ url, created, exposure, probed }`), never refusing. It creates a missing library only
+  when the storage root probes `private`, or `unknown` with `allowUnknownExposureFor(root)` exactly `true`; an
+  exposed or unprobeable root creates nothing (`url: null`, `probed` is the root). It never writes an access rule.
+  `put` is unchanged: it creates the library first and probes after, then fails closed.
+- A conditional `update` write that the server answers with a CREATE (`created: true`, CSS does this for an
+  `If-Match` on a deleted resource) is undone (conditional delete, best effort) and reported `not-found`.
 - The caller's body is read EXACTLY ONCE (a `File` may answer later reads differently). Size, sniff head
   (`SNIFF_BYTES` = 4096, plus the declared extension as `hints.extension`) and SHA-256 come from that one buffer,
   and storage-client is given a fresh `Blob` built from it (also for a `Uint8Array`), so hashed bytes are sent
@@ -54,6 +61,7 @@ Rules that must survive any change:
 Test pattern: the storage-client memory pod in both `solid` and `lws` modes (`test/support.ts` has the harness,
 fault injection `intercept`, `serverNames` for an LWS that picks its own names, and `withoutResponseEtags` for a
 server such as CSS whose create responses carry no ETag). Run the put and remove suites under that wrapper too.
-`src/review.test.ts` holds the regressions for the independent review; mutate the adoption checks, the
+`tools/storage-conformance/integration/pod-media-store.test.ts` is the opt-in real-CSS lane (`test:media-store`);
+re-run it after changing any storage call or status handling. `src/review.test.ts` holds the regressions for the independent review; mutate the adoption checks, the
 conditional-write validators, the containment and delete-scope checks and the exposure gate after edits and
 confirm tests fail.

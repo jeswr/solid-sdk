@@ -38,6 +38,7 @@ import { defaultSniff, SNIFF_BYTES, type Sniffed } from "./sniff.js";
 import type {
   AttachThumbnailInput,
   Current,
+  LibraryStatus,
   ListOptions,
   ListPage,
   MediaItem,
@@ -339,7 +340,7 @@ export async function openMediaStore<T, I>(
     return url;
   }
 
-  async function ensureLibrary(signal: AbortSignal | undefined): Promise<string> {
+  async function findOrCreateLibrary(signal: AbortSignal | undefined): Promise<string> {
     const known = library ?? (await discover(signal));
     if (known !== null) return known;
     let url: string;
@@ -417,6 +418,52 @@ export async function openMediaStore<T, I>(
     if (state === "failed" || (state === "unknown" && !(await unknownAllowed(target, signal)))) {
       throw fail("exposed", "exposure-unknown");
     }
+  }
+
+  /**
+   * Locate or create the library without writing media, and report the probe's answer for it.
+   * A library that does not exist yet is created only when the storage root is `private`, or
+   * `unknown` and `allowUnknownExposureFor(root)` says `true`; an exposed or unprobeable root
+   * leaves the pod untouched. Nothing here writes an access rule.
+   */
+  async function ensure(signal: AbortSignal | undefined): Promise<LibraryStatus> {
+    const known = library ?? (await discover(signal));
+    if (known !== null) {
+      return { url: known, created: false, exposure: await reported(known, signal), probed: known };
+    }
+    const blocked = await creationBlock(signal);
+    if (blocked === null) {
+      const url = await findOrCreateLibrary(signal);
+      return { url, created: true, exposure: await reported(url, signal), probed: url };
+    }
+    return {
+      url: null,
+      created: false,
+      exposure: blocked === "failed" ? "unknown" : blocked,
+      probed: storage.root,
+    };
+  }
+
+  /**
+   * Whether a missing library may be created: only under a storage root that probes `private`
+   * (or `unknown` with `allowUnknownExposureFor(root)` true). `null` means yes; otherwise the
+   * root's state that forbids it. A new container inherits its parent's access, so creating one
+   * under an exposed or unprobeable root is itself a write the store must not make.
+   */
+  async function creationBlock(
+    signal: AbortSignal | undefined,
+  ): Promise<ExposureState | "failed" | null> {
+    const root = storage.root;
+    const state = await exposureOf(root, signal);
+    const allowed =
+      state === "private" || (state === "unknown" && (await unknownAllowed(root, signal)));
+    return allowed ? null : state;
+  }
+
+  /** The probe's answer for a container, with a failed probe read as `unknown`. */
+  async function reported(target: string, signal: AbortSignal | undefined): Promise<ExposureState> {
+    const state = await exposureOf(target, signal);
+    return state === "failed" ? "unknown" : state;
   }
 
   // ---- reading descriptions --------------------------------------------------------------
@@ -832,7 +879,7 @@ export async function openMediaStore<T, I>(
     const { sha256 } = prepared;
     const known = await lookup(sha256, prepared.thumbnail !== undefined, signal);
     if (known !== undefined) return known;
-    const lib = await ensureLibrary(signal);
+    const lib = await findOrCreateLibrary(signal);
     await requireNotExposed(lib, signal);
     const [year, month] = prepared.key.split("/") as [string, string];
     const shardUrl = await ensureChild(await ensureChild(lib, year, signal), month, signal);
@@ -1073,6 +1120,17 @@ export async function openMediaStore<T, I>(
         ifMatch: etag,
         signal,
       });
+      if (written.created) {
+        // CSS 7 answers `If-Match: "<etag>"` on a resource that no longer exists with a create
+        // (201), not a 412. The description was deleted after it was read: the write brought it
+        // back, possibly beside media a `remove` is deleting. Take it down again (only if it is
+        // still the version just written) and report the item as gone.
+        const validator = written.etag;
+        if (validator !== null) {
+          await safely(signal, () => storage.delete(url, { ifMatch: validator, signal }));
+        }
+        throw fail("not-found", "storage");
+      }
       return { ...after.item, etag: written.etag, modified: null };
     };
     try {
@@ -1406,6 +1464,7 @@ export async function openMediaStore<T, I>(
           state === "failed" ? "unknown" : state,
         ),
       ),
+    ensureLibrary: (options) => run(options?.signal, () => ensure(options?.signal)),
     put: (input) => run(input?.signal, () => put(input)),
     list: (opts = {}) => run(opts.signal, () => list(opts)),
     get: (url, signal) => run(signal, () => get(url, signal)),

@@ -208,6 +208,18 @@ export interface SweepSummary {
   shardsSkipped: number;
 }
 
+/** What {@link MediaStore.ensureLibrary} found or made, and what the exposure probe said. */
+export interface LibraryStatus {
+  /** The library container, or null when none exists and none was created (see `exposure`). */
+  readonly url: string | null;
+  /** True when this call created (and privately registered) the container. */
+  readonly created: boolean;
+  /** The probe's answer for `probed`. A failed probe reads as `unknown`. */
+  readonly exposure: ExposureState;
+  /** The container the probe was asked about: the library, or the storage root when `url` is null. */
+  readonly probed: string;
+}
+
 export interface MediaStore<T, I> {
   /** The library container URL, or null until one is found or created. */
   readonly library: string | null;
@@ -215,6 +227,16 @@ export interface MediaStore<T, I> {
   isInsideLibrary(url: string): boolean;
   /** Probe whether the library (or, before it exists, the storage root) is readable by others. */
   checkExposure(signal?: AbortSignal): Promise<Result<ExposureState>>;
+  /**
+   * Find the library through the Type Index, or create it and register it in the private index,
+   * without writing any media, and run the exposure probe on it. The probe's answer is
+   * returned, not enforced, so a caller can ask the user about that exact URL before the first
+   * `put` (which still refuses an exposed or unprobeable container). A library that does not
+   * exist is created only when the storage root probes `private`, or `unknown` and
+   * `allowUnknownExposureFor(root)` returns `true`; otherwise nothing is created and `url` is
+   * null. Never writes an access rule.
+   */
+  ensureLibrary(options?: { signal?: AbortSignal }): Promise<Result<LibraryStatus>>;
   put(input: PutInput<I>): Promise<Result<PutOutcome>>;
   list(options?: ListOptions): Promise<Result<ListPage<T>>>;
   get(descriptionUrl: string, signal?: AbortSignal): Promise<Result<MediaItem<T>>>;

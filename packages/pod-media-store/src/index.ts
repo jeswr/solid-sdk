@@ -13,6 +13,7 @@ export type {
   AttachThumbnailInput,
   BuildContext,
   Current,
+  LibraryStatus,
   ListOptions,
   ListPage,
   MediaItem,

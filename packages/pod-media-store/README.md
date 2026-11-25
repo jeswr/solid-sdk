@@ -55,7 +55,10 @@ included. An abort is `failed` / `aborted`. No operation throws, whatever it is 
   said it is private (below). A planted registration therefore cannot receive media silently; at worst it
   makes `put` fail closed.
 - Nothing is created or registered on open; the first `put` creates `<root>/<defaultContainerName>/` and
-  registers every class. On LWS the class is declared in the container's create hint instead.
+  registers every class. On LWS the class is declared in the container's create hint instead. That
+  `put` creates and registers the library **before** it asks the probe about it, so on a pod whose root is
+  exposed it leaves an empty container behind and then refuses (`exposed`). To decide first, call
+  `ensureLibrary` (below) and put only when the answer is acceptable.
 - Month shards `<library>/<yyyy>/<mm>/` by the item's UTC creation time, created as needed. Binary,
   thumbnail and description sit side by side in the shard. On Solid shards are matched by URL segment. On
   LWS identifiers are the server's, so after creating a shard the store checks the identifier and, if the
@@ -64,6 +67,25 @@ included. An abort is `failed` / `aborted`. No operation throws, whatever it is 
 - **Not supported: an existing flat or differently laid-out library.** Anything outside `<yyyy>/<mm>/`
   shards (including Pod Photos' present data) is not listed; it is counted as `foreign` in `skipped`. A
   migration is outside this package (known limit, tracked for the Pod Photos port).
+
+## ensureLibrary
+
+`ensureLibrary({ signal? })` returns `Result<LibraryStatus>` with `{ url, created, exposure, probed }`. It finds
+the library through the Type Index, or creates it and registers it in the **private** index, without writing any
+media, and runs the exposure probe on it. The probe's answer is **returned, not enforced**, so an app can show
+the user that exact URL (and its `exposure`) before the first `put`. `put` still fails closed on its own.
+
+- Library found: `{ url, created: false, exposure, probed: url }`; nothing is written.
+- No library: the storage root is probed first (a new container inherits its parent's access). Only a `private`
+  root, or an `unknown` one for which `allowUnknownExposureFor(root)` returns exactly `true`, allows creation:
+  `{ url, created: true, exposure: <probe of the new library>, probed: url }`. An `exposed` root (the override is
+  not even asked), an unknown root the caller has not allowed, a missing probe, a throwing probe or a nonsense
+  answer create nothing: `{ url: null, created: false, exposure, probed: <root> }` (a failed probe reads as
+  `unknown`).
+- The library's own probe is the answer after creation (`unknown` if a probe fails); the approval for the root does
+  not carry to the library. A `private` answer is cached for `exposureTtlMs`, so the following `put` does not ask
+  again. It never writes an access rule, and storage failures are a `failed` result, never a throw. An abort is
+  `failed` / `aborted`.
 
 ## put
 
@@ -153,7 +175,9 @@ during a `put` is the caller's bug.
   `updateAttempts` times. `mutate({ url, body, contentType })` returns the new serialised body (or `undefined` for
   no change). The store never rebuilds a description from a parsed value. The result must still parse, and must
   `locate` **the same binary and thumbnail**: an edit cannot repoint an item at another item's media (use
-  `attachThumbnail` to add a thumbnail).
+  `attachThumbnail` to add a thumbnail). If the description was deleted after it was read and the server
+  answers the conditional write with a **create** (CSS does; see below), the write is taken back (deleted
+  conditionally on the version just written, best effort) and the result is `not-found`, never success.
 - `attachThumbnail(descriptionUrl, { bytes, mutate, signal? })`: see above. It probes exposure first.
 - `remove(descriptionUrl)`: a journalled two-step delete. The entry is recorded with `phase: "intent"`; the
   description is deleted conditionally on its ETag (and only while it still locates the recorded binary); only
@@ -232,6 +256,32 @@ first 64) are refused, with NULs ignored so UTF-16 markup is seen. glTF JSON, OB
   gaussian-splat data, not markup. The markup guard still refuses compressed bytes that carry markup in their
   first 512 bytes. Consumers must keep serving it as `application/octet-stream` and must not inflate it into
   a document.
+
+## Against a real server (Community Solid Server 7.2.0)
+
+`tools/storage-conformance/integration/pod-media-store.test.ts` runs this package against the file-backed CSS the
+conformance tool already starts (`cssTarget`), with the real DPoP `auth.fetch`, `createPodClient`, `createTypeIndex`,
+SDK-serialised Turtle descriptions and `exposureFromOwnerOnly(checkOwnerOnly)`. It is opt-in:
+`pnpm --filter @jeswr/storage-conformance run test:media-store` (not part of `test`). What a real server does
+that the memory pod does not:
+
+- **Access model unknown.** CSS 7.2.0 advertises no access-control model, so with discovered capabilities
+  `checkOwnerOnly` answers `unsupported-model` and the store sees `unknown` (it fails closed, and `ensureLibrary`
+  creates nothing). The test tells `pod-access` the model (WAC, as `acpDialect` is given) and the probe then says `private`.
+- **ETags.** Strong on GET and HEAD of resources and containers; **none** on the PUT, POST and DELETE responses,
+  so storage-client follows with a `HEAD` (`etagSource: "follow-up"`).
+- **Status codes.** Create 201; overwrite and delete **205**; create-if-absent (`If-None-Match: *`) on an existing
+  name 412; a stale `If-Match` on PUT or DELETE 412; creating a container that exists 409 (mapped to `conflict`).
+  `If-Match: "<etag>"` on a **missing** resource is a 201 create, not a 412: see the `update` note above.
+- **`Slug`.** Honoured on POST (percent-encoded in `Location`); a taken slug is not an error, the server picks a UUID
+  name; `..` is 400. The store creates Solid resources with a conditional PUT at a known name and does not use POST.
+- **Listings.** Turtle for `text/turtle` and `*/*`, also JSON-LD and N-Triples. Members carry no auxiliary resources
+  (`.acl` and `.meta` are not listed), and `modified` is present, so `sweepOrphans` ages candidates correctly.
+  Deleting a resource leaves no `.meta` or `.acl` behind.
+- **Type Index.** The first private registration creates `settings/`, `privateTypeIndex.ttl` and `prefs.ttl` and edits the
+  profile card (205).
+- **Large bodies.** A 20 MiB PNG goes through `put` as a `Blob` (201, byte-identical on the server). The same
+  size as a `Uint8Array` straight to `auth.fetch` is refused above its 16 MiB replay limit.
 
 ## Containment
 
