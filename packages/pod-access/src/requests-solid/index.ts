@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 /** Solid request inbox and forward-only, conditional WAC/CSS ACP approval pipeline. */
-export { accessModel, UnsupportedAccessModelError } from "./acl.js";
+export { accessModel, roleFor, UnsupportedAccessModelError } from "./acl.js";
 export type {
   DecideOptions,
   DecisionPreview,
@@ -12,7 +12,14 @@ export type {
 export { decide, deriveGrantId, previewDecision } from "./approval.js";
 export { accmAliases, accmTerm, canonicalizeAccmDataset } from "./canonical-vocab.js";
 export { DecisionPreviewConflictError } from "./errors.js";
-export { MAX_MEMBERS, MAX_NOTIFICATION_BYTES, RequestConflictError } from "./http.js";
+export {
+  MAX_MEMBERS,
+  MAX_NOTIFICATION_BYTES,
+  publicHttpsUrl,
+  publicTransport,
+  RequestConflictError,
+  requireStrongEtag,
+} from "./http.js";
 export type {
   AccessRequestEntry,
   ListRequestsOptions,

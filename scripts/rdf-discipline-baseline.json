@@ -2,14 +2,8 @@
   "apps/access-manager/src/demo/fixtures.ts": {
     "rdf-literal": 8
   },
-  "apps/access-manager/src/demo/pod.ts": {
-    "rdf-literal": 2
-  },
   "apps/access-manager/src/lib/acl.ts": {
     "rdf-factory": 1
-  },
-  "apps/access-manager/src/lib/rdf.ts": {
-    "rdf-factory": 5
   },
   "apps/coeliac/src/lib/community/publish.ts": {
     "rdf-factory": 1

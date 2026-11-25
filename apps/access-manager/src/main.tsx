@@ -1,16 +1,15 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
-// Entry point: register the web components, then EITHER mount the ?demo-gated
-// read-only demo (the real views over an inert in-browser fixture pod — no
-// auth, no network, no writes) OR build the real LoginController
-// (reactive-auth + silent session restore) and mount the app. Demo mode is
-// reachable ONLY via the ?demo query param; the real path is unchanged.
+// AUTHORED-BY Claude Opus 5.5
+// Entry point. Access Manager now lives in Solid Suite Permissions, so the app sends people
+// there (see suite-redirect.ts) and shows a link while the browser follows it. The ?demo-gated
+// read-only demo (the old views over an inert in-browser fixture pod — no auth, no network, no
+// writes) is still reachable ONLY via the ?demo query param.
 import "@jeswr/solid-elements";
-import { ThemeProvider } from "@jeswr/app-shell";
 import { createRoot } from "react-dom/client";
-import { buildController } from "./auth/controller.js";
 import { demoViewFromSearch } from "./demo/gate.js";
-import { App } from "./ui/App.jsx";
+import { goToSuite, suitePermissionsUrl } from "./suite-redirect.js";
+import { MovedNotice } from "./ui/MovedNotice.jsx";
 import "./styles.css";
 
 const rootEl = document.getElementById("root");
@@ -19,21 +18,12 @@ const root = createRoot(rootEl);
 
 const demoView = demoViewFromSearch(window.location.search);
 if (demoView !== null) {
-  // Code-split: the demo fixtures never load in the real app.
+  // Code-split: the demo fixtures never load in the redirect path.
   void import("./demo/DemoApp.jsx").then(({ DemoApp }) => {
     root.render(<DemoApp view={demoView} />);
   });
 } else {
-  // ThemeProvider wraps the real app (suite convention — pod-drive/pod-photos
-  // parity): defaults to "system", persists to localStorage "access-manager:app-shell-theme",
-  // and toggles the `.dark` class on <html>. Without it the logged-in Shell's
-  // ThemeToggle (useTheme) throws and the post-login UI white-screens. The
-  // ?demo branch above is mutually exclusive and DemoApp mounts its OWN
-  // provider (it must stay self-contained — tests render it directly), so
-  // there is never a double wrap.
-  root.render(
-    <ThemeProvider storageKey="access-manager:app-shell-theme">
-      <App controller={buildController()} />
-    </ThemeProvider>,
-  );
+  const target = suitePermissionsUrl();
+  root.render(<MovedNotice href={target} />);
+  goToSuite(target);
 }
