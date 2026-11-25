@@ -154,7 +154,11 @@ A conflict (a resource changed between read and write, or a server whose weak ET
 `If-Match` fail) leaves that resource unredacted. One chat that cannot be read or fixed does not
 stop the run; it is counted in `failed`. Exit status is **0** only when the whole archive was
 repaired. It is **1**, with a fixed, content-free line on stderr saying the archive is NOT fully
-redacted, when `failed` or `conflicts` is above 0 or the run could not start; run it again.
+redacted, when `failed` or `conflicts` is above 0, or **1** with a fixed "Check the owner MCP
+configuration" line when the run could not start; run it again. A failed write stops its own
+chat (the rest of it is counted in `conflicts`) so the next run can finish it. The chat
+interop README states what the repair does and does not guarantee, including equal
+timestamps and replay IDs.
 
 ## Content and opt-out
 
