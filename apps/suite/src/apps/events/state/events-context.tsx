@@ -38,6 +38,7 @@ export function EventsProvider({
         }),
         () =>
           toast.error("Couldn't save your invitation. Please reconnect or refresh and try again."),
+        (message) => toast.warning(message),
       ),
     [session],
   );

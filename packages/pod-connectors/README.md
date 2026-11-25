@@ -60,7 +60,7 @@ registration logic are shared with the fetch writer, and these reads also use `r
 Pass the run's `signal` to the writer to stop new operations and cancel in-flight reads.
 Hosts own cache policy; the Node transport forces revalidation.
 
-Garmin, WHOOP and bank statement runs require both `verifyPrivateDestination(url)` and
+Runs of every connector classified `private` (see the table below) require both `verifyPrivateDestination(url)` and
 `confirmPrivateWrite(url, { etag })` on their `PodWriter`. Hosts with a storage client can
 pass both checks from `createOwnerOnlyDestinationChecks` into the writer. The client transport
 must honor the run signal during pre-write access-policy reads. For the storage-backed writer, also pass
@@ -110,6 +110,24 @@ before cleanup.
 Confirmation cannot detect an intervening revision if the server reuses a strong ETag for different states between the two HEADs.
 
 Type Index registration retains the existing public-index fallback, which is tracked separately.
+
+### Which connectors require a private destination
+
+`CONNECTOR_PRIVACY` in `src/core/pod-writer-policy.ts` classifies every registered adapter id.
+`requiresPrivateDestination(id)` is true for `private` ids; they follow the contract above
+(owner-only verification before any write, after-write confirmation, clean-up, cancellation and
+refusal precedence). A registry test fails when an adapter is registered without a classification.
+An id outside the table (a test or host adapter) is not private, so classify new adapters when you add them.
+
+| Class | Connector ids | Why |
+| --- | --- | --- |
+| `private` | `activity-files`, `apple-health`, `fitbit`, `garmin`, `strava`, `whoop` | Health metrics, heart rate, GPS tracks, original FIT/GPX/TCX files |
+| `private` | `bank-statements`, `amazon-orders`, `uber` | Transactions, purchases, trips and fares |
+| `private` | `gmail`, `whatsapp`, `google-contacts`, `google-calendar`, `google-drive`, `google-takeout`, `chatgpt` | Mail, chats, contacts, appointments, file copies, conversations |
+| `public-ok` | `discord`, `dropbox`, `facebook`, `github`, `goodreads`, `google-photos`, `instagram`, `linkedin`, `netflix`, `notion`, `pinterest`, `reddit`, `slack`, `spotify`, `steam`, `tiktok`, `twitch`, `vesync`, `x-twitter`, `youtube` | Public-profile, catalogue or metadata-only data (no message, health, location, finance or contact content) |
+
+The Garmin note that sends nested FIT archives to `activity-files` therefore lands in an
+equally protected adapter.
 
 Suite and Pod Manager use `createSessionPrivateDestinationChecks({ fetch, storageUrl, webId, signal })`.
 It discovers storage with the authenticated session fetch. For a legacy root without a
@@ -1004,7 +1022,7 @@ memory through this factory. With a vault configured, the CLI uses the shared OA
 session so every rotation is persisted. An explicit `options.sourceAuth` bypasses login,
 the factory and vault wiring.
 
-The standalone CLI verifies owner-only WAC for Garmin, WHOOP and bank imports by default,
+The standalone CLI verifies owner-only WAC for every `private` connector's imports by default,
 using the authenticated Solid client that writes the payload. It checks the checkpoint destination
 before protecting the checkpoint and verifies every import and checkpoint destination before and
 after writing. The CLI prints the destination URL with an after-write refusal. Node hosts

@@ -72,6 +72,24 @@ bounded fetch-rdf with the session fetch and redirects refused. Data links and a
 remain pod-scoped. Access changes fail closed on unsupported models. An explicit authenticated demo session bypasses access
 provisioning only for the non-enforcing demo fixture.
 
+**Existing folders are never rewritten.** Only a container this call created is sealed
+owner-only (`protect(url, folder, created)`); a `trips/` or `reservations/` folder that already
+exists is only verified with `checkOwnerOnly`, so a folder the user shares keeps its collaborators
+and reopening Trips writes no access document. When a pre-existing folder is not verifiably
+owner-only, `initialise()` still resolves (data stays readable, `store.sharedFolders` lists it,
+no folder is added inside it, registration is `skipped`), and every private write (`saveTrip`,
+`addReservation`) refuses with a `TripsPrivacyError` (`reason: "shared"`) after re-verifying the
+folder immediately before writing. Trips never widens and never silently narrows. An access
+model `checkOwnerOnly` cannot represent (LWS, or ACP without a trusted dialect) is treated the
+same way, failing closed.
+
+**Type Index registration is non-fatal.** A missing or non-private Type Index, a profile
+outside the storage or a registration error does not stop the store opening. `store.registration`
+is `registered`, `skipped` (shared folder), or `failed` with a user-facing `message` and the
+`cause`; `await store.retryRegistration()` re-verifies a previously shared folder and tries again.
+The tolerant open for a WebID outside the storage is `tripsTypeIndex` (this package's local
+read-only shim); `@jeswr/pod-type-index` has no shared tolerant constructor yet.
+
 Scan discovers the connector's per-reservation-class trips/ registrations. EmailMessage
 registrations point at messages/ and are never used to guess a trips/ path. It does not crawl messages or modify connector data. Reads are bounded
 by 30 seconds, 16 sources, 200 documents, eight pages per container, 1 MiB listing pages and

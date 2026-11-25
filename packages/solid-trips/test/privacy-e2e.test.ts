@@ -129,6 +129,11 @@ it("refuses a caller-supplied sub-root that the server does not type as pim:Stor
     private: false,
     reasons: [{ subject: "unknown", modes: [], reason: "not-storage-root" }],
   });
-  await expect(store.initialise()).rejects.toThrow("verify owner-only");
+  // trips/ already existed, so it is verified and left untouched: it is refused, not rewritten.
+  await store.initialise();
+  expect(store.sharedFolders).toEqual([`${POD}alice/trips/`]);
   expect(register).not.toHaveBeenCalled();
+  await expect(store.addReservation({ kind: "TrainReservation" })).rejects.toThrow(
+    "verify owner-only",
+  );
 });

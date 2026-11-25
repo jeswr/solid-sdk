@@ -9,7 +9,17 @@ import type { Board } from "./drawing-io";
 import { DrawingIO } from "./drawing-io";
 
 export type { Board } from "./drawing-io";
+/**
+ * Type Index registration is discovery metadata, never a precondition for using boards.
+ * `unavailable`: the WebID profile is outside this storage, so there is no index to use.
+ * `failed` keeps only the error code.
+ */
+export type WhiteboardRegistration =
+  | { state: "registered" }
+  | { state: "unavailable" }
+  | { state: "failed"; reason: string };
 export class WhiteboardRepository extends DrawingIO {
+  registration: WhiteboardRegistration = { state: "unavailable" };
   readonly unreadable: string[] = [];
   truncated = false;
   async list(): Promise<Board[]> {
@@ -38,10 +48,10 @@ export class WhiteboardRepository extends DrawingIO {
 }
 export async function prepareWhiteboards(
   storage: StorageClient,
-  index: TypeIndex,
+  index: TypeIndex | undefined,
 ): Promise<WhiteboardRepository> {
   let container = new URL("whiteboards/", storage.root).href;
-  const locations = await index.find(DRAW_SCENE_IRI);
+  const locations = (await index?.find(DRAW_SCENE_IRI)) ?? [];
   for (const url of locations.slice(0, 100)) {
     if (storage.isWithinStorage(url) && (await storage.head(url)).kind === "container") {
       container = url;
@@ -61,8 +71,24 @@ export async function prepareWhiteboards(
       await storage.head(container);
     }
   }
-  const hint = await index.register(DRAW_SCENE_IRI, { container }, { index: "private" });
-  return new WhiteboardRepository(storage, container, hint);
+  // Registration is best-effort: a failure leaves the boards readable and writable. Only the
+  // private index is ever targeted.
+  let registration: WhiteboardRegistration = { state: "unavailable" };
+  let hint: Awaited<ReturnType<TypeIndex["register"]>>;
+  if (index) {
+    try {
+      hint = await index.register(DRAW_SCENE_IRI, { container }, { index: "private" });
+      registration = { state: "registered" };
+    } catch (error) {
+      registration = {
+        state: "failed",
+        reason: error instanceof StorageError ? error.code : "unknown",
+      };
+    }
+  }
+  const repository = new WhiteboardRepository(storage, container, hint);
+  repository.registration = registration;
+  return repository;
 }
 export async function openWhiteboards(session: PodSession) {
   const fetch =
@@ -73,12 +99,18 @@ export async function openWhiteboards(session: PodSession) {
   const freshFetch: typeof globalThis.fetch = (input, init) =>
     fetch(input, { ...init, cache: "no-store" });
   const client = await createPodClient({ fetch: freshFetch, storage: session.storageUrl });
-  const index = createTypeIndex({
-    storage: client.storage,
-    features: client.features,
-    profile: session.webId,
-    fetch: freshFetch,
-  });
+  // A WebID outside this storage cannot be registered through it (`scope`); boards still work.
+  let index: TypeIndex | undefined;
+  try {
+    index = createTypeIndex({
+      storage: client.storage,
+      features: client.features,
+      profile: session.webId,
+      fetch: freshFetch,
+    });
+  } catch (error) {
+    if (!(error instanceof StorageError) || error.code !== "scope") throw error;
+  }
   return prepareWhiteboards(client.storage, index);
 }
 export function isConflict(error: unknown): boolean {
