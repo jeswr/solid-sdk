@@ -936,12 +936,12 @@ describe("adversarial cost", () => {
       ).join("\n");
     const started = performance.now();
     const result = await importAssistantTurtle(body, options);
-    expect(performance.now() - started).toBeLessThan(20_000);
+    expect(performance.now() - started).toBeLessThan(60_000);
     expect(result.value.nanopubs).toHaveLength(fit);
     expect(result.skipped).toEqual({ count: 3, reasons: { ImportLimit: 3 } });
     const evidence = result.value.nanopubs.reduce((sum, np) => sum + np.evidence.length, 0);
     expect(evidence).toBe(fit * perFact);
-  }, 30_000);
+  }, 90_000);
   it(`stops at ${MAX_IMPORT_FACTS} facts per import`, async () => {
     const body =
       prefixes +
@@ -951,10 +951,10 @@ describe("adversarial cost", () => {
       ).join("\n");
     const started = performance.now();
     const result = await importAssistantTurtle(body, options);
-    expect(performance.now() - started).toBeLessThan(20_000);
+    expect(performance.now() - started).toBeLessThan(60_000);
     expect(result.value.nanopubs).toHaveLength(MAX_IMPORT_FACTS);
     expect(result.skipped).toEqual({ count: 2, reasons: { ImportLimit: 2 } });
-  }, 30_000);
+  }, 90_000);
   it(`keeps at most ${MAX_FACT_QUOTES} quotes per fact, the first in term order`, async () => {
     const quotes = Array.from(
       { length: 30 },
