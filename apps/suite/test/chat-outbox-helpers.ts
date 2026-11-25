@@ -57,6 +57,8 @@ export interface BoxOptions {
   onOpen?: (sdk: Outbox) => void;
   /** The storage root this session works in (default: Alice's). */
   storageUrl?: string;
+  /** The account-liveness fence (false once the account was switched or signed out). */
+  active?: () => boolean;
   /** The saved-message hook (Chat's notification chip). */
   onSaved?: (message: Message) => void;
 }
@@ -82,6 +84,7 @@ export function box(
       };
     },
     options.onSaved,
+    options.active,
   );
   const close = queue.connect();
   stops.push(close);

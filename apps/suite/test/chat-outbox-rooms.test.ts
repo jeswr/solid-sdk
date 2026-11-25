@@ -3,7 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { ChatClient, type Message } from "../src/apps/chat/lib/client";
 import { buildRoom, roomIndex, saveChat } from "../src/apps/chat/lib/model";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
-import { box, storageUrl, webId } from "./chat-outbox-helpers";
+import { box, type result, storageUrl, webId } from "./chat-outbox-helpers";
+
+type Send = Parameters<typeof result>;
 
 /** Real ChatClient sends against a demo pod, in a room of each layout (v1 day documents, v2 members). */
 async function fixture(layout: "v1" | "v2") {
@@ -30,7 +32,7 @@ describe.each(["v1", "v2"] as const)("pending sends in a %s room", (layout) => {
     const { client, room } = await fixture(layout);
     const saved = vi.fn<(message: Message) => void>();
     const { queue, sdk } = box(
-      (...args) => client.send(...args),
+      vi.fn((...args: Send) => client.send(...args)),
       () => true,
       webId,
       {
@@ -60,7 +62,7 @@ describe.each(["v1", "v2"] as const)("pending sends in a %s room", (layout) => {
     const saved = vi.fn<(message: Message) => void>();
     let lost = true;
     const { queue, sdk } = box(
-      async (...args) => {
+      vi.fn(async (...args: Send) => {
         const message = await client.send(...args);
         // The write landed but the response was lost: the row fails, then Retry resends it.
         if (lost) {
@@ -68,7 +70,7 @@ describe.each(["v1", "v2"] as const)("pending sends in a %s room", (layout) => {
           throw new TypeError("network error");
         }
         return message;
-      },
+      }),
       () => true,
       webId,
       { onSaved: saved },
@@ -96,7 +98,7 @@ describe.each(["v1", "v2"] as const)("pending sends in a %s room", (layout) => {
     const { client, room } = await fixture(layout);
     const saved = vi.fn<(message: Message) => void>();
     const { queue } = box(
-      async (...args) => client.send(...args),
+      vi.fn(async (...args: Send) => client.send(...args)),
       () => true,
       webId,
       {

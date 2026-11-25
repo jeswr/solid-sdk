@@ -94,6 +94,12 @@ export class ChatOutbox {
     private online: () => boolean,
     private open: () => ChatOutboxConnection,
     private onSaved?: (message: Message) => void,
+    /**
+     * False once the account was switched or signed out, possibly before React retires this
+     * queue (the session's fetch then throws). Fences delivery as the shell's `outboxTransport`
+     * does: a send that fails then is not the message's fault, so it stays pending.
+     */
+    private active: () => boolean = () => true,
   ) {}
   snapshot = (): Outgoing[] => this.entries;
   subscribe = (listener: () => void): (() => void) => {
@@ -292,7 +298,7 @@ export class ChatOutbox {
       return storage;
     } catch (error) {
       this.storages.delete(connection);
-      if (this.online()) this.setUnreachable(connection, true);
+      if (this.online() && this.active()) this.setUnreachable(connection, true);
       throw error;
     }
   }
@@ -359,7 +365,7 @@ export class ChatOutbox {
       // failure while online offers Retry and Discard.
       this.patch(item.id, (entry) => ({
         ...entry,
-        status: this.online() || entry.unsaved ? "failed" : "sending",
+        status: (this.online() && this.active()) || entry.unsaved ? "failed" : "sending",
       }));
     }
   }
@@ -398,7 +404,8 @@ export class ChatOutbox {
           throw new TypeError("Invalid chat delivery");
         const item = this.decode(delivery.body, delivery.url);
         const network = () => new StorageError("network", { url: delivery.url, method: "PATCH" });
-        if (!this.online()) throw network();
+        const fenced = () => !this.online() || !this.active() || this.connection !== connection;
+        if (fenced()) throw network();
         let message: Message = item;
         try {
           message = await this.client.send(item.room, item.draft, {
@@ -407,9 +414,10 @@ export class ChatOutbox {
           });
         } catch (error) {
           if (!isDuplicate(error)) {
-            // Offline: the SDK keeps the entry waiting for reconnection. Online, every failure
-            // (5xx, 429 and fetch errors included) fails the row so Retry and Discard show.
-            if (!this.online()) throw network();
+            // Offline, or the account left (or this queue was retired) mid-replay: the SDK keeps
+            // the entry waiting. Otherwise every failure (5xx, 429 and fetch errors included)
+            // fails the row so Retry and Discard show.
+            if (signal.aborted || fenced()) throw network();
             throw new Error(error instanceof Error ? error.message : "Couldn't send the message");
           }
           message = duplicateOf(item, error);
@@ -516,7 +524,7 @@ export class ChatOutbox {
       replayed = false;
     }
     // Offline, the rows keep waiting for reconnection as before.
-    const stalled = !replayed && this.online();
+    const stalled = !replayed && this.online() && this.active();
     if (this.stalled !== stalled) {
       this.stalled = stalled;
       await this.refresh(connection);

@@ -88,9 +88,11 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
   // The queue belongs to the account (WebID and storage), not to the client object: a rebuilt
   // client (a new session version or display name) must not drop rows held in memory.
   const latest = useRef(client);
+  const current = useRef(session);
   useLayoutEffect(() => {
     latest.current = client;
-  }, [client]);
+    current.current = session;
+  }, [client, session]);
   const { webId, storageUrl } = session;
   const mode = session.mode;
   const queue = useMemo(() => {
@@ -118,6 +120,8 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
       (message) => {
         notifySaved.current(message);
       },
+      // The newest session knows an account switch or sign-out before React commits it.
+      () => current.current.active?.() ?? true,
     );
   }, [webId, storageUrl, mode]);
   const outbox = useSyncExternalStore(queue.subscribe, queue.snapshot, queue.snapshot);
@@ -166,6 +170,11 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
       removeEventListener("online", online);
     };
   }, [queue, invalidate]);
+  // A rebuilt session may follow a fenced attempt: resume any rows it left pending.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the session object is the trigger
+  useEffect(() => {
+    queue.flush();
+  }, [queue, session]);
   const send = queue.send;
   const retrySend = queue.retry;
   const discard = queue.discard;
