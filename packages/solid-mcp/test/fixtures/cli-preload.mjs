@@ -5,7 +5,7 @@ import { mockCss } from "./css.mjs";
 
 os.homedir = () => process.env.SOLID_MCP_TEST_HOME;
 syncBuiltinESMExports();
-const css = mockCss();
+const css = mockCss({ chatAcl: process.env.SOLID_MCP_TEST_NO_CHAT_ACL !== "true" });
 globalThis.fetch = process.env.SOLID_MCP_TEST_AUTH_FAIL
   ? async () => new Response("fixture-secret", { status: 401 })
   : css.fetch;

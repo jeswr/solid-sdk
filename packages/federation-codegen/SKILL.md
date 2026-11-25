@@ -7,6 +7,8 @@ description: Use when generating a typed domain model from a sector ontology plu
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+
 # Domain-model code generation
 
 `@jeswr/federation-codegen` lives in `packages/federation-codegen`. It compiles an OWL/RDFS
@@ -28,12 +30,99 @@ const result = generateModel({ ontologyTtl, shapesTtl, config });
 ```
 
 CLI: `federation-codegen gen --ontology <ttl> --shapes <ttl> --config <json> --out <dir>`
-(`--update-lock` accepts a reviewed input change).
+(`--update-lock` accepts a reviewed input change). `gen` passes an existing
+`<out>/model.json` to `generateModel` as `previousManifest`, which pins concept-enum
+strictness across regenerations.
 
 A workspace package that commits generated output must pass the root `check:codegen` guard.
 It needs a `codegen` script writing to `src/generated`, a `workspace:*` devDependency on this
 package, and a drift test running `pnpm run codegen --out <tmp>` with a byte comparison.
 `packages/solid-bookmark` (`package.json`, `test/codegen.test.ts`) is the reference.
+
+## Ordered collection rules
+
+Opt in per field with full predicate IRIs (also supported in composite node `fields`,
+including `rename`):
+
+```json
+{
+  "fields": {
+    "instructions": {
+      "ordered": {
+        "position": "http://schema.org/position",
+        "value": "http://schema.org/text"
+      }
+    }
+  }
+}
+```
+
+The owning property uses `sh:node` to one named item NodeShape:
+
+```turtle
+ex:RecipeShape a sh:NodeShape; sh:targetClass schema:Recipe;
+  sh:property [
+    sh:name "instructions"; sh:path schema:recipeInstructions;
+    sh:node ex:StepShape; sh:minCount 1
+  ] .
+ex:StepShape a sh:NodeShape; sh:targetClass schema:HowToStep;
+  sh:property [
+    sh:path schema:position; sh:datatype xsd:integer;
+    sh:minCount 1; sh:maxCount 1; sh:minInclusive 1
+  ], [
+    sh:path schema:text; sh:datatype xsd:string;
+    sh:minCount 1; sh:maxCount 1
+  ] .
+```
+
+| Input | Admission |
+|---|---|
+| Ordered config | Exactly `{ position, value }`, distinct safe absolute IRIs, distinct from the owning predicate and `rdf:type`; matching field and named `sh:node` required. |
+| Owning property | Direct, unaliased node link; optional `sh:nodeKind sh:IRI`, cardinality and severity. An explicit `sh:class` must equal the item's target class. Scalar constraints on the link reject, as do outer `sh:minCount`/`sh:maxCount` above 256 (`MAX_ORDERED_ITEMS`). A named property shape shared by several NodeShapes must be ordered with the same `{ position, value }` on every owner; sharing it with a plain or differently ordered owner rejects. |
+| Item NodeShape | Exactly one target class and exactly the two configured properties; no target aliases, merged item shapes, competing flat/composite ownership, or extra node constraints. Metadata is allowed. Item shapes are consumed by ordered fields, not emitted as separate entities. |
+| Position property | Exactly `xsd:integer`, `minCount 1`, `maxCount 1`; optional `nodeKind Literal` and `minInclusive` (safe integer ≤ 1 so writes starting at 1 conform). Other constraints reject. |
+| Item property severity | Optional `sh:severity` on the position or value property must be `sh:Violation`: the runtime enforces item properties at the outer severity, so an advisory item severity rejects instead of yielding laxer SHACL. |
+| Value property | Exactly one value (`minCount 1`, `maxCount 1`); an existing validated literal datatype or explicit `sh:IRI`, with the existing enum, pattern, length and numeric guards. Class/node links, aliases and extra properties reject. |
+| Config policies | Existing value `iriScheme`, `nonBlank`, `sanitizeText`, outer `requiredFailClosed`, and composite `rename` are supported. Defaults, set sorting/trimming/dropping, and unknown keys reject. |
+| Unsupported/missing/ambiguous encoding | `AdmissionError`; diagnostics identify the ordered field and item shape. Compilation and fidelity recheck the complete item contract; fidelity also rejects any non-nested field compiled from a constraint carrying `sh:node`, or a fail-closed non-concept `sh:class`, unless that field is ordered. |
+
+The manifest uses `collection: "ordered"`; its `kind`, `datatype`, `in`, and scalar
+guards constrain the item value. `ordered` records `itemClass`, `position`, `value`,
+optional `minPosition`, and outer `severity`. Outer cardinality counts linked items.
+Data and wrapper types use `readonly T[]`; assigning a new array replaces the field.
+Composite `nodes` lenses retain this contract.
+
+Runtime reads sort safe integer positions numerically, retain duplicate values, and permit
+gaps. Duplicate positions or any malformed item reject the entity at Violation severity;
+Warning/Info drop the entire field. A merged outer property rejects if any source is
+Violation. Strict composite-child validation still rejects every present violation.
+Named items must be safe http(s) IRIs in the same lexical document, distinct from the
+document and owner subjects; blank nodes reject,
+matching composite NamedNode traversal. Item class membership uses the existing bounded
+data-graph subclass walk. Fields cap at 256 items and 10,000 raw link/item/class reads.
+
+Writes mint `<document>#<resolvedFieldName>-<1-based index>`, assert the item class,
+and write positions 1..n. Invalid scalar values follow the existing datatype drop/sanitize
+policy; surviving values keep their relative order and receive consecutive positions.
+Oversized/nonarray inputs and surviving item counts outside outer `sh:minCount`/`sh:maxCount`
+throw before mutation, including omitted fields below their minimum, at every severity.
+Replacement clears links and only removes the item class, position and value triples from
+safe same-document nodes explicitly typed with the item class, whose fragments match exactly
+`<resolvedFieldName>-<n>` (positive decimal n without leading zeros), distinct from document/owner
+subjects, and exclusively referenced by that owner/field. Other nodes and unrelated predicates/types
+survive, and a cleaned-up item IRI that keeps any other triple is not reused. Minting skips
+occupied unrelated/shared IRIs. A setter refuses (`TypeError`) to replace present links that
+fail validation, because the getter cannot distinguish them from an absent field; the
+runtime's `resetOrderedField(wrapper, name, values = [])` is the explicit discard. Composite node fragments matching any
+ordered field's resolved item-fragment pattern on that entity are rejected during generation.
+
+Two deliberate refinements keep the encoding interoperable: normalized SHACL adds explicit
+`sh:class <itemClass>` and `sh:nodeKind sh:IRI` on the owning property, because
+`sh:targetClass` alone does not constrain values of `sh:node`. This is the requested
+typed-item runtime policy made explicit for other validators. Position uniqueness, safety
+and resource caps remain runtime policies. Negative positions are valid only when the
+profile's optional lower bound permits them; use `sh:minInclusive 1` for positive positions.
+No ordered opt-in means unchanged generation bytes.
 
 ## Rules
 
@@ -47,6 +136,52 @@ package, and a drift test running `pnpm run codegen --out <tmp>` with a byte com
 - Reject multiple property shapes sharing a path within one NodeShape, including
   canonical/alternativePath-member overlaps, in either order. Do not conjoin them
   or overwrite one shape's constraints with another's.
+- Multiple NodeShapes with the same canonical target class and identical target alias
+  sets form one entity under its class config. Merge in shape-IRI order; conjoin matching
+  paths only under one unambiguous entity config. Competing flat configs, or flat and
+  composite claims to the same class, reject before compilation; never first-pick a config.
+  Merge paths by intersecting cardinalities, numeric bounds and enums and taking the greatest
+  minimum length. Different explicit datatype, class, nodeKind, node, name or pattern,
+  incompatible alternative paths, and empty intersections fail with both source shapes
+  named. A source `sh:in` is decoded with that source's value kind, so the merge rejects
+  any source enum whose kind or datatype differs from the conjoined field (an implicit-IRI
+  `sh:in` merged with an `xsd:string` or `sh:Literal` source); never re-decode or
+  intersect IRIs and literals by JS value. Fidelity re-checks every merged property
+  against each source shape (kind, datatype, class, node, pattern, bounds, enum subset),
+  not only against the merged constraint. Preserve original property severities/messages in SHACL; presence is a MUST
+  only if a source property requires presence at Violation grade. Inspect every original
+  graph constraint: a second safety shape containing `sh:not` still rejects the entity.
+  A shared anonymous property shape keeps one skolem identity within its class group;
+  reusing it across different classes retains the identity-collision rejection.
+- A `sh:class C` property becomes a closed concept IRI enum when the ontology contains
+  direct named `rdf:type C` individuals and C is not a shape target, target alias or
+  configured entity/node target. Ignore blank individuals and inferred subclasses.
+  Explicit `sh:node` and configured composite links retain link semantics. Zero named
+  individuals retain the existing class behavior. A reusable property shape used as a
+  link by any owner is never lowered for another owner.
+  Only used concept classes gain the
+  NodeShape-coverage exemption; their labels/definitions remain mandatory.
+  Compile sorted exact identities into `in` plus `guards.iriEnum: true`, intersecting
+  explicit `sh:in`. Fidelity checks both membership and the strict-write marker.
+  Emit a literal-union TS type and lower those class constraints to closed `sh:in`
+  lists in emitted SHACL; never require concept `rdf:type` assertions in pod data.
+  Invalid supplied concept writes throw the existing `TypeError`; reads retain normal
+  severity-graded drops. Ordinary `sh:in` writes retain their drop-invalid contract.
+  A Warning-graded concept `sh:class` still becomes a strict runtime enum: supplied
+  nonmember writes throw and reads drop nonmembers. Emitted `sh:in` retains
+  `sh:Warning`, so runtime membership enforcement is stricter than the advisory SHACL.
+  Strictness must never flip silently: an advisory `sh:class` on a projected class
+  with named individuals fails (`unstable-concept-enum`), and the CLI passes the
+  committed `model.json` as `previousManifest` so a field that was an `iriEnum` and
+  would become unenforced fails generation. Remove the committed `model.json` to
+  accept such a loosening deliberately.
+  A concept member that the property's `^https?://` / `^https://` pattern (or the
+  derived scheme guard) excludes fails generation (`concept-enum-scheme-conflict`);
+  an explicit `sh:in` may intersect it away.
+  Lowering makes emitted `shapes.ttl` diverge from the sector profile in both
+  directions (no pod `rdf:type C` required; typed non-individuals and subclass
+  instances excluded). Consumers MUST validate against the emitted `shapes.ttl`,
+  never the sector SHACL, for concept-lowered fields.
 - Prefix names must match Turtle `PN_PREFIX` (including the empty default prefix).
   Config loading rejects an unsafe or relative `shapesBase`. Every Turtle/N-Triples
   emission goes through `serializeCanonicalTurtle`, checking all NamedNodes,
@@ -147,8 +282,11 @@ package, and a drift test running `pnpm run codegen --out <tmp>` with a byte com
 - Composite nodes and derived views support aliases on types/flat fields. Structural
   `nested` links explicitly reject aliases; an aliased shape field cannot be omitted.
 - `parseShapes` needs the adapter's normalized ontology as its third argument for aliases;
-  its fourth argument carries raw ontology quads for composite subclass ancestry checks.
-  `generateModel` supplies both (legacy third-argument quads use the OWL/RDFS adapter).
+  its fourth argument carries raw ontology quads for composite subclass ancestry and
+  concept individuals. An optional fifth config argument identifies projected targets
+  and composite links before concept-enum selection. Resolve that selection after
+  merging properties, since another shape can supply the link's name or `sh:node`.
+  `generateModel` supplies all three (legacy third-argument quads use the OWL/RDFS adapter).
   Preserve complex-path roots as blank nodes with deterministic
   labels: skolemizing a path root silently changes its SHACL meaning to a predicate.
 - Mint skolem IRIs from full shape/class/path identities using stable hashes and
@@ -183,3 +321,65 @@ oracle remains verbatim except imports in the generator integration harness. The
 validates generated SHACL as well as the package's normative-shape oracle. Do not restore
 duplicate config or generated files under `examples/bookmark/`. After a generator change,
 build the generator and run `pnpm --filter @jeswr/solid-bookmark run codegen`.
+
+
+## Fixed values and bounded logical invariants
+
+Property-level `sh:hasValue` accepts exactly one IRI or admitted typed literal on a
+scalar/enum field (`sh:maxCount 1`). It must satisfy the conjoined datatype, concept
+class/`sh:in`, bounds and lexical guards. Literals must match the runtime writer's
+canonical lexical form. Conflicting merged fixed values, collections, ordered fields,
+composite links and fixed-value defaults fail closed. The manifest retains the exact
+term and strongest contributing severity. Generated TypeScript retains the base
+scalar/enum type; it does not narrow a fixed value to e.g. `true`.
+
+Node-level `sh:not`, `sh:and` and `sh:or` accept only this grammar:
+
+```text
+Expr = [ sh:path P; sh:hasValue V ]
+     | [ sh:path P; sh:qualifiedMinCount N; sh:qualifiedValueShape Expr ]
+     | [ sh:not Expr ] | [ sh:and (Expr ...) ] | [ sh:or (Expr ...) ]
+```
+
+Every path is a single predicate IRI identifying a projected field on the current
+entity. Qualified paths must be composite links or IRI collections with a projected
+`sh:class` target; the inner expression uses that target's fields. A flat collection's
+`sh:class` keeps the existing policy (advisory hints omitted, Violation rejected); atoms
+never need it. Lists must be nonempty and well
+formed; expression/list nodes cannot be shared or cyclic. Logical depth is at most
+four (a qualified context change adds no level), total atoms at most sixteen per
+source NodeShape, and N is a positive `xsd:integer` at most sixteen. Each qualified
+atom and its inner atoms count towards that total. The parser checks these limits
+before general blank-node identity refinement.
+
+Expression nodes accept only their operator's predicates. At a logical NodeShape,
+ordinary shape structure plus `sh:message`, `sh:severity`, `rdfs:label` and
+`rdfs:comment` are allowed. Nested annotations, `sh:node` operands, `sh:xone`,
+qualified maxima/disjointness, complex/alternative expression paths and unknown
+predicates remain rejected. Every merged source shape contributes its own invariant,
+source IRI, severity (default Violation) and message, in deterministic shape order.
+Fidelity independently re-reads the graph and checks those trees and fixed values
+exactly. The diet fixture pins model JSON bytes and compares its
+safety cases with emitted SHACL validation.
+
+The runtime evaluates atoms with SHACL semantics over the raw data graph (not parsed
+values): `hasValue` checks the raw objects of the path, and qualified atoms count every raw
+linked object (any IRI scheme, blank nodes) on whose own raw data the inner expression
+holds. Negated safety rules therefore fail closed exactly like an external validator of
+the emitted shapes.ttl; the diet regression tests compare both on adversarial data. Parses
+reject false Violation invariants; Warning/Info are advisory. A composite child's Violation
+invariant or Violation fixed value rejects the containing parse whenever the link has a raw
+object, even behind an optional `sh:node` or class-only link; other failures of an optional
+child still drop only the child. Invariants see only the parsed dataset: when a qualified
+rule spans resources (e.g. a `self`-subject target stored in its own document), merge the
+linked documents before parsing, or the atom is false and a negated rule passes vacuously.
+Builds and setters (ordered setters included) validate the staged state of the affected
+focuses before live mutation, within a bounded budget. See model-runtime's
+fixed-value/invariant contract for the precise rules.
+
+The full health-diary CLI probe now admits its consent and genetic safety constructs.
+With a temporary flat entity config it still fails on the Violation-grade
+`Meal.hasItem` class collection and eight vocabulary properties missing domain/range
+or explicit waivers: `additive`, `declaredAllergen`, `derivedFrom`, `note`,
+`offCategory`, `offRef`, `severity`, and `traceAllergen`. This lane does not migrate
+health-diary or relax those independent admission rules.

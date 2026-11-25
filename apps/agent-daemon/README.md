@@ -9,6 +9,9 @@ Explicit `login` uses the credential package's PKCE loopback listener.
 `composeDaemon` obtains a client-credentials DPoP session through
 `@jeswr/pod-auth/node`, creates the storage client and notifications client using
 that session's fetch, and calls a trusted `prepare(workspace)` host factory.
+Before login, `composeDaemon` requires `storageRoot` to be an absolute URL within
+one of `credentials.boundary`'s roots. It applies the same check to the discovered
+root before creating the workspace.
 Credentials stay in pod-auth. The factory supplies explicit accounts, an inbound gate, runtime memory, a gateway,
 an executor, verified authority stores, an audit writer and durable local state.
 `createDaemon` accepts the same already-composed capabilities for embedded hosts
@@ -197,7 +200,8 @@ mandate. The projector and executor supply that context from the proposal being
 processed. Preserve it through any send binding wrapper. Pass the executor's
 `expected` context to the channel's `send.validate(wire, renderable, expected)`
 when implementing the trusted validator that binds all intent terms and the
-destination account to the wire.
+destination account to the wire. Forward the channel's `send.preview` in the
+same wrapper.
 
 ```ts
 const gate = createInboundGate({
@@ -207,7 +211,7 @@ const gate = createInboundGate({
 });
 // Configure every send half used by bindings with verify: gate.verifyOwn.
 const project: DaemonOptions["project"] = async (proposal, sign) => {
-  const prepareEntry = createOutboxProjector({
+  const prepareEntry = createDaemonOutboxProjector({
     bindings,
     accounts: outboundAccountsByBinding,
     sign,
@@ -222,9 +226,9 @@ const project: DaemonOptions["project"] = async (proposal, sign) => {
 The projector can use the daemon's `sign` callback or be configured with
 `sign: gate.release`. Both pass through the leased gate and write the linked
 decision before returning the release for rendering. Persist and return the exact
-entry the executor reads. The projector replaces the model draft preview with a
-description drawn solely from signed message fields and binds the resulting
-preview, account, wire and intent to the approval digest. The daemon verifies
+entry the executor reads. `createDaemonOutboxProjector` calls the channel's
+`send.preview` on the rendered wire and binds that preview, account, wire and
+intent to the approval digest. The daemon verifies
 that digest before publishing the pending proposal. A typed refusal is cached and audited with the
 proposal reference, and the daemon skips outbox and pending proposal publication
 for that refusal. Confirmed gate releases reuse their original wire while the

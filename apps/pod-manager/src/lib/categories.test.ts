@@ -20,6 +20,13 @@ describe("category taxonomy", () => {
     ]);
   });
 
+  it("keeps Identity first and maps environment classes to the Environment tail category", () => {
+    // AUTHORED-BY Claude Opus 5.5
+    expect(CATEGORIES[0]?.id).toBe("identity");
+    expect(otherCategories().at(-1)?.id).toBe("environment");
+    expect(categoryForClass("http://www.w3.org/ns/sosa/Observation")?.id).toBe("environment");
+  });
+
   it("exposes a non-empty 'other' tail", () => {
     expect(otherCategories().map((c) => c.id)).toContain("documents");
     expect(otherCategories().length).toBeGreaterThan(0);

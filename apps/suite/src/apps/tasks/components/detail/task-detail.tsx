@@ -17,6 +17,7 @@ import { ArrowLeft, Ellipsis, Plus, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
+import { ChipText, ChipTextarea } from "@/components/chips";
 import { encodeRef } from "@/lib/refs";
 import { duplicateTaskData } from "../../lib/detail/task-data";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
@@ -279,7 +280,7 @@ export function TaskDetail({
         />
       </div>
       <div className="tsk-detail-description">
-        <Textarea
+        <ChipTextarea
           className={!editingDescription && description ? "sr-only" : undefined}
           aria-label="Description"
           placeholder="Description"
@@ -299,7 +300,9 @@ export function TaskDetail({
         />
         {!editingDescription && description && (
           <>
-            <p className="tsk-detail-description-text">{descriptionNodes(description)}</p>
+            <p className="tsk-detail-description-text">
+              <ChipText text={description} plain={descriptionNodes} />
+            </p>
             <Button
               variant="ghost"
               size="sm"

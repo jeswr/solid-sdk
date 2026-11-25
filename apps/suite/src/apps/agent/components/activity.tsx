@@ -70,6 +70,7 @@ const KINDS = {
   conversation: "Conversation recorded",
   ...GATE_AUDIT_LABELS,
   "tamper-suspected": "Record mismatch suspected",
+  "personal-data-read": "Personal data read",
 };
 const ICONS = {
   ingest: FileInput,
@@ -86,6 +87,7 @@ const ICONS = {
   "gate-decision": Shield,
   "record-anchor": FileCheck,
   "tamper-suspected": CircleAlert,
+  "personal-data-read": Shield,
   "ledger-checkpoint": Activity,
 };
 function Summary({ entry }: { entry: AuditEntry }) {

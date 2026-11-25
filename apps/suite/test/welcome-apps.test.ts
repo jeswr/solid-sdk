@@ -2,7 +2,8 @@
 import { readFileSync } from "node:fs";
 import { suiteApps } from "@jeswr/suite-ui";
 import { describe, expect, it } from "vitest";
-import { appRegistry } from "../src/shell/registry";
+import { plannedApps } from "../src/apps/planned/planned";
+import { appRegistry, visibleApps } from "../src/shell/registry";
 import { companionApps, welcomeApps } from "../src/welcome/apps";
 
 describe("welcome app directory", () => {
@@ -17,10 +18,32 @@ describe("welcome app directory", () => {
         name: app.name,
         basePath: app.basePath,
         hue: app.hue,
-        statusLabel: app.status === "backlog" ? "Early" : "Ready to try",
+        statusLabel: plannedApps.has(app.slug)
+          ? "Coming soon"
+          : app.status === "backlog"
+            ? "Early"
+            : "Ready to try",
       });
       expect(card?.description.length).toBeGreaterThan(15);
     }
+  });
+  it("lists only placeholder routes as planned and keeps implemented routes available", () => {
+    const available = visibleApps(false);
+    const placeholders = [];
+    for (const app of appRegistry) {
+      const page = readFileSync(
+        new URL(`../src/app/(suite)${app.basePath}/page.tsx`, import.meta.url),
+        "utf8",
+      );
+      if (page.includes("PlannedApp")) {
+        placeholders.push(app.slug);
+        expect(app.status, app.slug).toBe("backlog");
+      } else {
+        expect(available, app.slug).toContain(app);
+      }
+    }
+    expect([...plannedApps].sort()).toEqual(placeholders.sort());
+    expect(welcomeApps.find((app) => app.slug === "health")?.statusLabel).toBe("Ready to try");
   });
   it("uses the actual Pages slugs and GitHub READMEs for developer tools", () => {
     const deployments = JSON.parse(

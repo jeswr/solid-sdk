@@ -87,8 +87,12 @@ async function fixture(adapter: string, containerContentType?: string, rdfAvaila
       : {
           root: ROOT,
           webId: "",
-          async head(target) {
-            return { acl: `${target}.acl` };
+          async head(url) {
+            return {
+              acl: `${url}.acl`,
+              auxiliaryResources: [`${url}.acl`],
+              exists: url in resources,
+            };
           },
           async read(url) {
             const resource = resources[url];
@@ -96,7 +100,7 @@ async function fixture(adapter: string, containerContentType?: string, rdfAvaila
             return {
               body: new TextEncoder().encode(resource.body),
               contentType: resource.contentType,
-              etag: '"version"',
+              etag: resource.etag ?? '"version"',
               ...(url === PARENTS[4] ? { url: ROOT } : {}),
               ...(containerContentType && url === PARENTS[3] ? { isContainer: true } : {}),
             };
@@ -301,6 +305,7 @@ describe.each(["decorated fetch", "portable"])("shared output authorization: %s"
       url,
       content: '<> <urn:text> "allowed record".',
       contentType: "text/turtle",
+      ifMatch: '"version"',
     });
     const denied = await client.callTool({ name, arguments: args(SECRET) });
     expect(denied.isError).toBe(true);
@@ -340,7 +345,10 @@ describe.each(["decorated fetch", "portable"])("shared output authorization: %s"
     for (const name of ["pod_read", "solid_read"]) {
       const result = await client.callTool({ name, arguments: { url: ALLOWED } });
       expect(result.isError).toBeFalsy();
-      expect(result.content).toEqual([{ type: "text", text: body }]);
+      expect(result.content).toEqual([
+        { type: "text", text: body },
+        { type: "text", text: 'ETag: "bookmark"' },
+      ]);
     }
     const result = await client.readResource({ uri: ALLOWED });
     expect(result.contents[0]).toMatchObject({ text: body });
@@ -356,7 +364,10 @@ describe.each(["decorated fetch", "portable"])("shared output authorization: %s"
     expect(await fetchDocument(pod, ALLOWED)).toMatchObject({ text: body });
     for (const name of ["pod_read", "solid_read"]) {
       const result = await client.callTool({ name, arguments: { url: ALLOWED } });
-      expect(result.content).toEqual([{ type: "text", text: body }]);
+      expect(result.content).toEqual([
+        { type: "text", text: body },
+        { type: "text", text: `ETag: "${SECRET}"` },
+      ]);
     }
     const fetched = await client.callTool({ name: "fetch", arguments: { id: ALLOWED } });
     const content = fetched.content as { text: string }[];
@@ -471,7 +482,12 @@ describe.each(["decorated fetch", "portable"])("shared output authorization: %s"
     for (const name of ["pod_write", "solid_write"]) {
       const result = await client.callTool({
         name,
-        arguments: { url: SECRET, content: "record", contentType: "text/plain" },
+        arguments: {
+          url: SECRET,
+          content: "record",
+          contentType: "text/plain",
+          ifMatch: '"version"',
+        },
       });
       expect(result.isError).toBe(true);
       noSecret(result);

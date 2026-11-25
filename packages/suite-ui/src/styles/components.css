@@ -1563,3 +1563,151 @@
     transition: none;
   }
 }
+
+.suite-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: 100%;
+  vertical-align: baseline;
+  border-radius: var(--radius-sm);
+  padding-inline: var(--space-1);
+  background: var(--accent);
+  color: var(--accent-foreground);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.suite-chip-card {
+  max-width: calc(100vw - 2 * var(--space-4));
+  overflow-wrap: anywhere;
+}
+.suite-chip-card p {
+  margin-block: var(--space-2);
+}
+.suite-chip-card a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+.suite-chip-picker {
+  width: min(22rem, calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: var(--shadow-md);
+}
+.suite-chip-picker [role="listbox"] {
+  max-height: min(18rem, 40vh);
+  overflow: auto;
+}
+.suite-chip-picker [role="option"] {
+  width: 100%;
+  border: 0;
+  text-align: left;
+  background: var(--popover);
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2);
+  min-height: var(--control-h);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.suite-chip-picker [role="option"][aria-selected="true"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+.suite-chip-picker [role="option"] span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.suite-chip-picker small {
+  color: var(--muted-foreground);
+}
+
+.suite-chip[data-unreadable="true"] {
+  background: transparent;
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.su-template-dialog {
+  width: min(56rem, calc(100vw - 2rem));
+  max-width: 56rem;
+  max-height: 85dvh;
+  overflow-y: auto;
+}
+.su-template-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.su-template-filters label {
+  display: grid;
+  gap: var(--space-1);
+}
+.su-template-filters select {
+  padding: var(--space-2);
+  background: var(--surface);
+  color: var(--foreground);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+}
+.su-template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+.su-template-card {
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--foreground);
+}
+.su-template-card > button[data-template-choice] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3);
+  border: 0;
+  border-radius: inherit;
+  background: inherit;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+/* biome-ignore lint/style/noDescendingSpecificity: gallery focus styles are scoped independently of toast controls */
+.su-template-card button:focus-visible,
+.su-template-filters select:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.su-template-card button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.su-template-card small {
+  color: var(--foreground-muted);
+}
+.su-template-preview,
+.su-template-card img {
+  display: block;
+  width: 100%;
+  height: 7rem;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--text-sm);
+  background: var(--surface-2);
+  padding: var(--space-2);
+}
+.su-template-card img {
+  object-fit: cover;
+}

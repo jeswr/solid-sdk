@@ -31,6 +31,8 @@ export interface SharingPerson extends AccessOrigin {
   role: SharingRole;
 }
 export interface SharingState {
+  /** Group recipients are rendered separately from individual people. */
+  groups?: readonly string[];
   people: SharingPerson[];
   /** Anonymous access; a URL is not a secret capability. */
   link: "none" | "viewer" | "editor";

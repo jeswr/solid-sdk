@@ -54,7 +54,8 @@ export interface DaemonOptions {
   /**
    * Render and idempotently project the audited release before pod publication.
    * Use the supplied signer or the configured inbound gate factory's release.
-   * Return the exact executor entry with intent.termsDigest set to proposalTermsDigest(entry).
+   * Use createDaemonOutboxProjector to bind the channel's wire preview to the terms digest.
+   * Persist and return the exact executor entry.
    * The daemon durably caches that finalized proposal before publishing it or its audit evidence.
    */
   readonly project: (

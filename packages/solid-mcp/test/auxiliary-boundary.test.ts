@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { PodOutput } from "../src/output.js";
 import { PERSONAL_DATA_DENIED } from "../src/personal-data.js";
@@ -7,6 +8,7 @@ import { createFetchPodPort, type PodHeadResult, type PodPort } from "../src/pod
 const ROOT = "https://example.org/pod/";
 const SAFE = `${ROOT}ordinary.txt`;
 const BODY = new TextEncoder().encode("ordinary");
+const ACP = "http://www.w3.org/ns/solid/acp#accessControl";
 const TARGETS = [
   ROOT,
   `${ROOT}private/`,
@@ -23,7 +25,11 @@ function fixture(adapter: string, root = ROOT, webId = `${root}profile/card#me`)
   const metadata = new Map<string, PodHeadResult>();
   const head = vi.fn(
     async (target: string): Promise<PodHeadResult> =>
-      metadata.get(target) ?? { acl: `${target}.acl` },
+      metadata.get(target) ?? {
+        acl: `${target}.acl`,
+        auxiliaryResources: [`${target}.acl`],
+        exists: false,
+      },
   );
   const write = vi.fn(async () => ({ etag: '"new"' }));
   const remove = vi.fn(async () => {});
@@ -33,6 +39,7 @@ function fixture(adapter: string, root = ROOT, webId = `${root}profile/card#me`)
       const result = await head(request.url);
       const links = [
         ...(result.acl ? [`<${result.acl}>; rel="acl"`] : []),
+        ...(result.acr ?? []).map((url) => `<${url}>; rel="${ACP}"`),
         ...(result.describedby ?? []).map((url) => `<${url}>; rel="describedby"`),
       ];
       // Missing protected areas still advertise their governing associations.
@@ -65,7 +72,7 @@ function fixture(adapter: string, root = ROOT, webId = `${root}profile/card#me`)
 }
 
 async function refused(f: ReturnType<typeof fixture>, target: string) {
-  await expect(f.output.write(target, BODY, "text/plain", {})).rejects.toThrow(
+  await expect(f.output.write(target, BODY, "text/plain", { ifNoneMatch: "*" })).rejects.toThrow(
     PERSONAL_DATA_DENIED,
   );
   await expect(f.output.delete(target)).rejects.toThrow(PERSONAL_DATA_DENIED);
@@ -118,23 +125,31 @@ describe.each(["portable", "fetch"])("advertised auxiliary boundary: %s", (adapt
     await refused(f, `${ROOT}policies/agent-rules.ttl`);
   });
 
+  it("protects nonstandard ACP associations and their normalized aliases", async () => {
+    const f = fixture(adapter);
+    const acr = `${ROOT}POLICIES/%2561GENT-RULES.TTL/`;
+    f.metadata.set(`${ROOT}agent/`, { acr: [acr], auxiliaryResources: [acr] });
+    await refused(f, `${ROOT}policies/agent-rules.ttl`);
+  });
+
   it("fetches shared ancestors once per mutation and never consults an unrelated sibling's ACL", async () => {
     const f = fixture(adapter);
     const sibling = `${ROOT}public/`;
     const acl = `${ROOT}policies/public-rules.ttl`;
+    const inspected = [...TARGETS, acl, `${ROOT}policies/`].sort();
     f.metadata.set(sibling, { acl });
     await f.output.write(acl, BODY, "text/plain", { ifNoneMatch: "*" });
     expect(f.write).toHaveBeenCalledOnce();
-    expect(f.head.mock.calls.map(([url]) => url).sort()).toEqual(TARGETS);
+    expect(f.head.mock.calls.map(([url]) => url).sort()).toEqual(inspected);
     f.head.mockClear();
     await f.output.delete(acl, { ifMatch: '"new"' });
     expect(f.remove).toHaveBeenCalledOnce();
-    expect(f.head.mock.calls.map(([url]) => url).sort()).toEqual(TARGETS);
+    expect(f.head.mock.calls.map(([url]) => url).sort()).toEqual(inspected);
   });
 
   it("rechecks associations on the same output object and leaves reads unchanged", async () => {
     const f = fixture(adapter);
-    await f.output.write(SAFE, BODY, "text/plain", {});
+    await f.output.write(SAFE, BODY, "text/plain", { ifNoneMatch: "*" });
     f.write.mockClear();
     f.fetch.mockClear();
     f.head.mockClear();
@@ -211,6 +226,12 @@ it("refuses mutations without HEAD but still allows ordinary generic reads", asy
   expect((await f.output.read(SAFE)).body).toEqual(BODY);
 });
 
+it("refuses a portable empty ACL URL even alongside a valid description", async () => {
+  const f = fixture("portable");
+  f.metadata.set(`${ROOT}agent/`, { acl: "", describedby: [`${ROOT}description`] });
+  await refused(f, SAFE);
+});
+
 it.each([
   { status: 200, link: "" },
   { status: 404, link: "" },
@@ -226,7 +247,7 @@ it.each([
   { status: 200, link: '<one>; rel="acl",' },
   { status: 200, link: '<one>; rel="acl"; rel="alternate"' },
   { status: 200, link: '<one>; rel="describedby"; anchor="other"' },
-  { status: 200, link: '<one>; rel="http://www.w3.org/ns/solid/acp#accessControl"' },
+  { status: 200, link: `<https://elsewhere.example/policy>; rel="${ACP}"` },
 ])("refuses unsafe HEAD response $status $link", async ({ status, link }) => {
   const f = fixture("fetch");
   f.fetch.mockImplementation(async () => new Response(null, { status, headers: { link } }));
@@ -279,7 +300,9 @@ it.each([
     if (kind === "url") Object.defineProperty(response, "url", { value: alias });
     return response;
   });
-  await expect(f.output.write(SAFE, BODY, "text/plain", {})).rejects.toThrow(PERSONAL_DATA_DENIED);
+  await expect(f.output.write(SAFE, BODY, "text/plain", { ifNoneMatch: "*" })).rejects.toThrow(
+    PERSONAL_DATA_DENIED,
+  );
   expect(
     f.fetch.mock.calls.filter(([input, init]) => new Request(input, init).method === "PUT"),
   ).toHaveLength(1);

@@ -1,10 +1,21 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import CoreFoundation
 import CryptoKit
 import Foundation
 
 /// Platform-independent validation. A route has one unreserved, opaque chat id; no decoding steps.
 enum PushPolicy {
     static let generic = "You have new activity"
+    static let renewal = "Open Solid Suite to keep notifications on"
+    static func renewalExpiry(_ value: Any?, now: Double) throws -> Double? {
+        if value is NSNull { return nil }
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { throw PushCrypto.Failure.invalid }
+        let expiry = number.doubleValue
+        guard expiry.isFinite, expiry.rounded(.towardZero) == expiry, expiry > now, expiry <= 9007199254740991 else { throw PushCrypto.Failure.invalid }
+        return expiry
+    }
+    static func renewalTrigger(_ expiry: Double, now: Double) -> Double { max(now + 1000, expiry - 86400000) }
     static func route(_ route: String) -> Bool {
         route.utf8.count <= 512 && !route.contains("..") && route != "/chat/." &&
             (route == "/notifications" || route.range(of: "\\A/chat/[A-Za-z0-9_.~-]+\\z", options: .regularExpression) != nil)

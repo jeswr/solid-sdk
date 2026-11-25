@@ -115,7 +115,7 @@ it.each([
         if (record.outcome === 'attempting' && (stage === 'dispatch' || (stage === 'retry-claim' && record.transmission.attempts === 2))) { process.stdout.write('durable\\n'); await new Promise(() => {}); }
       } },
       tokens: { send: async () => { throw new Error('must not request credentials'); } },
-      bindings: { [binding.id]: { ...binding, send: { render: async () => entry.wire, validate: async () => ({ ok: true }),
+      bindings: { [binding.id]: { ...binding, send: { render: async () => entry.wire, preview: async (wire) => wire.bytes, validate: async () => ({ ok: true }),
         transmit: async () => {
           if (stage === 'dispatch') throw new Error('must not transmit before process death');
           if (stage.startsWith('retry-')) return { outcome: 'rejected', detail: 'not accepted' };

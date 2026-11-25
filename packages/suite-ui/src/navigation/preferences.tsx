@@ -38,10 +38,14 @@ export function RailPreferencesProvider({
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
 }
 export function usePreferences(_key: "rail"): RailPreferencesBinding {
-  const preferences = useContext(PreferencesContext);
+  const preferences = useOptionalRailPreferences();
   if (!preferences)
     throw new Error(
       "Wrap suite navigation in RailPreferencesProvider with the account's rail preferences.",
     );
   return preferences;
+}
+
+export function useOptionalRailPreferences(): RailPreferencesBinding | null {
+  return useContext(PreferencesContext);
 }

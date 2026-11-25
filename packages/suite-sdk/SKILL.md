@@ -1,6 +1,6 @@
 ---
 name: suite-sdk
-description: Use when working on @jeswr/suite-sdk accounts, registration, notifications, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, or pod-backed preferences and offline preference replay.
+description: Use when working on @jeswr/suite-sdk accounts, registration, notifications, smart chips and mentions, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, pod-backed preferences and offline preference replay, or pure notification digests and scheduling.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- // AUTHORED-BY Codex GPT-6 -->
@@ -181,3 +181,78 @@ tab updates. Test preferences source with real memory Solid/LWS operations and f
 keep the explicit `src/preferences/**` 100% statement/branch/function/line threshold.
 
 Public API changes must update this skill and README together.
+
+## Notification summaries (`./digest`)
+
+Pure, transport-independent and without React or I/O. Adapt source records to
+`DigestNotification`: epoch-millisecond `time`, stable id, kind/category, app, title, read,
+optional actor, target, urgent and blocking. `classifyUrgency` recognises access requests,
+security/sign-in, direct mentions, blocking agent approvals and explicit urgent flags.
+`buildDigest(records, { since, now })` includes `(since, now]`, deduplicates ids and emits
+app/thread/category groups ordered urgent, unread, newest, id, with agent activity/approval
+counts and an English headline. Output is capped at 50 groups / 100 ids per group; counts
+include all eligible records. `summarise(digest): Promise<string>` is explicit opt-in and
+makes the call async; failures propagate. Never invoke a remote summariser implicitly.
+
+Delivery adapters pass `digestedIds: []` initially, then the prior digest's `digestedIds`.
+When present, receipts replace the lower timestamp boundary so older, late-loaded items are
+included back to `since - lateWindow` (default 7 days). Invalid/future times remain excluded.
+Output `digestedIds` is an LRU of at most 500 receipts: every listed record is refreshed, and
+within one listing the least urgent/read/oldest are dropped first, so absent receipts never
+displace listed ones. Persist it per account. Items carry `key` (`digestGroupKey`) for matching
+live records to a group; never match a whole group through the capped `notificationIds`.
+`unread` counts all unread eligible records, including omitted groups, for desktop delivery.
+
+`nextDigestTime(schedule, now, tz = 'UTC')` returns a Date strictly after now, null for off.
+Modes: off, hourly, daily (`time`), twice-daily (`times: [first, second]`). Times use HH:MM.
+Quiet-hour slots defer until the period ends, including midnight wrap; equal endpoints
+mean no quiet interval. IANA zones use Intl: daily folds choose the first occurrence and
+spring gaps shift forward by their duration. Hourly schedules include both occurrences of a repeated hour. `isDue(lastDelivered, schedule, now, tz?)`
+uses the same slots, catches up missed delivery and treats null or future delivery times as immediately due outside
+quiet hours. Applications own account lifecycle, durable watermarks, wake-up and delivery.
+Keep all branches covered at 100%; update this skill and README with public API changes.
+
+`inQuietHours(quiet, now, tz = "UTC")` exposes the same quiet-hours predicate for delivery
+adapters; reuse it rather than duplicating midnight-wrap rules in applications.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Smart chips (`./chips`, `./chips/tiptap`)
+
+`./chips/core` is a dependency-free leaf for chip types, validation, text helpers and routes.
+Tiptap is an optional peer used only by `./chips/tiptap`.
+
+`ChipRef` carries `{ iri, kind, label, app? }`. `chipCandidates(query, { search, contacts,
+limit?, signal? })` consumes the existing `Search` callable, merges contacts/known WebIDs,
+ranks label prefixes first and deduplicates exact IRIs. Search errors propagate.
+`resolveChip(iri, { fetch, label?, kind? })` reads display metadata through fetch-rdf and
+wrapper accessors. Its bounded 30-second cache belongs to the supplied session transport.
+Unreadable resources keep the stored label and a lock icon; non-RDF files retain their
+stored metadata. Use `podScopedFetch(fetch, roots)` from `./pod-scoped-fetch`: only
+`isOwnPodIri(iri, roots)` descendants of a root use the session transport, with redirects
+refused. Chips pass only the user's storage; extra roots are for containers an opened resource
+owns. Foreign reads bypass it with credentials omitted, no referrer, no native cache, and follow
+redirects. Mount resolution is for own-pod resources only;
+foreign resources resolve on explicit hover/focus. Server callers still need DNS pinning.
+
+`createChipExtension()` on the separate `./chips/tiptap` entry is a framework-neutral inline
+atom with `{iri, kind, label}` attributes and ordinary anchor HTML. Pasted person chips, and
+those dropped from outside the editor, become plain links (`downgradePastedPeople`), so a paste
+never sends mentions. Consumers provide picker
+and node-view integration. No new domain model or search index is created. `chipQuery`,
+`chipText` and `textChips` support plain-text composers, preserving kind and resource IRI.
+
+`mentionNotification(resource, mentionedWebId, title)` sends a title bounded to 120 characters;
+never pass body text or raw chip markup. `addedChipRefs(before, after)` diffs exact person IRIs.
+`htmlChipRefs` reads raw absolute HTTP(S) href attributes, never browser-resolved URLs.
+`notifySavedHtml/Text(session, resource, before, after, title)` diff loaded/last-saved content
+before invoking a transport/actor-scoped notifier. Call only after acknowledged local writes,
+never on imports or remote merges. Rich collaborative editors track local transaction deltas
+and pass those to `notifySavedChips(session, resource, beforeRefs, afterRefs, title)`.
+`createChipPeople` caches contact/profile candidates per loader; supply the app's contact-model
+adapter. `createChipSearch` adapts shell results and known people without a new index.
+`chipHref(ref, encodeRef)` builds suite routes using the caller's resource encoder.
+
+`createMentionNotifier({ actor, notify, receipts })` validates/builds each draft before claiming,
+skips self/nonpeople, isolates per-ref failures and never retries an ambiguous send. Receipts
+must be durable and account scoped. Browser receipts provide at-most-once attempts on that
+browser, without cross-device guarantees; distributed deduplication needs a shared receipt store.

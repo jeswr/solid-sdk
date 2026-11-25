@@ -12,6 +12,7 @@ export interface SharePerson {
   expires?: Date;
 }
 export interface SharingState extends SharingGrantRestrictions {
+  groups?: readonly string[];
   people: SharePerson[];
   general: SharingGeneralAccess;
   canManage: boolean;

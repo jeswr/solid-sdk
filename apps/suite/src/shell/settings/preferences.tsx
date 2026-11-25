@@ -108,6 +108,11 @@ export function usePreferences<K extends keyof Preferences>(key: K) {
   };
 }
 
+/** Optional binding for notification fixtures mounted outside the settings provider. */
+export function useOptionalPreferences() {
+  return useContext(Context);
+}
+
 export function useAllPreferences() {
   const context = useContext(Context);
   if (!context) throw new Error("useAllPreferences requires PreferencesProvider");

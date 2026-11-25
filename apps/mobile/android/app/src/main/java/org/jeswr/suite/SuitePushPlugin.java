@@ -53,6 +53,11 @@ public class SuitePushPlugin extends Plugin {
     }
     @Override protected void handleOnNewIntent(Intent intent) { capture(intent); }
     private void capture(Intent intent) {
+        if (intent != null && intent.getBooleanExtra("suitePushRenewal", false)) {
+            intent.removeExtra("suitePushRenewal");
+            try { store(getContext()).launchNotifications(); } catch (Exception ignored) { /* Fail closed. */ }
+            return;
+        }
         if (intent == null || !intent.hasExtra("suitePushRegistration")) return;
         String registration = intent.getStringExtra("suitePushRegistration"); int index = intent.getIntExtra("suitePushTopic", -1);
         intent.removeExtra("suitePushRegistration"); intent.removeExtra("suitePushTopic");
@@ -113,8 +118,20 @@ public class SuitePushPlugin extends Plugin {
         } catch (Exception e) { call.reject("Invalid or unavailable topic map", "INVALID_ARGUMENT"); }
     }
     @PluginMethod public void silence(PluginCall call) {
-        try { store(getContext()).silence(call.getString("registrationId")); call.resolve(); }
+        try {
+            store(getContext()).silence(call.getString("registrationId"));
+            if (!store(getContext()).withAnyActive(() -> {})) PushRenewalReminder.schedule(getContext(), null);
+            call.resolve();
+        }
         catch (Exception e) { call.reject("Cannot silence registration", "INVALID_ARGUMENT"); }
+    }
+    @PluginMethod public void scheduleRenewalReminder(PluginCall call) {
+        try {
+            Map<String, Object> args = PushJson.object(PushJson.parse(call.getData().toString()));
+            if (!args.keySet().equals(java.util.Collections.singleton("expiresAt"))) throw new IllegalArgumentException();
+            Long expiry = PushPolicy.renewalExpiry(args.get("expiresAt"), System.currentTimeMillis());
+            PushRenewalReminder.schedule(getContext(), expiry); call.resolve();
+        } catch (Exception e) { call.reject("Invalid or unavailable renewal reminder", "INVALID_ARGUMENT"); }
     }
     @PluginMethod public void sign(PluginCall call) {
         if (call.getData().has("body") && call.getString("body") == null) { call.reject("body must be a string", "INVALID_ARGUMENT"); return; }
@@ -151,6 +168,7 @@ public class SuitePushPlugin extends Plugin {
         synchronized (enablement) {
             try {
                 PluginCall cancelled = enablement.disable(() -> store(getContext()).silenceAll());
+                PushRenewalReminder.schedule(getContext(), null);
                 if (cancelled != null) cancelled.reject("Push was disabled", "disabled");
             } catch (Exception e) { call.reject("Cannot silence push", "push-unavailable"); return; }
             if (deleting) { call.reject("Push cleanup is still pending; registrations are silenced", "BUSY"); return; }

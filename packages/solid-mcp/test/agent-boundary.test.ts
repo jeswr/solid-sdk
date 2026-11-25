@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import {
@@ -114,7 +115,11 @@ async function fixture(adapter: string) {
   };
   for (const container of [ROOT, `${ROOT}agent/`, `${ROOT}private/`]) {
     const safe = container === ROOT ? SAFE : `${container}notes.txt`;
-    resources[safe] = { contentType: "text/plain", body: "ordinary allowed content" };
+    resources[safe] = {
+      contentType: "text/plain",
+      body: "ordinary allowed content",
+      etag: '"ordinary"',
+    };
     const members = [safe, ...protectedUrls.map((url) => new URL(url).href)];
     listings.set(container, members);
     resources[container] = rdf((dataset) => {
@@ -171,7 +176,11 @@ async function fixture(adapter: string) {
         isContainer: member.endsWith("/"),
       })),
     ),
-    head: vi.fn(async (target: string) => ({ acl: `${target}.acl` })),
+    head: vi.fn(async (target: string) => ({
+      acl: `${target}.acl`,
+      auxiliaryResources: [`${target}.acl`],
+      exists: resources[target] !== undefined,
+    })),
     write: vi.fn(async () => ({ etag: '"tampered"' })),
     delete: vi.fn(async () => {}),
   };
@@ -313,7 +322,12 @@ describe.each(["portable", "fetch"])("owner-only agent boundary: %s", (adapter) 
     expect(f.fetch).not.toHaveBeenCalled();
     const result = await f.client.callTool({
       name: "pod_write",
-      arguments: { url: `${ROOT}agent/notes.txt`, content: "ordinary", contentType: "text/plain" },
+      arguments: {
+        url: `${ROOT}agent/notes.txt`,
+        content: "ordinary",
+        contentType: "text/plain",
+        ifMatch: '"ordinary"',
+      },
     });
     expect(result.isError, text(result)).not.toBe(true);
   });

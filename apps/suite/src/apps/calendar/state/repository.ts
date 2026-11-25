@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
@@ -122,13 +123,26 @@ export async function discoverCalendars(
 }
 // Only resume resources created by this account's own incomplete attempt.
 const creations = new WeakMap<CalendarAccount, Set<string>>();
+export interface CreateCalendarOptions {
+  /**
+   * A fresh calendar that never adopts existing resources: a random slug, and an existing
+   * events folder is refused instead of reused (412). For calendars that are shared on creation.
+   */
+  exclusive?: boolean;
+}
+/** Creates (or resumes creating) a calendar and returns its document URL. */
 export async function createCalendar(
   account: CalendarAccount,
   title: string,
   colour: string,
-): Promise<void> {
+  options: CreateCalendarOptions = {},
+): Promise<string> {
   const io = calendarIO(account.fetch, account.storageUrl);
-  const url = new URL(`calendar/${calendarSlug(title)}.ttl`, account.storageUrl).href;
+  const slug = calendarSlug(title);
+  const url = new URL(
+    `calendar/${options.exclusive ? `${slug}-${crypto.randomUUID()}` : slug}.ttl`,
+    account.storageUrl,
+  ).href;
   const container = eventContainer(url);
   let attempts = creations.get(account);
   if (!attempts) {
@@ -153,7 +167,7 @@ export async function createCalendar(
       body: "",
     },
   );
-  if (!response.ok && response.status !== 412)
+  if (!response.ok && (options.exclusive || response.status !== 412))
     throw new CalendarHttpError(response.status, response.headers.get("etag"));
   const { indexUrl } = await ensureTypeRegistrations({
     webId: account.webId,
@@ -163,6 +177,7 @@ export async function createCalendar(
   });
   await io.registerCalendar(indexUrl, url, container);
   attempts.delete(attempt);
+  return url;
 }
 /** Range order: by start, then by URL so ties are stable. */
 export function compareOccurrences(a: Occurrence, b: Occurrence): number {

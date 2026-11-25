@@ -246,6 +246,9 @@ test("one subject across labels, types and graphs appears once; all supported la
     "http://schema.org/name",
     "http://www.w3.org/2005/01/wf/flow#description",
     "http://rdfs.org/sioc/ns#name",
+    "http://www.w3.org/2002/12/cal/ical#summary",
+    "http://www.w3.org/2006/vcard/ns#fn",
+    "http://xmlns.com/foaf/0.1/name",
   ];
   for (const [i, predicate] of predicates.entries()) {
     await feed.resource(`${drive}graph${i}`, [quad(nn(url), nn(predicate), literal(`label ${i}`))]);

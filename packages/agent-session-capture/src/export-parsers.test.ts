@@ -20,6 +20,78 @@ const claude = (extra: object = {}) =>
   JSON.stringify([{ uuid: "chat", chat_messages: [{ sender: "human", text: "Hello" }], ...extra }]);
 
 describe("bounded export parsers", () => {
+  it.each(["chatgpt", "claude"])("uses shared chunk-aware PEM continuation for %s", (provider) => {
+    const body = `${"fixtureKeyMaterial".repeat(4)}\n`.repeat(26);
+    const parts = ["intro\n-----BEGIN PGP PRIVATE ", "KEY BLOCK-----\n", body];
+    const footer = "more body\n-----END PGP PRIVATE KEY BLOCK-----\nAfter";
+    const parsed =
+      provider === "chatgpt"
+        ? parseChatgptExport(
+            chat(message(), {
+              title: "My title",
+              mapping: {
+                first: { message: message({ id: "one", create_time: 1, content: { parts } }) },
+                last: {
+                  message: message({ id: "two", create_time: 2, content: { parts: [footer] } }),
+                },
+              },
+            }),
+          )
+        : parseClaudeExport(
+            claude({
+              name: "My title",
+              chat_messages: [
+                {
+                  uuid: "one",
+                  sender: "human",
+                  content: parts.map((text) => ({ type: "text", text })),
+                },
+                { uuid: "two", sender: "assistant", text: footer },
+              ],
+            }),
+          );
+    expect(parsed[0]?.title).toBe("My title");
+    expect(parsed[0]?.messages).toHaveLength(2);
+    expect(parsed[0]?.messages[0]?.text).toBe("intro\n[REDACTED]\n[REDACTED]\n[REDACTED]");
+    expect(parsed[0]?.messages[1]?.text).toBe("[REDACTED PRIVATE KEY]\nAfter");
+  });
+
+  it.each([
+    "chatgpt",
+    "claude",
+  ])("redacts %s title, message and content-part boundaries", (provider) => {
+    const parts = ["000000000000 Safe ghp", "_fixtureToken123 Safe ghp_fixture"];
+    const parsed =
+      provider === "chatgpt"
+        ? parseChatgptExport(
+            chat(message(), {
+              title: "AKIA0000",
+              mapping: {
+                a: { message: message({ id: "a", content: { parts } }) },
+                b: { message: message({ id: "b", content: { parts: ["Token123"] } }) },
+              },
+            }),
+          )
+        : parseClaudeExport(
+            claude({
+              name: "AKIA0000",
+              chat_messages: [
+                {
+                  uuid: "a",
+                  sender: "human",
+                  content: parts.map((text) => ({ type: "text", text })),
+                },
+                { uuid: "b", sender: "assistant", text: "Token123" },
+              ],
+            }),
+          );
+    expect(parsed[0]?.title).toBe("[REDACTED]");
+    expect(parsed[0]?.messages.map((message) => message.text)).toEqual([
+      "[REDACTED] Safe [REDACTED]\n[REDACTED] Safe [REDACTED TOKEN]",
+      "[REDACTED]",
+    ]);
+  });
+
   it.each([
     parseChatgptExport,
     parseClaudeExport,

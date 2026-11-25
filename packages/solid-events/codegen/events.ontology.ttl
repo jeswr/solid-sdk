@@ -1,0 +1,20 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+@prefix schema: <https://schema.org/> .
+@prefix ev: <https://jeswr.org/ns/events#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann: <http://purl.org/vocab/vann/> .
+
+<https://jeswr.org/ns/events> a owl:Ontology ; rdfs:label "Event invitations"@en ; vann:preferredNamespacePrefix "ev" ; vann:preferredNamespaceUri "https://jeswr.org/ns/events#" .
+schema:Event a owl:Class ; rdfs:label "Event"@en ; skos:definition "A event in an event invitation."@en .
+schema:RsvpAction a owl:Class ; rdfs:label "Rsvp"@en ; skos:definition "A rsvp in an event invitation."@en .
+schema:InviteAction a owl:Class ; rdfs:label "Invitee"@en ; skos:definition "A invitee in an event invitation."@en .
+ev:guestListVisible a owl:DatatypeProperty ; rdfs:label "guestListVisible"@en ; skos:definition "Invitation policy: guestListVisible."@en ; rdfs:domain schema:Event ; rdfs:range xsd:boolean .
+ev:visibility a owl:DatatypeProperty ; rdfs:label "visibility"@en ; skos:definition "Invitation policy: visibility."@en ; rdfs:domain schema:Event ; rdfs:range xsd:string .
+ev:publication a owl:DatatypeProperty ; rdfs:label "publication"@en ; skos:definition "Invitation policy: publication."@en ; rdfs:domain schema:Event ; rdfs:range xsd:string .
+ev:rsvpDeadline a owl:DatatypeProperty ; rdfs:label "rsvpDeadline"@en ; skos:definition "Invitation policy: rsvpDeadline."@en ; rdfs:domain schema:Event ; rdfs:range xsd:dateTime .
+ev:guestKey a owl:DatatypeProperty ; rdfs:label "guestKey"@en ; skos:definition "Invitation policy: guestKey."@en ; rdfs:domain schema:RsvpAction ; rdfs:range xsd:string .

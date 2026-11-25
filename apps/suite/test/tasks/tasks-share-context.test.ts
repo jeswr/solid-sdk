@@ -13,6 +13,8 @@ import type { PodSession } from "../../src/lib/session/pod-session";
 import { act, h, mount } from "../drive-ui-dom";
 import { now, Pod, storage, webId } from "./pod";
 
+const { mentionSaved } = vi.hoisted(() => ({ mentionSaved: vi.fn(async () => {}) }));
+vi.mock("@jeswr/suite-sdk/chips", () => ({ notifySavedText: mentionSaved }));
 vi.mock("@jeswr/suite-ui", () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), dismiss: vi.fn() },
 }));
@@ -161,4 +163,80 @@ it("requires the Tasks provider for consumers", async () => {
   }
   await expect(mount(h(Consumer))).rejects.toThrow("useTasks must be used within TasksProvider");
   log.mockRestore();
+});
+
+it("passes unchanged descriptions for unrelated task edits and prior text for new mentions", async () => {
+  const { context } = await provider();
+  const inbox = context.projects[0];
+  if (!inbox) throw new Error("Missing Inbox");
+  let task: Awaited<ReturnType<typeof context.createTask>>;
+  await act(async () => {
+    task = await context.createTask(inbox, { title: "Title", description: "Private description" });
+  });
+  if (!task) throw new Error("Missing task");
+  const created = task;
+  mentionSaved.mockClear();
+  let saved: typeof task | undefined;
+  await act(async () => {
+    saved = await context.updateTask(created, (item) => {
+      item.title = "New title";
+    });
+  });
+  expect(mentionSaved).toHaveBeenLastCalledWith(
+    expect.anything(),
+    task.url,
+    "Private description",
+    "Private description",
+    "New title",
+  );
+  if (!saved) throw new Error("Missing saved task");
+  const previous = saved;
+  await act(async () => {
+    await context.updateTask(previous, (item) => {
+      item.description = "New private description";
+    });
+  });
+  expect(mentionSaved).toHaveBeenLastCalledWith(
+    expect.anything(),
+    task.url,
+    "Private description",
+    "New private description",
+    "New title",
+  );
+});
+
+it("diffs mentions against the cached revision a change applied to, not the captured item", async () => {
+  const { context } = await provider();
+  const inbox = context.projects[0];
+  if (!inbox) throw new Error("Missing Inbox");
+  let task: Awaited<ReturnType<typeof context.createTask>>;
+  await act(async () => {
+    task = await context.createTask(inbox, { title: "Title", description: "Before" });
+  });
+  if (!task) throw new Error("Missing task");
+  const captured = task;
+  const mentioned = 'Before @[Bob](https://bob.example/profile#me "chip:person")';
+  // Another client adds a mention; the refresh lands after the UI captured `task`.
+  await context.cache.store.updateTask(captured, (item) => {
+    item.description = mentioned;
+  });
+  await act(async () => {
+    await context.cache.invalidate(captured.url);
+  });
+  mentionSaved.mockClear();
+  let saved: typeof task | undefined;
+  await act(async () => {
+    saved = await context.updateTask(captured, (item) => {
+      item.title = "Renamed";
+    });
+  });
+  expect(saved?.task.description).toBe(mentioned);
+  expect(mentionSaved).toHaveBeenCalledTimes(1);
+  expect(mentionSaved).toHaveBeenLastCalledWith(
+    expect.anything(),
+    captured.url,
+    mentioned,
+    mentioned,
+    "Renamed",
+  );
 });

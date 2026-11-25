@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/suite-native
 
@@ -18,6 +19,7 @@ The seams the Solid Suite web app uses when it runs inside the iOS and Android s
 | `openPdf(plugin, name, bytes, signal?)` | Drive's native "Open PDF" (MOB-P3 E5): checks the 25 MiB cap and `%PDF-` signature, sends 1 MiB base64 chunks to `SuiteFiles`, opens the platform viewer; aborting `signal` stops before the next native call. Failures are `PdfPreviewError` with code `too-large`, `not-pdf`, `no-viewer`, `cancelled` or `failed`. |
 | `clearPdfPreviews(plugin)` | Call on sign-out or account switch: drops any transfer, closes QuickLook on iOS and deletes every cached preview file. Failures are `PdfPreviewError` with code `failed`. |
 | `mobileClientIdDocument({ origin })` | The `application_type: native` Client Identifier Document for `org.jeswr.suite:/oauth/callback`. |
+| `validatePredecessorOrigins(value)` | Pure validation of a predecessor-origin migration plan; preserves order and duplicates for caller policy. |
 | `@jeswr/suite-native/capacitor` | Native plugin bindings (`SuiteAuthSession`, `SuiteShareIntake`, `SuiteShareStaging`, `SuiteFiles`, `SuiteSecureStore`, `Share`). Import only inside the app shell. |
 
 ```ts
@@ -113,3 +115,85 @@ pnpm --filter @jeswr/suite-native run build
 pnpm --filter @jeswr/suite-native run typecheck
 pnpm --filter @jeswr/suite-native run test   # 100% coverage thresholds
 ```
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+`store.takeMigrationNotice()` returns a one-shot boolean for MOB-P3d. Call it only when the
+native sign-in surface is ready to display “Sign in again to continue”. The native plugin
+returns exactly `{ signInAgain: boolean }` and clears the pending notice atomically; malformed
+responses reject with `SecureStoreError("failed")`. The method takes no origin, namespace or
+other arguments. Native startup performs the migration from the signed bundle's predecessor
+list before starting the bridge; JavaScript cannot initiate it or clear another namespace.
+Remote builds return false. The journal survives interruption and app restarts until consumed.
+
+`validatePredecessorOrigins(value)` accepts an array of at most 32 canonical HTTPS origin strings:
+no credentials, path (including a trailing slash), query, fragment, port zero, `localhost` or
+`.localhost` subdomain. Non-default ports from 1 to 65535 are allowed; an explicit `:443` is
+non-canonical and rejected. Empty plans are valid. It returns `{ valid: true, origins: string[] }`
+or `{ valid: false, reason: "list" | "origin" }`, without mutating or normalising the input or
+including it in errors. Validation covers the entire original list before duplicate handling:
+the suite build script deduplicates in first-seen order; mobile bundle checks reject duplicates.
+The root export has no Capacitor import and resolves to compiled `dist/index.js` in Node build
+scripts. Build workspace dependencies first, for example with
+`pnpm turbo run build --filter=@jeswr/app-suite^... --filter=@jeswr/app-mobile^...`.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Native push notifications (`./push`, MOB-P2d)
+
+`@jeswr/suite-native/push` is a pure, injectable API: it never imports Capacitor, reads a token,
+fetches pod contents, or logs push data. Load the binding only after checking `isNativeApp()`:
+
+```ts
+import { createPush, createPushRegistrar } from '@jeswr/suite-native/push';
+
+const { pushPlugin } = await import('@jeswr/suite-native/capacitor');
+const push = createPush(pushPlugin);
+```
+
+`createPush` validates the native `status`, `enable`, `setTopicMap`, `silence`, `sign`, `activate`,
+`disable`, `consumeLaunchRoute` and `scheduleRenewalReminder` methods. `consumeLaunchRoute()` unwraps
+Capacitor's `{ launchRoute }` envelope. Keys must be public P-256 keys, byte strings canonical
+base64url; routes are exactly `/notifications` or `/chat/<base64url-id>`. Native errors become a
+fixed message without native details. `disable()` silences all registrations; only
+`disable({ deleteLocalData: true })` deletes keys and the OS token after confirmed remote cleanup.
+
+`createPushRegistrar({ relayUrl, fetch, fetchFor?, cleanupFetch?, push, store, subscriptions, clock? })`
+owns the installation and registration lifecycle. `relayUrl` is an explicit HTTPS origin fixed by
+the signed build. `fetch` comes from
+`podAuth.fetchFor(account, { extraResourceOrigins: [RELAY_ORIGIN] })`; with multiple accounts,
+`fetchFor(accountId)` returns each account's own bounded fetch. `cleanupFetch` is a pristine,
+credential-free transport (default `globalThis.fetch`), used only for DELETE with a native device
+proof. Authentication, refresh, access tokens and DPoP keys stay inside pod-auth.
+
+- `enable({ accountId, webId, protocol, storage, topics })` creates or updates the installation,
+  waits for its encrypted challenge and activates it, creates a registration with empty topics,
+  subscribes at the pod, binds the returned channels at the relay and installs the local topic map.
+  The bootstrap PUT is necessary because the relay returns the secret inbox URL on creation only.
+- Each topic has `{ index, kind: 'inbox' | 'chat', topic, label, route, enabled }`. Labels/routes
+  stay local. At most four account/storage registrations share one installation; each has at most
+  sixteen topics. LWS storage subscriptions still require a Solid-OIDC account for relay auth.
+- `renew(accountId)` refreshes the relay and OS token on launch/resume; it asks the pod for seven
+  days when less than two days remain. It stores the expiry the pod actually returned, and schedules
+  the native availability reminder from the earliest active expiry. Expired relay installations
+  are recreated; lost inbox responses are recovered through `rotate-inbox`.
+- `remove(accountId)` aborts that account's in-flight work, silences its native registrations first,
+  then attempts pod cleanup and proof-only relay cleanup within ten seconds per operation. Other
+  accounts retain their maps. Failed cleanup remains durable for `retryCleanup()` on a later launch.
+  Keys/maps are retained until every remote deletion succeeds. A last-registration DELETE may
+  already have removed the installation atomically, so a later installation DELETE's 404 is success.
+- `snapshot()` returns a detached `PushRegistrarState` containing public account mapping,
+  registration IDs, secret inbox URLs, channel expiries, superseded channels awaiting cleanup and
+  removal flags. Treat it as sensitive metadata; persist through `store.load()/save(state)` in
+  app-private storage. Never store it in pod data or logs. Device keys and push tokens are absent.
+
+The app supplies `subscriptions.subscribe({ accountId, webId, protocol, storage, inbox, topics,
+requestedExpiresAt, signal })`, returning `BoundPushTopic[]` (`index`, `kind`, `topic`, `channel`,
+optional `sender`, actual epoch-millisecond `expiresAt`), and
+`subscriptions.remove({ accountId, protocol, storage, topics, signal })`. The adapter uses the
+account's authenticated pod fetch and owns discovery, scope checking, seven-day requests, and
+cleanup if subscription creation fails part-way through. Solid uses one WebhookChannel2023 per
+topic; LWS batches all topics in one WebhookSubscription. It must honor cancellation and delete
+only the channels it created. Preserve a single registrar instance per installation/relay.
+
+Settings must say **“Notifications pause if you don't open Solid Suite for a week”**. Launch routes
+must resolve registration-to-account before navigation; signed-out/unknown registrations open only
+`/notifications`. No production relay is configured by this package.

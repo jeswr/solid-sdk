@@ -43,6 +43,14 @@ The Solid and LWS HTTP backends support mutations; their JSON-LD writes remain u
 406 or 501 responses to its GET on both backends, preserving the status, URL, method and
 problem details; other operations retain their usual HTTP error mapping.
 
+Pass `{ maxBytes, signal }` to `readRdf(url, options)` or `read(url, options)`. The cap is a
+non-negative safe integer. RDF defaults to 16 MiB and raw reads have no default cap. The
+HTTP client counts streamed bytes without relying on Content-Length. Overflow cancels
+the body and rejects with non-retryable `StorageError('payload-too-large')`. For raw HTTP
+reads, this error surfaces when consuming `body`, `bytes()`, `text()` or `blob()`. The memory
+backend can reject in `read()` itself because the byte length is already available. Conditional
+304 responses have no body budget cost. Use an abort signal with a deadline for stalled reads.
+
 All mutations except `create` require `ifMatch`. A name is exact on Solid and a hint on LWS.
 Solid `create(container, body, { exactUrl, contentType })` preserves a canonical direct child's
 URL spelling (for example `system:inbox.ttl`), sending `If-None-Match: *`. `exactUrl` is mutually
@@ -94,6 +102,12 @@ LWS writes require `ifMatch`; `'*'` on `write`/`writeRdf` sends `If-Match: *` an
 creates a missing resource. Use `create` for POST creation: `name` is a Slug hint, and the
 returned URL comes from the server's Location, independently of the parent path.
 Create parents and move destinations may use opaque identifiers without a trailing slash.
+For POST creates, a revalidated HEAD must confirm the returned kind and, on LWS, the
+requested direct parent through a single `up` link. Solid checks direct path parentage.
+Auxiliary or unverifiable Locations reject with `StorageError('invalid-response')`,
+even when the POST supplied an ETag. A refusal can occur after the server committed the POST.
+The root's `isAuxiliaryResource(url, ...observations)` identifies known auxiliary URL suffixes
+and advertisements from available read or HEAD metadata.
 
 **LWS RDF patch is read-modify-write by default.** It checks the caller's ETag on the initial
 read, applies inserts/deletes, and PUTs with that read's ETag. A 412 triggers one fresh read

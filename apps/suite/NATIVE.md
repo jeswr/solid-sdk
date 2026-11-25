@@ -13,10 +13,40 @@ Native settings are baked into Next's client code and `www/build-info.json`:
 | `NEXT_PUBLIC_APP_BASE_URL` (or `APP_BASE_URL`) | `https://localhost` | `appBaseUrl` |
 | `NEXT_PUBLIC_PUBLIC_SUITE_URL` (or `PUBLIC_SUITE_URL`) | `https://solid-suite.vercel.app` | `publicSuiteUrl` |
 | `NEXT_PUBLIC_CLIENT_ID_URL` (or `CLIENT_ID_URL`) | public URL + `/.well-known/solid-client-id-mobile.jsonld` | `clientIdUrl` |
+| `NEXT_PUBLIC_PUSH_RELAY_URL` (or `PUSH_RELAY_URL`) | absent (push disabled) | `pushRelayUrl` |
 
 The app origin must be `https://localhost` or `capacitor://localhost`. Public and Client ID URLs
 must be https. Public bases reject userinfo, queries and fragments, and are canonicalized
 without a trailing slash before navigation and Client ID paths are appended.
+The optional push relay must be an exact canonical HTTPS origin, with no trailing slash,
+path, credentials, query or fragment. It is fixed in the signed native build. No production
+relay or provider credentials have been provisioned (MOB-P2f); omit the setting to hide
+push controls and avoid loading SuitePush. Web browsers never load the push binding.
+
+With a configured relay, Settings › Notifications enables push separately for each signed-in
+Solid account. The app discovers its inbox and joined chat containers (at most sixteen topics
+per storage), creates seven-day webhook subscriptions using the account's authenticated fetch,
+and retains each actual pod expiry. Labels and screen routes stay on the phone. Launch and
+resume renew within two days of expiry; a local notification asks the owner to open the app
+one day before the earliest expiry. Settings states: “Notifications pause if you don't open
+Solid Suite for a week”. LWS-only authentication remains unavailable pending MOB-P2g.
+
+Relay requests use `podAuth.fetchFor(account, { extraResourceOrigins: [RELAY_ORIGIN] })`;
+the registrar never reads tokens. Pod subscription endpoints must share the verified storage
+origin and stay in its credential boundary. Native policy explicitly admits the standard
+`/.notifications/` service path on verified storage origins; metadata cannot add other paths
+or origins. Turning push off
+or signing out silences native registrations before bounded pod and relay cleanup. Failed
+cleanup retains the local keys and metadata and retries on the next launch with connectivity.
+Notification taps resolve their registration to a live account and switch before navigating;
+the native `/chat/<ref>` alias maps to the suite's `/chat/r/<ref>`. Unknown or signed-out
+registrations open `/notifications`.
+
+Solid container notifications observe direct membership. For chats stored in daily message
+files, a new day's file produces a container event; later edits to that existing file may
+not produce one. LWS recursive subscriptions retain the server's semantics. Push text is
+therefore a hint to reconcile the tray and chat when the app opens, with delivery constrained
+by the pod's notification coverage.
 `appBaseUrl()` uses the live local scheme in the WebView so both platforms can
 consume the same bundle. Shared links use the public URL. The CSP permits executable assets
 only under `/_next/static/` at those two local origins and hashes each page's inline scripts.
@@ -76,6 +106,26 @@ The adaptation is recorded in `route-manifest.json`; `check-native.mjs` rejects 
 which must allow the native Origin through `FEEDBACK_ALLOWED_ORIGINS`. When that service
 cannot be reached, the guide works locally and Download my feedback preserves JSON,
 Markdown and audio together. See [README.md](README.md#pilot-feedback) for server setup.
+
+## Remote-session migration (MOB-P3d)
+
+`PREDECESSOR_ORIGINS` is a build setting containing a JSON array of canonical https origins,
+for example `'["https://solid-suite.vercel.app","https://old-suite.example:8443"]'`.
+It defaults to the origin of the public suite URL above (the deployed remote-mode suite), and
+`[]` explicitly disables predecessor deletion. The export bakes the deduplicated list into
+`build-info.json` as `predecessorOrigins`. At most 32 entries are accepted. Entries must be
+bare canonical origins: no trailing slash, path, userinfo, query, fragment, default-port spelling,
+port zero, or local `localhost` / `.localhost` host. `prepare-www` validates the baked list
+before copying the bundle; changing the environment at sync time cannot change the plan.
+
+Before starting the bridge, each bundled native shell validates the whole signed plan and
+removes only the listed origins' secure-store files and Keystore/Keychain entries. It checks
+artifacts on every startup, even after writing completion markers, and journals a pending
+notice before deletion so interruption can resume. Current-origin sessions, unlisted origins
+and native share-inbox batches are retained. Invalid plans or failed deletions stop startup.
+Remote builds never migrate. The native sign-in page consumes the plugin's one-shot boolean
+and shows “Sign in again to continue” only when predecessor session material was found.
+No migration API, namespace or stored value is available to JavaScript.
 
 ## Cached pod reads (MOB-P3e)
 

@@ -1,5 +1,7 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * L1 (tier-a) — the STRUCTURAL admission validator (design §4). Pure JS,
  * FAIL-CLOSED, run on every generation: it refuses to generate from an ontology /
@@ -21,11 +23,14 @@ import { literalMapper, VALIDATED_DATATYPES } from "@jeswr/model-runtime";
 import type { NormalizedOntology } from "./adapter.js";
 import { isFailClosedSeverity, isHttpPattern } from "./compile.js";
 import { type CodegenConfig, isCompositeConfig } from "./config.js";
+import { shapeInvariants } from "./invariants.js";
+import { orderedItemTargets } from "./ordered.js";
 import { Graph, RDF, SH } from "./rdf.js";
 import {
   implicitClassTargets,
   localName,
   type NormalizedShapes,
+  propertySources,
   sharedAliasPredicates,
 } from "./shapes.js";
 
@@ -74,8 +79,19 @@ export function admit(
   config?: CodegenConfig,
 ): AdmissionReport {
   const violations: AdmissionViolation[] = [];
+  let invariants: ReturnType<typeof shapeInvariants>;
   const add = (code: string, severity: AdmissionSeverity, subject: string, message: string) =>
     violations.push({ code, severity, subject, message });
+  try {
+    orderedItemTargets(shapes, config);
+    invariants = shapeInvariants(shapes);
+  } catch (error) {
+    if (!(error instanceof AdmissionError)) throw error;
+    violations.push(...error.violations);
+    // The ordinary scalar admission pass assumes a validated item projection.
+    // Return its closed diagnostic rather than mapping a rejected datatype.
+    return { ok: false, namespace, violations };
+  }
 
   // Inspect the ORIGINAL constraint graph, not just the lossy normalized projection.
   // Metadata never constrains accepted instance data. Every other sh:* predicate
@@ -109,21 +125,67 @@ export function admit(
   const childProperties = new Set(
     shapes.nodeShapes
       .filter((shape) => childTargets.has(shape.targetClass))
-      .flatMap((shape) => shape.properties.map((c) => c.shapeIri)),
+      .flatMap((shape) => shape.properties.flatMap(propertySources).map((c) => c.shapeIri)),
   );
   const graph = new Graph(shapes.quads);
-  const shapeByIri = new Map(shapes.nodeShapes.map((shape) => [shape.iri, shape]));
+  const shapeByIri = new Map(
+    shapes.nodeShapes.flatMap((shape) =>
+      (shape.shapeIris ?? [shape.iri]).map((iri) => [iri, shape] as const),
+    ),
+  );
   const constraintByIri = new Map(
-    shapes.nodeShapes.flatMap((shape) => shape.properties.map((c) => [c.shapeIri, c] as const)),
+    shapes.nodeShapes.flatMap((shape) =>
+      shape.properties.flatMap((c) =>
+        propertySources(c).map(
+          (source) =>
+            [
+              source.shapeIri,
+              {
+                ...source,
+                // Validate source guards against the conjoined value kind. A lexical
+                // guard cannot disappear behind another shape's numeric/date datatype.
+                kind: c.kind,
+                datatype: c.datatype,
+                conceptIris: c.conceptIris,
+              },
+            ] as const,
+        ),
+      ),
+    ),
   );
   const nestedShapeIris = new Set<string>();
+  // The sh:node / sh:class exemption below is decided per property-shape subject,
+  // but a named property shape can be referenced by several NodeShapes. Exempt it
+  // only when EVERY referencing constraint is ordered with the same descriptor;
+  // a shape shared with a plain owner would otherwise compile that owner's field
+  // without its sh:node / sh:class constraint.
+  const orderedUses = new Map<string, Set<string>>();
+  for (const s of shapes.nodeShapes)
+    for (const c of s.properties)
+      for (const source of propertySources(c)) {
+        const uses = orderedUses.get(source.shapeIri) ?? new Set<string>();
+        uses.add(c.ordered ? JSON.stringify([c.ordered.position, c.ordered.value]) : "");
+        orderedUses.set(source.shapeIri, uses);
+      }
+  const orderedShapeIris = new Set<string>();
+  for (const [shapeIri, uses] of orderedUses) {
+    if (![...uses].some((use) => use !== "")) continue;
+    if (uses.size === 1) orderedShapeIris.add(shapeIri);
+    else
+      add(
+        "invalid-ordered",
+        "error",
+        shapeIri,
+        "ordered property shape is shared with a non-ordered or differently ordered owner",
+      );
+  }
   for (const entity of config?.entities ?? []) {
     if (!isCompositeConfig(entity)) continue;
     for (const node of Object.values(entity.nodes)) {
       const shape = shapes.nodeShapes.find((s) => s.targetClass === node.targetClass);
       for (const c of shape?.properties ?? []) {
         if (node.links?.[c.name ?? localName(c.pathIri)] !== undefined)
-          nestedShapeIris.add(c.shapeIri);
+          for (const source of propertySources(c)) nestedShapeIris.add(source.shapeIri);
       }
     }
   }
@@ -167,8 +229,9 @@ export function admit(
     "pattern",
     "class",
     "node",
+    "hasValue",
   ]);
-  const nodeComponents = new Set(["targetClass", "property"]);
+  const nodeComponents = new Set(["targetClass", "property", "not", "and", "or"]);
   const aliasPathComponents = new Set(["alternativePath"]);
   const subjects = new Map(
     shapes.quads
@@ -181,6 +244,7 @@ export function admit(
       .map((q) => [q.subject.value, q.subject]),
   );
   for (const subject of subjects.values()) {
+    if (invariants.consumed.has(subject.value)) continue;
     const isProperty =
       graph.objects(subject, `${SH}path`).length > 0 ||
       graph.has(subject, `${RDF}type`, `${SH}PropertyShape`);
@@ -201,6 +265,9 @@ export function admit(
         unsupported("no runtime projection");
         continue;
       }
+      if (["not", "and", "or"].includes(component) && !shapeByIri.has(subject.value))
+        unsupported("logical constraints require a projected NodeShape");
+      if (component === "hasValue" && !c) unsupported("hasValue requires a projected property");
       const isAliasedTarget =
         component === "targetClass" &&
         (shapeByIri.get(subject.value)?.aliasTypeIris?.length ?? 0) > 0;
@@ -245,7 +312,9 @@ export function admit(
         unsupported("numeric bounds require a numeric projection");
       if (
         isNested &&
-        ["pattern", "in", "minLength", "minInclusive", "maxInclusive"].includes(component)
+        ["hasValue", "pattern", "in", "minLength", "minInclusive", "maxInclusive"].includes(
+          component,
+        )
       )
         unsupported("nested links cannot carry scalar guards");
       if (component === "node") {
@@ -256,10 +325,16 @@ export function admit(
         ) {
           unsupported("inline or unprojected sh:node reference");
         }
-        if (config !== undefined && !isNested)
+        if (config !== undefined && !isNested && !orderedShapeIris.has(subject.value))
           unsupported("sh:node requires a projected composite link");
       }
-      if (component === "class" && !isNested && config !== undefined) {
+      if (
+        component === "class" &&
+        !isNested &&
+        !orderedShapeIris.has(subject.value) &&
+        c?.conceptIris === undefined &&
+        config !== undefined
+      ) {
         // Root advisory hints retain their documented omission policy. A child
         // reached through sh:node must enforce even present optional constraints.
         const advisory = !childProperties.has(subject.value) && !isFailClosedSeverity(c?.severity);
@@ -299,10 +374,17 @@ export function admit(
   // 3. Every instance-data class (a sector owl:Class) has a NodeShape covering it;
   //    literal properties carry a datatype; every property states a cardinality.
   const shapeByTarget = new Map(shapes.nodeShapes.map((s) => [s.targetClass, s]));
+  const conceptClasses = new Set(
+    shapes.nodeShapes
+      .flatMap((s) => s.properties.flatMap(propertySources))
+      .filter((c) => c.conceptIris !== undefined)
+      .map((c) => c.hasClass),
+  );
   for (const c of ontology.classes) {
     if (!inNamespace(c.iri, namespace)) continue;
     const shape = shapeByTarget.get(c.iri);
     if (!shape) {
+      if (conceptClasses.has(c.iri)) continue;
       add(
         "missing-shape",
         "error",

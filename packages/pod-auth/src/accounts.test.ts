@@ -366,6 +366,82 @@ test("the anonymous lifecycle adapter delegates login to add", async () => {
   expect(manager.active()?.webId).toBe(f.alice.webId);
 });
 
+test("the anonymous adapter refuses account-bound fetch for the active account", async () => {
+  const f = fixture();
+  const manager = f.load();
+  const account = await manager.add();
+  const requests = f.transport.mock.calls.length;
+
+  expect(() => manager.authFor(null).fetchFor(account)).toThrow("Account session is unavailable");
+  expect(f.transport).toHaveBeenCalledTimes(requests);
+});
+
+test.each([
+  "add",
+  "anonymous login",
+])("%s refuses guarded login during a concurrent replacement", async (entryPoint) => {
+  const f = fixture();
+  const manager = f.load();
+  const winner = f.load();
+  const hint = { webId: f.alice.webId };
+  const before = await manager.add(hint);
+  const expectRemembered = await manager.authFor(before.webId).remembered();
+  expect(expectRemembered).toMatchObject([{ webId: f.alice.webId, issuer: f.alice.issuer }]);
+  const login = entryPoint === "add" ? manager.add : manager.authFor(null).login;
+  const opened = Promise.withResolvers<void>();
+  const resumed = Promise.withResolvers<void>();
+  const getCode = f.options.ui.getCode;
+  const popup = vi.fn(getCode).mockImplementationOnce(async (url, signal) => {
+    opened.resolve();
+    await resumed.promise;
+    return getCode(url, signal);
+  });
+  f.options.ui.getCode = popup;
+  const replacement = winner.add(hint);
+  await opened.promise;
+  try {
+    const stored = structuredClone([...f.values]);
+    await expect(login(hint, { expectRemembered })).rejects.toThrow("login ownership options");
+    expect(popup).toHaveBeenCalledOnce();
+    expect([...f.values]).toEqual(stored);
+    expect(manager.active()).toEqual(before);
+    expect(f.alice.stats.revocations).toBe(0);
+  } finally {
+    resumed.resolve();
+    await replacement;
+  }
+  const after = await replacement;
+  expect(after.grantId).not.toBe(before.grantId);
+  const stored = structuredClone([...f.values]);
+  await expect(login(hint, { expectRemembered })).rejects.toThrow("login ownership options");
+  await expect(login(hint, { reauthorize: true })).rejects.toThrow("login ownership options");
+  expect(popup).toHaveBeenCalledOnce();
+  expect([...f.values]).toEqual(stored);
+  expect(f.alice.stats.revocations).toBe(1);
+  expect(winner.active()).toEqual(after);
+});
+
+test("anonymous retirement preserves the active account and its remembered grant", async () => {
+  const f = fixture();
+  const manager = f.load();
+  const identity = await manager.add();
+  const saved = structuredClone([...f.values]);
+  const requests = f.transport.mock.calls.length;
+  const changed = vi.fn();
+  manager.on("change", changed);
+  await expect(manager.authFor(null).retireIfOwnedBy(identity)).resolves.toEqual({
+    retired: false,
+    reason: "no-grant",
+  });
+  expect([...f.values]).toEqual(saved);
+  expect(f.transport).toHaveBeenCalledTimes(requests);
+  expect(f.alice.stats.revocations).toBe(0);
+  expect(changed).not.toHaveBeenCalled();
+  expect(manager.active()).toEqual(identity);
+  expect(manager.accounts()).toEqual([identity]);
+  expect((await manager.fetch(f.alice.root + "private")).status).toBe(200);
+});
+
 test("Node default storage supports multiple accounts and restore within the manager", async () => {
   const f = fixture(false, true);
   const manager = f.load();

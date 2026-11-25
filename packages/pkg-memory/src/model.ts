@@ -44,6 +44,24 @@ export const VALIDITY_STATUSES = [
 export type EpistemicStatus = (typeof EPISTEMIC_STATUSES)[number];
 /** PKG validity token. */
 export type ValidityStatus = (typeof VALIDITY_STATUSES)[number];
+/** Exact clinical classes requiring MedicalHealth, including historical namespaces. */
+export const CLINICAL_TYPES: readonly string[] = Object.freeze([
+  ...[NS.health, LEGACY_HEALTH_NS].flatMap((namespace) =>
+    [
+      "Condition",
+      "MedicationStatement",
+      "MedicinalProduct",
+      "Observation",
+      "Immunization",
+      "Encounter",
+    ].map((name) => namespace + name),
+  ),
+  `${NS.fhir}AllergyIntolerance`,
+  `${NS.fhir}Observation`,
+  `${NS.schema}MedicalCondition`,
+  `${NS.schema}Drug`,
+  `${NS.schema}Observation`,
+]);
 /** Evidence item in the Python batch contract. */
 export interface Evidence {
   source: string;
@@ -281,6 +299,18 @@ export async function buildNanopublications(
     if (c.hedge) a.text(`${NS.pkg}hedgeMarker`, c.hedge);
     if (c.note) a.text(`${NS.rdfs}comment`, c.note);
     for (const cat of c.categories ?? []) a.link(`${NS.dpv}hasPersonalData`, expand(cat, owner));
+    // These clinical classes always require explicit special-category authorization,
+    // even when the caller omits categories or supplies a less sensitive category.
+    if (
+      [...assertion.dataset].some(
+        (q) =>
+          q.predicate.value === type &&
+          [...new RdfNode(q.subject, assertion.dataset).terms(type)].some(
+            (term) => term.termType === "NamedNode" && CLINICAL_TYPES.includes(term.value),
+          ),
+      )
+    )
+      a.link(`${NS.dpv}hasPersonalData`, `${NS.pd}MedicalHealth`);
     if (c.attributed_to) a.link(`${NS.prov}wasAttributedTo`, expand(c.attributed_to, owner));
     else if (["SelfReportedExplicit", "SelfReportedHedged", "Mentioned"].includes(c.epistemic))
       a.link(`${NS.prov}wasAttributedTo`, owner);

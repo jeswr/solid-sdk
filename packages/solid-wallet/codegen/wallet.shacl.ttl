@@ -1,0 +1,31 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+@prefix wallet: <https://jeswr.org/ns/wallet#> .
+@prefix schema: <https://schema.org/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+# Reviewed against sectors/identity/identity.shacl.ttl. This is a vault record,
+# not NaturalPerson, LegalName or VerifiableAttribute. Their legal-name, country,
+# assertedBy and Gender Harmony structures are omitted; no identity conformance
+# is claimed. Holder/issuer labels are untrusted display strings, not core:Person
+# or core:Agent links. Credential claims remain in a separate byte-exact VC.
+# Narrowings: one document per resource, one name/kind, literal kind enum, dates
+# without times, optional single file/credential HTTP(S) IRI, required timestamps.
+wallet:WalletItemShape a sh:NodeShape ; sh:targetClass schema:DigitalDocument ;
+ sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:minCount 1 ; sh:pattern "\\S" ] ;
+ sh:property [ sh:path wallet:itemKind ; sh:name "kind" ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:minCount 1 ; sh:in ( "passport" "identity-card" "driving-licence" "residence-permit" "insurance" "membership" "ticket" "vaccination" "certificate" "verifiable-credential" "other" ) ] ;
+ sh:property [ sh:path schema:identifier ; sh:name "identifier" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path wallet:issuerName ; sh:name "issuerName" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:validFrom ; sh:name "validFrom" ; sh:datatype xsd:date ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:expires ; sh:name "expires" ; sh:datatype xsd:date ; sh:maxCount 1 ] ;
+ sh:property [ sh:path wallet:holderName ; sh:name "holderName" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:description ; sh:name "notes" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+ sh:property [ sh:path schema:keywords ; sh:name "tags" ; sh:datatype xsd:string ] ;
+ sh:property [ sh:path schema:associatedMedia ; sh:name "file" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+ sh:property [ sh:path wallet:credential ; sh:name "credential" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+ sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:minCount 1 ] ;
+ sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; sh:minCount 1 ] ;
+ sh:property [ sh:path wallet:favourite ; sh:name "favourite" ; sh:datatype xsd:boolean ; sh:maxCount 1 ] .

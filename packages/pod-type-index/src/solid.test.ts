@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import { createSolidBackend } from "@jeswr/storage-client/solid";
 import { NS } from "@jeswr/suite-vocab";
 import { Writer } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -31,7 +32,7 @@ async function setup(card = "") {
 }
 async function linkLegacy(storage: StorageClient, body = reg()) {
   await put(storage, CARD, `<${WEBID}> solid:privateTypeIndex <${IDX}>.`);
-  await put(storage, IDX, body);
+  await put(storage, IDX, `<> a solid:TypeIndex. ${body}`);
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -113,7 +114,7 @@ describe("Solid discovery and bootstrap adversarial cases", () => {
     const { storage, index } = await setup(
       `<${WEBID}> solid:publicTypeIndex <${IDX}>, <${IDX}#alias>; solid:privateTypeIndex <${IDX}>; pim:preferencesFile <${CARD}>.`,
     );
-    await put(storage, IDX, reg());
+    await put(storage, IDX, `<> a solid:TypeIndex. ${reg()}`);
     const read = vi.spyOn(storage, "readRdf");
     expect(await index.find(CLASS)).toEqual([LOCATION.container]);
     expect(read.mock.calls.map(([url]) => url)).toEqual([CARD, IDX]);
@@ -233,7 +234,7 @@ describe("Solid discovery and bootstrap adversarial cases", () => {
         await put(
           storage,
           IDX,
-          `<#concurrent> a solid:TypeRegistration; solid:forClass <urn:concurrent>; solid:instance <${ROOT}concurrent>.`,
+          `<> a solid:TypeIndex. <#concurrent> a solid:TypeRegistration; solid:forClass <urn:concurrent>; solid:instance <${ROOT}concurrent>.`,
         );
         return original(url, dataset, opts);
       });
@@ -343,7 +344,7 @@ describe("Solid discovery and bootstrap adversarial cases", () => {
 
   it("ignores named-graph registrations on read and refuses to rewrite named graphs", async () => {
     const { storage, index } = await setup(`<${WEBID}> solid:privateTypeIndex <${IDX}>.`);
-    await put(storage, IDX, `<urn:graph> { ${reg()} }`, "application/trig");
+    await put(storage, IDX, `<> a solid:TypeIndex. <urn:graph> { ${reg()} }`, "application/trig");
     expect(await index.find(CLASS)).toEqual([]);
     await expect(index.register(CLASS, LOCATION)).rejects.toMatchObject({ code: "not-rdf" });
   });
@@ -376,7 +377,7 @@ describe("exact unregistration", () => {
     const { storage, index } = await setup(
       `<${WEBID}> solid:privateTypeIndex <${IDX}>; pim:preferencesFile <${PREF}>.`,
     );
-    await put(storage, IDX, reg());
+    await put(storage, IDX, `<> a solid:TypeIndex. ${reg()}`);
     if (state !== "missing")
       await put(
         storage,
@@ -417,7 +418,7 @@ describe("exact unregistration", () => {
     const { storage, index } = await setup(
       `<${WEBID}> solid:privateTypeIndex <${IDX}>; pim:preferencesFile <${PREF}>.`,
     );
-    await put(storage, IDX, reg());
+    await put(storage, IDX, `<> a solid:TypeIndex. ${reg()}`);
     await put(storage, PREF, `<${WEBID}> solid:privateTypeIndex ${pointer}.`);
     const read = vi.spyOn(storage, "readRdf");
     const write = vi.spyOn(storage, "writeRdf");
@@ -430,7 +431,7 @@ describe("exact unregistration", () => {
     const { storage, index } = await setup(
       `<${WEBID}> solid:privateTypeIndex <${IDX}>; pim:preferencesFile <${PREF}>.`,
     );
-    await put(storage, IDX, reg());
+    await put(storage, IDX, `<> a solid:TypeIndex. ${reg()}`);
     const original = storage.readRdf;
     vi.spyOn(storage, "readRdf").mockImplementation(async (url, opts) => {
       if (url === PREF) throw fail("forbidden", 403);
@@ -484,4 +485,138 @@ describe("exact unregistration", () => {
     await expect(index.unregister(CLASS, LOCATION)).rejects.toMatchObject({ code: "conflict" });
     expect(write).not.toHaveBeenCalled();
   });
+});
+
+describe("mutating only verified index documents", () => {
+  it.each([
+    "privateTypeIndex",
+    "publicTypeIndex",
+    "preferencesFile",
+  ])("rejects auxiliary URLs in %s before fetching or writing the document", async (predicate) => {
+    const auxiliary = `${ROOT}settings/policy.%61cl`;
+    const property = predicate === "preferencesFile" ? `pim:${predicate}` : `solid:${predicate}`;
+    const { storage, index } = await setup(`<${WEBID}> ${property} <${auxiliary}>.`);
+    const read = vi.spyOn(storage, "readRdf");
+    const write = vi.spyOn(storage, "writeRdf");
+    const create = vi.spyOn(storage, "create");
+    await expect(
+      index.register(CLASS, LOCATION, {
+        index: predicate === "publicTypeIndex" ? "public" : "private",
+      }),
+    ).rejects.toMatchObject({ code: "invalid-response" });
+    expect(read.mock.calls.map(([url]) => url)).toEqual([CARD]);
+    expect(write).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "acl",
+    "describedby",
+    "linkset",
+  ])("rejects an index advertised as %s despite its RDF type", async (rel) => {
+    const { storage, index } = await setup();
+    await linkLegacy(storage);
+    const head = storage.head;
+    vi.spyOn(storage, "head").mockImplementation(async (url, opts) => {
+      const result = await head(url, opts);
+      if (url === `${ROOT}settings/`) result.links.set(rel, [{ target: IDX, params: {} }]);
+      return result;
+    });
+    const write = vi.spyOn(storage, "writeRdf");
+    await expect(index.unregister(CLASS, LOCATION)).rejects.toMatchObject({
+      code: "invalid-response",
+    });
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("rejects a preferences pointer to an advertised opaque ACL before bootstrap", async () => {
+    const { storage, index } = await setup(`<${WEBID}> pim:preferencesFile <${PREF}>.`);
+    const head = storage.head;
+    vi.spyOn(storage, "head").mockImplementation(async (url, opts) => {
+      const result = await head(url, opts);
+      if (url === CARD) result.links.set("acl", [{ target: PREF, params: {} }]);
+      return result;
+    });
+    const write = vi.spyOn(storage, "writeRdf");
+    const create = vi.spyOn(storage, "create");
+    await expect(index.register(CLASS, LOCATION)).rejects.toMatchObject({
+      code: "invalid-response",
+    });
+    expect(write).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("refuses to add or remove entries from a linked document typed only on a different subject", async () => {
+    const { storage, index } = await setup(`<${WEBID}> solid:privateTypeIndex <${IDX}>.`);
+    await put(storage, IDX, `<#other> a solid:TypeIndex. ${reg()}`);
+    const write = vi.spyOn(storage, "writeRdf");
+    await expect(index.register(CLASS, LOCATION)).rejects.toMatchObject({ code: "conflict" });
+    await expect(index.unregister(CLASS, LOCATION)).rejects.toMatchObject({ code: "conflict" });
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("lets callers catch an out-of-storage Solid profile and use a conventional container", async () => {
+    const { storage } = await setup();
+    const read = vi.spyOn(storage, "read");
+    const head = vi.spyOn(storage, "head");
+    const fallback = LOCATION.container;
+    let location: string = fallback;
+    try {
+      const index = createTypeIndex({
+        storage,
+        features: storage.features,
+        profile: "https://id.example/me#id",
+      });
+      location = (await index.find(CLASS))[0] ?? fallback;
+    } catch (error) {
+      if (!(error instanceof StorageError) || error.code !== "scope") throw error;
+    }
+    expect(location).toBe(fallback);
+    expect(read).not.toHaveBeenCalled();
+    expect(head).not.toHaveBeenCalled();
+  });
+});
+
+it("refuses a mutation if RDF is returned for a different document than the one checked", async () => {
+  const { storage, index } = await setup();
+  await linkLegacy(storage);
+  const read = storage.readRdf;
+  vi.spyOn(storage, "readRdf").mockImplementation(async (url, opts) => {
+    const result = await read(url, opts);
+    return url === IDX ? { ...result, url: `${ROOT}settings/.acl` } : result;
+  });
+  const write = vi.spyOn(storage, "writeRdf");
+  await expect(index.register(CLASS, { instance: `${ROOT}new` })).rejects.toMatchObject({
+    code: "invalid-response",
+  });
+  expect(write).not.toHaveBeenCalled();
+});
+
+it("never probes a parent outside storage for the slashless root alias", async () => {
+  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(null, { status: 404 }));
+  const storage = createSolidBackend({ root: ROOT, fetch });
+  const index = createTypeIndex({
+    storage,
+    features: storage.features,
+    profile: `${ROOT.slice(0, -1)}#me`,
+  });
+  await expect(index.register(CLASS, LOCATION)).rejects.toMatchObject({ code: "not-found" });
+  expect(fetch.mock.calls.map(([url, init]) => [String(url), init?.method])).toEqual([
+    [ROOT, "HEAD"],
+    [ROOT, "GET"],
+  ]);
+});
+
+it("propagates a parent access failure that started after the destination was checked", async () => {
+  const { storage, index } = await setup();
+  await put(storage, IDX, "");
+  await storage.delete(IDX, { ifMatch: (await storage.head(IDX)).etag as string });
+  const head = storage.head;
+  vi.spyOn(storage, "head").mockImplementation(async (url, opts) => {
+    if (url === `${ROOT}settings/` && !opts?.revalidate) throw fail("forbidden", 403);
+    return head(url, opts);
+  });
+  const create = vi.spyOn(storage, "create");
+  await expect(index.register(CLASS, LOCATION)).rejects.toMatchObject({ code: "forbidden" });
+  expect(create).not.toHaveBeenCalled();
 });

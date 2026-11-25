@@ -136,6 +136,10 @@ describe("sparq fixtures and pagination", () => {
         status: 201,
         headers: { location: container, etag: '"created"' },
       },
+      [`HEAD ${container}`]: {
+        status: 200,
+        headers: { link: `<${ROOT}>; rel="up", <https://www.w3.org/ns/lws#Container>; rel="type"` },
+      },
       [`GET ${container}`]: {
         status: 200,
         headers: {
@@ -168,6 +172,7 @@ describe("sparq fixtures and pagination", () => {
     ]);
     expect(calls.map(({ method, url }) => [method, url])).toEqual([
       ["POST", ROOT],
+      ["HEAD", container],
       ["GET", container],
       ["GET", container],
       ["GET", next],

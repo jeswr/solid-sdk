@@ -63,7 +63,29 @@ permissions, before the lossy roles projection. Its result is `{ private: true }
 `unsupported-model`, or `not-storage-root`). No policy text, principal identifiers or error messages are returned.
 The only allowed owner is the exact supplied WebID; listing another owner is non-owner access.
 
-The function uses the same public `storage` and optional trusted `acpDialect: 'css' | 'ess'`
+Use `createOwnerOnlyDestinationVerifier({ podRoot, ownerWebId, openStorage, signal? })`
+when a Solid document's parent containers may need provisioning. The factory returns
+an async boolean verifier callable as `verify(url)`. It lazily opens storage, creates missing containers
+parent-first at their exact URLs, and verifies each resulting container and the policy of
+an existing target. It never sends the document body. Use a storage transport that observes
+the run signal throughout policy reads. A failed privacy proof resolves to `false`; a scope
+violation, abort, or failure while probing or creating a destination can reject. Use
+`checkOwnerOnly` directly for an existing resource or container.
+
+Use `createOwnerOnlyDestinationChecks({ podRoot, ownerWebId, openStorage, signal? })` to
+verify before writing and confirm the written version afterward. It returns
+`verifyPrivateDestination(url)` and `confirmPrivateWrite(url, { etag }, observeEtag?)`.
+Both factories expose `beforeWrite(url, guard)` on the verifier. Pass a `MutationGuard`
+(`() => Promise<never> | undefined`) to recheck the session immediately before each
+missing container is created. A returned promise rejects verification with the refusal.
+The factory passes the run signal to `openStorage` for verification and opens storage without
+that signal for confirmation. Confirmation requires an exact HEAD 200 with a strong ETag
+that matches the supplied write ETag, if present. The resource HEAD during policy discovery
+and the final revalidation must see the same version. Confirmation also checks the containing
+policy. If supplied, `observeEtag` receives the first strong validator before the policy checks.
+Treat false or rejection as a refusal.
+
+`checkOwnerOnly` uses the same public `storage` and optional trusted `acpDialect: 'css' | 'ess'`
 inputs as `createAccessClient`, plus `url` and `ownerWebId`. It follows advertised access
 links within `storage.root`, including ESS query-addressed ACRs. WAC uses the resource's own
 ACL or the nearest existing ancestor ACL's defaults after explicit 404s. ACP adds ancestor
@@ -398,10 +420,44 @@ no live service is needed. Run `pnpm run gate` after the package checks.
 <!-- AUTHORED-BY Codex GPT-6 -->
 
 `@jeswr/pod-access/roles` exports `rolesToModes`, `modesToRole`, `grantsWithRoles`,
-`readGrants`, `setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess`, `isRoleError`, and their documented types
-(`Role`, `ResourceKind`, `AgentRef`, `RoleGrant`, `GrantSnapshot`, `RoleModes`, `RoleContext`,
-`RoleError`, `RolesOptions`, `GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`).
-It does not change the offline root API.
+`readGrants`, `readAccessModes`, `setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess`,
+`isRoleError`, `isGrantableTarget`, `isSealed`, `sealAccess`, `unsealAccess`, `sealDataset`, and
+their documented types (`Role`, `ResourceKind`, `AgentRef`,
+`RoleGrant`, `GrantSnapshot`, `RoleModes`, `RoleContext`, `RoleError`, `RolesOptions`,
+`GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`, `PrincipalModes`,
+`AccessModesSnapshot`). It does not change the offline root API.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+`readAccessModes(url, options)` returns `{ url, resource, members, governedBy, version }`: every principal's
+raw modes (`{ agent, modes }`, Write implying Append), including principals whose modes map to no
+role (Append only, Write without Read, Control without edit), which `readGrants` omits. Use it,
+not the role projection, for security checks such as "only the owner can change this".
+`resource` is the effective policy of the resource itself (its own document, else the nearest
+ancestor's inherited rules); for a container URL `members` is what its members inherit (its own
+member-scope `acl:default` rules, else the inherited ones), and it is empty otherwise. It never
+refuses a folder whose scopes differ (it reports both), but refuses conditional policies like
+`readGrants`. `governedBy` is the resource whose own WAC document applies (`url` itself, or the
+nearest ancestor it inherits from; `null` when none does; `url` under ACP), so a caller can insist
+that a document inherits its folder's access instead of carrying its own. Its `version` equals
+`readGrants`' token for the same options, so it can guard a later `setGrants`
+(`expected: { [url]: version }`).
+
+`sealAccess(url, options)` marks `url`'s OWN access document with the caller's seal
+(`<doc> pa:sealedBy <webId>`, `pa:` = `https://jeswr.org/ns/pod-access#`), conditionally on its
+ETag and keeping every other statement; `isSealed(url, options)` reads it, counting only the
+caller's seal on the resource's own document (never an inherited one); `unsealAccess` removes it
+(a no-op without an own document). Only an agent with Control on the resource can write the seal,
+so it records that its owner verified what the resource governs (for example that a folder was
+empty when it was made owner-only). Seal last, after that verification, so a failure part-way
+leaves the resource unsealed. Role edits keep the seal: unseal before widening access.
+`sealDataset(dataset, documentUrl, webId, sealed?)` adds or removes the same statement in an
+access document built offline (such as a seeded demo pod).
+
+`isGrantableTarget(target, storage, reserved?)` is the shared check behind request approvals:
+false for anything outside storage, the storage root (with or without its slash), `settings/` and
+any extra top-level folder named in `reserved`, with everything under them, `.acl`/`.acr`/`.meta`
+documents, queries, fragments, empty segments, ambiguous percent-encodings and Windows aliases,
+compared case-insensitively by decoded path.
 
 ```ts
 import { readGrants, setGrants } from "@jeswr/pod-access/roles";
@@ -881,3 +937,16 @@ The subpath exports frozen `ACCM`, `DPV`, `ODRL`, `ACL`, `LDP` and supporting vo
 accm helpers. RDF uses `@jeswr/fetch-rdf`, typed accessors/RDF factories, and `n3.Writer`.
 Access Manager imports shared vocabulary and
 canonicalisation; its UI-specific request/approval interfaces remain deprecated compatibility code.
+
+`ensurePrivateContainerAccess(session, target, { created, storage, acpDialect? })` from
+`./roles` returns a `checkOwnerOnly` verdict for a private app container. `target` must be a
+container (ending in `/`) below the storage root. Only when `created` is true, meaning the
+caller just created the container and has written nothing into it, does it provision an
+owner-only manager grant for the container and its members. Any other container is only
+verified, never rewritten, so a folder someone shared on purpose keeps its collaborators
+and is refused. Verification reads the effective WAC or ACP policy through `checkOwnerOnly`:
+owner grants inherited from ACP member policies are accepted, any other inherited or untyped
+rule refuses. `acpDialect` is a trusted assertion and defaults to CSS; ESS pods fail closed
+without it. Members that already carry their own ACL/ACR keep it, so callers should only
+create new member names inside the container. `verifyPrivateDemoAccess(session, target,
+owner)` checks the isolated demo backend; real storage cannot pass that demo check.

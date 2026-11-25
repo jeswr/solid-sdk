@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import type { IntegrationAdapter } from "@jeswr/pod-connectors";
+import { pendingWhoopBatch } from "@jeswr/pod-connectors/adapters/whoop";
 
 /** Scopes the provider needs for sign-in or account identification; never optional.
  * Dropbox grants account_info.read to every app regardless of the request. */
@@ -74,6 +75,17 @@ const rules: Readonly<Record<string, readonly ScopeRule[]>> = {
 const gatesNothing: Readonly<Record<string, readonly string[]>> = {
   // Strava's profile `read`: the adapter only reads /athlete/activities (activity:read).
   strava: ["read"],
+  // A stale saved selection may still carry WHOOP's former `offline` scope; it gates no data.
+  whoop: ["offline"],
+};
+
+/** Adapters whose pending batch cursors resume a traversal of only the granted collections
+ * (they honour ctx.scopes). A partial selection passes those through, so batches advance,
+ * and on completion restores the high-water cursor the traversal started from. */
+const batchCursors: Readonly<
+  Record<string, (cursor: string | undefined) => { base?: string } | undefined>
+> = {
+  whoop: pendingWhoopBatch,
 };
 
 /** Omit deselected collection reads and writes, and don't call source endpoints for
@@ -134,10 +146,15 @@ export function withSelectedScopes(
         (scope) => !selected.includes(scope) && !ungated.includes(scope),
       );
       if (!partial) return outcome;
-      // A partial selection cannot advance a checkpoint shared with omitted data, nor discard
-      // resume state (a Gmail full-sync journal) that only the withheld cursor supersedes.
-      const { cursor: _cursor, commit: _commit, ...rest } = outcome;
-      return { ...rest, ...(ctx.cursor === undefined ? {} : { cursor: ctx.cursor }) };
+      // A partial selection cannot discard resume state (a Gmail full-sync journal)
+      // that only the withheld cursor supersedes, including while a batch advances.
+      const { commit: _commit, ...partialOutcome } = outcome;
+      const batch = batchCursors[adapter.metadata.id];
+      if (batch?.(outcome.cursor)) return partialOutcome;
+      // A partial selection cannot advance a checkpoint shared with omitted data.
+      const { cursor: _cursor, ...rest } = partialOutcome;
+      const pinned = batch?.(ctx.cursor) ? batch(ctx.cursor)?.base : ctx.cursor;
+      return { ...rest, ...(pinned === undefined ? {} : { cursor: pinned }) };
     },
   };
 }

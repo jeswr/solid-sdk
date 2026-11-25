@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
@@ -29,6 +30,24 @@ export interface GrantSnapshot {
   readonly url: string;
   grants: RoleGrant[];
   readonly version: string & { readonly [grantVersion]: true };
+}
+/** One principal's raw, unprojected modes. */
+export interface PrincipalModes {
+  agent: AgentRef;
+  modes: Mode[];
+}
+/** Raw per-principal modes on a resource and, for a container, on what its members inherit. */
+export interface AccessModesSnapshot {
+  readonly url: string;
+  resource: PrincipalModes[];
+  members: PrincipalModes[];
+  /**
+   * WAC: the resource whose own access document applies, `url` itself or the nearest ancestor it
+   * inherits from; null when no document applies. ACP: `url`, whose own control resource applies
+   * (with member controls collected from its ancestors).
+   */
+  readonly governedBy: string | null;
+  readonly version: GrantSnapshot["version"];
 }
 /** Separate permission targets: resource body, comments container, and own ACR. */
 export interface RoleModes {

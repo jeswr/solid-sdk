@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { readRdf, readResource, search } from "../src/pod.js";
 import { createFetchPodPort } from "../src/pod-port.js";
@@ -17,7 +18,11 @@ describe("fetch PodPort", () => {
       link: '<other>; title="view, not an ACL"; rel="alternate", <permissions>; rel="acl"',
     });
     const pod = createFetchPodPort({ fetch, podRoot: ROOT });
-    expect(await pod.head?.(FILE)).toEqual({ acl: `${ROOT}permissions` });
+    expect(await pod.head?.(FILE)).toEqual({
+      acl: `${ROOT}permissions`,
+      auxiliaryResources: [`${ROOT}permissions`],
+      exists: status !== 404,
+    });
     expect(fetch).toHaveBeenCalledWith(
       FILE,
       expect.objectContaining({ method: "HEAD", redirect: "manual", cache: "no-cache" }),
@@ -27,7 +32,6 @@ describe("fetch PodPort", () => {
   });
 
   it.each([
-    '<policy>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
     '<a>; rel="acl", <b>; rel="acl"',
     '<a>; rel="acl"; anchor="other"',
     '<a>; rel="acl"; rel="alternate"',
@@ -37,12 +41,27 @@ describe("fetch PodPort", () => {
     await expect(pod.head?.(FILE)).rejects.toThrow();
   });
 
+  it.each([200, 404])("returns complete ACP associations on HEAD HTTP %s", async (status) => {
+    const pod = createFetchPodPort({
+      fetch: responding(status, {
+        link: '<policy>; rel="http://www.w3.org/ns/solid/acp#accessControl", <permissions>; rel="acl", <meta>; rel="describedby"',
+      }),
+      podRoot: ROOT,
+    });
+    expect(await pod.head?.(FILE)).toEqual({
+      acr: [`${ROOT}policy`],
+      describedby: [`${ROOT}meta`],
+      auxiliaryResources: [`${ROOT}policy`, `${ROOT}permissions`, `${ROOT}meta`],
+      exists: status !== 404,
+    });
+  });
+
   it.each([
     "",
     '<a>; rel="alternate"; title="rel=acl"',
   ])("retains an empty association set for valid metadata without auxiliary links: %s", async (link) => {
     const pod = createFetchPodPort({ fetch: responding(200, { link }), podRoot: ROOT });
-    expect(await pod.head?.(FILE)).toEqual({});
+    expect((await pod.head?.(FILE))?.acl).toBeUndefined();
   });
 
   it.each([
@@ -57,6 +76,8 @@ describe("fetch PodPort", () => {
     expect(await pod.head?.(FILE)).toEqual({
       acl: `${ROOT}permissions`,
       describedby: [`${ROOT}meta/one`, `${ROOT}meta/two?ext=acr`],
+      auxiliaryResources: [`${ROOT}permissions`, `${ROOT}meta/one`, `${ROOT}meta/two?ext=acr`],
+      exists: status !== 404,
     });
   });
 

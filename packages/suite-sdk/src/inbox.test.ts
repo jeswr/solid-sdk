@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { AuthEvent, AuthEventType, Identity, PodAuth } from "@jeswr/pod-auth";
 import { PodAuthProvider } from "@jeswr/pod-auth/react";
 import { act, createElement, StrictMode } from "react";
@@ -44,9 +45,11 @@ function fakeAuth(identity: Identity | null = alice) {
   const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (url) => response(url));
   const auth: PodAuth = {
     fetch,
+    fetchFor: () => fetch,
     restore: async () => current,
     identity: async () => current,
     remembered: async () => [],
+    retireIfOwnedBy: async () => ({ retired: false, reason: "no-grant" }),
     login: async () => alice,
     logout: async () => {},
     on(type, handler) {

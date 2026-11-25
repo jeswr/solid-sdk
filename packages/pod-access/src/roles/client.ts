@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
@@ -23,9 +24,11 @@ import {
   subjectAgent,
 } from "./rdf.js";
 import type {
+  AccessModesSnapshot,
   AgentRef,
   GrantMutationOptions,
   GrantSnapshot,
+  PrincipalModes,
   Role,
   RoleGrant,
   RolesOptions,
@@ -197,6 +200,34 @@ function version(snapshot: Snapshot, options: RolesOptions, comments?: Snapshot)
     validators(snapshot),
     comments ? validators(comments) : null,
   ]) as GrantSnapshot["version"];
+}
+/**
+ * Read every principal's raw modes, including principals whose modes map to no role (Append
+ * only, Write without Read, Control without edit), which `readGrants` omits. `resource` is the
+ * effective policy of the resource itself: its own document, else the nearest ancestor's
+ * inherited (`acl:default`) rules. For a container URL, `members` is what its members inherit:
+ * its own member-scope rules, else the same inherited rules; it is empty for other resources.
+ * Conditional policies are refused, as in `readGrants`. `governedBy` names whose access document
+ * applies, so a caller can tell inherited access from a resource's own. The version token equals
+ * the one `readGrants` returns for the same options, so it can guard a later `setGrants`.
+ */
+export async function readAccessModes(
+  url: string,
+  options: RolesOptions,
+): Promise<AccessModesSnapshot> {
+  const snapshot = await load(url, options);
+  const comments = options.commentsContainer
+    ? await load(options.commentsContainer, options)
+    : undefined;
+  const list = (rows: Map<string, Row>): PrincipalModes[] =>
+    [...rows.values()].map((row) => ({ agent: row.agent, modes: [...row.modes].sort() }));
+  return {
+    url,
+    resource: list(rows(snapshot)),
+    members: url.endsWith("/") ? list(rows(snapshot, snapshot.documents, true)) : [],
+    governedBy: snapshot.model === "acp" ? url : (snapshot.documents[0]?.resource ?? null),
+    version: version(snapshot, options, comments),
+  };
 }
 /** Read roles and an opaque serialisable token covering discovery, absence and source ETags. */
 export async function readGrants(url: string, options: RolesOptions): Promise<GrantSnapshot> {

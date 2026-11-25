@@ -1,7 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, Input } from "@jeswr/suite-ui";
 import { useEffect, useId, useState } from "react";
+import { NativePushSettings } from "../push/settings";
+import { NotificationSummarySettings } from "./notification-summary";
 import { usePreferences } from "./preferences";
 
 /** The kinds that may pop up on the desktop (02-§7); the tray always lists every kind. */
@@ -49,6 +52,7 @@ export function NotificationSettings() {
   }, []);
   return (
     <>
+      <NativePushSettings />
       <p>
         Every notification appears in the tray. These settings choose which ones also pop up on your
         desktop.
@@ -103,6 +107,7 @@ export function NotificationSettings() {
         {permission === "unavailable" && <p>This browser doesn't support desktop notifications.</p>}
         {error && <p role="alert">{error}</p>}
       </section>
+      <NotificationSummarySettings />
       <fieldset>
         <legend>Quiet hours (no desktop pop-ups)</legend>
         <label className="settings-toggle">

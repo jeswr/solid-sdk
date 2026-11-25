@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { ChunkSlices } from "./chunk-slices.js";
 import type { ImportFile } from "./file-import.js";
 import { fileText } from "./file-stream.js";
@@ -156,14 +157,18 @@ export interface JsonEntry {
 /** Select array members and optional root fields without retaining the export.
  * An oversized selected value is discarded and counted once through onSkip.
  * Overflow outside a selected value (including routing keys) fails the file.
+ * onUnselected reports array members containing no matching selector; empty
+ * selected arrays still match. Mixed wrapper/flat imports can account for omissions.
  */
 export async function* jsonEntries(
   file: ImportFile,
   arrays: readonly string[],
   fields: readonly string[] = [],
   onSkip: () => void = () => {},
+  onUnselected: (arrayPath: string) => void = () => {},
 ): AsyncGenerator<JsonEntry> {
   const reader = new JsonReader(file);
+  let selections = 0;
   const next = async (retainString = false): Promise<Token> => {
     const token = await reader.next(retainString);
     if (!token) throw new Error("Unexpected end of JSON export.");
@@ -197,8 +202,10 @@ export async function* jsonEntries(
             (target) =>
               target === child || target.startsWith(`${child}.`) || target.startsWith(`${child}[]`),
           );
-        if (relevant && fields.includes(child)) yield* record(child, depth + 1);
-        else yield* visit(child, await next(), depth + 1, selected, !relevant);
+        if (relevant && fields.includes(child)) {
+          selections++;
+          yield* record(child, depth + 1);
+        } else yield* visit(child, await next(), depth + 1, selected, !relevant);
         const end = await next();
         if (end.kind === "}") break;
         expect(end, ",");
@@ -206,6 +213,7 @@ export async function* jsonEntries(
       }
     } else if (first.kind === "[") {
       const select = !selected && !ignored && arrays.includes(path);
+      if (select) selections++;
       let firstMember = true;
       while (true) {
         // Start before reading a member so its first token is also bounded.
@@ -215,7 +223,9 @@ export async function* jsonEntries(
           if (select) reader.endRecord();
           return;
         }
+        const before = selections;
         yield* visit(`${path}[]`, value, depth + 1, selected || select, ignored);
+        if (!select && !selected && !ignored && selections === before) onUnselected(path);
         if (select) {
           const raw = reader.endRecord();
           if (raw === undefined) onSkip();
@@ -232,7 +242,15 @@ export async function* jsonEntries(
   }
   async function* record(path: string, depth: number): AsyncGenerator<JsonEntry> {
     reader.beginRecord();
-    yield* visit(path, await next(), depth, true);
+    const first = await next();
+    // A field can support both an object and an array envelope. Stream members
+    // when the same path is an array selector instead of retaining its wrapper.
+    if (first.kind === "[" && arrays.includes(path)) {
+      reader.endRecord();
+      yield* visit(path, first, depth);
+      return;
+    }
+    yield* visit(path, first, depth, true);
     const raw = reader.endRecord();
     if (raw === undefined) onSkip();
     else yield { path, value: JSON.parse(raw) };

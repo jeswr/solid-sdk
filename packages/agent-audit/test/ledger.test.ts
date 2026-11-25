@@ -40,7 +40,22 @@ it("accepts every specified kind, snapshots input/output and uses the pilot hash
   for (const type of ENTRY_KINDS.filter(
     (type) => type !== "gate-decision" && type !== "record-anchor",
   ))
-    ledger.append({ ...record, type }, AT);
+    ledger.append(
+      {
+        ...record,
+        type,
+        ...(type === "personal-data-read"
+          ? {
+              tool: "memory_recall",
+              decision: "permit" as const,
+              reason: "autonomous",
+              categories: ["https://w3id.org/dpv/pd#Preference"],
+              resources: [],
+            }
+          : {}),
+      },
+      AT,
+    );
   ledger.append(
     {
       ...record,

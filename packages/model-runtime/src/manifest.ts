@@ -1,6 +1,8 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The compiled shape-manifest — the runtime's ONLY input schema, and the
  * data-not-code boundary (design §7.1/§7.2). A manifest is pure data: flag / enum
@@ -15,7 +17,13 @@
  */
 
 import { literalMapper } from "./datatypes.js";
-import { isSafeAbsoluteIri, isTurtlePrefixName } from "./guards.js";
+import { httpIriOrUndefined, isSafeAbsoluteIri, isTurtlePrefixName } from "./guards.js";
+import {
+  type EntityInvariant,
+  type HasValueConstraint,
+  validateEntityInvariants,
+  validateHasValue,
+} from "./invariants.js";
 
 /** The manifest schema version this runtime interprets. */
 export const MANIFEST_VERSION = 1 as const;
@@ -32,16 +40,17 @@ const CAP = {
   prefixes: 256,
   string_len: 4096,
   in_values: 1024,
-  // A composite manifest nests two levels deeper than a flat one
-  // (entities → nodes → fields → guards → value), so this bounds that shape with
-  // headroom while staying a small recursion-bomb guard.
-  default_object_depth: 10,
+  // Allow the independently checked 16-atom / four-logical-level invariant grammar
+  // inside a composite node. Unknown nested payloads still fail the closed key checks.
+  default_object_depth: 32,
   /** Nodes per composite entity (root + sub-nodes). */
   nodes_per_composite: 64,
 } as const;
 
 /** Per-field guard flags — all pure data (enums / booleans), no computation. */
 export interface ManifestFieldGuards {
+  /** Ontology-derived closed IRI enum: exact membership; invalid writes throw TypeError. */
+  iriEnum?: true;
   /** Filter + canonicalise IRI values through the http(s)-only lexical filter. */
   iriScheme?: "http-https" | "https";
   /** Closed SHACL prefix pattern, checked on the original RDF IRI before normalization. */
@@ -71,7 +80,20 @@ export interface ManifestFieldGuards {
 /** A literal scalar a manifest may carry (default value / `sh:in` member). */
 export type ManifestScalar = string | number | boolean;
 
+/** Ordered item-node encoding. Scalar keys on the field constrain its ONE item value. */
+export interface ManifestOrdered {
+  itemClass: string;
+  position: string;
+  value: string;
+  minPosition?: number;
+  severity: "Violation" | "Warning" | "Info";
+}
+
+/** Bounded independently of the manifest's field and enum inventories. */
+export const MAX_ORDERED_ITEMS = 256;
+
 export interface ManifestField {
+  hasValue?: HasValueConstraint;
   /** The JS/TS accessor name (allowlisted charset, reserved-name-checked). */
   name: string;
   /** The full predicate IRI. */
@@ -94,8 +116,9 @@ export interface ManifestField {
   hasClass?: string;
   /** True when the source link has sh:class but no sh:node; its target must match exactly. */
   classOnly?: true;
-  /** Present ⇒ the field is a live set; absent ⇒ a single value. */
-  collection?: "set";
+  /** Set ⇒ live set; ordered ⇒ replacing array snapshot; absent ⇒ singleton. */
+  collection?: "set" | "ordered";
+  ordered?: ManifestOrdered;
   /** Datatype IRI (or `xsd:` shorthand) — required for a literal field. */
   datatype?: string;
   minCount?: number;
@@ -112,6 +135,7 @@ export interface ManifestField {
 }
 
 export interface ManifestEntity {
+  invariants?: EntityInvariant[];
   /** The entity name (also the generated Wrapper / TS type base name). */
   name: string;
   /** Discriminator — a FLAT (single-node) entity. Absent is treated as `"flat"`. */
@@ -133,6 +157,7 @@ export interface ManifestEntity {
  * one incoming link; the graph is acyclic and spans every node).
  */
 export interface ManifestNode {
+  invariants?: EntityInvariant[];
   /** The node name — unique within the composite; referenced by `nested` fields. */
   name: string;
   /** The `rdf:type` IRI(s) this node is stamped with / recognised by. */
@@ -262,6 +287,7 @@ function assertKnownKeys(obj: Record<string, unknown>, allowed: Set<string>, wha
 }
 
 const GUARD_KEYS = new Set<string>([
+  "iriEnum",
   "iriScheme",
   "iriPattern",
   "requiredFailClosed",
@@ -276,6 +302,7 @@ const GUARD_KEYS = new Set<string>([
   "nonBlank",
 ]);
 const FIELD_KEYS = new Set<string>([
+  "hasValue",
   "name",
   "predicate",
   "aliasPredicates",
@@ -284,6 +311,7 @@ const FIELD_KEYS = new Set<string>([
   "hasClass",
   "classOnly",
   "collection",
+  "ordered",
   "datatype",
   "minCount",
   "maxCount",
@@ -294,6 +322,7 @@ const FIELD_KEYS = new Set<string>([
   "guards",
 ]);
 const ENTITY_KEYS = new Set<string>([
+  "invariants",
   "name",
   "kind",
   "typeIris",
@@ -302,7 +331,14 @@ const ENTITY_KEYS = new Set<string>([
   "fields",
 ]);
 const COMPOSITE_ENTITY_KEYS = new Set<string>(["name", "kind", "root", "nodes"]);
-const NODE_KEYS = new Set<string>(["name", "typeIris", "aliasTypeIris", "fragment", "fields"]);
+const NODE_KEYS = new Set<string>([
+  "invariants",
+  "name",
+  "typeIris",
+  "aliasTypeIris",
+  "fragment",
+  "fields",
+]);
 const ROOT_KEYS = new Set<string>(["manifestVersion", "runtime", "prefixes", "entities"]);
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -331,6 +367,10 @@ function validateGuards(raw: unknown): ManifestFieldGuards {
   if (!isObject(raw)) fail("field.guards must be an object");
   assertKnownKeys(raw, GUARD_KEYS, "field.guards");
   const g: ManifestFieldGuards = {};
+  if (raw.iriEnum !== undefined) {
+    if (raw.iriEnum !== true) fail("field.guards.iriEnum must be true when present");
+    g.iriEnum = true;
+  }
   if (raw.iriScheme !== undefined) {
     if (raw.iriScheme !== "http-https" && raw.iriScheme !== "https") {
       fail('field.guards.iriScheme must be "http-https" or "https"');
@@ -389,9 +429,11 @@ function validateNestedField(
   const node = checkString(raw.node, "field.node (required for a nested field)");
   if (!NAME_RE.test(node)) fail(`field.node "${node}" is not a valid node name`);
   for (const forbidden of [
+    "hasValue",
     "aliasPredicates",
     "datatype",
     "collection",
+    "ordered",
     "maxCount",
     "default",
     "defaultNow",
@@ -452,11 +494,14 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   }
   const kind = raw.kind;
 
-  let collection: "set" | undefined;
+  let collection: "set" | "ordered" | undefined;
   if (raw.collection !== undefined) {
-    if (raw.collection !== "set") fail('field.collection must be "set" when present');
-    collection = "set";
+    if (raw.collection !== "set" && raw.collection !== "ordered")
+      fail('field.collection must be "set" or "ordered" when present');
+    collection = raw.collection;
   }
+  if (collection !== "ordered" && raw.ordered !== undefined)
+    fail("field.ordered requires an ordered collection");
 
   let datatype: string | undefined;
   if (kind === "literal") {
@@ -474,6 +519,36 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
     );
   }
   if (collection) field.collection = collection;
+  if (collection === "ordered") {
+    if (!isObject(raw.ordered)) fail("ordered collection requires field.ordered");
+    const o = raw.ordered;
+    assertKnownKeys(
+      o,
+      new Set(["itemClass", "position", "value", "minPosition", "severity"]),
+      "field.ordered",
+    );
+    const itemClass = checkIri(o.itemClass, "field.ordered.itemClass");
+    const position = checkIri(o.position, "field.ordered.position");
+    const value = checkIri(o.value, "field.ordered.value");
+    const reserved = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    if (new Set([predicate, position, value, reserved]).size !== 4)
+      fail("ordered predicates must be distinct and exclude rdf:type");
+    if (!["Violation", "Warning", "Info"].includes(o.severity as string))
+      fail("field.ordered.severity must be Violation, Warning, or Info");
+    field.ordered = {
+      itemClass,
+      position,
+      value,
+      severity: o.severity as ManifestOrdered["severity"],
+    };
+    if (o.minPosition !== undefined) {
+      if (!Number.isSafeInteger(o.minPosition) || (o.minPosition as number) > 1)
+        fail("field.ordered.minPosition must be a safe integer no greater than 1");
+      field.ordered.minPosition = o.minPosition as number;
+    }
+    for (const key of ["aliasPredicates", "default", "defaultNow", "materializeDefault"])
+      if (raw[key] !== undefined) fail(`ordered field cannot carry ${key}`);
+  }
   if (datatype) field.datatype = datatype;
 
   if (raw.minCount !== undefined) field.minCount = checkCount(raw.minCount, "field.minCount");
@@ -485,6 +560,12 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   ) {
     fail(`field.minCount (${field.minCount}) exceeds field.maxCount (${field.maxCount})`);
   }
+  // An ordered field above the item cap could never be read or written.
+  if (
+    field.collection === "ordered" &&
+    ((field.minCount ?? 0) > MAX_ORDERED_ITEMS || (field.maxCount ?? 0) > MAX_ORDERED_ITEMS)
+  )
+    fail(`ordered field.minCount / field.maxCount must not exceed ${MAX_ORDERED_ITEMS}`);
 
   if (raw.default !== undefined) field.default = checkScalar(raw.default, "field.default");
   if (raw.defaultNow !== undefined)
@@ -503,6 +584,26 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
 
   field.guards = validateGuards(raw.guards);
   const g = field.guards;
+  if (collection === "ordered") {
+    for (const key of ["trim", "dropBlank", "sortOnRead", "emptyStringDrop", "iriEnum"] as const)
+      if (g[key] !== undefined) fail(`ordered field cannot carry ${key}`);
+  }
+  if (g.iriEnum !== undefined) {
+    if (kind !== "iri" || !field.in?.length) fail("iriEnum requires a non-empty IRI enumeration");
+    if (new Set(field.in).size !== field.in.length) fail("iriEnum requires distinct members");
+    if (g.trim === true || g.dropBlank === true)
+      fail("iriEnum cannot trim or drop supplied values");
+    if (field.default !== undefined && !field.in.includes(field.default))
+      fail("iriEnum default must be an enum member");
+    // A member the scheme guard filters would pass the enum write check and then be
+    // dropped, clearing the field instead of throwing. Every member must survive it.
+    if (g.iriScheme !== undefined)
+      for (const member of field.in) {
+        const iri = httpIriOrUndefined(member);
+        if (iri === undefined || (g.iriScheme === "https" && !iri.startsWith("https:")))
+          fail("iriEnum members must satisfy the iriScheme guard");
+      }
+  }
   const datatypeMapper = kind === "literal" ? literalMapper(datatype as string) : undefined;
   const jsType = datatypeMapper?.jsType ?? "string";
   if (g.iriScheme !== undefined && kind !== "iri") fail("iriScheme requires an IRI field");
@@ -541,6 +642,7 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
     });
     if (field.default !== undefined) checkIri(field.default, "field.default");
   }
+  if (raw.hasValue !== undefined) field.hasValue = validateHasValue(raw.hasValue, field);
   return field;
 }
 
@@ -619,6 +721,8 @@ function validateTypeAliases(entities: AnyManifestEntity[]): void {
   }
   for (const node of nodes) {
     for (const field of node.fields) {
+      if (field.ordered && aliases.has(field.ordered.itemClass))
+        fail(`ordered field "${field.name}" item class is a type alias removed by migration`);
       if (field.hasClass !== undefined && aliases.has(field.hasClass)) {
         fail(
           `composite nested field "${field.name}" sh:class ${field.hasClass} is a target type alias removed by migration`,
@@ -667,6 +771,7 @@ function validateEntity(raw: Record<string, unknown>): ManifestEntity {
     ...(raw.aliasTypeIris !== undefined
       ? { aliasTypeIris: validateAliases(raw.aliasTypeIris, typeIris, "entity.aliasTypeIris") }
       : {}),
+    ...(raw.invariants !== undefined ? { invariants: raw.invariants as EntityInvariant[] } : {}),
     subject: { convention },
     fields,
   };
@@ -703,6 +808,7 @@ function validateNode(raw: unknown, seenFieldNames: Set<string>): ManifestNode {
       ? { aliasTypeIris: validateAliases(raw.aliasTypeIris, typeIris, "node.aliasTypeIris") }
       : {}),
     fragment,
+    ...(raw.invariants !== undefined ? { invariants: raw.invariants as EntityInvariant[] } : {}),
     fields,
   };
 }
@@ -852,6 +958,7 @@ export function validateManifest(input: unknown): ModelManifest {
 
   validatePredicateAliases(entities);
   validateTypeAliases(entities);
+  validateEntityInvariants(entities);
 
   return {
     manifestVersion: MANIFEST_VERSION,

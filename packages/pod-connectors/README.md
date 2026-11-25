@@ -1,12 +1,15 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 # @jeswr/pod-connectors
 
 > Experimental — AI-agent-generated. Security-critical; private until conformance is gate-green.
 
 Source API and export-file adapters extracted with history from Pod Manager. The default
-catalog is unconfigured and uses recorded fixtures for demos. No environment variables are
-read by this package: the host injects public OAuth client ids and token proxy URLs.
+catalog is unconfigured and uses recorded fixtures for demos. Browser entry points read no
+environment variables. The host injects public OAuth client ids and token proxy URLs. The Node
+CLI reads `CONNECTOR_VAULT_KEY` for explicit vault configuration, and its VeSync credential
+reader handles the VeSync variables documented below.
 
 ```ts
 import { createRegistry, createFetchPodWriter, runImport } from '@jeswr/pod-connectors';
@@ -54,8 +57,64 @@ slugs, so the factory requires a Solid backend.
 `typeIndex.storageFor(url)` can select a separately scoped client for the canonical profile
 or the index validated against the profile's advertised storage. Selection, bootstrap and
 registration logic are shared with the fetch writer, and these reads also use `readRdf`.
-Pass the run's `signal` to the writer to cancel every storage operation inside a port.
+Pass the run's `signal` to the writer to stop new operations and cancel in-flight reads.
 Hosts own cache policy; the Node transport forces revalidation.
+
+Garmin, WHOOP and bank statement runs require both `verifyPrivateDestination(url)` and
+`confirmPrivateWrite(url, { etag })` on their `PodWriter`. Hosts with a storage client can
+pass both checks from `createOwnerOnlyDestinationChecks` into the writer. The client transport
+must honor the run signal during pre-write access-policy reads. For the storage-backed writer, also pass
+an authenticated `cleanupFetch` independent of the run signal. The fetch-backed writer gets
+that transport in its existing `fetch` option and applies the run signal itself.
+
+```ts
+import { createOwnerOnlyDestinationChecks, createStoragePodWriter } from '@jeswr/pod-connectors';
+
+const checks = createOwnerOnlyDestinationChecks({
+  podRoot: storage.root,
+  ownerWebId: webId,
+  openStorage: (signal) => openAuthenticatedStorage({ signal }),
+  signal,
+});
+const podWriter = createStoragePodWriter({
+  storage, container, webId, typeIndex: { profileDocumentUrl },
+  signal, cleanupFetch: authenticatedFetch, ...checks,
+});
+```
+
+The verifier checks the target's pod scope, the containing policy and any existing resource's
+own policy. It creates missing containers empty under verified owner-only defaults, then checks
+them before any payload write. The verifier's `beforeWrite(url, guard)` variant checks the
+session's refusal immediately before each container creation. Only an explicit `true` permits
+the write. Public, unreadable or unsupported policies fail closed. A dispatched private
+mutation finishes even if the run is cancelled. Confirmation requires exact HEAD 200 responses
+for the resource before, during and after policy discovery. They must report the same strong
+ETag, matching the write's strong ETag if supplied. The effective policies of both the file
+and its container must be owner-only.
+Confirmation also covers run provenance and CLI checkpoints. The runners report no new
+cursor or successful checkpoint until their preceding writes are confirmed.
+
+A refusal blocks further mutations in the import before cleanup starts. Cleanup applies
+only to a completed mutation that used a create-only precondition. It gets a fresh
+10-second timeout and sends DELETE with `If-Match` using the write's strong ETag, or the
+first confirmation HEAD's strong ETag if the write supplied no strong ETag. Without a strong
+validator, the importer skips deletion. A DELETE 200, 204, 404 or 410 followed by a HEAD
+404 or 410 confirms removal. A refused replacement is preserved because deletion would
+erase earlier committed data. The import fails with `PrivateDestinationError` carrying
+`phase: "after-write"`, the destination `url`, and whether removal was confirmed
+(`removed`). The host warns that a file was written and may be visible to others.
+
+The server can change access policy between the pre-write and post-write checks. A grant
+opened and closed between those checks escapes detection, and someone could read the data
+before cleanup.
+Confirmation cannot detect an intervening revision if the server reuses a strong ETag for different states between the two HEADs.
+
+Type Index registration retains the existing public-index fallback, which is tracked separately.
+
+Suite and Pod Manager use `createSessionPrivateDestinationChecks({ fetch, storageUrl, webId, signal })`.
+It discovers storage with the authenticated session fetch. For a legacy root without a
+storage-description link, it requires WAC and a typed storage root before verifying the
+destination policy. The two existing `*Verifier` factories still return the pre-write check.
 
 Live imports take `sourceAuth: { fetch: authenticatedSourceFetch }`. The optional
 `createSourceAuth(id, adapter, token, sourceFetch)` helper adds bearer and adapter headers.
@@ -64,9 +123,11 @@ and refuses redirects; pass a fifth argument to supply additional API origins ex
 Hosts must capture a pristine `sourceFetch` before initializing Solid authentication and
 pass it to `authorize(id, config, sourceFetch)` as well as `createSourceAuth`. Pass the
 auth manager's separate `podFetch` to `createFetchPodWriter`; never use the patched global
-fetch for source API requests or token exchange. Tokens stay in memory. A `PodWriter` binds a
+fetch for source API requests or token exchange. Access tokens stay in memory; hosts may inject the encrypted refresh vault. A `PodWriter` binds a
 connector container, resolves and reads slugs, writes RDF with `{ ifMatch }` or
-`{ ifNoneMatch: '*' }`, and registers Type Index entries. The fetch-backed implementation
+`{ ifNoneMatch: '*' }`, and registers Type Index entries. A document's `forClass`, plus any
+`additionalClasses` it holds, is registered for its container; the runner takes the extra
+classes from the document, so a custom port need not echo them. The fetch-backed implementation
 confines document reads, writes and every redirect hop to the connector container. Type
 Index operations separately validate the profile-selected index against the WebID's advertised
 `pim:storage` and `solid:storage` roots, independently of the import destination,
@@ -84,8 +145,9 @@ retains read preconditions for subsequent writes; explicit write conditions over
 Entry points:
 
 - `.`: contracts, runners, catalog, config factory, fetch-backed and storage-backed writers, errors.
-- `./oauth`: browser PKCE helpers and popup flow (only `authorize` touches `window`).
-- `./node`: Node CLI, pod-auth client-credentials Pod fetch, loopback source PKCE and state store.
+- `./oauth`: PKCE, refresh, vault-backed source sessions and popup flow (only `authorize` touches `window`).
+- `./vault`: browser-safe WebCrypto vault, memory/IndexedDB stores and key helpers.
+- `./node`: Node CLI, pod-auth client-credentials Pod fetch, loopback source PKCE, state and file vault stores.
 - `./testing`: recorded fixture fetch, memory Pod and import helpers; fail-closed fixture recorder.
 - `./mail`: shared browser-safe mail primitives and the existing MailWriter (details below).
 - `./mail/*`: individual primitive, MIME parser and typed-wrapper modules.
@@ -99,7 +161,7 @@ writer contracts for both writers, and the environment-read regression test with
 
 ## Run limits
 
-`runImport` owns one shared `RunBudget` for all 23 network adapters and wraps `ctx.api`:
+`runImport` owns one shared `RunBudget` for every network adapter and wraps `ctx.api`:
 requests are charged before dispatch, response bodies are metered as bytes stream, and
 source calls receive the combined run, response-deadline and caller signals. Adapters
 charge returned records through `ctx.budget.items()`. Pagination, retries, profile lookups
@@ -210,8 +272,10 @@ The complete adapter audit is:
 | --- | --- |
 | Spotify, GitHub, Strava, Reddit, Discord, Twitch, Notion, Dropbox, Google Calendar, Google Contacts, Google Drive, Gmail | Paginated; one runner-owned request/item/byte/time budget spans all pages and resources, including retries and full-sync fallback. |
 | Facebook, Fitbit, Garmin, Google Photos, Instagram, LinkedIn, Pinterest, Slack, TikTok, X/Twitter, YouTube | Existing first-page imports; all requests, returned records, bytes and elapsed time share the same runner-owned budget. Pagination support is unchanged. |
+| VeSync | Device-list/status polling; runner-owned request/byte/time limits apply alongside stricter adapter-local caps described below. Device rows use the adapter-local item budget; host `maxItems` is not charged by this adapter. |
 | Amazon orders, Apple Health, bank statements, ChatGPT, Garmin file import, Goodreads, Netflix, Steam, Uber, WhatsApp | Uploaded-file imports only; 64 MiB declared/actual byte cap and 100,000-record cap. Garmin also reads through the bounded byte reader. |
 | Google Takeout | Uploaded-file import only; legacy JSON has 64 MiB/100,000-record caps. ZIP has separate streaming entry, inflation, product-row and reconciliation-state caps described below. |
+| Activity files | Uploaded GPX, TCX, FIT or ZIP only. See Activity files below for file size, archive inflation, activity, record and parser caps. |
 | Mail | Shared writer/parser, with no independent source fetch or pagination; Gmail and Takeout enforce source limits before handing messages to it. |
 
 ## Binary resources
@@ -377,16 +441,503 @@ keep working. An unsupported-only archive returns its report even when it writes
 Only adapters declaring `streaming: true` bypass the runner's 64 MiB whole-upload size check;
 they must enforce their own streaming limits. Legacy Takeout JSON still has the 64 MiB cap.
 
+## WHOOP
+
+`./adapters/whoop` exports `whoopAdapter`, `createWhoopAdapter(limits?)`,
+`whoopFileAdapter`, `createWhoopFileAdapter(maxRecords?)` and `pendingWhoopBatch(cursor)`. Both paths appear under **one**
+health catalogue id, `whoop`, like Garmin.
+Hosts inject `createRegistry({ whoop: { clientId, tokenProxyUrl } })` and a separate
+`SourceAuth`. Code exchange defaults to the shared confidential-client token proxy;
+a Node host may instead inject its client secret for direct exchange. Client id alone
+keeps the connector in demo mode. Public secretless exchange is not assumed.
+The Tier A OAuth path uses the shared authorization-code/S256 PKCE engine with WHOOP's
+`/oauth/oauth2/auth` and `/oauth/oauth2/token` endpoints. Scopes are `read:recovery`,
+`read:cycles`, `read:sleep` and `read:workout`. Tokens remain host-owned and in memory.
+Automatic refresh is not implemented, so `offline` (a refresh token) is not requested.
+Provider behavior is exercised with synthetic v2-shaped fixtures only, without live
+verification of client registration or token exchange.
+
+The file path accepts `my_whoop_data_<date>.zip` from WHOOP → More → App Settings →
+Data Export, or a single `physiological_cycles.csv`, `sleeps.csv` or `workouts.csv`.
+ZIPs use Takeout's streaming, ranged central-directory/CRC/DEFLATE reader; native File/Blob
+or equivalent `stream()` and `slice()` ports are required, with no whole-archive fallback.
+Header matching ignores case, punctuation and whitespace and rejects normalization collisions.
+CSV timestamps require an explicit offset, either in the timestamp or the export's
+Cycle/Sleep/Workout timezone column. Ambiguous local times are skipped instead of assuming
+UTC or the host timezone. Journal entries and unknown archive products are reported as unsupported.
+
+API v2 collections are `cycle`, `recovery`, `activity/sleep` and `activity/workout`.
+Each drains `next_token` (also accepting `nextToken` in fixtures) through the `nextToken`
+query parameter. Tokens are opaque, URL-encoded, capped and checked for cycles. Collection
+envelopes fail closed; malformed individual records are skipped. Recoveries join their
+cycle id to a cycle start time; no time is fabricated for an unmatched recovery.
+Only scored records are imported. After traversal completes, the ISO cursor is the newest
+imported start time. A batch stopped by the item or request budget saves an opaque cursor
+with its collection, page token, row offset, original start filter and high-water time.
+Pass `report.cursor` (or `report.state`) into the next run until traversal completes;
+the high-water timestamp alone would skip older pages. A resumed page that now has fewer
+rows than the saved offset is replayed from its first row. If WHOOP rejects or has expired
+the saved page token (HTTP 400/404), that collection restarts once per run from the saved
+start without a token; records are keyed by kind and native id, so the replay is idempotent.
+A completed traversal that imported no scored record returns the distinct
+`{"v":1,"complete":true}` cursor (never no cursor, which would leave a stale batch cursor in
+place); the next run treats it, like a `{"file":…}` cursor from a host sharing one checkpoint
+between paths, as a fresh traversal. Each pending batch cursor records `base`, the completed
+high-water cursor its traversal started from. `pendingWhoopBatch(cursor)` returns `{ base? }`
+for a pending batch: Suite passes pending batches through on a partial scope selection (the
+adapter reads only `ctx.scopes`), so batches advance, and restores `base` on completion so a
+withheld collection's checkpoint never advances. Resumed recoveries resolve missing
+cycle dates through the [documented `cycle/<id>` endpoint](https://developer.whoop.com/api/);
+absent cycles are skipped, never assigned invented dates.
+With `ctx.scopes`, only granted collections are requested; recovery also requires cycles
+to resolve its timestamp. Withheld collections leave their stored records untouched.
+Subsequent requests use `start` with a seven-day overlap to replay delayed scores/updates.
+WHOOP's start filter is not an updated-since feed: changes to older events, or previously
+unmatched recoveries outside that overlap, require a cursor-free import. Full and incremental
+imports both preserve unrelated historical records; source deletions are not inferred.
+
+The destination layout is `health/observations/YYYY-MM.ttl` plus `health/workouts/YYYY-MM.ttl`,
+inside the WHOOP connector container. The Type Index registers health:Observation against
+`health/observations/`, and both schema:ExerciseAction and health:Observation (each workout's
+energy and heart-rate observations) against `health/workouts/`, so readers can discover all
+monthly documents. Observations are written and validated by the generated
+`@jeswr/solid-health` model (`buildObservation`), like Garmin; `src/whoop/model.ts` keeps
+only the WHOOP mapping policy (field → name, code, UCUM unit, optional QUDT unit, subtype).
+Observation values, CodeableConcepts, OWL-Time instants, UCUM codes and local person
+subjects follow the Health app's Apple Health model. Resting HR and total asleep duration use its existing HeartRateObservation/SleepObservation
+classes and LOINC codes (resting heart rate **40443-4**, asleep duration **93832-4**). HRV
+retains **RMSSD** (never relabelled as Apple's SDNN), skin
+temperature, SpO2, respiratory rate, energy and reported light/deep/REM durations use generic
+health:Observation with literal source field codes and no invented `inScheme`. Sleep stages
+remain separate reported totals, with no invented stage chronology and no SleepObservation
+subtype that would double-count the total. API kilojoules and CSV dietary calories normalize
+to kJ; workouts also carry schema:ExerciseAction energy/duration/name like Garmin.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Output changes from the move to `@jeswr/solid-health` (each pinned in `whoop.test.ts`):
+
+- `health:value` is `xsd:decimal` instead of `xsd:double`.
+- Observations are also typed `health:ClinicalEntry`; instants also `time:TemporalEntity`.
+- Code and instant helpers are `<observation>-code` / `<observation>-time` instead of
+  `<observation>/code` / `<observation>/time`. Reimporting a record removes legacy helpers.
+- The profile's QUDT inventory is NUM, M, SEC and BEAT-PER-MIN. HRV (`ms`), skin
+  temperature (`Cel`), SpO2 (`%`), energy (`kJ`) and respiratory rate (`/min`) now carry
+  only their UCUM `health:unitCode`; the former `unit:MilliSEC`, `unit:DEG_C`,
+  `unit:PERCENT`, `unit:KiloJ` and `unit:PER-MIN` links are no longer written.
+- Observations no longer carry `schema:endTime`: the profile's effective time is a single
+  instant (the record start). The record's `schema:Dataset` marker keeps its end time.
+
+Observation and record IDs, document paths, codes, schemes, names, `dct:source`, the API
+`schema:url` used for provenance, CSV/API deduplication and the workout ExerciseAction
+are unchanged. Strict `parseObservations` reads reject observations stored by an earlier
+version (`xsd:double`) until their record is reimported.
+
+The connector's Apple Health adapter currently imports only workouts; the Health app's
+observation reader currently charts six metric kinds. Total sleep uses that reader's class,
+code and unit; resting HR retains its distinct
+40443-4 concept, which the current heart-rate chart (8867-4) does not include. Other WHOOP
+values are retained as canonical observations for readers supporting those codes. Hosts must
+route/discover the WHOOP container;
+this change does not add metric cards or change the Health app's fixed storage root.
+The health sector has no recovery score, strain or sleep performance terms. These scores
+are omitted and listed in `report.unsupported` for both paths; no new vocabulary IRIs are minted.
+
+API fragments use native WHOOP ids; CSV fragments use `(start instant, record kind)`.
+Matching compares UTC start times at whole-second precision with an inclusive ±60 second
+tolerance and the same record kind, including adjacent monthly shards. An API record removes
+matching CSV descriptions and deterministic helper nodes. CSV records never replace a matching
+API record. Duplicate rows and reimports are idempotent. Distinct native ids at the same instant remain distinct.
+Monthly shards are selected by UTC start; a provider correction moving an event to another
+month outside the CSV matching tolerance cannot remove its old shard copy without a separate
+reconciliation inventory.
+All writes use retained ETags and the shared bounded provenance pipeline.
+
+WHOOP limits are 64 MiB per upload, 16 MiB per archive CSV, 100 ZIP entries, 10,000
+processed source rows per batch and 10,000 normalized records (a physiological row may yield
+two). Every monthly shard stays within `@jeswr/solid-health`'s reader limits
+(`MAX_OBSERVATION_QUADS`, 100,000 quads, and `MAX_OBSERVATIONS`, 5,000 observations),
+counting the provenance links the import session adds: a run that would write a larger shard
+fails before writing that shard, and a stored shard above the limit is refused. Byte-bounded CSV contents are scanned for sort
+keys; a bounded heap selects the newest rows first, then they are parsed and written in
+monthly groups. The file path saves a SHA-256 content-bound cursor in `report.cursor` and
+`report.state`; pass either to the next `runFileImport` with the same export. Re-selecting it
+in Suite resumes automatically. A finished traversal returns a distinct completion cursor;
+importing the same export again then starts a fresh traversal from its newest rows, so a
+re-import restores removed shards (rewrites are idempotent). The Node CLI keeps file and API
+progress in separate `fileCursor` and `cursor` slots of `state.json`, so neither path
+overwrites or misreads the other's checkpoint; an older single shared cursor is classified by
+shape on read. It resumes pending WHOOP batches on ordinary reruns and prints their warning;
+a completed API traversal retains the normal `--since` behavior. Duplicate and malformed rows consume the batch's row budget; malformed source records found
+while scanning sort keys are counted as skipped once per traversal, not once per batch;
+physiological rows stay atomic when only one record slot remains. A changed export restarts
+from its newest rows. Both API and file reports include a **“WHOOP import partial, re-run to
+continue.”** warning when another batch remains. `createWhoopFileAdapter(maxRecords)` accepts
+a smaller record budget (minimum 2). CSV sleep stages allow up to three minutes of rounding
+overage over the asleep total, while still requiring stages and total to fit the interval.
+Default API limits are 2,000 requests, 10,000 source items and 64 MiB cumulative JSON bytes; `createWhoopAdapter(limits)` accepts tighter host
+budgets. The shared 32 MiB JSON response and 4 MiB logical CSV record limits also apply.
+Source input is staged before data writes; invalid pages, CRCs, byte/quad limits, HTTP 401/429 and
+cancellation never advance the checkpoint. 429 is surfaced for host scheduling without
+retrying. Synthetic tests cover both orders of CSV/API deduplication, pagination, hostile
+headers/archives/records, budgets, provenance and cancellation. No new dependencies.
+
+## Garmin account export
+
+The existing `garmin` file adapter accepts the **full account ZIP**, recommended from
+[Garmin Account → Data Management → Export Your Data](https://www.garmin.com/account/datamanagement/).
+Select the downloaded ZIP directly. Activities CSV, GPX and TCX remain supported under
+the same catalog id. No Garmin API credentials or Garmin network requests are needed.
+Entries identify the export regardless of its filename. ZIPs require Takeout's `stream()`
+and reopenable `slice()` ports.
+
+Supported paths tolerate account/email/UserID prefixes and filename date suffixes:
+
+- `DI_CONNECT/DI-Connect-Fitness/*summarizedActivities*.json`: flat arrays, object-wrapped
+  arrays or `[{ summarizedActivitiesExport: [...] }]`. Activity IDs become
+  `health/activities.ttl#activity-<id>` or `mobility/journeys.ttl#journey-<id>`.
+  Runs/indoor cycling are exercise actions; outdoor rides/commutes are travel actions.
+  Archive distance/elevation are converted from cm to m, duration from ms to s and
+  ISO duration text. Summary `calories` appear to use kJ-like units: divide by 4.184
+  and round to one decimal place for kcal. **This conversion is pending verification
+  against a real export.** Pulse/elevation summaries are labelled notes.
+- `DI_CONNECT/DI-Connect-Aggregator/UDSFile_*.json`: steps, distance, resting/minimum/
+  maximum/average pulse, active kcal and floors. Numeric strings and zero counts work;
+  invalid dates and non-finite/negative values are omitted.
+- Wellness `*sleepData*.json`: asleep seconds (deep + light + REM, excluding awake time).
+  The source window, stages, awake seconds and overall score remain labelled notes.
+  Time in bed alone never becomes asleep time.
+- Wellness `*healthStatusData*`/`*hrv*` and Metrics `*MetricsMaxMetData*`: recognizable
+  overnight HRV summaries in ms and running/cycling VO₂max in mL/(kg.min).
+
+Daily measurements use `health/observations/<metric>/<YYYY-MM>.ttl`, deterministic
+metric/day subjects, and existing HealthRecord/Observation/CodeableConcept/OWL-Time terms.
+Steps, pulse and sleep use the Health model's QUDT/UCUM units; other quantities use generic
+observations and source field codes without asserting a concept scheme; running and cycling
+VO₂max have distinct codes. The patient is an unnamed document-local `#subject`, following
+Apple Health; an export does not establish the Pod owner's identity. Effective instants use
+the calendar date (UTC midnight), following Health's current measurement reader. If only a
+timestamp is available, its own offset determines the day. Numeric epochs must be Garmin
+milliseconds between 2000-01-01 and now + one day; seconds, zero and date-like numbers are
+rejected. Reimports merge matching subjects under ETags; overlapping exports preserve older
+dates. File imports have no cursor
+or deletion reconciliation. Raw JSON files are not retained.
+
+The connector Apple Health adapter currently imports workouts only. The suite Health
+model's separate Apple importer supplies the observation mapping used here. **Health charts
+currently read native monthly shards rather than connector metric directories**, and have no
+separate HRV/VO₂max charts. Observations are stored and registered using existing health
+terms; automatic chart discovery needs follow-up app work. This change includes no app edits.
+
+Stress, Body Battery and intensity minutes have no terms in the current health sector.
+They produce vocabulary-gap notes in `report.unsupported`, counted once per file per gap,
+with the number of distinct affected days per file. These notes do not increment
+`report.skipped`. Unknown files and directories are counted as unrecognised in notes;
+malformed/oversized records and omitted supported entries increment `report.skipped`.
+Grouped notes retain no account paths. Uploaded-Files nested ZIPs are counted without opening
+them; their note directs users to the `activity-files` adapter for FIT import. Unknown record
+shapes are reported, not guessed.
+
+Garmin reuses Takeout's ZIP/ZIP64 directory, local-header, overlap, size and CRC validation.
+Defaults: 10,000 dispatched entries, 64 MiB decompressed per entry, 32 MiB JSON per entry,
+512 MiB actual inflation per run, 100,000 records per file, 1,000,000 attempted records
+per run (including malformed/oversized rows), 100,000 observations/activities
+per run (including duplicates), and a declared compression-ratio ceiling of 1,000:1.
+The reader independently rejects directories above 64 MiB or 100,000 entries. Shared JSON
+limits are 1 MiB per token, 4 MiB per record and 64 nesting levels. Entry bytes are bounded
+and CRC-verified before JSON dispatch; wrapper arrays are parsed record by record. DEFLATE
+receives 1 KiB pieces to bound transient expansion. Recognised entries are staged in memory
+(within the caps above) and written once at the end; each monthly metric document has at most one value per day. Activities are retained under
+the run cap and written once to avoid repeated collection growth. Cancellation is checked
+between entries, inflater chunks, records and Pod operations. Corrupt entries are skipped;
+decoder exceptions abort because their unreported work cannot be charged safely. Caps retain
+successful records with warning notes. Rows parsed before a late JSON error in the same entry
+are discarded and counted as skipped; no destructive reconciliation occurs.
+
+`createGarminFileAdapter(partialLimits)` from `./adapters/garmin` can lower these limits;
+`GARMIN_ARCHIVE_LIMITS` and `GarminArchiveLimits` expose the ceilings. Legacy text remains
+capped at 64 MiB despite ZIP's `streaming: true`. Tests use only synthetic archives;
+maintainer validation with real account exports remains necessary.
+
+Maintenance constraints: read `src/garmin/archive.ts` and `health-vocab.ts`; reuse Takeout's
+ZIP validation and `core/file-json.ts`. Never recurse into Uploaded-Files FIT ZIPs, fetch
+source URLs or fall back to whole-archive text. Preserve the existing CSV/GPX/TCX units
+policy and rides/indoor-cycling split. Use only existing sector terms, never invented
+HRV/VO2max subclasses or IRIs. Catch entry parse failures separately from Pod writes;
+writer failures and decoder exceptions must propagate. Keep cap/FIT skips separate from
+unrecognised files, and preserve model limits for observations including duplicate rows.
+The Apple connector is workouts-only; use the separate suite Health model's
+Observation/CodeableConcept/Instant mapping for metrics. Do not claim automatic connector
+chart discovery or HRV/VO2max charts without app support.
+The range signature check leaves the full legacy stream for `fileText`, which enforces the
+actual byte cap independently of the supplied file size.
+
+## Bank statements
+
+`./adapters/bank-statements` exports `bankStatementsFileAdapter` and
+`createBankStatementsFileAdapter(options)`. CSV detection uses normalized headers,
+never the filename: Revolut account statements, Monzo transaction exports and
+Starling GBP statements. Revolut and Starling headers must match exactly after
+normalization. Monzo exports differ by app version, so Monzo is detected by column
+name in any order: Transaction ID, Date, Time, Type, Name, Amount and Currency are
+required; Emoji, Category, Local amount + Local currency, Notes and #tags, Address,
+Receipt, Description, Category split and Money Out + Money In are optional (each `+`
+pair must appear together). This admits the short 11-column layout and the full
+18-column layout (`…,Notes and #tags,Address,Receipt,Description,Category split,Money Out,Money In`).
+Unknown or duplicate columns are not Monzo. A header containing two or more
+distinctive columns of one bank is rejected with "looks like <bank> but the columns
+differ" if it does not match: Revolut's Product, State, Started Date and Completed
+Date; Monzo's Transaction ID, Emoji, Local amount, Notes and #tags and Category
+split; Starling's Counter Party, Amount (GBP) and Spending Category. Known banks
+take precedence over the original generic CSV importer. Other headers retain
+that importer's date/description/amount aliases, separate debit/credit support,
+lenient value/date parsing, row-index-derived IDs and snapshot replacement behavior.
+Generic imports do not infer currency or create account links. An explicit
+`csvFormat` disables this fallback; mismatches return a bounded `unsupported` report.
+The export-screen directions in `fileHint` are guidance; no provider was contacted
+to verify current menus. All tests use synthetic files.
+
+HSBC UK's three-column **headerless** CSV is ambiguous. Hosts must explicitly
+select it and supply a stable account label; the default picker adapter refuses it:
+
+```ts
+import { createBankStatementsFileAdapter } from '@jeswr/pod-connectors/adapters/bank-statements';
+
+const adapter = createBankStatementsFileAdapter({
+  csvFormat: 'hsbc-uk',
+  accountLabel: 'HSBC everyday', // use a different label for a credit card
+  currency: 'GBP', // HSBC UK default; validated against the runtime's ISO 4217 codes
+});
+// Pass adapter, file and the host's PodWriter to runFileImport as usual.
+```
+
+`csvFormat` can also constrain detection to `revolut`, `monzo` or `starling`.
+Hosts build format pickers from `BANK_CSV_FORMATS` and check user input with the
+adapter's own `validateBankOptions` (labels: visible text, at most
+`MAX_BANK_ACCOUNT_LABEL_CHARS` = 256 Unicode code points). The Node CLI and Suite's connect
+flow both pass these options.
+`accountLabel` distinguishes accounts absent from an export; keep it stable across
+overlapping imports. Only the Revolut, HSBC UK, Monzo and Starling CSV layouts use it.
+OFX/QFX and generic CSV files ignore it, still replace the one shared
+`finance/bank-transactions.ttl`, and the import adds an `unsupported` entry saying the
+label was not used (the entry never repeats the label).
+
+**Label normalisation.** The adapter normalises a label once, and that one string is both
+hashed into the account folder name and stored as the account's `skos:prefLabel`:
+
+- A label holding a bidi control, an Arabic prepended mark (U+0600–U+0605, U+06DD, …), a
+  noncharacter or a lone surrogate, or longer than 4096 UTF-16 units, is rejected rather than
+  cleaned, because what it shows would differ from what is stored.
+- Other control and format characters (`Cc`, `Cf`) are removed. A joiner or tag character is
+  kept only where it does visible work: ZWJ between emoji, ZWNJ between letters of a script
+  that shapes with it (Persian, Indic), and tags inside a well-formed subdivision flag (2–6 tag digits or lowercase tag
+  letters). Stray
+  ones would split one account into look-alike folders or carry hidden text.
+- The rest is put in NFC, every whitespace run (tabs, line breaks, no-break spaces) becomes
+  one space, and the ends are trimmed.
+- A label with no visible character (only fillers, combining marks or variation selectors)
+  is rejected, and the 256 limit counts code points of the normalised form, so an emoji
+  counts once.
+
+`"Joint\u0001"`, `"Jo\u200Dint"` and `"Joint"`, or the NFC and NFD spellings of `"Café"`,
+are the same account. A plain single-spaced label is unchanged by normalisation. Folder hashes
+use the runtime's Unicode tables, so a character assigned in a newer Unicode version may
+normalise differently on an older runtime. Revolut defaults to one account per Product/Currency. Monzo
+and Starling default to one account per bank/currency; provide labels when importing
+multiple accounts.
+Changing or adding an `accountLabel` later creates a new per-account document;
+keep labels stable to avoid duplicate transactions across documents.
+
+Generic CSV and OFX/QFX retain `finance/bank-transactions.ttl` under the connector
+container, with their original `schema:Invoice`/`fin:TransactionRecord` mapping, IDs,
+datatypes, Invoice Type Index registration and replacement snapshots. Revolut, HSBC UK,
+Monzo and Starling instead write Suite Money's generated wire format through
+`@jeswr/solid-money` (`MoneyDocument`, `putAccount`, `putTransaction`; read back with
+`parseMoney`), sharded per account and month inside the connector container:
+
+```text
+finance/bank/<bank>-<account-slug>/account.ttl             #it        fin:FinancialAccount (skos:prefLabel)
+finance/bank/<bank>-<account-slug>/<YYYY-MM>.ttl           #txn-<id>  fin:Transaction
+finance/bank/<bank>-<account-slug>/<YYYY-MM>-part-<n>.ttl  overflow parts, n = 2, 3, …
+```
+
+The account slug is the SHA-256 hash of the account key, never a raw account number,
+and `<id>` is the SHA-256 transaction identity below. Months come from solid-money's
+`monthKey` (the UTC month of `postingTime`, as in Suite Money). Each transaction carries
+`pm:account` to the account, `schema:description`, `fin:postingTime` and a
+`fin:hasMonetaryAmount` node with the signed exact decimal `schema:value` and uppercase
+`schema:currency`; amounts never pass through JS numbers. Every touched document is read
+first, edited with `putAccount`/`putTransaction` (which upsert by subject and reuse the
+stored amount node) and replaced under the read's ETag precondition, so re-importing
+overlapping statements merges by transaction ID and never duplicates. Stored blank-node
+labels are compacted on read so repeated imports do not grow the documents. Transactions
+absent from a later export are kept. Both registrations (`fin:FinancialAccount`,
+`fin:Transaction`) point at the `finance/bank/` container. **Provenance:** each transaction's
+(and each document's) `prov:wasDerivedFrom` names the account document, not the imported
+file. The import session would otherwise record the run's `urn:solid:connector:…:export`
+source, and Suite Money's validator rejects any non-http(s) `prov:wasDerivedFrom`, so its
+reader would refuse every imported transaction. `prov:wasGeneratedBy` still names the import
+run in `_provenance.ttl`. Imports in either layout leave the other
+layout untouched. Revolut's imported amount is `Amount - Fee` using exact decimal
+arithmetic, including negative fees (fee refunds). Only COMPLETED Revolut rows import;
+other states count in `report.skipped`.
+
+**Per-document budget** (`BANK_DOCUMENT_BUDGET`): at most 2,000 transactions and 4 MiB per
+month document, measured before writing as N-Triples bytes (an upper bound on the Turtle
+the writer PUTs) plus an allowance for the provenance the import session adds. Readers
+parse through `@jeswr/fetch-rdf`, whose defaults are 16 MiB and 1,000,000 quads; a full
+document uses at most a quarter of the byte limit and fewer than 30,000 quads. A month that would
+exceed the budget continues in the next `-part-<n>` document (new transactions go to the
+last part; existing ones are updated where they are stored). Re-imports read the first
+month document and each following part until one is absent. More than 1,000 parts for one
+account-month, a single transaction above the byte budget, or an update that would push a
+stored document over budget fails the import with `BankDocumentBudgetError`; nothing is
+truncated.
+
+**Per-import budget**: at most 50 accounts and 600 documents per import. A statement export
+covers one account; Revolut splits it into one account per Product and currency pocket, and
+50 covers every pocket an export can hold. 600 documents is 50 years of monthly documents for
+one account, or 12 accounts over 4 years. Planning also caps cumulative stored RDF at
+32 MiB of N-Triples before retaining shard copies. The parser fails as soon as a 51st account, or the 601st account
+plus account-month document, appears, before any Pod read. Planning then counts every
+document it reads (account documents, stored month documents and parts, and the one absent
+part probed after the last stored part, which is reused if the month needs a new part) and
+fails before the 601st read; a re-import over stored months costs about two reads per month.
+
+**Failure and retries.** Every budget error is raised while parsing or planning, so nothing
+is written. Writes then happen one document at a time (account document first, then months
+in order). A failed write, such as a 412 from a concurrent change or a network error, stops
+the import with the earlier documents already written; re-running the same import converges,
+because every write re-reads the document and upserts by transaction ID. Every replacement
+uses a strong ETag from the planning read. When that read has no strong validator the
+replacement is refused. New documents use create-only writes.
+
+**Posting-date window.** Known-bank rows must post between 1970-01-01 and one year after
+the import (date-only values at UTC midnight). Rows outside the window are skipped and
+counted in `report.skipped`, so a corrupt export cannot spread rows across thousands of
+months (dates may otherwise use any year 0001-9999). Generic CSV and OFX keep their original
+date handling.
+
+**Omitted bank fields.** solid-money's model has no fields for these, so they are not
+written (no hand-written accessors are added): Monzo Transaction ID (it still keys the
+hashed transaction subject), Revolut/Starling running balance (identity only), Revolut
+Type, Product, State and Started Date (Product still separates accounts), Monzo Time,
+Type, Emoji, Category, Local amount/currency, Notes and #tags, Address, Receipt,
+Category split and Money Out/In (Description only serves as a fallback, below), and Starling Type, Spending Category and
+Notes. Folded into `schema:description` instead: Starling's Reference (`<Counter Party> —
+<Reference>`) and a nonzero Revolut fee, appended as ` (fee <fee> <currency>)`; zero fees
+are omitted. Monzo and HSBC day-only dates stay `xsd:date`.
+
+**Descriptions.** solid-money rejects a description that is empty once control characters
+are stripped. When the primary description has no visible text the row falls back to the
+bank's own columns (Monzo: Name, then Description, then Type; Revolut: Description, then
+Type; Starling: the visible parts of Counter Party and Reference, joined with ` — `, then
+Type). A row with no visible text in any of
+them is skipped and counted in `report.skipped`, as are HSBC rows with an empty description.
+An `accountLabel` must likewise contain visible text.
+
+When upgrading from the generic-only importer, recognised-bank imports read the
+older shared document through the existing reader port and compare Invoice
+descriptions, amounts and dates, including the old generic representation of
+Monzo/Revolut rows. Matching transactions produce this run-report warning in
+`unsupported`: "N transactions from this statement also exist in the older shared bank document; remove them there or re-import that document with a generic/OFX file to avoid double counts."
+Nothing is deleted automatically. The comparison is bounded to 100,000 Invoices,
+1,600,000 quads and 64 MiB of term characters; exceeding a bound reports that the
+older shared document needs a manual duplicate check.
+
+No exchange rate is inferred:
+Monzo local amounts/currencies do not replace the account amount/currency.
+
+Bank-specific dates use strict calendar validation and typed `xsd:date`/`xsd:dateTime` values.
+Revolut uses Completed Date. Its optional `timeZone` is validated as an IANA name
+and defaults to **Europe/London**, independent of the host's zone. Repeated wall
+times select the earlier instant; gaps advance by the transition's duration,
+following [Temporal's compatible rule](https://tc39.es/proposal-temporal/docs/zoneddatetime.html#static-methods).
+Explicit timestamp offsets take precedence. Bank-specific day-only UK dates stay
+day-only; OFX retains its previous `xsd:dateTime` at UTC midnight. Generic CSV
+keeps its original date parsing and `xsd:dateTime` values. Bank-specific currency
+codes must be uppercase ISO 4217 codes supported by the runtime's ICU data
+(`Intl.supportedValuesOf('currency')`). Invalid bank-specific amounts,
+currencies, dates and rows count as skips.
+
+Bank-specific CSV SHA-256 identifiers use account identity plus Monzo Transaction ID
+when available. Otherwise they hash posting date, description, canonical amount,
+currency and balance (when present). HSBC additionally includes a per-file
+occurrence index for identical (date, description, amount) rows, so repeated
+purchases remain distinct and re-importing the same file stays idempotent.
+Overlapping exports of a day with identical HSBC rows rely on row order and
+consistent inclusion of those occurrences; partial overlaps cannot establish which
+identical purchase is which. Filenames never enter bank-specific keys.
+Generic CSV and OFX/QFX keep their original IDs and snapshot behavior.
+
+Bounds: 64 MiB declared/actual file bytes, 100,000 CSV source rows including skipped and malformed
+rows, 1,024 CSV columns, 64 KiB header characters, 4 MiB logical CSV records,
+16 KiB characters per bank-specific CSV field and 64 digits per bank-specific amount.
+OFX/QFX retain the original imported-row limit and the shared scanner caps transactions at 64 KiB bytes. Exceeding the bank-specific row/file cap fails before saving
+transaction data; oversized/malformed records are skipped at safe boundaries.
+Generic CSV imports truncate to the first 100,000 source rows and return a warning
+in `report.unsupported`; skipped and malformed rows consume that allowance too.
+Unterminated quoted CSV fails. Formula prefixes remain inert literal data.
+Parsing and validation finish before the first data write, and cancellation closes
+the input reader and prevents subsequent Pod operations through the shared runner.
+
+**Suite Money integration gap in this checkout:** known-bank imports now use Suite Money's
+wire format, but they stay inside `integrations/bank-statements/finance/bank/`, while Money
+reads only `<storage>/money/accounts/` and `money/transactions/` and does not discover this
+connector's Type Index entries. Generic CSV and OFX keep the Invoice model. This adapter
+preserves the writer's confinement; imports do **not** automatically appear in Money. A host
+integration/migration is required to bridge the destinations. No Suite app files are changed.
+The bridge must also handle re-imports: `putTransaction` rewrites every Transaction field it
+owns (account, description, category, payee, derivedFrom, debit/credit account, posting
+time and amount), so once Money writes categories or payees into these documents, a
+re-import of the same transaction would erase them.
+
 ## Node CLI
 
 Build the package and run `pod-connectors import spotify`, or
 `node packages/pod-connectors/dist/node/bin.js import spotify` from the workspace.
 `import netflix --file ./NetflixViewingHistory.csv` uses the file runner. Add the bare
 `--since` flag to an API import to resume its stored cursor; omission starts a full import.
-File imports reject `--since`. `--help` prints usage. Streaming adapters receive the stat
+File imports reject `--since`. `--help` prints usage.
+
+Bank statement imports accept two more flags, and only with `import bank-statements --file`:
+
+```sh
+pod-connectors import bank-statements --file ./hsbc.csv --format hsbc-uk --account-label "HSBC everyday"
+pod-connectors import bank-statements --file ./monzo-joint.csv --account-label "Monzo joint"
+```
+
+`--format <auto|revolut|hsbc-uk|monzo|starling>` maps to the adapter's `csvFormat`
+(`BANK_CSV_FORMATS`); `auto`, the default, detects the layout, including generic CSV and
+OFX/QFX. `--account-label <text>` maps to `accountLabel` and must pass the adapter's
+`validateBankOptions` (visible text, at most 256 code points once normalised, as above).
+`--format hsbc-uk` requires a label, so headerless HSBC UK exports import from the CLI.
+For Revolut, HSBC UK, Monzo and Starling CSV exports, give two accounts of the same bank
+different labels, or they share one account folder. OFX/QFX and generic CSV ignore the
+label and replace the shared document, so a label cannot keep two such files apart.
+Each value must be its own argument: `--account-label=<text>` and a value starting with
+`--` are rejected with the usage text. Invalid values, repeated flags and bank flags on
+other connectors fail with exit code 2 before the config file is read or any Pod request
+is made; the CLI never echoes the label.
+
+Streaming adapters receive the stat
 size and `stream()`/`slice()` backed by bounded filesystem read streams; the CLI never
 loads their entire upload. `text()` remains capped at 64 MiB. The whole-upload size limit
 applies only to adapters without `streaming: true`.
+
+Add `--vault <private-directory>` and set `CONNECTOR_VAULT_KEY` to canonical padded
+standard base64 encoding of exactly 32 random bytes to retain encrypted refresh credentials.
+`--vault` without `CONNECTOR_VAULT_KEY` exits 2 and names the missing variable on stderr.
+A key without `--vault` prints one stderr warning and continues with memory-only credentials.
+An invalid key with both settings fails closed. The CLI deletes `CONNECTOR_VAULT_KEY` from
+`process.env` immediately after reading it, so child processes never inherit it. The CLI tries refresh before interactive login and persists
+rotation before using the access token. Revocation deletes the record and reports exit 3
+with a reconnect message; re-run explicitly to log in again. An unreadable record (for example
+after a key rotation) starts loopback login, whose code exchange replaces it. Library hosts may
+pass `interactiveLogin: false` to `runCli` to never start login: missing or unreadable
+credentials then exit 3. Set `connectors[id].account`
+to a stable provider account id or owner-chosen label (default `default`). Use a separate
+directory per owner/configuration and label per provider account. Changing either selects
+a different record. Access tokens, Pod credentials and client secrets remain in memory.
 
 The CLI reads `~/.config/solid-mcp/config.json` (W9 MCP-12's location). It refuses symlinks,
 non-regular files, another user's files, and any mode other than **0600**, including 0400.
@@ -418,8 +969,12 @@ fragment is used and any redirect is refused. URLs use HTTPS. `readOnly: true` r
 import. Each `connectors[id]` may also supply `tokenProxyUrl` or an installed-app
 `clientSecret`. A local source secret selects direct exchange with the adapter's HTTPS token
 endpoint, taking precedence over a token proxy. Without a local secret, the adapter's configured
-proxy mode is preserved. These secrets and all session/source tokens remain in memory.
-Direct exchanges request JSON token responses, including GitHub. The provider's `tokenRequest`
+proxy mode is preserved. Client secrets and access tokens remain in memory; refresh
+credentials may use the optional encrypted vault described below.
+Token endpoints and proxies require HTTPS, except HTTP on `localhost`, `127.0.0.1` or
+`[::1]` for development proxies. Direct exchanges request JSON token responses, including
+GitHub; form-encoded token responses are unsupported. `scope` accepts a string or an array
+of strings (Twitch), normalized with `join(" ")`; other scope types are dropped. The provider's `tokenRequest`
 selects form-post secrets (the default), HTTP Basic with a form body (Fitbit), or HTTP Basic
 with a JSON body (Notion) for a local secret. Proxy flows keep the shared form contract.
 
@@ -445,16 +1000,32 @@ all authenticated transports refuse redirects. SIGINT/SIGTERM cancel the CLI.
 Profile-selected Type Index documents must also use HTTPS, even in another advertised storage.
 After source login, the CLI selects the adapter's optional `createSourceAuth` factory,
 falling back to the generic bearer transport. Spotify refreshes expired access tokens in
-memory through this factory. An explicit `options.sourceAuth` bypasses login and the factory.
+memory through this factory. With a vault configured, the CLI uses the shared OAuth source
+session so every rotation is persisted. An explicit `options.sourceAuth` bypasses login,
+the factory and vault wiring.
+
+The standalone CLI verifies owner-only WAC for Garmin, WHOOP and bank imports by default,
+using the authenticated Solid client that writes the payload. It checks the checkpoint destination
+before protecting the checkpoint and verifies every import and checkpoint destination before and
+after writing. The CLI prints the destination URL with an after-write refusal. Node hosts
+can supply `verifyPrivateDestination` and `confirmPrivateWrite` to `runCli`. Both receive the
+exact URL, storage client, authenticated fetch and owner WebID. Pre-write verification
+receives the run signal. Confirmation receives the write ETag when present and can report
+its first HEAD's strong ETag via `observeEtag` for conditional cleanup.
 
 The CLI stores `<podRoot>integrations/<id>/state.json`, including failed outcomes while
 retaining the last successful checkpoint. Before accessing JSON, it discovers the resource's
 `rel="acl"` link and writes a WAC ACL granting only the owner WebID Read, Write and Control.
 The ACL must be in the same connector container. Missing ACL discovery or rejected ACL
 writes fail closed; ACP/LWS state protection belongs to later storage integration.
-Conditional JSON PUTs reject stale ETags and concurrent creates. Once the CLI is cancelled it
-sends no further Pod or source request, so a cancelled run leaves the checkpoint unchanged. State persistence failures
-fail the command even if import documents were already written; deterministic slugs allow retry.
+Conditional JSON PUTs reject stale ETags and concurrent creates. Cancellation stops new
+source requests and regular Pod operations. In-flight OAuth token and revocation requests
+keep their own timeout. A dispatched private PUT or DELETE finishes,
+and checkpoint confirmation and cleanup can continue after cancellation. The CLI writes a
+checkpoint only after all payloads and run provenance have been confirmed. If checkpoint
+confirmation fails, the CLI reports the refusal and intentionally keeps any surviving
+checkpoint because its cursor points to confirmed data and deleting it would force a full re-import.
+State persistence failures fail the command, and deterministic slugs allow retry.
 
 Exit codes: **0** success/help, **1** import/state failure, **2** usage/config/file error,
 **3** Pod/source login failure, **130** cancellation. Error output uses constant messages
@@ -554,7 +1125,9 @@ connector IRI and start/end times. This companion document is excluded from impo
 counts and Type Index registration. Failed runs attempt provenance recording and retain the original error.
 A cancelled run makes no further Pod request, so it records no activity: documents and items it
 already wrote keep `prov:wasGeneratedBy` naming an activity absent from `_provenance.ttl`. Read
-such an unrecorded activity as a cancelled, incomplete run; the next run that rewrites those
+such an unrecorded activity as a cancelled, incomplete run for adapters without bounded
+history. Polling adapters can prune completed summaries through `maxRunActivities`, so
+absence alone does not establish cancellation for those adapters. The next run that rewrites those
 documents or items links them to its own recorded activity. `runImport` checks its signal at the
 PodWriter boundary, immediately before every port call, so a cancel while a session's implicit
 read or the provenance read is pending still stops the write that follows and the run rejects
@@ -594,8 +1167,8 @@ records are discarded through the next safe boundary and counted in
 `report.skipped` and `report.state.counts.skipped`. Unterminated XML markup or
 quoted CSV records fail with an explicit error. A skipped WhatsApp line also
 discards the pending message and continuations until the next timestamp.
-CSV headers are parsed and normalised once per file, including bank column
-aliases, and are limited to 1,024 columns and 65,536 characters.
+CSV headers are parsed and normalised once per file, including known bank header
+signatures, and are limited to 1,024 columns and 65,536 characters.
 CSV data tokenization retains only as many cells as the header contains. Extra
 fields are scanned without retaining their text, and the entire row is skipped
 and counted. WhatsApp constructs each message directly from coalesced slices,
@@ -732,7 +1305,7 @@ snapshots cover these paths without Google accounts or production traffic.
 `./adapters/google-drive` exports `googleDriveAdapter` and
 `createGoogleDriveAdapter({ maxBytes })` (default 25 MiB). Drive remains Tier B because
 `drive.readonly` is a restricted Google scope. OAuth uses `createGoogleOAuthConfig('drive')`.
-The catalog has 32 entries: eight Tier A, fourteen Tier B, and ten Tier C.
+The catalog has 36 entries (nine Tier A, sixteen Tier B, and eleven Tier C).
 
 A full import captures `changes/startPageToken` before paginating `files.list`; later
 imports replay `changes.list` and persist its final `newStartPageToken`. HTTP 404/410 from
@@ -785,6 +1358,81 @@ Downloads accumulate at most the configured byte cap and cancel/abort oversized 
 future writer port. JSON-only demo fixtures show metadata; sync tests wrap `fixtureFetch`
 with synthetic byte responses for media/export routes, without changing its public behavior.
 ## Spotify Web API
+
+The `spotify` catalog id also supports `fileAdapterById('spotify')` (direct module:
+`./spotify/file-adapter`). Request Extended streaming history or Account data through
+Spotify Account → Privacy settings → Download your data. Select the ZIP or a single
+`Streaming_History_Audio_*.json`, `Streaming_History_Video_*.json` or
+`StreamingHistory_music_*.json`. Older exports' `MyData/endsong_N.json` (extended) and
+`StreamingHistoryN.json` (account data) are accepted too; each row's fields decide how it
+is read. A ZIP with none of these names fails with "No Spotify streaming history found in
+this archive." No Web API application is needed for file import.
+
+File history merges into `integrations/spotify/music/history/YYYY-MM.ttl`, registered as
+`media:PlaybackEvent`, inside the connector container. A month splits into contiguous
+`YYYY-MM-part-N.ttl` documents (`spotifyHistorySlug`) when a document would exceed 2,000
+plays or about 4 MiB of estimated Turtle (well under readers' 16 MiB cap), up to 64
+documents a month. The adapter reads a month's existing parts first: a stored play stays in
+its part, so re-imports never move or duplicate it, and new plays fill parts in order.
+
+Each play is written by `@jeswr/solid-listening`'s generated scrobble model (`addScrobble`):
+a `media:PlaybackEvent` with `media:msPlayed`, `media:playedWork` → a titled `media:Track`,
+`media:performedByArtist` → a `foaf:name`d `media:Artist`, `media:inAlbum` → a titled
+`media:Album`, and `core:atTime` → `time:Instant`. The event is `#scrobble-<id>` and its
+instant `#scrobble-<id>-instant`. Plays of one recording in a document share its
+`#track-<key>`, `#artist-<key>` and `#album-<key>` nodes, keyed by a hash of every value the
+node describes. Music's top artists and recently played use imported plays; its "most
+played tracks" counts only library tracks, so imported plays do not appear there yet.
+Recordings are not shared across documents. The model still emits the legacy `w3id.org/jeswr` media/core namespaces; the
+adapter stores them under the canonical `@jeswr/suite-vocab` namespaces with
+`canonicalizeJeswrDataset`. The adapter writes no hand-built accessors, `schema:` types,
+`media:playedVia` or Spotify track link (the generated profile leaves out `playedVia`).
+The generated runtime costs a few milliseconds a play, so the 100,000-row maximum takes
+minutes. Episodes use their title and show name in that history representation.
+
+SHA-256 ids derive from the UTC timestamp and valid track URI, falling back to artist/title
+names; rows sharing an id within one import are one play (the last row wins). Basic
+`endTime` is interpreted as UTC at its exported minute precision, so repeats of one
+recording ending in the same minute are numbered in file order and the number joins the id
+from the second repeat on: re-importing the same file, or an overlapping one, adds nothing. Duration is not
+subtracted to invent a start time. Plays under 30 seconds (including zero) are kept,
+matching Last.fm/ListenBrainz imports: their 30-second rule deduplicates nearby plays,
+and does not filter by duration. Spotify file import deduplicates exact natural keys only.
+
+The same listen can therefore be stored twice: a Basic and an Extended export of the same
+plays hash differently, and the live adapter's `music/recently-played.ttl#play-…` overlaps
+file history for recent periods. Music reads every part alongside its own history and live
+Spotify history, and folds imported duplicates on read: the same normalised title and a
+shared artist within 90 seconds, from different sources or with Basic's minute precision
+(the precise play wins). A failure reading imported file history never hides Music's own.
+
+Only timestamp, title, artist/show, album and milliseconds are kept; a validated track URI
+only feeds the id.
+`ip_addr`, `conn_country`, `platform`, reasons, shuffle and skipped flags are dropped.
+Rows with `incognito_mode: true` (Spotify Private Session plays, which Spotify keeps out of
+the user's history) are skipped and counted as skips; there is no opt-in yet.
+Raw files and filenames are never written to the pod. Malformed rows count as skips.
+All selected input is verified, and every month's existing parts are read and its new
+documents planned, before history writes: invalid JSON, CRC/size/DEFLATE errors, exceeded
+limits and a month over the document limit fail before history changes. Months are then
+saved one after another, so a Pod error may leave earlier months saved; re-import finishes
+without duplicating them.
+
+The shared streaming JSON scanner caps tokens at 1 MiB, records at 4 MiB, nesting at 64,
+and each JSON file at 64 MiB. Per run: 100,000 rows including invalid/duplicate/oversized
+records, 16 MiB retained metadata, 600 months, 1,000 ZIP entries, 512 MiB compressed input
+and 256 MiB actual inflation across selected entries. ZIPs require `stream()` and `slice()`;
+the shared Takeout reader validates headers, directory, overlap, encryption, compression,
+ranges, size and CRC. Only documented history paths are dispatched; unknown files are not
+inflated. Split exports that exceed a cap.
+
+Suite Connect offers history import by default when no host client is configured, and
+live PKCE with a personal public Client ID. The setup form shows the exact
+`/oauth-callback.html` redirect URI to register in the Spotify Developer Dashboard,
+validates 32 hexadecimal characters, and saves `connect.spotify-client-id` through
+suite-sdk pod-backed preferences. `NEXT_PUBLIC_CONNECTOR_SPOTIFY_CLIENT_ID` takes
+precedence. Personal apps remain subject to Spotify's development-account and user limits.
+No client secret is requested, stored or used by this flow.
 
 The Spotify adapter imports saved tracks, playlists with ordered items, followed artists,
 short/medium/long-term top tracks and artists, and recently-played history. The existing
@@ -897,3 +1545,336 @@ types where the current sectors have no equivalent (root `QUESTIONS.md` Q2); fol
 not playback events, accounts are not people, and workouts are not clinical observations.
 Recorded fixture tests cover sorted Turtle mappings, re-imports, pagination, provenance,
 checkpoint retention on source errors, and Dropbox deletions without production API calls.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Garmin archive observations now use the generated `@jeswr/solid-health` write model.
+Measured values change from `xsd:double` to `xsd:decimal`; existing monthly paths,
+fragment IDs, codes, units and timezone-bearing `xsd:dateTime` timestamps are retained.
+Recognised entries are parsed before final Pod writes; malformed JSON entries contribute
+no observations, including rows preceding the bad token. A later fatal decoder error
+leaves no earlier data writes. Writer failures or cancellation during the final flush can
+still leave some documents written; re-running the import converges because ids are stable.
+The shared ZIP validator also rejects encoded separators, absolute/drive paths, decoded
+traversal segments and control characters before adapter dispatch.
+This applies to Google Takeout too: a Takeout file whose name contains a literal `%2f` or
+`%5c` is now skipped as `invalid-entry`. Undecodable escapes such as `100%ab.txt` remain
+accepted, and paths may have 16 components below `Takeout/`.
+
+## Connect your Levoit purifiers
+
+VeSync (`vesync`, **Levoit (VeSync)**) is **CLI only**. It uses the unofficial
+account API at `https://smartapi.vesync.com`, following pyvesync request shapes;
+there is no OAuth or browser CORS support. Use your own VeSync account. The adapter
+only lists devices and reads purifier status; it sends no device-control commands.
+Core 300S/400S/600S, Vital 100S/200S (including LAP model identifiers) and the older
+LV-PUR131S are supported conservatively. Other devices are skipped. Provider changes,
+regional accounts or extra login challenges can prevent login; there is no bypass.
+Synthetic fixtures test these shapes; live compatibility awaits an owner-account trial.
+
+First configure the Node CLI's owner-held 0600 Pod client-credentials file as above.
+No `connectors.vesync` OAuth configuration is needed. From the workspace:
+
+```sh
+export PATH=/opt/node24/bin:$PATH
+pnpm --filter @jeswr/solid-environment... run build
+pnpm --filter @jeswr/pod-connectors run build
+node packages/pod-connectors/dist/node/bin.js import vesync
+node packages/pod-connectors/dist/node/bin.js import vesync --room "Living room"
+node packages/pod-connectors/dist/node/bin.js import vesync --watch 10
+# With the installed bin: pod-connectors import vesync --watch --room "Living room"
+```
+
+Email and password prompts both hide input and require a TTY. Alternatively supply
+`VESYNC_EMAIL` and `VESYNC_PASSWORD` through your environment's secret injection;
+never put passwords in command arguments or the JSON config. Only the Node VeSync
+credential reader reads these variables, deletes them from `process.env` (so child
+processes do not inherit them; the operating system's initial process environment,
+such as `/proc/<pid>/environ`, still holds them for the process lifetime and any
+process running as the same user can read it), hashes the password immediately with the API-required MD5 and drops the
+plaintext reference. JavaScript strings cannot be securely erased from memory. The
+hash, email, account ID and session token stay in memory; they never enter the pod,
+run reports or diagnostics. Pod credentials use their separate existing transport.
+For long-running `--watch` processes, prefer the hidden prompt: an environment
+variable leaves the plaintext password readable through `/proc` for days.
+The prompt enters raw mode before printing its label and pauses standard input
+afterwards, so a one-shot import exits when it finishes.
+
+Omit `--watch` for one reading per supported purifier now. Bare `--watch` means ten
+minutes; `--watch <minutes>` accepts 5–1440 minutes. Polling is sequential until
+SIGINT/SIGTERM. HTTP 429/5xx get three attempts with jittered exponential delays;
+watch failures back off from the chosen interval toward one hour, with jitter and a
+five-minute floor. Success resets the interval. HTTP 401 and token-expiry codes
+`-11000022`/`-11000021` trigger at most one re-login per request. Only an explicit
+login rejection (a non-zero login code, or HTTP 401) is a VeSync authentication
+failure; network faults, timeouts and malformed login answers (a success code without
+a session token or account ID) are retryable.
+
+Watch mode classifies each failure by cause, wherever it happens (VeSync, Pod writes,
+or the state checkpoint reread and writes), and prints which side failed:
+
+- Retried with backoff: VeSync transport, timeout or answer faults (an unexpected
+  non-zero VeSync code also drops the session, so the next cycle logs in afresh);
+  network faults; Pod HTTP 5xx, 408, 412 (another writer won) and 429 (rate limited); transient
+  checkpoint reads and writes.
+- Stop the command: a VeSync login rejection and Pod HTTP 401/403 (exit 3); a Pod
+  without strong ETags, other Pod 4xx refusals (including 409), structural checkpoint problems
+  (no unambiguous ACL, missing ETag, corrupt state) and invalid device lists (exit 1);
+  configuration errors (exit 2).
+
+A one-shot import reports the same category. Exit codes: 0 success, 1 import or
+checkpoint failure, 2 configuration, 3 authentication (VeSync or Pod), 130 cancellation.
+
+Each sensor has metadata (Levoit, device model and label), a room FeatureOfInterest,
+and UTC day observations under
+`integrations/vesync/environment/vesync-<hmac>/`. The slug is an HMAC-SHA-256 of
+the cid (uuid fallback) keyed by the connector's environment container URL, so it is
+stable within one pod (re-imports stay idempotent) but differs between pods, and raw
+cid/uuid/MAC never appear in pod IRIs. Room defaults to the purifier's
+name. A single `--room <label>` applies to every purifier. To assign separate rooms,
+use repeated `--room 'vesync-<64 hex>=Bedroom'` options, using the sensor slugs
+visible in the pod. The library also accepts a `room` map keyed by these slugs.
+
+Status keys follow pyvesync's device classes. Core models (bypassV2) read
+`air_quality_value` (PM2.5), `air_quality` (an air quality level), `level`
+(fan) and `filter_life`; Vital models read `PM25`, `AQLevel`, `fanSpeedLevel` and
+`filterLifePercent`; the LV-PUR131S detail route is addressed by uuid and reads its
+top-level `level` and `filterLife.percent` (its text air quality is omitted). Core
+200S models have no air sensor, so only fan and filter readings are recorded. A
+bypassV2 answer whose nested device code is non-zero records no readings.
+PM2.5 uses QUDT MicroGM-PER-M3, numeric air quality indices and fan levels use
+UNITLESS, and filter life uses PERCENT. Fan/filter observations concern the purifier;
+air measurements concern the room. The Core `air_quality` and Vital `AQLevel` values
+are Levoit's categorical 1–4 levels (1 is best), not a 0–500 AQI; they are stored
+as `AirQualityIndex` (UNITLESS) because the environment model has no scale or method
+annotation yet, so never chart them against another device's index. Device-specific index scales are preserved;
+text ratings, modes, booleans and missing/invalid numeric fields are omitted.
+Observations have stable minute/property identities, so repeats within the same
+minute update those readings. Later minutes append with read-modify-write and a
+strong If-Match ETag (create-only when absent); conflicts fail for a later retry.
+Sensor/Observation/FeatureOfInterest classes register through the existing Type Index.
+
+Limits: 1 MiB per source response, 8 MiB accepted response data and 51 adapter
+requests per run, 50 listed devices, 200 observations per run, 30-second signals per
+source attempt and Pod request, and a 3-minute deadline per adapter source call (a lazy
+login, bounded retries and one renewal). An account listing more than 50 devices fails
+the run rather than importing a partial list (reading the first 50 is a follow-up). Day documents respect solid-environment's 2000-root,
+50000-quad and 8 MiB Turtle limits, reserving space for provenance. Full/over-budget day documents
+are logged with fixed text and skipped. Each poll rereads the day; there is no
+provider cursor or deletion sweep. Polling retains the latest 32 run summaries in
+`_provenance.ttl`; older observation provenance links can outlive their summary.
+Sensor and room documents are rewritten on every poll (new provenance and ETag);
+skipping unchanged rewrites is a follow-up.
+
+Library hosts use `createVeSyncAdapter({ room, now? })` from `./adapters/vesync` and
+`createVeSyncSourceAuth({ credentials: { email, passwordHash }, transport, signal? })`
+from `./node`, then pass that source port to `runImport`. The Node entry also exports
+`hashVeSyncPassword` and `readVeSyncCredentials`; `CliOptions.vesyncCredentials` lets
+hosts inject already-hashed credentials. `now`, auth `sleep` and `random` are fixture
+seams. Catalogue metadata adds `cliOnly` and the `cli-only` status; show its requirements
+as terminal instructions. `NormalisedDoc.requirePrecondition` opts into strong-ETag
+checks, and `IntegrationAdapter.maxRunActivities` opts into bounded summaries (1–1000).
+The shared `readJson` helper accepts an optional final AbortSignal after its RunBudget,
+cancels stalled readers, and releases reader locks on completion or failure.
+
+## Activity files (CON-A6)
+
+`./adapters/activity-files` exports `activityFilesAdapter` and
+`createActivityFilesAdapter(limits?)`. The Tier C `activity-files` catalog entry accepts
+GPX 1.0/1.1, TCX and FIT, individually or inside a ZIP. Detection uses the FIT `.FIT`
+header signature or XML root, regardless of filename. Select activity exports from
+Strava, Garmin, Wahoo, Coros or Apple Health; no provider API or export URL is accessed.
+Native File/Blob `stream()` and `slice()` support archives; text-only ports support XML.
+
+Each activity has a document under `activities/<sha256>.ttl`, with the existing
+ExerciseAction (Health) or TravelAction (Mobility) model. It includes available sport,
+start/end, elapsed duration, distance, calories, creator/device and typed
+additionalProperty metrics for elevation gain and average/maximum heart rate. The
+health document uses the existing HealthRecord sector bridge; the current federation
+has no sports workout equivalent, so no new sector terms are invented.
+
+A document-local GeoShape track stores a sampled `schema:line` and compact JSON in
+`schema:text`. Sample tuples are `[latitude, longitude, epochMilliseconds, altitudeMetres,
+heartRateBpm, cadence, temperatureCelsius, distanceMetres, speedMetresPerSecond, powerWatts,
+segment]`, with null for absent values. Sampling retains endpoints and at most 2,000
+points. Segment boundaries prevent distance/elevation calculations across GPX gaps.
+Original bytes are stored at most once per file, and only when an activity links them,
+as create-only `activities/<file-sha256>.<format>` resources (25 MiB binary cap). Each
+file's PROV origin is the hash-only `urn:sha256:<sha256(content hash, file name)>`; the
+file name appears only as the original's `schema:name` (truncated to 256 characters) beside
+its content-hash `schema:identifier`. When the bytes exceed the cap, the origin IRI itself
+carries that name and identifier.
+
+IDs hash start time, normalized sport and device serial (file hash when unavailable).
+A bounded per-second index deduplicates later exports of the same sport when both
+start time and elapsed duration differ by at most two seconds, including across second
+boundaries. Moving time is not substituted for elapsed time: TCX elapsed duration is the
+trackpoint time span, else the last lap's StartTime plus its TotalTimeSeconds minus the
+first lap's StartTime. TCX TotalTimeSeconds is timer time and is not stored. Durations
+outside 1 second to 7 days are dropped with the end time (the activity is kept); an
+activity starting or ending outside 1970-01-01 to 2100-01-01 is skipped as invalid. A
+failure while mapping one activity skips it (`activity-import-failed`); Pod I/O failures
+and cancellation still fail the run. Complete imports retain
+prior original links and optional metrics; truncated imports never become fuzzy-match
+candidates. Unknown/missing sport is kept conservative; no fuzzy match occurs without
+start and duration. Imports add/update activities, never delete absent workouts, and
+file imports have no incremental cursor. The shared runner retains state on failure.
+
+Hard caps: 64 MiB per file, 512 MiB compressed archive size and total inflation, 1,000 activities, 100,000
+records per activity, 1,000,000 points and 2,000,000 parser events/FIT messages per run.
+XML scanning also charges one parser event per 512 characters, including comments and
+attribute text. At most 200,000 track samples stay retained per file; beyond that the
+current activity is truncated and the rest of the file is not parsed.
+XML tokens cap at 64 Ki characters and nesting at 64; DTDs and CDATA are refused.
+The Takeout ZIP reader also enforces its structural, CRC, entry-count and path bounds.
+Files are byte-capped and validated before their activities are written; FIT verifies
+header/file CRCs and message boundaries. Original bytes are retained within the cap for
+hashing and binary storage; XML parsing itself uses bounded streamed tokens, without a DOM.
+Byte-overflow files are skipped; record/message/activity overflows import only a bounded
+prefix. Diagnostics surface in `report.warnings`, alongside malformed-file `skipped` counts.
+Dedup buckets and original-file histories cap at 32 entries each. Host limits may only
+lower the hard caps. The original file remains the source for full-resolution telemetry.
+
+## Encrypted refresh vault (CON-A1)
+
+```ts
+import {
+  ConnectorTokenVault, importVaultKey,
+} from '@jeswr/pod-connectors/vault';
+import { FileVaultStore } from '@jeswr/pod-connectors/node';
+import { getOAuthToken, createOAuthSourceAuth } from '@jeswr/pod-connectors/oauth';
+
+// Node host: exact base64 from CONNECTOR_VAULT_KEY or a private key file.
+const vault = new ConnectorTokenVault(await importVaultKey(encodedKey), new FileVaultStore(directory));
+const options = { vault, account: 'work' };
+const token = await getOAuthToken(adapter.metadata.id, adapter.oauth, sourceFetch, options);
+// If undefined, use authorize/authorizeLoopback with the same vault/account options.
+const sourceAuth = createOAuthSourceAuth(adapter, adapter.oauth, sourceFetch, { ...options, token });
+// On explicit disconnect:
+await sourceAuth.disconnect();
+```
+
+A browser host imports only the browser-safe entry:
+
+```ts
+import { ConnectorTokenVault, IndexedDbVaultStore } from '@jeswr/pod-connectors/vault';
+
+// An owner-specific DB holds ciphertexts and its non-extractable CryptoKey.
+const store = new IndexedDbVaultStore('connector-vault-owner-label');
+const browserVault = new ConnectorTokenVault(await store.getOrCreateKey(), store);
+// Or keep only a passphrase-wrapped key at rest (prompt the user; never store the passphrase).
+const protectedStore = new IndexedDbVaultStore('connector-vault-protected-owner-label');
+const protectedKey = await protectedStore.getOrCreateKey({ passphrase: userPassphrase });
+```
+
+**IndexedDB key boundary.** Without a passphrase the non-extractable key is stored in the same
+database as the ciphertexts. Anyone with a copy of the browser profile, and any script running on
+the same origin, can use that key and decrypt the refresh tokens; non-extractable only stops the
+raw key bytes being exported. With `getOrCreateKey({ passphrase })` the database holds only the
+key wrapped by AES-256-GCM under a PBKDF2-SHA-256 key (600,000 iterations, random 16-byte salt
+stored beside it), so a copied profile is unusable without the passphrase. Same-origin script
+running while the vault is unlocked can still use the returned key, and script that persists on
+the origin (an injected or compromised dependency) can capture the passphrase at the next unlock.
+Passphrases are 8 to 1,024 UTF-16 code units; strength is the host's responsibility. A copied
+profile allows offline guessing at 600,000 PBKDF2 iterations per guess, so an 8-character minimum
+is a floor, not a recommendation: prefer a long passphrase. A wrong passphrase, a tampered wrapped
+key, or mixing passphrase and unprotected modes in one database raises the generic
+`ConnectorVaultError`. A forgotten passphrase requires reauthorisation. To switch an existing
+unprotected database to passphrase mode, delete the old database (its unprotected key and
+ciphertexts stay usable otherwise) and reauthorise. Do not record the chosen mode or the
+passphrase in localStorage, IndexedDB or any other browser storage.
+
+`ConnectorTokenVault(key, store)` exposes `get({ connectorId, account })`, `put(key, record)`,
+`delete(key)`, optional `withLock(key, fn)` and authenticated `list()` (keys only). The
+constructor refuses an extractable CryptoKey with the generic error.
+`put` replaces ciphertext without decrypting the old record, so a fresh login with a rotated
+key can recover it. Refreshing an unreadable record raises `UnreadableCredentialError`, an
+`IntegrationAuthError` subclass with `reason: 'reauthorise'`, so hosts may start login. Records
+contain `refreshToken`, epoch-ms `obtainedAt`, optional `scope`, `tokenType`, refresh-credential `expiresAt`, and `providerMeta`.
+Access-token expiry stays in the live `TokenSet`. Unknown record fields are rejected.
+Metadata is plain JSON with credential-shaped fields refused; keep secrets out of metadata
+and account labels. Connector ids are 1–64 lowercase ASCII letters/digits/hyphens, starting
+with a letter/digit; account labels are 1–256 well-formed UTF-16 code units without surrounding
+whitespace or ASCII controls. Refresh tokens are at most 16,384 code units, scope 4,096 and
+token type 64. Metadata is capped at 4 KiB UTF-8, 256 nodes and depth 8; plaintext at 32 KiB
+UTF-8, sealed input at 64 KiB characters and each store/list at 1,000 records. Bounds fail closed.
+
+WebCrypto AES-256-GCM uses fresh random 12-byte IVs, 128-bit tags and canonical
+`JSON.stringify([1, connectorId, account])` AAD. The sealed string is
+`1.<canonical-unpadded-base64url-IV>.<canonical-unpadded-base64url-ciphertext-and-tag>`.
+Parse, validation, authentication and storage failures all raise `ConnectorVaultError`
+with the same constant message and no underlying cause. Key helpers never read environment;
+only the Node CLI host reads `CONNECTOR_VAULT_KEY`. Imported keys and
+`generateBrowserVaultKey()` are non-extractable. Keep the original Node key safe: losing it
+requires reauthorisation. Hosts reading a key file must keep it private and pass its exact
+canonical base64 contents to `importVaultKey`, without whitespace/newline trimming.
+
+`VaultStore` receives canonical JSON `[connectorId, account]` ids and ciphertext strings.
+`MemoryVaultStore` is a bounded single-process fixture with a per-key mutex.
+`FileVaultStore` is exported only from `./node`: SHA-256 filenames, 0700 directories, 0600 files, owner checks, symlink and
+hardlink refusal, bounded descriptor reads, exclusive temporary files, file fsync, atomic
+rename and directory fsync. Existing group/world-accessible stores are refused, not repaired.
+A record file whose mode was loosened is refused by `get` and `put` and skipped by `list`, but
+`delete` still unlinks any regular record file owned by the current user (never a symlink or
+another user's file), so disconnect keeps working.
+Ancestor directories must be controlled by the host user or root; shared writable ancestors
+require the sticky bit. Construction resolves ancestor aliases with `realpath` once and
+checks the canonical path; a symlinked final directory or record is still refused.
+These ancestor checks prevent another user from replacing the private store's path.
+`FileVaultStore` requires a POSIX filesystem and throws at construction on Windows.
+It removes its own regular, current-uid temp files older than ten minutes on construction
+and before list/put budget checks; temp files never consume the name budget. Enumeration
+has a separate 10,000-entry work cap. Refreshes use per-record exclusive 0600 lock files;
+stale locks break after 60 seconds by mtime, active owners renew mtime, and release runs in
+`finally`. A waiter takes over a stale lock by renaming it to `<lock>.<uuid>.stale` and deletes
+that file only if its device and inode match the lock it judged stale. Otherwise the file is
+another owner's live lock: it is restored with a non-clobbering `link` back to the lock name and
+the renamed name is removed; if a third lock already holds that name, the renamed file is left
+to age out (its owner's release then sees a mismatch). Either way the waiter retries.
+Leftover `.stale` files age out like temp files. A newly created lock that fails its safety check is unlinked, after the same
+device/inode comparison, before failing. A failed release never replaces the callback's value
+or error; the unreleased lock goes stale. Contention waits at most 65 seconds before failing
+closed.
+`IndexedDbVaultStore.getOrCreateKey()` elects one key in a read/write transaction and stores
+it via structured clone in the same database as records; writes resolve only after commit.
+Version changes close and clear the cached handle; the next call reopens.
+Account locks use `navigator.locks.request` where available, otherwise a shared in-process
+mutex (cross-tab ownership then requires host coordination). Clearing that database removes
+both records and key. Hosts retain their origin/script security responsibilities (see the key
+boundary above).
+
+Pass `{ vault, account, signal? }` as the final argument to code exchange or refresh helpers.
+`authorize` takes these options as its fourth argument, or as its fifth after a custom
+same-origin callback page. `authorizeLoopback` accepts them in its options. `getOAuthToken` returns a
+live supplied token, refreshes saved credentials, or returns undefined for interactive login.
+With a vault, a missing record means disconnected: an in-memory refresh credential raises
+`reauthorise` instead of reviving the account (vault-less sessions keep their in-memory
+credential). Undefined is returned only when neither a record nor an in-memory credential exists.
+Refresh holds the optional store lock across reread, token exchange and put/delete, using
+any newer saved refresh token before sending. On `invalid_grant`, compare with the sent
+token before deleting; if a newer token exists, retry once with it and never loop. A rejected
+current credential raises `IntegrationAuthError` with `reason: 'reauthorise'`; other failures
+retain it. Token requests (code exchange and refresh) never use the caller's signal: once sent
+they run on a private controller with a 30-second timeout (`TOKEN_REQUEST_TIMEOUT_MS`), so a
+cancellation cannot cut off a response carrying a rotated credential. A caller abort before
+sending prevents the request; one during the exchange is honored after the response is
+validated and persisted, with a generic `AbortError`. A code exchange that returns no refresh
+token deletes any stored record for that `{ connectorId, account }`, so another provider account
+cannot silently reuse the previous login's credential. `createOAuthSourceAuth` restores lazily,
+refreshes expired tokens, shares concurrent refreshes and retries a GET once after 401.
+`disconnect()` waits for pending refresh before deleting so it cannot repopulate the vault.
+When the OAuth config has a `revocationEndpoint` (RFC 7009), disconnect first POSTs the stored
+and session refresh tokens there (`token_type_hint=refresh_token`, same client authentication
+and private-controller timeout rule, not sent once cancelled), ignoring every failure, then
+deletes locally. The Google configurations declare `https://oauth2.googleapis.com/revoke`.
+Revoking at Google removes the whole grant for that OAuth client, so disconnecting one Google
+connector also signs out every other Google connector that shares the client ID; those need
+reauthorising. A disconnect cancelled part-way can revoke one of the two tokens and not the other,
+and still deletes the local record; remove any remaining access in the provider's account
+settings (for Google, the account's third-party access page).
+Other providers have no RFC 7009 endpoint configured: revoke the app's access in the provider's
+account settings.
+The built-in stores provide account locks for the shared engine, including CLI cron runs
+using the file store. Custom stores without `withLock` require hosts to serialize mutations.
+`createSpotifySourceAuth` throws when given a vault: vault hosts must use
+`createOAuthSourceAuth` so every refresh follows the shared persistence contract.
+Tokens never enter the pod, localStorage, sessionStorage or cookies.

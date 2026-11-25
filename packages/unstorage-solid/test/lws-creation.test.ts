@@ -10,9 +10,10 @@ const LWS = "https://www.w3.org/ns/lws#";
 
 async function fixture(injected: boolean, rename?: "resource" | "container") {
   const base = `https://unstorage-lws-create-${++fixtureId}.example/kv/`;
-  const nodes = new Map<string, { container: boolean; body: BodyInit | null }>([
-    [base, { container: true, body: null }],
-  ]);
+  const nodes = new Map<
+    string,
+    { container: boolean; body: BodyInit | null; parent: string | null }
+  >([[base, { container: true, body: null, parent: null }]]);
   const requests: { url: string; method: string; headers: Headers }[] = [];
   const createdHints: string[] = [];
   const fetch: typeof globalThis.fetch = async (input, init) => {
@@ -33,7 +34,7 @@ async function fixture(injected: boolean, rename?: "resource" | "container") {
       const container = headers.get("link")?.includes(`${LWS}Container`) ?? false;
       const name = rename === (container ? "container" : "resource") ? "server-chosen" : hint;
       const location = `${url}${name}${container ? "/" : ""}`;
-      nodes.set(location, { container, body: init?.body ?? null });
+      nodes.set(location, { container, body: init?.body ?? null, parent: url });
       createdHints.push(hint);
       return new Response(null, { status: 201, headers: { location, etag: '"created"' } });
     }
@@ -43,7 +44,11 @@ async function fixture(injected: boolean, rename?: "resource" | "container") {
       return new Response(method === "HEAD" ? null : node.body, {
         headers: {
           etag: '"current"',
-          link: `<${base}>; rel="${LWS}storage", <${LWS}${node.container ? "Container" : "DataResource"}>; rel="type"`,
+          link: [
+            `<${base}>; rel="${LWS}storage"`,
+            `<${LWS}${node.container ? "Container" : "DataResource"}>; rel="type"`,
+            ...(node.parent === null ? [] : [`<${node.parent}>; rel="up"`]),
+          ].join(", "),
         },
       });
     throw new Error(`Unexpected ${method} ${url}`);
@@ -85,7 +90,9 @@ describe.each([false, true])("LWS creation with injected storage: %s", (injected
     await expect(driver.setItem?.(key, "value", {})).rejects.toThrow(
       kind === "resource" ? /preserve the key name/ : /preserve the container name/,
     );
-    expect(nodes.has(`${base}server-chosen${kind === "container" ? "/" : ""}`)).toBe(true);
+    const renamed = `${base}server-chosen${kind === "container" ? "/" : ""}`;
+    expect(nodes.has(renamed)).toBe(true);
+    expect(requests).toContainEqual(expect.objectContaining({ url: renamed, method: "HEAD" }));
     expect(requests.every(({ method }) => ["HEAD", "GET", "POST"].includes(method))).toBe(true);
   });
 });

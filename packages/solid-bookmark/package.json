@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/solid-bookmark",
   "version": "0.1.0",
-  "description": "The RDF vocabulary + typed model for bookmarks / read-it-later (the data model for a Linkding\u2192Solid fork) \u2014 book:Bookmark over reused dereferenceable terms (schema.org / Dublin Core / SKOS) rooted in the suite core, plus the ontology TTL and SHACL shape that pin the contract.",
+  "description": "The RDF vocabulary + typed model for bookmarks / read-it-later (the data model for a Linkding→Solid fork) — book:Bookmark over reused dereferenceable terms (schema.org / Dublin Core / SKOS) rooted in the suite core, plus the ontology TTL and SHACL shape that pin the contract.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",
@@ -38,6 +38,14 @@
       "types": "./dist/shape.d.ts",
       "import": "./dist/shape.js"
     },
+    "./netscape": {
+      "types": "./dist/netscape.d.ts",
+      "import": "./dist/netscape.js"
+    },
+    "./pod": {
+      "types": "./dist/pod.d.ts",
+      "import": "./dist/pod.js"
+    },
     "./bookmark.ttl": "./bookmark.ttl",
     "./bookmark.shacl.ttl": "./bookmark.shacl.ttl"
   },
@@ -60,7 +68,10 @@
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/pod-access": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "n3": "^2.0.3"
   },

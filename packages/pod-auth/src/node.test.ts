@@ -75,6 +75,10 @@ test.each([
   });
   expect(await auth.restore()).toBeNull();
   expect(await auth.remembered()).toEqual([]);
+  await expect(auth.retireIfOwnedBy({ webId: null, issuer: documentUrl })).resolves.toEqual({
+    retired: false,
+    reason: "no-grant",
+  });
   expect((await auth.fetch(f.as.root + "private")).status).toBe(200);
   expect(await auth.identity()).toEqual({
     webId: null,

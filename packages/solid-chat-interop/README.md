@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 
 # @jeswr/solid-chat-interop
 
@@ -50,6 +51,90 @@ preserves message content, author, time, replies, edits, deletion, provenance, a
 
 IRI-valued fields from untrusted data are restricted to safe HTTP(S) IRIs on both read and write.
 
+## Generated canonical model
+
+The Message (`as:Note`) and stored Conversation (`as:Collection`) models are generated
+by `@jeswr/federation-codegen` from [codegen/](./codegen/) and interpreted by
+`@jeswr/model-runtime`. The committed `src/generated/` contains the manifest, fixed JS
+shim, declarations, normalized SHACL and input/output hashes. Never edit these files.
+
+The [AS2 facade](./src/as2.ts) keeps the public plain-data types, arbitrary subject
+IRIs, media-type and write-time timestamp defaults, PROV-O nesting, and the co-typed
+task overlay (closed wins over open). `As2MessageDoc` is a minimal public view of the
+generated wrapper; its hand-written field accessors have been removed. ChatWriter
+uses the generated message metadata accessors and [conversation facade](./src/conversation.ts).
+ACL enforcement, redaction, IDs, timestamps, pagination, adapters, JSON-LD loading and
+LongChat reconciliation retain their existing policy.
+
+The profile starts from the social sector's Note/Feed model but preserves this package's
+existing AS2 IRIs. The header in [chat.shapes.ttl](./codegen/chat.shapes.ttl) lists every
+mapping, narrowing, addition and omission; social IRIs do not become read aliases.
+The published [message shape](./shapes/message.shacl.ttl), `/shape` API, and pc: legacy
+namespace migration remain available with their original behavior.
+
+Generator/runtime gaps retained in the facade:
+
+- Closed admission cannot express the advisory `rdf:type` qualified task-state shape
+  (`sh:qualifiedValueShape` / `sh:qualifiedMaxCount`) or conditional `wf:Task`
+  co-typing. Only that property shape is omitted from generation; the published shape
+  still contains it, and the facade keeps the existing closed-wins/default-open policy.
+- The runtime's HTTP guard normalizes URL identities. Chat's existing lexical HTTP(S)
+  filtering and percent-escaping stay in [canonical-iris.ts](./src/canonical-iris.ts),
+  a typed singleton accessor for all eight IRI fields. The generated profile retains
+  their IRI/cardinality/pattern constraints. The facade restores exact guarded object
+  spellings after building and reads them without URL normalization.
+- Required fields cannot have config defaults. The facade computes `published = now`
+  only on write. Foreign incomplete notes still parse through individually guarded
+  generated accessors when strict entity parsing fails; this is a compatibility
+  projection, not a SHACL validation result. Missing/malformed content becomes `""`,
+  media type defaults to `text/plain`, and malformed/missing dates stay absent. The
+  generated entity and published SHACL retain both required-field constraints.
+- The sector feed's `core:hasPart` aggregation is outside this stored conversation
+  projection: messages remain separate resources discovered through the injected pod
+  port. `CanonicalRoom.messages` remains an adapter's plain-data projection.
+
+From the workspace root:
+
+```sh
+export PATH=/opt/node24/bin:$PATH
+pnpm --filter @jeswr/federation-codegen... run build
+pnpm --filter @jeswr/solid-chat-interop run codegen --update-lock
+pnpm exec turbo run lint build typecheck test --filter=...@jeswr/solid-chat-interop
+node scripts/check-codegen.mjs
+```
+
+The drift test regenerates every artifact byte for byte, including the lockfile. All
+410 original tests remain unchanged. The build bundles the generated JS and runtime
+into `dist/` with esbuild, so no generated-file copy step is needed. Public declarations
+use a declaration-only wrapper view with no runtime/generated imports; the runtime is
+therefore listed in `mirrorPublish.inlined`. Tests verify this and compile a strict
+consumer, including clearing setters. `dist/` remains uncommitted.
+
+## Exact divergences
+
+These changes from the hand-written AS2 core are pinned in
+[test/compatibility.test.ts](./test/compatibility.test.ts):
+
+- Ambiguous singleton content, media type, dates, task title and all eight IRI fields
+  drop instead of selecting the first value. Content/media type use their existing
+  empty/plain defaults; the rest stay absent. Ambiguous stored identifiers/roles or
+  conversation titles now cause ChatWriter's existing invalid-resource checks to fail.
+- Text reads require `xsd:string`: language-tagged and numeric literals drop instead
+  of returning their lexical spelling. Stored conversation titles/identifiers follow
+  the same rule. Dates require a valid `xsd:dateTime`; `xsd:date` and impossible
+  calendar values drop. Invalid date writes and mistyped body/task-title writes now
+  drop the field instead of throwing.
+- Data-graph subclasses of `as:Note` and `as:Collection` are recognized through the
+  runtime's bounded, cycle-safe class walk.
+- Direct `As2MessageDoc` access now uses the generated guards: writes sanitize text,
+  IRI fields normalize accepted URLs and drop invalid values, and unsafe/relative
+  or non-NamedNode subjects throw. `parseAs2Message` returns `undefined` for an unsafe
+  subject. The high-level build/parse facade keeps chat's lexical escaping policy.
+
+The compatibility suite also pins unchanged full-message Turtle/JSON bytes, arbitrary
+subject fragments, incomplete-note parsing, lexical IRIs, task state precedence,
+published scalar constraint parity, generated SHACL validation, and mirror declarations.
+
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 ## Owner-only conversation storage
@@ -83,6 +168,11 @@ the exact target and reject unsupported models and unsafe targets. The associati
 is checked again after each create attempt; existing non-WAC ACL documents abort the
 save. Shared ACL documents with `acl:accessTo` or `acl:default` grants for other
 resources are rejected before replacing the ACL or writing the target resource.
+`ownerOnlyChatAcl(acl, target, owner)` returns the exact owner-only `n3.Store` used by
+ChatWriter and MCP's ACL validator: one authorization at `<acl>#owner`, owner Read/Write/Control,
+`acl:accessTo` for the target and `acl:default` only for containers. It builds RDF in memory;
+callers remain responsible for discovering the association and enforcing conditional writes.
+
 The caller's port must enforce pod scope, refuse write redirects, and reject
 HTTP failures with a numeric `status` property. There is no permissive ACL fallback.
 
@@ -206,6 +296,84 @@ Unquoted value boundaries depend on syntax:
   brackets. Punctuation such as `;`, `,`, `)`, `}` and `]` stays inside the redaction.
 - Code, object keys, YAML, JSON and CLI flags retain the code delimiters: whitespace,
   `;`, `,`, `)`, `}` and `]`, with escaped whitespace and continuations included.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+`redactSecretFields(fields)` normalizes and redacts an ordered array without mutating it.
+`redactConversation(conversation)` returns a copy with title and message text redacted in
+title → message 1 → message 2 order, preserving all other metadata. The writer, transcript
+renderer and capture paths use this shared helper. Optional
+`redactConversation(conversation, { chunks })` accepts a readonly array of source-chunk
+arrays in message order (one array per message; mismatched counts throw). Chunks
+replace message text, are checked together before joining each message with `\n`
+and trimming it, and the assembled conversation is checked again. Empty chunk arrays
+produce empty text. The helper never mutates conversation metadata or source chunks.
+Export importers use this path instead of mapping fields themselves. After
+per-field redaction, adjacent fields are checked using the last 512 UTF-16 code units
+of the left field and the first 512 of the right, with edges snapped inward to complete
+code points, joined without a separator. A detection whose context spans that join
+replaces each covered value piece with `[REDACTED]`; names, quotes
+and surrounding code stay. Normalized source windows are also checked so an earlier
+per-field marker cannot hide a prefix while exposing its continuation. Existing
+marker text is preserved, including spans contained in a marker; touching fragments
+extend that marker's coverage without duplicating it. Zero-width boundary spans are
+ignored. A URL's trailing `@` counts as context even when its password is wholly in
+the preceding field, provided that field still ends in userinfo. An existing userinfo
+`@` completes the left authority; a later message's `@mention`
+cannot extend it. An undelimited host:port-looking suffix is ambiguous: a following
+field's `@` establishes userinfo even when the password is numeric and wholly on
+the left or continues on the right. These values redact conservatively, including
+when the right field could be an @mention. Unambiguous host:port URLs ending in `/`
+or followed by whitespace or a path stay intact. Appending a neighbour preserves
+already detected messages' text and content-derived IDs. A closing quote at a field
+boundary completes a shell word and keeps its delimiters: appending `Thanks` after
+`export API_KEY="fixture"` leaves `export API_KEY="[REDACTED]"` unchanged. Prefixes
+retain the same redacted text as the full conversation, except that later context
+completing an unresolved secret may add redaction, never remove existing coverage.
+The field-array operation is idempotent.
+A left value already consisting only of markers ends boundary continuation, preventing
+repeated passes from consuming another window of the next field. Source windows still
+detect plaintext continuations on the initial pass.
+Edited fields are checked once more for assignments exposed by boundary removal.
+Capture/import callers must apply this before queueing or splitting saves into batches.
+
+A private-key END delimiter without a preceding BEGIN in the same field conservatively
+redacts everything from that field's start through the last END delimiter. Following
+text survives. This rule applies only to whole fields: appending an orphan END cannot
+redact preceding prose or titles. Both PEM rules accept `PGP PRIVATE KEY BLOCK`.
+Once a BEGIN header is recognized, redact to its first END or the conversation end,
+including entire subsequent fields and arbitrarily long bodies without END. BEGIN
+and END delimiters split across one join are recognized within the window. This
+continuation remains linear and stops before text following END; the per-field
+orphan rule can still cover later orphan END delimiters in the same field.
+
+The boundary pass is linear in total input size plus field count and collects all
+matches before replacing them. It checks adjacent pairs only, within the 512-code-unit
+windows: credentials requiring three fields or more distant context are outside this
+policy, except the PEM-body continuation above. A delimiter itself requiring three
+fields, or more than 512 units of context across a join, remains outside it.
+Separator-free detection errs toward redaction: a complete token at one field's
+end can also cover the next field's first word. A caller that has already redacted each
+source field independently cannot recover a hidden prefix; pass the complete original
+field array to this helper before discarding source text.
+
+Before detection and after boundary replacement, the shared text normalizer strips
+lone surrogates (Unicode Cs), C0/C1 controls except tab/CR/LF,
+and every Unicode General_Category=Cf character except emoji ZWJs and subdivision-flag
+tags. U+200D survives only between Extended_Pictographic characters, each optionally
+followed by U+FE0E/U+FE0F and/or a skin-tone modifier (either order). Variation selectors
+U+FE00–U+FE0F and U+E0100–U+E01EF are removed except U+FE0E/U+FE0F on an emoji
+base (including its modifier) or within a complete keycap. A digit followed by a
+selector without the keycap mark is stripped too, preventing token suffix leaks.
+Subdivision flags require
+U+1F3F4, exactly two tag lowercase letters (U+E0061–U+E007A), then 1–4 tag lowercase
+letters or digits (U+E0030–U+E0039), then U+E007F. All other U+E0000–U+E007F tags are
+removed, including arbitrary hidden instructions. Family/profession emoji, skin-tone
+variants and England/Scotland/Wales flags retain their exact bytes. Zero-width spaces,
+word joiners, BOMs, soft hyphens and bidi controls are removed before persistence
+and again on export, so they cannot split credential patterns.
+
+Package-specific agent guidance lives in [SKILL.md](SKILL.md).
 
 The existing PEM private-key, `sk-`, GitHub, AWS key-ID, JWT and `Authorization:`
 header rules run first with their existing markers. Redaction is pure, emits no

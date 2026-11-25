@@ -1,12 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { notifySavedText } from "@jeswr/suite-sdk/chips";
 import {
   createContext,
   type ReactNode,
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -69,8 +71,27 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
   );
   const [revision, setRevision] = useState(0);
   const local = useMemo(() => new ChatLocalState(session.webId), [session.webId]);
+  const notifySaved = useRef<(message: Message) => void>(() => {});
+  useLayoutEffect(() => {
+    notifySaved.current = (message) => {
+      void notifySavedText(session, message.id, "", message.content, "Chat message").catch(
+        () => {},
+      );
+    };
+    return () => {
+      notifySaved.current = () => {};
+    };
+  }, [session]);
   const queue = useMemo(
-    () => new ChatOutbox(client, () => navigator.onLine !== false, local),
+    () =>
+      new ChatOutbox(
+        client,
+        () => navigator.onLine !== false,
+        local,
+        (message) => {
+          notifySaved.current(message);
+        },
+      ),
     [client, local],
   );
   const outbox = useSyncExternalStore(queue.subscribe, queue.snapshot, queue.snapshot);
@@ -79,7 +100,11 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
   const [currentRoom, setCurrentRoom] = useState<string>();
   const invalidate = useCallback(() => setRevision((value) => value + 1), []);
   const trackRooms = useCallback((joined: JoinedRoom[]) => {
-    rooms.current = joined.map((room) => room.url);
+    const next = joined.map((room) => room.url);
+    if (JSON.stringify(rooms.current) !== JSON.stringify(next)) {
+      rooms.current = next;
+      window.dispatchEvent(new Event("suite-push-topics-changed"));
+    }
   }, []);
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -312,6 +337,10 @@ export function useChatActions() {
       },
       async edit(url: string, subject: string, text: string) {
         await client.edit(url, subject, text);
+        invalidate();
+      },
+      async moderate(url: string, subject: string) {
+        await client.moderate(url, subject);
         invalidate();
       },
       async remove(url: string, subject: string) {

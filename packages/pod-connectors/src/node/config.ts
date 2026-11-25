@@ -4,11 +4,14 @@ import { open } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { getuid } from "node:process";
+import { vaultId } from "../vault.js";
 import { httpsUrl, NodeRuntimeError, object, textValue, validateCallbackPort } from "./errors.js";
 
 /** Node-only source settings; desktop client secrets remain in memory. */
 export interface NodeConnectorConfig {
   readonly clientId: string;
+  /** Stable provider account id or owner-chosen vault label; defaults to default. */
+  readonly account?: string;
   readonly clientSecret?: string;
   readonly tokenProxyUrl?: string;
   /** Fixed loopback port for a registered source redirect URI. */
@@ -71,7 +74,10 @@ function parseNodeConfig(value: unknown): NodeConfig {
   )) {
     if (!/^[a-z0-9-]+$/.test(id)) throw new Error("Invalid connector id");
     const source = object(value);
+    if (source.account !== undefined)
+      vaultId({ connectorId: id, account: source.account as string });
     connectors[id] = {
+      ...(source.account === undefined ? {} : { account: source.account as string }),
       clientId: textValue(source.clientId),
       ...(source.clientSecret === undefined
         ? {}

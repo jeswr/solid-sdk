@@ -670,7 +670,7 @@ describe("PreviewPane", () => {
       <PreviewPane
         source={source(
           "text/markdown",
-          "# Notes\n\n**Ready**\n\n<script>bad()</script>\n\n[bad](javascript:alert(1))\n\n![private](https://example.org/tracker.png)",
+          "# Notes\n\n**Ready**\n\n<script>bad()</script>\n\n[bad](javascript:alert(1))\n\n[Source](https://example.org/notes)\n\n![private](https://example.org/tracker.png)",
         )}
       />,
     );
@@ -679,6 +679,10 @@ describe("PreviewPane", () => {
     expect(container.querySelector("script")).toBeNull();
     expect(container.querySelector("img")).toBeNull();
     expect(container.querySelector('a[href^="javascript:"]')).toBeNull();
+    const link = screen.getByRole("link", { name: "Source" });
+    expect(link.getAttribute("href")).toBe("https://example.org/notes");
+    expect(link.hasAttribute("target")).toBe(false);
+    expect(link.hasAttribute("rel")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Show raw" }));
     expect(container.querySelector("pre")?.textContent).toContain("**Ready**");
     fireEvent.click(screen.getByRole("button", { name: "Show rendered" }));

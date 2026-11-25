@@ -3,7 +3,9 @@ name: pod-auth
 description: Use when integrating @jeswr/pod-auth login, multi-account managers, bounded auth.fetch, restore, React sessions, Node agents, CSS self-registration or Client Identifier Documents, or migrating deprecated suite client authentication.
 ---
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- // AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # Work with `@jeswr/pod-auth`
 
@@ -65,7 +67,17 @@ Construct one core per application session. `ui.getCode` must return the complet
 including `state`, `code` and `iss`, honor cancellation and own popup/redirect cleanup. Choose among
 advertised issuers explicitly; omitting the chooser for multiple issuers throws `AmbiguousIssuerError`.
 Same-hint concurrent login is single-flight; different hints reject while login is pending. Log out
-before switching accounts on the same core, or use the account manager below. `identity()` reads claims only; it never refreshes, contacts an issuer or
+before switching accounts on the same core, or use the account manager below. Pass `login(hint, { expectRemembered })` with the `remembered()` result the
+sign-in decision used: pod-auth refuses before authorization if the pointer differs and compares the
+pointer and stored grant owner again under the namespace mutation lock before publishing the grant
+owner and the pointer, rejecting with `OwnershipChangedError` after discarding only that attempt's new
+grant. Use `reauthorize: true` (WebID hints only, same account only) to replace a grant whose refresh
+persistently fails with something other than `invalid_grant`; it bypasses only its own context's
+stored credential, and logout/retirement keep reading (and revoking) every credential. Within a login attempt, a rejected identity
+also discards only the attempt's own new grant (locally, unrevoked), never other contexts' grants, the
+owner or the pointer. Outside an attempt (a later upgrade authenticates a different identity, or a
+restore's engine identity contradicts the pointer) it signs out as `logout()` does: every catalogued
+grant is revoked, then all grants, the owner and the pointer are cleared. `identity()` reads claims only; it never refreshes, contacts an issuer or
 returns credentials. Public profile reads are not proof of authentication.
 
 Use the pure `./directory` entry point for shared sign-in address handling. `KNOWN_PROVIDERS` is deeply
@@ -95,6 +107,19 @@ first; storage failures are harmless. Providers use monograms by default; host-s
 
 ## Preserve the credential boundary
 
+- `auth.fetchFor({ webId, issuer }, { extraResourceOrigins: [BUILD_TIME_ORIGIN] })` pins a fetch
+  to the current session for explicit non-pod resource servers. Require canonical HTTPS origins
+  (no trailing slash, userinfo, path, query, fragment, wildcard host or URL normalization).
+  Exclude the selected issuer's advertised token and registration endpoints even on other
+  origins or with query parameters; protocol transport alone owns those endpoints. Never derive them
+  from pod data or a challenge. Extra resources reuse the same in-memory Solid grant, context,
+  DPoP key, generation fence and refresh lock; they refuse redirects, omit cookies, and cannot
+  start UI or exchange LWS/UMA credentials. Their origin boundary is separate from `auth.fetch`
+  and `Identity.storages`. Normal pod requests keep normal provider routing. Handles fail after
+  logout/relogin, cross-realm supersession or a transition to LWS; recreate after restore.
+  Reject extra origins for every LWS session, including human sessions with an underlying Solid
+  grant, and for agents. P2-PUSH-RELAY §3 P2 defers LWS-only relay authentication to MOB-P2g.
+
 - Use the unbound `auth.fetch` throughout the SDK. Preserve global fetch; never call `registerGlobally`.
   Construct auth after installing the intended pristine transport in tests. Protocol discovery,
   registration, token and refresh HTTP must never recurse through a credential-attaching wrapper.
@@ -109,7 +134,7 @@ first; storage failures are harmless. Providers use monograms by default; host-s
   `boundary.storageEndpoints` names exact (or trailing-`/` prefix) paths on each verified storage's
   origin, for server APIs outside the pod folder; they share that storage's grant and stay out of
   `Identity.storages`. Use it only for endpoints of the server that hosts the storage.
-- `auth.fetch` buffers bodies for replay after a 401; bodies over `maxReplayBodyBytes` (default
+- `auth.fetch` and `auth.fetchFor` buffer bodies for replay after a 401; bodies over `maxReplayBodyBytes` (default
   16 MiB) reject after being read. A `Blob`/`File` body is replayed as it is and never buffered,
   so upload files as a `File` instead of raising the limit. Node agents
   (`forClientCredentials`, `forCid`) keep the default.
@@ -165,6 +190,8 @@ first; storage failures are harmless. Providers use monograms by default; host-s
 `createAccountManager(options)` from `./accounts` owns one fresh core per account. Its synchronous
 `accounts()` / `active()` snapshots contain public Identity values only. `add(hint?, { signal }?)`
 uses a fresh session scope, DPoP key and boundary; failed/cancelled adds preserve existing state.
+`add()` and the anonymous adapter's login reject `expectRemembered` and `reauthorize: true`
+before authorization. Ownership-guarded login requires a direct core.
 Duplicate WebIDs replace only their old scope and retain ordering. `switchTo(webId)` persists
 the active WebID without network/navigation; `fetch` resolves the current active core at call time,
 while `fetchFor(webId)` stays bound to that account. Unknown WebIDs throw `UnknownAccountError`.
@@ -212,6 +239,27 @@ does not load credentials or contact the network. `logout()` revokes when advert
 sessions/keys and the pointer across reloads, fences in-flight work, and emits `logout` even on failure.
 Await cleanup; errors reject after cleanup attempts and notification. Clear application capability
 caches on `logout`. Local logout does not sign out the OP browser session.
+
+Reject an earlier login/restore result with `retireIfOwnedBy(identity)`, passing its `grantId` as well
+as WebID/issuer. Never compose `remembered()`/`identity()` ownership reads with unconditional logout.
+OIDC identities expose this public, opaque identifier; refresh preserves it and each new authorization
+changes it. Any newly installed namespace grant advances the stored owner; refreshing an older grant
+does not reclaim it. Retirement compares ownership and performs all logout cleanup/revocation under
+the same exclusive namespace mutation lock used by credential commits (before the engine fence lock).
+Web Locks coordinate cooperating tabs/workers with shared stores; Node's FIFO fallback covers only the
+current realm; browsers without Web Locks fail closed. Direct storage edits/older library versions are
+outside this coordination. Success returns `{ retired: true }` and emits logout; failures reject after
+cleanup attempts. Skips return `{ retired: false, reason }` with `missing-grant`, `no-grant`,
+`owner-changed` or `grant-changed`, without credential, fence or lifecycle changes. Agents return
+`no-grant`. Issuer-only credentials remain private memory; their stored owner metadata contains no token.
+`grantId` is an ownership tag, not a secret or capability. If retirement wins the mutation lock
+before another tab's in-flight sign-in commits, it supersedes that sign-in and its stale commit
+fails with `SessionSupersededError`. A sign-in that commits first makes the older retirement skip.
+Retain the accepted Identity snapshot alongside application account state for sign-out and expired
+reauthentication cleanup too. Reset that state only on `{ retired: true }`; diagnose `missing-grant`
+and `no-grant` separately from the expected `owner-changed` / `grant-changed` concurrency skips.
+External `PodAuth` implementers and test fakes must implement the required `retireIfOwnedBy` method;
+this interface addition is a breaking change (see README).
 
 `on('login' | 'restore' | 'logout' | 'expired' | 'challenge', handler)` returns an idempotent
 unsubscribe function. Events carry identity snapshots and timestamps; observers cannot interrupt auth.

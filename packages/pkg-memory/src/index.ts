@@ -27,6 +27,7 @@ export type {
 } from "./model.js";
 export {
   buildNanopublications,
+  CLINICAL_TYPES,
   EPISTEMIC_STATUSES,
   parseAssertion,
   parseNanopublications,
@@ -41,9 +42,19 @@ export {
   MEMORY_PURPOSES,
   purposeFilter,
 } from "./purpose.js";
+export { DEFAULT_MEMORY_SCOPE, type MemoryMandate, memoryCategory, scopeAdmits } from "./scope.js";
 export type { RetractionOptions } from "./store.js";
 export { NanopubStore } from "./store.js";
-export type { Fact, PaymentCardBrand, TemporalValue } from "./templates.js";
+export type {
+  EncounterValue,
+  Fact,
+  HealthCode,
+  HealthTemporalValue,
+  ImmunizationValue,
+  ObservationValue,
+  PaymentCardBrand,
+  TemporalValue,
+} from "./templates.js";
 export { createFactAssertion, PAYMENT_CARD_BRANDS } from "./templates.js";
 export type { WacDiscoveryOptions } from "./wac.js";
 export { discoverWacAcl, validateDedicatedWacAcl } from "./wac.js";

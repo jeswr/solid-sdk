@@ -16,13 +16,17 @@ const frameShortcuts: RegisteredShortcut[] = [
   { id: "frame.sidebar", keys: "[", label: "Toggle sidebar", group: "Global" },
   { id: "frame.details", keys: "]", label: "Toggle details pane", group: "Global" },
 ];
-export function ShortcutsTable() {
+export function ShortcutsTable({ hasSidebar = true }: { hasSidebar?: boolean } = {}) {
   const shortcuts = useRegisteredShortcuts();
   const [query, setQuery] = useState("");
   const id = useId();
   const rows = [
     ...shortcuts,
-    ...frameShortcuts.filter((row) => !shortcuts.some((shortcut) => shortcut.keys === row.keys)),
+    ...frameShortcuts.filter(
+      (row) =>
+        (hasSidebar || row.id !== "frame.sidebar") &&
+        !shortcuts.some((shortcut) => shortcut.keys === row.keys),
+    ),
   ].filter((row) =>
     `${row.label} ${row.keys} ${row.group}`.toLowerCase().includes(query.toLowerCase()),
   );
@@ -78,6 +82,7 @@ export function ShortcutHelpSheet({
   open,
   onOpenChange,
   returnFocusTo,
+  hasSidebar = true,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -86,6 +91,7 @@ export function ShortcutHelpSheet({
    * closing (the command palette): its input is gone by then, so it can't be the target.
    */
   returnFocusTo?: HTMLElement | null;
+  hasSidebar?: boolean;
 }) {
   const returnFocus = useRef<HTMLElement | null>(null);
   return (
@@ -106,7 +112,7 @@ export function ShortcutHelpSheet({
           Shortcuts pause while you type. Command shortcuts work everywhere.
         </DialogDescription>
         <CharacterKeysToggle />
-        <ShortcutsTable />
+        <ShortcutsTable hasSidebar={hasSidebar} />
       </DialogContent>
     </Dialog>
   );

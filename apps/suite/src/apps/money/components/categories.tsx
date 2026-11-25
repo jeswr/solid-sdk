@@ -1,11 +1,11 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { type Category, type CategoryNode, categoryTree } from "@jeswr/solid-money";
 import { Button, EditableText, EmptyState, IconButton, Input } from "@jeswr/suite-ui";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { deleteCategory, reparent, saveCategories } from "../lib/data/categories";
 import { storeOf } from "../lib/data/container";
-import { type Category, type CategoryNode, categoryTree } from "../lib/model";
 import { useMoney } from "../state/money-context";
 import { Modal, MoneySelect } from "./money-forms";
 export function CategoriesScreen() {

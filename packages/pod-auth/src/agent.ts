@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { sameIssuer } from "@jeswr/reactive-authentication";
+import { accountMatches, extraResourceOrigins } from "./options.js";
 import { type AgentConfiguration, type AgentPolicy, createAgentProviders } from "./providers.js";
 import type { AuthEvent, AuthEventType, Identity, PodAuth } from "./types.js";
 
@@ -38,8 +40,21 @@ export function createAgentAuth(policy: AgentPolicy, config: AgentConfiguration)
   });
   return {
     fetch: providers.manager.fetch as typeof fetch,
+    fetchFor: (account, options) => {
+      if (extraResourceOrigins(options).length)
+        throw new Error("Extra resource origins require a Solid-OIDC account");
+      if (!accountMatches(account, current)) throw new Error("Account session is unavailable");
+      const selected = snapshot()!;
+      const started = epoch;
+      return async (input, init) => {
+        if (started !== epoch || !accountMatches(selected, current))
+          throw new Error("Account session is unavailable");
+        return await providers.manager.fetch(input, init);
+      };
+    },
     identity: async () => snapshot(),
     remembered: async () => [],
+    retireIfOwnedBy: async () => ({ retired: false, reason: "no-grant" }),
     restore: async () => snapshot(),
     login: (hint, loginOptions) => {
       if (loginOptions?.signal?.aborted) return Promise.reject(loginOptions.signal.reason);

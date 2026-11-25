@@ -1,6 +1,13 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { createRegistry, IntegrationError } from "@jeswr/pod-connectors";
-import { describe, expect, it } from "vitest";
+import { createRegistry, fileAdapterById, IntegrationError } from "@jeswr/pod-connectors";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@jeswr/pod-connectors", async (original) => {
+  const actual = await original<typeof import("@jeswr/pod-connectors")>();
+  return { ...actual, fileAdapterById: vi.fn(actual.fileAdapterById) };
+});
+
 import {
   catalogue,
   destinationsFor,
@@ -17,10 +24,17 @@ import {
 } from "../src/apps/home/lib/connect/copy";
 
 describe("connector catalogue", () => {
+  it("retains the registry description when optional Spotify file metadata is unavailable", () => {
+    const registry = createRegistry();
+    vi.mocked(fileAdapterById).mockReturnValueOnce(undefined);
+    expect(catalogue(registry).find((entry) => entry.id === "spotify")?.whatYouGet).toBe(
+      registry.adapterById("spotify")?.metadata.whatYouGet,
+    );
+  });
   it("uses configured registry status, file metadata and the coming-soon flag", () => {
     const entries = catalogue(createRegistry());
     expect(entries.find((entry) => entry.id === "spotify")).toMatchObject({
-      status: "demo",
+      status: "import",
       tier: "A",
       domains: ["media"],
       logoId: "spotify",
@@ -30,10 +44,10 @@ describe("connector catalogue", () => {
       tier: "C",
       whatYouGet: "Your viewing history, saved as watch records in Media.",
     });
-    expect(entries.some((entry) => entry.tier === "B")).toBe(false);
+    expect(entries.some((entry) => entry.tier === "B" && entry.status !== "cli-only")).toBe(false);
     expect(
       catalogue(createRegistry(), true)
-        .filter((entry) => entry.tier === "B")
+        .filter((entry) => entry.tier === "B" && entry.status !== "cli-only")
         .every((entry) => entry.status === "soon"),
     ).toBe(true);
     expect(
@@ -69,9 +83,16 @@ describe("connector catalogue", () => {
       "body-health",
       "mobility",
     ]);
+    expect(entries.find((entry) => entry.id === "activity-files")).toMatchObject({
+      status: "import",
+      domains: ["body-health", "mobility"],
+    });
     expect(entries.find((entry) => entry.id === "bank-statements")?.domains).toEqual(["financial"]);
+    expect(entries.find((entry) => entry.id === "whoop")?.domains).toEqual(["body-health"]);
     expect(destinationsFor("netflix")).toEqual([{ domain: "media", label: "Media › Streaming" }]);
     expect(destinationsFor("future-adapter")).toEqual([{ domain: "other", label: "Other" }]);
+    expect(scopeLabel("read:recovery")).toBe("Recovery and daily vitals");
+    expect(scopeLabel("read:sleep")).toBe("Sleep and stages");
   });
   it("uses source-aware destinations for Discord and Steam, retaining GitHub in Work", () => {
     expect(destinationsFor("discord")).toEqual([
@@ -150,5 +171,14 @@ describe("plain connect copy", () => {
     expect(relativeSync("2026-11-01T10:00:00Z", now)).toBe("Synced 2 hours ago");
     expect(relativeSync("2026-10-31T12:00:00Z", now)).toBe("Synced 1 day ago");
     expect(relativeSync("2026-10-30T12:00:00Z", now)).toBe("Synced 2 days ago");
+  });
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+it("shows VeSync CLI instructions without the coming-soon flag", () => {
+  expect(catalogue(createRegistry()).find(({ id }) => id === "vesync")).toMatchObject({
+    status: "cli-only",
+    name: "Levoit (VeSync)",
+    howTo: expect.stringContaining("pod-connectors import vesync"),
   });
 });

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope, isWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
+import { inventoryPod } from "@jeswr/pod-export";
 import { Container, Group } from "@solid/object";
 import { DataFactory } from "n3";
 import { detectAccessSystem, readAccess } from "./access.js";
@@ -104,77 +105,56 @@ async function buildPlan(opts: {
   if (isWithinPodScope(source.root, destination) || isWithinPodScope(target.root, source.root))
     throw new TypeError("Source and target pods must be disjoint");
   const report: MigrationPlan["report"] = [];
-  const discovered: { resource: PlannedResource; acl?: string }[] = [];
-  const auxiliaries = new Set<string>();
-  const queue = [source.root];
-  const seen = new Set<string>();
-  while (queue.length) {
-    opts.signal?.throwIfAborted();
-    const url = queue.shift() as string;
-    seen.add(url);
-    if (seen.size > 10000) throw new RangeError("Pod has more than 10000 resources");
-    const head = requireOk(await source.http.head(url, { signal: opts.signal }), url);
-    const acl = aclLink(head, url, source.root);
-    for (const auxiliary of [...links(head, url, "acl"), ...links(head, url, "describedby")])
-      auxiliaries.add(auxiliary);
-    const resource: PlannedResource = {
-      sourceUrl: url,
-      targetUrl: assertWithinPodScope(target.root, destination + url.slice(source.root.length)),
-      kind: url.endsWith("/") ? "container" : "resource",
-    };
-    const contentType = head.headers.get("content-type");
-    if (contentType) resource.contentType = contentType;
-    const length = head.headers.get("content-length");
-    if (length !== null && Number.isSafeInteger(Number(length)) && Number(length) >= 0)
-      resource.size = Number(length);
-    discovered.push({ resource, acl });
-    if (resource.kind === "container") {
+  const aclUrls = new Map<string, string | undefined>();
+  const inventory = await inventoryPod({
+    root: source.root,
+    fetch: async (input, init) => {
+      // The shared inventory transport passes only checked primitive URL strings.
+      const url = input as string;
+      return requireOk(await source.http.head(url, { signal: init?.signal ?? undefined }), url);
+    },
+    signal: opts.signal,
+    maxDepth: Number.MAX_SAFE_INTEGER,
+    directChildren: true,
+    skipAuxiliaries: true,
+    failFast: true,
+    numericContentLength: true,
+    onHead: (head, url) => aclUrls.set(url, aclLink(head, url, source.root)),
+    readMembers: async (url) => {
       const dataset = await parse(
         requireOk(await source.http.get(url, { accept: "text/turtle", signal: opts.signal }), url),
         url,
         source.http,
         opts.signal,
       );
-      for (const member of new Container(url, dataset, DataFactory).contains) {
-        const child = assertWithinPodScope(source.root, member.id);
-        if (parent(child, source.root) !== url)
-          throw new TypeError("Container lists a non-child resource");
-        if (
-          /\.(acl|acr|meta)\/?$/i.test(decodeURIComponent(new URL(child).pathname)) ||
-          auxiliaries.has(child)
-        ) {
-          report.push(
-            reportItem(
-              "metadata-skipped",
-              child,
-              "Auxiliary access or description metadata is translated separately and never copied as content.",
-              ["acknowledge"],
-            ),
-          );
-        } else queue.push(child);
-      }
-    }
-    opts.onProgress?.({
-      phase: "crawl",
-      done: seen.size,
-      total: seen.size + queue.length,
-      current: url,
-    });
-  }
-  const isAuxiliary = (url: string) =>
-    [...auxiliaries].some(
-      (auxiliary) => url === auxiliary || (auxiliary.endsWith("/") && url.startsWith(auxiliary)),
-    );
-  for (const item of discovered.filter((item) => isAuxiliary(item.resource.sourceUrl)))
-    report.push(
-      reportItem(
-        "metadata-skipped",
-        item.resource.sourceUrl,
-        "Advertised auxiliary metadata is translated separately and never copied as content.",
-        ["acknowledge"],
+      return [...new Container(url, dataset, DataFactory).contains].map((member) => member.id);
+    },
+    onSkipAuxiliary: (url, advertised) =>
+      report.push(
+        reportItem(
+          "metadata-skipped",
+          url,
+          advertised
+            ? "Advertised auxiliary metadata is translated separately and never copied as content."
+            : "Auxiliary access or description metadata is translated separately and never copied as content.",
+          ["acknowledge"],
+        ),
       ),
-    );
-  const resources = discovered.filter((item) => !isAuxiliary(item.resource.sourceUrl));
+    onProgress: (progress) => opts.onProgress?.({ phase: "crawl", ...progress }),
+  });
+  const resources = inventory.resources.map((item) => {
+    const resource: PlannedResource = {
+      sourceUrl: item.url,
+      targetUrl: assertWithinPodScope(
+        target.root,
+        destination + item.url.slice(source.root.length),
+      ),
+      kind: item.kind === "container" ? "container" : "resource",
+    };
+    if (item.contentType) resource.contentType = item.contentType;
+    if (item.size !== undefined) resource.size = item.size;
+    return { resource, acl: aclUrls.get(item.url) };
+  });
   const sourceSystem = await detectAccessSystem(source, opts.signal);
   const detectedTargetSystem = await detectAccessSystem(target, opts.signal);
   // ACP dialect changes Control enforcement; RDF vocabulary cannot identify the server.

@@ -37,6 +37,7 @@ const sections = [
 const update = vi.fn();
 function Frame({
   initial = defaultShellPreferences,
+  hasSidebar = true,
   hasDetails = true,
   sidebarContent,
   detailsContent,
@@ -44,6 +45,7 @@ function Frame({
   controlledDetails,
 }: {
   initial?: ShellPreferences;
+  hasSidebar?: boolean;
   hasDetails?: boolean;
   sidebarContent?: ReactNode;
   detailsContent?: ReactNode;
@@ -62,12 +64,16 @@ function Frame({
         actions: <button type="button">Upload</button>,
         account: <button type="button">Account</button>,
       }}
-      sidebar={{
-        label: "Drive sections",
-        header: <h2>Drive</h2>,
-        footer: sidebarContent,
-        sections,
-      }}
+      sidebar={
+        hasSidebar
+          ? {
+              label: "Drive sections",
+              header: <h2>Drive</h2>,
+              footer: sidebarContent,
+              sections,
+            }
+          : null
+      }
       {...(hasDetails
         ? {
             details: {
@@ -125,6 +131,21 @@ afterEach(() => {
   cleanup();
   listeners.clear();
   vi.unstubAllGlobals();
+});
+
+it.each([true, false])("omits the sidebar and its shortcut with desktop = %s", (wide) => {
+  desktop = wide;
+  const { container } = render(
+    <Frame hasSidebar={false} initial={{ sidebarOpen: true, detailsOpen: false }} />,
+  );
+  expect(container.querySelector(".suite-sidebar-slot")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Toggle sidebar", hidden: true })).toBeNull();
+  expect(fireEvent.keyDown(document, { key: "[" })).toBe(true);
+  expect(update).not.toHaveBeenCalled();
+  expect(screen.queryByRole("dialog", { hidden: true })).toBeNull();
+
+  fireEvent.keyDown(document, { key: "]" });
+  expect(update).toHaveBeenCalledWith({ sidebarOpen: true, detailsOpen: true });
 });
 async function accessible() {
   const results = await axe.run(document.body, { rules: { "color-contrast": { enabled: false } } });

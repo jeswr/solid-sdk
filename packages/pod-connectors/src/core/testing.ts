@@ -9,8 +9,12 @@
  * preconditions — enough to exercise the real write path (writeResource,
  * type-index bootstrap, idempotent re-import) without any network.
  */
+import { serialize } from "@jeswr/rdf-serialize";
 import type { StorageClient } from "@jeswr/storage-client";
-import { Parser, Store } from "n3";
+import { NS } from "@jeswr/suite-vocab";
+import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
+import { Authorization } from "@solid/object";
+import { DataFactory, Parser, Store } from "n3";
 import { type FileImportAdapter, type ImportFile, runFileImport } from "./file-import.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createSourceAuth, type ImportReport, runImport } from "./import-runner.js";
@@ -22,6 +26,21 @@ import type { FixtureRoute, IntegrationAdapter } from "./types.js";
 export const TEST_POD_ROOT = "https://pod.test/alice/";
 export const TEST_WEBID = `${TEST_POD_ROOT}profile/card#me`;
 export const TEST_PROFILE_DOC = `${TEST_POD_ROOT}profile/card`;
+const ROOT_ACL = `${TEST_POD_ROOT}.acl`;
+const ACL = "http://www.w3.org/ns/auth/acl#";
+
+function fixtureOwnerAcl() {
+  const dataset = new Store();
+  const rule = new Authorization(DataFactory.namedNode(`${ROOT_ACL}#owner`), dataset, DataFactory);
+  rule.type.add(`${ACL}Authorization`);
+  rule.accessTo = TEST_POD_ROOT;
+  rule.default = TEST_POD_ROOT;
+  SetFrom.subjectPredicate(rule, `${ACL}agent`, NamedNodeAs.string, NamedNodeFrom.string).add(
+    TEST_WEBID,
+  );
+  for (const mode of ["Read", "Write", "Control"]) rule.mode.add(ACL + mode);
+  return serialize([...dataset]);
+}
 
 const PROFILE_TURTLE = `@prefix foaf: <http://xmlns.com/foaf/0.1/>.
 @prefix solid: <http://www.w3.org/ns/solid/terms#>.
@@ -86,6 +105,19 @@ export function createMemoryPod(): MemoryPod {
       const existing = resources.get(url);
 
       if (method === "GET" || method === "HEAD") {
+        const links = `<${url}.acl>; rel="acl"`;
+        if (url === ROOT_ACL && !existing)
+          return new Response(method === "HEAD" ? null : await fixtureOwnerAcl(), {
+            headers: { "content-type": "text/turtle", etag: '"owner-acl"' },
+          });
+        if (url === TEST_POD_ROOT && !existing)
+          return new Response(method === "HEAD" ? null : containerListing(url, pod.urls()), {
+            headers: {
+              "content-type": "text/turtle",
+              etag: '"root"',
+              link: `${links}, <${NS.LDP}BasicContainer>; rel="type", <http://www.w3.org/ns/pim/space#Storage>; rel="type"`,
+            },
+          });
         if (existing) {
           const body = existing.bytes ? (existing.bytes as Uint8Array<ArrayBuffer>) : existing.body;
           return new Response(method === "HEAD" ? null : body, {
@@ -93,6 +125,7 @@ export function createMemoryPod(): MemoryPod {
             headers: {
               "content-type": existing.contentType,
               etag: `"v${existing.version}"`,
+              link: links,
             },
           });
         }
@@ -101,9 +134,9 @@ export function createMemoryPod(): MemoryPod {
         if (url.endsWith("/")) {
           const listing = containerListing(url, [...resources.keys()]);
           if (listing) {
-            return new Response(listing, {
+            return new Response(method === "HEAD" ? null : listing, {
               status: 200,
-              headers: { "content-type": "text/turtle", etag: '"container"' },
+              headers: { "content-type": "text/turtle", etag: '"container"', link: links },
             });
           }
         }
@@ -140,8 +173,11 @@ export function createMemoryPod(): MemoryPod {
 
       if (method === "DELETE") {
         if (!existing) return new Response("Not found", { status: 404 });
+        const ifMatch = new Headers(init?.headers).get("if-match");
+        if (ifMatch && ifMatch !== `"v${existing.version}"`)
+          return new Response("Precondition failed", { status: 412 });
         resources.delete(url);
-        return new Response(null, { status: 205 });
+        return new Response(null, { status: 204 });
       }
 
       return new Response("Method not allowed", { status: 405 });
@@ -291,11 +327,14 @@ export function createStorageMemoryPod(): Promise<MemoryPod> {
 
 /** Keep legacy HTTP fault-injection fixtures available alongside the storage backend. */
 export function testPodWriter(pod: MemoryPod, adapterId: string) {
+  const ownerOnly = async () => true; // No other principal can access this fixture.
+  const privacy = { verifyPrivateDestination: ownerOnly, confirmPrivateWrite: ownerOnly };
   return pod.storage
     ? createStoragePodWriter({
         storage: pod.storage,
         container: new URL(`integrations/${adapterId}/`, TEST_POD_ROOT).href,
         webId: TEST_WEBID,
+        ...privacy,
         typeIndex: { profileDocumentUrl: TEST_PROFILE_DOC },
       })
     : createFetchPodWriter({
@@ -304,5 +343,6 @@ export function testPodWriter(pod: MemoryPod, adapterId: string) {
         profileDocumentUrl: TEST_PROFILE_DOC,
         podRoot: TEST_POD_ROOT,
         fetch: pod.fetch,
+        ...privacy,
       });
 }

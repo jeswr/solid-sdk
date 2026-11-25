@@ -17,6 +17,7 @@ import {
 } from "@jeswr/suite-ui/sign-in";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { NativeMigrationNotice } from "@/components/native-migration-notice";
 import { useSolidExtension } from "@/lib/session/extension-session";
 import { preloadAppFrame } from "@/shell/app-frame-loaders";
 import { useSuiteEnvironment } from "@/shell/environment";
@@ -134,6 +135,7 @@ function SignIn() {
   return (
     <>
       <h1 className="suite-sr-only">Sign in to Solid Suite</h1>
+      <NativeMigrationNotice />
       {adding && (
         <p role="status" className="shell-public-note">
           Adding another account — you stay signed in as {active.name}.

@@ -14,6 +14,7 @@ import {
 } from '../src/outbox.js';
 
 const root = 'https://pod.example/store/';
+const assigned = `${root}assigned`;
 const url = `${root}b`;
 const webId = 'https://pod.example/profile#me';
 const tag = 'app.policy';
@@ -26,13 +27,21 @@ function box() {
   return outbox;
 }
 function storage(protocol: StorageClient['protocol'] = 'solid') {
-  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(
-    async (_url, init) =>
-      new Response(null, {
-        status: init?.method === 'POST' || init?.method === 'PUT' ? 201 : 204,
-        headers: { etag: '"new"', location: `${root}assigned` },
-      }),
-  );
+  let createdIn: string | undefined;
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (input, init) => {
+    if (protocol === 'lws' && init?.method === 'POST') createdIn = String(input);
+    if (init?.method === 'HEAD' && String(input) === assigned && createdIn !== undefined)
+      return new Response(null, {
+        headers: {
+          etag: '"new"',
+          link: `<${createdIn}>; rel="up", <https://www.w3.org/ns/lws#DataResource>; rel="type"`,
+        },
+      });
+    return new Response(null, {
+      status: init?.method === 'POST' || init?.method === 'PUT' ? 201 : 204,
+      headers: { etag: '"new"', location: assigned },
+    });
+  });
   const client =
     protocol === 'lws' ? createLwsBackend({ root, fetch }) : createSolidBackend({ root, fetch });
   const calls = [
@@ -566,7 +575,14 @@ describe('canonical policy matching and delivery', () => {
       name: 'b-conflict-1000',
     });
     expect(matcher).toHaveBeenCalledWith({ op: 'create', url: target, container: root });
-    expect(client.fetch.mock.calls[0]?.[0]).toBe(target);
+    expect(client.fetch.mock.calls.map(([input, init]) => [init?.method, input])).toEqual(
+      protocol === 'solid'
+        ? [['PUT', target]]
+        : [
+            ['POST', target],
+            ['HEAD', assigned],
+          ],
+    );
     expect(outbox.pending()).toEqual([]);
   });
 
@@ -597,8 +613,10 @@ describe('canonical policy matching and delivery', () => {
       expect(reopened.pending()).toEqual([]);
     }
     expect(matcher).toHaveBeenCalledWith({ op: 'create', url: container, container });
-    expect(client.fetch).toHaveBeenCalledOnce();
-    expect(client.fetch.mock.calls[0]?.[0]).toBe(container);
+    expect(client.fetch.mock.calls.map(([input, init]) => [init?.method, input])).toEqual([
+      ['POST', container],
+      ['HEAD', assigned],
+    ]);
     expect(new Headers(client.fetch.mock.calls[0]?.[1]?.headers).get('slug')).toBe(
       encodeURIComponent(name),
     );

@@ -113,6 +113,9 @@ function PersonLabel({
 }
 
 export interface PeoplePickerProps {
+  /** Accessible input label when the picker selects groups or other named recipients. */
+  label?: string;
+  addLabel?: string;
   contacts: { people: readonly SharingPerson[]; state: SharingState; onRetry?: () => void };
   value: readonly SharingPerson[];
   onChange: (people: SharingPerson[]) => void;
@@ -122,6 +125,8 @@ export interface PeoplePickerProps {
 }
 
 export function PeoplePicker({
+  label = "Add people",
+  addLabel = "Add person",
   contacts,
   value,
   onChange,
@@ -205,7 +210,7 @@ export function PeoplePicker({
         />
       ))}
       <label className="su-label" htmlFor={`${id}-input`}>
-        Add people
+        {label}
       </label>
       {value.length > 0 && (
         <ul className="su-stack" aria-label="Selected people">
@@ -279,7 +284,7 @@ export function PeoplePicker({
           }}
         />
         <Button disabled={offline} onClick={addEntry}>
-          Add person
+          {addLabel}
         </Button>
       </div>
       <p className="su-muted" id={`${id}-help`}>

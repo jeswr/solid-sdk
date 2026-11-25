@@ -22,7 +22,7 @@ import { Resource } from "@solid/object/solid";
 import { DataFactory, Store } from "n3";
 import { StorageError, type StorageErrorCode } from "./errors.js";
 import { exactCreateSegment } from "./exact-create.js";
-import { scoped } from "./http.js";
+import { readTooLarge, scoped } from "./http.js";
 import {
   isWithin,
   listingTooLarge,
@@ -31,7 +31,7 @@ import {
   throwIfAborted,
   toBytes,
   validateKeepalive,
-  validateListingMaxBytes,
+  validateMaxBytes,
 } from "./internal.js";
 import { applyJsonPatch, type JsonPatchError } from "./json-patch.js";
 import {
@@ -42,6 +42,7 @@ import {
   TRIPLE_FORMATS,
   WRITABLE_RDF,
 } from "./rdf.js";
+import { DEFAULT_RDF_MAX_BYTES, rdfBody } from "./read.js";
 import { encodeResource, isTrashEndpoint, serviceUrl, trashCommand } from "./services.js";
 import type {
   CreateOptions,
@@ -87,10 +88,10 @@ export type { StorageClient } from "./types.js";
 const LDP = "http://www.w3.org/ns/ldp#";
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const IANA_REL = "http://www.iana.org/assignments/relation/";
+const RDF_READABLE: ReadonlySet<string> = new Set(SUPPORTED_RDF_MEDIA_TYPES);
 const LWS_CONTAINER = "https://www.w3.org/ns/lws#Container";
 const LWS_DATA_RESOURCE = "https://www.w3.org/ns/lws#DataResource";
 const LWS_SERVER_RELS = new Set(["linkset", "type", "up"]);
-const RDF_READABLE: ReadonlySet<string> = new Set(SUPPORTED_RDF_MEDIA_TYPES);
 const MAX_EMULATED_MOVE = 2_000;
 const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
 
@@ -672,7 +673,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
 
     async list(url, opts = {}) {
       begin("GET", url, opts.signal);
-      validateListingMaxBytes(opts.maxBytes);
+      validateMaxBytes(opts.maxBytes);
       return listPage(url, opts.cursor, opts.maxBytes, opts.signal);
     },
 
@@ -689,6 +690,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
 
     async read(url, opts = {}) {
       begin("GET", url, opts.signal);
+      validateMaxBytes(opts.maxBytes);
       const { node, page } = target("GET", url);
       const { bytes, contentType, next } = await representation(node, page);
       if (
@@ -708,20 +710,21 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         ) {
           throw fail("bad-request", "GET", url, 416, { message: "Range not satisfiable" });
         }
-        return readResult(
-          node,
-          206,
-          bytes.slice(start, Math.min(end, bytes.byteLength - 1) + 1),
-          contentType,
-          null,
-          url,
-        );
+        const stop = Math.min(end, bytes.byteLength - 1) + 1;
+        if (opts.maxBytes !== undefined && stop - start > opts.maxBytes)
+          throw readTooLarge(url, opts.maxBytes);
+        return readResult(node, 206, bytes.slice(start, stop), contentType, null, url);
       }
+      if (opts.maxBytes !== undefined && bytes.byteLength > opts.maxBytes)
+        throw readTooLarge(url, opts.maxBytes);
       return readResult(node, 200, bytes, contentType, next, url);
     },
 
     async readRdf(url, opts = {}): Promise<RdfReadResult> {
-      const result = await client.read(url, opts);
+      const result = await client.read(url, {
+        ...opts,
+        maxBytes: opts.maxBytes ?? DEFAULT_RDF_MAX_BYTES,
+      });
       const type = mediaType(result.contentType as string);
       if (type === null || !RDF_READABLE.has(type)) {
         throw fail("not-rdf", "GET", url, null, {
@@ -737,12 +740,8 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
           notModified: true,
         };
       }
-      try {
-        const dataset = await parseRdf(await result.text(), result.contentType, { baseIRI: url });
-        return { url, etag: result.etag, contentType: type, dataset };
-      } catch (cause) {
-        throw fail("not-rdf", "GET", url, null, { cause, message: `${url} is not valid ${type}` });
-      }
+      const { dataset } = await rdfBody(result, "not-rdf", opts.maxBytes, opts.signal);
+      return { url, etag: result.etag, contentType: type, dataset };
     },
 
     write: serial("PUT", async (url, body, opts) => {

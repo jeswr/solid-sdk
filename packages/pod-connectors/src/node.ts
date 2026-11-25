@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Node CLI runtime. Importing this entry point never starts a listener or command. */
 
 /** Run a file import using a host-supplied file and Pod writer. */
@@ -17,3 +18,10 @@ export type { LoopbackLoginOptions, NodeOAuthConfig } from "./node/loopback.js";
 export { authorizeLoopback } from "./node/loopback.js";
 export { createClientCredentialsFetch } from "./node/pod-auth.js";
 export { createStateStore } from "./node/state.js";
+export { FileVaultStore } from "./node/vault-store.js";
+export type { VeSyncAuthOptions, VeSyncCredentials } from "./node/vesync-auth.js";
+export {
+  createVeSyncSourceAuth,
+  hashVeSyncPassword,
+  readVeSyncCredentials,
+} from "./node/vesync-auth.js";

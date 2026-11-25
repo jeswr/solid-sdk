@@ -33,8 +33,12 @@ Missing linked indexes yield no locations; unreadable or invalid documents propa
 On a bare profile, registration creates `settings/privateTypeIndex.ttl`, types it as a TypeIndex
 and UnlistedDocument, links it from `settings/prefs.ttl`, then links preferences from the profile.
 Public registration creates a ListedDocument and links it directly from the profile. Existing
-preferences and unrelated RDF are retained. Existing default-path documents are adopted only when
-typed as TypeIndex. Bootstrap requires reported root Write and Control access. Only a confirmed 404 permits creation, using `storage.create`'s exact-name
+preferences and unrelated RDF are retained. Every existing index, including a linked or default-path index, must
+declare `solid:TypeIndex` on the document URL before registration or unregistration. Missing
+type identity returns `StorageError('conflict')`. The mutation path rejects auxiliary URLs,
+including ACL/ACR/metadata suffixes and targets advertised in inspected Link headers, with
+`StorageError('invalid-response')`. This applies to profile, preferences, and index documents.
+Discovery retains support for legacy untyped indexes. Bootstrap requires reported root Write and Control access. Only a confirmed 404 permits creation, using `storage.create`'s exact-name
 Solid PUT with `If-None-Match: *`. Edits require a strong observed ETag and `writeRdf` with `ifMatch`;
 no wildcard overwrite is used. Conflicts re-read/reconcile at most twice. An interrupted bootstrap
 may leave an unlinked index; repeating registration reuses it. No-op changes avoid writes.
@@ -44,8 +48,10 @@ private pointers identify distinct indexes, unregister rejects with `conflict` b
 It does not delete documents/links.
 
 All document and result URLs must be HTTP(S), credential-free, and inside the selected storage.
-Foreign profile documents are unsupported by this storage-scoped API. Reads drop unsafe linked
-URLs; mutations reject them. Data discovery grants no access. Bootstrap inherits the destination
+On Solid, `createTypeIndex` throws `StorageError('scope')` synchronously when the profile is
+outside the selected storage. Construct it inside your optional discovery/registration handler
+and catch that code to use your conventional app container. Authenticated scope stays on the
+selected storage. Discovery drops unsafe linked URLs and mutations reject them. Data discovery grants no access. Bootstrap inherits the destination
 container's access controls: callers must provision owner-only settings/preferences/private-index
 access through their access layer before registration. The UnlistedDocument type itself is not
 an ACL. This package does not modify access controls or make the profile private.
@@ -100,8 +106,7 @@ The profile header documents the generator gaps and projection choices:
   Untyped profile/preferences subjects use the generated Profile wrapper directly; no Agent
   type is required or added. ListedDocument/UnlistedDocument remain extra type markers.
 
-Builds copy the generated JavaScript and declarations into `dist/generated/`. The original
-140 tests remain unchanged. `test/codegen.test.ts` regenerates every artifact into a temporary
+Builds copy the generated JavaScript and declarations into `dist/generated/`. The mutation fixtures declare the document type when exercising writes. `test/codegen.test.ts` regenerates every artifact into a temporary
 directory and compares bytes, including the lock. `test/compatibility.test.ts` pins tolerant
 named/blank subjects, raw cardinality checks, graph isolation, lexical removal, untyped profiles,
 valid Turtle bytes, and the divergences below. Coverage remains 100% for statements, branches,

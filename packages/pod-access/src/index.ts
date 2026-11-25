@@ -21,6 +21,11 @@ export {
   unionPolicies,
 } from "./policy.js";
 export {
+  createOwnerOnlyDestinationChecks,
+  createOwnerOnlyDestinationVerifier,
+  type MutationGuard,
+} from "./private-destination.js";
+export {
   ACL,
   ACP,
   FOAF,

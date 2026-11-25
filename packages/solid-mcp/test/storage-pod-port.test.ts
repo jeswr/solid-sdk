@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RdfLimitError } from "../src/bounded-rdf.js";
 import { MAX_CONTENT_BYTES } from "../src/content.js";
 import { fetchDocument } from "../src/fetch.js";
-import { listContainer, readRdf, search } from "../src/pod.js";
+import { listContainer, readRdf, search, writeResource } from "../src/pod.js";
 import { createSolidMcpServer } from "../src/server.js";
 import { createStoragePodPort } from "../src/storage-pod-port.js";
 
@@ -34,12 +34,34 @@ function fixture(protocol: "solid" | "lws" = "solid", readOnly = false) {
 }
 
 describe("storage-client PodPort", () => {
+  it("refuses advertised access-control writes through the complete storage output path", async () => {
+    const { pod, storage, fetch } = fixture();
+    const create = vi.spyOn(storage, "create");
+    const write = vi.spyOn(storage, "write");
+    fetch.mockImplementation(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      return new Response(null, {
+        status: 404,
+        headers: { link: url === FILE ? `<${FILE}>; rel="linkset"` : `<${url}.acl>; rel="acl"` },
+      });
+    });
+    await expect(writeResource(pod, FILE, "x", "text/plain")).rejects.toThrow(
+      /access-control|description/,
+    );
+    expect(create).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+  });
+
   it.each([200, 404])("retains WAC HEAD discovery on HTTP %s", async (status) => {
     const { pod, fetch } = fixture();
     fetch.mockResolvedValueOnce(
       new Response(null, { status, headers: { link: '<policy>; rel="acl"' } }),
     );
-    expect(await pod.head?.(FILE)).toEqual({ acl: `${ROOT}policy` });
+    expect(await pod.head?.(FILE)).toEqual({
+      acl: `${ROOT}policy`,
+      auxiliaryResources: [`${ROOT}policy`],
+      exists: status !== 404,
+    });
     expect(createPodClient).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledWith(
       FILE,
@@ -55,6 +77,25 @@ describe("storage-client PodPort", () => {
     const pod = createStoragePodPort({ fetch, podRoot: ROOT });
     await expect(pod.head?.(FILE)).rejects.toThrow("Discovery unavailable");
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("preserves a successful write without an ETag", async () => {
+    const { pod, storage } = fixture();
+    const write = vi.spyOn(storage, "write").mockResolvedValueOnce({
+      url: FILE,
+      created: false,
+      etag: null,
+    });
+    const body = new Uint8Array([1]);
+    await expect(
+      pod.write(FILE, body, "application/octet-stream", { ifMatch: '"old"' }),
+    ).resolves.toEqual({
+      etag: undefined,
+    });
+    expect(write).toHaveBeenCalledExactlyOnceWith(FILE, body, {
+      contentType: "application/octet-stream",
+      ifMatch: '"old"',
+    });
   });
 
   it.each([
@@ -205,7 +246,11 @@ it.each([
   const result = await fetchDocument(pod, FILE);
   const binary = contentType === "application/octet-stream";
   expect(result.text).toBe(contentType === "text/plain" ? "x".repeat(MAX_CONTENT_BYTES) : "");
-  expect(result.metadata).toEqual({ contentType, etag: '"v1"', truncated: !binary });
+  expect(result.metadata).toEqual({
+    contentType,
+    ...(binary ? { etag: '"v1"' } : {}),
+    truncated: !binary,
+  });
   expect(downloaded).toBeLessThanOrEqual(binary ? 0 : MAX_CONTENT_BYTES + 65536);
   expect(cancel).toHaveBeenCalledOnce();
 });
@@ -561,7 +606,7 @@ it("retains absent metadata and drops foreign listing entries", async () => {
   expect(await pod.list(ROOT)).toEqual([{ url: `${ROOT}folder/`, isContainer: true, type: [] }]);
 });
 
-it("preserves missing media type/validators and unconditional write semantics", async () => {
+it("preserves missing read metadata and refuses writes without a validator", async () => {
   const { createSolidBackend } = await import("@jeswr/storage-client/solid");
   const calls: Request[] = [];
   const fetch: typeof globalThis.fetch = async (input, init) => {
@@ -577,10 +622,10 @@ it("preserves missing media type/validators and unconditional write semantics", 
   );
   const pod = createStoragePodPort({ fetch, podRoot: ROOT, readOnly: false });
   expect(await pod.read(FILE)).toMatchObject({ contentType: "", etag: undefined });
-  expect(await pod.write(FILE, new Uint8Array([1]), "application/octet-stream", {})).toEqual({
-    etag: undefined,
-  });
-  expect(calls.at(-1)?.headers.has("if-match")).toBe(false);
+  await expect(
+    pod.write(FILE, new Uint8Array([1]), "application/octet-stream", {}),
+  ).rejects.toThrow(/ETag/);
+  expect(calls.some((request) => request.method === "PUT")).toBe(false);
 });
 
 it.each([

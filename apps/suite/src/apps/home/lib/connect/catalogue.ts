@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { type createRegistry, fileAdapterById } from "@jeswr/pod-connectors";
 import { NS } from "@jeswr/suite-vocab";
@@ -9,8 +10,9 @@ export interface ConnectorEntry {
   whatYouGet: string;
   domains: string[];
   tier: "A" | "B" | "C";
-  status: "connect" | "demo" | "import" | "soon";
+  status: "connect" | "demo" | "import" | "soon" | "cli-only";
   logoId: string;
+  howTo?: string;
 }
 
 // IntegrationMetadata exposes categories, not classes. Keep this host-side bridge
@@ -20,6 +22,7 @@ const classes: Readonly<Record<string, readonly string[]>> = {
   spotify: schema("MusicRecording", "MusicPlaylist", "ListenAction"),
   github: [...schema("SoftwareSourceCode"), `${NS.FOAF}OnlineAccount`],
   strava: schema("ExerciseAction", "TravelAction"),
+  "activity-files": schema("ExerciseAction", "TravelAction"),
   reddit: [...schema("SocialMediaPosting"), `${NS.FOAF}Group`],
   discord: [`${NS.FOAF}OnlineAccount`, `${NS.FOAF}Group`],
   twitch: schema("WatchAction"),
@@ -33,6 +36,7 @@ const classes: Readonly<Record<string, readonly string[]>> = {
   youtube: schema("VideoObject", "MusicPlaylist"),
   fitbit: schema("ExerciseAction"),
   garmin: schema("ExerciseAction", "TravelAction"),
+  whoop: [...schema("ExerciseAction"), `${NS.HEALTH}Observation`, `${NS.HEALTH}VitalSign`],
   instagram: schema("ImageObject", "SocialMediaPosting"),
   facebook: [...schema("SocialMediaPosting"), `${NS.FOAF}Group`],
   tiktok: schema("VideoObject", "SocialMediaPosting"),
@@ -85,25 +89,33 @@ export function catalogue(
 ): ConnectorEntry[] {
   return registry
     .allCatalogEntries()
-    .filter((entry) => entry.tier !== "B" || showComingSoon)
+    .filter((entry) => entry.cliOnly || entry.tier !== "B" || showComingSoon)
     .map((entry) => {
       const metadata = entry.tier === "C" ? (fileAdapterById(entry.id)?.metadata ?? entry) : entry;
       const status = registry.statusOf(entry);
       return {
         id: metadata.id,
         name: metadata.name,
-        whatYouGet: metadata.whatYouGet,
+        whatYouGet:
+          metadata.id === "spotify" && status === "demo"
+            ? (fileAdapterById("spotify")?.metadata.whatYouGet ?? metadata.whatYouGet)
+            : metadata.whatYouGet,
         domains: [...new Set(destinationsFor(metadata.id).map(({ domain }) => domain))],
         tier: metadata.tier,
         status:
-          status === "live"
-            ? "connect"
-            : status === "demo"
-              ? "demo"
-              : status === "export-file"
-                ? "import"
-                : "soon",
+          status === "cli-only"
+            ? "cli-only"
+            : status === "live"
+              ? "connect"
+              : status === "demo"
+                ? metadata.id === "spotify"
+                  ? "import"
+                  : "demo"
+                : status === "export-file"
+                  ? "import"
+                  : "soon",
         logoId: metadata.id,
+        ...(metadata.cliOnly ? { howTo: metadata.requirements.join(" ") } : {}),
       };
     });
 }

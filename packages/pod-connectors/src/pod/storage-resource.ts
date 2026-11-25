@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { serialize } from "@jeswr/rdf-serialize";
-import { type StorageClient, StorageError } from "@jeswr/storage-client";
+import { type StorageClient, StorageError, type WriteResult } from "@jeswr/storage-client";
 import type { DatasetCore } from "@rdfjs/types";
 import { strongEtag } from "../core/pod-writer-policy.js";
-import type { WriteConditions } from "../core/types.js";
+import type { MutationGuard, WriteConditions } from "../core/types.js";
 import { VOCAB_PREFIXES } from "../core/vocab.js";
 
 export function missingResource(error: unknown): boolean {
@@ -17,12 +18,13 @@ export async function createStorageResource(
   body: string | Uint8Array | Blob,
   contentType: string,
   signal?: AbortSignal,
-): Promise<void> {
+): Promise<WriteResult> {
   signal?.throwIfAborted();
   const parent = new URL(".", url).href;
   try {
     const result = await storage.create(parent, body, { exactUrl: url, contentType, signal });
     if (result.url !== url) throw new TypeError("Storage changed the connector resource URL.");
+    return result;
   } catch (error) {
     // Solid maps an occupied exact name to conflict; the writer preserves its HTTP precondition.
     if (error instanceof StorageError && error.code === "conflict")
@@ -44,22 +46,37 @@ export async function writeStorageRdf(
   conditions: WriteConditions,
   signal?: AbortSignal,
   prefixes: Record<string, string> = { ...VOCAB_PREFIXES },
-): Promise<void> {
+  finishMutation = false,
+  guard?: MutationGuard,
+): Promise<WriteResult> {
   signal?.throwIfAborted();
-  if (conditions.ifMatch !== undefined) {
-    await storage.writeRdf(url, dataset, {
+  if (conditions.ifMatch !== undefined && !finishMutation && !guard) {
+    return storage.writeRdf(url, dataset, {
       ifMatch: strongEtag(conditions.ifMatch, "storage", url),
       prefixes,
       signal,
     });
-  } else if (conditions.ifNoneMatch === "*") {
-    const quads = [...dataset];
-    if (quads.some((quad) => quad.graph.termType !== "DefaultGraph"))
-      throw new TypeError("Turtle cannot carry named graphs.");
-    const body = await serialize(quads, {
-      format: "text/turtle",
-      prefixes,
+  }
+  if (conditions.ifMatch === undefined && conditions.ifNoneMatch !== "*")
+    throw new TypeError("A conditional RDF write is required.");
+  const quads = [...dataset];
+  if (quads.some((quad) => quad.graph.termType !== "DefaultGraph"))
+    throw new TypeError("Turtle cannot carry named graphs.");
+  const body = await serialize(quads, { format: "text/turtle", prefixes });
+  signal?.throwIfAborted();
+  const refused = guard?.();
+  if (refused) return refused;
+  if (conditions.ifMatch !== undefined)
+    return storage.write(url, body, {
+      contentType: "text/turtle",
+      ifMatch: strongEtag(conditions.ifMatch, "storage", url),
+      ...(finishMutation ? {} : { signal }),
     });
-    await createStorageResource(storage, url, body, "text/turtle", signal);
-  } else throw new TypeError("A conditional RDF write is required.");
+  return createStorageResource(
+    storage,
+    url,
+    body,
+    "text/turtle",
+    finishMutation ? undefined : signal,
+  );
 }

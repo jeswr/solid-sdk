@@ -16,7 +16,6 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/welcome/walkthrough", () => ({ WalkthroughDock: () => null }));
 
-import { AppLauncher, defaultRailPins, RailPreferencesProvider } from "@jeswr/suite-ui";
 import { NavigationFixture } from "../src/app/dev/components/navigation-fixture";
 import { SuiteFrame } from "../src/components/interim-shell/suite-frame";
 import { SuiteEnvironmentContext } from "../src/shell/environment";
@@ -41,26 +40,13 @@ it.each([
   vi.stubEnv("NEXT_PUBLIC_SUITE_TARGET", target);
   vi.stubEnv("NEXT_PUBLIC_SHOW_BACKLOG_APPS", flag);
   const env = parseSuiteEnv({ NEXT_PUBLIC_SHOW_BACKLOG_APPS: flag });
-  const apps = visibleApps(env.NEXT_PUBLIC_SHOW_BACKLOG_APPS);
   render(
     h(SuiteEnvironmentContext.Provider, {
       value: env,
       children: h(SuiteFrame, {
         app: "drive",
         sidebar: null,
-        children: h(RailPreferencesProvider, {
-          value: {
-            value: { pinned: defaultRailPins },
-            update: vi.fn(),
-            status: "ready",
-            retry: vi.fn(),
-          },
-          children: h(AppLauncher, {
-            currentApp: "drive",
-            apps,
-            showBacklog: env.NEXT_PUBLIC_SHOW_BACKLOG_APPS,
-          }),
-        }),
+        children: null,
       }),
     }),
   );
@@ -68,8 +54,16 @@ it.each([
     name: link.textContent,
     href: link.getAttribute("href"),
   }));
-  fireEvent.click(screen.getByRole("button", { name: "Apps" }));
+  const tabs = document.querySelector<HTMLElement>(".suite-bottom-tabs");
+  if (!tabs) throw new Error("Missing mobile app tabs");
+  expect(
+    within(tabs)
+      .getAllByRole("link")
+      .map((link) => link.getAttribute("href")),
+  ).toEqual(["/home", "/drive", "/docs", "/tasks"]);
+  fireEvent.click(within(tabs).getByRole("button", { name: "More apps" }));
   const launcher = await screen.findByRole("dialog", { name: "Apps" });
+  expect(within(launcher).queryByRole("button", { name: "Customise rail" })).toBeNull();
   const links = within(launcher).getAllByRole("link", { hidden: true });
   expect(
     links.map((link) => ({ name: link.textContent, href: link.getAttribute("href") })),

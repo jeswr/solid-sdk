@@ -1,0 +1,43 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "name": "@jeswr/suite-groups",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pod-backed shareable groups and Family orchestration.",
+  "license": "MIT",
+  "securityCritical": true,
+  "sideEffects": false,
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "lint": "biome check .",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@jeswr/pod-access": "workspace:*",
+    "@jeswr/solid-task-model": "workspace:*",
+    "@jeswr/storage-client": "workspace:*",
+    "n3": "2.0.3",
+    "@rdfjs/wrapper": "0.34.0",
+    "@solid/object": "0.6.0"
+  },
+  "devDependencies": {
+    "@types/n3": "1.26.1",
+    "@vitest/coverage-v8": "4.1.10",
+    "@biomejs/biome": "2.5.3",
+    "@types/node": "25.9.5",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10",
+    "@jeswr/fetch-rdf": "workspace:*"
+  }
+}

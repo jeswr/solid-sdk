@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";

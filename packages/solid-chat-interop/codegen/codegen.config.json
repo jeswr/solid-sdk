@@ -1,0 +1,24 @@
+{
+  "shapesBase": "https://jeswr.org/ns/pod-chat/shapes#",
+  "prefixes": {
+    "as": "https://www.w3.org/ns/activitystreams#",
+    "dct": "http://purl.org/dc/terms/",
+    "schema": "http://schema.org/",
+    "prov": "http://www.w3.org/ns/prov#",
+    "wf": "http://www.w3.org/2005/01/wf/flow#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "targetClass": "https://www.w3.org/ns/activitystreams#Note",
+      "name": "Message",
+      "subject": { "convention": "self" }
+    },
+    {
+      "targetClass": "https://www.w3.org/ns/activitystreams#Collection",
+      "name": "Conversation",
+      "subject": { "convention": "self" }
+    }
+  ]
+}

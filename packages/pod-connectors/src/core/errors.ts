@@ -30,6 +30,7 @@ export type AuthFailureReason =
   | "popup-blocked"
   | "cancelled" // user closed the popup / denied the grant
   | "state-mismatch" // possible CSRF — always surfaced, never retried silently
+  | "reauthorise" // refresh credential revoked/expired; reconnect explicitly
   | "exchange-failed"; // token endpoint said no
 
 /** The OAuth dance failed before we ever had a token. */
@@ -44,6 +45,18 @@ export class IntegrationAuthError extends IntegrationError {
     super(adapterId, message ?? `Authorization failed (${reason}).`, options);
     this.name = "IntegrationAuthError";
     this.reason = reason;
+  }
+}
+
+/**
+ * A saved refresh credential exists but cannot be decrypted or validated (for example after a
+ * vault key rotation). `reason` stays `reauthorise`; a fresh code exchange replaces the record
+ * without reading it, so interactive hosts may start login instead of stopping.
+ */
+export class UnreadableCredentialError extends IntegrationAuthError {
+  constructor(adapterId: string) {
+    super(adapterId, "reauthorise", "Reconnect this source account.");
+    this.name = "UnreadableCredentialError";
   }
 }
 
@@ -62,6 +75,33 @@ export class IntegrationSyncError extends IntegrationError {
     this.name = "IntegrationSyncError";
     this.url = options?.url;
     this.status = options?.status;
+  }
+}
+
+export class PrivateDestinationError extends IntegrationSyncError {
+  readonly phase: "before-write" | "after-write";
+  readonly removed?: boolean;
+
+  constructor(adapterId: string, written?: { url: string; removed: boolean }) {
+    super(
+      adapterId,
+      written
+        ? `A file was written to your pod and may be visible to other people. ${written.removed ? "The file was removed." : "Removal of the file could not be confirmed."}`
+        : "Could not verify an owner-private import destination.",
+      written,
+    );
+    this.name = "PrivateDestinationError";
+    this.phase = written ? "after-write" : "before-write";
+    this.removed = written?.removed;
+  }
+}
+
+// AUTHORED-BY Claude Opus 5.5
+/** The Pod cannot support a safe conditional update (no strong ETag); retrying cannot help. */
+export class PreconditionUnsupportedError extends IntegrationSyncError {
+  constructor(adapterId: string, message: string) {
+    super(adapterId, message);
+    this.name = "PreconditionUnsupportedError";
   }
 }
 

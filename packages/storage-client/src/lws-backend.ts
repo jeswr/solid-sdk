@@ -13,7 +13,7 @@ import {
   type ReadShape,
   scoped,
 } from "./http.js";
-import { listingTooLarge, paginate, validateListingMaxBytes } from "./internal.js";
+import { listingTooLarge, paginate, validateMaxBytes } from "./internal.js";
 import { lwsWrites } from "./lws-write.js";
 import {
   acceptReadStatus,
@@ -236,7 +236,7 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
   // Container identifiers may be slashless; validate the representation rather than URL shape.
   // Also used by recursive deletion, after HEAD confirms a scoped target is a container.
   const list: StorageClient["list"] = async (container, opts = {}) => {
-    validateListingMaxBytes(opts.maxBytes);
+    validateMaxBytes(opts.maxBytes);
     const result = await get(
       opts.cursor === undefined ? container : opts.cursor.url,
       { Accept: LIST_ACCEPT },

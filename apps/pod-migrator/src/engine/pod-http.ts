@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
+import { createPodFetch } from "@jeswr/pod-export";
 import { ResourceReadError } from "./resource-body.js";
 import type { PodHttp } from "./types.js";
 
@@ -23,26 +24,11 @@ export function createPodHttp(opts: {
       throw new TypeError("A plain pod resource URL is required");
     return assertWithinPodScope(root, url);
   }
+  const transport = createPodFetch({ root, fetch: opts.fetch, canonical: checked });
   async function send(url: string, method: string, init: RequestInit): Promise<Response> {
     const target = checked(url);
     try {
-      const response = await opts.fetch(target, {
-        ...init,
-        method,
-        redirect: "manual",
-        credentials: "omit",
-      });
-      if (
-        response.type === "opaqueredirect" ||
-        response.redirected ||
-        (response.status >= 300 && response.status < 400)
-      )
-        throw new TypeError("Pod redirects are refused");
-      if (response.url && checked(response.url) !== target)
-        throw new TypeError("Unexpected response URL");
-      const location = response.headers.get("location");
-      if (location) checked(new URL(location, target).href);
-      return response;
+      return await transport(target, { ...init, method, credentials: "omit" });
     } catch (error) {
       if (method === "GET" || method === "HEAD")
         throw new ResourceReadError(

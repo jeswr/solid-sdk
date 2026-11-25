@@ -4,9 +4,12 @@
 import { Blob as NodeBlob } from "node:buffer";
 import { createRequire } from "node:module";
 import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
+import { getSchema, type JSONContent } from "@tiptap/react";
+import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs";
 import { rowExportJson } from "../src/apps/docs/editor/export-document";
+import { baseExtensions } from "../src/apps/docs/editor/extensions";
 import { deleteDocument } from "../src/apps/docs/editor/operations";
 import { DocumentPersistence } from "../src/apps/docs/editor/persistence";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
@@ -72,6 +75,11 @@ vi.mock("y-indexeddb", () => ({
     }
     mirrors.delete(name);
   },
+}));
+const { mentionSaved } = vi.hoisted(() => ({ mentionSaved: vi.fn(async () => {}) }));
+vi.mock("@jeswr/suite-sdk/chips", async (original) => ({
+  ...(await original<object>()),
+  notifySavedChips: mentionSaved,
 }));
 const json = (text: string) => ({
   type: "doc",
@@ -866,4 +874,57 @@ it("keeps the offline banner state while a background reconnect waits for the br
   await runtime.reconnect();
   expect(runtime.online).toBe(true);
   expect(runtime.stored?.data.body).toBe("<p>Still offline</p>");
+});
+
+it("notifies only locally added people after save, excluding loaded/imported/remote chips and typo edits", async () => {
+  const { runtime, session } = await fixture();
+  runtimes.push(runtime);
+  await runtime.open();
+  const bob = { iri: "https://bob.example/#me", label: "Bob", kind: "person" };
+  const cat = { iri: "https://cat.example/#me", label: "Cat", kind: "person" };
+  const edit = (refs: (typeof bob)[], local: boolean, text = "Private body") => {
+    const content: JSONContent = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text }, ...refs.map((attrs) => ({ type: "chip", attrs }))],
+        },
+      ],
+    };
+    const seed = prosemirrorJSONToYDoc(getSchema(baseExtensions(session.fetch)), content);
+    const fragment = runtime.doc.getXmlFragment("prosemirror");
+    runtime.doc.transact(() => {
+      fragment.delete(0, fragment.length);
+      applyUpdate(runtime.doc, encodeStateAsUpdate(seed));
+    });
+    seed.destroy();
+    runtime.change(
+      `<p>${text}${refs.map((ref) => `<a href="${ref.iri}" data-chip data-chip-kind="person" data-chip-label="${ref.label}">${ref.label}</a>`).join("")}</p>`,
+      content,
+      local,
+    );
+  };
+  const recipients = () =>
+    mentionSaved.mock.calls.flatMap(
+      (call) => (call as unknown as [unknown, unknown, unknown, (typeof bob)[]])[3],
+    );
+  mentionSaved.mockClear();
+  edit([bob], false);
+  await runtime.flush();
+  expect(recipients()).toEqual([]);
+  edit([bob], true, "Fixed a private typo");
+  await runtime.flush();
+  expect(recipients()).toEqual([]);
+  edit([bob, cat], true);
+  await runtime.flush();
+  expect(recipients()).toEqual([cat]);
+  expect(mentionSaved).toHaveBeenLastCalledWith(
+    session,
+    runtime.stored?.url,
+    [],
+    [cat],
+    runtime.stored?.data.title,
+  );
+  expect(mentionSaved.mock.lastCall).not.toContain("Private body");
 });

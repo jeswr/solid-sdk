@@ -50,6 +50,7 @@ export {
   previewKind,
 } from "./components/preview-pane.js";
 export * from "./components/render-async.js";
+export { SafeMarkdown, type SafeMarkdownProps } from "./components/safe-markdown.js";
 export {
   type SurfaceError,
   type SurfaceState,
@@ -162,6 +163,11 @@ export {
 } from "./sharing/role-select.js";
 export type { SharingError, SharingState } from "./sharing/state.js";
 export * from "./sync/index.js";
+export {
+  TemplateGallery,
+  type TemplateGalleryItem,
+  type TemplateGalleryProps,
+} from "./templates/template-gallery.js";
 export type { ProjectColour, SuiteToken, TokenName } from "./tokens.js";
 export { PROJECT_COLOURS, tokens } from "./tokens.js";
 export {

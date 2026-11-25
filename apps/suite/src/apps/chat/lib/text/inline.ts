@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { textChips } from "@jeswr/suite-sdk/chips";
 import { EMOJI_SHORTCODES } from "./emoji";
 import { parseAutolink, trimLinkEnd } from "./links";
 import type { InlineNode, TextOptions } from "./types";
@@ -204,6 +205,12 @@ function inline(
     }
     const boundary = offset === 0 || !/[\w@]/.test(source.charAt(offset - 1));
     if (boundary) {
+      const chip = rest.startsWith("@[") ? textChips(rest.slice(0, 8192))[0] : undefined;
+      if (chip?.from === 0) {
+        nodes.push({ type: "chip", ref: chip.ref });
+        offset += chip.to;
+        continue;
+      }
       const { explicit, handle: mention } =
         rest.charAt(0) === "@" ? scanMention(rest, budget) : { explicit: null, handle: null };
       if (explicit) {

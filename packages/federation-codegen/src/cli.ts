@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The Mode-A codegen CLI (design §3.1): `federation-codegen gen` runs the pipeline
  * in-repo and writes the artifacts into a committed, diffable output directory,
@@ -100,6 +101,12 @@ function run(argv: string[]): void {
     );
   }
 
+  // A committed manifest pins concept-enum strictness across regenerations.
+  try {
+    input.previousManifest = readFileSync(join(args.out, "model.json"), "utf8");
+  } catch {
+    // First generation: nothing to compare against.
+  }
   const result = generateModel(input);
   mkdirSync(args.out, { recursive: true });
   for (const [name, content] of Object.entries(result.artifacts)) {

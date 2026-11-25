@@ -1,10 +1,13 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import {
   createSourceAuth,
   fileAdapterById,
   type ImportProgress,
   type ImportReport,
+  PrivateDestinationError,
   runFileImport,
   runImport,
   type SourceAuth,
@@ -28,8 +31,16 @@ import {
 import type { DataCategory } from "../../lib/model/domains";
 import { useConnectors } from "../../state/connectors";
 import { useHomeSession } from "../home-app";
+import {
+  BANK_PROBLEM_ID,
+  BANK_STATEMENTS_ID,
+  BankImportOptions,
+  bankChoiceProblem,
+  bankStatementsAdapter,
+  DEFAULT_BANK_CHOICE,
+} from "./bank-options";
 import { domainForWrittenDocument } from "./completion";
-import { entries, registry } from "./config";
+import { entries, registry, spotifyAdapterFor } from "./config";
 import {
   createImportWriter,
   fetchWithSignal,
@@ -41,6 +52,7 @@ import {
 import { login, sourceFetch } from "./oauth-login";
 import { requiredScopesFor, withRequiredScopes, withSelectedScopes } from "./scopes";
 import { ConnectorLogo, StatusBadge } from "./shared";
+import { SpotifyClientSettings } from "./spotify-client";
 
 /** Abort reason when the connection drops: the user did not cancel. */
 class WentOffline extends Error {
@@ -51,20 +63,34 @@ class WentOffline extends Error {
 }
 
 export function ConnectFlow({ service }: { service: string }) {
+  const session = useHomeSession();
+  const [scope, setScope] = useState({ session, generation: 0 });
+  if (scope.session !== session) setScope({ session, generation: scope.generation + 1 });
   // The server route has already validated the id against this same catalogue.
   const entry = entries.find((candidate) => candidate.id === service) as ConnectorEntry;
-  return <ServiceFlow key={service} entry={entry} />;
+  return <ServiceFlow key={`${service}:${scope.generation}`} entry={entry} />;
 }
 
 function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   const session = useHomeSession();
   const [, update] = useConnectors(session.webId);
   const online = useOnline();
-  const adapter = registry.adapterById(entry.id);
+  const [personalClientId, setPersonalClientId] = useState("");
+  const spotify = entry.id === "spotify";
+  const [fileMode, setFileMode] = useState(
+    entry.tier === "C" || (spotify && !registry.adapterById("spotify")?.oauth?.clientId),
+  );
+  const adapter = spotify ? spotifyAdapterFor(personalClientId) : registry.adapterById(entry.id);
   const fileAdapter = fileAdapterById(entry.id);
-  const metadata = entry.tier === "C" ? fileAdapter?.metadata : adapter?.metadata;
-  const scopes = metadata?.scopes ?? [];
-  const [selected, setSelected] = useState<readonly string[]>(scopes);
+  const bank = entry.id === BANK_STATEMENTS_ID && !!fileAdapter;
+  // The bank format and account label the user chose for the next file import.
+  const [bankChoice, setBankChoice] = useState(DEFAULT_BANK_CHOICE);
+  const bankProblem = bank ? bankChoiceProblem(bankChoice) : undefined;
+  const metadata = fileMode ? fileAdapter?.metadata : adapter?.metadata;
+  const scopes = fileMode ? [] : (metadata?.scopes ?? []);
+  const [selected, setSelected] = useState<readonly string[]>(
+    adapter?.metadata.scopes ?? metadata?.scopes ?? [],
+  );
   const required = requiredScopesFor(entry.id);
   const selectedScopes = withRequiredScopes(entry.id, selected);
   const [step, setStep] = useState(1);
@@ -92,8 +118,13 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   const page = useRef<HTMLDivElement>(null);
   const wasOnline = useRef(online);
   const view = useRef(`${step}:${phase}`);
-  const mode: ConnectionMode =
-    entry.status === "demo" ? "demo" : entry.tier === "C" ? "file" : "live";
+  const mode: ConnectionMode = fileMode
+    ? "file"
+    : spotify
+      ? "live"
+      : entry.status === "demo"
+        ? "demo"
+        : "live";
   const destinations = destinationsFor(entry.id);
 
   useEffect(
@@ -119,7 +150,9 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   }, [step, phase]);
 
   async function start(file?: File) {
-    if (running.current || !navigator.onLine) return;
+    if (running.current || !navigator.onLine || bankProblem) return;
+    // Bank statements take the chosen format and label; Auto-detect is the default adapter.
+    const importAdapter = bank && file ? bankStatementsAdapter(bankChoice) : fileAdapter;
     running.current = true;
     const abort = new AbortController();
     controller.current = abort;
@@ -175,12 +208,13 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
             abort.signal.throwIfAborted();
             setProgress(value);
           };
-          return mode === "file" && fileAdapter && file
+          return mode === "file" && importAdapter && file
             ? await runFileImport({
-                adapter: fileAdapter,
+                adapter: importAdapter,
                 file: fileWithSignal(file, abort.signal),
                 podWriter: writer,
                 onProgress,
+                ...(cursor ? { cursor } : {}),
                 signal: abort.signal,
               })
             : await runImport({
@@ -261,7 +295,9 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
         );
       } else {
         setFailure(error);
-        setPhase(abort.signal.aborted ? "cancelled" : "error");
+        const privacyRefused =
+          error instanceof PrivateDestinationError && error.phase === "after-write";
+        setPhase(abort.signal.aborted && !privacyRefused ? "cancelled" : "error");
       }
     } finally {
       running.current = false;
@@ -279,9 +315,15 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
   // A popup can read as closed while still open (COOP), so this is a hint, not a verdict.
   const popupClosedCopy = "If you closed the sign-in window, choose Cancel.";
   const offlineCopy = "Connecting services needs a connection. Reconnect to connect services.";
+  const offlinePrivacyWarning =
+    phase === "error" &&
+    failure instanceof PrivateDestinationError &&
+    failure.phase === "after-write"
+      ? connectorErrorCopy(failure, entry.name)
+      : undefined;
   // One always-mounted live region; its text changes, so every outcome is announced.
   const announcement = !online
-    ? offlineCopy
+    ? [offlineCopy, offlinePrivacyWarning].filter(Boolean).join(" ")
     : phase === "waiting"
       ? popupClosed
         ? popupClosedCopy
@@ -301,6 +343,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                 importedDomains.map((domain) => domain.label).join(", ") || "your pod",
               ),
               skippedCopy(report.skipped ?? 0),
+              ...(report.warnings ?? []),
             ]
               .filter(Boolean)
               .join(". ")
@@ -326,6 +369,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
             title="Connecting services needs a connection"
             body="Reconnect to connect services."
           />
+          {offlinePrivacyWarning && <p>{offlinePrivacyWarning}</p>}
         </div>
       ) : (
         <>
@@ -336,7 +380,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
             <ConnectorLogo entry={entry} />
             <div>
               <AppHeading>Synchronise your {entry.name} data</AppHeading>
-              <StatusBadge status={entry.status} />
+              <StatusBadge status={fileMode ? "import" : spotify ? "connect" : entry.status} />
             </div>
           </div>
           <div className="hm-connect-columns">
@@ -344,7 +388,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
               <ol className="hm-connect-stepper" aria-label="Connection steps">
                 {[
                   "Choose what to sync",
-                  entry.tier === "C" ? "Import a file" : `Sign in to ${entry.name}`,
+                  mode === "file" ? "Import a file" : `Sign in to ${entry.name}`,
                   "Importing",
                 ].map((label, index) => (
                   <li key={label} aria-current={step === index + 1 ? "step" : undefined}>
@@ -353,7 +397,14 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                   </li>
                 ))}
               </ol>
-              {entry.status === "soon" ? (
+              {entry.status === "cli-only" ? (
+                <div className="hm-connect-result">
+                  <h2 ref={panelHeading} tabIndex={-1}>
+                    CLI only
+                  </h2>
+                  <p>{entry.howTo}</p>
+                </div>
+              ) : entry.status === "soon" ? (
                 <div className="hm-connect-result">
                   {/* A focus target for reconnecting, like every other panel. */}
                   <h2 ref={panelHeading} tabIndex={-1}>
@@ -368,9 +419,22 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                       importedDomains.map((domain) => domain.label).join(", ") || "your pod",
                     )}
                   </h2>
+                  {report.warnings?.map((warning) => (
+                    <p key={warning}>{warning}</p>
+                  ))}
                   {!!report.skipped && <p>{skippedCopy(report.skipped)}</p>}
                   {report.unsupported?.length ? (
                     <p>Some parts of this export aren't supported yet.</p>
+                  ) : null}
+                  {/* Only when Auto-detect wrote nothing: other warnings come with written data. */}
+                  {bank &&
+                  bankChoice.format === "auto" &&
+                  report.unsupported?.length &&
+                  !(report.state?.counts.items ?? report.written.length) ? (
+                    <p>
+                      If this is an HSBC UK statement, choose HSBC UK as the bank format, add an
+                      account label and sync again.
+                    </p>
                   ) : null}
                   <div className="hm-connect-actions">
                     {importedDomains.map((domain) => (
@@ -439,6 +503,43 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                   <h2 ref={panelHeading} tabIndex={-1}>
                     Choose what to sync
                   </h2>
+                  {spotify && (
+                    <>
+                      <fieldset className="hm-connect-scopes">
+                        <legend>How to connect Spotify</legend>
+                        <label>
+                          <input
+                            type="radio"
+                            name="spotify-path"
+                            checked={fileMode}
+                            onChange={() => setFileMode(true)}
+                          />
+                          Import streaming history (no Spotify app needed)
+                        </label>
+                        <label>
+                          <input
+                            type="radio"
+                            name="spotify-path"
+                            checked={!fileMode}
+                            onChange={() => setFileMode(false)}
+                          />
+                          Connect live with a Spotify app
+                        </label>
+                      </fieldset>
+                      {!fileMode &&
+                        (registry.adapterById("spotify")?.oauth?.clientId ? (
+                          <p>
+                            This deployment's Spotify Client ID is configured and takes precedence
+                            over personal settings.
+                          </p>
+                        ) : (
+                          <SpotifyClientSettings
+                            session={session}
+                            onClientId={setPersonalClientId}
+                          />
+                        ))}
+                    </>
+                  )}
                   {scopes.length ? (
                     <fieldset className="hm-connect-scopes">
                       <legend>Data to synchronise</legend>
@@ -469,27 +570,44 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                   <button
                     type="button"
                     className="hm-connect-button"
-                    disabled={scopes.length > 0 && selected.length === 0}
+                    disabled={
+                      (scopes.length > 0 && selected.length === 0) ||
+                      (spotify && !fileMode && !adapter?.oauth?.clientId)
+                    }
                     onClick={() => setStep(2)}
                   >
                     Continue
                   </button>
                 </div>
-              ) : entry.tier === "C" && fileAdapter ? (
+              ) : mode === "file" && fileAdapter ? (
                 <div className="hm-connect-result">
                   <h2 ref={panelHeading} tabIndex={-1}>
                     Import a file
                   </h2>
                   {notice && <p>{notice}</p>}
                   <p>{fileAdapter.fileHint}</p>
+                  {(entry.tier === "A" || entry.tier === "B") && adapter && (
+                    <button
+                      type="button"
+                      className="hm-connect-button"
+                      onClick={() => {
+                        setFileMode(false);
+                        if (spotify) setStep(1);
+                      }}
+                    >
+                      Use {entry.name} connection
+                    </button>
+                  )}
+                  {bank && <BankImportOptions value={bankChoice} onChange={setBankChoice} />}
                   <label
                     className="hm-connect-drop"
                     htmlFor="connector-file"
+                    aria-disabled={bankProblem ? true : undefined}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={(event) => {
                       event.preventDefault();
                       const file = event.dataTransfer.files[0];
-                      if (file) void start(file);
+                      if (file && !bankProblem) void start(file);
                     }}
                   >
                     Export file — drop it here or choose a file
@@ -499,6 +617,8 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                       id="connector-file"
                       type="file"
                       accept={fileAdapter.accept}
+                      disabled={!!bankProblem}
+                      aria-describedby={bankProblem ? BANK_PROBLEM_ID : undefined}
                       onChange={(event) => {
                         const file = event.target.files?.[0];
                         if (file) void start(file);
@@ -509,6 +629,8 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                   <button
                     type="button"
                     className="hm-connect-button"
+                    disabled={!!bankProblem}
+                    aria-describedby={bankProblem ? BANK_PROBLEM_ID : undefined}
                     onClick={() => fileInput.current?.click()}
                   >
                     Choose file
@@ -533,6 +655,16 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
                       No sign-in is needed. This imports recorded demo data from {entry.name} into
                       your pod.
                     </p>
+                  )}
+                  {fileAdapter && (
+                    <button
+                      type="button"
+                      className="hm-connect-button"
+                      disabled={phase === "waiting"}
+                      onClick={() => setFileMode(true)}
+                    >
+                      Import an export file
+                    </button>
                   )}
                   {phase === "waiting" ? (
                     <>
@@ -577,9 +709,9 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
             <aside className="hm-connect-about" aria-label={`About ${entry.name}`}>
               <h2>About {entry.name}</h2>
               <h3>What you get</h3>
-              <p>{entry.whatYouGet}</p>
+              <p>{metadata?.whatYouGet ?? entry.whatYouGet}</p>
               <h3>Requirements</h3>
-              {metadata?.requirements.length ? (
+              {mode !== "file" && metadata?.requirements.length ? (
                 <ul>
                   {metadata.requirements.map((requirement) => (
                     <li key={requirement}>{requirement}</li>

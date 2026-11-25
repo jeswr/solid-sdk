@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /** Structural key-value seam; values must support structured cloning, including CryptoKeys. */
 export interface KvStore<T extends {} = {}> {
   getItem(key: string): Promise<T | null>;
@@ -47,8 +48,8 @@ export interface PodAuthOptions {
   allowInsecureLoopback?: boolean;
   clock?: () => number;
   /**
-   * Largest request body `auth.fetch` buffers so it can replay a request after a 401 challenge
-   * (default 16 MiB). Raise it for apps that upload large files; larger bodies reject.
+   * Largest body `auth.fetch` or `auth.fetchFor` buffers for replay after a 401 (default 16 MiB).
+   * Larger buffered bodies reject. Blob/File bodies supplied in init replay without buffering or this cap.
    */
   maxReplayBodyBytes?: number;
 }
@@ -63,6 +64,8 @@ export interface CidSubject {
 }
 
 export interface Identity {
+  /** Public ownership tag, not a secret/capability. Stable across refresh; new sign-ins change it. */
+  grantId?: string;
   webId: string | null;
   issuer: string;
   subject: string;
@@ -70,6 +73,17 @@ export interface Identity {
   protocol: "solid-oidc" | "lws";
   storages: readonly string[];
 }
+
+/** Credential-free ownership snapshot from a pod-auth Identity. Missing identifiers fail closed. */
+export type GrantOwner = Pick<Identity, "webId" | "issuer" | "grantId">;
+
+/** A skipped retirement never revokes, clears credentials, advances the fence or emits logout. */
+export type GrantRetirementResult =
+  | { retired: true }
+  | {
+      retired: false;
+      reason: "missing-grant" | "no-grant" | "owner-changed" | "grant-changed";
+    };
 
 export interface LoginHint {
   webId?: string;
@@ -88,11 +102,49 @@ export interface AuthEvent {
 export interface LoginOptions {
   /** Abandons the attempt; see {@link PodAuth.login}. */
   signal?: AbortSignal;
+  /**
+   * The `remembered()` result the caller saw when it decided to sign in. Login rejects with
+   * `OwnershipChangedError` before authorization if the remembered pointer differs. Under the
+   * namespace mutation lock, immediately before publishing this attempt's grant owner and the pointer,
+   * pod-auth checks again that the pointer and the stored grant owner are unchanged since the attempt
+   * began; on a mismatch it discards only this attempt's new grant and rejects the same way.
+   * Ownership-guarded attempts are never shared with concurrent logins.
+   */
+  expectRemembered?: readonly { webId: string; issuer: string }[];
+  /**
+   * Requires a WebID hint. Authorizes interactively without redeeming any stored refresh credential,
+   * for a grant of that account that persistently fails refresh (for example `invalid_client`). The
+   * new grant replaces it for that context; the old one stays catalogued for logout. Rejects with
+   * `OwnershipChangedError` if the pointer or stored owner names another account, and guards
+   * publication like `expectRemembered`.
+   */
+  reauthorize?: boolean;
+}
+
+/** Public identity selector; no credentials cross this surface. */
+export interface FetchAccount {
+  webId: string | null;
+  issuer: string;
+}
+
+export interface FetchForOptions {
+  /**
+   * Explicit canonical HTTPS origins (no wildcards), trusted by the application rather than pod data.
+   * OIDC token/registration endpoints are excluded even on admitted origins.
+   */
+  extraResourceOrigins?: readonly string[];
 }
 
 /** Suite authentication and credential-free session lifecycle. */
 export interface PodAuth {
   fetch: typeof fetch;
+  /**
+   * Pin a fetch to the current account/session. Extra resource origins receive only this session's
+   * Solid-OIDC DPoP credentials; they never broaden `fetch`, grant storage access, run LWS/UMA
+   * exchange or start sign-in. LWS sessions and agents reject extra origins. Redirects from extra
+   * resources are refused. Handles expire on logout or a transition from Solid-OIDC to LWS.
+   */
+  fetchFor(account: FetchAccount, options?: FetchForOptions): typeof fetch;
   /**
    * Interactive login. `options.signal` abandons this attempt: its requests and the authorization popup are
    * cancelled and the promise rejects with the abort reason once the attempt has wound down, leaving stored
@@ -116,6 +168,13 @@ export interface PodAuth {
   logout(options?: { scope: "session" }): Promise<void>;
   /** Release this instance and cancel its work without deleting remembered credentials. */
   dispose?(): void;
+  /**
+   * Retire only the namespace grant matching this identity snapshot, including its grantId.
+   * Ownership comparison and logout cleanup share a namespace lock with credential commits.
+   * Web Locks coordinate tabs/workers sharing storage; Node's fallback covers only this realm.
+   * Browsers without Web Locks fail closed. Cleanup failures reject after attempted cleanup.
+   */
+  retireIfOwnedBy(expected: GrantOwner): Promise<GrantRetirementResult>;
   /** Read only the credential-free remembered pointer, without discovery or credential access. */
   remembered(): Promise<{ webId: string; issuer: string; displayName?: string; avatar?: string }[]>;
   /** Reports current claims without discovery, refresh or UI interaction. */

@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY GPT-6.1-Sol
 
 /** A Link field value with its target and anchor context resolved against the response URL. */
@@ -6,7 +8,7 @@ export interface ParsedLink {
   readonly context: string;
   /** Case-normalised relation types; extension URIs are compared case-insensitively too. */
   readonly rel: readonly string[];
-  /** Unquoted parameters, with lower-case names; repeated hreflang/extension parameters survive. */
+  /** Unquoted parameters with lower-case names; repeats survive by default, while strict mode rejects them. */
   readonly parameters: readonly (readonly [string, string])[];
 }
 
@@ -20,6 +22,9 @@ export interface ParseLinkHeadersOptions {
   maxResolvedBytes?: number;
   /** Ignore oversized fields and stop at member/resolved limits, or reject incomplete inspection. */
   onOverflow?: "truncate" | "throw";
+  /** Skip malformed members (default), or throw SyntaxError on malformed/ambiguous members.
+   * Throwing also rejects invalid relation tokens, duplicate parameters, empty targets and target whitespace/backslashes. */
+  onMalformed?: "skip" | "throw";
 }
 
 /** The authoritative Link fields could not be fully inspected within the configured bounds. */
@@ -33,6 +38,10 @@ export class LinkHeaderOverflowError extends Error {
 type LinkToken = { kind: "target" | "quoted" | "token" | ";" | "=" | "invalid"; value: string };
 
 const tokenCharacter = /^[!#$%&'*+\-.^_`|~\da-z]$/i;
+
+// RFC 8288 relation tokens are registered names or absolute URIs with RFC 3986 characters.
+const relationToken =
+  /^[a-z][a-z0-9.-]*$|^[a-z][a-z0-9+.-]*:(?:[a-z0-9._~:/?#[\]@!$&'()*+,;=-]|%[a-f0-9]{2})*$/i;
 
 /** Tokenise once, treating commas inside targets and quoted strings as data. */
 function* tokenizeLinkValues(value: string): Generator<LinkToken[]> {
@@ -90,16 +99,24 @@ function* tokenizeLinkValues(value: string): Generator<LinkToken[]> {
 }
 
 /** Interpret tokens without retrying earlier input when a member is malformed. */
-function parseLinkValue(tokens: LinkToken[], base: string): ParsedLink | undefined {
+function parseLinkValue(
+  tokens: LinkToken[],
+  base: string,
+  strict: boolean,
+): ParsedLink | undefined {
   const target = tokens[0] as LinkToken;
   if (target.kind !== "target") return undefined;
+  if (strict && (!target.value || /[\s\\]/u.test(target.value))) return undefined;
   const parameters: [string, string][] = [];
   const singletons = new Set<string>();
+  const names = new Set<string>();
   for (let cursor = 1; cursor < tokens.length; cursor++) {
     if (tokens[cursor]?.kind !== ";") return undefined;
     const parameter = tokens[++cursor];
     if (parameter?.kind !== "token") return undefined;
     const name = parameter.value.toLowerCase();
+    if (strict && names.has(name)) return undefined;
+    names.add(name);
     let value = "";
     if (tokens[cursor + 1]?.kind === "=") {
       cursor += 2;
@@ -114,15 +131,15 @@ function parseLinkValue(tokens: LinkToken[], base: string): ParsedLink | undefin
     parameters.push([name, value]);
   }
   const rel = (parameters.find(([name]) => name === "rel")?.[1] ?? "")
-    .toLowerCase()
     .split(/[ \t]+/)
     .filter(Boolean);
   if (rel.length === 0) return undefined;
+  if (strict && rel.some((relation) => !relationToken.test(relation))) return undefined;
   try {
     return {
       target: new URL(target.value, base).href,
       context: new URL(parameters.find(([name]) => name === "anchor")?.[1] ?? base, base).href,
-      rel,
+      rel: rel.map((relation) => relation.toLowerCase()),
       parameters,
     };
   } catch {
@@ -143,6 +160,9 @@ function parseLinkValue(tokens: LinkToken[], base: string): ParsedLink | undefin
  * duplicates and implicit response-URL contexts. Its default is unlimited; truncation stops before
  * retaining an overflowing member. With onOverflow: 'throw', exceeding any bound throws
  * LinkHeaderOverflowError instead of returning partial links; exactly reaching a bound is valid.
+ * With onMalformed: 'throw', any malformed member throws SyntaxError, including missing relations,
+ * invalid relation tokens, invalid URLs, duplicate parameters, empty targets and target
+ * whitespace/backslashes. Defaults retain first-singleton handling and skip malformed members.
  * An invalid response URL throws TypeError; invalid limits throw RangeError.
  */
 export function parseLinkHeaders(
@@ -151,7 +171,13 @@ export function parseLinkHeaders(
   options: ParseLinkHeadersOptions = {},
 ): readonly ParsedLink[] {
   const base = new URL(responseUrl).href;
-  const { maxBytes = 8192, maxMembers = 64, maxResolvedBytes, onOverflow = "truncate" } = options;
+  const {
+    maxBytes = 8192,
+    maxMembers = 64,
+    maxResolvedBytes,
+    onOverflow = "truncate",
+    onMalformed = "skip",
+  } = options;
   for (const limit of [maxBytes, maxMembers, maxResolvedBytes]) {
     if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 0))
       throw new RangeError("Link header limits must be non-negative safe integers");
@@ -170,7 +196,9 @@ export function parseLinkHeaders(
         if (onOverflow === "throw") throw new LinkHeaderOverflowError("maxMembers");
         return links;
       }
-      const link = parseLinkValue(tokens, base);
+      const link = parseLinkValue(tokens, base, onMalformed === "throw");
+      if (!link && onMalformed === "throw")
+        throw new SyntaxError("Invalid or ambiguous Link header");
       if (link) {
         resolvedBytes += link.target.length + link.context.length;
         if (maxResolvedBytes !== undefined && resolvedBytes > maxResolvedBytes) {

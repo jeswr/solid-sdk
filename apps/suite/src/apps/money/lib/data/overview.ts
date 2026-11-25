@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6
-import { addAmounts, type Category, type Transaction } from "../model";
+import { addAmounts, type Category, type Transaction } from "@jeswr/solid-money";
 import { formatMoney, spendingByCategory } from "../reports";
 import { type AccountSummary, listAccounts } from "./accounts";
 import { loadCategories } from "./categories";

@@ -1,6 +1,93 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
-import { IntegrationSyncError } from "./errors.js";
+import { IntegrationSyncError, PrivateDestinationError } from "./errors.js";
+import type { MutationGuard, PodWriter } from "./types.js";
+
+/** The health and finance imports that require a host-verified write destination. */
+export function requiresPrivateDestination(id: string): boolean {
+  return id === "garmin" || id === "whoop" || id === "bank-statements";
+}
+
+export async function requirePrivateDestination(
+  id: string,
+  writer: Pick<PodWriter, "verifyPrivateDestination">,
+  url: string,
+  guard?: MutationGuard,
+): Promise<void> {
+  try {
+    const verified =
+      guard && writer.verifyPrivateDestination?.beforeWrite
+        ? await writer.verifyPrivateDestination.beforeWrite(url, guard)
+        : await writer.verifyPrivateDestination?.(url);
+    if (verified === true) return;
+  } catch {
+    // Transport and policy errors may contain sensitive values. Refuse without echoing them.
+  }
+  throw new PrivateDestinationError(id);
+}
+
+/** Confirm a successful write. A refused replacement must preserve earlier records. */
+export async function requirePrivateWriteConfirmation(
+  id: string,
+  writer: Pick<PodWriter, "confirmPrivateWrite" | "cleanupPrivateWrite">,
+  slug: string,
+  url: string,
+  created: boolean,
+  writeEtag?: string | null,
+  onRefusal?: (refusal: Promise<PrivateDestinationError>) => void,
+): Promise<void> {
+  const version = writeEtag == null ? {} : { etag: writeEtag };
+  let observed: string | undefined;
+  try {
+    const confirmed = await writer.confirmPrivateWrite?.(url, version, (etag) => {
+      if (observed === undefined && isStrongEtag(etag)) observed = etag;
+    });
+    if (confirmed === true) return;
+  } catch {
+    // Keep policy and transport errors out of the host's diagnostics.
+  }
+  const etag = isStrongEtag(writeEtag) ? writeEtag : observed;
+  const refusal = Promise.resolve().then(async () => {
+    let removed = false;
+    if (created && isStrongEtag(etag) && writer.cleanupPrivateWrite) {
+      const signal = AbortSignal.timeout(10_000);
+      try {
+        const expired = new Promise<false>((resolve) =>
+          signal.addEventListener("abort", () => resolve(false), { once: true }),
+        );
+        removed =
+          (await Promise.race([writer.cleanupPrivateWrite(slug, { etag, signal }), expired])) ===
+          true;
+      } catch {
+        // A failed cleanup leaves the file potentially visible.
+      }
+    }
+    return new PrivateDestinationError(id, { url, removed });
+  });
+  onRefusal?.(refusal);
+  throw await refusal;
+}
+
+/** Delete a refused create, then check its exact URL once for absence. */
+export async function cleanupPrivateResource(
+  fetch: typeof globalThis.fetch,
+  url: string,
+  { etag, signal }: { etag: string; signal: AbortSignal },
+): Promise<boolean> {
+  if (!isStrongEtag(etag)) return false;
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: { "if-match": etag },
+    redirect: "error",
+    signal,
+  });
+  void response.body?.cancel().catch(() => {});
+  if (![200, 204, 404, 410].includes(response.status)) return false;
+  signal.throwIfAborted();
+  const head = await fetch(url, { method: "HEAD", redirect: "error", cache: "no-cache", signal });
+  return head.status === 404 || head.status === 410;
+}
 
 /** Resolve connector slugs identically for every transport. */
 export function containerResolver(container: string, adapterId: string) {
@@ -44,13 +131,17 @@ export function validateBinaryType(contentType: string, adapterId: string): void
     throw new IntegrationSyncError(adapterId, `Unsupported binary content type: ${mediaType}`);
 }
 
-/** A single strong validator; wildcards could turn a Solid write into a blind overwrite. */
+/** A single strong validator; wildcards could turn a Solid mutation into a blind one. */
+export function isStrongEtag(etag: string | null | undefined): etag is string {
+  return typeof etag === "string" && /^"[\x21\x23-\x7e\x80-\xff]*"$/.test(etag);
+}
+
 export function strongEtag(
   etag: string | null | undefined,
   adapterId: string,
   url: string,
 ): string {
-  if (!etag || !/^"[\x21\x23-\x7E\x80-\xFF]*"$/.test(etag))
+  if (!isStrongEtag(etag))
     throw new IntegrationSyncError(adapterId, "Existing resource has no strong ETag.", { url });
   return etag;
 }

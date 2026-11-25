@@ -3,6 +3,7 @@
 @import "tailwindcss";
 @import "@jeswr/suite-ui/styles/tokens.css";
 @import "@jeswr/suite-ui/styles/theme.css";
+@import "@jeswr/suite-charts/styles.css";
 @import "@jeswr/suite-ui/styles/density.css";
 @import "@jeswr/suite-ui/styles/date-time.css";
 @import "@jeswr/suite-ui/styles/navigation.css";

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createBrowserCaches, nonReactiveFetch, withLock } from "@jeswr/reactive-authentication";
 import { createPodAuth } from "./index.js";
 import { protectStore, scopedStore } from "./kv.js";
@@ -37,6 +38,7 @@ export interface AccountManager {
   accounts(): Identity[];
   active(): Identity | null;
   switchTo(webId: string): Promise<void>;
+  /** Rejects ownership-guarded options, which require a direct core login. */
   add(hint?: LoginHint, options?: LoginOptions): Promise<Identity>;
   remove(webId: string): Promise<void>;
   restoreAll(): Promise<Identity[]>;
@@ -196,11 +198,15 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
   };
   const anonymous: PodAuth = {
     fetch: transport,
+    fetchFor: () => {
+      throw new Error("Account session is unavailable");
+    },
     identity: async () => null,
     restore: async () => null,
     remembered: async () => [],
     login: (hint, loginOptions) => api.add(hint, loginOptions),
     logout: async () => {},
+    retireIfOwnedBy: async () => ({ retired: false, reason: "no-grant" }),
     on: () => () => {},
   };
   const api: AccountManager = {
@@ -222,6 +228,8 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
       }),
     add: async (hint, loginOptions) => {
       assertOpen();
+      if (loginOptions?.expectRemembered !== undefined || loginOptions?.reauthorize === true)
+        throw new TypeError("Account manager add does not support login ownership options");
       const signal = AbortSignal.any([
         lifetime.signal,
         ...(loginOptions?.signal === undefined ? [] : [loginOptions.signal]),

@@ -6,6 +6,7 @@ import { IntegrationAuthError } from "../core/errors.js";
 import { createSourceAuth } from "../core/import-runner.js";
 import { SOURCE_RESPONSE_TIMEOUT_MS } from "../core/source-timeout.js";
 import type { SourceAuth, TokenSet } from "../core/types.js";
+import type { ConnectorTokenVault } from "../vault.js";
 import { spotifyAdapter } from "./adapter.js";
 
 const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
@@ -59,7 +60,15 @@ export function createSpotifySourceAuth(options: {
   token: TokenSet;
   fetch: typeof fetch;
   onToken?: (token: TokenSet) => void;
+  vault?: ConnectorTokenVault;
+  account?: string;
 }): SourceAuth {
+  if (options.vault)
+    throw new IntegrationAuthError(
+      "spotify",
+      "not-configured",
+      "Vault hosts must use createOAuthSourceAuth.",
+    );
   let token = options.token;
   let refreshing: SharedRefresh | undefined;
   const transport = refuseRedirects(options.fetch);

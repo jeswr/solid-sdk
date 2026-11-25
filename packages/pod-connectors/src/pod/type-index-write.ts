@@ -21,6 +21,7 @@ import type { DatasetCore } from "@rdfjs/types";
 import { Agent } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { canonicalJeswrIri } from "../core/canonical-vocab.js";
+import type { MutationGuard } from "../core/types.js";
 import { freshRdf } from "./rdf-read.js";
 import { ResourceWriteError, writeResource } from "./resource.js";
 import { writeStorageRdf } from "./storage-resource.js";
@@ -88,6 +89,8 @@ export async function ensureTypeRegistrations(opts: {
   /** Storage-backed registration reuses the same document selection and validation. */
   storageFor?: (url: string) => StorageClient;
   signal?: AbortSignal;
+  finishMutations?: boolean;
+  guard?: MutationGuard;
 }): Promise<EnsureRegistrationsResult> {
   const { webId, podRoot, registrations } = opts;
   const profileDocument = documentUrl(opts.profileDocumentUrl ?? webId);
@@ -119,8 +122,10 @@ export async function ensureTypeRegistrations(opts: {
         options?.createOnly ? { ifNoneMatch: "*" } : { ifMatch: options?.etag ?? undefined },
         opts.signal,
         options?.prefixes ?? {},
+        opts.finishMutations,
+        opts.guard,
       );
-    } else await writeResource(url, dataset, options);
+    } else await writeResource(url, dataset, { ...options, guard: opts.guard });
   };
   const authenticatedFetch = refuseRedirects(opts.fetchImpl);
   const profileFetch = documentFetch(profileDocument, authenticatedFetch);
@@ -129,6 +134,7 @@ export async function ensureTypeRegistrations(opts: {
   // copy would carry a stale ETag into If-Match (spurious 412 on the write).
   const { dataset: profileDs, etag: profileEtag } = await readRdf(profileDocument, profileFetch);
   const links = typeIndexLinks(webId, profileDs);
+  // Public Type Index fallback is existing behavior tracked separately from private import confirmation.
   let indexUrl = links.privateIndex ?? links.publicIndex;
   let bootstrapped = false;
   // The profile's trusted storage roots are independent of the import destination.

@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import { SecureStoreError } from "./errors.js";
 
 export interface SecureStoreStatus {
@@ -20,6 +21,8 @@ export interface SecureStoreSetOptions {
 
 /** The native `SuiteSecureStore` plugin. Only refresh tokens belong in this store. */
 export interface SecureStorePlugin {
+  /** Consumes only the startup migration notice; accepts no origin or namespace. */
+  takeMigrationNotice(): Promise<{ signInAgain: boolean }>;
   status(): Promise<SecureStoreStatus>;
   get(options: { key: string }): Promise<SecureStoreEntry>;
   set(
@@ -31,6 +34,7 @@ export interface SecureStorePlugin {
 }
 
 export interface SecureStore {
+  takeMigrationNotice(): Promise<boolean>;
   status(): Promise<SecureStoreStatus>;
   get(key: string, signal?: AbortSignal): Promise<SecureStoreEntry>;
   set(key: string, value: string, options: SecureStoreSetOptions): Promise<{ version: number }>;
@@ -119,6 +123,16 @@ export function createSecureStore(plugin: SecureStorePlugin): SecureStore {
     );
 
   return {
+    takeMigrationNotice() {
+      return invoke(
+        () => plugin.takeMigrationNotice(),
+        (raw) => {
+          const { signInAgain } = response(raw, ["signInAgain"]);
+          if (typeof signInAgain !== "boolean") throw new SecureStoreError("failed");
+          return signInAgain;
+        },
+      );
+    },
     status() {
       return invoke(
         () => plugin.status(),

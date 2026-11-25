@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 
@@ -315,6 +316,22 @@ export function PermissionAccessRow({
         {/* PermissionRow exposes no slots. Portal the local extensions into its existing
             semantic header and controlled region; CSS hides only its stock line children. */}
         {slots ? createPortal(nameLink, slots.header) : nameLink}
+        {row.kind === "group" && (
+          <details>
+            <summary>Group · {row.members?.length ?? "Unknown"} members</summary>
+            {row.members ? (
+              <ul>
+                {row.members.map((member) => (
+                  <li className="su-account-id" key={member}>
+                    {member}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>Membership could not be loaded.</p>
+            )}
+          </details>
+        )}
         <DisabledHint reason={reason} focusable={!blocked}>
           <PermissionRow
             name={name}

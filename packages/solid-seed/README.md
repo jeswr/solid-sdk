@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY GPT-5.6 Sol via codex -->
 
 # @jeswr/solid-seed
@@ -115,6 +116,9 @@ crash or a failed replacement.
 
 `baseUrl` must be an origin (`https://pod.example`), not a path-based pod. Paths cannot target
 auxiliary resources (`.acl`, `.acr`, `.meta`) or percent-encode an unreserved character, `/`, `\` or `%`
-(servers such as CSS decode `/x.%61cl` to `/x.acl`, and a double encoding like `%2561` depends on how often the server decodes); this includes `%7E`, so write `~` as is. Every request is sent with
+(servers such as CSS decode `/x.%61cl` to `/x.acl`, and a double encoding like `%2561` depends on how often the server decodes); this includes `%7E`, so write `~` as is. The shared storage-capabilities guard also refuses
+case variants and trailing-slash auxiliary aliases, semicolons, query/fragment delimiters
+(raw or encoded), and dots/spaces at segment ends (including `%20`). Interior escaped spaces
+remain valid. Every request is sent with
 `redirect: "error"`, so an `authFetch` wrapper must pass `init.redirect` through; error details read
 at most 4 KiB of a response.

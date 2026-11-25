@@ -8,18 +8,25 @@
  * DataFactory terms, the way a provisioning server writes a new account.
  */
 
+import { parseRdf } from "@jeswr/fetch-rdf";
+import { TEMPLATE_CLASS } from "@jeswr/suite-templates";
 import { NS } from "@jeswr/suite-vocab";
 import type { Quad } from "@rdfjs/types";
 import { DataFactory, Writer } from "n3";
 import { withDemoAgentKey } from "../../apps/agent/lib/demo-mandate";
 import { buildAgentSeed, demoApprovalVerificationMethod } from "../../apps/agent/lib/seed";
+import { serializeTurtle } from "../../apps/docs/lib/model/rdf-io";
+import { TypeRegistration } from "../../apps/docs/lib/model/type-index";
 import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
 import { seedAssistants } from "./seed-assistants";
 import { seedContacts } from "./seed-contacts";
+import { seedGroups } from "./seed-groups";
 import { buildHomeSeed } from "./seed-home";
+import { seedLegacy, withDemoRecoveryProfile } from "./seed-legacy";
 import { seedPermissions } from "./seed-permissions";
 import { DEMO_INBOX, seedRequests } from "./seed-requests";
+import { seedTemplates } from "./seed-templates";
 
 const { namedNode, literal, quad } = DataFactory;
 const RDF_TYPE = namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
@@ -78,7 +85,7 @@ export async function buildDemoSeed(
     { foaf: FOAF, pim: PIM, solid: SOLID, ldp: LDP },
   );
   const index = namedNode(`${DEMO_ROOT}settings/privateTypeIndex.ttl`);
-  const typeIndex = await turtle(
+  let typeIndex = await turtle(
     [
       quad(index, RDF_TYPE, namedNode(`${SOLID}TypeIndex`)),
       quad(index, RDF_TYPE, namedNode(`${SOLID}UnlistedDocument`)),
@@ -100,6 +107,16 @@ export async function buildDemoSeed(
     ],
     { solid: SOLID },
   );
+  const indexDataset = await parseRdf(typeIndex, "text/turtle", { baseIRI: index.value });
+  const templatesRegistration = new TypeRegistration(
+    `${index.value}#templates`,
+    indexDataset,
+    DataFactory,
+  );
+  templatesRegistration.markRegistration();
+  templatesRegistration.forClass = TEMPLATE_CLASS;
+  templatesRegistration.instanceContainer = new URL("templates/", DEMO_ROOT).href;
+  typeIndex = await serializeTurtle(indexDataset);
   const owner = namedNode(`${DEMO_ROOT}.acl#owner`);
   const acl = await turtle(
     [
@@ -133,12 +150,14 @@ export async function buildDemoSeed(
   ].join("\n");
   const files: DemoSeedFile[] = [
     ...(await seedAssistants(now)),
+    ...(await seedTemplates(now)),
     ...(await buildHomeSeed(now)),
+    ...(await seedLegacy(now)),
     ...(await seedPermissions(DEMO_ROOT, DEMO_WEBID, now)),
     ...(await buildAgentSeed(now)),
     {
       path: "profile/card",
-      body: await withDemoAgentKey(profile),
+      body: await withDemoAgentKey(await withDemoRecoveryProfile(profile)),
       contentType: "text/turtle",
       modified: now - 40 * DAY,
     },
@@ -182,5 +201,5 @@ export async function buildDemoSeed(
     const { seedCalendar } = await import("./seed-calendar");
     return seedContacts(await seedCalendar(files, now), now);
   };
-  return seedRequests(await seeded(), DEMO_ROOT, DEMO_WEBID, now);
+  return seedGroups(await seedRequests(await seeded(), DEMO_ROOT, DEMO_WEBID, now), now);
 }

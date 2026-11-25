@@ -41,6 +41,15 @@ through `storage.read` and the roles 1 MiB bounded reader; refuse targets equal 
 only after URL normalisation. Preserve 100% coverage
 and document read-time races; this check neither locks policies nor proves caller write access.
 
+For nominal Solid document destinations whose parents may be missing, use root
+`createOwnerOnlyDestinationVerifier({ podRoot, ownerWebId, openStorage, signal? })`.
+It returns an async boolean verifier, lazily opens the selected storage, and may create
+empty parents at exact URLs before checking each parent and an existing target's own policy.
+For a session guard, use the verifier's `beforeWrite(url, guard)` variant. It checks
+the guard immediately before each missing container is created and propagates any refusal.
+Treat false or rejection as a refusal. Keep policy reads on the signal-aware run transport.
+For already existing resources and containers, use `checkOwnerOnly` directly.
+
 Use [storage-capabilities](../storage-capabilities/SKILL.md) to inspect access-control models
 and request/grant service features. Availability describes server support, not caller permission.
 `ReadResult.allow === null` means no usable hint; it establishes neither denial nor access.
@@ -287,6 +296,20 @@ mixed-model refusals, which requests-solid reports as `UnsupportedAccessModelErr
 
 <!-- AUTHORED-BY Codex GPT-6 -->
 
+`readAccessModes` returns the raw per-principal modes (`resource`, and `members` for containers)
+with `readGrants`' version token; it keeps principals that map to no role and is the API for
+owner-only/no-other-writer checks; its `governedBy` says whose WAC document applies (own vs
+inherited). `isGrantableTarget(target, storage, reserved?)` is the one target check for approvals
+and other grant callers (root, `settings/`, reserved folders, access documents, ambiguous
+encodings); requests-solid approval uses it. `sealAccess`/`isSealed`/`unsealAccess` keep an
+owner's seal in a resource's own access document (only Control can write it): seal last, after
+verifying what it governs, and trust contents only while sealed; `sealDataset` seals an offline
+document. Limits: anyone who held Control on the resource before it was secured can forge the
+owner's seal and then drop their own access (inherent to seals), and the owner widening then
+narrowing a sealed resource elsewhere keeps the seal. A seal can be dropped by any editor that
+rewrites the document without unknown statements, so treat "unsealed" as "ask the owner", never
+as "delete". Keep all of these documented in README.
+
 `readGrants` returns `{ url, grants, version }` as an opaque JSON-serialisable `GrantSnapshot`;
 `grantsWithRoles` remains `(await readGrants(url, options)).grants`. Preserve the version token
 verbatim: it binds own-document presence/absence, own and inherited ETags, discovery, comments,
@@ -400,3 +423,13 @@ whole verified destination and any remaining source items. Never recreate data o
 Native moves still delegate unchanged. Keep ordering, validator races, cleanup/deletion failures,
 lockout, aborts and both WAC/ACP transports covered at 100%. README documents non-atomic ancestor
 and final-check races; never promise transactional visibility.
+
+`./roles` exports `verifyPrivateDemoAccess(session, target, owner)`, the shared fail-closed
+check for the isolated demo backend, and `ensurePrivateContainerAccess(session, target,
+{ created, storage, acpDialect? })`. The target must be a container below the storage root.
+Provisioning (owner manager grants for resource and members, `setGrants` with `ownOnly`) runs
+only when `created` is true for a container the caller just made; never pass `created` for an
+adopted container, because `ownOnly` replaces every existing grant. Every call then returns
+`checkOwnerOnly`'s verdict on the effective policy, so inherited owner-only ACP member policies
+pass and any other grant, untyped rule or unknown model refuses. Existing members keep their
+own ACL/ACR: write only new member names. The dialect defaults to CSS (ESS fails closed).

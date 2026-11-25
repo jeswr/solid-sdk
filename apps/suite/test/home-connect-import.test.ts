@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { ownerPolicy, writeWac } from "@jeswr/pod-access";
 import {
   createRegistry,
   fileAdapterById,
@@ -24,6 +25,7 @@ import { withRequiredScopes, withSelectedScopes } from "../src/apps/home/compone
 import { isDemoImport } from "../src/apps/home/lib/connect";
 import {
   type ConnectionAction,
+  type ConnectorConnection,
   connectionReducer,
 } from "../src/apps/home/lib/connect/connection-state";
 import { provenanceOf } from "../src/apps/home/lib/model/provenance";
@@ -40,6 +42,130 @@ async function setup() {
   return { pod, session };
 }
 describe("Connect uses the real package writer against the suite demo pod", () => {
+  it("imports a bank export into owner-only demo storage through the shared verifier", async () => {
+    const { session } = await setup();
+    const adapter = fileAdapterById("bank-statements");
+    if (!adapter) throw new Error("Missing bank statement adapter");
+    const report = await runFileImport({
+      adapter,
+      file: memoryFile("bank.csv", "Date,Description,Amount,Currency\n2026-06-01,Shop,-5,GBP"),
+      podWriter: createImportWriter(session, "bank-statements", new AbortController().signal),
+    });
+    expect(report.state?.lastOutcome).toBe("success");
+    expect(report.written.map(({ url }) => url)).toEqual([
+      `${session.storageUrl}integrations/bank-statements/finance/bank-transactions.ttl`,
+    ]);
+  });
+
+  it("keeps a refused bank write out of the connection and progress even when cancelled", async () => {
+    const { session, pod } = await setup();
+    const adapter = fileAdapterById("bank-statements");
+    if (!adapter) throw new Error("Missing bank statement adapter");
+    const payload = `${session.storageUrl}integrations/bank-statements/finance/bank-transactions.ttl`;
+    const controller = new AbortController();
+    let awaitingConfirmation = false;
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      if (String(input) === payload) {
+        if (init?.method === "PUT") {
+          controller.abort();
+          awaitingConfirmation = true;
+        }
+        if (init?.method === "HEAD" && awaitingConfirmation)
+          return new Response(null, { status: 403 });
+        if (init?.method === "DELETE") awaitingConfirmation = false;
+      }
+      init?.signal?.throwIfAborted();
+      return session.fetch(input, init);
+    });
+    let connection: ConnectorConnection | undefined;
+    const update = vi.fn((action: ConnectionAction) => {
+      connection = connectionReducer(connection, action);
+      return connection;
+    });
+    const progress = vi.fn();
+    await expect(
+      runSavedImport(
+        session.storageUrl,
+        "bank-statements",
+        "file",
+        controller.signal,
+        update,
+        async () =>
+          runFileImport({
+            adapter,
+            file: memoryFile(
+              "bank.csv",
+              "Date,Description,Amount,Currency\n2026-06-01,Shop,-5,GBP",
+            ),
+            podWriter: createImportWriter(
+              { ...session, fetch },
+              "bank-statements",
+              controller.signal,
+              (url) => {
+                update({ type: "written", url });
+                progress();
+              },
+            ),
+            signal: controller.signal,
+          }),
+      ),
+    ).rejects.toMatchObject({
+      phase: "after-write",
+      url: payload,
+      removed: false,
+      message: expect.stringContaining("may be visible to other people"),
+    });
+    expect(progress).not.toHaveBeenCalled();
+    expect(connection).toMatchObject({ resourceUrls: [], lastOutcome: "error" });
+    expect(pod.has(payload)).toBe(false);
+    expect(
+      fetch.mock.calls.filter(([url, init]) => url === payload && init?.method === "DELETE"),
+    ).toHaveLength(1);
+  });
+
+  it.each([
+    "public parent",
+    "unavailable ACL",
+  ])("refuses a bank import with a %s before sending a payload", async (issue) => {
+    const { session } = await setup();
+    const parent = `${session.storageUrl}integrations/`;
+    const parentAcl = `${parent}.acl`;
+    if (issue === "public parent") {
+      const policy = ownerPolicy(session.webId, true);
+      const [owner] = policy.grants;
+      if (!owner) throw new Error("Expected an owner grant");
+      policy.grants.push({ ...owner, modes: new Set(["read"]), who: [[{ kind: "public" }]] });
+      const seed = await session.fetch(parentAcl, {
+        method: "PUT",
+        headers: { "content-type": "text/turtle" },
+        body: await writeWac(policy, parent, parentAcl),
+      });
+      expect(seed.ok).toBe(true);
+    }
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) =>
+      issue === "unavailable ACL" && String(input) === parentAcl
+        ? new Response(null, { status: 403 })
+        : session.fetch(input, init),
+    );
+    const podWriter = createImportWriter(
+      { ...session, fetch },
+      "bank-statements",
+      new AbortController().signal,
+    );
+    const adapter = fileAdapterById("bank-statements");
+    if (!adapter) throw new Error("Missing bank statement adapter");
+    await expect(
+      runFileImport({
+        adapter,
+        file: memoryFile("bank.csv", "Date,Description,Amount,Currency\n2026-06-01,Shop,-5,GBP"),
+        podWriter,
+      }),
+    ).rejects.toMatchObject({ name: "PrivateDestinationError" });
+    const requests = fetch.mock.calls.map(([url, init]) => `${init?.method ?? "GET"} ${url}`);
+    expect(requests.at(-1)).toBe(`${issue === "public parent" ? "GET" : "HEAD"} ${parentAcl}`);
+    expect(requests.filter((request) => request.startsWith("PUT "))).toEqual([]);
+  });
+
   it.each([
     ["playlist-read-private", "Focus Flow", "Sunday Morning", "5ABHKGoOzxkaa28ttQV9sE"],
     ["playlist-read-collaborative", "Sunday Morning", "Focus Flow", "37i9dQZF1DXcBWIGoYBM5M"],
