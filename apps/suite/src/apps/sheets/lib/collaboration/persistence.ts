@@ -29,11 +29,20 @@ export async function clearWorkbookMirrors(webId: string, workbook: string) {
 
 const CORRUPT_UPDATE = "[y-solid] skipped a corrupt update";
 
-/** Size-cap refusals and 4xx responses will not succeed on retry. 404/410 never reach here. */
+/**
+ * Only refusals that will never succeed on retry: the size cap and 403. 404/410 never reach
+ * here (y-solid returns null for them). 401, 408, 425, 429, other statuses, 5xx and network
+ * errors are transient and must fail the open. @jeswr/y-solid exposes no typed error or
+ * status for these failures, so this matches its message text and fails closed: an unknown
+ * or reworded message is never skipped.
+ */
 function permanentReadFailure(error: unknown) {
   const { message } = error as Error;
-  return /exceeds max size/.test(message) || /readUpdate .* failed: 4\d\d\b/.test(message);
+  return /exceeds max size/.test(message) || /readUpdate .* failed: 403\b/.test(message);
 }
+
+/** How long a positive currency check lets later appends skip re-reading workbook.json. */
+const CURRENCY_TTL_MS = 2000;
 
 /** One append-only update log, with an atomic, create-only initial seed. */
 export class WorkbookCollaboration {
@@ -47,6 +56,9 @@ export class WorkbookCollaboration {
   private mirror: IndexeddbPersistence | undefined;
   private confirmedVector = "AA==";
   private retired: Error | undefined;
+  private currentUntil = 0;
+  private readonly retireListeners = new Set<() => void>();
+  private readonly skipListeners = new Set<(skipped: number) => void>();
   localMirrorUnavailable = false;
   /** Log members that could not be read or decoded and were skipped. Non-blocking. */
   skippedUpdates = 0;
@@ -65,9 +77,13 @@ export class WorkbookCollaboration {
     this.readOnly = readOnly;
     // Defence in depth: even a stray local transaction cannot write as a viewer.
     const append = store.appendUpdate.bind(store);
-    store.appendUpdate = (update) => {
-      if (this.retired) return Promise.reject(this.retired);
-      if (this.readOnly) return Promise.reject(new Error("This spreadsheet is view only"));
+    store.appendUpdate = async (update) => {
+      if (this.retired) throw this.retired;
+      if (this.readOnly) throw new Error("This spreadsheet is view only");
+      // A restore elsewhere replaces the instance id and retires this log: never
+      // keep appending to it. The result is cached briefly to bound the extra reads.
+      if (Date.now() >= this.currentUntil) await this.checkCurrent();
+      if (this.retired) throw this.retired;
       return append(update);
     };
     // One oversized, forbidden or otherwise permanently unreadable member must not make
@@ -79,8 +95,7 @@ export class WorkbookCollaboration {
         return await read(url);
       } catch (error) {
         if (!permanentReadFailure(error)) throw error;
-        ++this.skippedUpdates;
-        this.skipCause ??= error as Error;
+        this.skipped(error as Error);
         return null;
       }
     };
@@ -88,13 +103,44 @@ export class WorkbookCollaboration {
     this.provider.on("error", (error) => {
       // A corrupt member is skipped by y-solid; it is a warning, not an append failure.
       if (error.message.startsWith(CORRUPT_UPDATE)) {
-        ++this.skippedUpdates;
-        this.skipCause ??= error;
+        this.skipped(error);
         return;
       }
       this.failure = error;
       ++this.failureVersion;
     });
+  }
+
+  private skipped(cause: Error) {
+    ++this.skippedUpdates;
+    this.skipCause ??= cause;
+    for (const listener of this.skipListeners) listener(this.skippedUpdates);
+  }
+
+  /** Called when members are skipped after open, with the running total. */
+  onSkipped(listener: (skipped: number) => void) {
+    this.skipListeners.add(listener);
+    return () => void this.skipListeners.delete(listener);
+  }
+
+  /** Called once when the workbook was deleted or restored under another instance id. */
+  onRetired(listener: () => void) {
+    this.retireListeners.add(listener);
+    return () => void this.retireListeners.delete(listener);
+  }
+
+  get isRetired() {
+    return this.retired !== undefined;
+  }
+
+  /** Currency check for live traffic. Transient read failures never retire the log. */
+  private async checkCurrent() {
+    try {
+      await this.assertCurrent();
+    } catch (error) {
+      if (this.retired && error === this.retired) return;
+      // isCurrent could not be answered: keep working, a later check will decide.
+    }
   }
 
   async open(snapshot: Snapshot) {
@@ -180,7 +226,9 @@ export class WorkbookCollaboration {
 
   private async assertCurrent() {
     if (this.retired) throw this.retired;
-    if (this.instance && !(await this.instance.isCurrent())) {
+    if (this.instance && (await this.instance.isCurrent())) {
+      this.currentUntil = Date.now() + CURRENCY_TTL_MS;
+    } else if (this.instance) {
       this.retired = new Error("This spreadsheet was deleted or replaced");
       this.stopped = true;
       this.unwatch?.();
@@ -197,6 +245,7 @@ export class WorkbookCollaboration {
         }
       } finally {
         this.doc.destroy();
+        for (const listener of this.retireListeners) listener();
       }
       throw this.retired;
     }
@@ -212,6 +261,10 @@ export class WorkbookCollaboration {
       .catch(() => {})
       .then(async () => {
         if (this.stopped) return;
+        // Focus, reconnect, push and the 30-second poll all land here: notice a restore
+        // elsewhere before reading from, or flushing into, the retired log.
+        await this.checkCurrent();
+        if (this.stopped) return;
         await this.provider.sync();
         // A prior native replay may have failed after Yjs accepted its update.
         // Reconcile that live state again even when the log has no new members.
@@ -226,6 +279,8 @@ export class WorkbookCollaboration {
     const confirmed = Y.encodeStateAsUpdate(this.doc);
     const vector = checkpoint(this.doc).stateVector;
     await this.provider.flush();
+    // A background append can retire this log (restored elsewhere) while it drains.
+    if (this.retired) throw this.retired;
     if (this.readOnly) return;
     if (this.failure) {
       // y-solid reports background append errors through events. Retain all

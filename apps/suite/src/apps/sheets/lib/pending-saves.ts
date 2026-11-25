@@ -61,6 +61,9 @@ export function createPendingSaves() {
             ...(snapshotCurrent ? { snapshotCurrent: true } : {}),
             ...(savingTitle === storedTitle ? {} : { title: savingTitle }),
           });
+          // The pod now holds the restored workbook, whatever the queue reports next
+          // (going offline, a lost response): the caller must remount onto it.
+          if (restoring) restorePublished = true;
           if (dropped) return;
           snapshotCurrent = false;
           opened = { ...opened, ...result, snapshot };

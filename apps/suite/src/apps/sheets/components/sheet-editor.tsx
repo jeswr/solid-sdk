@@ -31,7 +31,7 @@ import { ArrowLeft, ChevronDown, Table2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { SaveTemplateDialog } from "@/components/templates/save-template-dialog";
 import { TemplatePicker } from "@/components/templates/template-picker";
@@ -105,6 +105,8 @@ function Grid({
   onReady,
   readOnly,
   locked,
+  onMounted,
+  onStale,
 }: {
   container: string;
   snapshot: Snapshot;
@@ -117,6 +119,10 @@ function Grid({
   readOnly: boolean;
   /** A UI-only editing lock (version history). It never changes collaboration access. */
   locked: boolean;
+  /** The workbook instance id this grid's collaboration was opened for. */
+  onMounted: (instanceId: string | undefined) => void;
+  /** This grid's collaboration was retired: the workbook was restored or deleted elsewhere. */
+  onStale: () => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const service = useWorkbookService();
@@ -129,13 +135,26 @@ function Grid({
   const [localMirrorUnavailable, setLocalMirrorUnavailable] = useState(false);
   const [skippedUpdates, setSkippedUpdates] = useState(0);
   const [attempt, setAttempt] = useState(0);
+  // Set when members of the update log could not be read: the grid may show older cells
+  // than workbook.json, so it stays read-only until the user chooses to continue.
+  const [held, setHeld] = useState(false);
+  const heldRef = useRef(false);
+  const staleRef = useRef(onStale);
+  staleRef.current = onStale;
+  const mountedRef = useRef(onMounted);
+  mountedRef.current = onMounted;
   const access = useRef(readOnly);
   access.current = readOnly;
-  const viewOnly = useRef(readOnly || locked);
-  viewOnly.current = readOnly || locked;
+  const viewOnly = useRef(readOnly || locked || held);
+  viewOnly.current = readOnly || locked || heldRef.current;
+  const hold = (value: boolean) => {
+    heldRef.current = value;
+    viewOnly.current = access.current || locked || value;
+    setHeld(value);
+  };
   useEffect(() => {
-    if (engineRef.current) applyLock(engineRef.current, readOnly, locked);
-  }, [readOnly, locked, engineRef]);
+    if (engineRef.current) applyLock(engineRef.current, readOnly, locked || held);
+  }, [readOnly, locked, held, engineRef]);
   useEffect(() => {
     dark.current = resolvedTheme === "dark";
     engineRef.current?.setDark(dark.current);
@@ -151,6 +170,10 @@ function Grid({
     setReady(false);
     setLocalMirrorUnavailable(false);
     setSkippedUpdates(0);
+    heldRef.current = false;
+    setHeld(false);
+    let unsubscribeStale: (() => void) | undefined;
+    let unsubscribeSkipped: (() => void) | undefined;
     void (async () => {
       const mount = await loadEngine();
       if (!live || !host.current) return;
@@ -164,7 +187,26 @@ function Grid({
         return;
       }
       setLocalMirrorUnavailable(collaboration?.localMirrorUnavailable === true);
-      setSkippedUpdates(collaboration?.skippedUpdates ?? 0);
+      const skipped = collaboration?.skippedUpdates ?? 0;
+      setSkippedUpdates(skipped);
+      if (skipped > 0 && !access.current) {
+        heldRef.current = true;
+        viewOnly.current = true;
+        setHeld(true);
+      }
+      mountedRef.current(latestSnapshot.current.snapshot.id as string | undefined);
+      unsubscribeStale = collaboration?.onRetired?.(() => {
+        if (live) staleRef.current();
+      });
+      unsubscribeSkipped = collaboration?.onSkipped?.((total) => {
+        if (!live) return;
+        setSkippedUpdates(total);
+        if (!access.current) {
+          heldRef.current = true;
+          viewOnly.current = true;
+          setHeld(true);
+        }
+      });
       engine = await mount(host.current, {
         collaboration,
         snapshot: latestSnapshot.current.snapshot,
@@ -199,6 +241,8 @@ function Grid({
       live = false;
       unsubscribe?.();
       unsubscribeSaved?.();
+      unsubscribeStale?.();
+      unsubscribeSkipped?.();
       if (window.__sheetsEngine === engine) delete window.__sheetsEngine;
       engineRef.current = null;
       onReady(null);
@@ -219,6 +263,15 @@ function Grid({
       {skippedUpdates > 0 && (
         <p role="status">
           Some earlier edits couldn't be read and were skipped. The rest of this spreadsheet loaded.
+          {held && (
+            <>
+              {" "}
+              Some cells may show older values, so editing is paused to keep your saved copy safe.{" "}
+              <Button variant="outline" onClick={() => hold(false)}>
+                Edit anyway
+              </Button>
+            </>
+          )}
         </p>
       )}
       {!ready && (
@@ -266,6 +319,8 @@ export function SheetEditor({ container }: { container: string }) {
   const [busy, setBusy] = useState(false);
   const [returnConflictFocus, setReturnConflictFocus] = useState(false);
   const [grid, setGrid] = useState<{ container: string; revision: number }>();
+  const mountedId = useRef<string | undefined>(undefined);
+  const [storedId, setStoredId] = useState<string>();
   const history = useMemo(
     () => (state.workbook?.container === container ? service.versions?.(container) : undefined),
     [service, container, state.workbook?.container],
@@ -302,12 +357,54 @@ export function SheetEditor({ container }: { container: string }) {
       setGrid((current) => ({ container, revision: (current?.revision ?? 0) + 1 }));
       return;
     }
-    const loaded: SnapshotSaved = (snapshot, revision) => engine.current?.load(snapshot, revision);
+    // A snapshot under another instance id belongs to a different collaboration log
+    // (the workbook was restored elsewhere). Loading it into an engine bound to the old
+    // log would be reverted by that log, so remount and let a new collaboration seed.
+    let replaced = false;
+    const loaded: SnapshotSaved = (snapshot, revision) => {
+      if (mountedId.current !== undefined && snapshot.id !== mountedId.current) replaced = true;
+      else engine.current?.load(snapshot, revision);
+    };
     await state.reload(loaded);
     setChartRevision((revision) => revision + 1);
-    if (!engine.current)
+    setStoredId(undefined);
+    if (replaced || !engine.current)
       setGrid((current) => ({ container, revision: (current?.revision ?? 0) + 1 }));
   };
+  // The grid's collaboration was retired by a restore (or delete) from another client.
+  // With nothing unsaved, reload and remount onto the new instance. With unsaved edits,
+  // keep them: their save conflicts and the conflict dialog lets the user choose.
+  const statusRef = useRef(state.status);
+  statusRef.current = state.status;
+  const reloadRef = useRef(state.reload);
+  reloadRef.current = state.reload;
+  const onStale = useCallback(() => {
+    if (statusRef.current !== "saved") return;
+    void reloadRef
+      .current()
+      .then(() => {
+        setChartRevision((revision) => revision + 1);
+        setGrid((current) => ({ container, revision: (current?.revision ?? 0) + 1 }));
+      })
+      .catch(() => {});
+  }, [container]);
+  const onMounted = useCallback((id: string | undefined) => {
+    mountedId.current = id;
+  }, []);
+  const conflicted = state.status === "conflict" && !state.readOnly;
+  useEffect(() => {
+    if (!conflicted) return;
+    let live = true;
+    void service
+      .open(container)
+      .then((latest) => live && setStoredId(latest.snapshot.id as string | undefined))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [conflicted, service, container]);
+  const restoredElsewhere =
+    storedId !== undefined && mountedId.current !== undefined && storedId !== mountedId.current;
   const download = () => {
     if (!engine.current) return;
     const csv = engine.current.exportCsv();
@@ -542,6 +639,8 @@ export function SheetEditor({ container }: { container: string }) {
                 onReady={setChartEngine}
                 readOnly={state.readOnly}
                 locked={viewingHistory}
+                onMounted={onMounted}
+                onStale={onStale}
               />
               <Suspense fallback={null}>
                 <ChartWorkspace
@@ -708,7 +807,9 @@ export function SheetEditor({ container }: { container: string }) {
           <AlertDialogHeader>
             <AlertDialogTitle>This spreadsheet changed somewhere else</AlertDialogTitle>
             <AlertDialogDescription>
-              Choose which version to keep. Your local changes stay here until you choose.
+              {restoredElsewhere
+                ? "An earlier version was restored somewhere else. Load the restored version, or save your changes as a copy. Your local changes stay here until you choose."
+                : "Choose which version to keep. Your local changes stay here until you choose."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -741,22 +842,33 @@ export function SheetEditor({ container }: { container: string }) {
             >
               Save mine as a copy
             </Button>
-            <AlertDialogAction
-              disabled={busy}
-              onClick={(event) => {
-                event.preventDefault();
-                void action(async () => {
-                  if (engine.current)
-                    state.scheduleSave(() => {
-                      if (!engine.current) throw new Error("Grid closed");
-                      return engine.current.snapshot();
-                    });
-                  await state.retry(true);
-                });
-              }}
-            >
-              Keep mine
-            </AlertDialogAction>
+            {!restoredElsewhere && (
+              <AlertDialogAction
+                disabled={busy}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void action(async () => {
+                    // Forcing a save over a restore elsewhere would undo it for everyone.
+                    const latest = await service.open(container);
+                    if (
+                      mountedId.current !== undefined &&
+                      latest.snapshot.id !== mountedId.current
+                    ) {
+                      setStoredId(latest.snapshot.id as string | undefined);
+                      return;
+                    }
+                    if (engine.current)
+                      state.scheduleSave(() => {
+                        if (!engine.current) throw new Error("Grid closed");
+                        return engine.current.snapshot();
+                      });
+                    await state.retry(true);
+                  });
+                }}
+              >
+                Keep mine
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
