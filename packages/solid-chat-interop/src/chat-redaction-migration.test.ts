@@ -6,6 +6,7 @@ import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { type ChatConversation, type ChatPodPort, ChatWriter } from "./chat-writer.js";
 import { storeToTurtle } from "./reconcile.js";
+import { redactSecrets } from "./redact.js";
 import { PROV_WAS_GENERATED_BY } from "./vocab.js";
 
 const ROOT = "https://alice.example/pod/";
@@ -13,6 +14,7 @@ const OWNER = `${ROOT}profile/card#me`;
 const CHAT = `${ROOT}private/chats/claude/thread-1/`;
 const DAY1 = "2026-10-24T12:00:00.000Z";
 const DAY2 = "2026-10-25T12:00:00.000Z";
+const DAY3 = "2026-10-26T12:00:00.000Z";
 const TOKEN = "ghp_fixtureMigrationToken123";
 const PLACEHOLDER = "XXPLACEHOLDERXX";
 const encoder = new TextEncoder();
@@ -152,7 +154,12 @@ async function legacyPod(): Promise<{ pod: EtagPod; legacy: string }> {
 }
 
 const REDACTED_DERIVED = "Use [REDACTED TOKEN] now";
-const REDACTED_SOURCE = "Saved [REDACTED TOKEN] for later";
+/** What a fresh `save()` stores for a conversation: the oracle for what the repair must produce. */
+async function savedChat(conversation: ChatConversation) {
+  const writer = new ChatWriter(new EtagPod());
+  await writer.save(conversation);
+  return writer.get(conversation.provider, conversation.conversationId);
+}
 const CLEAN = {
   titles: 0,
   messagesRewritten: 0,
@@ -177,6 +184,20 @@ async function legacyMessage(
   const url = `${saved.url}m-${message.id}.ttl`;
   pod.set(url, pod.text(url).replace(PLACEHOLDER, TOKEN));
   return url;
+}
+
+/** Replace every literal equal to `from` in a stored resource, through the RDF model. */
+async function swapLiteral(pod: EtagPod, url: string, from: string, to: string) {
+  const dataset = await parseRdf(pod.text(url), "text/turtle", { baseIRI: url });
+  const hits = [...dataset].filter(
+    (q) => q.object.termType === "Literal" && q.object.value === from,
+  );
+  expect(hits.length).toBeGreaterThan(0);
+  for (const q of hits) {
+    dataset.delete(q);
+    dataset.add(DataFactory.quad(q.subject, q.predicate, DataFactory.literal(to), q.graph));
+  }
+  pod.set(url, await storeToTurtle(dataset));
 }
 
 describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
@@ -232,16 +253,16 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
     expect(pod.resources.has(`${legacy}.acl`)).toBe(false);
 
     const chat = await writer.get("claude", "thread-1");
+    // The repair stores exactly what save() stores for the same conversation.
+    const expected = await savedChat(raw());
+    expect(chat.title).toBe(expected.title);
+    expect(chat.account).toBe(expected.account);
+    expect(chat.messages).toEqual(expected.messages);
     expect(chat.title).toBe("Deploy with [REDACTED TOKEN]");
     expect(chat.account).toBe("Work [REDACTED TOKEN]");
-    expect(chat.messages).toEqual([
-      {
-        id: await derivedId("user", REDACTED_DERIVED, DAY1),
-        role: "user",
-        text: REDACTED_DERIVED,
-        createdAt: DAY1,
-      },
-      { id: "msg-2", role: "assistant", text: REDACTED_SOURCE, createdAt: DAY2 },
+    expect(chat.messages.map((m) => m.id)).toEqual([
+      await derivedId("user", expected.messages[0]?.text as string, DAY1),
+      "msg-2",
     ]);
     // Provenance survives the metadata rewrite.
     expect(chat.channel).toBe("mcp");
@@ -274,7 +295,8 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
     // The duplicate the conversation-archive ADR describes: replay beside the legacy record.
     expect(await writer.save(raw())).toMatchObject({ saved: 1, skipped: 1 });
     expect((await writer.get("claude", "thread-1")).messages).toHaveLength(3);
-    const replay = `${CHAT}m-${await derivedId("user", REDACTED_DERIVED, DAY1)}.ttl`;
+    const expected = await savedChat(raw());
+    const replay = `${CHAT}m-${expected.messages[0]?.id}.ttl`;
     const replayBody = pod.text(replay);
     pod.writes = [];
     expect(await writer.migrateRedaction()).toMatchObject({
@@ -287,7 +309,9 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
     expect(pod.text(replay)).toBe(replayBody);
     expect(pod.writes.some((w) => w.url.startsWith(replay))).toBe(false);
     const chat = await writer.get("claude", "thread-1");
-    expect(chat.messages.map((m) => m.text)).toEqual([REDACTED_DERIVED, REDACTED_SOURCE]);
+    expect(chat.messages.map((m) => m.text)).toEqual(expected.messages.map((m) => m.text));
+    expect(chat.messages.map((m) => m.id)).toEqual(expected.messages.map((m) => m.id));
+    expect(pod.everything()).not.toContain(TOKEN);
   });
 
   it("moves a legacy hash-named message whose raw text had control characters", async () => {
@@ -457,12 +481,179 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
     });
   });
 
+  describe("whole-conversation redaction, as save() does it", () => {
+    /** Store a conversation as the pre-redaction writer did: ID-less messages named by a
+     * digest of their raw text, with the raw title and text verbatim. */
+    async function seedLegacy(
+      pod: EtagPod,
+      title: string,
+      messages: { role: "user" | "assistant"; text: string; createdAt: string }[],
+    ) {
+      const placeholders = messages.map((_, i) => `PLACEHOLDER-MESSAGE-${i}`);
+      const ids = await Promise.all(messages.map((m) => derivedId(m.role, m.text, m.createdAt)));
+      await new ChatWriter(pod).save({
+        ...raw(),
+        title: "PLACEHOLDER-TITLE",
+        account: undefined,
+        messages: messages.map((m, i) => ({
+          ...m,
+          id: ids[i] as string,
+          text: placeholders[i] as string,
+        })),
+      });
+      await swapLiteral(pod, `${CHAT}_conversation.ttl`, "PLACEHOLDER-TITLE", title);
+      for (const [i, id] of ids.entries())
+        await swapLiteral(
+          pod,
+          `${CHAT}m-${id}.ttl`,
+          placeholders[i] as string,
+          (messages[i] as { text: string }).text,
+        );
+      return ids.map((id) => `${CHAT}m-${id}.ttl`);
+    }
+    const sourceOf = (
+      title: string,
+      messages: { role: "user" | "assistant"; text: string; createdAt: string }[],
+    ): ChatConversation => ({
+      ...raw(),
+      title,
+      account: undefined,
+      messages,
+    });
+    /** The repaired chat equals what save() stores for the original, and replay adds nothing. */
+    async function expectSaveEquivalent(pod: EtagPod, source: ChatConversation, secrets: string[]) {
+      const writer = new ChatWriter(pod);
+      expect(await writer.migrateRedaction()).toMatchObject({ failed: 0, conflicts: 0 });
+      for (const secret of secrets) expect(pod.everything()).not.toContain(secret);
+      const expected = await savedChat(source);
+      const repaired = await writer.get("claude", "thread-1");
+      expect(repaired.title).toBe(expected.title);
+      expect(repaired.messages).toEqual(expected.messages);
+      expect(await writer.save(source)).toMatchObject({
+        saved: 0,
+        skipped: source.messages.length,
+      });
+      expect((await writer.get("claude", "thread-1")).messages).toEqual(expected.messages);
+      expect(await writer.migrateRedaction()).toMatchObject(CLEAN);
+    }
+
+    it("redacts a private key split across two messages, matching save()", async () => {
+      const pod = new EtagPod();
+      const messages = [
+        {
+          role: "user" as const,
+          text: "Here is the key\n-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj",
+          createdAt: DAY1,
+        },
+        {
+          role: "user" as const,
+          text: "MBQwXZ3sPEMBODYSECRETpart2",
+          createdAt: DAY2,
+        },
+        { role: "user" as const, text: "-----END PRIVATE KEY-----\nthanks", createdAt: DAY3 },
+      ];
+      await seedLegacy(pod, "Plain title", messages);
+      // Redacting each stored message alone leaves the second one's key body in place.
+      expect(redactSecrets(messages[1]?.text as string)).toContain("MBQwXZ3sPEMBODYSECRETpart2");
+      expect(await new ChatWriter(pod).migrateRedaction({ dryRun: true })).toMatchObject({
+        messagesReplaced: 3,
+      });
+      await expectSaveEquivalent(pod, sourceOf("Plain title", messages), [
+        "MBQwXZ3sPEMBODYSECRETpart2",
+        "MIIEvQIBADANBgkqhkiG9w0BAQEFAASC",
+      ]);
+    });
+
+    it("redacts a secret split across the title and the first message, matching save()", async () => {
+      const pod = new EtagPod();
+      const title = 'password="sk-fixtureTitleHalf';
+      const messages = [
+        { role: "user" as const, text: 'fixtureMessageHalf"; x = 1', createdAt: DAY1 },
+      ];
+      await seedLegacy(pod, title, messages);
+      expect(redactSecrets(messages[0]?.text as string)).toContain("fixtureMessageHalf");
+      expect(await new ChatWriter(pod).migrateRedaction()).toMatchObject({
+        titles: 1,
+        messagesReplaced: 1,
+        failed: 0,
+      });
+      await expectSaveEquivalent(pod, sourceOf(title, messages), [
+        "fixtureTitleHalf",
+        "fixtureMessageHalf",
+      ]);
+    });
+  });
+
+  describe("metadata that cannot be validated still lets the messages be repaired", () => {
+    it("repairs messages and counts a failure when the stored identifier is wrong", async () => {
+      const { pod, legacy } = await legacyPod();
+      const url = `${CHAT}_conversation.ttl`;
+      const dataset = await parseRdf(pod.text(url), "text/turtle", { baseIRI: url });
+      for (const q of [...dataset].filter((q) => q.object.value === "thread-1")) {
+        dataset.delete(q);
+        dataset.add(
+          DataFactory.quad(q.subject, q.predicate, DataFactory.literal("other"), q.graph),
+        );
+      }
+      pod.set(url, await storeToTurtle(dataset));
+      const report = await new ChatWriter(pod).migrateRedaction();
+      expect(report).toMatchObject({ messagesRewritten: 1, messagesReplaced: 1, failed: 1 });
+      expect(pod.resources.has(legacy)).toBe(false);
+      // The metadata itself is left untouched and reported, never silently skipped.
+      expect(pod.text(url)).toContain(TOKEN);
+      expect(pod.everything().replace(pod.text(url), "")).not.toContain(TOKEN);
+    });
+
+    it("repairs messages and counts a failure when the metadata cannot be read", async () => {
+      const { pod, legacy } = await legacyPod();
+      pod.fail.set(`${CHAT}_conversation.ttl`, 403);
+      expect(await new ChatWriter(pod).migrateRedaction()).toMatchObject({
+        messagesRewritten: 1,
+        messagesReplaced: 1,
+        failed: 1,
+      });
+      expect(pod.resources.has(legacy)).toBe(false);
+    });
+
+    it("still redacts the title and hides an invalid account label", async () => {
+      const { pod, legacy } = await legacyPod();
+      const url = `${CHAT}_conversation.ttl`;
+      const long = `${TOKEN} ${"x".repeat(80)}`;
+      await swapLiteral(pod, url, RAW_ACCOUNT, long);
+      const report = await new ChatWriter(pod).migrateRedaction();
+      expect(report).toMatchObject({
+        titles: 1,
+        messagesRewritten: 1,
+        messagesReplaced: 1,
+        failed: 0,
+      });
+      expect(pod.resources.has(legacy)).toBe(false);
+      expect(pod.everything()).not.toContain(TOKEN);
+      expect(pod.everything()).not.toContain("xxxxxxxxxx");
+      const chat = await new ChatWriter(pod).get("claude", "thread-1");
+      expect(chat.title).toBe("Deploy with [REDACTED TOKEN]");
+      expect(chat.account).toBe("[REDACTED]");
+    });
+
+    it("hides an account label that holds a control character", async () => {
+      const { pod } = await legacyPod();
+      await swapLiteral(pod, `${CHAT}_conversation.ttl`, RAW_ACCOUNT, `${TOKEN}\u0007bell`);
+      expect(await new ChatWriter(pod).migrateRedaction()).toMatchObject({ titles: 1, failed: 0 });
+      expect(pod.everything()).not.toContain(TOKEN);
+      expect((await new ChatWriter(pod).get("claude", "thread-1")).account).toBe("[REDACTED]");
+    });
+  });
+
   it("leaves a legacy message whose replay copy is inconsistent, and a malformed one", async () => {
     const { pod, legacy } = await legacyPod();
     const writer = new ChatWriter(pod);
     await writer.save(raw());
-    const replay = `${CHAT}m-${await derivedId("user", REDACTED_DERIVED, DAY1)}.ttl`;
-    pod.set(replay, pod.text(replay).replace(REDACTED_DERIVED, "Something else"));
+    const expected = await savedChat(raw());
+    const replay = `${CHAT}m-${expected.messages[0]?.id}.ttl`;
+    pod.set(
+      replay,
+      pod.text(replay).replace(expected.messages[0]?.text as string, "Something else"),
+    );
     expect(await writer.migrateRedaction()).toMatchObject({ messagesReplaced: 0, failed: 1 });
     expect(pod.resources.has(legacy)).toBe(true);
     expect(pod.deletes).toEqual([]);
