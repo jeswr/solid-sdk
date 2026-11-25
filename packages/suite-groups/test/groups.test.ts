@@ -4,6 +4,7 @@ import { readWac } from "@jeswr/pod-access";
 import {
   addGrant,
   isSealed,
+  isSecuring,
   type RoleGrant,
   readAccessModes,
   readGrants,
@@ -23,10 +24,14 @@ import {
   GROUPS_UNVERIFIED,
   GroupDirectory,
   memberWebId,
+  PREVIEW_LIMIT,
   SECURING_BLOCKED,
+  SECURING_INTERRUPTED,
   SECURING_RACE,
   SETTINGS_UNSAFE,
   SETTINGS_UNVERIFIED,
+  serializeGroup,
+  UNVERIFIED_UNREADABLE,
 } from "../src/index.js";
 
 vi.mock("@jeswr/pod-access", () => ({ readWac: vi.fn() }));
@@ -34,6 +39,7 @@ vi.mock("@jeswr/pod-access/roles", async (original) => ({
   addGrant: vi.fn(),
   isGrantableTarget: (await original<typeof import("@jeswr/pod-access/roles")>()).isGrantableTarget,
   isSealed: vi.fn(),
+  isSecuring: vi.fn(),
   readAccessModes: vi.fn(),
   readGrants: vi.fn(),
   removeGrant: vi.fn(),
@@ -61,6 +67,8 @@ const success = {
 let roles: Map<string, RoleGrant[]>;
 /** Folders whose own access document carries the owner's seal. */
 let sealed: Set<string>;
+/** Folders whose own access document carries the owner's securing mark. */
+let securing: Set<string>;
 function make() {
   const storage = createMemoryStorage({ root, protocol: "solid" });
   Object.assign(storage.features.accessControl, { state: "available", detail: { model: "wac" } });
@@ -95,15 +103,21 @@ beforeEach(() => {
   vi.resetAllMocks();
   roles = new Map();
   sealed = new Set();
+  securing = new Set();
   vi.mocked(isSealed).mockImplementation(async (url) => sealed.has(url));
+  vi.mocked(isSecuring).mockImplementation(async (url) => securing.has(url));
   vi.mocked(sealAccess).mockImplementation(async (url) => {
     sealed.add(url);
+    securing.delete(url);
   });
   vi.mocked(unsealAccess).mockImplementation(async (url) => {
     sealed.delete(url);
   });
-  vi.mocked(setGrants).mockImplementation(async (urls, grants) => {
-    for (const url of urls) roles.set(url, grants);
+  vi.mocked(setGrants).mockImplementation(async (urls, grants, options) => {
+    for (const url of urls) {
+      roles.set(url, grants);
+      if (options.securing) securing.add(url);
+    }
     return success;
   });
   vi.mocked(readWac).mockImplementation((_dataset, url) => ({
@@ -1073,16 +1087,35 @@ describe("fail-safe cleanup of a folder being secured (review round 4)", () => {
     expect(roles.get(folder)).toEqual([ownerManager]);
     expect(sealed.has(folder)).toBe(false);
     await expect(directory.list()).rejects.toThrow(SETTINGS_UNVERIFIED);
-    // A retry neither trusts nor silently deletes them: the owner decides.
-    await expect(directory.setupFamily(group.id, [photos])).rejects.toThrow(SETTINGS_UNVERIFIED);
+    // Still marked as being secured: what survived was planted, so it is never offered to keep.
+    expect(securing.has(folder)).toBe(true);
+    expect(await directory.unverified()).toEqual([
+      {
+        folder: "settings",
+        documents: [`${folder}state.json`],
+        contents: [
+          {
+            url: `${folder}state.json`,
+            inherits: true,
+            kind: "settings",
+            family: group.id,
+            spaces: [privateFolder],
+          },
+        ],
+        planted: true,
+        keepable: false,
+      },
+    ]);
+    await expect(directory.verifyFolder("settings", "keep")).rejects.toThrow(SECURING_INTERRUPTED);
+    expect(sealed.has(folder)).toBe(false);
+    // The retry deletes it, never trusting or granting from it, and seals the folder.
+    await expect(directory.setupFamily(group.id, [photos])).rejects.toThrow(SECURING_RACE);
     expect(privateGrants()).toEqual([]);
     expect(photos.create).not.toHaveBeenCalled();
-    expect(await directory.unverified()).toEqual([
-      { folder: "settings", documents: [`${folder}state.json`] },
-    ]);
-    await directory.verifyFolder("settings", "discard");
     await expect(storage.read(`${folder}state.json`)).rejects.toMatchObject({ code: "not-found" });
     expect(sealed.has(folder)).toBe(true);
+    expect(securing.has(folder)).toBe(false);
+    expect(await directory.unverified()).toEqual([]);
     photos.create.mockResolvedValue([`${root}photos/family/`]);
     await directory.setupFamily(group.id, [photos]);
     expect(privateGrants()).toEqual([]);
@@ -1117,10 +1150,27 @@ describe("fail-safe cleanup of a folder being secured (review round 4)", () => {
     });
     await expect(directory.setFamily(group.id)).rejects.toThrow("Tab closed");
     expect(sealed.has(folder)).toBe(false);
+    expect(securing.has(folder)).toBe(true);
     await expect(directory.list()).rejects.toThrow(SETTINGS_UNVERIFIED);
-    await expect(directory.setupFamily(group.id, [photos])).rejects.toThrow(SETTINGS_UNVERIFIED);
+    // The next pass resumes: everything the marked folder holds was planted, and goes.
+    await expect(directory.setupFamily(group.id, [photos])).rejects.toThrow(SECURING_RACE);
     expect(privateGrants()).toEqual([]);
     expect(photos.create).not.toHaveBeenCalled();
+    for (const name of ["state.json", "0.txt"])
+      await expect(storage.read(`${folder}${name}`)).rejects.toMatchObject({ code: "not-found" });
+    expect(sealed.has(folder)).toBe(true);
+    photos.create.mockResolvedValue([`${root}photos/family/`]);
+    await directory.setupFamily(group.id, [photos]);
+    expect(privateGrants()).toEqual([]);
+  });
+  it("seals a marked folder left empty by an interrupted pass without reporting a race", async () => {
+    const { directory } = make();
+    const group = await directory.create("Family", [bob]);
+    roles.set(folder, [ownerManager]);
+    securing.add(folder);
+    await directory.setFamily(group.id);
+    expect(sealed.has(folder)).toBe(true);
+    expect(securing.has(folder)).toBe(false);
   });
   it("unseals a sealed folder whose access widened, and refuses it while it holds anything", async () => {
     const { directory, storage } = make();
@@ -1187,7 +1237,9 @@ describe("fail-safe cleanup of a folder being secured (review round 4)", () => {
     await expect(directory.create("Family", [bob])).rejects.toThrow(SECURING_BLOCKED);
     expect(sealed.has(groups)).toBe(false);
     await expect(directory.list()).rejects.toThrow(GROUPS_UNVERIFIED);
-    await expect(directory.create("Family", [bob])).rejects.toThrow(GROUPS_UNVERIFIED);
+    // The retry tries to delete it again (it was planted), and fails the same way.
+    await expect(directory.create("Family", [bob])).rejects.toThrow(SECURING_BLOCKED);
+    await expect(directory.verifyFolder("groups", "keep")).rejects.toThrow(SECURING_INTERRUPTED);
     // Removing it fails the same way, so the folder stays unsealed.
     await expect(directory.verifyFolder("groups", "discard")).rejects.toThrow(SECURING_BLOCKED);
     expect(sealed.has(groups)).toBe(false);
@@ -1219,10 +1271,17 @@ describe("folders changed outside the suite are kept or removed by the owner (re
     expect(vi.mocked(setGrants).mock.calls.length).toBe(grants);
     for (const { id } of [family, team])
       expect(await storage.read(id.replace("#this", ""))).toBeDefined();
+    const previews = [
+      { url: family.id.replace("#this", ""), name: "Family", members: [bob] },
+      { url: team.id.replace("#this", ""), name: "Team", members: [carol] },
+    ].sort((a, b) => a.url.localeCompare(b.url));
     expect(await directory.unverified()).toEqual([
       {
         folder: "groups",
-        documents: [family.id, team.id].map((id) => id.replace("#this", "")).sort(),
+        documents: previews.map(({ url }) => url),
+        contents: previews.map((preview) => ({ ...preview, kind: "group", inherits: true })),
+        planted: false,
+        keepable: true,
       },
     ]);
   });
@@ -1299,7 +1358,21 @@ describe("folders changed outside the suite are kept or removed by the owner (re
     await directory.setFamily(group.id);
     sealed.delete(folder);
     expect(await directory.unverified()).toEqual([
-      { folder: "settings", documents: [`${folder}state.json`] },
+      {
+        folder: "settings",
+        documents: [`${folder}state.json`],
+        contents: [
+          {
+            url: `${folder}state.json`,
+            inherits: true,
+            kind: "settings",
+            family: group.id,
+            spaces: [],
+          },
+        ],
+        planted: false,
+        keepable: true,
+      },
     ]);
     await expect(directory.setFamily(group.id)).rejects.toThrow(SETTINGS_UNVERIFIED);
   });
@@ -1329,4 +1402,146 @@ it("never deletes access or metadata documents listed in a folder being secured"
   expect(remove).not.toHaveBeenCalled();
   expect(setGrants).toHaveBeenCalledWith([folder], expect.anything(), expect.anything());
   expect(sealed.has(folder)).toBe(true);
+});
+
+describe("previews of unverified folders (review round 6)", () => {
+  const groups = `${root}groups/`;
+  const folder = `${root}settings/group-sharing/`;
+  const document = (id: string) => id.replace("#this", "");
+  it("shows what each group says, and offers Keep only when every document can be kept", async () => {
+    const { directory, storage } = make();
+    const family = await directory.create("Family", [bob, carol]);
+    const empty = await directory.create("Empty");
+    sealed.delete(groups);
+    // Everything below is shown, never trusted: none of it is kept without the owner's word.
+    const add = async (name: string, body: string) =>
+      (await storage.create(groups, body, { name, contentType: "text/turtle" })).url;
+    const notGroup = await add("not-group.ttl", "");
+    const userinfo = await add(
+      "userinfo.ttl",
+      await serializeGroup(`${groups}userinfo.ttl`, {
+        name: "Odd",
+        members: ["https://user:secret@bob.example/#me"],
+      }),
+    );
+    const own = await add(
+      "own.ttl",
+      await serializeGroup(`${groups}own.ttl`, { name: "Own", members: [bob] }),
+    );
+    roles.set(own, roles.get(groups) ?? []);
+    const locked = await add(
+      "locked.ttl",
+      await serializeGroup(`${groups}locked.ttl`, { name: "Locked", members: [bob] }),
+    );
+    const modes = vi.mocked(readAccessModes).getMockImplementation() as typeof readAccessModes;
+    vi.mocked(readAccessModes).mockImplementation(async (url, options) => {
+      if (url === locked) throw new StorageError("forbidden", { method: "HEAD", url, status: 403 });
+      return modes(url, options);
+    });
+    const writes = vi.mocked(setGrants).mock.calls.length;
+    const [found] = await directory.unverified();
+    expect(vi.mocked(setGrants).mock.calls.length).toBe(writes);
+    expect(sealed.has(groups)).toBe(false);
+    expect(found?.planted).toBe(false);
+    expect(found?.keepable).toBe(false);
+    expect(new Map(found?.contents.map((content) => [content.url, content]))).toEqual(
+      new Map([
+        [
+          document(family.id),
+          {
+            url: document(family.id),
+            inherits: true,
+            kind: "group",
+            name: "Family",
+            members: [bob, carol],
+          },
+        ],
+        [
+          document(empty.id),
+          { url: document(empty.id), inherits: true, kind: "group", name: "Empty", members: [] },
+        ],
+        [notGroup, { url: notGroup, inherits: true, kind: "unreadable" }],
+        [userinfo, { url: userinfo, inherits: true, kind: "unreadable" }],
+        [own, { url: own, inherits: false, kind: "group", name: "Own", members: [bob] }],
+        [locked, { url: locked, inherits: false, kind: "group", name: "Locked", members: [bob] }],
+      ]),
+    );
+    // Keep refuses what the preview couldn't offer: documents with their own access...
+    await expect(directory.verifyFolder("groups", "keep")).rejects.toThrow(GROUP_UNSAFE);
+    for (const url of [own, locked])
+      await storage.delete(url, { ifMatch: (await storage.head(url)).etag as string });
+    roles.delete(own);
+    // ...and documents it can't read.
+    await expect(directory.verifyFolder("groups", "keep")).rejects.toThrow(UNVERIFIED_UNREADABLE);
+    expect(sealed.has(groups)).toBe(false);
+    for (const url of [notGroup, userinfo])
+      await storage.delete(url, { ifMatch: (await storage.head(url)).etag as string });
+    expect((await directory.unverified())[0]?.keepable).toBe(true);
+    await directory.verifyFolder("groups", "keep");
+    expect((await directory.list()).map((group) => group.name)).toEqual(["Empty", "Family"]);
+  });
+  it("shows the settings' Family group and spaces, or that they can't be read", async () => {
+    const { directory, storage } = make();
+    const group = await directory.create("Family", [bob]);
+    await directory.setFamily(group.id);
+    sealed.delete(folder);
+    const state = `${folder}state.json`;
+    const write = async (body: string) =>
+      storage.write(state, body, {
+        contentType: "application/json",
+        ifMatch: (await storage.head(state)).etag as string,
+      });
+    await write(
+      JSON.stringify({ notices: [], spaces: { a: [`${root}b/`, `${root}a/`], c: [`${root}a/`] } }),
+    );
+    expect((await directory.unverified())[0]?.contents).toEqual([
+      {
+        url: state,
+        inherits: true,
+        kind: "settings",
+        family: null,
+        spaces: [`${root}a/`, `${root}b/`],
+      },
+    ]);
+    await write("{");
+    expect(await directory.unverified()).toEqual([
+      {
+        folder: "settings",
+        documents: [state],
+        contents: [{ url: state, inherits: true, kind: "unreadable" }],
+        planted: false,
+        keepable: false,
+      },
+    ]);
+    await expect(directory.verifyFolder("settings", "keep")).rejects.toThrow(UNVERIFIED_UNREADABLE);
+    await directory.verifyFolder("settings", "discard");
+    expect(await directory.unverified()).toEqual([]);
+  });
+  it(`previews at most ${PREVIEW_LIMIT} documents, and never offers Keep for unseen ones`, async () => {
+    const { directory, storage } = make();
+    await directory.create("Family", [bob]);
+    sealed.delete(groups);
+    for (let index = 0; index < PREVIEW_LIMIT; index++)
+      await storage.create(groups, "", { name: `g${index}.ttl`, contentType: "text/turtle" });
+    const [found] = await directory.unverified();
+    expect(found?.documents).toHaveLength(PREVIEW_LIMIT + 1);
+    expect(found?.contents).toHaveLength(PREVIEW_LIMIT);
+    expect(found?.keepable).toBe(false);
+  });
+  it("stops removing when another tab sealed the folder after this one rewrote it", async () => {
+    const { directory, storage } = make();
+    const family = await directory.create("Family", [bob]);
+    sealed.delete(groups);
+    const original = vi.mocked(setGrants).getMockImplementation();
+    vi.mocked(setGrants).mockImplementation(async (urls, grants, options) => {
+      const result = await (original as NonNullable<typeof original>)(urls, grants, options);
+      // Another tab kept the folder (and sealed it) just after this rewrite.
+      if (urls[0] === groups) sealed.add(groups);
+      return result;
+    });
+    const remove = vi.spyOn(storage, "delete");
+    await directory.verifyFolder("groups", "discard");
+    expect(remove).not.toHaveBeenCalled();
+    expect((await directory.list()).map((group) => group.id)).toEqual([family.id]);
+  });
 });

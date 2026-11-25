@@ -87,16 +87,40 @@ refused, and nothing it holds is trusted until the owner decides.
   deleted. It got that way through an earlier build, an ACL editor that dropped the seal, a
   cleanup that never finished, or a widen-then-narrow (the recovery `GROUP_UNSAFE` asks for).
   Deleting automatically would silently drop every group, and with it every `acl:agentGroup`
-  grant, or re-send invitations. `unverified()` lists such folders and their documents;
-  `verifyFolder(folder, "keep")` re-checks that the folder is safe and that every document
-  inherits its ACL (one with its own ACL is refused, never kept), then seals without deleting;
-  `verifyFolder(folder, "discard")` deletes what the folder holds, then seals. Settings → Groups &
-  family offers these as Keep and Remove, Remove after a confirmation.
+  grant, or re-send invitations. `unverified()` lists such folders and their documents, with a
+  preview of what each says (`contents`, at most `PREVIEW_LIMIT` = 500): a group's name and member
+  WebIDs, or the settings' Family group and the space URLs they would grant it, read with the
+  readers' own parsers but trusted for nothing else and with no side effects. A document that
+  can't be read or parsed is `unreadable`; `inherits` says whether it inherits the folder's ACL.
+  `keepable` is true only when the folder is not `planted` (below) and every document is
+  previewed, readable and inherits. `verifyFolder(folder, "keep")` re-checks that the folder is
+  safe and not `planted` (`SECURING_INTERRUPTED`) and that every document inherits its ACL (one
+  with its own ACL is refused, never kept) and is readable (`UNVERIFIED_UNREADABLE`), then seals
+  without deleting; `verifyFolder(folder, "discard")` deletes what the folder holds, then seals.
+  Settings → Groups & family lists the contents and warns that Keep trusts what anyone with
+  earlier access could have written (and, for settings, that kept settings can grant the Family
+  group the spaces listed). Remove comes first; Keep (offered only when `keepable`) and Remove
+  each open a confirmation that takes focus, and Remove's says that removing groups ends every
+  share made through them. Cancel returns focus to its button; the outcome is announced in a
+  focused `role="status"` (or the error in a focused alert).
+- Securing an unsafe folder marks it as being secured in the same ACL rewrite (pod-access
+  `setGrants` `securing`, read with `isSecuring`), and the seal removes the mark. A folder that is
+  safe, unsealed and still marked was left by a pass that stopped part-way (a failed delete, a
+  crash), so everything it holds was planted: `unverified()` reports it as `planted`, Keep is
+  refused, and the next provisioning pass deletes what it holds (readable documents first, past
+  failures), seals it and fails with `SECURING_RACE` (reload and retry), as does "discard". Only
+  the owner's own mark on the folder's own ACL counts, and a sealed folder ignores it, so forcing
+  that deletion needs Control on the folder: the same threat level as forging the seal (below).
 - Only documents that appear between the emptiness check and the permission rewrite (this pass's
   race window) are deleted automatically: the documents readers read first, each delete
   conditional on the entry's current ETag. A failure never stops the rest, and the call fails
   with `SECURING_RACE` (reload and retry) once the folder is sealed. Older never-read leftovers
   are left in place.
+- Before deleting anything, the pass re-checks the seal. If another pass (another tab) has sealed
+  the folder since this one rewrote it, it deletes nothing and re-checks the folder instead: that
+  pass verified the folder before sealing it and creates groups only after its seal, while this
+  pass listed what it would delete before the check, so a group the other tab just created
+  survives.
 - The seal is withheld (`SECURING_BLOCKED`) while a readable document survives, e.g. one whose own
   ACL shuts the owner out; remove it to continue. Other leftovers (such an undeletable `0.txt`, a
   planted sub-folder) are never read, so they do not block the seal.

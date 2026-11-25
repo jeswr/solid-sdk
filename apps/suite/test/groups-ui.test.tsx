@@ -97,80 +97,251 @@ it("creates a group and shows a grants warning before deletion", async () => {
   fireEvent.click(within(review).getByRole("button", { name: "Remove grants and delete group" }));
   await waitFor(() => expect(directory.delete).toHaveBeenCalledTimes(1));
 });
-it("asks the owner to keep or remove group files changed outside the suite", async () => {
-  const directory = setup();
-  const documents = [`${root}groups/a.ttl`, `${root}groups/b.ttl`];
-  directory.unverified.mockResolvedValueOnce([{ folder: "groups", documents }]);
-  directory.list.mockRejectedValueOnce(new Error(GROUPS_UNVERIFIED));
+const groupFolder = (overrides: Partial<UnverifiedFolder> = {}): UnverifiedFolder => ({
+  folder: "groups",
+  documents: [`${root}groups/a.ttl`, `${root}groups/b.ttl`],
+  contents: [
+    {
+      url: `${root}groups/a.ttl`,
+      inherits: true,
+      kind: "group",
+      name: "Family",
+      members: ["https://bob.example/#me", "https://carol.example/#me"],
+    },
+    { url: `${root}groups/b.ttl`, inherits: true, kind: "group", name: "Team", members: [] },
+  ],
+  planted: false,
+  keepable: true,
+  ...overrides,
+});
+const settingsFolder = (overrides: Partial<UnverifiedFolder> = {}): UnverifiedFolder => ({
+  folder: "settings",
+  documents: [`${root}settings/group-sharing/state.json`],
+  contents: [
+    {
+      url: `${root}settings/group-sharing/state.json`,
+      inherits: true,
+      kind: "settings",
+      family: `${root}groups/family.ttl#this`,
+      spaces: [`${root}private/`],
+    },
+  ],
+  planted: false,
+  keepable: true,
+  ...overrides,
+});
+function renderSettings() {
   render(
     <AccountsContext.Provider value={context}>
       <GroupsSettings />
     </AccountsContext.Provider>,
   );
+}
+it("shows each changed group and its members, and keeps them only after a confirmation", async () => {
+  const directory = setup();
+  directory.unverified.mockResolvedValueOnce([groupFolder()]);
+  directory.list.mockRejectedValueOnce(new Error(GROUPS_UNVERIFIED));
+  renderSettings();
   const notice = await screen.findByRole("region", { name: "Group files changed" });
   expect(
     within(notice).getByText(
-      "2 group files were changed outside the suite. Keep them or remove them?",
+      "2 group files were changed outside the suite. Review them, then keep or remove them.",
     ),
   ).toBeTruthy();
+  expect(within(notice).getByText("Family")).toBeTruthy();
+  const members = within(notice).getByRole("list", { name: "Members of Family" });
+  expect(
+    within(members)
+      .getAllByRole("listitem")
+      .map((item) => item.textContent),
+  ).toEqual(["https://bob.example/#me", "https://carol.example/#me"]);
+  expect(within(notice).getByText("No members")).toBeTruthy();
+  expect(within(notice).getByText(/anyone who could change this folder before/)).toBeTruthy();
   expect(await screen.findByRole("alert")).toHaveProperty("textContent", GROUPS_UNVERIFIED);
   // Nothing else can be changed until the owner decides.
   const create = screen.getByRole("region", { name: "Create group" });
   expect((create.querySelector("fieldset") as HTMLFieldSetElement).disabled).toBe(true);
+  // Remove comes first; Keep needs a confirmation, which takes focus.
+  const buttons = within(notice).getAllByRole("button");
+  expect(buttons.map((button) => button.textContent)).toEqual(["Remove", "Keep"]);
+  const keep = within(notice).getByRole("button", { name: "Keep" });
+  fireEvent.click(keep);
+  const confirm = within(notice).getByRole("group", {
+    name: "Keep these 2 groups and their members as they are?",
+  });
+  expect(document.activeElement).toBe(confirm);
+  expect(within(confirm).getByText("Groups you keep: Family, Team.")).toBeTruthy();
+  expect(directory.verifyFolder).not.toHaveBeenCalled();
+  // Cancel returns focus to the button that opened the confirmation.
+  fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
+  expect(document.activeElement).toBe(within(notice).getByRole("button", { name: "Keep" }));
   fireEvent.click(within(notice).getByRole("button", { name: "Keep" }));
+  fireEvent.click(within(notice).getByRole("button", { name: "Keep files" }));
   await waitFor(() => expect(directory.verifyFolder).toHaveBeenCalledWith("groups", "keep"));
   await waitFor(() =>
     expect(screen.queryByRole("region", { name: "Group files changed" })).toBeNull(),
   );
+  // Focus moves to the announced outcome.
+  const status = await screen.findByText("Group files kept.");
+  expect(status.getAttribute("role")).toBe("status");
+  await waitFor(() => expect(document.activeElement).toBe(status));
   expect(await screen.findByRole("region", { name: "Family" })).toBeTruthy();
   expect((create.querySelector("fieldset") as HTMLFieldSetElement).disabled).toBe(false);
 });
-it("confirms before removing changed files, and words a single file or settings", async () => {
+it("warns that removing groups ends their shares, and shows the settings' Family spaces", async () => {
   const directory = setup();
   directory.unverified.mockResolvedValueOnce([
-    { folder: "groups", documents: [`${root}groups/a.ttl`] },
-    { folder: "settings", documents: [`${root}settings/group-sharing/state.json`] },
+    groupFolder({
+      documents: [`${root}groups/a.ttl`],
+      contents: groupFolder().contents.slice(0, 1),
+    }),
+    settingsFolder(),
   ]);
-  render(
-    <AccountsContext.Provider value={context}>
-      <GroupsSettings />
-    </AccountsContext.Provider>,
-  );
+  renderSettings();
   const notice = await screen.findByRole("region", { name: "Group files changed" });
   expect(
     within(notice).getByText(
-      "1 group file was changed outside the suite. Keep them or remove them?",
+      "1 group file was changed outside the suite. Review them, then keep or remove them.",
     ),
   ).toBeTruthy();
   const settings = screen.getByRole("region", { name: "Group settings changed" });
   expect(
     within(settings).getByText(
-      "Your group sharing settings were changed outside the suite. Keep them or remove them?",
+      "Your group sharing settings were changed outside the suite. Review them, then keep or remove them.",
     ),
   ).toBeTruthy();
-  fireEvent.click(within(notice).getByRole("button", { name: "Remove" }));
-  const confirm = within(notice).getByRole("group", {
-    name: "Remove them from your pod? This can't be undone.",
-  });
+  // The Family group is named from the listed groups; its spaces are listed.
+  expect(within(settings).getByText("Family group: Family")).toBeTruthy();
+  expect(
+    within(within(settings).getByRole("list", { name: "Family spaces" })).getByText(
+      `${root}private/`,
+    ),
+  ).toBeTruthy();
+  expect(
+    within(settings).getByText(/Kept settings can give your Family group access/),
+  ).toBeTruthy();
+  fireEvent.click(within(settings).getByRole("button", { name: "Keep" }));
+  expect(
+    within(settings).getByText(`Your Family group can be given access to: ${root}private/.`),
+  ).toBeTruthy();
+  fireEvent.click(within(settings).getByRole("button", { name: "Cancel" }));
+  const remove = within(notice).getByRole("button", { name: "Remove" });
+  fireEvent.click(remove);
+  const removal =
+    "Remove these group files from your pod? Every share made through these groups ends. This can't be undone.";
+  const confirm = within(notice).getByRole("group", { name: removal });
+  expect(document.activeElement).toBe(confirm);
   expect(directory.verifyFolder).not.toHaveBeenCalled();
   fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
-  expect(
-    within(notice).queryByRole("group", {
-      name: "Remove them from your pod? This can't be undone.",
-    }),
-  ).toBeNull();
+  expect(within(notice).queryByRole("group", { name: removal })).toBeNull();
+  expect(document.activeElement).toBe(within(notice).getByRole("button", { name: "Remove" }));
   fireEvent.click(within(notice).getByRole("button", { name: "Remove" }));
   fireEvent.click(
-    within(
-      within(notice).getByRole("group", {
-        name: "Remove them from your pod? This can't be undone.",
-      }),
-    ).getByRole("button", {
+    within(within(notice).getByRole("group", { name: removal })).getByRole("button", {
       name: "Remove files",
     }),
   );
   await waitFor(() => expect(directory.verifyFolder).toHaveBeenCalledWith("groups", "discard"));
   expect(directory.verifyFolder).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(document.activeElement?.textContent).toBe("Group files removed."));
+});
+it("offers only removal for planted or unkeepable files, and focuses a failure", async () => {
+  const directory = setup();
+  directory.unverified.mockResolvedValueOnce([
+    groupFolder({
+      documents: [`${root}groups/a.ttl`, `${root}groups/b.ttl`, `${root}groups/c.ttl`],
+      contents: [
+        { url: `${root}groups/a.ttl`, inherits: true, kind: "unreadable" },
+        { url: `${root}groups/b.ttl`, inherits: false, kind: "group", name: "", members: [] },
+      ],
+      keepable: false,
+    }),
+    settingsFolder({
+      contents: [
+        {
+          url: `${root}settings/group-sharing/state.json`,
+          inherits: true,
+          kind: "settings",
+          family: `${root}groups/unknown.ttl#this`,
+          spaces: [],
+        },
+      ],
+      planted: true,
+      keepable: false,
+    }),
+  ]);
+  directory.verifyFolder.mockRejectedValueOnce(new Error("Storage unavailable"));
+  renderSettings();
+  const notice = await screen.findByRole("region", { name: "Group files changed" });
+  expect(within(notice).getByText("This file can't be read, so it can't be kept.")).toBeTruthy();
+  expect(within(notice).getByText("Unnamed group")).toBeTruthy();
+  expect(
+    within(notice).getByText("This file has its own access settings, so it can't be kept."),
+  ).toBeTruthy();
+  expect(within(notice).getByText("1 more file isn't shown, so it can't be kept.")).toBeTruthy();
+  expect(
+    within(notice).getByText("Some of these files can't be kept. Remove them to continue."),
+  ).toBeTruthy();
+  expect(within(notice).queryByRole("button", { name: "Keep" })).toBeNull();
+  const settings = screen.getByRole("region", { name: "Group settings changed" });
+  expect(within(settings).getByText(`Family group: ${root}groups/unknown.ttl#this`)).toBeTruthy();
+  expect(within(settings).getByText("No Family spaces")).toBeTruthy();
+  expect(within(settings).getByText(/added by someone else while this folder/)).toBeTruthy();
+  expect(within(settings).queryByRole("button", { name: "Keep" })).toBeNull();
+  fireEvent.click(within(settings).getByRole("button", { name: "Remove" }));
+  expect(
+    within(settings).getByRole("group", {
+      name: "Remove these group settings from your pod? This can't be undone.",
+    }),
+  ).toBeTruthy();
+  fireEvent.click(within(settings).getByRole("button", { name: "Remove files" }));
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toBe("Storage unavailable");
+  await waitFor(() => expect(document.activeElement).toBe(alert));
+  expect(screen.queryByText("Group settings removed.")).toBeNull();
+});
+it("keeps settings that list no spaces, and has no Family group", async () => {
+  const directory = setup();
+  directory.unverified.mockResolvedValueOnce([
+    settingsFolder({
+      contents: [
+        {
+          url: `${root}settings/group-sharing/state.json`,
+          inherits: true,
+          kind: "settings",
+          family: null,
+          spaces: [],
+        },
+      ],
+    }),
+  ]);
+  renderSettings();
+  const settings = await screen.findByRole("region", { name: "Group settings changed" });
+  expect(within(settings).getByText("Family group: none")).toBeTruthy();
+  fireEvent.click(within(settings).getByRole("button", { name: "Keep" }));
+  expect(within(settings).getByRole("group", { name: "Keep these group settings as they are?" }));
+  expect(within(settings).getByText("These settings list no Family spaces.")).toBeTruthy();
+  fireEvent.click(within(settings).getByRole("button", { name: "Keep files" }));
+  await waitFor(() => expect(directory.verifyFolder).toHaveBeenCalledWith("settings", "keep"));
+  await waitFor(() => expect(document.activeElement?.textContent).toBe("Group settings kept."));
+});
+it("words keeping a single group", async () => {
+  const directory = setup();
+  directory.unverified.mockResolvedValueOnce([
+    groupFolder({
+      documents: [`${root}groups/a.ttl`],
+      contents: groupFolder().contents.slice(0, 1),
+    }),
+  ]);
+  renderSettings();
+  const notice = await screen.findByRole("region", { name: "Group files changed" });
+  fireEvent.click(within(notice).getByRole("button", { name: "Keep" }));
+  expect(
+    within(notice).getByRole("group", {
+      name: "Keep this group and its members as they are?",
+    }),
+  ).toBeTruthy();
+  expect(directory.verifyFolder).not.toHaveBeenCalled();
 });
 it("shows why ACP group sharing is unavailable", async () => {
   setup();

@@ -78,7 +78,7 @@ describe("public export boundary", () => {
       assert.deepEqual(Object.keys(roles).sort(),
         [
           "addGrant", "ensurePrivateContainerAccess", "grantsWithRoles", "isGrantableTarget",
-          "isRoleError", "isSealed", "modesToRole", "movePreservingAccess", "readAccessModes",
+          "isRoleError", "isSealed", "isSecuring", "modesToRole", "movePreservingAccess", "readAccessModes",
           "readGrants", "readScopedGrants", "removeGrant", "rolesToModes", "sealAccess", "sealDataset", "setGrants", "setScopedGrants",
           "unsealAccess", "verifyPrivateDemoAccess",
         ].sort());
