@@ -10650,16 +10650,16 @@ packages:
     version: 0.1.0
     engines: {node: '>=24'}
 
-  '@jeswr/guarded-fetch@git+https://git@github.com:jeswr/guarded-fetch.git#81926b4481310ff74a5c02c3c4eaa2a51ce2dee6':
-    resolution: {commit: 81926b4481310ff74a5c02c3c4eaa2a51ce2dee6, repo: git@github.com:jeswr/guarded-fetch.git, type: git}
+  '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6':
+    resolution: {tarball: https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6}
     version: 0.1.0
     engines: {node: '>=22'}
 
   '@jeswr/prefixcc@1.2.1':
     resolution: {integrity: sha512-kBBXbqsaeh3Irp416h/RbelqJgIOp6X/OJJlYmLyr/9qlBYKTKSCuEv5/xjZ0Yf8Yec+QFRYBaOQ2JkMBSH7KA==}
 
-  '@jeswr/rdf-serialize@git+https://git@github.com:jeswr/rdf-serialize.git#9c3a34dd93f318fd00d9e6f22081123e502a0578':
-    resolution: {commit: 9c3a34dd93f318fd00d9e6f22081123e502a0578, repo: git@github.com:jeswr/rdf-serialize.git, type: git}
+  '@jeswr/rdf-serialize@https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578':
+    resolution: {tarball: https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578}
     version: 0.1.0
     engines: {node: '>=24'}
 
@@ -27095,7 +27095,7 @@ snapshots:
       jsonld-streaming-parser: 5.0.1
       n3: 2.1.1
 
-  '@jeswr/guarded-fetch@git+https://git@github.com:jeswr/guarded-fetch.git#81926b4481310ff74a5c02c3c4eaa2a51ce2dee6':
+  '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6':
     dependencies:
       undici: 8.9.0
 
@@ -27107,7 +27107,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  '@jeswr/rdf-serialize@git+https://git@github.com:jeswr/rdf-serialize.git#9c3a34dd93f318fd00d9e6f22081123e502a0578':
+  '@jeswr/rdf-serialize@https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578':
     dependencies:
       '@rdfjs/types': 2.0.1
       n3: 2.1.1
@@ -27126,8 +27126,8 @@ snapshots:
 
   '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/bee27d508372e64021e23bdaeb2d79c06e08cf18':
     dependencies:
-      '@jeswr/guarded-fetch': git+https://git@github.com:jeswr/guarded-fetch.git#81926b4481310ff74a5c02c3c4eaa2a51ce2dee6
-      '@jeswr/rdf-serialize': git+https://git@github.com:jeswr/rdf-serialize.git#9c3a34dd93f318fd00d9e6f22081123e502a0578
+      '@jeswr/guarded-fetch': https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6
+      '@jeswr/rdf-serialize': https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578
       '@rdfjs/wrapper': 0.34.0
       '@solid/object': 0.6.0
       content-type: 1.0.5
