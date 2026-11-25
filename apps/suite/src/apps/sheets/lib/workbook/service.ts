@@ -253,7 +253,14 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     saveOptions: { force?: boolean; title?: string; snapshotCurrent?: boolean } = {},
   ): Promise<SaveResult> {
     container = checked(container);
-    await collaborations.get(container)?.flush();
+    const collaboration = collaborations.get(container);
+    try {
+      await collaboration?.flush();
+    } catch (error) {
+      // A log retired by a restore elsewhere is a conflict the user resolves, not a retryable failure.
+      if (collaboration?.isRetired) throw new WorkbookConflictError(container);
+      throw error;
+    }
     snapshot = validateCommentSnapshot(snapshot);
     if (snapshot.charts !== undefined)
       snapshot = (await import("../charts/spec")).validateChartSnapshot(snapshot);

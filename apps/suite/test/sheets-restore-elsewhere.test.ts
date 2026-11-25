@@ -3,11 +3,12 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cells, LOCAL_ORIGIN, sheetStates } from "../src/apps/sheets/lib/collaboration/model";
 import type { WorkbookCollaboration } from "../src/apps/sheets/lib/collaboration/persistence";
-import type {
-  MountEngine,
-  SheetEngine,
-  Snapshot,
-  WorkbookService,
+import {
+  type MountEngine,
+  type SheetEngine,
+  type Snapshot,
+  WorkbookConflictError,
+  type WorkbookService,
 } from "../src/apps/sheets/lib/contract";
 import { pendingSaves } from "../src/apps/sheets/lib/pending-saves";
 import { act, click, h, mount } from "./drive-ui-dom";
@@ -177,6 +178,46 @@ it("retires a second client's log when another client restores, so the restored 
   expect(text(reopened)).toContain("Yesterday");
   expect(text(reopened)).not.toContain("Stale edit");
   await reopened.destroy();
+});
+
+it("reports a save through a retired log as a conflict, not a retryable error", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const pod = await setup();
+  const { book } = pod;
+  const stale = (await pod.service.collaborate?.(
+    book.container,
+    book.snapshot,
+    false,
+  )) as WorkbookCollaboration;
+  // The workbook is restored elsewhere under a fresh instance id.
+  const restored = { ...book.snapshot, id: crypto.randomUUID() };
+  const saved = await pod.service.save(book.container, restored, book.version, { force: true });
+  vi.setSystemTime(Date.now() + 10_000);
+  edit(stale, "Stale edit");
+  await expect(pod.service.save(book.container, book.snapshot, saved.version)).rejects.toThrow(
+    WorkbookConflictError,
+  );
+  expect(stale.isRetired).toBe(true);
+  expect((await pod.service.open(book.container)).snapshot.id).toBe(restored.id);
+});
+
+it("keeps an ordinary flush failure as a retryable save error", async () => {
+  const pod = await setup();
+  const { book } = pod;
+  const live = (await pod.service.collaborate?.(
+    book.container,
+    book.snapshot,
+    false,
+  )) as WorkbookCollaboration;
+  vi.spyOn(live, "flush").mockRejectedValueOnce(new Error("Network down"));
+  const failure = await pod.service
+    .save(book.container, book.snapshot, book.version)
+    .catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(Error);
+  expect(failure).not.toBeInstanceOf(WorkbookConflictError);
+  expect((failure as Error).message).toBe("Network down");
+  expect(live.isRetired).toBe(false);
+  await live.destroy();
 });
 
 it("retires an idle client on sync, so it stops reading and flushing the old log", async () => {
