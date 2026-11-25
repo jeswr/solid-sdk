@@ -27,15 +27,26 @@ entries. Use it for explicit overwrite and missing-validator recovery; a normal 
 with an observed ETag must retain that validator. A conflicted create may be explicitly
 replaced with a fresh create by supplying a new input object.
 
-Privacy is fail-closed and WAC-only. `protectJournal` checks the complete policy as well
-as projected roles, because partial grants can disappear from role projections. Setup
-seals absent own ACLs automatically only when effective inherited defaults are owner-only;
-new folders and the explicit `makePrivate` action may seal broader inheritance. Every
-seal uses `setGrants` with `ownOnly` and the observed snapshot, then verifies it. Do not
-edit ancestor ACLs or widen permissions. Unsupported/unreadable policies remain errors.
-Revoked WAC authorisations with no principals are inert and may remain in the ACL;
-privacy checks still require active owner-only grants. Differing folder/member scopes
-are refused with a message directing the user to review both scopes in Drive.
+Privacy is fail-closed and decided only by the shared `checkOwnerOnly` from
+`@jeswr/pod-access` (there is no Journal-specific verifier): it reads the raw effective WAC
+or ACP policy, own document then every ancestor, and refuses untyped WAC rules, non-canonical
+targets, unrepresentable modes, a looser inherited parent ACL, and any transport or discovery
+doubt. ACP pods work when the caller supplies a trusted `acpDialect` ("css" or "ess", from
+deployment configuration; `openJournal(..., { acpDialect })` or the `createJournalStore`
+options argument); without it an ACP pod fails closed. LWS is refused.
+
+Only two situations write an access document: a folder `initialize()` just created, and the
+user's explicit `makePrivate()` repair. Every other call (reopening, `list`, `read`, `save`,
+`remove`, photos) only verifies, never seals, and never inherits what the verifier refused.
+A folder that already exists and is shared surfaces `JournalPrivacyError.canMakePrivate`
+(only when every finding is a non-owner grant); anything unverifiable is `canMakePrivate:
+false`. Sealing uses `readGrants`/`setGrants` with `ownOnly` and the observed snapshot (no
+pinned access model) and is never taken as proof: the result is verified again with
+`checkOwnerOnly`. Do not edit ancestor ACLs or widen permissions. Known limitation: the role
+writer can leave an inert principal-less authorisation after replacing a shared rule, which
+the strict verifier refuses, so such a repair fails closed ("Couldn't verify private journal
+access") until pod-access cleans it up. Differing folder/member scopes are refused with a
+message directing the user to review both scopes in Drive.
 
 Listing verifies the folder once and loads at most six entries concurrently. Per-entry
 HEAD/advertised ACL checks catch overrides before reading bodies. `onPrivacySkip` reports

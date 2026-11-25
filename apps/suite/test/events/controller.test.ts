@@ -35,6 +35,8 @@ function fixture() {
     update: vi.fn().mockResolvedValue(event),
     invitees: vi.fn(),
     notify: vi.fn(),
+    registerInTypeIndex: vi.fn(),
+    reshare: vi.fn(),
   };
   const failure = vi.fn();
   return { repository, failure, controller: new EventsController(repository, failure) };
@@ -70,6 +72,23 @@ it("paints a new invitation before the pod returns and uses its stable URL", asy
     expect(controller.snapshot()).toMatchObject({ saving: 0, events: [saved] }),
   );
 });
+it("reports a Type Index registration warning once the saved invitation is confirmed", async () => {
+  const { repository } = fixture();
+  const warn = vi.fn();
+  const controller = new EventsController(repository, vi.fn(), warn);
+  await controller.refresh();
+  repository.create.mockResolvedValueOnce({
+    ...event,
+    registrationWarning: "Not in your Type Index",
+  });
+  controller.save(event);
+  await controller.settled();
+  expect(warn).toHaveBeenCalledWith("Not in your Type Index");
+  warn.mockClear();
+  controller.save(event);
+  await controller.settled();
+  expect(warn).not.toHaveBeenCalled();
+});
 it("a failed earlier edit never erases a newer queued edit", async () => {
   const { repository, controller, failure } = fixture();
   await controller.refresh();
@@ -79,8 +98,11 @@ it("a failed earlier edit never erases a newer queued edit", async () => {
   controller.save({ ...event, name: "First" }, [], event);
   await Promise.resolve();
   controller.save({ ...event, name: "Second" }, [], event);
-  first.reject(new Error("failure"));
+  const cause = new Error("failure");
+  first.reject(cause);
   await vi.waitFor(() => expect(failure).toHaveBeenCalledOnce());
+  // The failure itself is passed on, so the app can explain a publication failure.
+  expect(failure).toHaveBeenCalledWith(cause);
   expect(controller.snapshot().events[0]?.name).toBe("Second");
   const final = { ...event, name: "Second", etag: '"two"' };
   repository.list.mockResolvedValue([final]);

@@ -600,12 +600,37 @@ it("preserves metadata names when LWS chooses opaque resource identifiers", asyn
   await store.assertContains(saved.data.content);
   await expect(store.assertContains(`${root}outside`)).rejects.toThrow();
 });
-it("refuses an untyped conventional Solid container, including create conflicts", async () => {
+it("adopts an untyped conventional Solid container only when it is verified owner-only", async () => {
   const storage = createMemoryStorage({ root, protocol: "solid" });
-  await storage.create(root, null, { kind: "container", name: "templates" });
+  const existing = await storage.create(root, null, { kind: "container", name: "templates" });
+  const ensurePrivateAccess = vi.fn(async () => false);
+  const refused = createTemplateStore({ storage, ensurePrivateAccess });
+  await expect(refused.list()).rejects.toBeInstanceOf(TemplateAccessError);
+  await expect(refused.save(input)).rejects.toBeInstanceOf(TemplateAccessError);
+  expect(ensurePrivateAccess).not.toHaveBeenCalledWith(existing.url, { created: true });
   const store = createTemplateStore({ storage });
   expect(await store.list()).toEqual([]);
-  await expect(store.save(input)).rejects.toMatchObject({ code: "conflict" });
+  const saved = await store.save(input);
+  expect(saved.id.startsWith(existing.url)).toBe(true);
+});
+it("adopts an untyped Solid container found through a create conflict only when verified", async () => {
+  const storage = createMemoryStorage({ root, protocol: "solid" });
+  let hidden = true;
+  const racing = override(storage, {
+    head: async (url) => {
+      if (hidden && url === `${root}templates/`) {
+        hidden = false;
+        throw new StorageError("not-found", { method: "HEAD", url });
+      }
+      return storage.head(url);
+    },
+  });
+  await storage.create(root, null, { kind: "container", name: "templates" });
+  const refusing = createTemplateStore({ storage: racing, ensurePrivateAccess: async () => false });
+  await expect(refusing.save(input)).rejects.toBeInstanceOf(TemplateAccessError);
+  hidden = true;
+  const adopting = createTemplateStore({ storage: racing });
+  expect((await adopting.save(input)).id.startsWith(`${root}templates/`)).toBe(true);
 });
 it("copies images into sibling resources before publishing metadata and normalizes previews", async () => {
   const storage = createMemoryStorage({ root, protocol: "solid" });

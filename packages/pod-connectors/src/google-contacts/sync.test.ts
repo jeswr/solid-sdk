@@ -8,6 +8,7 @@ import { createFetchPodWriter } from "../core/pod-writer.js";
 import {
   createMemoryPod,
   fixtureFetch,
+  ownerOnlyFixtureChecks,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
   TEST_WEBID,
@@ -55,6 +56,7 @@ function setup() {
   const pod = createMemoryPod();
   const podFetch = vi.fn(pod.fetch);
   const podWriter = createFetchPodWriter({
+    ...ownerOnlyFixtureChecks,
     adapterId: "google-contacts",
     webId: TEST_WEBID,
     profileDocumentUrl: TEST_PROFILE_DOC,

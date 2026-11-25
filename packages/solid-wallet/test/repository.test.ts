@@ -19,6 +19,17 @@ vi.mock("@jeswr/pod-access", () => ({ checkOwnerOnly: permissions.read }));
 vi.mock("@jeswr/pod-access/roles", () => ({
   setGrants: permissions.write,
 }));
+const typeIndexFactory = vi.hoisted(() => ({ override: undefined as undefined | (() => never) }));
+vi.mock("@jeswr/pod-type-index", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@jeswr/pod-type-index")>();
+  return {
+    ...actual,
+    createTypeIndex: (...args: Parameters<typeof actual.createTypeIndex>) => {
+      if (typeIndexFactory.override) return typeIndexFactory.override();
+      return actual.createTypeIndex(...args);
+    },
+  };
+});
 const data = {
   name: "Test passport",
   kind: "passport" as const,
@@ -32,6 +43,7 @@ function fixture(protocol: "solid" | "lws" = "solid") {
   return { storage, typeIndex, repository };
 }
 beforeEach(() => {
+  typeIndexFactory.override = undefined;
   permissions.read.mockReset().mockResolvedValue({ private: true });
   permissions.write.mockReset().mockResolvedValue({ applied: [], failed: [] });
 });
@@ -242,8 +254,110 @@ it("checks linked preferences and index access during real private registration"
       ? { private: false, reasons: [{ subject: "public", modes: ["read"], reason: "non-owner" }] }
       : { private: true },
   );
-  await expect(repository.initialise()).rejects.toBeInstanceOf(WalletPrivacyError);
+  // A shared index never blocks the wallet and is never written to.
+  await repository.initialise();
+  expect(repository.registration).toEqual({ state: "failed", reason: "shared" });
   expect(write).not.toHaveBeenCalled();
+  await repository.save(data);
+  permissions.read.mockResolvedValue({ private: true });
+  expect(await repository.retryRegistration()).toEqual({ state: "registered" });
+});
+it("opens and stays usable when the WebID profile is outside the storage", async () => {
+  const storage = createMemoryStorage({ root: "https://pod.example/" });
+  const repository = createWalletRepository({
+    storage,
+    fetch: vi.fn(),
+    webId: "https://id.example/card#me",
+  });
+  expect(repository.registration).toEqual({ state: "unavailable" });
+  await repository.initialise();
+  expect(repository.registration).toEqual({ state: "unavailable" });
+  expect(await repository.retryRegistration()).toEqual({ state: "unavailable" });
+  // Nothing is registered, so the settings folder is not provisioned for it either.
+  await expect(storage.head("https://pod.example/settings/")).rejects.toMatchObject({
+    code: "not-found",
+  });
+  const item = await repository.save(data);
+  expect((await repository.list())[0]).toMatchObject(data);
+  await repository.remove(item);
+  expect(await repository.list()).toEqual([]);
+});
+it("reports registration state and rethrows unexpected Type Index constructor errors", async () => {
+  const { repository } = fixture();
+  expect(repository.registration).toEqual({ state: "pending" });
+  // Retrying before the wallet folders are verified registers nothing.
+  expect(await repository.retryRegistration()).toEqual({ state: "pending" });
+  await repository.initialise();
+  expect(repository.registration).toEqual({ state: "registered" });
+  typeIndexFactory.override = () => {
+    throw new StorageError("forbidden", { method: "GET", url: "https://pod.example/" });
+  };
+  const storage = createMemoryStorage({ root: "https://pod.example/" });
+  expect(() => createWalletRepository({ storage, fetch: vi.fn(), webId: owner })).toThrow(
+    StorageError,
+  );
+  typeIndexFactory.override = () => {
+    throw new TypeError("broken");
+  };
+  expect(() => createWalletRepository({ storage, fetch: vi.fn(), webId: owner })).toThrow("broken");
+});
+it("opens and stays usable when settings/ is shared, registering nothing", async () => {
+  const { repository, typeIndex, storage } = fixture();
+  await storage.create(storage.root, null, { name: "settings", kind: "container" });
+  permissions.read.mockImplementation(async ({ url }: { url: string }) =>
+    url === "https://pod.example/settings/"
+      ? { private: false, reasons: [{ subject: "public", modes: ["read"], reason: "non-owner" }] }
+      : { private: true },
+  );
+  await repository.initialise();
+  expect(repository.registration).toEqual({ state: "failed", reason: "shared" });
+  expect(typeIndex.register).not.toHaveBeenCalled();
+  // The wallet folders were provisioned and verified: the wallet stays fully usable.
+  await repository.assertPrivate();
+  const item = await repository.save(data);
+  expect((await repository.list())[0]).toMatchObject(data);
+  await repository.remove(item);
+  // A transport failure while checking settings/ is a failed registration, not sharing.
+  permissions.read.mockImplementation(async ({ url }: { url: string }) => {
+    if (url === "https://pod.example/settings/") throw new Error("unreachable");
+    return { private: true };
+  });
+  expect(await repository.retryRegistration()).toEqual({ state: "failed", reason: "unknown" });
+  permissions.read.mockImplementation(async ({ url }: { url: string }) =>
+    url === "https://pod.example/settings/" ? refusedFor("unsupported-model") : { private: true },
+  );
+  expect(await repository.retryRegistration()).toEqual({ state: "failed", reason: "unsupported" });
+  // Retrying once settings/ is private registers.
+  permissions.read.mockResolvedValue({ private: true });
+  expect(await repository.retryRegistration()).toEqual({ state: "registered" });
+  expect(typeIndex.register).toHaveBeenCalledTimes(1);
+  permissions.read.mockResolvedValue(refusedFor("unsupported-model"));
+  await expect(repository.assertPrivate()).rejects.toBeInstanceOf(WalletUnsupportedError);
+});
+it("keeps the wallet usable when the index write fails, and keeps the error code only", async () => {
+  const { repository, typeIndex } = fixture();
+  vi.mocked(typeIndex.register).mockRejectedValueOnce(
+    new StorageError("forbidden", {
+      method: "PUT",
+      url: "https://pod.example/",
+      message: "secret",
+    }),
+  );
+  await repository.initialise();
+  expect(repository.registration).toEqual({ state: "failed", reason: "forbidden" });
+  expect(JSON.stringify(repository.registration)).not.toContain("secret");
+  await repository.save(data);
+  expect(await repository.retryRegistration()).toEqual({ state: "registered" });
+});
+it("still refuses to write when the wallet folders themselves are shared", async () => {
+  const { repository } = fixture();
+  await repository.initialise();
+  permissions.read.mockResolvedValue({
+    private: false,
+    reasons: [{ subject: "public", modes: ["read"], reason: "non-owner" }],
+  });
+  await expect(repository.save(data)).rejects.toBeInstanceOf(WalletPrivacyError);
+  await expect(repository.initialise()).rejects.toBeInstanceOf(WalletPrivacyError);
 });
 it("handles a concurrent folder creator but rejects a server-assigned different location", async () => {
   const { repository, storage } = fixture();

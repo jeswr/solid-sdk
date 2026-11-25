@@ -40,13 +40,25 @@ validation and date ordering are facade policy because closed admission cannot e
 `invitees/` stores independent InviteAction resources. Event instances are registered in the private
 Type Index. The base, per-event folders and invitee records inherit owner-only access. Drafts remain
 private. Existing content writes use observed ETags and reject conflicts without retrying stale edits.
-Missing own WAC documents are bootstrapped only at an advertised ACL link with If-None-Match; existing
-policies are inspected and never overwritten. New reply/event resources are protected before publishing.
+Containers and documents this package creates are sealed owner-only through `@jeswr/pod-access`
+(`ensurePrivateContainerAccess`, `setGrants`); anything that already existed is only verified with
+`checkOwnerOnly` and never rewritten. The package never writes an `.acl`/`.acr` document itself, and the
+access-control dialect comes from the client's storage features, never from pod data. New reply/event
+resources are protected before publishing.
 
 Publishing grants invitees (or the public for link invitations) Read on the invitation and **Append only
-on the reply container**. Visible guest lists add Read on the container and its children separately;
-Append is never inherited to individual replies. Replies are immutable, so changing a response writes
-a fresh resource. Hidden lists are readable only by the organiser. There is no guest Write grant.
+on the reply container**. The public, or anyone holding a link, **never gets Read on `rsvps/` or on a
+reply**: link invitations accept anonymous Append only, so a guest list is not available for them
+(`guestListAvailable(event)` is false, a requested list is stored hidden, and the host UI says so). A visible
+guest list is offered only for invitation-only events, as inherited Read for the named invited WebIDs.
+(A host-written summary document would let link visitors see names or counts without exposing raw replies;
+that is not built yet.) Publishing verifies the reply container afterwards and fails closed if it is
+readable beyond that audience. Editing a published link invitation withdraws any public (or signed-in) guest-list Read an
+earlier version granted, and only that: the organiser's and every named agent's access is kept, a rule that
+also covers another agent is refused rather than revoked whole, and nothing is written when there is nothing
+to withdraw. Append is never inherited to individual replies. Replies are immutable, so
+changing a response writes a fresh resource. Hidden lists are readable only by the organiser. There is no
+guest Write grant.
 The first cut supports Solid WAC. Unsupported discovery/access models fail closed; ACP and LWS are
 future work. The explicit `demo: true` adapter requires the in-browser fixture's non-enforcement header;
 it is never selected automatically for real storage and does not establish actual access enforcement.
@@ -54,8 +66,21 @@ it is never selected automatically for real storage and does not establish actua
 Sharing settings are fixed after creation. Saved drafts can be published after confirmation.
 Cancellation and postponement revoke guest Append grants before writing the new status;
 separate guest Read grants and the organiser's access remain. Reopening replies is deferred.
-Publishing is a multi-resource operation: a failed creation may leave a recoverable private draft in the organiser's pod, and a failed
-publication may leave some of the intended audience's grants applied. It never grants a wider audience.
+Publishing is a multi-resource operation and commits state before it widens access: the `published`
+state is written first, then the audience's grants. On any failure after widening the grants are revoked,
+re-read to confirm, and the invitation is restored to a private draft; the call throws `PublicationError`
+(`sharingWithdrawn` is false only if that confirmation itself failed, which the message tells the organiser
+to check; `draftRestored` is false when the draft state could not be written back, and the message then says
+the invitation is still marked published with nobody able to open it). `reshare(invitation)` explicitly
+shares such a published invitation again; an edit never widens access by itself. A failed creation may leave a recoverable private draft in the organiser's pod. It never grants a
+wider audience.
+
+Documents are created at the location the server assigns: if a pod names a document differently from the
+requested name, it is rewritten so its subject IRI matches where it lives.
+
+Type Index registration is best-effort discovery metadata. `create` returns `registrationWarning` when the
+invitation could not be registered (for example, a WebID outside the storage, or no private Type Index); the
+invitation is saved and fully usable, and `registerInTypeIndex(invitation)` retries.
 
 `publicEventFetch` wraps the caller's credential-bounded transport with guarded-fetch and refuses redirects.
 Foreign URLs are read only in the browser. Node consumers must inject a DNS-pinned transport according to
@@ -70,7 +95,7 @@ The default WAC flow cannot prove authorship, so WebID and anonymous claims appe
 The latest claim is counted only in a separately labelled unverified tally; superseded claims appear
 as earlier replies. A claimed WebID or copied guest hash cannot replace any verified reply.
 Anyone can copy these public correlation keys, so this grouping does not establish identity.
-When the guest list is visible, any reader can copy another guest's stored `guestKey` hash into a
+When the guest list is visible (invitation-only events), any named reader can copy another guest's stored `guestKey` hash into a
 newer raw POST, which then replaces that guest's displayed (unverified) reply. Treat a guest's
 current unverified reply as the latest claim under that key, never as that guest's own answer.
 Unverified claims for a WebID that also has a verified reply are listed only as earlier replies and
