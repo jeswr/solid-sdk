@@ -16,6 +16,7 @@ const conflict = {
   url: "https://pod.test/alice/tasks/projects/inbox/task.ttl",
 };
 let conflicts: (typeof conflict)[] = [];
+let shellWebId = "https://pod.test/alice/profile/card#me";
 vi.mock("next/navigation", () => ({
   usePathname: () => "/tasks/inbox",
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -23,16 +24,23 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/refs", async () => import("../../src/lib/refs"));
 vi.mock("../../src/shell/sync/outbox-session", () => ({
-  useOutboxSession: () => ({ outbox: {}, adapter: { resolve: choose } }),
+  useOutboxSession: () => ({
+    account: { webId: shellWebId },
+    outbox: {},
+    adapter: { resolve: choose },
+  }),
 }));
 vi.mock("@jeswr/suite-sdk/offline", async (original) => ({
   ...(await original<Record<string, unknown>>()),
-  useOutbox: () => ({
-    pending: conflicts.length
-      ? [{ id: "edit", guard: { tag: "tasks.intent.v1" }, label: "Local task", createdAt: 0 }]
-      : [],
-    conflicts,
-  }),
+  useOutbox: (outbox: unknown) =>
+    !outbox
+      ? { pending: [], conflicts: [] }
+      : {
+          pending: conflicts.length
+            ? [{ id: "edit", guard: { tag: "tasks.intent.v1" }, label: "Local task", createdAt: 0 }]
+            : [],
+          conflicts,
+        },
 }));
 vi.mock("../../src/apps/tasks/state/tasks-context", () => ({
   useTasks: () => ({
@@ -102,7 +110,7 @@ it.each([
 ])("opens ConflictDialog and dispatches %s to the shell", async (label, choice) => {
   cache = (await frameCache()).cache;
   conflicts = [conflict];
-  await mount(h(TasksConflicts, { cache }));
+  await mount(h(TasksConflicts, { cache, webId: "https://pod.test/alice/profile/card#me" }));
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
     "Title, due date or completion changed elsewhere",
   );
@@ -114,4 +122,16 @@ it.each([
     click(button);
   });
   expect(choose).toHaveBeenCalledWith(conflict.id, choice);
+});
+
+it("shows no conflict dialog for another account's outbox", async () => {
+  cache = (await frameCache()).cache;
+  conflicts = [conflict];
+  shellWebId = "https://pod.test/mallory/profile/card#me";
+  try {
+    await mount(h(TasksConflicts, { cache, webId: "https://pod.test/alice/profile/card#me" }));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  } finally {
+    shellWebId = "https://pod.test/alice/profile/card#me";
+  }
 });

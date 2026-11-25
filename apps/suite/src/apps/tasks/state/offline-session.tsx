@@ -8,7 +8,7 @@ import type { PodSession } from "@/lib/session/pod-session";
 import { useOptionalAccounts } from "../../../shell/session/accounts-context";
 import { useConnectionState } from "../../../shell/sync/connection-state";
 import { useOutboxSession } from "../../../shell/sync/outbox-session";
-import { TASKS_REPLAY, TasksOffline } from "./offline";
+import { purgeStaleTasksCaches, TASKS_REPLAY, TasksOffline } from "./offline";
 import type { TasksCache } from "./tasks-cache";
 
 export function useTasksOffline(session: PodSession) {
@@ -42,6 +42,12 @@ export function useTasksOffline(session: PodSession) {
       },
     });
   });
+  // The shell does not announce sign-out to Tasks: drop the cache of any account that is gone,
+  // including accounts removed while Tasks was not mounted.
+  useEffect(() => {
+    if (!accounts) return;
+    purgeStaleTasksCaches([session.webId, ...accounts.accounts.map((account) => account.webId)]);
+  }, [accounts, session.webId]);
   useEffect(
     () => () => {
       if (accounts?.active && !accounts.isActiveAccount(accounts.active.id)) offline.clear();
@@ -63,6 +69,8 @@ export function useTasksOffline(session: PodSession) {
             onConfirm: offline.confirm,
             onSettled: offline.settled,
             baseEtag: offline.baseEtag,
+            onApplied: offline.markApplied,
+            wasApplied: offline.wasApplied,
           });
           return replay.replay(delivery, ctx);
         },
@@ -74,8 +82,17 @@ export function useTasksOffline(session: PodSession) {
 }
 
 /** Tasks conflicts open on reconnect; the same records remain available in the shell sync sheet. */
-export function TasksConflicts({ cache, offline }: { cache: TasksCache; offline?: TasksOffline }) {
-  const shell = useOutboxSession();
+export function TasksConflicts({
+  cache,
+  offline,
+  webId,
+}: {
+  cache: TasksCache;
+  offline?: TasksOffline;
+  webId: string;
+}) {
+  const current = useOutboxSession();
+  const shell = current?.account.webId === webId ? current : null;
   const { pending, conflicts } = useDurableOutbox(shell?.outbox ?? null);
   const [dismissed, setDismissed] = useState<string>();
   const [busy, setBusy] = useState(false);

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 import { StorageError } from "@jeswr/storage-client";
 import type { Outbox, OutboxItem, ReplayDelegate } from "@jeswr/suite-sdk/offline";
 import { isomorphic } from "rdf-isomorphic";
@@ -10,11 +11,74 @@ import { DataFactory, NS, node, parse, SCHEMA, serialize } from "../lib/model/rd
 import type { TaskStore } from "../lib/model/store";
 import { createTask, TaskItem, taskDetails, validateTask } from "../lib/model/task";
 import { TaskTracker } from "../lib/model/tracker";
+import { CACHE_PREFIX, cacheKey } from "./offline-cache-key";
 
 export const TASKS_REPLAY = "tasks.intent.v1";
 export const DEPENDENCY_MESSAGE = "An earlier Tasks change must sync first";
 export const SKIPPED_MESSAGE = "An earlier Tasks change was not applied, so this one was held back";
 const APPLIED_LIMIT = 1000;
+/** Per-document cap for the localStorage read cache; larger documents pass through uncached. */
+const CACHE_DOCUMENT_LIMIT = 1024 * 1024;
+type CacheStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+/** Remove one account's Tasks read cache, whether or not Tasks is mounted for it. */
+export function clearTasksCache(
+  webId: string,
+  storageUrl: string,
+  storage: Pick<Storage, "removeItem"> | undefined = safeStorage(),
+) {
+  try {
+    storage?.removeItem(cacheKey(webId, storageUrl));
+  } catch {
+    /* Unavailable storage. */
+  }
+}
+/** Remove cached Tasks documents of every account that is no longer signed in. */
+export function purgeStaleTasksCaches(
+  knownWebIds: Iterable<string>,
+  storage: Pick<Storage, "key" | "length" | "removeItem"> | undefined = safeStorage(),
+) {
+  if (!storage) return;
+  const known = new Set(knownWebIds);
+  try {
+    const stale: string[] = [];
+    for (let index = 0; index < storage.length; index++) {
+      const key = storage.key(index);
+      if (!key?.startsWith(CACHE_PREFIX)) continue;
+      if (!known.has(key.slice(CACHE_PREFIX.length).split("\u0000")[0] ?? "")) stale.push(key);
+    }
+    for (const key of stale) storage.removeItem(key);
+  } catch {
+    /* Unavailable storage. */
+  }
+}
+function safeStorage(): Storage | undefined {
+  try {
+    return globalThis.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+/** Read a body through a byte cap; null when it is larger (the stream is cancelled). */
+async function readCapped(response: Response, limit: number): Promise<string | null> {
+  const length = Number(response.headers.get("Content-Length"));
+  if (Number.isFinite(length) && length > limit) return null;
+  const reader = response.body?.getReader();
+  if (!reader) return "";
+  const decoder = new TextDecoder();
+  let text = "";
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > limit) {
+      void reader.cancel().catch(() => {});
+      return null;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
 const savedSchema = z.object({
   body: z.string(),
   etag: z.string().nullable(),
@@ -66,6 +130,12 @@ export class TasksOffline {
   };
   readonly baseEtag = (url: string, local: string | null) =>
     this.validators.get(`${url}\u0000${local}`) ?? local;
+  /** A queue entry's own intent reached the pod; replay instances forward this to the session. */
+  readonly markApplied = (id: string) => {
+    this.applied.add(id);
+    this.save();
+  };
+  readonly wasApplied = (id: string) => this.applied.has(id);
   /** A replay settled this resource: fence listing reads that began before it. */
   readonly settled = (url: string) => {
     for (const key of [url, new URL(".", url).href])
@@ -107,14 +177,16 @@ export class TasksOffline {
       fetch: typeof fetch;
       online: () => boolean;
       outbox: () => Outbox | null;
-      storage?: Pick<Storage, "getItem" | "setItem" | "removeItem"> | undefined;
+      storage?: CacheStorage | undefined;
       onConfirm?: (url: string, local: string, remote: string | null) => void;
       baseEtag?: (url: string, local: string | null) => string | null;
+      onApplied?: (id: string) => void;
+      wasApplied?: (id: string) => boolean;
       onEnqueue?: () => void;
       onSettled?: (url: string) => void;
     },
   ) {
-    this.key = `suite.tasks.cache.v1.${options.webId}\u0000${options.storageUrl}`;
+    this.key = cacheKey(options.webId, options.storageUrl);
     this.io = new RdfIO(options.fetch);
     try {
       const stored = z
@@ -164,13 +236,22 @@ export class TasksOffline {
     }
   }
   readonly online = () => this.options.online();
-  private waiting(url: string) {
+  private waiting(url: string, includeFailed = true) {
     return (
       this.options
         .outbox()
         ?.pending()
-        .some((item) => item.url === url) ?? false
+        .some((item) => item.url === url && (includeFailed || item.status !== "failed")) ?? false
     );
+  }
+  /** Lost access to a container or tracker also loses the cached documents inside it. */
+  private evict(url: string) {
+    this.documents.delete(url);
+    const prefix = url.endsWith("/") ? url : url.replace(/\.ttl$/, "/");
+    if (prefix === url && !url.endsWith("/")) return;
+    for (const [child, saved] of [...this.documents])
+      if (child.startsWith(prefix) && child !== url && !(saved.local && this.waiting(child, false)))
+        this.documents.delete(child);
   }
   private response(url: string, saved: Saved): Response {
     if (saved.deleted) return new Response(null, { status: 404 });
@@ -230,13 +311,15 @@ export class TasksOffline {
         const saved = this.documents.get(url);
         return saved ? this.response(url, saved) : this.fetch(input, init);
       };
-      if (cached && (!this.options.online() || (cached.local && this.waiting(url))))
+      if (cached && (!this.options.online() || (cached.local && this.waiting(url, false))))
         return this.response(url, cached);
       if (!this.options.online()) {
-        const listing = this.documents.get(new URL(".", url).href);
+        // A container's parent listing is one level up, not the container itself.
+        const parent = new URL(url.endsWith("/") ? ".." : ".", url).href;
+        const listing = this.documents.get(parent);
         if (
           listing &&
-          !node(new URL(".", url).href, await parse(new URL(".", url).href, listing.body))
+          !node(parent, await parse(parent, listing.body))
             .iris(`${NS.LDP}contains`)
             .has(url)
         )
@@ -252,8 +335,15 @@ export class TasksOffline {
           (!response.url || response.url === url) &&
           response.headers.get("Content-Type")?.includes("turtle")
         ) {
+          const text = await readCapped(response.clone(), CACHE_DOCUMENT_LIMIT);
+          if (text === null) {
+            // Too large for the localStorage cache: pass it through and drop any older copy.
+            this.documents.delete(url);
+            this.save();
+            return response;
+          }
           const saved = {
-            body: await this.overlay(url, await response.clone().text()),
+            body: await this.overlay(url, text),
             etag: response.headers.get("ETag"),
             local: false,
             wacAllow: response.headers.get("WAC-Allow"),
@@ -265,7 +355,7 @@ export class TasksOffline {
           this.save();
           return this.response(url, saved);
         } else if ([401, 403, 404, 410].includes(response.status)) {
-          this.documents.delete(url);
+          this.evict(url);
           this.save();
         }
         return response;
@@ -301,6 +391,15 @@ export class TasksOffline {
         ? cached
         : this.versions.get(`${url}\u0000${headers.get("If-Match")}`);
     if (!creating && !base) throw new Error("Not available offline");
+    if (tracker?.isTracker && base && after !== null) {
+      // Replay merges only the fields it knows; never queue a change it would silently drop.
+      const from = new TaskTracker(`${url}#this`, await parse(url, base.body), DataFactory);
+      if (
+        from.isTracker &&
+        (!equal(from.parent, tracker.parent) || !equal(from.savedViews, tracker.savedViews))
+      )
+        throw new Error("Reconnect to change this project's nesting or saved views");
+    }
     const intent = {
       url,
       revision: crypto.randomUUID(),
@@ -393,8 +492,7 @@ export class TasksOffline {
       const id = delivery.purpose === "resolve-both" ? undefined : await this.entryId(delivery);
       const result = await this.deliver(delivery, ctx);
       if (id) {
-        this.applied.add(id);
-        this.save();
+        (this.options.onApplied ?? this.markApplied)(id);
       }
       (this.options.onSettled ?? this.settled)(delivery.url);
       this.resumeFollowers();
@@ -416,7 +514,8 @@ export class TasksOffline {
       throw new Error(DEPENDENCY_MESSAGE);
     // A same-resource follower rebases on whatever its predecessor's resolution left. A
     // scoped prerequisite (e.g. a child remap before a move deletes its source) must apply.
-    if (intent.requires.some((id) => !this.applied.has(id))) throw new Error(SKIPPED_MESSAGE);
+    if (intent.requires.some((id) => !(this.options.wasApplied ?? this.wasApplied)(id)))
+      throw new Error(SKIPPED_MESSAGE);
     const assertions = z.object({ url: z.string() }).parse(delivery.assertions);
     if (
       intent.url !== assertions.url ||
@@ -634,6 +733,11 @@ export class OfflineTaskStore extends IssuesTaskStore {
     const run = move.run.bind(move);
     move.run = () => this.together(run);
     return move;
+  }
+  /** A half-queued delete replays task DELETEs after the UI rolled back; refuse before any write. */
+  override async deleteProject(...args: Parameters<TaskStore["deleteProject"]>) {
+    if (!this.online()) throw new Error("Reconnect to delete this project");
+    return super.deleteProject(...args);
   }
   override async bootstrapInbox() {
     if (this.online()) {

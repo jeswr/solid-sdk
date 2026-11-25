@@ -43,8 +43,6 @@ function useTasksValue(session: PodSession) {
       offline.online,
       offline.together,
     );
-    // Issues writes go straight to the pod: the Tasks replay cannot merge an Issues document.
-    offline.direct = (url) => store.isIssueResource(url);
     return new TasksCache(
       store,
       (error, retry) => {
@@ -61,6 +59,15 @@ function useTasksValue(session: PodSession) {
       (message) => toast.info(message),
     );
   });
+  // Issues writes go straight to the pod: the Tasks replay cannot merge an Issues document.
+  // Bound to the kept cache's store (StrictMode discards one initialiser result).
+  useEffect(() => {
+    const store = cache.store as OfflineTaskStore;
+    offline.direct = (url) => store.isIssueResource(url);
+    return () => {
+      offline.direct = () => false;
+    };
+  }, [cache, offline]);
   useEffect(() => offline.subscribeReceipts(cache.confirmOfflineWrite), [cache, offline]);
   const { preferences } = useTasksPreferences();
   useLayoutEffect(() => {
@@ -182,7 +189,7 @@ export function TasksProvider({ session, children }: { session: PodSession; chil
   return (
     <TasksContext value={value}>
       {children}
-      <TasksConflicts cache={value.cache} offline={offline} />
+      <TasksConflicts cache={value.cache} offline={offline} webId={session.webId} />
     </TasksContext>
   );
 }
