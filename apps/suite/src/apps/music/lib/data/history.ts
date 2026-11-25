@@ -14,7 +14,7 @@ import {
   loadHistory as readMonths,
   recentlyPlayed,
 } from "../model";
-import { type Library, musicRoot } from "./library";
+import { type Library, musicRoot, type ReportMusicFailure } from "./library";
 import { dedupeImportedPlays, loadSpotifyHistory } from "./spotify-history";
 
 export { computeTopArtists, recentlyPlayed };
@@ -24,14 +24,34 @@ export async function loadHistory(
   now: Date,
   months = 12,
   offset = 0,
+  report?: ReportMusicFailure,
 ): Promise<Playback[]> {
   const dates = Array.from(
     { length: months },
     (_, index) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - index - offset, 1)),
   );
+  const readOwn = async () =>
+    report
+    ? (
+        await Promise.all(
+          dates.map(async (date) => {
+            try {
+              return await readMonths(fetch, musicRoot(storage), [date]);
+            } catch (error) {
+              report({
+                url: new URL(`history/${monthKey(date)}.ttl`, musicRoot(storage)).href,
+                error,
+                area: "history",
+              });
+              return [];
+            }
+          }),
+        )
+      ).flat()
+    : await readMonths(fetch, musicRoot(storage), dates);
   // Imported file history is best effort: it never rejects the user's own history.
   const [history, imported] = await Promise.all([
-    readMonths(fetch, musicRoot(storage), dates),
+    readOwn(),
     loadSpotifyHistory(fetch, storage, dates),
   ]);
   const selected = new Set(dates.map(monthKey));
@@ -42,7 +62,14 @@ export async function loadHistory(
       ...readHistory(doc.dataset).filter((play) => selected.has(monthKey(play.startTime))),
     );
   } catch (error) {
-    if (!(error instanceof RdfFetchError) || error.status !== 404) throw error;
+    if (!(error instanceof RdfFetchError) || error.status !== 404) {
+      if (!report) throw error;
+      report({
+        url: liveHistory,
+        error,
+        area: "history",
+      });
+    }
   }
   history.push(...dedupeImportedPlays(imported, liveHistory));
   return history.sort((a, b) => b.startTime.getTime() - a.startTime.getTime());
