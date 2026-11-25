@@ -681,7 +681,11 @@ describe("LWS parent lookups", () => {
         },
       }),
     });
-    expect(must(await flaky.resumePending())).toEqual({ completed: 0, failed: 1, rejected: 0 });
+    expect(must(await flaky.resumePending())).toMatchObject({
+      completed: 0,
+      failed: 1,
+      rejected: 0,
+    });
     const controller = new AbortController();
     const aborting = await h.reopen({
       journal,

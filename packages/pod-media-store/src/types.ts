@@ -176,10 +176,54 @@ export interface Current {
   readonly contentType: string;
 }
 
+/**
+ * What a `shouldResume` veto sees: the journal's own record of one pending delete, and nothing
+ * else (no storage handle, no credentials). `sha256` is the content hash read from the
+ * description's name on Solid (where names are the hash); it is undefined where the server
+ * chose the name (LWS).
+ */
+export interface PendingDelete {
+  readonly descriptionUrl: string;
+  readonly shardUrl: string;
+  readonly binaryUrl?: string;
+  readonly thumbnailUrl?: string;
+  readonly phase: "intent" | "deleted";
+  readonly sha256?: string;
+}
+
+/**
+ * Per-entry veto, consulted IMMEDIATELY before each destructive request of a resumed delete
+ * (the description delete, then each of the binary and thumbnail deletes). `false` skips the
+ * entry and leaves it in the journal untouched. A throw or rejection counts as `false`.
+ */
+export type ShouldResume = (entry: PendingDelete) => boolean | Promise<boolean>;
+
+export interface ResumeOptions {
+  signal?: AbortSignal;
+  shouldResume?: ShouldResume;
+}
+
+export type ResumeOutcome = "completed" | "failed" | "rejected" | "skipped";
+
+export interface ResumeEntryResult {
+  readonly descriptionUrl: string;
+  readonly outcome: ResumeOutcome;
+  /**
+   * For `skipped`: the veto said no (`vetoed`), the veto threw (`veto-error`), or the entry
+   * was withdrawn (by `withdrawPending`, or by a `put` adopting the copy) after the journal
+   * was listed and before this entry's turn (`withdrawn`).
+   */
+  readonly reason?: "vetoed" | "veto-error" | "withdrawn";
+}
+
 export interface ResumeSummary {
   completed: number;
   failed: number;
   rejected: number;
+  /** Entries a `shouldResume` veto declined (or threw on); they stay in the journal. */
+  skipped: number;
+  /** One result per journal entry, in journal order. */
+  entries: readonly ResumeEntryResult[];
 }
 
 /** What `attachThumbnail` needs: the image and the edit that links it. */
@@ -261,8 +305,18 @@ export interface MediaStore<T, I> {
    * left without its media.
    */
   remove(descriptionUrl: string, signal?: AbortSignal): Promise<Result<void>>;
-  /** Finish deletes recorded in the journal, the description first. */
-  resumePending(signal?: AbortSignal): Promise<Result<ResumeSummary>>;
+  /**
+   * Finish deletes recorded in the journal, the description first. Pass an `AbortSignal` or
+   * `{ signal?, shouldResume? }`. Content-named copies are shared by every record that saved
+   * the same bytes, so a caller that knows a copy is in use again vetoes it with
+   * `shouldResume`, which is consulted just before each destructive request.
+   */
+  resumePending(signalOrOptions?: AbortSignal | ResumeOptions): Promise<Result<ResumeSummary>>;
+  /**
+   * Drop the pending delete recorded for a copy, if any. True when one was withdrawn; false
+   * (not an error) when none existed. Deletes nothing in the pod.
+   */
+  withdrawPending(descriptionUrl: string, signal?: AbortSignal): Promise<Result<boolean>>;
   /**
    * Remove media no description references and empty descriptions a failed put left on LWS,
    * once they are old enough. A shard whose descriptions cannot all be read is left alone.

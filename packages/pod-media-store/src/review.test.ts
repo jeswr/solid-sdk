@@ -101,7 +101,11 @@ describe("F-03: a failed remove never costs the media of an item that stays", ()
     });
     expect(await journal.list()).toEqual([]);
     refuse = false;
-    expect(must(await h.store.resumePending())).toEqual({ completed: 0, failed: 0, rejected: 0 });
+    expect(must(await h.store.resumePending())).toMatchObject({
+      completed: 0,
+      failed: 0,
+      rejected: 0,
+    });
     expect(await allResources(h.storage)).toHaveLength(3);
     expect((await h.store.get(out.descriptionUrl)).ok).toBe(true);
   });
@@ -125,7 +129,11 @@ describe("F-03: a failed remove never costs the media of an item that stays", ()
       error: { kind: "conflict", reason: "retries-exhausted" },
     });
     expect(await journal.list()).toEqual([]);
-    expect(must(await h.store.resumePending())).toEqual({ completed: 0, failed: 0, rejected: 0 });
+    expect(must(await h.store.resumePending())).toMatchObject({
+      completed: 0,
+      failed: 0,
+      rejected: 0,
+    });
     expect(await allResources(h.storage)).toHaveLength(3);
   });
 
@@ -143,7 +151,11 @@ describe("F-03: a failed remove never costs the media of an item that stays", ()
     expect(await journal.list()).toEqual([expect.objectContaining({ phase: "intent" })]);
     expect(await allResources(h.storage)).toHaveLength(3);
     offline = false;
-    expect(must(await h.store.resumePending())).toEqual({ completed: 1, failed: 0, rejected: 0 });
+    expect(must(await h.store.resumePending())).toMatchObject({
+      completed: 1,
+      failed: 0,
+      rejected: 0,
+    });
     expect(await allResources(h.storage)).toEqual([]);
     expect(await journal.list()).toEqual([]);
   });
@@ -159,7 +171,11 @@ describe("F-03: a failed remove never costs the media of an item that stays", ()
       binaryUrl: out.binaryUrl,
       ...(out.thumbnailUrl === undefined ? {} : { thumbnailUrl: out.thumbnailUrl }),
     });
-    expect(must(await h.store.resumePending())).toEqual({ completed: 1, failed: 0, rejected: 0 });
+    expect(must(await h.store.resumePending())).toMatchObject({
+      completed: 1,
+      failed: 0,
+      rejected: 0,
+    });
     expect(await allResources(h.storage)).toEqual([]);
   });
 
@@ -182,7 +198,11 @@ describe("F-03: a failed remove never costs the media of an item that stays", ()
       binaryUrl: out.binaryUrl,
       phase: "intent",
     });
-    expect(must(await h.store.resumePending())).toEqual({ completed: 0, failed: 0, rejected: 1 });
+    expect(must(await h.store.resumePending())).toMatchObject({
+      completed: 0,
+      failed: 0,
+      rejected: 1,
+    });
     expect(await journal.list()).toEqual([]);
     expect(await allResources(h.storage)).toHaveLength(5);
   });
@@ -326,7 +346,11 @@ describe("F-07: remove and resume delete only the item's own media", () => {
     });
     expect(h.store.isInsideLibrary(`${shard}.acl`)).toBe(false);
     expect(h.store.isInsideLibrary(`${shard}.meta`)).toBe(false);
-    expect(must(await h.store.resumePending())).toEqual({ completed: 2, failed: 0, rejected: 0 });
+    expect(must(await h.store.resumePending())).toMatchObject({
+      completed: 2,
+      failed: 0,
+      rejected: 0,
+    });
     expect(await allResources(h.storage)).toEqual(
       expect.arrayContaining(
         [a.binaryUrl, b.binaryUrl, b.descriptionUrl, `${shard}.acl`].filter(
@@ -343,7 +367,11 @@ describe("F-07: remove and resume delete only the item's own media", () => {
       shardUrl: shard,
       binaryUrl: a.binaryUrl,
     });
-    expect(must(await h.store.resumePending())).toEqual({ completed: 0, failed: 0, rejected: 1 });
+    expect(must(await h.store.resumePending())).toMatchObject({
+      completed: 0,
+      failed: 0,
+      rejected: 1,
+    });
     expect(await allResources(h.storage)).toContain(a.binaryUrl);
   });
 
@@ -605,7 +633,11 @@ describe("F-13: LWS identifiers are opaque", () => {
       binaryUrl: april.binaryUrl,
       phase: "deleted",
     });
-    expect(must(await h.store.resumePending())).toEqual({ completed: 1, failed: 0, rejected: 0 });
+    expect(must(await h.store.resumePending())).toMatchObject({
+      completed: 1,
+      failed: 0,
+      rejected: 0,
+    });
     expect(await allResources(h.storage)).toEqual(
       expect.arrayContaining([april.binaryUrl, april.descriptionUrl]),
     );

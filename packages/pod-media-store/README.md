@@ -190,9 +190,14 @@ during a `put` is the caller's bug.
   of the form `<description name>[-thumb].<ext>`. On LWS names are opaque, so a description that a writer with
   access to the pod crafted to name another item's media in the same shard can still make `remove` delete
   that media; `update` and `put` never create such a description. This is a known limit.
-- `resumePending()`: treats the journal as untrusted (shard and description must be inside the library). For an
-  `intent` entry it deletes the description first (if it still locates the recorded binary; otherwise the entry
-  is dropped as `rejected`), then the media.
+- `resumePending(signal | { signal?, shouldResume? })`: treats the journal as untrusted (shard and description
+  must be inside the library). For an `intent` entry it deletes the description first (if it still locates the
+  recorded binary; otherwise the entry is dropped as `rejected`), then the media. The result is
+  `{ completed, failed, rejected, skipped, entries }`, with one `{ descriptionUrl, outcome, reason? }` per entry.
+  See "Shared copies" below for `shouldResume`.
+- `withdrawPending(descriptionUrl, signal?)`: drops the pending delete recorded for a copy and answers whether
+  there was one (`true`), or not (`false`; never an error). It deletes nothing in the pod.
+
 - `sweepOrphans({ minAgeMs = 24 h, signal? })`: in every shard, deletes media no description references and
   empty descriptions, only if older than `minAgeMs` (the grace period that protects a concurrent put), and
   leaves a shard alone if any description in it cannot be read or understood (`shardsSkipped`). A candidate is selected by
@@ -201,6 +206,37 @@ during a `put` is the caller's bug.
   resource whose name or display name matches, or one with an `image|audio|video|model` type, is a candidate
   (an LWS orphan with a server-chosen name and an `application/octet-stream` type is not collected).
   Returns `{ deleted, retained, shardsSkipped }`.
+
+### Shared copies: a pending delete can outlive its reason
+
+Resources are named by content hash, so every record that saved the same bytes shares one pod copy (on Solid
+`<shard>/<hash>`; on LWS when `findByHash` converges them). A delete is journalled before it is carried out, and
+`resumePending` finishes it on a later start. The hazard: a delete is interrupted; the same bytes are saved again
+under another record (the copy is adopted); the next start resumes the old delete and destroys a copy that is in
+use again. Three defences, from innermost out:
+
+1. **The store withdraws the intent when `put` adopts the copy.** The journal entry for the copy is deleted before
+   `put` reports success (a journal that cannot delete fails the put with `failed` / `journal`). All operations on
+   one copy (`put`, `remove`, `resumePending`, `withdrawPending`) run one at a time inside a store instance, so a
+   `remove` racing a `put` of the same bytes cannot leave a description without its binary: the put waits, then
+   finds the copy gone and writes a whole new pair. `resumePending` re-reads the journal for each entry when its turn
+   comes, so an entry withdrawn after the listing is reported `skipped` / `withdrawn` and never acted on. This
+   serialisation is per store instance. Two instances (two tabs, two devices) racing on one pod have only the
+   server's conditional requests, as before.
+2. **`shouldResume(entry)`: a per-entry veto**, for the caller who knows better than the journal (it keeps its own
+   records of what is in use). It is called with `{ descriptionUrl, shardUrl, binaryUrl?, thumbnailUrl?, phase,
+   sha256? }` (frozen; `sha256` is the content hash from the name on Solid and absent on LWS), immediately before
+   each destructive request: the description delete (not asked when the description is already gone), then each
+   media delete. `false` skips the entry and leaves its journal record untouched (`skipped` / `vetoed`); a throw, a
+   rejection, or any answer other than `true` counts as `false` (`skipped` / `veto-error` when it threw) and does
+   not stop other entries; an abort is honoured, including while the veto is pending. The veto runs inside the
+   copy's lock: it must not call `put`, `remove`, `resumePending` or `withdrawPending` on the same copy, and
+   should answer from memory.
+3. **`withdrawPending(descriptionUrl)`** when the caller decides outright that a copy must live: call it as the
+   record that now uses the copy is saved. Its absence is not an error.
+
+A skipped entry stays in the journal, so a later `resumePending` without the veto (or with one that now answers
+`true`) finishes it.
 
 ## Exposure
 

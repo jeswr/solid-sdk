@@ -10,6 +10,7 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import { checkOwnerOnly } from "@jeswr/pod-access";
 import {
   type Current,
+  createMemoryJournal,
   exposureFromOwnerOnly,
   type MediaStore,
   type MediaStoreOptions,
@@ -17,7 +18,7 @@ import {
 } from "@jeswr/pod-media-store";
 import { createTypeIndex } from "@jeswr/pod-type-index";
 import { serialize } from "@jeswr/rdf-serialize";
-import { createPodClient } from "@jeswr/storage-client";
+import { createPodClient, StorageError } from "@jeswr/storage-client";
 import { DataFactory } from "n3";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { cssTarget } from "../src/targets/css.js";
@@ -575,6 +576,84 @@ describe("pod-media-store against a real Community Solid Server", () => {
     expect(after.status).toBe(404);
     // Clean up the item's binary, which a delete of the description alone leaves behind.
     await fetchOf(out.binaryUrl, { method: "DELETE" });
+  });
+
+  it("an interrupted delete, the same bytes saved again, then a resume never destroys the shared copy", async () => {
+    const journal = createMemoryJournal();
+    const exposure = ownerOnlyVia(informed(storage));
+    // A store whose pod refuses every delete: `remove` journals its intent and goes offline.
+    const failing = new Proxy(storage, {
+      get(target, property) {
+        if (property === "delete") {
+          return async () => {
+            throw new StorageError("network", { url: "x:", method: "DELETE" });
+          };
+        }
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const crashing = ok(await openStore({ journal, exposure, storage: failing }));
+    const sharing = ok(await openStore({ journal, exposure }));
+    const bytes = pngBytes(91);
+    const status = async (url: string) => (await fetchOf(url, { method: "HEAD" })).status;
+    const first = ok(
+      await put({ bytes, contentType: "image/png", extension: ".png", name: "one" }),
+    );
+
+    const interrupted = await crashing.remove(first.descriptionUrl);
+    expect(interrupted.ok).toBe(false);
+    expect(await journal.list()).toHaveLength(1);
+
+    // The veto: a caller that knows the copy is in use skips the entry; nothing is deleted and
+    // the entry stays in the journal.
+    const seen: unknown[] = [];
+    const vetoed = ok(
+      await sharing.resumePending({
+        shouldResume: (entry) => {
+          seen.push(entry);
+          return false;
+        },
+      }),
+    );
+    expect(vetoed).toMatchObject({ completed: 0, skipped: 1 });
+    expect(seen).toHaveLength(1);
+    expect(await journal.list()).toHaveLength(1);
+    expect(await status(first.descriptionUrl)).toBe(200);
+    expect(await status(first.binaryUrl)).toBe(200);
+
+    // Explicit withdrawal: true once, false when none is left.
+    expect(ok(await sharing.withdrawPending(first.descriptionUrl))).toBe(true);
+    expect(ok(await sharing.withdrawPending(first.descriptionUrl))).toBe(false);
+
+    // The hazard itself: interrupt again, save the same bytes under another record, resume.
+    expect((await crashing.remove(first.descriptionUrl)).ok).toBe(false);
+    expect(await journal.list()).toHaveLength(1);
+    const second = ok(
+      await sharing.put({
+        bytes,
+        contentType: "image/png",
+        extension: ".png",
+        createdAt: AT,
+        description: { name: "two" },
+      }),
+    );
+    expect(second).toMatchObject({
+      descriptionUrl: first.descriptionUrl,
+      binaryUrl: first.binaryUrl,
+      existed: true,
+    });
+    // Adoption withdrew the intent before it reported success.
+    expect(await journal.list()).toEqual([]);
+    expect(ok(await sharing.resumePending())).toMatchObject({ completed: 0, skipped: 0 });
+    expect(await status(first.descriptionUrl)).toBe(200);
+    expect(await status(first.binaryUrl)).toBe(200);
+    expect(ok(await sharing.get(first.descriptionUrl)).binaryUrl).toBe(first.binaryUrl);
+
+    // A genuine remove still deletes both, and leaves nothing behind.
+    ok(await sharing.remove(first.descriptionUrl));
+    expect(await status(first.descriptionUrl)).toBe(404);
+    expect(await status(first.binaryUrl)).toBe(404);
   });
 
   it("removes every item and leaves nothing on the server; sweeps planted orphans", async () => {

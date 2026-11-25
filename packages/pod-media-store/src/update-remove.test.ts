@@ -255,10 +255,18 @@ describe.each(["solid", "lws"] as const)("remove and resumePending (%s)", (proto
     expect((await h.storage.read(out.descriptionUrl).catch(() => null)) === null).toBe(true);
 
     const restarted = await h.reopen();
-    expect(must(await restarted.resumePending())).toEqual({ completed: 1, failed: 0, rejected: 0 });
+    expect(must(await restarted.resumePending())).toMatchObject({
+      completed: 1,
+      failed: 0,
+      rejected: 0,
+    });
     expect(await allResources(h.storage)).toEqual([]);
     expect(await journal.list()).toEqual([]);
-    expect(must(await restarted.resumePending())).toEqual({ completed: 0, failed: 0, rejected: 0 });
+    expect(must(await restarted.resumePending())).toMatchObject({
+      completed: 0,
+      failed: 0,
+      rejected: 0,
+    });
   });
 
   it("resume reports what it cannot finish and keeps those entries", async () => {
@@ -276,7 +284,11 @@ describe.each(["solid", "lws"] as const)("remove and resumePending (%s)", (proto
           throw new StorageError("forbidden", { url: "x:", method: "DELETE" });
       }),
     });
-    expect(must(await refusing.resumePending())).toEqual({ completed: 0, failed: 1, rejected: 0 });
+    expect(must(await refusing.resumePending())).toMatchObject({
+      completed: 0,
+      failed: 1,
+      rejected: 0,
+    });
     expect(await journal.list()).toHaveLength(1);
     expect(await allResources(h.storage)).toContain(out.binaryUrl);
   });
@@ -330,7 +342,11 @@ describe.each(["solid", "lws"] as const)("remove and resumePending (%s)", (proto
       shardUrl: `${ROOT}media/2026/05/`,
     });
     const h = await harness(protocol, { journal });
-    expect(must(await h.store.resumePending())).toEqual({ completed: 0, failed: 1, rejected: 0 });
+    expect(must(await h.store.resumePending())).toMatchObject({
+      completed: 0,
+      failed: 1,
+      rejected: 0,
+    });
     const controller = new AbortController();
     controller.abort();
     expect(await h.store.resumePending(controller.signal)).toEqual({
@@ -486,31 +502,33 @@ describe.each(["solid", "lws"] as const)("remove and resumePending (%s)", (proto
         throw new Error("disk full");
       },
     };
-    const h = await harness(protocol, { journal: broken });
+    const h = await harness(protocol);
     const out = must(await h.store.put(putInput()));
-    expect(await h.store.remove(out.descriptionUrl)).toEqual({
+    const brokenStore = await h.reopen({ journal: broken });
+    expect(await brokenStore.remove(out.descriptionUrl)).toEqual({
       ok: false,
       error: { kind: "failed", reason: "journal" },
     });
     expect(await allResources(h.storage)).toContain(out.descriptionUrl);
-    expect(await h.store.resumePending()).toEqual({
+    expect(await brokenStore.resumePending()).toEqual({
       ok: false,
       error: { kind: "failed", reason: "journal" },
     });
     const onlyDelete: DeleteJournal = { ...createMemoryJournal(), delete: broken.delete };
-    const h2 = await harness(protocol, { journal: onlyDelete });
+    const h2 = await harness(protocol);
     const out2 = must(await h2.store.put(putInput({ seed: 8 })));
-    expect(await h2.store.remove(out2.descriptionUrl)).toEqual({
+    expect(await (await h2.reopen({ journal: onlyDelete })).remove(out2.descriptionUrl)).toEqual({
       ok: false,
       error: { kind: "failed", reason: "journal" },
     });
     const dropping: DeleteJournal = createMemoryJournal();
     await dropping.put({ descriptionUrl: `${ROOT}x/y`, shardUrl: `${ROOT}x/` });
-    const h3 = await harness(protocol, {
+    const h3 = await harness(protocol);
+    await h3.store.put(putInput({ seed: 9 }));
+    const h3Store = await h3.reopen({
       journal: { ...dropping, delete: broken.delete, list: dropping.list },
     });
-    await h3.store.put(putInput({ seed: 9 }));
-    expect(await h3.store.resumePending()).toEqual({
+    expect(await h3Store.resumePending()).toEqual({
       ok: false,
       error: { kind: "failed", reason: "journal" },
     });

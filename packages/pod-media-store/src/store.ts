@@ -44,10 +44,14 @@ import type {
   MediaItem,
   MediaStore,
   MediaStoreOptions,
+  PendingDelete,
   PutInput,
   PutOutcome,
+  ResumeEntryResult,
+  ResumeOptions,
   ResumeSummary,
   SerializedDescription,
+  ShouldResume,
   SkipCounts,
   SweepOptions,
   SweepSummary,
@@ -849,8 +853,21 @@ export async function openMediaStore<T, I>(
     // No library yet, or a hit outside it: a miss, never a failure.
     const found = library ?? (await discover(signal));
     const placed = found === null ? undefined : await shardOfMember(found, descriptionUrl, signal);
-    if (placed === undefined) return undefined;
-    const lib = found as string;
+    return placed === undefined
+      ? undefined
+      : withCopy(descriptionUrl, signal, () =>
+          adoptHit(found as string, descriptionUrl, sha256, wantsThumbnail, signal),
+        );
+  }
+
+  /** Under the copy's lock: verify the hit and adopt it, withdrawing any pending delete. */
+  async function adoptHit(
+    lib: string,
+    descriptionUrl: string,
+    sha256: string,
+    wantsThumbnail: boolean,
+    signal: AbortSignal | undefined,
+  ): Promise<PutOutcome | undefined> {
     let loaded: Loaded<T>;
     try {
       loaded = await loadItem(lib, descriptionUrl, signal);
@@ -862,6 +879,8 @@ export async function openMediaStore<T, I>(
     if ((await hashOf(loaded.item.binaryUrl, maxBytes, signal)) !== sha256) {
       throw fail("conflict", "hash-mismatch");
     }
+    // The copy is in use again: a pending delete of it must not outlive this adoption.
+    await journalled(() => journal.delete(descriptionUrl));
     return {
       descriptionUrl,
       binaryUrl: loaded.item.binaryUrl,
@@ -885,39 +904,74 @@ export async function openMediaStore<T, I>(
     const shardUrl = await ensureChild(await ensureChild(lib, year, signal), month, signal);
     await requireNotExposed(shardUrl, signal);
     verifiedShards.add(shardUrl);
-    const created: string[] = [];
-    const shell: { url?: string } = {};
+    // On LWS the server names a new pair, so nobody else can be deleting it. On Solid the copy
+    // is `<shard>/<hash>`: serialise with any remove or resume of it.
+    const attempt = async (): Promise<PutOutcome> => {
+      const created: string[] = [];
+      const shell: { url?: string } = {};
+      try {
+        const binaryUrl = await createMedia(
+          shardUrl,
+          `${sha256}${prepared.sniffed.extension}`,
+          prepared.source.body,
+          prepared.sniffed.contentType,
+          verifyBinary(sha256, signal),
+          signal,
+          created,
+        );
+        const written = lws
+          ? await writeLws(shardUrl, input, prepared, binaryUrl, created, shell)
+          : await writeSolid(lib, shardUrl, input, prepared, binaryUrl, created);
+        // Adopted or created, the copy is live: withdraw any pending delete before reporting it.
+        await journalled(() => journal.delete(written.descriptionUrl));
+        remember(shardUrl, written.descriptionUrl, binaryUrl, written.thumbnailUrl);
+        return {
+          descriptionUrl: written.descriptionUrl,
+          binaryUrl,
+          thumbnailUrl: written.thumbnailUrl,
+          thumbnailMissing: written.thumbnailMissing,
+          sha256,
+          existed: written.existed && !created.includes(binaryUrl),
+        };
+      } catch (cause) {
+        // Nothing is deleted by guesswork: media are named by their content, so a retry adopts
+        // them and `sweepOrphans` removes any that never gain a description. Only an empty shell
+        // this call made is removed, because nothing else can have written into it.
+        const left =
+          shell.url !== undefined && (await dropEmpty(shell.url))
+            ? created.filter((url) => url !== shell.url)
+            : created;
+        throw withOrphans(cause, left, signal);
+      }
+    };
+    return lws ? attempt() : withCopy(`${shardUrl}${sha256}`, signal, attempt);
+  }
+
+  // ---- per-copy serialisation ----------------------------------------------------------
+  // Copies are named by content, so several records can share one. Everything that creates,
+  // adopts, deletes or resumes the deletion of one copy (keyed by its description URL) runs one
+  // at a time inside this store, so a `remove` and a `put` of the same bytes cannot interleave
+  // into a description without its binary (or the reverse).
+  const copyLocks = new Map<string, Promise<void>>();
+
+  async function withCopy<R>(
+    descriptionUrl: string,
+    signal: AbortSignal | undefined,
+    fn: () => Promise<R>,
+  ): Promise<R> {
+    const previous = copyLocks.get(descriptionUrl) ?? Promise.resolve();
+    let release!: () => void;
+    const mine = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => mine);
+    copyLocks.set(descriptionUrl, tail);
     try {
-      const binaryUrl = await createMedia(
-        shardUrl,
-        `${sha256}${prepared.sniffed.extension}`,
-        prepared.source.body,
-        prepared.sniffed.contentType,
-        verifyBinary(sha256, signal),
-        signal,
-        created,
-      );
-      const written = lws
-        ? await writeLws(shardUrl, input, prepared, binaryUrl, created, shell)
-        : await writeSolid(lib, shardUrl, input, prepared, binaryUrl, created);
-      remember(shardUrl, written.descriptionUrl, binaryUrl, written.thumbnailUrl);
-      return {
-        descriptionUrl: written.descriptionUrl,
-        binaryUrl,
-        thumbnailUrl: written.thumbnailUrl,
-        thumbnailMissing: written.thumbnailMissing,
-        sha256,
-        existed: written.existed && !created.includes(binaryUrl),
-      };
-    } catch (cause) {
-      // Nothing is deleted by guesswork: media are named by their content, so a retry adopts
-      // them and `sweepOrphans` removes any that never gain a description. Only an empty shell
-      // this call made is removed, because nothing else can have written into it.
-      const left =
-        shell.url !== undefined && (await dropEmpty(shell.url))
-          ? created.filter((url) => url !== shell.url)
-          : created;
-      throw withOrphans(cause, left, signal);
+      await abortable(signal, previous);
+      return await fn();
+    } finally {
+      release();
+      if (copyLocks.get(descriptionUrl) === tail) copyLocks.delete(descriptionUrl);
     }
   }
 
@@ -1207,13 +1261,18 @@ export async function openMediaStore<T, I>(
   // ---- remove ----------------------------------------------------------------------------
 
   /** Conditional delete: observe the ETag, delete on it, retry a lost race. Gone is done. */
-  async function deleteGuarded(url: string, signal: AbortSignal | undefined): Promise<void> {
+  async function deleteGuarded(
+    url: string,
+    signal: AbortSignal | undefined,
+    before?: Veto,
+  ): Promise<void> {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const head = await storage.head(url, { signal });
         // A description is never media, whatever name points at it.
         if (DESCRIPTION_TYPES.has(baseType(head.contentType ?? ""))) return;
         if (head.etag === null) throw fail("failed", "no-validator");
+        await before?.();
         await storage.delete(url, { ifMatch: head.etag, signal });
         return;
       } catch (cause) {
@@ -1222,6 +1281,15 @@ export async function openMediaStore<T, I>(
       }
     }
     throw fail("conflict", "retries-exhausted");
+  }
+
+  /** Called immediately before a destructive request; throws `Skipped` to stop. */
+  type Veto = () => Promise<void>;
+
+  class Skipped extends Error {
+    constructor(readonly why: "vetoed" | "veto-error") {
+      super(why);
+    }
   }
 
   const journalled = async <R>(fn: () => Promise<R>): Promise<R> => {
@@ -1241,6 +1309,7 @@ export async function openMediaStore<T, I>(
     lib: string,
     entry: DeleteJournalEntry,
     signal: AbortSignal | undefined,
+    before?: Veto,
   ): Promise<boolean> {
     for (let attempt = 0; attempt < 3; attempt++) {
       let doc: Document;
@@ -1256,6 +1325,7 @@ export async function openMediaStore<T, I>(
       }
       if (doc.etag === null) throw fail("failed", "no-validator");
       try {
+        await before?.();
         await storage.delete(entry.descriptionUrl, { ifMatch: doc.etag, signal });
         return true;
       } catch (cause) {
@@ -1289,6 +1359,7 @@ export async function openMediaStore<T, I>(
     lib: string,
     entry: DeleteJournalEntry,
     signal: AbortSignal | undefined,
+    before?: Veto,
   ): Promise<void> {
     let recreated = true;
     try {
@@ -1300,7 +1371,7 @@ export async function openMediaStore<T, I>(
     if (!recreated) {
       for (const target of [entry.binaryUrl, entry.thumbnailUrl]) {
         if (target !== undefined && (await isOwnMedia(lib, entry, target, signal))) {
-          await deleteGuarded(target, signal);
+          await deleteGuarded(target, signal, before);
         }
       }
     }
@@ -1309,6 +1380,10 @@ export async function openMediaStore<T, I>(
 
   async function remove(url: string, signal: AbortSignal | undefined): Promise<void> {
     requireUrl(url);
+    await withCopy(url, signal, () => removeLocked(url, signal));
+  }
+
+  async function removeLocked(url: string, signal: AbortSignal | undefined): Promise<void> {
     const lib = await resolveLibrary(signal);
     const shardUrl = await memberOrFail(lib, url, signal);
     const doc = await readDocument(url, signal);
@@ -1348,50 +1423,123 @@ export async function openMediaStore<T, I>(
     await removeMedia(lib, deleted, signal);
   }
 
-  async function resumePending(signal: AbortSignal | undefined): Promise<ResumeSummary> {
+  const pendingView = (entry: DeleteJournalEntry): PendingDelete => {
+    const name = segmentOf(entry.descriptionUrl);
+    return Object.freeze({
+      descriptionUrl: entry.descriptionUrl,
+      shardUrl: entry.shardUrl,
+      ...(entry.binaryUrl === undefined ? {} : { binaryUrl: entry.binaryUrl }),
+      ...(entry.thumbnailUrl === undefined ? {} : { thumbnailUrl: entry.thumbnailUrl }),
+      phase: entry.phase ?? "intent",
+      ...(!lws && /^[0-9a-f]{64}$/.test(name) ? { sha256: name } : {}),
+    });
+  };
+
+  /** The veto for one entry: a throw or rejection is a `false`, and an abort stays an abort. */
+  const vetoFor =
+    (
+      entry: DeleteJournalEntry,
+      shouldResume: ShouldResume,
+      signal: AbortSignal | undefined,
+    ): Veto =>
+    async () => {
+      const view = pendingView(entry);
+      let allowed = false;
+      let why: "vetoed" | "veto-error" = "vetoed";
+      try {
+        allowed = (await abortable(signal, (async () => shouldResume(view))())) === true;
+      } catch {
+        why = "veto-error";
+      }
+      throwIfAborted(signal);
+      if (!allowed) throw new Skipped(why);
+    };
+
+  async function resumePending(
+    signalOrOptions: AbortSignal | ResumeOptions | undefined,
+  ): Promise<ResumeSummary> {
+    const { signal, shouldResume } = resumeArgs(signalOrOptions);
     const entries = await journalled(() => journal.list());
-    const summary: ResumeSummary = { completed: 0, failed: 0, rejected: 0 };
+    const results: ResumeEntryResult[] = [];
+    const summary: ResumeSummary = {
+      completed: 0,
+      failed: 0,
+      rejected: 0,
+      skipped: 0,
+      entries: results,
+    };
     const lib = library ?? (await discover(signal));
     for (const entry of entries) {
       throwIfAborted(signal);
-      if (lib === null) {
-        summary.failed++;
-        continue;
-      }
-      let ours: boolean;
-      try {
-        // A deleted description can no longer be placed on LWS; its media are placed one by one.
-        ours =
-          (await shardInLibrary(lib, entry.shardUrl, signal)) &&
-          (entry.phase === "deleted" ||
-            (await shardOfMember(lib, entry.descriptionUrl, signal)) === entry.shardUrl);
-      } catch (cause) {
-        if (signal?.aborted) throw cause;
-        summary.failed++;
-        continue;
-      }
-      if (!ours) {
-        // Not ours: a stale or tampered record is dropped and never acted on.
-        await journalled(() => journal.delete(entry.descriptionUrl));
-        summary.rejected++;
-        continue;
-      }
-      try {
-        // The description first; media only after it is confirmed gone.
-        if (entry.phase !== "deleted" && !(await removeDescription(lib, entry, signal))) {
-          await journalled(() => journal.delete(entry.descriptionUrl));
-          summary.rejected++;
-          continue;
-        }
-        await removeMedia(lib, entry, signal);
-        summary.completed++;
-      } catch (cause) {
-        if (signal?.aborted) throw cause;
-        summary.failed++;
-      }
+      const outcome = await withCopy(entry.descriptionUrl, signal, () =>
+        resumeEntry(lib, entry, signal, shouldResume),
+      );
+      summary[outcome.outcome]++;
+      results.push({ descriptionUrl: entry.descriptionUrl, ...outcome });
     }
     return summary;
   }
+
+  async function resumeEntry(
+    lib: string | null,
+    listed: DeleteJournalEntry,
+    signal: AbortSignal | undefined,
+    shouldResume: ShouldResume | undefined,
+  ): Promise<Omit<ResumeEntryResult, "descriptionUrl">> {
+    if (lib === null) return { outcome: "failed" };
+    // The journal was listed before this entry's turn: a put may have adopted the copy and
+    // withdrawn the intent since. Act only on what the journal holds now.
+    const entry = (await journalled(() => journal.list())).find(
+      (one) => one.descriptionUrl === listed.descriptionUrl,
+    );
+    if (entry === undefined) return { outcome: "skipped", reason: "withdrawn" };
+    let ours: boolean;
+    try {
+      // A deleted description can no longer be placed on LWS; its media are placed one by one.
+      ours =
+        (await shardInLibrary(lib, entry.shardUrl, signal)) &&
+        (entry.phase === "deleted" ||
+          (await shardOfMember(lib, entry.descriptionUrl, signal)) === entry.shardUrl);
+    } catch (cause) {
+      if (signal?.aborted) throw cause;
+      return { outcome: "failed" };
+    }
+    if (!ours) {
+      // Not ours: a stale or tampered record is dropped and never acted on.
+      await journalled(() => journal.delete(entry.descriptionUrl));
+      return { outcome: "rejected" };
+    }
+    const before = shouldResume === undefined ? undefined : vetoFor(entry, shouldResume, signal);
+    try {
+      // The description first; media only after it is confirmed gone.
+      if (entry.phase !== "deleted" && !(await removeDescription(lib, entry, signal, before))) {
+        await journalled(() => journal.delete(entry.descriptionUrl));
+        return { outcome: "rejected" };
+      }
+      await removeMedia(lib, entry, signal, before);
+      return { outcome: "completed" };
+    } catch (cause) {
+      if (signal?.aborted) throw cause;
+      if (cause instanceof Skipped) return { outcome: "skipped", reason: cause.why };
+      return { outcome: "failed" };
+    }
+  }
+
+  async function withdrawPending(url: string, signal: AbortSignal | undefined): Promise<boolean> {
+    requireUrl(url);
+    return withCopy(url, signal, async () => {
+      const present = (await journalled(() => journal.list())).some(
+        (entry) => entry.descriptionUrl === url,
+      );
+      if (present) await journalled(() => journal.delete(url));
+      return present;
+    });
+  }
+
+  const resumeArgs = (
+    arg: AbortSignal | ResumeOptions | undefined,
+  ): { signal?: AbortSignal; shouldResume?: ShouldResume } =>
+    arg !== undefined && "aborted" in arg ? { signal: arg } : (arg ?? {});
 
   // ---- sweep -----------------------------------------------------------------------------
 
@@ -1471,7 +1619,8 @@ export async function openMediaStore<T, I>(
     update: (url, mutate, opts = {}) => run(opts.signal, () => update(url, mutate, opts.signal)),
     attachThumbnail: (url, input) => run(input?.signal, () => attachThumbnail(url, input)),
     remove: (url, signal) => run(signal, () => remove(url, signal)),
-    resumePending: (signal) => run(signal, () => resumePending(signal)),
+    resumePending: (arg) => run(resumeArgs(arg).signal, () => resumePending(arg)),
+    withdrawPending: (url, signal) => run(signal, () => withdrawPending(url, signal)),
     sweepOrphans: (opts = {}) => run(opts.signal, () => sweep(opts)),
   };
   const opened = await run(options.signal, () => discover(options.signal));

@@ -32,6 +32,12 @@ Rules that must survive any change:
   that is a path check; on LWS identifiers are opaque, so containment is proven with `storage.parentOf` or by
   having listed or created the resource this session.
 - The journal, cursor, type index and descriptions are untrusted input. `resumePending` acts only inside the library.
+- Copies are shared: content-named media serve every record that saved the same bytes. A journalled delete must not
+  outlive that: `put` withdraws a copy's pending delete when it adopts the copy (before reporting success, and
+  `put`/`remove`/`resumePending`/`withdrawPending` on one copy are serialised per store), `resumePending` re-reads the
+  journal per entry, and callers veto with `resumePending({ shouldResume })` (consulted immediately before each
+  destructive request; `false`, a throw or a non-`true` answer skips and leaves the entry) or drop an intent with
+  `withdrawPending(url)`. The veto runs inside the copy's lock, so it must not call back into the store for that copy.
 - Exposure fails closed: the probe must say `private` for the library and for the shard before a write;
   `unknown` refuses unless `allowUnknownExposureFor(containerUrl)` returns exactly `true` for that container;
   `exposed`, a missing probe, a throwing probe and a nonsense answer always refuse (the override is not even
