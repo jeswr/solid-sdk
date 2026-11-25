@@ -4,7 +4,13 @@ import { MAX_JSON_BYTES, RunBudget, type RunLimits } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
 import { runImport } from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
-import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "../core/testing.js";
+import {
+  createMemoryPod,
+  ownerOnlyFixtureChecks,
+  TEST_POD_ROOT,
+  TEST_PROFILE_DOC,
+  TEST_WEBID,
+} from "../core/testing.js";
 import { createSpotifyAdapter, spotifyAdapter } from "./adapter.js";
 import { API, spotifyJson } from "./api.js";
 
@@ -47,6 +53,7 @@ async function seeded() {
     profileDocumentUrl: TEST_PROFILE_DOC,
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
+    ...ownerOnlyFixtureChecks,
   });
   const report = await runImport({
     adapter: spotifyAdapter,

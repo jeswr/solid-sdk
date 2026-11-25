@@ -25,7 +25,11 @@ and https://jeswr.org/fedcon#emailMarkupTrust (only an explicit "verified" rende
 Manual bookings write no email trust. The store marks records read from its own owner-only
 trips/reservations/ container `origin: "manual"` (never read from RDF); `isTrusted(item)` is
 true for "verified", or for a manual record that claims no trust. Connector records without a
-trust flag stay "unverified".
+trust flag stay "unverified". `load()` re-verifies (never repairs) `trips/reservations/` and each
+manual document's own access with `checkOwnerOnly` every time: a record in a folder or document
+that is not verified owner-only is read as `"unverified"` with no `origin`, whatever trust it
+states, because anyone with Write or Append there could have planted it. A later successful
+verification restores trust, and clears the folder from `store.sharedFolders`.
 Providers can also be on reservationFor → airline/provider. Sender keys and opaque
 resource slugs never determine booking identity or trust. Missing dateModified stays absent.
 
@@ -82,6 +86,14 @@ no folder is added inside it, registration is `skipped`), and every private writ
 folder immediately before writing. Trips never widens and never silently narrows. An access
 model `checkOwnerOnly` cannot represent (LWS, or ACP without a trusted dialect) is treated the
 same way, failing closed.
+
+**ACP pods currently fail closed for private writes.** Trips passes no `acpDialect`, so on an ACP
+pod `checkOwnerOnly` cannot represent the policy: Trips cannot create or verify its own folders
+there, and every private write refuses with a `TripsPrivacyError`. Nothing falls back to an
+unverified write. A trusted dialect belongs to later ACP storage integration.
+
+Editing an existing trip re-verifies the trip document's own access as well as `trips/`, so a trip
+shared individually is refused.
 
 **Type Index registration is non-fatal.** A missing or non-private Type Index, a profile
 outside the storage or a registration error does not stop the store opening. `store.registration`

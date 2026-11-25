@@ -464,6 +464,7 @@ describe("Pod client credentials", () => {
         sourceAuth: { fetch: fixtureFetch("spotify", spotifyAdapter.fixtures()) },
         stdout: vi.fn(),
         stderr: vi.fn(),
+        ...privateDestinationChecks,
       }),
     ).toBe(0);
     expect(pod.get(`${podRoot}integrations/spotify/state.json`)).toContain(
@@ -2038,6 +2039,7 @@ describe("VeSync watch failure classification", () => {
       signal: controller.signal,
       sleep,
       random: () => 0.5,
+      ...privateDestinationChecks,
     });
     const imported = stdout.mock.calls.filter(([text]) => String(text).startsWith("Imported"));
     return { code, stderr, sleeps, imported: imported.length, logins: () => logins };
