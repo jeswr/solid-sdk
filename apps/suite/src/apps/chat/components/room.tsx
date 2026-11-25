@@ -29,6 +29,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { decodeIdentifierRef, decodeRef } from "@/lib/refs";
 import { usePageRouteParams } from "@/lib/route-params";
+import { AppHeading, useAppShell } from "@/shell/app-frame";
 import type { Message } from "../lib/client";
 import { roomContainer } from "../lib/model";
 import {
@@ -143,6 +144,7 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
   const send = useSend(url);
   const actions = useChatActions();
   const { session, client, details, setDetails, setCurrentRoom } = useChat();
+  const inShell = useAppShell();
   const [editing, setEditing] = useState<Message>();
   const [deleting, setDeleting] = useState<Message>();
   const [deleteModeration, setDeleteModeration] = useState(false);
@@ -270,9 +272,9 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
           <MessageSquare size={22} />
         </span>
         <div className="chat-room-heading">
-          <h1>
+          <AppHeading>
             <RoomName room={data} />
-          </h1>
+          </AppHeading>
           <ul className="chat-members" aria-label={`${data.members.length} members`}>
             {data.members.slice(0, 4).map((member) => (
               <MemberAvatar key={member} webId={member} />
@@ -300,14 +302,16 @@ export function RoomView({ url, messageId }: { url: string; messageId?: string |
             Leave room
           </Button>
         )}
-        <IconButton
-          label={details ? "Hide details" : "Show details"}
-          variant="ghost"
-          aria-pressed={details}
-          onClick={() => setDetails(!details)}
-        >
-          <Info size={20} aria-hidden="true" />
-        </IconButton>
+        {!inShell && (
+          <IconButton
+            label={details ? "Hide details" : "Show details"}
+            variant="ghost"
+            aria-pressed={details}
+            onClick={() => setDetails(!details)}
+          >
+            <Info size={20} aria-hidden="true" />
+          </IconButton>
+        )}
       </header>
       {room.status === "error" && <ChatFailure error={room.error} retry={room.retry} />}
       {messages.status === "error" && <ChatFailure error={messages.error} retry={messages.retry} />}
@@ -458,7 +462,7 @@ function RoomRouteContent({ reference }: { reference: string }) {
   } catch {
     return (
       <div className="chat-state" role="alert">
-        <h1>This room link isn't valid</h1>
+        <AppHeading>This room link isn't valid</AppHeading>
         <p>Ask the sender to copy the invite link again.</p>
         <a href="/chat">Back to Chat</a>
       </div>
@@ -473,7 +477,7 @@ function RoomRouteContent({ reference }: { reference: string }) {
   if (!client.canOpen(url))
     return (
       <div className="chat-state" role="alert">
-        <h1>This conversation is in another pod</h1>
+        <AppHeading>This conversation is in another pod</AppHeading>
         <p>
           This conversation is in another pod. Opening conversations in other pods arrives with
           sign-in.
