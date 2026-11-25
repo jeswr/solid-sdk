@@ -14,13 +14,21 @@ if (args[0] === "chatgpt-export" || args[0] === "claude-export") {
   process.exit(status);
 } else if (args[0] === "redact-archive") {
   let status = 1;
+  // The run itself warns when it finished with resources left unredacted; then the
+  // configuration is not at fault and the hint below would mislead.
+  let warned = false;
   try {
     const { runRedactionMigration } = await import("./redaction-migration.js");
-    status = await runRedactionMigration(args);
+    status = await runRedactionMigration(args, {
+      warn: (message) => {
+        warned = true;
+        process.stderr.write(`${message}\n`);
+      },
+    });
   } catch {
     // Never print secret-bearing startup errors.
   }
-  if (status !== 0)
+  if (status !== 0 && !warned)
     process.stderr.write("Redaction failed. Check the owner MCP configuration and run it again.\n");
   process.exit(status);
 } else {

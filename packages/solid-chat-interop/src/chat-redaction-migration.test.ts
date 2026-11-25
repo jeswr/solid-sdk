@@ -223,6 +223,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
       messagesReplaced: 1,
       conflicts: 0,
       failed: 0,
+      unverified: 0,
     });
     expect(pod.writes).toEqual([]);
     expect(pod.deletes).toEqual([]);
@@ -241,6 +242,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
       messagesReplaced: 1,
       conflicts: 0,
       failed: 0,
+      unverified: 0,
     });
     expect(pod.everything()).not.toContain(TOKEN);
     expect([...pod.resources.keys()].join("\n")).not.toContain(TOKEN);
@@ -303,6 +305,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
       messagesReplaced: 1,
       messagesRewritten: 1,
       failed: 0,
+      unverified: 0,
     });
     expect(pod.resources.has(legacy)).toBe(false);
     // The replay's copy is kept as it was, not rewritten.
@@ -375,6 +378,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
       messagesRewritten: 2,
       messagesReplaced: 0,
       failed: 0,
+      unverified: 0,
     });
     expect(pod.deletes).toEqual([]);
     for (const url of [hook, legacyCapture]) expect(pod.text(url)).toContain("[REDACTED TOKEN]");
@@ -432,18 +436,27 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
     pod.set(`${broken}_conversation.ttl`, "");
     pod.fail.set(`${CHAT}m-msg-2.ttl`, 403);
     const writer = new ChatWriter(pod);
+    // The failed write stops its conversation: the later writes are left for the next run.
     expect(await writer.migrateRedaction()).toEqual({
       dryRun: false,
       conversations: 2,
-      titles: 1,
+      titles: 0,
       messagesRewritten: 0,
+      messagesReplaced: 0,
+      conflicts: 2,
+      failed: 2,
+      unverified: 0,
+    });
+    expect(pod.resources.has(legacy)).toBe(true);
+    pod.fail.clear();
+    expect(await writer.migrateRedaction()).toMatchObject({
+      titles: 1,
+      messagesRewritten: 1,
       messagesReplaced: 1,
       conflicts: 0,
-      failed: 2,
+      failed: 1,
+      unverified: 0,
     });
-    expect(pod.resources.has(legacy)).toBe(false);
-    pod.fail.clear();
-    expect(await writer.migrateRedaction()).toMatchObject({ messagesRewritten: 1, failed: 1 });
     expect(pod.everything()).not.toContain(TOKEN);
   });
 
@@ -463,7 +476,11 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
     const { pod } = await legacyPod();
     pod.etags = false;
     pod.writes = [];
-    expect(await new ChatWriter(pod).migrateRedaction()).toMatchObject({ ...CLEAN, failed: 3 });
+    expect(await new ChatWriter(pod).migrateRedaction()).toMatchObject({
+      ...CLEAN,
+      failed: 1,
+      conflicts: 2,
+    });
     expect(pod.writes).toEqual([]);
     expect(pod.deletes).toEqual([]);
     pod.etags = true;
@@ -576,6 +593,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
         titles: 1,
         messagesReplaced: 1,
         failed: 0,
+        unverified: 0,
       });
       await expectSaveEquivalent(pod, sourceOf(title, messages), [
         "fixtureTitleHalf",
@@ -611,6 +629,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
         messagesRewritten: 1,
         messagesReplaced: 1,
         failed: 1,
+        unverified: 0,
       });
       expect(pod.resources.has(legacy)).toBe(false);
     });
@@ -626,6 +645,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
         messagesRewritten: 1,
         messagesReplaced: 1,
         failed: 0,
+        unverified: 0,
       });
       expect(pod.resources.has(legacy)).toBe(false);
       expect(pod.everything()).not.toContain(TOKEN);
@@ -650,10 +670,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
     await writer.save(raw());
     const expected = await savedChat(raw());
     const replay = `${CHAT}m-${expected.messages[0]?.id}.ttl`;
-    pod.set(
-      replay,
-      pod.text(replay).replace(expected.messages[0]?.text as string, "Something else"),
-    );
+    pod.set(replay, pod.text(replay).replace(expected.messages[0]?.text as string, "? else"));
     expect(await writer.migrateRedaction()).toMatchObject({ messagesReplaced: 0, failed: 1 });
     expect(pod.resources.has(legacy)).toBe(true);
     expect(pod.deletes).toEqual([]);
