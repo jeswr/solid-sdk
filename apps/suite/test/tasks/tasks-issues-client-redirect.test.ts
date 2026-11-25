@@ -22,9 +22,24 @@ describe("Issues browser redirect before sign-in", () => {
     vi.stubGlobal("location", { search, replace });
     const app = vi.fn(() => h("p", null, "Local app"));
     const { host } = await mount(h(SuiteRedirect, null, h(app)));
-    expect(replace).toHaveBeenCalledWith(`https://suite.example/tasks/issues${search}`);
+    expect(replace).toHaveBeenCalledWith(
+      "https://suite.example/tasks/issues?tracker=https%3A%2F%2Fpod.example%2Ftracker.ttl%23this",
+    );
     expect(app).not.toHaveBeenCalled();
     expect(host.textContent).toBe("");
+  });
+  it.each([
+    "?code=abc&state=xyz&tracker=https%3A%2F%2Fpod.example%2Ft.ttl",
+    "?error=access_denied",
+    "?iss=https%3A%2F%2Fop.example",
+  ])("keeps an OIDC callback %s local and forwards nothing", async (search) => {
+    vi.stubEnv("NEXT_PUBLIC_SUITE_ORIGIN", "https://suite.example");
+    route.pathname = "/";
+    const replace = vi.fn();
+    vi.stubGlobal("location", { search, replace });
+    const { host } = await mount(h(SuiteRedirect, null, "Local app"));
+    expect(host.textContent).toBe("Local app");
+    expect(replace).not.toHaveBeenCalled();
   });
   it.each(["1", ""])("renders locally with no configured suite in export=%s", async (mode) => {
     vi.stubEnv("APP_STATIC_EXPORT", mode);

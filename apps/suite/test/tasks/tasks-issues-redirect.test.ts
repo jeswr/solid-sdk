@@ -34,6 +34,16 @@ describe("standalone Issues entry point", () => {
     expect(destination.origin + destination.pathname).toBe("https://suite.example/tasks/issues");
     expect(destination.searchParams.get("tracker")).toBe(tracker);
   });
+  it("never redirects an in-flight OIDC callback", async () => {
+    vi.stubEnv("SUITE_ORIGIN", "https://suite.example/");
+    for (const query of ["code=a&state=b", "error=access_denied", "iss=https%3A%2F%2Fop.example"]) {
+      const callback = await unstable_getResponseFromNextConfig({
+        url: `https://issues.example/?${query}`,
+        nextConfig: config,
+      });
+      expect(getRedirectUrl(callback)).toBeNull();
+    }
+  });
   it.each([
     "/clientid.jsonld",
     "/callback.html",

@@ -56,7 +56,9 @@ const nextConfig: NextConfig = staticExport
       output: "export",
       // Served from a sub-path on GitHub Pages (jeswr.github.io/solid-sdk/issues/):
       // scripts/build-pages.mjs sets NEXT_PUBLIC_BASE_PATH. Unset, the app is at the root.
-      basePath: process.env.NEXT_PUBLIC_BASE_PATH?.replace(/\/+$/, "") || undefined,
+      ...(process.env.NEXT_PUBLIC_BASE_PATH?.replace(/\/+$/, "")
+        ? { basePath: process.env.NEXT_PUBLIC_BASE_PATH.replace(/\/+$/, "") }
+        : {}),
       // Caddy `file_server` serves `/foo` → `/foo/index.html`; trailing-slash
       // routing makes Next emit that directory layout so links resolve on disk.
       trailingSlash: true,
@@ -67,11 +69,26 @@ const nextConfig: NextConfig = staticExport
       ...baseConfig,
       async redirects() {
         const suite = process.env.SUITE_ORIGIN?.trim();
-        // Next forwards the query; auth and client identifier assets stay served.
+        // Next appends the incoming query to a redirect and cannot filter it, so an OIDC callback
+        // (`code`, `state`, `error`, `iss`, ...) must never match: those requests stay served
+        // locally. The browser redirect (`SuiteRedirect`) forwards only the `tracker` hint.
+        const callback = [
+          "code",
+          "state",
+          "error",
+          "iss",
+          "session_state",
+          "id_token",
+          "access_token",
+        ].map((key) => ({
+          type: "query" as const,
+          key,
+        }));
         return suite
           ? [
               {
                 source: "/",
+                missing: callback,
                 destination: `${normaliseOrigin(suite)}/tasks/issues`,
                 permanent: false,
               },

@@ -1,6 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { Button, Input, LoadingSkeleton } from "@jeswr/suite-ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  Button,
+  Input,
+  LoadingSkeleton,
+} from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -15,6 +27,7 @@ import {
   issueRow,
   issueTable,
 } from "../../lib/issues/table";
+import { documentUrl } from "../../lib/model/rdf";
 import { useTasks } from "../../state/tasks-context";
 import "./issues.css";
 
@@ -36,8 +49,34 @@ export function IssuesView({ trackerUrl }: { trackerUrl?: string }) {
   const [creating, setCreating] = useState(false);
   const [target, setTarget] = useState("");
   const requested = trackerUrl ?? params.get("tracker");
+  // A tracker named by a link is opened only after the user confirms its origin.
+  const [confirmed, setConfirmed] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const requestedOrigin = (() => {
+    try {
+      return requested ? new URL(requested).origin : undefined;
+    } catch {
+      return undefined;
+    }
+  })();
+  const known = Boolean(
+    requested &&
+      tasks.projects.some((project) => {
+        try {
+          return project.url === documentUrl(requested);
+        } catch {
+          return false;
+        }
+      }),
+  );
+  const pending =
+    Boolean(requested) &&
+    requested !== dismissed &&
+    confirmed !== requested &&
+    !known &&
+    tasks.status !== "loading";
   useEffect(() => {
-    if (!requested) return;
+    if (!requested || (!known && confirmed !== requested)) return;
     let live = true;
     setOpening(true);
     setError("");
@@ -63,7 +102,7 @@ export function IssuesView({ trackerUrl }: { trackerUrl?: string }) {
     return () => {
       live = false;
     };
-  }, [requested, trackerUrl, issuesStore, tasks.cache, router]);
+  }, [requested, known, confirmed, trackerUrl, issuesStore, tasks.cache, router]);
   const projects = tasks.projects.filter(isIssuesProject);
   const shown = trackerUrl ? projects.filter((project) => project.url === trackerUrl) : projects;
   const project = shown.find((project) => project.url === target) ?? shown[0];
@@ -129,6 +168,35 @@ export function IssuesView({ trackerUrl }: { trackerUrl?: string }) {
         </Button>
       </form>
       {error && <p role="alert">{error}</p>}
+      <AlertDialog
+        open={pending}
+        onOpenChange={(next) => {
+          if (!next && requested) {
+            setDismissed(requested);
+            if (!trackerUrl) router.replace("/tasks/issues");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Open this tracker?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A link asks to open an issue tracker hosted at{" "}
+              <strong>{requestedOrigin ?? "an unrecognised address"}</strong>. Only open trackers
+              from sites you trust.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!requestedOrigin}
+              onClick={() => setConfirmed(requested ?? null)}
+            >
+              Open tracker
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {!trackerUrl && (
         <ul aria-label="Issue trackers">
           {projects.map((project) => (

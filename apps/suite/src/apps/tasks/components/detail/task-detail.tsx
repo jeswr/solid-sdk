@@ -477,7 +477,10 @@ export function TaskDetail({
         )}
       </section>
       <TaskAttachments key={stored.url} stored={stored} />
-      <TaskComments key={`${tasks.webId} ${stored.url}`} stored={stored} project={project} />
+      {/* Issues carry their own comments section; the Tasks comment store rejects `#this` subjects. */}
+      {!issue && (
+        <TaskComments key={`${tasks.webId} ${stored.url}`} stored={stored} project={project} />
+      )}
       <TaskProperties
         stored={stored}
         project={project}

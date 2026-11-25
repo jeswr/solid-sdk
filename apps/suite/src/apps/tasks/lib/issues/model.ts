@@ -24,18 +24,29 @@ export class IssuesTracker extends TaskTracker {
 }
 /** Keep the standalone category and the shared literal consistent through every Tasks editor. */
 export class IssueItem extends TaskItem {
+  /** A non-http `wf:tracker` must not make the getter (and so the whole tracker load) throw. */
+  private priorityBase(): string | undefined {
+    try {
+      return this.project ? documentUrl(this.project) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
   override get priority() {
-    const base = this.project && documentUrl(this.project);
+    const base = this.priorityBase();
     return (
-      (["high", "medium", "low"] as const).find((level) =>
-        this.types.has(`${base}#priority-${level}`),
-      ) ?? super.priority
+      (base &&
+        (["high", "medium", "low"] as const).find((level) =>
+          this.types.has(`${base}#priority-${level}`),
+        )) ||
+      super.priority
     );
   }
   override set priority(value: "high" | "medium" | "low" | undefined) {
     super.priority = value;
-    if (!this.project) return;
-    const prefix = `${documentUrl(this.project)}#priority-`;
+    const base = this.priorityBase();
+    if (!base) return;
+    const prefix = `${base}#priority-`;
     for (const level of ["high", "medium", "low"]) this.types.delete(`${prefix}${level}`);
     if (value) this.types.add(`${prefix}${value}`);
   }

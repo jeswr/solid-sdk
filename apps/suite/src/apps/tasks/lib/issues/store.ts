@@ -3,12 +3,12 @@ import { isomorphic } from "rdf-isomorphic";
 import { ModelError } from "../model/errors";
 import { RdfIO, type Resource } from "../model/io";
 import type { TaskMove } from "../model/move";
-import { DataFactory, documentUrl, NS, requireTitle, Store } from "../model/rdf";
+import { DataFactory, documentUrl, NS, requireHttp, requireTitle, Store } from "../model/rdf";
 import { type StoredProject, type StoredTask, type StoreOptions, TaskStore } from "../model/store";
 import { createTask, type TaskDetails, type TaskItem, validateTask } from "../model/task";
 import type { TaskTracker } from "../model/tracker";
 import { TypeIndex } from "../model/type-index";
-import { allowsWrite, discoverIssues, inside } from "./discovery";
+import { allowsWrite, discoverIssues, inside, isIssueMember } from "./discovery";
 import { IssueItem, IssuesTracker, isIssuesProject, syncIssueState } from "./model";
 
 /** Compatibility at the I/O boundary; TasksCache still owns queues, rollback and conflict toasts. */
@@ -36,7 +36,7 @@ export class IssuesTaskStore extends TaskStore {
   isIssueResource(url: string): boolean {
     const document = documentUrl(url);
     return [...this.trackers].some(
-      ([container, project]) => project.url === document || inside(document, container),
+      ([container, project]) => project.url === document || isIssueMember(document, container),
     );
   }
   canEdit(project: StoredProject, task?: StoredTask): boolean {
@@ -55,20 +55,44 @@ export class IssuesTaskStore extends TaskStore {
       throw new Error("Issues cannot be moved between projects.");
     return super.prepareTaskMove(item, source, target, id);
   }
+  /** The issue container must be a strict child of the tracker's own directory, away from Tasks data. */
+  private requireIssuesContainer(trackerUrl: string, container: string): void {
+    const directory = new URL("./", trackerUrl).href;
+    if (
+      !container.endsWith("/") ||
+      container === directory ||
+      !inside(container, directory) ||
+      inside(container, this.projects) ||
+      inside(this.projects, container)
+    )
+      throw new ModelError(400, container);
+  }
+  /** True for a tracker the user opened by URL or WebID: never one of their own projects. */
+  isOpenedTracker(url: string): boolean {
+    return this.opened.has(documentUrl(url));
+  }
   override async readProject(url: string): Promise<StoredProject> {
     const project = await super.readProject(url);
     if (!isIssuesProject(project)) return project;
     project.tracker = new IssuesTracker(project.tracker.id, project.dataset, DataFactory);
     const container = project.tracker.stateStore as string;
-    if (!inside(container, new URL("./", project.url).href) || !container.endsWith("/"))
-      throw new ModelError(400, container);
+    this.requireIssuesContainer(project.url, container);
     this.trackers.set(container, project);
     return project;
   }
   override async listProjects(
     onError?: (url: string, error: unknown) => void,
-    { strict = false } = {},
+    { strict = false, collection }: { strict?: boolean; collection?: string } = {},
   ): Promise<StoredProject[]> {
+    // A family mutation needs only its own collection; Issues trackers live elsewhere.
+    if (collection) {
+      const listed = await super.listProjects(onError, { strict, collection });
+      return Promise.all(
+        listed.map((project) =>
+          isIssuesProject(project) ? this.readProject(project.url) : project,
+        ),
+      );
+    }
     const urls = new Set(
       (await this.issuesIO.list(this.projects, { strict })).filter(
         (url) => inside(url, this.projects) && url.endsWith(".ttl"),
@@ -82,44 +106,78 @@ export class IssuesTaskStore extends TaskStore {
           this.config.webId,
         ).locations(`${NS.WF}Tracker`);
         for (const registration of registrations) {
-          if (!inside(registration.location, this.config.storage)) continue;
+          if (!inside(documentUrl(registration.location), this.config.storage)) continue;
           if (registration.kind === "instance") urls.add(documentUrl(registration.location));
           else {
             try {
               for (const url of await this.issuesIO.list(registration.location, { strict }))
                 if (inside(url, registration.location) && url.endsWith(".ttl")) urls.add(url);
             } catch (error) {
+              if (strict && !onError) throw error;
               onError?.(registration.location, error);
             }
           }
         }
-      } catch {
-        /* Public discovery and conventional projects still work without an index. */
+      } catch (error) {
+        // Public discovery and conventional projects still work without an index, but a strict
+        // read must fail closed rather than reconcile against an incomplete listing.
+        if (strict) throw error;
       }
     }
-    for (const url of [
-      ...this.opened,
-      ...(await discoverIssues(this.config.webId, this.issuesIO, this.config.storage)),
-    ])
+    // Opened and conventional candidates may legitimately not exist.
+    const optional = new Set<string>(this.opened);
+    for (const url of await discoverIssues(this.config.webId, this.issuesIO, this.config.storage)) {
+      optional.add(url);
       urls.add(url);
+    }
+    for (const url of this.opened) urls.add(url);
     const result = new Map<string, StoredProject>();
     for (const url of urls) {
       try {
         result.set(url, await this.readProject(url));
       } catch (error) {
-        if (!(error instanceof ModelError && error.status === 404)) onError?.(url, error);
+        const missing =
+          error instanceof ModelError && (error.status === 404 || error.status === 410);
+        if (missing && (optional.has(url) || !strict)) continue;
+        if (!onError) {
+          if (strict) throw error;
+          continue;
+        }
+        onError(url, error);
       }
     }
     return [...result.values()];
   }
   async openTracker(input: string): Promise<string[]> {
-    let urls: string[];
-    try {
-      // WebIDs can end in .ttl too; inspect RDF rather than guessing from the path.
-      const project = await this.readProject(documentUrl(input));
-      urls = [project.url];
-    } catch {
-      urls = await discoverIssues(input, this.issuesIO);
+    const requireHttps = (value: string) => {
+      if (new URL(requireHttp(value)).protocol !== "https:") throw new TypeError("Expected HTTPS.");
+      return value;
+    };
+    requireHttps(input);
+    const accepted = async (candidate: string): Promise<string | undefined> => {
+      try {
+        const project = await this.readProject(requireHttps(documentUrl(candidate)));
+        // Only Issues-shaped trackers, with their stateStore confinement, may be opened.
+        return isIssuesProject(project) ? project.url : undefined;
+      } catch {
+        return undefined;
+      }
+    };
+    // WebIDs can end in .ttl too; inspect RDF rather than guessing from the path.
+    const direct = await accepted(input);
+    const urls: string[] = [];
+    if (direct) urls.push(direct);
+    else {
+      let found: string[] = [];
+      try {
+        found = await discoverIssues(input, this.issuesIO);
+      } catch {
+        /* nothing discoverable */
+      }
+      for (const candidate of found) {
+        const url = await accepted(candidate);
+        if (url) urls.push(url);
+      }
     }
     if (!urls.length) throw new ModelError(404, input);
     for (const candidate of urls) this.opened.add(candidate);
@@ -142,19 +200,30 @@ export class IssuesTaskStore extends TaskStore {
     return updated;
   }
   override async readTask(url: string): Promise<StoredTask> {
-    const project = [...this.trackers].find(([container]) => inside(url, container))?.[1];
+    const project = [...this.trackers].find(([container]) =>
+      isIssueMember(documentUrl(url), container),
+    )?.[1];
     if (!project) return super.readTask(url);
     const resource = await this.issuesIO.read(documentUrl(url));
-    const subject = [
-      ...resource.dataset.match(
-        null,
-        DataFactory.namedNode(`${NS.RDF}type`),
-        DataFactory.namedNode(`${NS.WF}Task`),
-      ),
-    ].find(
-      (quad) =>
-        quad.subject.termType === "NamedNode" && documentUrl(quad.subject.value) === resource.url,
-    )?.subject.value;
+    const subjects = new Set(
+      [
+        ...resource.dataset.match(
+          null,
+          DataFactory.namedNode(`${NS.RDF}type`),
+          DataFactory.namedNode(`${NS.WF}Task`),
+        ),
+      ]
+        .filter(
+          (quad) =>
+            quad.subject.termType === "NamedNode" &&
+            documentUrl(quad.subject.value) === resource.url,
+        )
+        .map((quad) => quad.subject.value),
+    );
+    // Deterministic: the suite's `#it`, then the standalone app's `#this`, else the least subject.
+    const subject =
+      [`${resource.url}#it`, `${resource.url}#this`].find((id) => subjects.has(id)) ??
+      [...subjects].sort()[0];
     if (!subject) throw new TypeError("Expected a wf:Task.");
     return { ...resource, task: new IssueItem(subject, resource.dataset, DataFactory) };
   }
@@ -165,7 +234,7 @@ export class IssuesTaskStore extends TaskStore {
     if (!this.trackers.has(container)) return super.listTasks(container, { strict, skipInvalid });
     const tasks: StoredTask[] = [];
     for (const url of await this.issuesIO.list(container, { strict })) {
-      if (!inside(url, container) || !url.endsWith(".ttl")) continue;
+      if (!isIssueMember(url, container)) continue;
       try {
         tasks.push(await this.readTask(url));
       } catch (error) {
@@ -204,7 +273,7 @@ export class IssuesTaskStore extends TaskStore {
   }
   override async deleteTask(item: StoredTask): Promise<void> {
     const project = [...this.trackers.values()].find((project) =>
-      inside(item.url, project.tracker.stateStore as string),
+      isIssueMember(item.url, project.tracker.stateStore as string),
     );
     if (project && !this.canEdit(project, item)) throw new ModelError(403, item.url);
     return super.deleteTask(item);
@@ -214,7 +283,7 @@ export class IssuesTaskStore extends TaskStore {
     change: (task: TaskItem) => void,
   ): Promise<StoredTask> {
     const project = [...this.trackers.values()].find((project) =>
-      inside(item.url, project.tracker.stateStore as string),
+      isIssueMember(item.url, project.tracker.stateStore as string),
     );
     if (!project) return super.updateTask(item, change);
     if (!this.canEdit(project, item)) throw new ModelError(403, item.url);

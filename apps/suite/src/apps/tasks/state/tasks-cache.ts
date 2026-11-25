@@ -340,7 +340,11 @@ export class TasksCache {
         this.completedDeletionBlocked = true;
         throw error;
       });
-    const ownProjects = new Set(projects.map((project) => project.url));
+    // A tracker opened from a link or an address is someone else's: it is listed, never owned.
+    const opened = (this.store as { isOpenedTracker?: (url: string) => boolean }).isOpenedTracker;
+    const ownProjects = new Set(
+      projects.map((project) => project.url).filter((url) => !opened?.call(this.store, url)),
+    );
     for (const url of this.sharedProjects.keys()) {
       if (ownProjects.has(url) || !inScope(url)) continue;
       try {
