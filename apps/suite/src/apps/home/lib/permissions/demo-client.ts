@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { DEMO_APP_CLIENT_ID, DEMO_APP_LOGO } from "../../../../lib/demo-pod/seed-permission-app";
+import { DEMO_APP_CLIENT_ID, DEMO_APP_LOGO } from "./demo-app";
 
 /** Only these two public seed documents use the fixture pod; no real session fetch. */
 export async function demoClientResource(

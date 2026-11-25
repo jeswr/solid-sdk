@@ -1,9 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import {
+  DEMO_APP_CLIENT_ID,
+  DEMO_APP_LOGO,
+  DEMO_APP_ROOT,
+} from "../../apps/home/lib/permissions/demo-app";
 import { DEMO_ROOT } from "./constants";
 import type { DemoSeedFile } from "./pod";
 
-export const DEMO_APP_CLIENT_ID = `${DEMO_ROOT}apps/notenest/client-id.jsonld`;
-export const DEMO_APP_LOGO = `${DEMO_ROOT}apps/notenest/logo.svg`;
+export { DEMO_APP_CLIENT_ID, DEMO_APP_LOGO };
+
+if (DEMO_APP_ROOT !== `${DEMO_ROOT}apps/notenest/`)
+  throw new Error("The demo app must live in the demo pod");
 
 /** Public app metadata, served as JSON by the in-browser pod. */
 export function seedPermissionApp(now: number): DemoSeedFile[] {
