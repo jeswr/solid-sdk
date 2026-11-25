@@ -761,6 +761,56 @@ it("revalidates legacy listings on storage-root notifications and retries failed
   expect(gets.filter((url) => !url.endsWith("/"))).toEqual([added]);
 });
 
+async function refusedSession(deleteFails: boolean) {
+  const { session, pod } = await setup();
+  let loosened = false;
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    if (deleteFails && init?.method === "DELETE" && url.includes("/diary/"))
+      return new Response(null, { status: 500 });
+    const response = await session.fetch(input, init);
+    if (init?.method === "PUT" && /\/diary\/[^/]+\/[^/]*\.ttl$/.test(url) && !loosened) {
+      loosened = true;
+      await session.fetch(`${url}.acl`, {
+        method: "PUT",
+        headers: { "content-type": "text/turtle" },
+        body: `@prefix acl: <http://www.w3.org/ns/auth/acl#>. @prefix foaf: <http://xmlns.com/foaf/0.1/>.
+<${url}.acl#p> a acl:Authorization; acl:agentClass foaf:Agent; acl:accessTo <${url}>; acl:mode acl:Read.`,
+      });
+    }
+    return response;
+  };
+  return { session: { ...session, fetch }, pod };
+}
+async function logRefusedMeal(session: PodSession) {
+  const view = await mount(h(HealthProvider, { session, children: h(DiaryView) }));
+  await eventually(() => expect(view.host.querySelectorAll("article")).toHaveLength(2));
+  await click(button("Log meal", view.host));
+  await fill("#hlt-diary-foods", "Refused dish");
+  await submit();
+  return view;
+}
+it("tells the user a new entry was removed because it could not be confirmed private", async () => {
+  const { session } = await refusedSession(false);
+  await logRefusedMeal(session);
+  await eventually(() =>
+    expect(
+      [...document.querySelectorAll('[role="dialog"] [role="alert"]')].map((e) => e.textContent),
+    ).toContain("Not saved: we removed it because we couldn't confirm it is private to you."),
+  );
+  expect(document.body.textContent).not.toContain("check your connection");
+});
+it("tells the user a stored entry could not be confirmed private when it was not removed", async () => {
+  const { session } = await refusedSession(true);
+  await logRefusedMeal(session);
+  await eventually(() =>
+    expect(
+      [...document.querySelectorAll('[role="dialog"] [role="alert"]')].map((e) => e.textContent),
+    ).toContain(
+      "Saved, but we couldn't confirm it is private to you. Check who can access your Health folder.",
+    ),
+  );
+});
 it("shows the pre-diagnosis gluten warning above the likely triggers", async () => {
   const { session, diary } = await setup();
   const when = new Date(Date.now() - 4 * 86400000);

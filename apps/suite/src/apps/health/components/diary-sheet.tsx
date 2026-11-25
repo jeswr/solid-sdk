@@ -18,6 +18,7 @@ import {
   MANUAL_EXPOSURE_NOTE,
   matchDiaryItems,
 } from "../lib/data/diary";
+import { DiaryPrivacyError } from "../lib/data/diary-confirm";
 import { useDiaryActions } from "../state/diary-context";
 import { useDiaryMode } from "../state/diary-mode-context";
 import { useSheetSide } from "./measurement-sheet";
@@ -204,12 +205,14 @@ export function DiarySheet({
               onClose();
             } catch (error) {
               setFailure(
-                typeof error === "object" &&
-                  error !== null &&
-                  "status" in error &&
-                  error.status === 412
-                  ? "This entry changed elsewhere. Close this form and review the refreshed entry before editing again."
-                  : "Couldn't save your diary entry. Your draft is still here; check your connection and try again.",
+                error instanceof DiaryPrivacyError
+                  ? error.message
+                  : typeof error === "object" &&
+                      error !== null &&
+                      "status" in error &&
+                      error.status === 412
+                    ? "This entry changed elsewhere. Close this form and review the refreshed entry before editing again."
+                    : "Couldn't save your diary entry. Your draft is still here; check your connection and try again.",
               );
             } finally {
               setSaving(false);

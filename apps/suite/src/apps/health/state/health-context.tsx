@@ -14,6 +14,7 @@ import {
 } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
 import { ensureSample } from "../demo/sample";
+import { DiaryPrivacyError } from "../lib/data/diary-confirm";
 import { PartialImportError, writeSamples } from "../lib/data/import";
 import {
   addMeasurement,
@@ -179,13 +180,15 @@ export function HealthProvider({
           "status" in underlying &&
           underlying.status === 412;
         toast.error(
-          error instanceof PartialGpxImportError
+          error instanceof DiaryPrivacyError
             ? error.message
-            : conflict
-              ? "This item changed elsewhere. We refreshed your data. Review it before saving again."
-              : error instanceof PartialImportError
-                ? error.message
-                : "Couldn't save to your private Health storage. Your change was rolled back.",
+            : error instanceof PartialGpxImportError
+              ? error.message
+              : conflict
+                ? "This item changed elsewhere. We refreshed your data. Review it before saving again."
+                : error instanceof PartialImportError
+                  ? error.message
+                  : "Couldn't save to your private Health storage. Your change was rolled back.",
         );
         throw error;
       } finally {

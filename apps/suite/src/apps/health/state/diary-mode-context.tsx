@@ -12,6 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { DiaryPrivacyError } from "../lib/data/diary-confirm";
 import {
   createDiaryPreferencesStore,
   DEFAULT_DIARY_PREFERENCES,
@@ -96,8 +97,12 @@ export function DiaryModeProvider({ children }: { children: ReactNode }) {
       setPreferences(value);
       setVisit(false);
       setVisitTrigger(undefined);
-    } catch {
-      setError("Couldn't save diary settings. Check your connection and try again.");
+    } catch (error) {
+      setError(
+        error instanceof DiaryPrivacyError
+          ? error.message
+          : "Couldn't save diary settings. Check your connection and try again.",
+      );
     } finally {
       writing.current = false;
       setSaving(false);

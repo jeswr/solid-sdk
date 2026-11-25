@@ -3,7 +3,6 @@
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { diaryTriggers, type SafetyContext } from "@jeswr/health-insights";
-import { createOwnerOnlyDestinationChecks } from "@jeswr/pod-access";
 import {
   buildMeal,
   buildSymptom,
@@ -19,7 +18,6 @@ import {
   type SymptomData,
   type SymptomType,
 } from "@jeswr/solid-health-diary";
-import { createPodClient } from "@jeswr/storage-client";
 import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import {
@@ -36,6 +34,7 @@ import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { diaryDay } from "../diary-time";
 import { emptyHealthDocument, HealthIoError, type Range } from "../model";
+import { createPrivateWriteConfirmer } from "./diary-confirm";
 import { createHealthDataStore } from "./store";
 
 interface CommonDraft {
@@ -131,23 +130,6 @@ function packageDataset(document: DatasetCore) {
   }
   return copy;
 }
-/**
- * A written entry could not be confirmed as owner-only afterwards. `removed` is true only
- * when the server confirmed the deletion of the file this run created.
- */
-export class DiaryPrivacyError extends Error {
-  constructor(readonly removed: boolean) {
-    super(
-      removed
-        ? "Couldn't confirm this entry is private to you, so it was removed."
-        : "Couldn't confirm this entry is private to you. It may still be stored; check your Health access settings.",
-    );
-    this.name = "DiaryPrivacyError";
-  }
-}
-function strongEtag(value: string | null): string | undefined {
-  return value !== null && /^"[^"\r\n]*"$/.test(value) ? value : undefined;
-}
 function missing(error: unknown) {
   return error instanceof RdfFetchError && error.status === 404;
 }
@@ -203,13 +185,8 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     return fetch(input, init);
   };
   const store = createHealthDataStore(transport, storage, owner);
-  // The shared after-write contract: the written version, its container and its policy
-  // must still be owner-only. Storage discovery uses the account's own fetch.
-  const checks = createOwnerOnlyDestinationChecks({
-    podRoot: storage,
-    ownerWebId: owner,
-    openStorage: async () => (await createPodClient({ fetch, storage })).storage,
-  });
+  // The shared after-write contract (also used for diary settings).
+  const confirm = createPrivateWriteConfirmer(fetch, storage, owner);
   const base = `${store.base}diary/`;
   const scoped = (url: string) => {
     const safe = assertWithinPodScope(base, url);
@@ -475,37 +452,13 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
       if (!conflict(error)) throw error;
     }
   }
-  /**
-   * After a write: the file must still carry the ETag the write returned, and it and its
-   * container must be owner-only. On refusal, delete ONLY a file this run created (201 to a
-   * create-only request) with If-Match on that ETag, so a replaced or concurrently changed
-   * file is never removed, and report removal only once the server confirms it.
-   */
   async function confirmPrivate(url: string, written: Response | undefined) {
-    // A recovered lost-response create has no response of its own: nothing here is ours to delete.
-    const etag = strongEtag(written?.headers.get("etag") ?? null);
-    let confirmed = false;
     try {
-      confirmed = await checks.confirmPrivateWrite(url, etag === undefined ? {} : { etag });
-    } catch {
-      // An unreadable policy or unexpected metadata is a refusal as well.
+      await confirm(url, written);
+    } catch (error) {
+      invalidateSuite();
+      throw error;
     }
-    if (confirmed) return;
-    let removed = false;
-    if (written?.status === 201 && etag !== undefined) {
-      try {
-        const response = await fetch(url, {
-          method: "DELETE",
-          redirect: "error",
-          headers: { "if-match": etag },
-        });
-        removed = response.ok;
-      } catch {
-        // The entry may remain; the error says so.
-      }
-    }
-    invalidateSuite();
-    throw new DiaryPrivacyError(removed);
   }
   async function save(
     draft: DiaryDraft,
@@ -641,6 +594,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
   const restore = (entry: DiaryEntry) => save(entry, "restore", undefined, entry.url);
   return { base, list, read, save, remove, restore, invalidate };
 }
+export { DiaryPrivacyError } from "./diary-confirm";
 export type DiaryStore = ReturnType<typeof createDiaryStore>;
 
 export interface DiaryPattern {

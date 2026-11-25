@@ -221,6 +221,34 @@ it("loads only for diary consumers, reuses the account cache on navigation and i
   await eventually(() => expect(reads.length).toBeGreaterThan(before));
 });
 
+it("tells the user when an Undo restore could not be confirmed private", async () => {
+  let loosen = false;
+  const { pod } = await setup(async (input, init, fetch) => {
+    const response = await fetch(input, init);
+    if (loosen && init?.method === "PUT" && String(input).endsWith("/entry.ttl")) {
+      loosen = false;
+      await fetch(`${String(input)}.acl`, {
+        method: "PUT",
+        headers: { "content-type": "text/turtle" },
+        body: `@prefix acl: <http://www.w3.org/ns/auth/acl#>. @prefix foaf: <http://xmlns.com/foaf/0.1/>.
+<${String(input)}.acl#p> a acl:Authorization; acl:agentClass foaf:Agent; acl:accessTo <${String(input)}>; acl:mode acl:Read.`,
+      });
+    }
+    return response;
+  });
+  await act(async () => context.save(draft, "entry"));
+  await eventually(() => expect(entries()).toHaveLength(1));
+  await act(async () => context.remove(entries()[0] as DiaryEntry));
+  notifications.error.mockClear();
+  loosen = true;
+  await act(async () => undo("Diary entry deleted"));
+  await eventually(() =>
+    expect(notifications.error).toHaveBeenCalledWith(
+      "Not saved: we removed it because we couldn't confirm it is private to you.",
+    ),
+  );
+  expect(pod.has(`${ROOT}health/diary/2026-10/entry.ttl`)).toBe(false);
+});
 it("dismisses Undo toasts and ignores a late Undo once the account provider is gone", async () => {
   const writes: string[] = [];
   const { diary, view } = await setup(async (input, init, fetch) => {
