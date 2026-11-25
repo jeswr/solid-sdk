@@ -25,6 +25,7 @@
     "@jeswr/app-shell": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/solid-elements": "workspace:*",
+    "@jeswr/suite-ui": "workspace:*",
     "@jeswr/suite-vocab": "workspace:*",
     "@lit/react": "^1.0.8",
     "@radix-ui/react-avatar": "^1.2.0",

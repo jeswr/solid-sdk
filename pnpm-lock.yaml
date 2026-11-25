@@ -1972,6 +1972,9 @@ importers:
       '@jeswr/solid-elements':
         specifier: workspace:*
         version: link:../../../packages/solid-elements
+      '@jeswr/suite-ui':
+        specifier: workspace:*
+        version: link:../../../packages/suite-ui
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../../../packages/suite-vocab
