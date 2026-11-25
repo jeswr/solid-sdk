@@ -21,6 +21,7 @@ import {
   readPolicy,
   removeAcpAgent,
   replaceWac,
+  retainWacPrincipals,
   subjectAgent,
 } from "./rdf.js";
 import type {
@@ -286,9 +287,18 @@ async function plan(
   const changes = [...keys].filter(
     (key) => !sameModes(before.get(key)?.modes ?? new Set(), desired.get(key)?.modes ?? new Set()),
   );
+  // A WAC seal must also drop principal-less or scope-less rules that earlier edits (or other
+  // tools) left behind, even when no row changes, or the document never verifies as owner-only.
+  const sealed = options.ownOnly && snapshot.model === "wac" && snapshot.own;
+  const residue =
+    sealed &&
+    retainWacPrincipals(
+      new Store([...sealed.dataset]),
+      [...desired.values()].map((row) => row.agent),
+    );
   // Moves must also preserve an existing empty own ACR. An empty ACP selection still
   // inherits controls; WAC's empty selection is refused by the lockout check below.
-  if (!changes.length && !(options.ownOnly && !snapshot.own)) return undefined;
+  if (!changes.length && !residue && !(options.ownOnly && !snapshot.own)) return undefined;
   const me = agentKey({ type: "webid", id: options.webId });
   // Require direct, independently established management; public/group/client access
   // must not be the only safeguard against the caller locking themselves out.
@@ -337,6 +347,13 @@ async function plan(
         folderScope(snapshot, options),
       );
     }
+    // Sealing replaces own access with exactly the desired principals: no other principal
+    // class (public or authenticated Append included) and no rule left without a principal.
+    if (options.ownOnly)
+      retainWacPrincipals(
+        dataset,
+        [...desired.values()].map((row) => row.agent),
+      );
   } else {
     const selected = agent
       ? [agent]
@@ -511,7 +528,9 @@ async function prepare(
     desired.set(agentKey(grant.agent), { agent: grant.agent, modes: values });
   }
   // A richer explicit policy cannot silently disappear through a lossy role projection.
-  for (const row of current.values())
+  // A seal (ownOnly) drops every principal outside the selection by design, so a principal
+  // whose raw modes map to no role (Append only) is removed rather than refused.
+  for (const row of options.ownOnly ? [] : current.values())
     if (
       role(
         row,
