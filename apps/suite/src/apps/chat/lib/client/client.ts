@@ -63,6 +63,7 @@ import {
 import { aggregateReactions, type ReactionSummary } from "../timeline";
 import {
   deliverInvitations,
+  INBOX_SCAN_LIMIT,
   type Invitation,
   type InvitationDelivery,
   type InvitationRoomCache,
@@ -205,7 +206,7 @@ export class ChatClient {
     });
     this.inboxReader = createInboxReader({
       fetch: withAbortSignal(sessionFetch, () => this.invitationSignal),
-      maxItems: 100,
+      maxItems: INBOX_SCAN_LIMIT,
     });
     httpIri(webId);
     this.preferences = new PreferencesStore(this.fetch, storageUrl);
