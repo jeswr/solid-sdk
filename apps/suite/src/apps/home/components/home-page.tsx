@@ -18,8 +18,8 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { StartSomethingNew } from "@/components/templates/start-something-new";
-import { domainItemKey } from "../lib/model/discovery";
 import { SharedCard } from "@/lib/shared/shared-card";
+import { domainItemKey } from "../lib/model/discovery";
 import "@/lib/shared/shared.css";
 import { DOMAINS, UNCATEGORISED, visibleDomains } from "../lib/model/domains";
 import {
