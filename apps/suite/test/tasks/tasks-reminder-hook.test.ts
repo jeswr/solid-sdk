@@ -86,6 +86,7 @@ beforeEach(() => {
   FakeNotification.instances = [];
   FakeNotification.requestPermission.mockClear();
   sessionStorage.clear();
+  localStorage.clear();
   warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 afterEach(() => {
@@ -96,6 +97,57 @@ afterEach(() => {
 });
 
 describe("fired reminder store", () => {
+  it("deduplicates after reload using localStorage when IndexedDB is absent or fails", async () => {
+    for (const factory of [
+      undefined,
+      {
+        open: () => {
+          throw new Error("Unavailable");
+        },
+      },
+    ]) {
+      localStorage.clear();
+      vi.stubGlobal("indexedDB", factory);
+      const first = await load();
+      expect(await first.firedReminderStore().claim("reload")).toBe(true);
+      const next = await load();
+      expect(await next.firedReminderStore().claim("reload")).toBe(false);
+    }
+  });
+  it("uses memory when localStorage is blocked or corrupt", async () => {
+    vi.stubGlobal("indexedDB", undefined);
+    for (const raw of ["invalid JSON", "{}"]) {
+      localStorage.setItem("tasks.firedReminders", raw);
+      const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new Error("Quota");
+      });
+      const { firedReminderStore } = await load();
+      expect(await firedReminderStore().claim("key")).toBe(true);
+      expect(await firedReminderStore().claim("key")).toBe(false);
+      set.mockRestore();
+    }
+    vi.stubGlobal("localStorage", undefined);
+    const { firedReminderStore } = await load();
+    expect(await firedReminderStore().claim("key")).toBe(true);
+  });
+  it("uses memory when accessing localStorage itself throws", async () => {
+    vi.stubGlobal("indexedDB", undefined);
+    const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get: () => {
+        throw new Error("Denied");
+      },
+    });
+    try {
+      const { firedReminderStore } = await load();
+      expect(await firedReminderStore().claim("key")).toBe(true);
+      expect(await firedReminderStore().claim("key")).toBe(false);
+      expect(warn).toHaveBeenCalledWith("Tasks reminders:", expect.any(Error));
+    } finally {
+      if (original) Object.defineProperty(globalThis, "localStorage", original);
+    }
+  });
   it("is shared per tab and falls back to memory without IndexedDB", async () => {
     vi.stubGlobal("indexedDB", undefined);
     const { firedReminderStore } = await load();
