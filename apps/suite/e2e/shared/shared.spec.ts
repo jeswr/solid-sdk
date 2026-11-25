@@ -5,7 +5,7 @@ import { seedDemoSession } from "../demo-session";
 
 test.beforeEach(({ page }) => seedDemoSession(page));
 
-test("demo Home card opens Shared with me, filters apps and opens a document", async ({ page }) => {
+test("demo Home card opens Shared with me, filters apps and previews a friend's document", async ({ page }) => {
   await page.goto("/home");
   const card = page.getByRole("region", { name: "Shared with you", exact: true });
   await expect(card.getByRole("link", { name: "Launch plan", exact: true })).toBeVisible();
@@ -18,7 +18,7 @@ test("demo Home card opens Shared with me, filters apps and opens a document", a
   await expect(page).toHaveTitle(/Shared with me/);
   const list = page.getByRole("list", { name: "Shared items" });
   await expect(list.getByRole("listitem")).toHaveCount(4);
-  await expect(list.getByText("bob.demo.pod", { exact: false })).toBeVisible();
+  await expect(list.getByText("friends.demo.pod", { exact: false })).toBeVisible();
   await page
     .getByRole("group", { name: "Filter shared items by app" })
     .getByRole("button", { name: "Sheets", exact: true })
@@ -35,8 +35,10 @@ test("demo Home card opens Shared with me, filters apps and opens a document", a
   ).toEqual([]);
   await list.getByRole("link", { name: "Launch plan", exact: true }).focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/docs\/d\//);
-  await expect(page.getByRole("textbox", { name: "Document title" })).toHaveValue("Launch plan");
+  // The document lives in a friend's pod, outside the demo storage: it opens in the preview,
+  // never in the native editor.
+  await expect(page).toHaveURL(/\/drive\/p\//);
+  await expect(page.getByText("Launch plan").first()).toBeVisible();
 });
 
 test("removing a share persists across the page and Home card", async ({ page }) => {

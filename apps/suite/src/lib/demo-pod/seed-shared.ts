@@ -9,25 +9,30 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
-import { serializeWorkbook, workbookLayout } from "@/apps/sheets/lib/model/rdf";
-import { serializeSnapshot } from "@/apps/sheets/lib/model/snapshot";
-import { serialize } from "@/apps/tasks/lib/model/rdf";
-import { createTracker } from "@/apps/tasks/lib/model/tracker";
-import { DEMO_ROOT, DEMO_WEBID } from "./constants";
+import { DEMO_ROOT, FRIENDS_ROOT } from "./constants";
 import type { DemoSeedFile } from "./pod";
 
 const AS = "https://www.w3.org/ns/activitystreams#";
-const taskUrl = `${DEMO_ROOT}tasks/projects/weekend-plans.ttl`;
-const sheetUrl = `${DEMO_ROOT}sheets/trip-budget/`;
 
-/** Fictional senders announce useful demo resources; no grant or access-control claims. */
+/**
+ * Fictional friends announce resources that live in their own pod ({@link FRIENDS_ROOT}), so
+ * they are genuinely outside the demo user's storage and count as shared with them. Only the
+ * inbox notifications are seeded here; no grant or access-control claims are made.
+ */
 export async function seedShared(now: number): Promise<DemoSeedFile[]> {
   const files: DemoSeedFile[] = [];
   for (const [id, object, name, sender, role, age] of [
-    ["doc", `${DEMO_ROOT}docs/launch.ttl`, "Launch plan", "bob", "Editor", 1],
-    ["sheet", sheetUrl, "Trip budget", "maya", "Viewer", 2],
-    ["tasks", taskUrl, "Weekend plans", "alex", "Editor", 3],
-    ["calendar", `${DEMO_ROOT}calendar/work.ttl`, "Team calendar", "sam", "Viewer", 4],
+    ["doc", `${FRIENDS_ROOT}docs/launch.ttl`, "Launch plan", "bob", "Editor", 1],
+    ["sheet", `${FRIENDS_ROOT}sheets/trip-budget/`, "Trip budget", "maya", "Viewer", 2],
+    [
+      "tasks",
+      `${FRIENDS_ROOT}tasks/projects/weekend-plans.ttl`,
+      "Weekend plans",
+      "alex",
+      "Editor",
+      3,
+    ],
+    ["calendar", `${FRIENDS_ROOT}calendar/work.ttl`, "Team calendar", "sam", "Viewer", 4],
   ] as const) {
     const path = `inbox/shared-${id}.ttl`;
     const draft = shareNotification(object, role);
@@ -60,65 +65,5 @@ export async function seedShared(now: number): Promise<DemoSeedFile[]> {
     );
     files.push({ path, body, contentType: "text/turtle", modified: now });
   }
-  const tracker = createTracker(
-    taskUrl,
-    "Weekend plans",
-    taskUrl.replace(/\.ttl$/, "/"),
-    [DEMO_WEBID],
-    new Date(now),
-  );
-  files.push({
-    path: taskUrl.slice(DEMO_ROOT.length),
-    body: await serialize(tracker.dataset),
-    contentType: "text/turtle",
-    modified: now,
-  });
-  files.push({
-    path: "tasks/projects/weekend-plans/",
-    body: "",
-    contentType: "text/turtle",
-    modified: now,
-  });
-  const layout = workbookLayout(sheetUrl);
-  // A native workbook snapshot fixture; no spreadsheet engine needs to boot while seeding.
-  const snapshot = {
-    id: "demo-trip-budget",
-    name: "Trip budget",
-    appVersion: "1.2.0",
-    locale: "enUS",
-    styles: {},
-    sheetOrder: ["sheet1"],
-    sheets: {
-      sheet1: {
-        id: "sheet1",
-        name: "Budget",
-        rowCount: 1000,
-        columnCount: 26,
-        cellData: {
-          "0": { "0": { v: "Item", t: 1 }, "1": { v: "Cost", t: 1 } },
-          "1": { "0": { v: "Train", t: 1 }, "1": { v: 45, t: 2 } },
-          "2": { "0": { v: "Lunch", t: 1 }, "1": { v: 20, t: 2 } },
-        },
-      },
-    },
-  };
-  files.push({
-    path: layout.index.slice(DEMO_ROOT.length),
-    body: await serializeWorkbook(sheetUrl, {
-      title: "Trip budget",
-      creator: DEMO_WEBID,
-      created: new Date(now),
-      modified: new Date(now),
-      sheets: [{ number: 1, name: "Budget" }],
-    }),
-    contentType: "text/turtle",
-    modified: now,
-  });
-  files.push({
-    path: layout.snapshot.slice(DEMO_ROOT.length),
-    body: serializeSnapshot(snapshot),
-    contentType: "application/json",
-    modified: now,
-  });
   return files;
 }

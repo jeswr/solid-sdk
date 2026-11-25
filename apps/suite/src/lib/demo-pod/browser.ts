@@ -9,6 +9,7 @@
  * and notifications are released only after the commit is durable.
  */
 
+import { FRIENDS_ROOT } from "./constants";
 import { migrateDemoHealthPrivacy } from "./migrate-health";
 import { createDemoPod, type DemoPod, type DemoPodSnapshot } from "./pod";
 import { buildDemoSeed, DEMO_ROOT } from "./seed";
@@ -95,9 +96,26 @@ function offline(pod: DemoPod): DemoPod {
     ...pod,
     fetch: async (input, init) => {
       if (navigator.onLine === false) throw new TypeError("Demo pod is offline");
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.startsWith(FRIENDS_ROOT))
+        return friendsFetch(input instanceof Request ? input.method : (init?.method ?? "GET"), url);
       return pod.fetch(input, init);
     },
   };
+}
+
+/**
+ * The fictional friends' pod holds what the demo inbox announces as shared with the demo user.
+ * It is read-only, never persisted, and built on first use.
+ */
+let friends: Promise<DemoPod> | undefined;
+async function friendsFetch(method: string, url: string): Promise<Response> {
+  if (!["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase()))
+    return new Response(null, { status: 405, headers: { allow: "GET, HEAD, OPTIONS" } });
+  friends ??= import("./seed-friends").then(async ({ seedFriendsPod }) =>
+    createDemoPod({ root: FRIENDS_ROOT, seed: await seedFriendsPod(Date.now()) }),
+  );
+  return (await friends).fetch(url, { method });
 }
 
 export function getDemoPod(): Promise<DemoPod> {
