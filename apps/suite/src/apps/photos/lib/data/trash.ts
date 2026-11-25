@@ -1,18 +1,16 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
 
+import { buildPhoto, identifier, parseTrash, RestoreReceipt } from "@jeswr/solid-photos";
 import { DataFactory } from "n3";
 import { isomorphic } from "rdf-isomorphic";
 import {
-  buildPhoto,
   PhotoIoError,
   type PhotoStorage,
-  parseTrash,
   purgePhoto as purge,
-  RestoreReceipt,
   restorePhoto as restore,
   trashPhoto as trash,
 } from "../model";
-import { identifier } from "../model/validation";
 import { children, collect, requireEtag, statusOf } from "./shared";
 
 async function readTrash(io: PhotoStorage, url: string) {

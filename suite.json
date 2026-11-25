@@ -123,7 +123,8 @@
     "@jeswr/solid-trips",
     "@jeswr/excalidraw-scene",
     "@jeswr/pod-ask",
-    "@jeswr/solid-mail"
+    "@jeswr/solid-mail",
+    "@jeswr/solid-photos"
   ],
   "applications": [
     {

@@ -1,15 +1,24 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
-import { serialize } from "@jeswr/rdf-serialize";
+import {
+  type Album,
+  buildAlbum,
+  buildPhoto,
+  documentUrl,
+  httpIri,
+  type Photo,
+  parseAlbum,
+  parsePhoto,
+  parsePhotos,
+  RestoreReceipt,
+  serializePhotos,
+} from "@jeswr/solid-photos";
 import type { DatasetCore } from "@rdfjs/types";
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
-import { type Album, buildAlbum, parseAlbum } from "./album.js";
-import { buildPhoto, type Photo, parsePhoto, parsePhotos, RestoreReceipt } from "./photograph.js";
 import { type ImageEncoder, preparePhoto, type UploadInput } from "./upload.js";
-import { documentUrl, httpIri } from "./validation.js";
-import { PREFIXES } from "./vocab.js";
 
 export class PhotoIoError extends Error {
   constructor(
@@ -48,12 +57,7 @@ export function photoStorage(fetch: typeof globalThis.fetch, storage: string) {
     return { etag: response.headers.get("etag") };
   }
   async function write(url: string, dataset: DatasetCore, precondition: Precondition) {
-    return put(
-      url,
-      await serialize([...dataset], { prefixes: PREFIXES }),
-      "text/turtle",
-      precondition,
-    );
+    return put(url, await serializePhotos(dataset), "text/turtle", precondition);
   }
   async function remove(url: string, etag: string) {
     const response = await scoped(documentUrl(url), {
