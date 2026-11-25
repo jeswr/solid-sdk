@@ -15,6 +15,7 @@ import {
 import {
   type CalendarAccount,
   CalendarPrivacyError,
+  CalendarUnconfirmedError,
   calendarDocument,
   calendarSlug,
   createCalendar,
@@ -426,6 +427,137 @@ describe("Calendar creation privacy", () => {
     expect((await discoverCalendars({ ...account })).calendars.map((c) => c.title)).not.toContain(
       "Shared Folder",
     );
+  });
+  function deletes(account: CalendarAccount) {
+    const log: { url: string; ifMatch: string | null }[] = [];
+    return {
+      log,
+      account: altered(account, (url, init) => {
+        if (init?.method === "DELETE")
+          log.push({ url, ifMatch: new Headers(init.headers).get("If-Match") });
+        return undefined;
+      }),
+    };
+  }
+  const refuseEvents = async (url: string) => !url.endsWith("/events.ttl");
+  it("never deletes an events folder that existed before the call, but removes the calendar document with If-Match", async () => {
+    const { account, io } = await setup();
+    const folder = `${root}calendar/existing/`;
+    expect(
+      (
+        await account.fetch(folder, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "text/turtle",
+            Link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
+          },
+          body: "",
+        })
+      ).ok,
+    ).toBe(true);
+    const recorded = deletes(account);
+    await expect(
+      createCalendar(
+        {
+          ...recorded.account,
+          privateDestination: { verify: refuseEvents, confirm: async () => true },
+        },
+        "Existing",
+        PALETTE[0] as string,
+      ),
+    ).rejects.toBeInstanceOf(CalendarPrivacyError);
+    expect(recorded.log.map((entry) => entry.url)).toEqual([`${root}calendar/existing.ttl`]);
+    expect(recorded.log[0]?.ifMatch).toMatch(/^"/);
+    expect((await account.fetch(folder, { method: "HEAD" })).status).toBe(200);
+    await expect(io.loadCalendar(`${root}calendar/existing.ttl`)).rejects.toThrow();
+  });
+  it("deletes an events folder this call created, conditionally on its ETag", async () => {
+    const { account } = await setup();
+    const recorded = deletes(account);
+    await expect(
+      createCalendar(
+        {
+          ...recorded.account,
+          privateDestination: { verify: refuseEvents, confirm: async () => true },
+        },
+        "Fresh",
+        PALETTE[0] as string,
+      ),
+    ).rejects.toBeInstanceOf(CalendarPrivacyError);
+    expect(recorded.log.map((entry) => entry.url)).toEqual([
+      `${root}calendar/fresh/`,
+      `${root}calendar/fresh.ttl`,
+    ]);
+    expect(recorded.log.every((entry) => /^"/.test(entry.ifMatch ?? ""))).toBe(true);
+    expect((await account.fetch(`${root}calendar/fresh/`, { method: "HEAD" })).status).toBe(404);
+  });
+  it("does not delete a document or folder that changed since this call created it", async () => {
+    const { account, io } = await setup();
+    const recorded = deletes(account);
+    const url = `${root}calendar/changing.ttl`;
+    const changeBoth = async (target: string) => {
+      if (!target.endsWith("/events.ttl")) return true;
+      // Another writer replaces both resources before the cleanup runs.
+      await account.fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "text/turtle" },
+        body: await serializeDataset(
+          buildCalendar(url, { title: "Edited", color: PALETTE[0] as string }),
+        ),
+      });
+      await account.fetch(`${root}calendar/changing/`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "text/turtle",
+          Link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
+        },
+        body: "",
+      });
+      return false;
+    };
+    await expect(
+      createCalendar(
+        {
+          ...recorded.account,
+          privateDestination: { verify: changeBoth, confirm: async () => true },
+        },
+        "Changing",
+        PALETTE[0] as string,
+      ),
+    ).rejects.toBeInstanceOf(CalendarUnconfirmedError);
+    expect((await io.loadCalendar(url))?.data.title).toBe("Edited");
+  });
+  it("reports a calendar that could not be confirmed private and could not be removed", async () => {
+    const { account, io } = await setup();
+    const failing = altered(account, (_url, init) =>
+      init?.method === "DELETE" ? new Response(null, { status: 503 }) : undefined,
+    );
+    const failure = createCalendar(
+      { ...failing, privateDestination: { verify: async () => true, confirm: async () => false } },
+      "Stuck",
+      PALETTE[0] as string,
+    );
+    await expect(failure).rejects.toBeInstanceOf(CalendarUnconfirmedError);
+    await expect(failure).rejects.toBeInstanceOf(CalendarPrivacyError);
+    await expect(failure).rejects.toThrow(/could not be removed/);
+    await expect(failure).rejects.not.toThrow(/https?:|acl|public|was not created/i);
+    // The document really is still there, so the honest message matters.
+    expect((await io.loadCalendar(`${root}calendar/stuck.ttl`))?.data.title).toBe("Stuck");
+    // A network failure during cleanup is reported the same way.
+    const offline = altered(account, (_url, init) => {
+      if (init?.method === "DELETE") throw new TypeError("offline");
+      return undefined;
+    });
+    await expect(
+      createCalendar(
+        {
+          ...offline,
+          privateDestination: { verify: async () => true, confirm: async () => false },
+        },
+        "Offline",
+        PALETTE[0] as string,
+      ),
+    ).rejects.toBeInstanceOf(CalendarUnconfirmedError);
   });
   it("fails closed outside the demo pod when storage cannot prove owner-only access", async () => {
     const { account } = await setup();
