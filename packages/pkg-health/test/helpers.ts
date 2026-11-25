@@ -117,17 +117,24 @@ export function claim(id: string, fact: Fact = condition()): Claim {
 /**
  * Like `batch`, but models a record from a foreign or older export that this builder did
  * not write: the builder always adds `pd:MedicalHealth` to a claim whose assertion has a
- * clinical type, so it is removed again for every claim whose own `categories` omit it.
+ * clinical type, so it is removed again for every claim whose own `categories` omit it
+ * (and that is not listed in `nonClinical`). Each removal is asserted to have happened.
  */
-export async function foreignBatch(claims: Claim[], id = "health-test"): Promise<Nanopublications> {
+export async function foreignBatch(
+  claims: Claim[],
+  id = "health-test",
+  nonClinical: readonly string[] = [],
+): Promise<Nanopublications> {
   const value = await batch(claims, id);
   const medical = df.namedNode("https://w3id.org/dpv/pd#MedicalHealth");
   const hasPersonalData = df.namedNode("https://w3id.org/dpv#hasPersonalData");
   for (const c of claims) {
-    if (c.categories?.includes("pd:MedicalHealth")) continue;
+    // Claims whose assertion has no clinical type are never auto-tagged: nothing to remove.
+    if (nonClinical.includes(c.id)) continue;
+    if (c.categories?.some((category) => category.endsWith("MedicalHealth"))) continue;
     const np = value.nanopubs.find((n) => n.identifier === `${id}/${c.id}`);
     if (!np) throw new Error("Missing fixture nanopub");
-    value.dataset.removeQuad(
+    const removed = value.dataset.removeQuad(
       df.quad(
         df.namedNode(np.assertionId),
         hasPersonalData,
@@ -135,6 +142,9 @@ export async function foreignBatch(claims: Claim[], id = "health-test"): Promise
         df.namedNode(np.provenanceId),
       ),
     );
+    // Every targeted claim must really have carried the auto-added category.
+    if (!removed || !np.categories.includes(medical.value))
+      throw new Error("Auto-added category not found");
     np.categories = np.categories.filter((category) => category !== medical.value);
   }
   return value;

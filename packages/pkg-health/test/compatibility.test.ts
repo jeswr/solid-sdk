@@ -359,6 +359,8 @@ it("recognises standalone owner-linked supporting records even without a categor
   const view = projectHealthFacts(
     await foreignBatch(
       records.map((assertion, i) => ({ ...claim(String(i)), assertion, categories: [] })),
+      "health-test",
+      ["1"], // the CodeableConcept is not a clinical type
     ),
     { owner },
   );

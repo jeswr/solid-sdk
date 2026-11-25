@@ -1,7 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import { type Nanopublications, parseNanopublicationsTolerant } from "@jeswr/pkg-memory";
-import { assertWithinLimits } from "./limits.js";
 import { HealthGraphError } from "./types.js";
 
 /** Read locally, retaining whole valid nanopubs. Apply purpose policy before projection. */
@@ -17,17 +16,25 @@ export async function importHealthExport(
   let parsed: Awaited<ReturnType<typeof parseNanopublicationsTolerant>>;
   try {
     parsed = await parseNanopublicationsTolerant(text);
-  } catch {
-    throw new HealthGraphError("read-failed");
+  } catch (error) {
+    // The parser refuses an export with too many heads before reading any graph.
+    throw new HealthGraphError(
+      error instanceof Error && error.message === "Too many nanopublications"
+        ? "too-large"
+        : "read-failed",
+    );
   }
-  // Too many nanopubs, or too many sharing one assertion, would make classification
-  // and projection superlinear: refuse the whole import, with no value in the error.
-  assertWithinLimits(parsed.nanopubs);
-  const { dataset, nanopubs, skipped, affected, skippedTargets } = parsed;
+  const { dataset, nanopubs, skipped, affected, skippedTargets, skippedTargetsOverflow } = parsed;
   const reasons: Record<string, number> = {};
   for (const { errorClass } of skipped) reasons[errorClass] = (reasons[errorClass] ?? 0) + 1;
   return {
-    value: { dataset, nanopubs, affected, skippedTargets },
+    value: {
+      dataset,
+      nanopubs,
+      affected,
+      skippedTargets,
+      ...(skippedTargetsOverflow ? { skippedTargetsOverflow } : {}),
+    },
     skipped: { count: skipped.length, reasons },
   };
 }

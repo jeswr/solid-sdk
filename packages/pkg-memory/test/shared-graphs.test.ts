@@ -6,8 +6,7 @@ import {
   buildNanopublications,
   classifyNanopublications,
   createFactAssertion,
-  MAX_CLASSIFIED_NANOPUBLICATIONS,
-  MAX_ENVELOPES_PER_ASSERTION,
+  MAX_REPLACED_BY,
   type Nanopublication,
   type Nanopublications,
   parseNanopublications,
@@ -86,7 +85,7 @@ describe("F4: heads sharing a provenance or pubinfo graph", () => {
     built.dataset.addQuad(
       node("https://example.org/extra"),
       node(`${NS.schema}name`),
-      df.literal("Fictional value"),
+      df.literal("Fictional\u2028value"),
       node(prov),
     );
     const trig = await serialize([...built.dataset], { format: "application/trig" });
@@ -97,47 +96,24 @@ describe("F4: heads sharing a provenance or pubinfo graph", () => {
   });
 });
 
-describe("F3: shared assertion graphs are bounded", () => {
-  const link = (value: Nanopublications) => {
-    for (const np of value.nanopubs)
-      value.dataset.addQuad(
+describe("F3: shared assertion graphs", () => {
+  it("classifies envelopes that all revise one shared assertion, with a bounded replacedBy", async () => {
+    const count = MAX_REPLACED_BY + 6;
+    const built = await build(names(count), true);
+    expect(new Set(built.nanopubs.map((np) => np.assertionId)).size).toBe(1);
+    for (const np of built.nanopubs)
+      built.dataset.addQuad(
         node(np.assertionId),
         node(`${NS.prov}wasRevisionOf`),
         node(np.assertionId),
         node(np.provenanceId),
       );
-  };
-  it("classifies exactly the per-assertion maximum, whose replacement sets stay small", async () => {
-    const built = await build(names(MAX_ENVELOPES_PER_ASSERTION), true);
-    expect(new Set(built.nanopubs.map((np) => np.assertionId)).size).toBe(1);
-    link(built);
     const parsed = await parseNanopublications(
       await serialize([...built.dataset], { format: "application/trig" }),
     );
     const classified = classifyNanopublications(parsed);
-    expect(classified).toHaveLength(MAX_ENVELOPES_PER_ASSERTION);
-    // The quadratic term the cap bounds: every envelope names all the others.
-    expect(classified.every((np) => np.replacedBy.length === MAX_ENVELOPES_PER_ASSERTION - 1)).toBe(
-      true,
-    );
-  });
-
-  it("fails closed with a fixed error above the per-assertion maximum", async () => {
-    const built = await build(names(MAX_ENVELOPES_PER_ASSERTION + 1), true);
-    expect(() => classifyNanopublications(built)).toThrow(
-      "Too many nanopublications share one assertion",
-    );
-  });
-
-  it("fails closed with a fixed error above the total maximum, before reading any graph", () => {
-    const nanopubs = Array.from({ length: MAX_CLASSIFIED_NANOPUBLICATIONS + 1 }, (_, i) => ({
-      id: `https://example.org/np/${i}`,
-      assertionId: `https://example.org/a/${i}`,
-    })) as unknown as Nanopublication[];
-    const match = vi.spyOn(Store.prototype, "match");
-    expect(() => classifyNanopublications({ dataset: new Store(), nanopubs })).toThrow(
-      "Too many nanopublications",
-    );
-    expect(match).not.toHaveBeenCalled();
+    expect(classified).toHaveLength(count);
+    expect(classified.every((np) => np.belief === "past")).toBe(true);
+    expect(classified.every((np) => np.replacedBy.length === MAX_REPLACED_BY)).toBe(true);
   });
 });

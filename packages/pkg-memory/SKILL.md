@@ -25,7 +25,8 @@ For imported exports, use `parseNanopublicationsTolerant(text, { baseIRI? })` fo
 explicit `Promise<TolerantNanopublications>` return type. The existing
 `parseNanopublications(text, { invalid: "skip", baseIRI? })` overload stays compatible.
 Both add a value-free `skipped: [{ id, errorClass }]` report (an unsafe head IRI is
-shown as `urn:pkg:skipped:<n>`), `affected: string[]` and `skippedTargets: string[]`,
+shown as `urn:pkg:skipped:<n>`), `affected: string[]` and `skippedTargets: string[]` (derived like `affected`, not serialized; capped, see
+`skippedTargetsOverflow`),
 and retain only whole valid envelopes and batch graphs needed by kept nanopubs,
 including typed `pkg:correspondenceBatch` context on retractions. Envelopes whose
 graph names include skipped IDs are dropped transitively (`SharedGraphWithSkipped`)

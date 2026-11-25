@@ -55,14 +55,11 @@ async function twoFiles(predicate: string, target: "id" | "assertionId") {
   value.dataset.addQuad(
     df.namedNode("https://example.org/extra"),
     df.namedNode(`${NS.schema}name`),
-    df.literal("Fictional value"),
+    df.literal("Fictional\u2028value"),
     df.namedNode(required(b).provenanceId),
   );
-  const batchNames = [...new Set(value.dataset.getGraphs(null, null, null).map((g) => g.value))]
-    .filter((name) => name.includes("/batch/") || name.includes("batch"))
-    .filter((name) => ![a, b, c].some((np) => envelope(required(np)).includes(name)));
   const fileA = await parseNanopublicationsTolerant(
-    await trig(value.dataset, [...envelope(required(a)), ...envelope(required(c)), ...batchNames]),
+    await trig(value.dataset, [...envelope(required(a)), ...envelope(required(c))]),
   );
   const fileB = await parseNanopublicationsTolerant(
     await trig(value.dataset, envelope(required(b))),
@@ -116,7 +113,7 @@ describe("an unreadable update in one input marks its target in the other", () =
     value.dataset.addQuad(
       df.namedNode("https://example.org/extra"),
       df.namedNode(`${NS.schema}name`),
-      df.literal("Fictional value"),
+      df.literal("Fictional\u2028value"),
       df.namedNode(required(b).provenanceId),
     );
     const parsed = await parseNanopublicationsTolerant(

@@ -73,23 +73,27 @@ describe("projection and ownership", () => {
       "http://hl7.org/fhir/subject",
       other,
     );
-    const value = await foreignBatch([
-      { ...claim("foreign"), assertion: foreign },
-      { ...claim("mixed"), assertion: mixed },
-      { ...claim("typed"), categories: [] },
-      {
-        ...claim("email"),
-        assertion: createFactAssertion(owner, { template: "email", value: "avery@example.org" }),
-        categories: ["pd:EmailAddress"],
-      },
-      {
-        ...claim("ignored"),
-        assertion: entities.MedicinalProduct.build("https://example.org/entities/ignored", {
-          name: "Unrelated product",
-        }),
-        categories: ["pd:Preference"],
-      },
-    ]);
+    const value = await foreignBatch(
+      [
+        { ...claim("foreign"), assertion: foreign },
+        { ...claim("mixed"), assertion: mixed },
+        { ...claim("typed"), categories: [] },
+        {
+          ...claim("email"),
+          assertion: createFactAssertion(owner, { template: "email", value: "avery@example.org" }),
+          categories: ["pd:EmailAddress"],
+        },
+        {
+          ...claim("ignored"),
+          assertion: entities.MedicinalProduct.build("https://example.org/entities/ignored", {
+            name: "Unrelated product",
+          }),
+          categories: ["pd:Preference"],
+        },
+      ],
+      "health-test",
+      ["email"],
+    );
     const view = projectHealthFacts(value, { owner });
     expect(view.facts).toHaveLength(1);
     expect(view.unrecognised).toEqual([]);

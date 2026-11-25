@@ -547,7 +547,7 @@ it("leaves no skipped term reachable from the returned store's internal indexes"
   value.dataset.addQuad(
     df.namedNode("https://example.org/skipped-only-subject"),
     df.namedNode(`${NS.schema}name`),
-    df.literal("Fictional skipped-only-value"),
+    df.literal("Fictional\u2028skipped-only-value"),
     df.namedNode(b.id),
   );
   const result = await parseNanopublicationsTolerant(await raw(value.dataset));

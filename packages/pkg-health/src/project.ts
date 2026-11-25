@@ -347,18 +347,28 @@ export function projectHealthFacts(
       }
       return result;
     };
-    // Nanopubs sharing assertion graphs multiply facts: refuse before classifying.
+    // Envelopes sharing an assertion graph repeat its facts: refuse a read with too many.
     assertWithinLimits(value.nanopubs);
     const tooLarge = () => view.facts.length + view.unrecognised.length > MAX_PROJECTED_FACTS;
-    for (const np of classifyNanopublications(value)) {
-      const category = np.categories.some((c) => categories.has(c));
-      let assertion = assertions.get(np.assertionId);
-      if (!assertion) {
-        const graph = readNamedGraph(value.dataset, np.assertionId);
-        assertion = { graph, nodes: subjectNodes(graph) };
-        assertions.set(np.assertionId, assertion);
-      }
-      const { graph, nodes } = assertion;
+    interface Plan {
+      entries: { node: ReadNode; kind: HealthFactKind }[];
+      excluded: boolean;
+      fallback?: ReadNode;
+    }
+    // What an assertion yields depends only on the assertion and on two properties of
+    // the envelope's categories, so it is worked out once per assertion and variant:
+    // each envelope then only builds the facts it produces (and those are capped).
+    const plans = new Map<string, Plan>();
+    const planFor = (
+      assertionId: string,
+      graph: DatasetCore,
+      nodes: ReadNode[],
+      category: boolean,
+      hasCategories: boolean,
+    ): Plan => {
+      const key = `${assertionId}\n${category}\n${hasCategories}`;
+      const known = plans.get(key);
+      if (known) return known;
       const supporting = nodes.filter(
         (n) =>
           n.term.termType === "NamedNode" &&
@@ -368,14 +378,13 @@ export function projectHealthFacts(
       const qualifies =
         category ||
         supporting.some((n) => !isForeign(n) && n.owners.some((t) => t.value === options.owner));
-      let excluded = supporting.some(isForeign),
-        recognised = false;
+      const plan: Plan = { entries: [], excluded: supporting.some(isForeign) };
       for (const node of nodes) {
         for (const kind of kindsOf(node)) {
-          if (kind === "document" && !category && np.categories.length > 0) continue;
+          if (kind === "document" && !category && hasCategories) continue;
           const linked = linkedOwners(node, kind);
           if (isForeign(node)) {
-            excluded = true;
+            plan.excluded = true;
             continue;
           }
           if (
@@ -389,35 +398,54 @@ export function projectHealthFacts(
             !node.owners.some((t) => t.value === options.owner)
           )
             continue;
-          recognised = true;
-          const metadata = base(provenance(np), np, node);
-          const fact = project(metadata, kind, node);
-          if (fact) {
-            view.facts.push(fact);
-            view.byKind[kind].push(fact);
-          } else view.unrecognised.push(metadata);
-          if (tooLarge()) throw new HealthGraphError("too-large");
+          plan.entries.push({ node, kind });
         }
       }
-      if (qualifies && !recognised) {
+      if (qualifies && plan.entries.length === 0) {
         // Explicit foreign subjects exclude the category fallback too. Never recover their labels.
         const candidates = nodes.filter(
           (node) => !kindsOf(node).some((kind) => kind === "note" || kind === "document"),
         );
         const owned = candidates.filter((n) => n.owners.length && !isForeign(n));
         const other = nodes.some(isForeign);
-        if (other) excluded = true;
-        if (!other || owned.length) {
-          const node =
+        if (other) plan.excluded = true;
+        if (!other || owned.length)
+          plan.fallback =
             owned[0] ??
             candidates.find((n) => n.label) ??
             candidates.find((n) => n.terms(RDF_TYPE).length) ??
             candidates[0];
-          // At most one per nanopub, so bounded by the nanopub cap.
-          if (node) view.unrecognised.push(base(provenance(np), np, node));
-        }
       }
-      if (excluded) view.excludedOtherSubjects += 1;
+      plans.set(key, plan);
+      return plan;
+    };
+    for (const np of classifyNanopublications(value)) {
+      const category = np.categories.some((c) => categories.has(c));
+      let assertion = assertions.get(np.assertionId);
+      if (!assertion) {
+        const graph = readNamedGraph(value.dataset, np.assertionId);
+        assertion = { graph, nodes: subjectNodes(graph) };
+        assertions.set(np.assertionId, assertion);
+      }
+      const plan = planFor(
+        np.assertionId,
+        assertion.graph,
+        assertion.nodes,
+        category,
+        np.categories.length > 0,
+      );
+      for (const { node, kind } of plan.entries) {
+        const metadata = base(provenance(np), np, node);
+        const fact = project(metadata, kind, node);
+        if (fact) {
+          view.facts.push(fact);
+          view.byKind[kind].push(fact);
+        } else view.unrecognised.push(metadata);
+        if (tooLarge()) throw new HealthGraphError("too-large");
+      }
+      // At most one per envelope, so bounded by the nanopub cap.
+      if (plan.fallback) view.unrecognised.push(base(provenance(np), np, plan.fallback));
+      if (plan.excluded) view.excludedOtherSubjects += 1;
     }
     // Keyed by batch and IRI: another batch citing the same IRI adds its own record
     // and can never replace this batch's kind or title.

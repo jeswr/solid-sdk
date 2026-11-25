@@ -158,11 +158,11 @@ whose result also has `skipped: [{ id, errorClass }]` and `affected: string[]`.
 Existing parser calls stay atomic, including the string baseIRI overload. Tolerance
 covers literal/term validation only; invalid TriG or malformed nanopub metadata still
 fails, exposed here as a fixed `HealthGraphError`. Work is bounded: an import or
-projection of more than `MAX_IMPORT_NANOPUBLICATIONS` (20,000) nanopubs, or more than
-`MAX_ENVELOPES_PER_IMPORTED_ASSERTION` (64) envelopes sharing one assertion graph,
-throws `HealthGraphError` with `code: "too-large"` (no values), as does a projection
-that would build more than `MAX_PROJECTED_FACTS` (20,000) facts, however the subjects
-are shared. These caps match pkg-memory's classifier limits. Each head/assertion/provenance/pubinfo
+projection of more than `MAX_IMPORT_NANOPUBLICATIONS` (20,000) nanopubs throws
+`HealthGraphError` with `code: "too-large"` (no values), as does a projection that would
+build more than `MAX_PROJECTED_FACTS` (20,000) facts. There is no per-assertion cap:
+any number of envelopes may state one assertion, and an assertion's facts are worked out
+once however many envelopes share it. The nanopub cap matches pkg-memory's. Each head/assertion/provenance/pubinfo
 envelope is kept or dropped together. A bad shared assertion drops every referencing
 nanopub; a bad batch source/entity graph, including declared `pkg:correspondenceBatch`
 context on retraction envelopes, drops its users. Batch graphs survive

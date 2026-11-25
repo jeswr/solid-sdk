@@ -1,5 +1,5 @@
 // AUTHORED-BY Claude Sonnet 5.5
-import { mergeNanopublications } from "@jeswr/pkg-memory";
+import * as memory from "@jeswr/pkg-memory";
 import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { DataFactory as df, type Store, Writer } from "n3";
 import { expect, it } from "vitest";
@@ -36,7 +36,7 @@ it("keeps a fact uncertain when its retraction is skipped in a different export"
   new FixtureNode(
     "https://example.org/extra",
     new NamedGraphDataset(df.namedNode(poisonedGraph), value.dataset, df),
-  ).text(`${S}name`, "Fictional value");
+  ).text(`${S}name`, "Fictional\u2028value");
   const everything = new Set(value.dataset.getGraphs(null, null, null).map((graph) => graph.value));
   const first = await importHealthExport(
     await external(value.dataset, new Set([...everything].filter((name) => !bGraphs.has(name)))),
@@ -52,7 +52,7 @@ it("keeps a fact uncertain when its retraction is skipped in a different export"
     },
   );
 
-  const merged = mergeNanopublications(first.value, second.value);
+  const merged = memory.mergeNanopublications(first.value, second.value);
   const view = projectHealthFacts(merged, { owner });
   expect(view.facts.find((f) => f.id === a.id)).toMatchObject({
     belief: "might",
@@ -62,4 +62,23 @@ it("keeps a fact uncertain when its retraction is skipped in a different export"
     belief: "definitely",
     affectedBySkipped: undefined,
   });
+});
+
+it("marks every fact affected when the skipped update targets overflow", async () => {
+  const kept = await memory.serializeNanopublications(await batch([claim("kept")]));
+  const links = Array.from({ length: memory.MAX_SKIPPED_TARGETS + 1 }, (_, i) => `<urn:t:${i}>`);
+  const skippedHead = `
+@prefix np: <http://www.nanopub.org/nschema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+<urn:skip:head> { <urn:skip:head> np:hasAssertion <urn:skip:a> ; np:hasProvenance <urn:skip:p> ; np:hasPublicationInfo <urn:skip:i> . }
+<urn:skip:a> { <urn:s> <urn:p> <urn:o> . }
+<urn:skip:i> { <urn:s> <urn:p> <urn:o> . }
+<urn:skip:p> { <urn:skip:a> prov:wasRevisionOf ${links.join(", ")} . <urn:s> <urn:p> "bad\u2028value" . }
+`;
+  const imported = await importHealthExport(`${kept}\n${skippedHead}`, { owner });
+  expect(imported.skipped.count).toBe(1);
+  expect(imported.value.skippedTargetsOverflow).toBe(true);
+  expect(projectHealthFacts(imported.value, { owner }).facts).toMatchObject([
+    { belief: "might", affectedBySkipped: true },
+  ]);
 });
