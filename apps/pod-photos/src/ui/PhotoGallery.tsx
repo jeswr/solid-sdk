@@ -23,9 +23,8 @@ export interface PhotoGalleryProps {
   /** The container URL to open first (the gallery root). */
   rootUrl: string;
   /**
-   * The authenticated fetch for pod reads. Omit to use the ambient global fetch
-   * (patched by @solid/reactive-authentication in a real session). The
-   * injectable auth seam — unit tests pass a stub here.
+   * The authenticated fetch for pod reads, passed through to the data layer.
+   * Omit to use the unauthenticated global fetch; tests may inject a stub.
    */
   fetch?: typeof fetch;
   /** Optional heading rendered above the gallery. */
