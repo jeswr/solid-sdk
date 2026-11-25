@@ -37,10 +37,12 @@ const METADATA = new Set(["moov", "trak", "udta", "meta", "ilst", "keys", "xml "
 const MAX_BOXES = 100_000;
 const UNREADABLE =
   "This video's structure couldn't be fully checked, so it wasn't uploaded. Location can only be removed from videos that can be read completely.";
-const JPEG_TRACK =
-  "This video holds still pictures stored as JPEG, which can carry their own location and can't be cleaned here, so it wasn't uploaded.";
+const WAY_FORWARD = "Export or convert the video without it, then upload it again.";
+const JPEG_TRACK = `This video holds still pictures, which can carry their own location and can't be cleaned here, so it wasn't uploaded. ${WAY_FORWARD}`;
+const STREAM_TRACK = `This video has a track whose real format can't be confirmed as ordinary video or audio, so it wasn't uploaded. ${WAY_FORWARD}`;
+const FLAC_TRACK = `This video has an audio track with embedded tags or pictures that can't be cleaned, so it wasn't uploaded. ${WAY_FORWARD}`;
 const refusal = (what: string) =>
-  `This video has ${what} that can't be kept safely while removing location, so it wasn't uploaded. Saving it without that track would silently lose it.`;
+  `This video has ${what} that can't be kept safely while removing location, so it wasn't uploaded. Uploading it without that track would lose it without telling you. ${WAY_FORWARD}`;
 function typeAt(bytes: Uint8Array, offset: number): string {
   return String.fromCharCode(...bytes.subarray(offset, offset + 4));
 }
@@ -182,7 +184,23 @@ const AV_HANDLERS = new Set(["vide", "soun", "tmcd"]);
 // Timed-metadata tracks can carry location (phone, action-camera and drone telemetry). They are
 // removed on purpose, and that never needs a refusal.
 const TIMED_METADATA_HANDLERS = new Set(["meta", "mebx", "gpmd", "djmd", "rtmd", "gps ", "camm"]);
-const TIMED_METADATA_FORMATS = new Set(["mebx", "gpmd", "djmd", "rtmd", "gps ", "camm"]);
+const TIMED_METADATA_FORMATS = new Set([
+  "mebx",
+  "gpmd",
+  "djmd",
+  "rtmd",
+  "gps ",
+  "camm",
+  "mett",
+  "metx",
+  "urim",
+]);
+// An `mp4v`/`mp4a` sample entry only says "MPEG-4 elementary stream"; the esds object type says
+// what the samples really are (0x6C JPEG and 0x6D PNG frames carry their own EXIF). Keep only
+// these: MPEG-4 Visual (0x20), MPEG-2 Visual (0x60-0x65), MPEG-1 Visual (0x6A) for video;
+// MPEG-4 AAC (0x40), MPEG-2 AAC (0x66-0x68), MPEG-2 and MPEG-1 audio (0x69, 0x6B) for audio.
+const VIDEO_OBJECT_TYPES = new Set([0x20, 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x6a]);
+const AUDIO_OBJECT_TYPES = new Set([0x40, 0x66, 0x67, 0x68, 0x69, 0x6b]);
 const TEXT_HANDLERS = new Set(["text", "sbtl", "subt", "clcp", "cc  ", "tx3g"]);
 const CODEC_BOXES = new Set(
   "avcC hvcC dvcC dvvC av1C vpcC esds dOps dfLa alac dac3 dec3 btrt pasp colr clap fiel gama chan wave mdcv clli CoLL SmDm".split(
@@ -639,16 +657,86 @@ function fragmentSamples(
 function refuse(message: string): never {
   throw new VideoLocationError(message);
 }
+/** MPEG-4 systems descriptor length: 1-4 bytes of 7 bits each, high bit means "more follows". */
+function descriptorLength(reader: Cursor): number {
+  let length = 0;
+  for (let index = 0; index < 4; index++) {
+    const byte = reader.uint(1);
+    length = length * 128 + (byte & 0x7f);
+    if (!(byte & 0x80)) return length;
+  }
+  throw new VideoLocationError(UNREADABLE);
+}
+/** The DecoderConfigDescriptor objectTypeIndication of an `esds` box; unparseable refuses. */
+function objectType(bytes: Uint8Array, esds: Atom): number {
+  const outer = cursor(bytes, esds);
+  readable(outer.uint(4) === 0 && outer.uint(1) === 0x03);
+  const length = descriptorLength(outer); // read first: it advances the position
+  const end = outer.position + length;
+  readable(end <= esds.end);
+  const es = new Cursor(bytes, end, outer.position);
+  es.uint(2); // ES_ID
+  const flags = es.uint(1);
+  if (flags & 0x80) es.uint(2); // dependsOn_ES_ID
+  if (flags & 0x40) {
+    const urlLength = es.uint(1); // read first: it advances the position
+    es.position += urlLength;
+  }
+  if (flags & 0x20) es.uint(2); // OCR_ES_ID
+  readable(es.position <= end);
+  while (es.position < end) {
+    const tag = es.uint(1);
+    const size = descriptorLength(es);
+    const next = es.position + size;
+    readable(next <= end);
+    if (tag === 0x04) {
+      readable(size >= 13);
+      return es.uint(1);
+    }
+    es.position = next;
+  }
+  throw new VideoLocationError(UNREADABLE);
+}
+/** Sample entries whose real content type or embedded blocks need a closer look. */
+function checkEntry(bytes: Uint8Array, entry: Atom) {
+  if (entry.type === "mp4v" || entry.type === "mp4a") {
+    // QuickTime nests the esds of an `mp4a` entry inside `wave`.
+    const streams = [
+      ...entry.children,
+      ...entry.children.filter((child) => child.type === "wave").flatMap((wave) => wave.children),
+    ].filter((child) => child.type === "esds");
+    readable(streams.length >= 1);
+    const allowed = entry.type === "mp4v" ? VIDEO_OBJECT_TYPES : AUDIO_OBJECT_TYPES;
+    // Every esds that stays in the file must describe an allowed stream.
+    for (const stream of streams) if (!allowed.has(objectType(bytes, stream))) refuse(STREAM_TRACK);
+  }
+  if (entry.type === "fLaC") {
+    // Only the 34-byte STREAMINFO block may be present: tags and pictures live in other blocks.
+    const boxes = entry.children.filter((child) => child.type === "dfLa");
+    readable(boxes.length === 1);
+    const box = boxes[0] as Atom;
+    const reader = cursor(bytes, box);
+    readable(reader.uint(4) === 0);
+    const header = reader.uint(4);
+    readable((header & 0x7fffffff) === 34 && box.end - box.payload >= 42);
+    if (box.end - box.payload !== 42 || header >>> 24 !== 0x80) refuse(FLAC_TRACK);
+  }
+}
 /**
  * Decide a retained track's fate. Only timed-metadata tracks may be dropped; a track whose loss
  * would change what the video is (audio, subtitles, chapters, unknown kinds) refuses instead.
  */
-function trackIsRemoved(handler: string, descriptions: Atom[]): boolean {
+function trackIsRemoved(bytes: Uint8Array, handler: string, descriptions: Atom[]): boolean {
   const formats = descriptions.map((entry) => entry.type);
-  if (TIMED_METADATA_HANDLERS.has(handler)) return true;
+  if (!formats.length) refuse(refusal("a track with no sample description"));
+  if (TIMED_METADATA_HANDLERS.has(handler)) {
+    if (formats.every((format) => TIMED_METADATA_FORMATS.has(format))) return true;
+    refuse(refusal("a metadata track in a format"));
+  }
   if (AV_HANDLERS.has(handler)) {
     if (formats.every((format) => SAMPLE_FORMATS.has(format))) {
       if (formats.some((format) => JPEG_FORMATS.has(format))) refuse(JPEG_TRACK);
+      for (const entry of descriptions) checkEntry(bytes, entry);
       return false;
     }
     if (formats.every((format) => TIMED_METADATA_FORMATS.has(format))) return true;
@@ -703,7 +791,7 @@ export function stripVideoLocation(
     handler.uint(4);
     const table = one(one(mdia, "minf"), "stbl");
     const descriptions = one(table, "stsd").children;
-    const remove = !atom.keep || trackIsRemoved(handlerType, descriptions);
+    const remove = !atom.keep || trackIsRemoved(bytes, handlerType, descriptions);
     const track = { remove, descriptions: descriptions.length };
     tracks.set(id, track);
     staticSamples(bytes, table, track, ranges);

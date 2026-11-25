@@ -395,7 +395,13 @@ describe("video upload and Takeout data paths", () => {
     const io = photoDataStorage(fetch, ROOT);
     const image = encoder(62.5);
     const input = { name: "clip.webm", original: new Blob(["webm"], { type: "video/webm" }) };
-    const options = { encoder: image, id: () => "clip", now: NOW, stripLocation: false };
+    const options = {
+      encoder: image,
+      id: () => "clip",
+      now: NOW,
+      stripLocation: false,
+      verifyDestination: async () => true,
+    };
     expect((await uploadFiles(io, [input], options))[0]?.ok).toBe(false);
     fail = false;
     expect((await uploadFiles(io, [input], options))[0]?.ok).toBe(true);
@@ -442,7 +448,13 @@ describe("video upload and Takeout data paths", () => {
         const outcomes = await uploadFiles(
           io,
           items.map((item) => ({ name: item.name, original: item.file, metadata: item.metadata })),
-          { encoder: encoder(2.5), id: () => `takeout-${++id}`, now: NOW, stripLocation: false },
+          {
+            verifyDestination: async () => true,
+            encoder: encoder(2.5),
+            id: () => `takeout-${++id}`,
+            now: NOW,
+            stripLocation: false,
+          },
         );
         return outcomes.map((outcome) =>
           outcome.ok ? `${outcome.url}#it` : { kind: "pod" as const },
