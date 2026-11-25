@@ -123,7 +123,7 @@ export async function readInvitations({
   signal,
   loadRoom,
   cache,
-  inboxTruncated = () => false,
+  inboxTruncated,
 }: {
   reader: InboxReader;
   joinedFetch: typeof globalThis.fetch;
@@ -133,7 +133,7 @@ export async function readInvitations({
   loadRoom(room: string, signal: AbortSignal): Promise<InvitationRoom>;
   cache: InvitationRoomCache;
   /** Read after the inbox listing: did the reader leave children unread? */
-  inboxTruncated?(): boolean;
+  inboxTruncated(): boolean;
 }): Promise<InvitationScan> {
   signal.throwIfAborted();
   const joined = new Set((await loadRooms(withAbortSignal(joinedFetch, signal), storage)).rooms);

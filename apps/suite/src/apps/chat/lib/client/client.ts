@@ -64,7 +64,6 @@ import { aggregateReactions, type ReactionSummary } from "../timeline";
 import {
   deliverInvitations,
   INBOX_SCAN_LIMIT,
-  type Invitation,
   type InvitationDelivery,
   type InvitationRoomCache,
   type InvitationScan,

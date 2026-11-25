@@ -331,6 +331,34 @@ it("bounds room checks by the user's own existing rooms and the scan's total req
     fetch.mock.calls.slice(before).filter(([url]) => String(url).endsWith("/index.ttl")),
   ).toHaveLength(1);
 });
+it("caps verified rows and room checks, reporting both as truncated", async () => {
+  const { client, fetch } = await inboxFixture([]);
+  const real: string[] = [];
+  for (let i = 0; i < 51; i++) {
+    const { url } = await client.createRoom({ name: `R${i}`, members: [BOB] });
+    await client.leave(url);
+    real.push(url);
+  }
+  const empty = Array.from({ length: 60 }, (_, i) => `${ROOT}chat/rooms/empty${i}/`);
+  for (const url of empty)
+    await client.fetch(`${url}index.ttl`, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: "",
+    });
+  await writeInbox(client, [
+    ...real.map((url) => offer(url, `; as:actor <${BOB}>${published(20)}`)),
+    ...empty.map((url) => offer(url, `; as:actor <${BOB}>${published(10)}`)),
+  ]);
+  const before = fetch.mock.calls.length;
+  const found = await client.invitations();
+  expect(found.invitations).toHaveLength(50);
+  expect(found.truncated).toBe(true);
+  // 111 existing claimed rooms, but only 100 indexes are read.
+  expect(
+    fetch.mock.calls.slice(before).filter(([url]) => String(url).endsWith("/index.ttl")),
+  ).toHaveLength(100);
+});
 it("reports an inbox with more children than the scan reads as truncated", async () => {
   const { client } = await inboxFixture(
     Array.from({ length: 301 }, (_, i) => offer(`${FOREIGN}chat/rooms/t${i}/`)),
