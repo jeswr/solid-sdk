@@ -21,6 +21,8 @@ import * as api from "../src/index.js";
 // The committed public runtime surface. Keep this list = the README's documented
 // API. A diff here is a CONTRACT change — coordinate it with consumers.
 const PUBLIC_EXPORTS = [
+  // App header
+  "AppHeader",
   // Account menu
   "AccountControl",
   "AccountMenu",

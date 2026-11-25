@@ -14,6 +14,7 @@ Treat this package as the React shell for suite applications. Keep session, rout
 - Add `themeScript()` to the document head when first-paint theme correctness matters. Use the same storage key and dark class as `ThemeProvider`.
 - Pass `webId`, display data, and navigation/sign-out callbacks to `AccountMenu`. Do not couple this package to an auth implementation.
 - Use `AccountControl` for extension-aware header chrome: pass `webId`, `displayName`, `avatarUrl` and `onSignOut`. It shows `AccountMenu` without the extension and an isolated ghost sign-out button with it. Optional `signOutLabel` changes the standalone button's label. Keep logout owned by the host; extension presence grants no identity.
+- Use `AppHeader` for the standard app header instead of hand-assembling the trio: `<AppHeader brand="Pod X" feedback={{ repo, appName, appVersion, webId }} account={{ webId, displayName, avatarUrl, onSignOut }} />`. Children render before the feedback button for extra header actions. It is prop-only and keeps the `.app-header`/`.app-brand`/`.app-header-actions` class names.
 - Configure `FeedbackButton` with the consuming app's own `owner/repo`. A `submit` callback enables a proxy; without it, the control opens a prefilled GitHub issue.
 - Wrap routed content in `ErrorBoundary` and pass a route-derived `resetKey`. Keep raw error text and stacks in telemetry; show friendly copy through `ErrorState`.
 - Use `useSolidExtensionPresent()` only as a presence signal. It does not establish identity or authentication.

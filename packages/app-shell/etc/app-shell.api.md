@@ -34,6 +34,17 @@ export interface AccountMenuProps {
     webId?: string | null;
 }
 
+// @public
+export function AppHeader(input: AppHeaderProps): JSX.Element;
+
+// @public (undocumented)
+export interface AppHeaderProps {
+    account: AccountControlProps;
+    brand: ReactNode;
+    children?: ReactNode;
+    feedback: FeedbackButtonProps;
+}
+
 // @public (undocumented)
 export function Avatar(input: React_2.ComponentProps<typeof AvatarPrimitive.Root>): React_2.JSX.Element;
 

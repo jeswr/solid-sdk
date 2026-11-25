@@ -17,6 +17,7 @@
 
 export { AccountControl, type AccountControlProps } from "./components/account-control.js";
 export { AccountMenu, type AccountMenuProps, initials } from "./components/account-menu.js";
+export { AppHeader, type AppHeaderProps } from "./components/app-header.js";
 export {
   ErrorBoundary,
   type ErrorBoundaryFallbackProps,
