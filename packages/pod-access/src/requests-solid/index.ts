@@ -11,7 +11,7 @@ export type {
 } from "./approval.js";
 export { decide, deriveGrantId, previewDecision } from "./approval.js";
 export { accmAliases, accmTerm, canonicalizeAccmDataset } from "./canonical-vocab.js";
-export { DecisionPreviewConflictError } from "./errors.js";
+export { ApprovalRevokedError, DecisionPreviewConflictError } from "./errors.js";
 export {
   MAX_MEMBERS,
   MAX_NOTIFICATION_BYTES,
