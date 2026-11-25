@@ -62,8 +62,8 @@ it.each([
 });
 it.each([
   ["normal", "normal"],
-  ["Zorbly normal", undefined],
-  ["normal (invented zorb note)", undefined],
+  ["Flagged normal", undefined],
+  ["normal (see attached note)", undefined],
   ["abnormal", "abnormal"],
   ["positive", "abnormal"],
   ["HIGH", "high"],
@@ -81,8 +81,8 @@ it.each([
   ["borderline", undefined],
   ["normality", undefined],
   ["abnormal high", undefined],
-  ["Negative for high-risk Zorbvirus", undefined],
-  ["Low zorb", undefined],
+  ["Negative for example marker", undefined],
+  ["Low concern", undefined],
   ["Elevated normal", undefined],
   ["within normal limits, slightly low", undefined],
   ["constructor", undefined],

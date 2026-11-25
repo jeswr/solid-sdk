@@ -128,8 +128,8 @@ Series grouping prefers code IRI, then code system/value, then normalised label.
 Observations retain qualitative string results. `interpretation` is optional and
 matches only an entire phrase from this fixed table after trimming and lower-casing.
 Compound text, negation and parenthetical additions remain uninterpreted: the
-invented phrases “Negative for high-risk Zorbvirus”, “Low zorb”, “Elevated normal”,
-“within normal limits, slightly low” and “normal (invented zorb note)” all have no
+invented phrases “Negative for example marker”, “Low concern”, “Elevated normal”,
+“within normal limits, slightly low” and “normal (see attached note)” all have no
 interpretation.
 
 | Interpretation | Keywords |

@@ -9,7 +9,18 @@ import type { Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { entities } from "../src/generated/model.js";
 import { HEALTH_CATEGORIES, HealthGraphError, projectHealthFacts } from "../src/index.js";
-import { batch, claim, condition, FixtureNode, H, medication, other, owner, X } from "./helpers.js";
+import {
+  batch,
+  claim,
+  condition,
+  FixtureNode,
+  foreignBatch,
+  H,
+  medication,
+  other,
+  owner,
+  X,
+} from "./helpers.js";
 
 describe("projection and ownership", () => {
   it("keeps all belief/validity levels, revisions, contradictions, hedges and corroboration", async () => {
@@ -62,7 +73,7 @@ describe("projection and ownership", () => {
       "http://hl7.org/fhir/subject",
       other,
     );
-    const value = await batch([
+    const value = await foreignBatch([
       { ...claim("foreign"), assertion: foreign },
       { ...claim("mixed"), assertion: mixed },
       { ...claim("typed"), categories: [] },
@@ -104,7 +115,7 @@ describe("projection and ownership", () => {
       "Fictional label",
     );
     const view = projectHealthFacts(
-      await batch([
+      await foreignBatch([
         { ...claim("unknown"), assertion: unrecognised, categories: ["pd:MentalHealth"] },
         { ...claim("foreign"), assertion: foreign },
         { ...claim("label"), assertion: unknown },
