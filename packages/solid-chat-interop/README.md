@@ -391,8 +391,13 @@ await chats.migrateRedaction();
 // { conversations, titles, messagesRewritten, messagesReplaced, conflicts, failed }
 ```
 
-It walks every provider's conversations and checks each title, account label and message
-against the current redaction rules. Every change is conditional on the strong ETag it read,
+It walks every provider's conversations and redacts each one as a whole, exactly as `save`
+does: the title and all messages go through `redactConversation` together, in stored order
+(`createdAt`, then ID), so a secret split across the title and a message, or a PEM block
+across messages, is caught and the derived IDs match a replayed `save`. The stored order may
+differ from the order the conversation was first submitted in, which can change what a
+boundary-spanning secret redacts to in rare cases; the repair never leaves such a secret in
+place. It checks each title, account label and message against the current redaction rules. Every change is conditional on the strong ETag it read,
 so the port's `read` must return one; a resource that changed meanwhile (412) is counted in
 `conflicts` and left for the next run.
 
@@ -413,7 +418,13 @@ so the port's `read` must return one; a resource that changed meanwhile (412) is
 - Every other message is rewritten in place under its ID with `If-Match`; its ACL is not
   touched. A message saved both with a source ID and without one stays as two messages, as
   before.
-- A conversation whose metadata is missing still has its messages repaired.
+- A conversation whose metadata is missing still has its messages repaired. So does one
+  whose metadata is unreadable or fails validation (wrong identifier, invalid title): that is
+  counted in `failed`, the metadata is left as it is and its messages are redacted anyway. An
+  account label that fails validation (too long, control characters) may still hold a secret,
+  so it is replaced by `[REDACTED]` and counted in `titles`.
+- The repair does not audit who can read a conversation; it never changes an ACL it did not
+  create.
 
 One unreadable or malformed conversation or message, a missing ETag, or a failed request
 counts in `failed` (no URLs or content are reported) and the run carries on. Afterwards

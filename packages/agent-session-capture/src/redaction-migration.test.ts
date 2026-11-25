@@ -1,13 +1,14 @@
 // AUTHORED-BY Claude Opus 5.5
 import type { ChatRedactionReport } from "@jeswr/solid-chat-interop";
+import { ChatWriter } from "@jeswr/solid-chat-interop";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { mkdtemp, rm } from "fs/promises";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { tmpdir } from "os";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { join } from "path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { runRedactionMigration } from "./redaction-migration.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { REDACTION_INCOMPLETE_MESSAGE, runRedactionMigration } from "./redaction-migration.js";
 import { createCaptureTestTransport } from "./testing.js";
 
 const env = {
@@ -35,6 +36,7 @@ beforeEach(async () => {
   reports = [];
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   await rm(home, { recursive: true, force: true });
 });
 
@@ -109,6 +111,56 @@ describe("solid-capture redact-archive (sst-5ax.39)", () => {
     expect(result).toBe(1);
     expect(reports).toEqual([expect.objectContaining({ conversations: 1, failed: 1 })]);
     expect(JSON.stringify(reports)).not.toContain("secret detail");
+  });
+
+  it("exits 1 and says so when conflicts left resources unredacted", async () => {
+    const warnings: string[] = [];
+    const base = {
+      dryRun: false,
+      conversations: 3,
+      titles: 1,
+      messagesRewritten: 1,
+      messagesReplaced: 1,
+      conflicts: 0,
+      failed: 0,
+    };
+    const migrate = vi.spyOn(ChatWriter.prototype, "migrateRedaction");
+    const exec = () =>
+      runRedactionMigration(["redact-archive"], {
+        home,
+        env,
+        fetch: transport.fetch,
+        report: (report) => reports.push(report),
+        warn: (message) => warnings.push(message),
+      });
+    // Only conflicts: every other count is clean, yet the archive is not.
+    migrate.mockResolvedValueOnce({ ...base, conflicts: 2 });
+    expect(await exec()).toBe(1);
+    expect(reports).toEqual([{ ...base, conflicts: 2 }]);
+    expect(warnings).toEqual([REDACTION_INCOMPLETE_MESSAGE]);
+    expect(REDACTION_INCOMPLETE_MESSAGE).toMatch(/NOT fully redacted/);
+    // Failures say so too; a clean run stays silent and exits 0.
+    migrate.mockResolvedValueOnce({ ...base, failed: 1 });
+    expect(await exec()).toBe(1);
+    expect(warnings).toHaveLength(2);
+    migrate.mockResolvedValueOnce(base);
+    expect(await exec()).toBe(0);
+    expect(warnings).toHaveLength(2);
+  });
+
+  it("writes the incomplete-archive warning to stderr by default, without content", async () => {
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    vi.spyOn(ChatWriter.prototype, "migrateRedaction").mockResolvedValueOnce({
+      dryRun: false,
+      conversations: 1,
+      titles: 0,
+      messagesRewritten: 0,
+      messagesReplaced: 0,
+      conflicts: 1,
+      failed: 0,
+    });
+    expect(await run(["redact-archive"])).toBe(1);
+    expect(stderr).toHaveBeenCalledWith(`${REDACTION_INCOMPLETE_MESSAGE}\n`);
   });
 
   it("fails closed without exposing remote errors", async () => {
