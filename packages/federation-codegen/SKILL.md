@@ -163,6 +163,20 @@ package, and a drift test running `pnpm run codegen --out <tmp>` with a byte com
 
 The design of record is `decisions/0003-domain-model-codegen.md`.
 
+## Date datatype admission
+
+| `sh:datatype` | Emitted TypeScript type | Runtime read / write |
+|---|---|---|
+| `xsd:date` | `Date` | Calendar-checked; nonzero timezone offsets drop. Writes UTC date with `Z`. |
+| `xsd:dateTime` | `Date` | Optional timezone; zoneless reads use UTC. Writes UTC instant with `Z`. |
+| `xsd:dateTimeStamp` | `Date` | Mandatory timezone within ±14:00. Uses dateTime conversion and writes UTC instant with `Z`, typed dateTimeStamp. |
+
+Preserve the exact datatype in `model.json` and normalized `shapes.ttl`, including
+for OWL-Time `time:inXSDDateTimeStamp`. Stamp fields reject dateTime literals and
+vice versa; malformed/zoneless/unrepresentable reads follow severity grading.
+Invalid Date writes drop. Sets emit `Date[]` / `Set<Date>` and use the same guards.
+Do not widen admission beyond the runtime's reviewed `VALIDATED_DATATYPES` inventory.
+
 The bookmarks example points to `packages/solid-bookmark`, which owns its normative
 `bookmark.ttl` + `bookmark.shacl.ttl`, config, `src/generated/`, and facade. Its 78-test
 oracle remains verbatim except imports in the generator integration harness. The harness

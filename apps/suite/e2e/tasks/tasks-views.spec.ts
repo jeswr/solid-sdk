@@ -290,7 +290,7 @@ test("scenario 8 keyboard: seven counted days and reschedule to Wednesday retain
   await page.goto("/tasks/upcoming");
   await expect(page).toHaveTitle("Upcoming · Tasks · Solid Suite");
   await expect(page.locator(".tsk-day-cell")).toHaveCount(7);
-  await expect(page.getByRole("button", { name: /^Sort:/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Sort:/ })).toHaveCount(1);
   expect(
     await page.locator(".tsk-week-strip").evaluate((strip) => {
       const bounds = strip.getBoundingClientRect();
@@ -348,7 +348,7 @@ test("scenario 3 Completed: completion-day group and reopen persist without ende
   });
   await page.goto("/tasks/completed");
   await expect(page).toHaveTitle("Completed · Tasks · Solid Suite");
-  await expect(page.getByRole("button", { name: /^Sort:/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Sort:/ })).toHaveCount(1);
   const group = page.getByRole("region", { name: "Today", exact: true });
   await expect(
     group.getByRole("checkbox", { name: "Reopen 'Finished bill'", exact: true }),

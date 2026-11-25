@@ -11,6 +11,7 @@
  * code→token, so live mode runs through the maintainer's token proxy.
  * Demoable now against recorded fixtures.
  */
+
 import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
@@ -49,15 +50,18 @@ export const facebookAdapter: IntegrationAdapter = {
   fixtures: () => FACEBOOK_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = ctx.budget;
     ctx.progress({ label: "Fetching your posts…", done: 0, total: 2 });
     const posts = await getJson<FbPostsAnswer>(
       ID,
       ctx.api,
       `${API}/me/posts?fields=id,message,story,created_time,permalink_url&limit=50`,
+      undefined,
     );
 
     const postsDoc = ctx.resolve("social/posts.ttl");
     const postStore = new Store();
+    budget.items(posts.data.length);
     for (const p of posts.data) {
       const text = p.message ?? p.story;
       const post = new SocialMediaPosting(
@@ -80,10 +84,16 @@ export const facebookAdapter: IntegrationAdapter = {
     });
 
     ctx.progress({ label: "Fetching your groups…", done: 1, total: 2 });
-    const groups = await getJson<FbGroupsAnswer>(ID, ctx.api, `${API}/me/groups?limit=100`);
+    const groups = await getJson<FbGroupsAnswer>(
+      ID,
+      ctx.api,
+      `${API}/me/groups?limit=100`,
+      undefined,
+    );
 
     const groupsDoc = ctx.resolve("social/groups.ttl");
     const groupStore = new Store();
+    budget.items(groups.data.length);
     for (const g of groups.data) {
       const grp = new Group(`${groupsDoc}#group-${g.id}`, groupStore, DataFactory).mark();
       grp.name = g.name;

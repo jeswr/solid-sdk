@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 "use client";
@@ -35,6 +36,7 @@ import { HomeHeader } from "./home-header";
 import { AddManuallySheet } from "./item/add-manually-sheet";
 import { itemShortcut } from "./item/shortcuts";
 import { useItemActions } from "./item/use-item-actions";
+import { HomeAgentPermissions } from "./permissions/home-agent-permissions";
 
 export function HomePage({ domain }: { domain: string }) {
   const session = useHomeSession();
@@ -124,6 +126,7 @@ export function HomePage({ domain }: { domain: string }) {
         asOf={data.loadedAt}
         onRetry={retry}
       />
+      <HomeAgentPermissions />
       <DomainNavigation
         domains={visibleDomains(data.items)}
         active={entry.id}

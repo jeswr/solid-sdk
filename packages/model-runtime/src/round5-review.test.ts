@@ -231,9 +231,35 @@ describe("R5.4 string subtype lexical spaces", () => {
 });
 
 describe("R5.5 runtime parity", () => {
-  it.each(["date", "dateTime"])("rejects negative-zero xsd:%s years", (type) => {
+  it.each(["date", "dateTime"])("reads negative-zero xsd:%s years as year zero", (type) => {
+    // XSD 1.1 permits `-0000`; it denotes year zero (supersedes the earlier rejection).
     const lex = type === "date" ? "-0000-01-01Z" : "-0000-01-01T00:00:00Z";
+    const yearZero = new Date(0);
+    yearZero.setUTCFullYear(0, 0, 1);
+    expect(readLiteral(literal(lex, namedNode(`${XSD}${type}`)))).toEqual(yearZero);
+  });
+  it.each([
+    ["date", "02026-01-01Z"],
+    ["date", "-02026-01-01Z"],
+    ["date", "00000-01-01Z"],
+    ["date", "-000001-01-01Z"],
+    ["dateTime", "02026-01-01T00:00:00Z"],
+    ["dateTime", "-02026-01-01T00:00:00Z"],
+    ["dateTime", "00000-01-01T00:00:00Z"],
+    ["dateTime", "-000000-01-01T00:00:00.000Z"],
+    ["dateTime", "-000001-01-01T00:00:00Z"],
+  ])("rejects xsd:%s %s (XSD 1.1 yearFrag: leading zero only in four digits)", (type, lex) => {
     expect(() => readLiteral(literal(lex, namedNode(`${XSD}${type}`)))).toThrow();
+  });
+  it("reads the legacy six-digit negative xsd:dateTime only in the exact old writer form", () => {
+    const yearMinusOne = new Date(0);
+    yearMinusOne.setUTCFullYear(-1, 0, 1);
+    expect(
+      readLiteral(literal("-000001-01-01T00:00:00.000Z", namedNode(`${XSD}dateTime`))),
+    ).toEqual(yearMinusOne);
+    expect(() =>
+      readLiteral(literal("-000001-01-01T00:00:00.000Z", namedNode(`${XSD}dateTimeStamp`))),
+    ).toThrow();
   });
   for (const type of ["date", "dateTime"]) {
     it.each([10000, 100000, -1, -10000, 0])(`round-trips xsd:${type} year %i`, async (year) => {

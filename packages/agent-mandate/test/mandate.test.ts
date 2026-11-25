@@ -682,3 +682,81 @@ it("signs the spend-limit currency into the agreement and returns it from every 
       mandateCredential({ ...m, currency }, { statusListCredential: STATUS, statusListIndex: "0" }),
     ).toThrow("ISO 4217");
 });
+
+it.each([
+  undefined,
+  [],
+  ["Preference"],
+  ["Preference", "Health"],
+])("round-trips signed memory scope %j without turning OFF into the preference default", async (names) => {
+  const memoryScope = names?.map((name) => `https://w3id.org/dpv/pd#${name}`);
+  const m = { ...mandate(), memoryScope };
+  const vc = await issueMandate(m, key, { statusListCredential: STATUS, statusListIndex: "1" });
+  const parsed = await parseMandateCredential(await mandateToTurtle(vc));
+  expect(parsed).toBeDefined();
+  for (const candidate of [vc, parsed]) {
+    const loaded = await createVcMandateVerifier({
+      ...options,
+      read: async () => candidate,
+    }).load();
+    expect(loaded).toBeDefined();
+    expect(loaded?.memoryScope).toEqual(memoryScope);
+  }
+  const tampered = {
+    ...vc,
+    credentialSubject: {
+      ...(vc.credentialSubject as Record<string, JsonValue>),
+      [`${AGENT}agreement`]: {
+        ...((vc.credentialSubject as Record<string, JsonValue>)[`${AGENT}agreement`] as Record<
+          string,
+          JsonValue
+        >),
+        [`${AGENT}memoryScope`]: ["https://w3id.org/dpv/pd#Financial"],
+      },
+    },
+  } as VerifiableCredential;
+  expect(
+    await createVcMandateVerifier({ ...options, read: async () => tampered }).load(),
+  ).toBeUndefined();
+});
+it.each([
+  "not-an-iri",
+  "https://other.example/Health",
+  ["http://www.w3.org/1999/02/22-rdf-syntax-ns#nil", "https://w3id.org/dpv/pd#Health"],
+])("rejects a malformed memory scope even with a valid owner signature: %j", async (scope) => {
+  const unsigned = mandateCredential(mandate(), {
+    statusListCredential: STATUS,
+    statusListIndex: "1",
+  });
+  const signed = await issue({
+    credential: {
+      ...unsigned,
+      credentialSubject: {
+        ...(unsigned.credentialSubject as Record<string, JsonValue>),
+        [`${AGENT}agreement`]: {
+          ...((unsigned.credentialSubject as Record<string, JsonValue>)[
+            `${AGENT}agreement`
+          ] as Record<string, JsonValue>),
+          [`${AGENT}memoryScope`]: scope,
+        },
+      },
+    },
+    key,
+    options: { created: NOW },
+  });
+  expect(await parseMandateCredential(await mandateToTurtle(signed))).toBeUndefined();
+  expect(
+    await createVcMandateVerifier({ ...options, read: async () => signed }).load(),
+  ).toBeUndefined();
+});
+it("refuses to issue malformed memory categories", () => {
+  expect(() =>
+    mandateCredential(
+      { ...mandate(), memoryScope: ["pd:Health"] },
+      {
+        statusListCredential: STATUS,
+        statusListIndex: "1",
+      },
+    ),
+  ).toThrow("category IRIs");
+});

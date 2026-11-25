@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+
 import { isSharedTrackerUrl } from "../lib/model/rdf";
+import { type GroupMode, groupOptions } from "../lib/views/grouping";
 import type { SortMode } from "../lib/views/project-groups";
 export interface TasksPreferences {
   /** Projects shared with `sharedOwner`; stored per WebID, never in the browser-wide record. */
@@ -11,7 +13,9 @@ export interface TasksPreferences {
   sharedOwner?: string | undefined;
   viewMode: Record<string, "list" | "board">;
   sort: Record<string, SortMode>;
+  groupBy: Record<string, GroupMode>;
   collapsedSections: string[];
+  collapsedProjects: string[];
   sidebar: { labelsOpen: boolean; projectsOpen: boolean };
   showCompletedInProject: boolean;
   weekStart: "monday" | "sunday" | "locale";
@@ -21,7 +25,9 @@ export const defaultPreferences: TasksPreferences = {
   favourites: [],
   viewMode: {},
   sort: {},
+  groupBy: {},
   collapsedSections: [],
+  collapsedProjects: [],
   sidebar: { labelsOpen: true, projectsOpen: true },
   showCompletedInProject: false,
   weekStart: "locale",
@@ -30,9 +36,11 @@ export type PreferenceAction =
   | { type: "sharedProject"; url: string; title: string }
   | { type: "removeSharedProject"; url: string }
   | { type: "favouriteProject"; url: string; value: boolean }
+  | { type: "groupBy"; viewId: string; value: GroupMode }
   | { type: "sort"; viewId: string; value: SortMode }
   | { type: "viewMode"; viewId: string; value: "list" | "board" }
   | { type: "collapse"; sectionId: string }
+  | { type: "collapseProject"; url: string }
   | { type: "sidebar"; group: "labelsOpen" | "projectsOpen" }
   | { type: "showCompleted"; value: boolean }
   | { type: "weekStart"; value: TasksPreferences["weekStart"] };
@@ -68,6 +76,8 @@ export function preferencesReducer(
         ...state,
         sharedProjects: state.sharedProjects.filter((project) => project.url !== action.url),
       };
+    case "groupBy":
+      return { ...state, groupBy: { ...state.groupBy, [action.viewId]: action.value } };
     case "sort":
       return { ...state, sort: { ...state.sort, [action.viewId]: action.value } };
     case "viewMode":
@@ -78,6 +88,13 @@ export function preferencesReducer(
         collapsedSections: state.collapsedSections.includes(action.sectionId)
           ? state.collapsedSections.filter((id) => id !== action.sectionId)
           : [...state.collapsedSections, action.sectionId],
+      };
+    case "collapseProject":
+      return {
+        ...state,
+        collapsedProjects: state.collapsedProjects.includes(action.url)
+          ? state.collapsedProjects.filter((url) => url !== action.url)
+          : [...state.collapsedProjects, action.url],
       };
     case "sidebar":
       return {
@@ -111,8 +128,12 @@ export function parsePreferences(raw: string | null): TasksPreferences {
       favourites: [],
       viewMode: entries(data.viewMode, ["list", "board"]),
       sort: entries(data.sort, ["manual", "due", "priority", "name"]),
+      groupBy: entries(data.groupBy, Object.keys(groupOptions) as GroupMode[]),
       collapsedSections: Array.isArray(data.collapsedSections)
         ? data.collapsedSections.filter((id): id is string => typeof id === "string")
+        : [],
+      collapsedProjects: Array.isArray(data.collapsedProjects)
+        ? data.collapsedProjects.filter((url): url is string => typeof url === "string")
         : [],
       sidebar: {
         labelsOpen: typeof sidebar.labelsOpen === "boolean" ? sidebar.labelsOpen : true,

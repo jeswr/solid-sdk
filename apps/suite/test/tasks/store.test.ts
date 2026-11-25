@@ -1991,3 +1991,22 @@ describe("detail project moves", () => {
     expect(pod.files.has(`${target.tracker.stateStore}task-1.ttl`)).toBe(true);
   });
 });
+
+it("keeps directly registered trackers without a .ttl suffix in a scoped family listing", async () => {
+  const pod = new Pod();
+  const tasks = store(pod);
+  const inbox = await tasks.bootstrapInbox();
+  const importedUrl = `${projects}imported`;
+  const foreignUrl = `${storage}elsewhere/imported`;
+  for (const url of [importedUrl, foreignUrl]) {
+    const imported = createTracker(url, "Imported", `${url}-state/`, [], now);
+    pod.seed(url, await serialize(imported.dataset));
+  }
+  const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, pod.ensurePrivateIndexAccess);
+  await index.register([
+    { forClass: `${NS.WF}Tracker`, location: `${importedUrl}#this`, kind: "instance" },
+    { forClass: `${NS.WF}Tracker`, location: `${foreignUrl}#this`, kind: "instance" },
+  ]);
+  const family = await tasks.listProjects(undefined, { strict: true, collection: projects });
+  expect(family.map((project) => project.url).sort()).toEqual([importedUrl, inbox.url].sort());
+});

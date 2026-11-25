@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { RunBudget, readJson } from "../core/budget.js";
+import { type RunBudget, readJson } from "../core/budget.js";
 import { IntegrationSyncError, RateLimitedError } from "../core/errors.js";
 import type { ImportContext } from "../core/types.js";
 
@@ -30,12 +30,12 @@ function retryDelay(ms: number, signal: AbortSignal | undefined): Promise<void> 
 export async function spotifyJson<T>(
   api: typeof fetch,
   url: string,
-  budget = new RunBudget("spotify"),
+  budget: RunBudget,
   signal?: AbortSignal,
 ): Promise<T> {
   for (let attempt = 0; ; attempt++) {
-    budget.request();
-    const res = await api(url, { redirect: "error" });
+    budget.checkTime();
+    const res = await api(url, { redirect: "error", signal });
     if (res.status === 429) {
       const header = res.headers.get("retry-after");
       const seconds =
@@ -45,10 +45,11 @@ export async function spotifyJson<T>(
             ? Math.max(0, (Date.parse(header) - Date.now()) / 1000)
             : Number.NaN;
       const delay = Number.isFinite(seconds) ? seconds : undefined;
-      await res.body?.cancel();
+      await res.body?.cancel().catch(() => undefined);
       if (attempt >= 3 || delay === undefined || delay * 1000 > 2_147_483_647)
         throw new RateLimitedError("spotify", url, delay);
-      await retryDelay(delay * 1000, signal);
+      await retryDelay(Math.min(delay * 1000, budget.remainingMs), signal);
+      budget.checkTime();
       continue;
     }
     if (!res.ok)
@@ -56,7 +57,7 @@ export async function spotifyJson<T>(
         url,
         status: res.status,
       });
-    return (await readJson(res, "spotify", url, undefined, budget)) as T;
+    return (await readJson(res, "spotify", url)) as T;
   }
 }
 
@@ -64,7 +65,6 @@ export async function spotifyJson<T>(
 export async function* pages<T>(
   ctx: ImportContext,
   initial: string,
-  budget = new RunBudget("spotify"),
   unwrap: (json: Page<T> & { artists?: Page<T> }) => Page<T> | undefined = (json) => json,
 ): AsyncGenerator<Page<T>> {
   let next: string | undefined = initial;
@@ -85,7 +85,7 @@ export async function* pages<T>(
     const json = await spotifyJson<Page<T> & { artists?: Page<T> }>(
       ctx.api,
       url.href,
-      budget,
+      ctx.budget,
       ctx.signal,
     );
     if (!json || typeof json !== "object")
@@ -98,7 +98,7 @@ export async function* pages<T>(
       (page.next !== undefined && page.next !== null && typeof page.next !== "string")
     )
       throw new IntegrationSyncError("spotify", "Invalid Spotify page.");
-    budget.items(page.items.length);
+    ctx.budget.items(page.items.length);
     yield page;
     next = page.next ?? undefined;
   }

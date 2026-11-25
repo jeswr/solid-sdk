@@ -20,10 +20,12 @@ import {
   bindingPolicy,
   decodeCurrency,
   decodeLimit,
+  decodeMemoryScope,
   decodePolicy,
   decodeProhibitions,
   encodeCurrency,
   encodeLimit,
+  encodeMemoryScope,
   encodePolicy,
   encodeProhibitions,
 } from "./codec.js";
@@ -131,6 +133,7 @@ export function mandateCredential(
       [`${ODRL}prohibition`]: encodeProhibitions(m.prohibitions),
       [`${ODRL}constraint`]: m.limits.map(encodeLimit),
       ...encodeCurrency(m.currency),
+      ...encodeMemoryScope(m.memoryScope),
     },
   };
   return { ...credential, credentialSubject: subject };
@@ -245,6 +248,7 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
           prohibitions: decodeProhibitions(root),
           limits,
           ...decodeCurrency(root),
+          ...decodeMemoryScope(root),
         };
         // Every entry path must preserve the entire signed claim graph, including restrictions.
         // Decoding a known subset must never erase a signed field before evaluation.

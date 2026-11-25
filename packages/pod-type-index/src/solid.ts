@@ -1,21 +1,27 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import type { RdfReadResult, StorageClient } from "@jeswr/storage-client";
 import { StorageError } from "@jeswr/storage-client";
-import { canonicalize, NS } from "@jeswr/suite-vocab";
+import { canonicalize } from "@jeswr/suite-vocab";
 import { DataFactory } from "n3";
 import { documentUrl, error, requireScoped, scoped } from "./common.js";
 import type { Resource } from "./rdf.js";
 import {
+  addRegistration,
   CLASS,
   CONTAINER,
   emptyDocument,
   INDEX,
   INSTANCE,
   indexDataset,
+  markIndex,
   PREFS,
   PRIVATE,
   PUBLIC,
-  REGISTRATION,
+  pointer,
+  registrationData,
+  removeRegistration,
   resource,
   serialize,
   TYPE,
@@ -57,10 +63,13 @@ function rawCount(subject: Resource, predicate: string): number {
 
 export function solidIndex(storage: StorageClient, webId: string) {
   const profile = requireScoped(storage, webId);
+  if (!isSafeAbsoluteIri(storage.root) || !isSafeAbsoluteIri(profile)) {
+    throw error("scope", storage.root);
+  }
   const profileUrl = documentUrl(profile);
 
   function links(subject: Resource, predicate: string, strict = false): string[] {
-    const values = subject.iris(predicate);
+    const values = [...pointer(subject, predicate, true)];
     const urls = values.map((value) => scoped(storage, value));
     if (
       strict &&
@@ -99,10 +108,11 @@ export function solidIndex(storage: StorageClient, webId: string) {
       const document = await read(url);
       if (!document) continue;
       for (const reg of indexDataset(document).registrations) {
-        for (const iri of reg.iris(CLASS)) {
+        const data = registrationData(reg);
+        for (const iri of data.forClass ?? []) {
           const targets = wanted.get(canonicalize(iri));
           if (!targets) continue;
-          for (const value of [...reg.iris(INSTANCE), ...reg.iris(CONTAINER)]) {
+          for (const value of [...(data.instance ?? []), ...(data.instanceContainer ?? [])]) {
             const target = scoped(storage, value);
             if (target && !targets.has(target)) {
               if (++count > MAX_RESULTS) throw error("invalid-response", storage.root);
@@ -204,12 +214,15 @@ export function solidIndex(storage: StorageClient, webId: string) {
         // Turtle writes must not collapse foreign named graphs into the default graph.
         for (const quad of document.dataset)
           if (quad.graph.termType !== "DefaultGraph") throw error("not-rdf", url);
-        const locationPredicate = container ? CONTAINER : INSTANCE;
-        const matching = [...indexDataset(document).registrations].filter(
-          (reg) =>
-            reg.iris(CLASS).some((value) => canonicalize(value) === iri) &&
-            reg.iris(locationPredicate).some((value) => scoped(storage, value) === target),
-        );
+        const matching = [...indexDataset(document).registrations].filter((reg) => {
+          const data = registrationData(reg);
+          return (
+            data.forClass?.some((value) => canonicalize(value) === iri) &&
+            (container ? data.instanceContainer : data.instance)?.some(
+              (value) => scoped(storage, value) === target,
+            )
+          );
+        });
         let changed = false;
         if (remove) {
           for (const reg of matching) {
@@ -220,9 +233,7 @@ export function solidIndex(storage: StorageClient, webId: string) {
               throw error("conflict", url);
             }
             // Delete only the registration contract; preserve third-party annotations.
-            reg.values(locationPredicate).delete(reg.iris(locationPredicate)[0] as string);
-            reg.values(CLASS).delete(reg.iris(CLASS)[0] as string);
-            reg.values(TYPE).delete(REGISTRATION);
+            removeRegistration(reg, container);
             changed = true;
           }
         } else if (matching.length === 0) {
@@ -230,27 +241,21 @@ export function solidIndex(storage: StorageClient, webId: string) {
           do {
             subject = `${url}#registration-${crypto.randomUUID()}`;
           } while (document.dataset.match(DataFactory.namedNode(subject)).size > 0);
-          const reg = resource(document, subject);
-          reg.values(TYPE).add(REGISTRATION);
-          reg.values(CLASS).add(iri);
-          reg.values(locationPredicate).add(target);
+          addRegistration(document, subject, iri, target, container);
           changed = true;
         }
         if (!existing) {
-          docSubject.values(TYPE).add(INDEX);
-          docSubject
-            .values(TYPE)
-            .add(`${NS.SOLID}${visibility === "public" ? "ListedDocument" : "UnlistedDocument"}`);
+          markIndex(document, visibility);
         }
         if (changed) await save(document, !existing, signal);
         if (remove) return;
         const hostOwner = resource(host, profile);
         if (!links(hostOwner, predicate, true).includes(url)) {
-          hostOwner.values(predicate).add(url);
+          pointer(hostOwner, predicate).add(url);
           await save(host, hostFresh, signal);
         }
         if (preferencesUrl && !links(owner, PREFS, true).includes(preferencesUrl)) {
-          owner.values(PREFS).add(preferencesUrl);
+          pointer(owner, PREFS).add(preferencesUrl);
           await save(card, false, signal);
         }
         return;

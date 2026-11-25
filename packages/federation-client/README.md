@@ -71,6 +71,11 @@ for catching and typing errors from its own functions. The `@jeswr/federation-cl
 entry still provides the DNS-pinning helpers. Both built entries share the same guard error
 classes. Existing `github:` commit SHA pins continue to use their original exports.
 
+Registry reads now inherit guarded-fetch's DNS-pinned Node default. An injected `fetch`
+for a Node hostname must be DNS-pinned and passed as `guard.pinningFetch`, or explicitly
+opt out with `guard.requireDnsPinning: false` to accept the validation/connect rebinding
+window. Browser and DNS-less edge policies are unchanged.
+
 ## Links
 
 - [Source](https://github.com/jeswr/federation-client)

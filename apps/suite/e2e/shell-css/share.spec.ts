@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { randomUUID } from "node:crypto";
 import { forClientCredentials } from "@jeswr/pod-auth/node";
 import type { Locator, Page } from "@playwright/test";
@@ -125,7 +126,7 @@ async function anonymousStatus(url: string, status: number) {
 }
 
 for (const keyboardOnly of [false, true]) {
-  test(`scenario 7 partial: folder-sharing blocker and real file ACLs (${keyboardOnly ? "keyboard only" : "pointer"})`, async ({
+  test(`scenario 7 partial: folder permissions and real file ACLs (${keyboardOnly ? "keyboard only" : "pointer"})`, async ({
     page,
     browser,
     baseURL,
@@ -177,22 +178,17 @@ for (const keyboardOnly of [false, true]) {
       // document active again; this does not assign focus to any share control.
       await page.bringToFront();
 
-      await test.step("folder sharing explains the blocker and leaves Bob denied by CSS", async () => {
-        // Folder Editor sharing is tracked in sst-djzb.
+      await test.step("folder sharing explains descendants and leaves Bob denied before a grant", async () => {
         const dialog = await openShare(page, folder, folderName, keyboardOnly);
-        const explanation = dialog.getByRole("status").filter({
-          hasText: "Folder sharing is read-only for now",
-        });
-        await expect(explanation).toContainText(
-          "Changes here would not reach the files and folders inside",
+        await expect(dialog.getByRole("note")).toContainText(
+          "Items inside that have their own sharing won't change. Open an item's sharing to change it.",
         );
-        await expect(explanation).toContainText("To change access to a file, share that file.");
         await expect(dialog.getByRole("button", { name: "Share", exact: true })).toBeDisabled();
         await expect(
           dialog.getByRole("combobox", { name: "Add people", exact: true }),
-        ).toBeDisabled();
-        await expect(dialog.getByLabel("Role for added people", { exact: true })).toBeDisabled();
-        await expect(dialog.getByLabel("Who can access", { exact: true })).toBeDisabled();
+        ).toBeEnabled();
+        await expect(dialog.getByLabel("Role for added people", { exact: true })).toBeEnabled();
+        await expect(dialog.getByLabel("Who can access", { exact: true })).toBeEnabled();
         await accessible(page);
         await anonymousStatus(folderUrl as string, 401);
         const denied = await bob?.fetch(folderUrl as string);
@@ -205,11 +201,6 @@ for (const keyboardOnly of [false, true]) {
         });
         expect(upload?.status).toBe(403);
         await upload?.body?.cancel();
-        info.annotations.push({
-          type: "blocker",
-          description:
-            "Scenario 7 folder grant/upload/revocation cannot run: Drive deliberately disables folder sharing until SDK writes support member access. The remaining steps below exercise a file, not folder acceptance.",
-        });
         await activate(
           page,
           dialog.getByRole("button", { name: "Done", exact: true }),
@@ -218,10 +209,7 @@ for (const keyboardOnly of [false, true]) {
         await expect(dialog).toBeHidden();
       });
 
-      // Keep the supported file path exercised against real CSS; do not seed a grant
-      // behind the read-only folder UI and misrepresent it as successful folder sharing.
-      // Arrange file bytes through CSS: the separate upload-blocker test below records
-      // why Drive's UI upload cannot currently serve as this test's setup on CSS.
+      // Arrange file bytes through CSS, then exercise grants and revocation through Drive.
       const original = `Alice's private file ${randomUUID()}`;
       fileUrl = new URL(fileName, folderUrl).href;
       const created = await alice.fetch(fileUrl, {

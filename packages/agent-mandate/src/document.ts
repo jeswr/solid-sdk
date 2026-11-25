@@ -12,7 +12,13 @@ import {
   type VerifiableCredential,
 } from "@jeswr/solid-vc";
 import { Store } from "n3";
-import { decodeCurrency, decodeLimit, decodePolicy, decodeProhibitions } from "./codec.js";
+import {
+  decodeCurrency,
+  decodeLimit,
+  decodeMemoryScope,
+  decodePolicy,
+  decodeProhibitions,
+} from "./codec.js";
 import { validInstant } from "./instant.js";
 import { mandateCredential } from "./mandate.js";
 import {
@@ -79,6 +85,7 @@ export async function parseMandateCredential(
       prohibitions: decodeProhibitions(root),
       limits: root.values(`${ODRL}constraint`).map(decodeLimit),
       ...decodeCurrency(root),
+      ...decodeMemoryScope(root),
     };
     // Reconstruction preserves the complete package-issued signed graph. Foreign/extra claims
     // cannot be laundered: the verifier checks the signature over this reconstructed graph.

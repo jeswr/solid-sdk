@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
+import { createMemoryPod, TEST_POD_ROOT } from "@jeswr/pod-connectors/testing";
 import { expect, it } from "vitest";
 import { ensureSample } from "../src/apps/music/demo/sample";
 import { importSpotifyFixture } from "../src/apps/music/demo/spotify";
@@ -70,6 +72,15 @@ it("runs the real Spotify mapping entirely against recorded JSON and the pod", a
   const before = pod.snapshot();
   await importSpotifyFixture(pod.fetch, root);
   expect(pod.snapshot()).toEqual(before);
+});
+
+// Moved from pod-connectors: the Music demo entry point runs through a budgeted context.
+it("imports the Spotify fixture through a budgeted runner context", async () => {
+  const pod = createMemoryPod();
+  await expect(importSpotifyFixture(pod.fetch, TEST_POD_ROOT)).resolves.toBeUndefined();
+  expect(
+    pod.urls().some((url) => url.includes("integrations/spotify/") && url.endsWith(".ttl")),
+  ).toBe(true);
 });
 
 it.each([

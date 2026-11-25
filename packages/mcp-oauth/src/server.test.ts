@@ -7,6 +7,25 @@ import { createAuthorizationServer } from "./index.js";
 import { CODE_TTL, digest, GRANT_TTL, LOGIN_TTL, OAuthError } from "./protocol.js";
 
 describe("metadata and complete OAuth flow", () => {
+  it("rejects registration with eleven redirects or control characters", async () => {
+    const f = fixture();
+    for (const metadata of [
+      { redirect_uris: Array(11).fill(REDIRECT) },
+      { redirect_uris: [REDIRECT], client_name: "Claude\u202E" },
+    ]) {
+      const response = await f.server.handle(
+        new Request(`${ISSUER}/register`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(metadata),
+        }),
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: "client_name" in metadata ? "invalid_client_metadata" : "invalid_redirect_uri",
+      });
+    }
+  });
   it.each([
     "https://mcp.example:443/auth",
     "https://MCP.EXAMPLE/auth",
@@ -1033,4 +1052,21 @@ describe("HTTP parser and configuration", () => {
   it("allows encoded question marks in issuer and resource paths", () => {
     expect(() => fixture({ issuer: `${ISSUER}%3F`, resource: `${RESOURCE}%3F` })).not.toThrow();
   });
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+it("sets bounded retention for registration, pending login and unused authorization codes", async () => {
+  const f = fixture();
+  const clients = vi.spyOn(f.stores.clients, "put");
+  const pending = vi.spyOn(f.stores.pending, "put");
+  const codes = vi.spyOn(f.stores.codes, "put");
+  const id = await f.register();
+  expect(clients.mock.calls[0]?.[2]).toBe(30 * 24 * 60 * 60);
+  await f.server.handle(f.authRequest(id));
+  expect(pending.mock.calls[0]?.[2]).toBe(600);
+  const code = await f.code(id);
+  expect(codes.mock.calls[0]?.[2]).toBe(300);
+  const consume = vi.spyOn(f.stores.codes, "consume");
+  expect((await f.exchange(id, code)).status).toBe(200);
+  expect(consume.mock.calls[0]?.[1]).toBe(30 * 24 * 60 * 60);
 });

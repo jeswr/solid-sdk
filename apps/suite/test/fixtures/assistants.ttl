@@ -1,0 +1,16 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix dpv: <https://w3id.org/dpv#> .
+@prefix pd: <https://w3id.org/dpv/pd#> .
+@prefix mcp: <https://jeswr.org/ns/mcp#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<#read-0> a prov:Activity ;
+  prov:wasAssociatedWith <https://mcp.example/clients/demo> ;
+  prov:startedAtTime "2026-11-11T09:00:00Z"^^xsd:dateTime ;
+  dpv:hasPurpose dpv:ServiceProvision ; dpv:hasPersonalData pd:Health .
+<#read-1> a prov:Activity ;
+  prov:wasAssociatedWith <https://assistant.example/app> ;
+  prov:startedAtTime "2026-11-11T08:00:00Z"^^xsd:dateTime ;
+  dpv:hasPurpose dpv:ServiceProvision ; dpv:hasPersonalData pd:Health .
+# An unrecognized literal is deliberately private and must never reach the projection.
+<#read-0> <https://example.org/value> "value" .

@@ -95,6 +95,35 @@ export async function writeRdf(
 }
 
 /**
+ * Create a new member of `container` with `POST` and a `Slug`. WAC needs only Append on the
+ * container for this, whereas a `PUT` create also needs Append on the new resource itself.
+ * The dataset names its subject up front, so the server must honour the slug exactly.
+ *
+ * @throws ResourceWriteError on any non-2xx answer, or (status 502) when the server created
+ *   the member under another URL than `${container}${slug}`.
+ */
+export async function createRdfChild(
+  container: string,
+  slug: string,
+  dataset: DatasetCore,
+  fetchImpl: typeof fetch,
+): Promise<{ etag: string | null }> {
+  const expected = new URL(encodeURIComponent(slug), container).href;
+  const body = await serializeTurtle(dataset);
+  const res = await fetchImpl(container, {
+    method: "POST",
+    redirect: "error",
+    headers: { "content-type": "text/turtle", slug },
+    body,
+  });
+  if (!res.ok) throw new ResourceWriteError(expected, res.status);
+  const location = res.headers.get("location");
+  if (!location || new URL(location, container).href !== expected)
+    throw new ResourceWriteError(expected, 502);
+  return { etag: res.headers.get("etag") };
+}
+
+/**
  * Delete a resource. A `404`/`410` is treated as success (idempotent delete —
  * the resource is already gone, the caller's desired end state).
  *

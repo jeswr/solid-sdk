@@ -2,6 +2,7 @@
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 
 # 0003 Domain-model code generation in the workspace
 
@@ -49,6 +50,27 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
    new `@jeswr/rdf-serialize/wrapper` subpath. Every consumer already depends on
    rdf-serialize, and `escapeIri` (the write chokepoint those helpers call) lives there.
 
+## Reviewed date datatype mappings
+
+The runtime's immutable `VALIDATED_DATATYPES` inventory controls generator admission;
+its mapper controls the emitted TypeScript type. Normalized SHACL and the manifest
+retain the exact declared datatype.
+
+| `sh:datatype` | JS / TypeScript surface | Read / write policy |
+|---|---|---|
+| `xsd:date` | `Date` | Calendar date; nonzero timezone offsets drop. Writes UTC calendar date with `Z`. |
+| `xsd:dateTime` | `Date` | Optional timezone; zoneless reads mean UTC. Writes UTC instant with `Z`. |
+| `xsd:dateTimeStamp` | `Date` | Mandatory `Z` or offset within ±14:00. Shares dateTime's expanded-year conversion, representability drops and UTC `Z` writer. |
+
+DateTimeStamp support admits health profiles using OWL-Time `time:inXSDDateTimeStamp`
+without a bypass or hand-written accessor. Exported `isXsdDateTimeStamp` checks the
+dateTime lexical and requires its timezone. Exact literal datatype identity applies
+in both directions between dateTime and dateTimeStamp. Malformed, zoneless and
+unrepresentable stamps drop per field severity; Invalid Date writes drop. Sets use
+the same guards and emit `Date[]` data / `Set<Date>` accessors. This extension admits
+no other new datatype. Bookmark, listening and scheduling artifacts must regenerate
+byte-identically.
+
 ## Phase map
 
 | Phase | State | Workspace target | Bead |
@@ -67,7 +89,7 @@ phase M composite kind, and pass solid-bookmark's 42-test suite verbatim through
 | P2 form runtime and generated RDFa forms (unify `solid-components`) | later | new package | sst-ild.4.4 |
 | P3 bounded N3 mapping layer for cross-vocabulary migration | later | federation-codegen | sst-ild.4.5 |
 | P4 ESM generation service | later | app or tool | sst-ild.4.6 |
-| P5 fleet migration (drawing, chat-interop; task-model split; memory needs a sector) | drawing implemented: generated nine-field Scene plus facade; original 90-test oracle unchanged; remaining packages later | `packages/solid-drawing`, remaining model packages | sst-ild.4.7 |
+| P5 fleet migration (drawing, chat-interop; task-model split; memory needs a sector) | drawing implemented: generated nine-field Scene plus facade; original 90-test oracle unchanged. pod-type-index implemented: generated TypeRegistration, TypeIndex and Profile entities; facade enumerates sibling subjects and retains blank-node/policy support. Remaining models later | `packages/solid-drawing`, `packages/pod-type-index`, remaining model packages | sst-ild.4.7 |
 | ild.9 `@jeswr/rdf-serialize/wrapper` helpers and consumer rewire | open | `packages/rdf-serialize` plus six consumers | sst-ild.9 |
 
 G5 deliberately preserves canonical-first singleton migration reads. With

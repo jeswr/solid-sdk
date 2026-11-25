@@ -10,7 +10,7 @@ import { assertion, type MemoryClientInfo, MemoryNode, memoryContext } from "./m
 import { PD, purposeDenied } from "./personal-policy.js";
 import { withPodReadLimits } from "./pod-operation.js";
 import type { PodPort } from "./pod-port.js";
-import { defineTool, type PodTool, toolText } from "./tool.js";
+import { AUDITED_READ_HINTS, defineTool, type PodTool, READ_HINTS, toolText } from "./tool.js";
 
 const VCARD = "http://www.w3.org/2006/vcard/ns#";
 const SCHEMA = "https://schema.org/";
@@ -109,6 +109,7 @@ export function createPersonalTools(
         aliases: [],
         title: "Get profile contacts",
         readOnly: true,
+        annotations: READ_HINTS,
         description:
           "Read the owner's in-pod WebID name, emails and phones under pd:Contact policy. Requires purpose and configured clientInfo.",
         inputSchema: z.object({ purpose: purposeSchema }),
@@ -165,6 +166,7 @@ export function createPersonalTools(
         aliases: [],
         title: "Get addresses",
         readOnly: true,
+        annotations: AUDITED_READ_HINTS,
         description:
           "Read definitely-true Current owner addresses, at now or an ISO date/instant. Calendar validity bounds are inclusive. Requires purpose and configured clientInfo.",
         inputSchema: z.object({ purpose: purposeSchema, at: instantSchema.optional() }),
@@ -227,6 +229,7 @@ export function createPersonalTools(
         aliases: [],
         title: "Query health facts",
         readOnly: true,
+        annotations: AUDITED_READ_HINTS,
         description:
           "Read definitely-true Current owner health facts only with an explicit purpose permit. Requires a successful private audit write and readOnly:false.",
         inputSchema: z.object({

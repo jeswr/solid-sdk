@@ -102,6 +102,14 @@
   z-index: 2;
   background: var(--surface-2);
 }
+.suite-table-viewport[data-sticky-header="false"] thead {
+  position: static;
+}
+.suite-table-viewport tbody tr[data-drop="true"] {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+  background: var(--primary-soft);
+}
 .suite-table-viewport tr {
   display: grid;
   width: 100%;

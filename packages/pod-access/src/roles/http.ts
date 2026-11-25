@@ -16,6 +16,8 @@ export interface Document {
   policy: RolePolicy;
   etag: string | null;
 }
+/** Internal raw access document: privacy proofs must not lose conditions through role projection. */
+export type AccessDocument = Omit<Document, "policy">;
 export interface Snapshot {
   resource: string;
   resourceEtag: string | null;
@@ -106,6 +108,11 @@ export async function boundedBody(
 }
 const mismatches = new WeakMap<object, "wac" | "acp">();
 const mixed = new WeakSet<object>();
+const unsupportedAcp = new WeakSet<object>();
+/** Internal classification of policy projection refusals, preserving transport/parser failures. */
+export function isUnsupportedAcpPolicy(error: unknown): boolean {
+  return unsupportedAcp.has(error as object);
+}
 /**
  * Whether `error` is a refusal for access documents that mix models (both vocabularies in one
  * document, or ancestors of different models), so the resource's model cannot be decided.
@@ -158,24 +165,77 @@ export async function detectModel(
   const { model, ownUrl } = await discover(resource, options, true);
   return { model: model ?? "unknown", ownUrl };
 }
-async function discover(
+/**
+ * Read ACRs without projecting conditional/deny policies into roles. Privacy proofs opt into
+ * requireAncestorAccess: every existing walked resource must advertise readable access rules.
+ */
+export async function readAccessDocuments(
   resource: string,
-  options: Pick<RolesOptions, "fetch" | "root" | "implementation">,
-  detecting: boolean,
-): Promise<Omit<Snapshot, "model"> & { model: Snapshot["model"] | undefined }> {
+  options: Pick<RolesOptions, "fetch" | "root"> & { requireAncestorAccess?: boolean },
+) {
+  const snapshot = await discover(resource, options, true);
+  return { model: snapshot.model ?? "unknown", ownUrl: snapshot.ownUrl, documents: snapshot.raw };
+}
+/**
+ * Bounded HEAD walk shared with records-folder discovery. Only strict privacy proofs may skip
+ * not-yet-created folders at the start; a missing parent of an existing resource is never skipped.
+ */
+export async function* walkResources(
+  resource: string,
+  options: Pick<RolesOptions, "fetch" | "root"> & { requireAncestorAccess?: boolean },
+) {
   const root = options.root ?? `${new URL(resource).origin}/`;
   scoped(root, root);
   scoped(resource, root);
-  const documents: Document[] = [];
-  let ownUrl = "";
-  let resourceEtag: string | null = null;
-  let own: Document | undefined;
-  let model: "wac" | "acp" | undefined;
   let current = resource;
+  let found = false;
   for (let depth = 0; ; depth++) {
     if (depth === 64)
       throw roleError("invalid-response", resource, "Ancestor walk exceeds 64 documents");
     const head = await request(current, options, { method: "HEAD" });
+    if (
+      !(
+        options.requireAncestorAccess &&
+        !found &&
+        head.status === 404 &&
+        current.endsWith("/") &&
+        current !== root
+      )
+    ) {
+      found = true;
+      yield { resource: current, head };
+    }
+    if (current === root) break;
+    current = scoped(new URL(current.endsWith("/") ? ".." : ".", current).href, root);
+  }
+}
+async function discover(
+  resource: string,
+  options: Pick<RolesOptions, "fetch" | "root" | "implementation"> & {
+    requireAncestorAccess?: boolean;
+  },
+  detecting: boolean,
+): Promise<
+  Omit<Snapshot, "model"> & { model: Snapshot["model"] | undefined; raw: AccessDocument[] }
+> {
+  const root = options.root ?? `${new URL(resource).origin}/`;
+  const documents: Document[] = [];
+  const raw: AccessDocument[] = [];
+  let ownUrl = "";
+  let resourceEtag: string | null = null;
+  let own: Document | undefined;
+  let model: "wac" | "acp" | undefined;
+  for await (const { resource: current, head } of walkResources(resource, options)) {
+    const strictAncestor = options.requireAncestorAccess;
+    const parentRefusal = () =>
+      roleError(
+        "invalid-response",
+        current,
+        current === root
+          ? `The server's root access rules are unreadable at ${current}`
+          : `The server's parent access rules can't be checked at ${current}`,
+      );
+    if (strictAncestor && !head.ok) throw parentRefusal();
     requireOk(head, current);
     if (current === resource) resourceEtag = head.headers.get("etag");
     const endpoints = [
@@ -187,6 +247,7 @@ async function discover(
     if (endpoints.length > 1)
       throw roleError("invalid-response", current, "Multiple access endpoints");
     const endpoint = endpoints[0];
+    if (strictAncestor && endpoint === undefined) throw parentRefusal();
     if (current === resource && endpoint === undefined)
       throw roleError("unsupported", resource, "Resource advertises no access document");
     if (endpoint !== undefined) {
@@ -195,6 +256,7 @@ async function discover(
         headers: { accept: "text/turtle, application/ld+json;q=0.9" },
       });
       const exists = response.status !== 404;
+      if (strictAncestor && exists && !response.ok) throw parentRefusal();
       if (exists) {
         requireOk(response, endpoint);
         if (response.status !== 200)
@@ -238,29 +300,44 @@ async function discover(
       // non-empty document with neither ACP terms nor a WAC authorization is not evidence of
       // either model: detection stops there and reports unknown (fail closed).
       if (detecting && exists && dataset.size > 0 && !acp && !wac)
-        return { resource, resourceEtag, ownUrl, own, model: undefined, documents };
+        return { resource, resourceEtag, ownUrl, own, model: undefined, documents, raw };
       const decides = !detecting || (exists && dataset.size > 0);
       if (decides) {
         if (model && exists && detected !== model)
           throw mixedModels(endpoint, "Mixed ancestor access models");
         model ??= detected;
       }
+      if (exists)
+        raw.push({
+          url: endpoint,
+          resource: current,
+          model: detected,
+          dataset,
+          etag: response.headers.get("etag"),
+        });
       if (exists && !detecting) {
         // Outside detection every document decides, so the model is set.
         const settled = model as "wac" | "acp";
-        const document: Document = {
-          url: endpoint,
-          resource: current,
-          model: settled,
-          dataset,
-          policy: readPolicy(
+        let policy: RolePolicy;
+        try {
+          policy = readPolicy(
             dataset,
             current,
             endpoint,
             settled,
             options.implementation ?? "css",
             resource,
-          ),
+          );
+        } catch (error) {
+          if (settled === "acp") unsupportedAcp.add(error as object);
+          throw error;
+        }
+        const document: Document = {
+          url: endpoint,
+          resource: current,
+          model: settled,
+          dataset,
+          policy,
           etag: response.headers.get("etag"),
         };
         documents.push(document);
@@ -268,8 +345,6 @@ async function discover(
       }
       if (exists && decides && model === "wac") break;
     }
-    if (current === root) break;
-    current = scoped(new URL(current.endsWith("/") ? ".." : ".", current).href, root);
   }
-  return { resource, resourceEtag, ownUrl, own, model, documents };
+  return { resource, resourceEtag, ownUrl, own, model, documents, raw };
 }

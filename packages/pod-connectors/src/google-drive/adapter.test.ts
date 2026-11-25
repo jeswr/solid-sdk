@@ -1,9 +1,10 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createHash } from "node:crypto";
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store, Writer } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_RUN_LIMITS, RunBudget } from "../core/budget.js";
+import { RunBudget, type RunLimits } from "../core/budget.js";
 import { runImport } from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
 import { Provenance } from "../core/provenance.js";
@@ -16,9 +17,15 @@ import {
   TEST_WEBID,
 } from "../core/testing.js";
 import type { ConnectorState, FixtureRoute } from "../core/types.js";
-import { createGoogleDriveAdapter, DEFAULT_MAX_BYTES, googleDriveAdapter } from "./adapter.js";
+import { SCHEMA } from "../core/vocab.js";
+import {
+  createGoogleDriveAdapter,
+  DEFAULT_MAX_BYTES,
+  googleDriveAdapter,
+  MAX_RETRY_ATTEMPTS,
+} from "./adapter.js";
 import { DRIVE_API, type DriveFile, FILES, GOOGLE_APPS } from "./fixtures.js";
-import { DriveMetadata } from "./vocab.js";
+import { DRIVE_VOCAB, DriveContentRetry, DriveMetadata, DriveRetryEntry } from "./vocab.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -89,6 +96,7 @@ function setup(maxBytes?: number) {
       state?: ConnectorState;
       cursor?: string;
       onState?: (state: ConnectorState) => void;
+      limits?: Partial<RunLimits>;
     } = {},
   ) => {
     const api = vi.fn(fixtureMediaFetch(routes, opts.media ?? {}));
@@ -102,6 +110,7 @@ function setup(maxBytes?: number) {
         state: opts.state,
         cursor: opts.cursor,
         onState: opts.onState,
+        limits: opts.limits,
       }),
     };
   };
@@ -1017,38 +1026,33 @@ describe("Drive malformed snapshots", () => {
         ? jsonBytes(changePages[0] as FixtureRoute) + jsonBytes(fullPages[0] as FixtureRoute)
         : Math.max(...routes.map(jsonBytes)) +
           (mode === "full" ? jsonBytes(fullPages[0] as FixtureRoute) : 0);
-    const originalMaxBytes = DEFAULT_RUN_LIMITS.maxBytes;
-    Object.assign(DEFAULT_RUN_LIMITS, { maxBytes });
-    try {
-      const before = pod.get(metaUrl(BINARY.id));
-      const remove = vi.spyOn(podWriter, "remove");
-      const read = vi.spyOn(podWriter, "read");
-      const write = vi.spyOn(podWriter, "write");
-      const binary = vi.spyOn(podWriter, "writeBinary");
-      const onState = vi.fn();
-      const { api, result } = run(routes, {
-        state,
-        cursor: mode === "full" ? "" : state.cursor,
-        onState,
-      });
-      await expect(result).rejects.toThrow("data budget");
-      expect(api.mock.calls).toHaveLength(mode === "full" ? 3 : mode === "changes" ? 2 : 4);
-      expect(remove).not.toHaveBeenCalled();
-      expect(binary).not.toHaveBeenCalled();
-      expect(read.mock.calls.map(([slug]) => slug)).not.toContain("drive/files/");
-      expect(write.mock.calls.map(([doc]) => doc.slug)).toEqual(["_provenance.ttl"]);
-      expect(pod.get(metaUrl(BINARY.id))).toBe(before);
-      expect(pod.bytes(contentUrl(BINARY))).toBeDefined();
-      expect(onState).toHaveBeenCalledWith(
-        expect.objectContaining({
-          cursor: state.cursor,
-          counts: state.counts,
-          lastOutcome: "error",
-        }),
-      );
-    } finally {
-      Object.assign(DEFAULT_RUN_LIMITS, { maxBytes: originalMaxBytes });
-    }
+    const before = pod.get(metaUrl(BINARY.id));
+    const remove = vi.spyOn(podWriter, "remove");
+    const read = vi.spyOn(podWriter, "read");
+    const write = vi.spyOn(podWriter, "write");
+    const binary = vi.spyOn(podWriter, "writeBinary");
+    const onState = vi.fn();
+    const { api, result } = run(routes, {
+      state,
+      cursor: mode === "full" ? "" : state.cursor,
+      onState,
+      limits: { maxBytes },
+    });
+    await expect(result).rejects.toThrow("data budget");
+    expect(api.mock.calls).toHaveLength(mode === "full" ? 3 : mode === "changes" ? 2 : 4);
+    expect(remove).not.toHaveBeenCalled();
+    expect(binary).not.toHaveBeenCalled();
+    expect(read.mock.calls.map(([slug]) => slug)).not.toContain("drive/files/");
+    expect(write.mock.calls.map(([doc]) => doc.slug)).toEqual(["_provenance.ttl"]);
+    expect(pod.get(metaUrl(BINARY.id))).toBe(before);
+    expect(pod.bytes(contentUrl(BINARY))).toBeDefined();
+    expect(onState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cursor: state.cursor,
+        counts: state.counts,
+        lastOutcome: "error",
+      }),
+    );
   });
 });
 
@@ -1348,5 +1352,462 @@ describe("Drive staged representations", () => {
     expect(remove.mock.calls.map(([slug]) => slug)).toEqual(
       valid.map((name) => `${path(BINARY.id)}${name}`),
     );
+  });
+});
+
+describe("Drive capped convergence", () => {
+  it("keeps per-file copies outside the JSON run byte cap and converges across request-capped runs", async () => {
+    const { run, pod, metadata } = setup(20_000);
+    const files = Array.from({ length: 3 }, (_, i) => ({
+      ...BINARY,
+      id: `large-${i}`,
+      size: "10000",
+    }));
+    const media = Object.fromEntries(
+      files.map((file) => [mediaUrl(file.id), bytes("x".repeat(10_000))]),
+    );
+    let saved = 0;
+    let complete = false;
+    for (let i = 0; i < 3; i++) {
+      try {
+        await run(full(files), { media, limits: { maxRequests: 3, maxBytes: 3000 } }).result;
+        complete = true;
+      } catch (error) {
+        expect(error).toMatchObject({ name: "RunBudgetExceededError", resource: "requests" });
+      }
+      const current = files.filter((file) => pod.bytes(contentUrl(file))).length;
+      expect(current).toBeGreaterThan(saved);
+      saved = current;
+      if (complete) break;
+    }
+    expect(complete).toBe(true);
+    for (const file of files) expect(metadata(file.id).contentSkipped).toBeUndefined();
+  });
+});
+
+it("records a timed-out file as metadata and completes the remaining Drive scan", async () => {
+  vi.useFakeTimers();
+  try {
+    const { run, metadata } = setup();
+    const { api, result } = run(full([BINARY, DOC]), {
+      media: { ...CONTENT, [mediaUrl(BINARY.id)]: () => new Promise<Response>(() => {}) },
+    });
+    const outcome = result.then(
+      (report) => ({ report }),
+      (error: unknown) => ({ error }),
+    );
+    await vi.waitFor(() =>
+      expect(api.mock.calls.some(([input]) => String(input) === mediaUrl(BINARY.id))).toBe(true),
+    );
+    await vi.advanceTimersByTimeAsync(60_001);
+    expect(await outcome).toMatchObject({ report: { cursor: "1000" } });
+    expect(metadata(BINARY.id).contentSkipped).toBe("timeout");
+    expect(metadata(DOC.id).encodings.size).toBe(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("retries a timed-out file on the next incremental run although the change list omits it", async () => {
+  vi.useFakeTimers();
+  try {
+    const { run, metadata, pod } = setup();
+    const retryUrl = `${ROOT}drive/_content-retry.ttl`;
+    const first = run(full([BINARY, DOC]), {
+      media: { ...CONTENT, [mediaUrl(BINARY.id)]: () => new Promise<Response>(() => {}) },
+    });
+    const outcome = first.result.then(
+      (report) => ({ report }),
+      (error: unknown) => ({ error }),
+    );
+    await vi.waitFor(() =>
+      expect(first.api.mock.calls.some(([input]) => String(input) === mediaUrl(BINARY.id))).toBe(
+        true,
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(60_001);
+    const { report } = (await outcome) as { report: { state: ConnectorState } };
+    expect(metadata(BINARY.id).contentSkipped).toBe("timeout");
+    expect(pod.get(retryUrl)).toBeDefined();
+    vi.useRealTimers();
+    // Nothing changed at the source: the change list is empty, yet the file is re-read.
+    const fileUrl = `${DRIVE_API}/files/${encodeURIComponent(BINARY.id)}`;
+    const second = run(
+      [changes({ changes: [], newStartPageToken: "1001" }), { url: fileUrl, json: BINARY }],
+      {
+        media: CONTENT,
+        state: report.state,
+      },
+    );
+    expect((await second.result).cursor).toBe("1001");
+    expect(second.api.mock.calls.some(([input]) => String(input).startsWith(`${fileUrl}?`))).toBe(
+      true,
+    );
+    expect(metadata(BINARY.id).contentSkipped).toBeUndefined();
+    expect(pod.bytes(contentUrl(BINARY))).toBeDefined();
+    expect(pod.get(retryUrl)).toBeUndefined();
+    // Once retried, later runs no longer re-read the file.
+    const third = run([changes({ changes: [], newStartPageToken: "1002" })], {
+      state: (await second.result).state,
+    });
+    await third.result;
+    expect(third.api.mock.calls.some(([input]) => String(input).startsWith(`${fileUrl}?`))).toBe(
+      false,
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("drops a retried file that has since disappeared and keeps one that times out again", async () => {
+  vi.useFakeTimers();
+  try {
+    const { run, pod } = setup();
+    const retryUrl = `${ROOT}drive/_content-retry.ttl`;
+    const stalled = { ...CONTENT, [mediaUrl(BINARY.id)]: () => new Promise<Response>(() => {}) };
+    const timedRun = async (routes: FixtureRoute[], state?: ConnectorState) => {
+      const pending = run(routes, { media: stalled, state });
+      const outcome = pending.result.then((report) => report);
+      await vi.waitFor(() =>
+        expect(
+          pending.api.mock.calls.some(([input]) => String(input) === mediaUrl(BINARY.id)),
+        ).toBe(true),
+      );
+      await vi.advanceTimersByTimeAsync(60_001);
+      return outcome;
+    };
+    const fileUrl = `${DRIVE_API}/files/${encodeURIComponent(BINARY.id)}`;
+    const first = await timedRun(full([BINARY, DOC]));
+    const second = await timedRun(
+      [changes({ changes: [], newStartPageToken: "1001" }), { url: fileUrl, json: BINARY }],
+      first.state,
+    );
+    expect(second.cursor).toBe("1001");
+    expect(pod.get(retryUrl)).toBeDefined();
+    vi.useRealTimers();
+    const third = run(
+      [
+        changes({ changes: [], newStartPageToken: "1002" }),
+        { url: fileUrl, json: { error: {} }, status: 404 },
+      ],
+      { state: second.state },
+    );
+    expect((await third.result).cursor).toBe("1002");
+    expect(pod.get(retryUrl)).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+describe("Drive content retry list", () => {
+  const RetryUrl = `${ROOT}drive/_content-retry.ttl`;
+  const metaIri = (id: string) => `${metaUrl(id)}#it`;
+  const fileUrl = (id: string) => `${DRIVE_API}/files/${encodeURIComponent(id)}`;
+  /** Seeds the list as raw Turtle, so hostile entries bypass the adapter's own writer. */
+  const seed = async (
+    pod: ReturnType<typeof createMemoryPod>,
+    entries: readonly (readonly [string, string | undefined])[],
+  ) => {
+    const lines = entries.flatMap(([iri, attempts]) => [
+      `<#it> <${SCHEMA}hasPart> <${iri}> .`,
+      ...(attempts === undefined ? [] : [`<${iri}> <${DRIVE_VOCAB}retryAttempts> ${attempts} .`]),
+    ]);
+    expect((await pod.fetch(RetryUrl, { method: "PUT", body: lines.join("\n") })).ok).toBe(true);
+  };
+  const saved = (pod: ReturnType<typeof createMemoryPod>) => {
+    const dataset = pod.dataset(RetryUrl);
+    return new Map(
+      [...new DriveContentRetry(`${RetryUrl}#it`, dataset, DataFactory).files].map((iri) => [
+        iri,
+        new DriveRetryEntry(iri, dataset, DataFactory).attempts,
+      ]),
+    );
+  };
+  const retried = (api: { mock: { calls: unknown[][] } }) =>
+    api.mock.calls
+      .map(([input]) => String(input))
+      .filter((url) => url.startsWith(`${DRIVE_API}/files/`) && url.includes("?fields="))
+      .map((url) =>
+        decodeURIComponent(url.slice(`${DRIVE_API}/files/`.length).split("?")[0] ?? ""),
+      );
+  const files = (n: number, prefix = "retry") =>
+    Array.from({ length: n }, (_, i) => ({ ...BINARY, id: `${prefix}-${i}` }));
+
+  it("returns the cursor and carries the unretried rest when the budget runs out mid-retry", async () => {
+    const { run, pod } = setup();
+    const stale = files(3);
+    await seed(
+      pod,
+      stale.map((file) => [metaIri(file.id), "1"]),
+    );
+    const { api, result } = run(
+      [
+        changes({ changes: [], newStartPageToken: "1001" }),
+        ...stale.map((file) => ({ url: fileUrl(file.id), json: file })),
+      ],
+      {
+        cursor: "1000",
+        media: Object.fromEntries(stale.map((file) => [mediaUrl(file.id), bytes()])),
+        limits: { maxRequests: 3 }, // the change page, then one file's metadata and media
+      },
+    );
+    const report = await result;
+    expect(report.cursor).toBe("1001");
+    expect(report.state?.lastOutcome).toBe("success");
+    expect(retried(api)).toEqual(["retry-0"]);
+    expect(pod.bytes(contentUrl(stale[0] as DriveFile))).toBeDefined();
+    expect(saved(pod)).toEqual(
+      new Map([
+        [metaIri("retry-1"), 1],
+        [metaIri("retry-2"), 1],
+      ]),
+    );
+  });
+
+  it("counts timed-out attempts and drops a file after the last allowed one", async () => {
+    vi.useFakeTimers();
+    try {
+      const { run, pod } = setup();
+      const [again, last] = files(2);
+      if (!again || !last) throw new Error("Missing fixture");
+      await seed(pod, [
+        [metaIri(again.id), "1"],
+        [metaIri(last.id), String(MAX_RETRY_ATTEMPTS - 1)],
+      ]);
+      const stall = () => new Promise<Response>(() => {});
+      const { api, result } = run(
+        [
+          changes({ changes: [], newStartPageToken: "1001" }),
+          { url: fileUrl(again.id), json: again },
+          { url: fileUrl(last.id), json: last },
+        ],
+        {
+          cursor: "1000",
+          media: { [mediaUrl(again.id)]: stall, [mediaUrl(last.id)]: stall },
+        },
+      );
+      const outcome = result.then(
+        (report) => ({ report }),
+        (error: unknown) => ({ error }),
+      );
+      // Expire each stalled download only once it has started (retries run in id order).
+      for (const file of [again, last]) {
+        await vi.waitFor(() =>
+          expect(api.mock.calls.some(([input]) => String(input) === mediaUrl(file.id))).toBe(true),
+        );
+        await vi.advanceTimersByTimeAsync(61_000);
+      }
+      expect(await outcome).toMatchObject({ report: { cursor: "1001" } });
+      expect(saved(pod)).toEqual(new Map([[metaIri(again.id), 2]]));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops foreign, non-canonical and malformed entries instead of failing", async () => {
+    const { run, pod } = setup();
+    const [badCount, zero, tooMany, valid] = files(4);
+    if (!badCount || !zero || !tooMany || !valid) throw new Error("Missing fixture");
+    await seed(pod, [
+      ["https://evil.test/integrations/google-drive/drive/files/x/meta.ttl#it", "1"],
+      [`${ROOT}drive/files/~2E~2E/meta.ttl#it`, "1"],
+      [`${ROOT}drive/files/a%2Fb/meta.ttl#it`, "1"],
+      [`${ROOT}drive/files/a/b/meta.ttl#it`, "1"],
+      [`${ROOT}drive/files/x/other.ttl#it`, "1"],
+      [metaIri(badCount.id), '"x"'],
+      [metaIri(zero.id), "0"],
+      [metaIri(tooMany.id), "99"],
+      [metaIri(valid.id), undefined],
+    ]);
+    const { api, result } = run(
+      [
+        changes({ changes: [], newStartPageToken: "1001" }),
+        ...[badCount, zero, tooMany, valid].map((file) => ({ url: fileUrl(file.id), json: file })),
+      ],
+      { cursor: "1000", media: { [mediaUrl(valid.id)]: bytes() } },
+    );
+    expect((await result).cursor).toBe("1001");
+    expect(retried(api)).toEqual([valid.id]);
+    expect(pod.get(RetryUrl)).toBeUndefined();
+  });
+
+  /** A download that only ends when its request signal aborts. */
+  const stalled = (init?: RequestInit) =>
+    new Promise<Response>((_, reject) =>
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason)),
+    );
+  /** Like fixtureMediaFetch, but media handlers receive the request init (and its signal). */
+  const sourceWith = (
+    routes: readonly FixtureRoute[],
+    media: Record<string, (init?: RequestInit) => Promise<Response>>,
+  ) => {
+    const json = fixtureFetch("google-drive", routes);
+    return vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      const handler = media[url];
+      return handler ? handler(init) : json(input, init);
+    });
+  };
+  const seeded = async (n: number) => {
+    const { pod, podWriter } = setup();
+    const stale = files(n);
+    await seed(
+      pod,
+      stale.map((file) => [metaIri(file.id), "1"]),
+    );
+    const routes: FixtureRoute[] = [
+      changes({ changes: [], newStartPageToken: "1001" }),
+      ...stale.map((file) => ({ url: fileUrl(file.id), json: file })),
+    ];
+    return { pod, podWriter, stale, routes };
+  };
+
+  // Ports the round-4 delta-review probe.
+  it("returns the cursor and carries entries when the run deadline expires mid-retry", async () => {
+    const { pod, podWriter, stale, routes } = await seeded(3);
+    const api = sourceWith(
+      routes,
+      Object.fromEntries(stale.map((file) => [mediaUrl(file.id), stalled])),
+    );
+    const report = await runImport({
+      adapter: googleDriveAdapter,
+      mode: "live",
+      sourceAuth: { fetch: api },
+      podWriter,
+      cursor: "1000",
+      limits: { maxDurationMs: 300 },
+    });
+    expect(report.cursor).toBe("1001");
+    expect(retried(api)).toEqual(["retry-0"]);
+    // Interrupted and unreached entries keep their attempt counts.
+    expect(saved(pod)).toEqual(new Map(stale.map((file) => [metaIri(file.id), 1])));
+  });
+
+  it("rejects with the caller's reason when cancelled mid-retry and leaves the list as it was", async () => {
+    const { pod, podWriter, stale, routes } = await seeded(2);
+    const before = pod.get(RetryUrl);
+    const controller = new AbortController();
+    const reason = new Error("user cancelled");
+    const api = sourceWith(
+      routes,
+      Object.fromEntries(
+        stale.map((file) => [
+          mediaUrl(file.id),
+          (init?: RequestInit) => {
+            setTimeout(() => controller.abort(reason), 10);
+            return stalled(init);
+          },
+        ]),
+      ),
+    );
+    await expect(
+      runImport({
+        adapter: googleDriveAdapter,
+        mode: "live",
+        sourceAuth: { fetch: api },
+        podWriter,
+        cursor: "1000",
+        signal: controller.signal,
+      }),
+    ).rejects.toBe(reason);
+    expect(pod.get(RetryUrl)).toBe(before);
+  });
+
+  it("starts no retry within the time reserve, under default and small limits", async () => {
+    vi.useFakeTimers();
+    try {
+      for (const [limits, elapse] of [
+        [undefined, 1_800_000 - 30_000], // 30 s left: under one response timeout
+        [{ maxDurationMs: 1_000 }, 600], // 400 ms left: under half of the allowance
+      ] as const) {
+        const { pod, stale, routes } = await seeded(2);
+        const api = sourceWith(routes, {});
+        // Time passes outside any source request (which has its own response timeout): while
+        // the retry list is read, after the change set is stored.
+        const podWriter = createFetchPodWriter({
+          adapterId: "google-drive",
+          webId: TEST_WEBID,
+          profileDocumentUrl: TEST_PROFILE_DOC,
+          podRoot: TEST_POD_ROOT,
+          fetch: async (input, init) => {
+            if ((init?.method ?? "GET") === "GET" && String(input) === RetryUrl)
+              await vi.advanceTimersByTimeAsync(elapse);
+            return pod.fetch(input, init);
+          },
+        });
+        const report = await runImport({
+          adapter: googleDriveAdapter,
+          mode: "live",
+          sourceAuth: { fetch: api },
+          podWriter,
+          cursor: "1000",
+          ...(limits ? { limits } : {}),
+        });
+        expect(report.cursor).toBe("1001");
+        expect(retried(api)).toEqual([]);
+        expect(saved(pod)).toEqual(new Map(stale.map((file) => [metaIri(file.id), 1])));
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts other per-file retry failures as attempts and still returns the cursor", async () => {
+    const { pod, podWriter } = setup();
+    const [forbidden, broken, exhausted] = files(3);
+    if (!forbidden || !broken || !exhausted) throw new Error("Missing fixture");
+    await seed(pod, [
+      [metaIri(forbidden.id), "1"],
+      [metaIri(broken.id), "1"],
+      [metaIri(exhausted.id), String(MAX_RETRY_ATTEMPTS - 1)],
+    ]);
+    const api = sourceWith(
+      [
+        changes({ changes: [], newStartPageToken: "1001" }),
+        { url: fileUrl(forbidden.id), json: forbidden },
+        { url: fileUrl(broken.id), json: { error: {} }, status: 500 },
+        { url: fileUrl(exhausted.id), json: exhausted },
+      ],
+      {
+        [mediaUrl(forbidden.id)]: async () =>
+          Response.json({ error: { reason: "cannotDownloadAbusiveFile" } }, { status: 403 }),
+        [mediaUrl(exhausted.id)]: async () => new Response(null, { status: 503 }),
+      },
+    );
+    const report = await runImport({
+      adapter: googleDriveAdapter,
+      mode: "live",
+      sourceAuth: { fetch: api },
+      podWriter,
+      cursor: "1000",
+    });
+    expect(report.cursor).toBe("1001");
+    expect(report.skipped).toBe(3);
+    expect(retried(api)).toEqual([broken.id, exhausted.id, forbidden.id].sort());
+    expect(saved(pod)).toEqual(
+      new Map([
+        [metaIri(forbidden.id), 2],
+        [metaIri(broken.id), 2],
+      ]),
+    );
+  });
+
+  it("keeps at most 10,000 entries and rewrites an oversized list", async () => {
+    const { run, pod } = setup();
+    const ids = Array.from({ length: 10_005 }, (_, i) => `big-${String(i).padStart(5, "0")}`);
+    await seed(
+      pod,
+      ids.map((id) => [metaIri(id), "1"]),
+    );
+    const { api, result } = run([changes({ changes: [], newStartPageToken: "1001" })], {
+      cursor: "1000",
+      limits: { maxRequests: 1 },
+    });
+    expect((await result).cursor).toBe("1001");
+    expect(retried(api)).toEqual([]);
+    const kept = saved(pod);
+    expect(kept.size).toBe(10_000);
+    expect(kept.has(metaIri("big-09999"))).toBe(true);
+    expect(kept.has(metaIri("big-10000"))).toBe(false);
   });
 });

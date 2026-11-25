@@ -1909,8 +1909,14 @@ it("recovers a journaled series edit when the account provider starts", async ()
     ...source.data,
     recurrence: { ...source.data.recurrence!, exceptDate: [source.data.start] },
   };
-  const journal = new SeriesJournal(account.webId, localStorage);
+  const journal = new SeriesJournal(account.webId, account.storageUrl, vi.fn());
   journal.put({
+    v: 1,
+    id: "recovery",
+    startedAt: "2026-11-01",
+    webId: account.webId,
+    storageUrl: account.storageUrl,
+    operation: { mode: "this", action: "edit" },
     created: { kind: "create", url: replacementUrl, data: replacement },
     original: { kind: "update", url: source.url, etag: source.etag as string, data: original },
     replacementEtag,
@@ -1938,4 +1944,59 @@ it("asks a signed-out account to sign in before starting calendar recovery", asy
   mocks.status = "signed-out";
   const mounted = await mount(h(CalendarProvider, { children: null }));
   expect(mounted.host.textContent).toContain("Sign in to open your Calendar");
+});
+
+it("retries pending recovery on a journal storage event and shows conflicts without blocking Calendar", async () => {
+  const { SeriesJournal, intentsKey } = await import("../src/apps/calendar/state/intents");
+  const account = mocks.session as PodSession;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  const source = (await io.loadEvent(`${DEMO_ROOT}calendar/work/stand-up.ttl`)) as NonNullable<
+    Awaited<ReturnType<typeof io.loadEvent>>
+  >;
+  const replacementUrl = `${DEMO_ROOT}calendar/work/attention.ttl`;
+  const replacement = { ...source.data, uid: "attention", recurrence: undefined };
+  const replacementEtag = await io.saveEvent(replacementUrl, replacement, { create: true });
+  // Both documents were edited by another client before Calendar resumed its operation.
+  await io.saveEvent(
+    source.url,
+    { ...source.data, name: "Remote master" },
+    { etag: source.etag as string },
+  );
+  await io.saveEvent(
+    replacementUrl,
+    { ...replacement, name: "Remote copy" },
+    { etag: replacementEtag as string },
+  );
+  const mounted = await mount(screen());
+  await settle();
+  const journal = new SeriesJournal(account.webId, account.storageUrl, vi.fn());
+  const record = {
+    v: 1 as const,
+    id: "attention",
+    startedAt: "2026-11-01",
+    webId: account.webId,
+    storageUrl: account.storageUrl,
+    operation: { mode: "this" as const, action: "edit" as const },
+    created: { kind: "create" as const, url: replacementUrl, data: replacement },
+    original: { kind: "delete" as const, url: source.url, etag: source.etag as string },
+    replacementEtag,
+  };
+  journal.put(record);
+  for (const key of [null, "other"]) {
+    await act(() => window.dispatchEvent(new window.StorageEvent("storage", { key })));
+    expect(journal.list()).toHaveLength(1);
+  }
+  await act(() =>
+    window.dispatchEvent(
+      new window.StorageEvent("storage", {
+        key: `${intentsKey(account.webId, account.storageUrl)}attention`,
+      }),
+    ),
+  );
+  await settle();
+  expect(journal.list()).toEqual([]);
+  expect((await io.loadEvent(source.url))?.data.name).toBe("Remote master");
+  expect((await io.loadEvent(replacementUrl))?.data.name).toBe("Remote copy");
+  expect(document.body.textContent).toContain("you may see duplicate occurrences");
+  expect(mounted.host.querySelector(".cal-toolbar")).not.toBeNull();
 });

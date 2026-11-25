@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
+import { RunBudget } from "../core/budget.js";
 import { asStore } from "../core/dataset.js";
 import { fixtureFetch } from "../core/fixture-fetch.js";
 import type { ImportContext } from "../core/types.js";
@@ -25,6 +26,7 @@ async function importEntries(entries: DropboxEntry[], existing?: Store) {
     forClass: doc.forClass,
   }));
   const outcome = await dropboxAdapter.import({
+    budget: new RunBudget("fixture"),
     api: fixtureFetch("dropbox", [
       {
         method: "POST",

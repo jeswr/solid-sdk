@@ -29,7 +29,11 @@ export default defineConfig({
     // A production build is deterministic (no on-demand dev compiles timing out tests).
     command: `next build --webpack && next start --hostname 127.0.0.1 -p ${port}`,
     // SUITE_E2E=1 lets the server honour a SUITE_TEST_CAPS passed to this run (shell/lib/env.ts).
-    env: { NEXT_PUBLIC_DEV_FIXTURES: "1", SUITE_E2E: "1" },
+    env: {
+      NEXT_PUBLIC_DEV_FIXTURES: "1",
+      NEXT_PUBLIC_SUITE_MCP_URL: "https://mcp.example/mcp",
+      SUITE_E2E: "1",
+    },
     url: `http://127.0.0.1:${port}/dev/components`,
     reuseExistingServer: false,
     timeout: 300000,

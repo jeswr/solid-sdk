@@ -35,7 +35,7 @@ const wrappers = {
     createPodScopedFetch(BASE, { fetch: transport }),
   createGuardedFetch: (transport: typeof fetch) =>
     createGuardedFetch({
-      fetch: transport,
+      pinningFetch: transport,
       dnsLookup: async () => [{ address: "93.184.216.34", family: 4 }],
     }),
 };

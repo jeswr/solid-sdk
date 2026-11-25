@@ -116,7 +116,8 @@ describe("SSRF guard wiring (the real @jeswr/guarded-fetch policy)", () => {
       async () => new Response(null, { status: 302, headers: { location: "/next" } }),
     );
     const fetch = createGuardedFetch({
-      fetch: transport,
+      // Inert fixture transport: no socket or independent DNS lookup is opened.
+      pinningFetch: transport,
       dnsLookup: async () => [{ address: "8.8.8.8", family: 4 }],
     });
     await expect(fetchGranary("https://granary.io/x", { fetch })).rejects.toThrow(/redirect/i);

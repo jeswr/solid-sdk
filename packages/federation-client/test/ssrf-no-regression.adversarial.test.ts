@@ -140,7 +140,7 @@ describe("no-SSRF-regression — end-to-end guard (createGuardedFetch, offline)"
   it("REFUSES every blocked literal as a full URL before reaching fetch", async () => {
     for (const addr of MUST_BE_NON_PUBLIC) {
       const { fetch, calls } = okFetch();
-      const guarded = createGuardedFetch({ fetch, dnsLookup: PublicDns });
+      const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PublicDns });
       // Bracket v6 literals for the URL host.
       const host = addr.includes(":") ? `[${addr}]` : addr;
       await expect(guarded(`https://${host}/doc`)).rejects.toBeInstanceOf(SsrfError);
@@ -154,7 +154,7 @@ describe("no-SSRF-regression — end-to-end guard (createGuardedFetch, offline)"
       { address: "127.0.0.1", family: 4 },
     ];
     const { fetch, calls } = okFetch();
-    const guarded = createGuardedFetch({ fetch, dnsLookup: dns });
+    const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: dns });
     await expect(guarded("https://rebind.example/doc")).rejects.toBeInstanceOf(SsrfError);
     expect(calls).toEqual([]);
   });
@@ -162,7 +162,7 @@ describe("no-SSRF-regression — end-to-end guard (createGuardedFetch, offline)"
   it("ALLOWS a public literal as a full URL (guard is not block-everything)", async () => {
     for (const addr of MUST_BE_PUBLIC) {
       const { fetch, calls } = okFetch();
-      const guarded = createGuardedFetch({ fetch, dnsLookup: PublicDns });
+      const guarded = createGuardedFetch({ pinningFetch: fetch, dnsLookup: PublicDns });
       const host = addr.includes(":") ? `[${addr}]` : addr;
       await expect(guarded(`https://${host}/doc`)).resolves.toBeInstanceOf(Response);
       expect([addr, calls.length]).toEqual([addr, 1]);

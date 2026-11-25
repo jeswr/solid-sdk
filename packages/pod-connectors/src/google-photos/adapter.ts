@@ -10,6 +10,7 @@
  * Google web clients are confidential, so live mode runs the code→token
  * exchange through the maintainer's token proxy. Demoable now against fixtures.
  */
+
 import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
@@ -50,15 +51,18 @@ export const googlePhotosAdapter: IntegrationAdapter = {
   fixtures: () => GOOGLE_PHOTOS_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = ctx.budget;
     ctx.progress({ label: "Indexing your photo library…", done: 0, total: 1 });
     const list = await getJson<GPhotosMediaItemsList>(
       ID,
       ctx.api,
       `${API}/mediaItems?pageSize=100`,
+      undefined,
     );
 
     const doc = ctx.resolve("media/photos.ttl");
     const items = new Store();
+    budget.items(list.mediaItems?.length ?? 0);
     for (const m of list.mediaItems ?? []) {
       const isVideo = m.mimeType.startsWith("video/");
       const item = new MediaItem(`${doc}#media-${m.id}`, items, DataFactory).mark(

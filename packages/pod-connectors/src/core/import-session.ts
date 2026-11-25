@@ -170,11 +170,13 @@ export function createImportSession(
     if (index !== -1) written.splice(index, 1);
   }
   let finalized = false;
-  async function finish() {
+  /** Records the run, then runs `committed` while this run still holds the connector. */
+  async function finish(committed?: () => Promise<void>) {
     if (finalized) return;
     finalized = true;
     try {
       await recordRun();
+      await committed?.();
     } finally {
       active.delete(claim);
     }

@@ -7,3 +7,4 @@ export {
   limitConstraint,
   mandateCredential,
 } from "./mandate.js";
+export { type RemovePermissionOptions, reissueMandate, removePermission } from "./reduce.js";

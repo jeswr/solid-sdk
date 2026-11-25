@@ -8,6 +8,7 @@ export default defineConfig({
     react: 'src/react.ts',
     outbox: 'src/outbox.ts',
     merge: 'src/merge.ts',
+    journal: 'src/journal.ts',
   },
   format: ['esm'],
   target: 'es2022',

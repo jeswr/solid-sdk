@@ -15,6 +15,7 @@
  * confidential, so live mode runs code→token through the maintainer proxy.
  * Demoable now against recorded fixtures.
  */
+
 import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
@@ -54,15 +55,18 @@ export const youtubeAdapter: IntegrationAdapter = {
   fixtures: () => YOUTUBE_FIXTURES,
 
   async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const budget = ctx.budget;
     ctx.progress({ label: "Fetching your liked videos…", done: 0, total: 2 });
     const liked = await getJson<YTVideosList>(
       ID,
       ctx.api,
       `${API}/videos?part=snippet,contentDetails&myRating=like&maxResults=50`,
+      undefined,
     );
 
     const videosDoc = ctx.resolve("media/videos.ttl");
     const videos = new Store();
+    budget.items(liked.items.length);
     for (const v of liked.items) {
       const item = new MediaItem(`${videosDoc}#video-${v.id}`, videos, DataFactory).mark(
         CLASSES.VideoObject,
@@ -87,10 +91,12 @@ export const youtubeAdapter: IntegrationAdapter = {
       ID,
       ctx.api,
       `${API}/playlists?part=snippet,contentDetails&mine=true&maxResults=50`,
+      undefined,
     );
 
     const listsDoc = ctx.resolve("media/playlists.ttl");
     const playlists = new Store();
+    budget.items(lists.items.length);
     for (const p of lists.items) {
       const pl = new MusicPlaylist(`${listsDoc}#playlist-${p.id}`, playlists, DataFactory).mark();
       pl.name = p.snippet.title;

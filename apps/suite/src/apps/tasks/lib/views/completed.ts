@@ -8,13 +8,14 @@ export interface CompletedGroup {
   tasks: TaskView[];
 }
 
-/** Page is zero-based. Filter and sort before slicing; groups can span page boundaries. */
+/** Page is zero-based; omit it to group the full result before applying view preferences. */
 export function completedGroups(
   tasks: readonly TaskView[],
-  options: { projectUrl?: string; page: number },
+  options: { projectUrl?: string; page?: number },
   now: Date,
 ): { groups: CompletedGroup[]; hasMore: boolean } {
-  if (!Number.isSafeInteger(options.page) || options.page < 0) throw new TypeError("Invalid page.");
+  if (options.page !== undefined && (!Number.isSafeInteger(options.page) || options.page < 0))
+    throw new TypeError("Invalid page.");
   const today = localDayKey(now);
   const yesterday = localDayKey(addDays(now, -1));
   const completed = tasks
@@ -28,7 +29,11 @@ export function completedGroups(
       (a, b) => (b.completedAt?.getTime() ?? -Infinity) - (a.completedAt?.getTime() ?? -Infinity),
     );
   const groups = new Map<string | undefined, CompletedGroup>();
-  for (const task of completed.slice(options.page * 50, (options.page + 1) * 50)) {
+  const rows =
+    options.page === undefined
+      ? completed
+      : completed.slice(options.page * 50, (options.page + 1) * 50);
+  for (const task of rows) {
     const dayKey = task.completedAt && localDayKey(task.completedAt);
     let group = groups.get(dayKey);
     if (!group) {
@@ -46,5 +51,8 @@ export function completedGroups(
     }
     group.tasks.push(task);
   }
-  return { groups: [...groups.values()], hasMore: (options.page + 1) * 50 < completed.length };
+  return {
+    groups: [...groups.values()],
+    hasMore: options.page !== undefined && (options.page + 1) * 50 < completed.length,
+  };
 }

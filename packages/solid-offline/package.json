@@ -33,6 +33,10 @@
       "types": "./dist/outbox.d.ts",
       "import": "./dist/outbox.js"
     },
+    "./journal": {
+      "types": "./dist/journal.d.ts",
+      "import": "./dist/journal.js"
+    },
     "./merge": {
       "types": "./dist/merge.d.ts",
       "import": "./dist/merge.js"

@@ -11,6 +11,7 @@ import { useNow } from "../../state/clock";
 import { useTasks } from "../../state/tasks-context";
 import { rescheduleTasks } from "../../state/view-actions";
 import { CrossProjectView } from "./cross-project-view";
+import { GroupedTasks } from "./grouped-tasks";
 import { ReschedulePopover } from "./reschedule-popover";
 import { ViewGroup } from "./view-group";
 
@@ -39,63 +40,65 @@ export function TodayView() {
         </Button>
       }
     >
-      {groups.overdue.length > 0 && (
-        <ViewGroup
-          title="Overdue"
-          rows={groups.overdue}
-          collapsible
-          destructive
-          container={{ kind: "day" }}
-          actions={
-            <ReschedulePopover
-              open={reschedule}
-              onOpenChange={setReschedule}
-              onCloseFocus={() => {
-                (rescheduleButton.current?.isConnected && !rescheduleButton.current.disabled
-                  ? rescheduleButton.current
-                  : heading.current
-                )?.focus();
-              }}
-              onSelect={(dayKey) => {
-                setBusy(true);
-                void rescheduleTasks(groups.overdue, dayKey, tasks)
-                  .then((result) => {
-                    setFailures(result.failed.map(({ item }) => item));
-                  })
-                  .finally(() => setBusy(false));
-              }}
-              trigger={
-                <Button
-                  ref={rescheduleButton}
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                >
-                  Reschedule all
-                </Button>
-              }
-            />
-          }
-        />
-      )}
-      {failures.length > 0 && (
-        <div role="alert">
-          <p>Couldn't reschedule these tasks:</p>
-          <ul>
-            {failures.map((task) => (
-              <li key={task.url}>{task.title}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {rows.length > 0 && (
-        <ViewGroup
-          title="Today"
-          rows={groups.today}
-          container={{ kind: "day", dayKey: localDayKey(now) }}
-        />
-      )}
+      <GroupedTasks rows={rows}>
+        {groups.overdue.length > 0 && (
+          <ViewGroup
+            title="Overdue"
+            rows={groups.overdue}
+            collapsible
+            destructive
+            container={{ kind: "day" }}
+            actions={
+              <ReschedulePopover
+                open={reschedule}
+                onOpenChange={setReschedule}
+                onCloseFocus={() => {
+                  (rescheduleButton.current?.isConnected && !rescheduleButton.current.disabled
+                    ? rescheduleButton.current
+                    : heading.current
+                  )?.focus();
+                }}
+                onSelect={(dayKey) => {
+                  setBusy(true);
+                  void rescheduleTasks(groups.overdue, dayKey, tasks)
+                    .then((result) => {
+                      setFailures(result.failed.map(({ item }) => item));
+                    })
+                    .finally(() => setBusy(false));
+                }}
+                trigger={
+                  <Button
+                    ref={rescheduleButton}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                  >
+                    Reschedule all
+                  </Button>
+                }
+              />
+            }
+          />
+        )}
+        {failures.length > 0 && (
+          <div role="alert">
+            <p>Couldn't reschedule these tasks:</p>
+            <ul>
+              {failures.map((task) => (
+                <li key={task.url}>{task.title}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {rows.length > 0 && (
+          <ViewGroup
+            title="Today"
+            rows={groups.today}
+            container={{ kind: "day", dayKey: localDayKey(now) }}
+          />
+        )}
+      </GroupedTasks>
     </CrossProjectView>
   );
 }

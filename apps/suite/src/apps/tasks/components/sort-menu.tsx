@@ -4,11 +4,17 @@ import {
   Button,
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@jeswr/suite-ui";
 import { ArrowDownWideNarrow } from "lucide-react";
+import { type GroupMode, groupOptions } from "../lib/views/grouping";
 import type { SortMode } from "../lib/views/project-groups";
 import { useTasksPreferences } from "../state/preferences";
 
@@ -21,9 +27,11 @@ const options: Record<SortMode, string> = {
 export function SortMenu({
   viewId,
   defaultSort = "manual",
+  crossProject = false,
 }: {
   viewId: string;
   defaultSort?: SortMode;
+  crossProject?: boolean;
 }) {
   const { preferences, dispatch } = useTasksPreferences();
   const value = preferences.sort[viewId] ?? defaultSort;
@@ -36,6 +44,7 @@ export function SortMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
+        <DropdownMenuLabel>Sort</DropdownMenuLabel>
         <DropdownMenuRadioGroup
           value={value}
           onValueChange={(value) => dispatch({ type: "sort", viewId, value: value as SortMode })}
@@ -46,6 +55,26 @@ export function SortMenu({
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Group by</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuRadioGroup
+              value={preferences.groupBy[viewId] ?? "none"}
+              onValueChange={(value) =>
+                dispatch({ type: "groupBy", viewId, value: value as GroupMode })
+              }
+            >
+              {Object.entries(groupOptions)
+                .filter(([value]) => value !== "project" || crossProject)
+                .map(([value, label]) => (
+                  <DropdownMenuRadioItem key={value} value={value}>
+                    {label}
+                  </DropdownMenuRadioItem>
+                ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
       </DropdownMenuContent>
     </DropdownMenu>
   );

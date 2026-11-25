@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { describe, expect, it } from "vitest";
@@ -92,7 +93,11 @@ describe("owner-controlled approval records", () => {
     await expect(
       decide({ id: ID }, { approve: true, expiresAt: new Date("2029-01-01Z") }, opts(pod)),
     ).rejects.toThrow("still finishing");
-    const result = await decide({ id: ID }, { approve: true }, opts(pod));
+    const result = await decide(
+      { id: ID },
+      { approve: true, expiresAt: new Date("2028-01-01Z") },
+      opts(pod),
+    );
     expect(result.status).toBe("approved");
     // The pinned record was resumed, then settled as approved.
     expect(pod.etag(intent)).toBe('"v2"');
@@ -294,7 +299,7 @@ describe("owner-controlled approval records", () => {
       await expect(decide({ id: ID }, { approve: false }, opts(pod))).rejects.toThrow(message);
       expect(puts(pod)).toEqual([]);
     };
-    await refuse('<x>; rel="http://www.w3.org/ns/solid/acp#accessControl"', "acp");
+    await refuse('<x>; rel="http://www.w3.org/ns/solid/acp#accessControl"', "unknown");
     await refuse("<https://evil.example/records.acl>; rel=acl", /.+/);
     // Without a Link header the folder's access model is unknown: no conventional sibling is guessed.
     await refuse(null, "unknown access model");

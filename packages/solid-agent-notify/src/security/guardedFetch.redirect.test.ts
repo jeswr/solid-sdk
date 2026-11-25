@@ -9,6 +9,8 @@ vi.mock("@jeswr/guarded-fetch/node", async () => {
     createNodeGuardedFetch: (options: Parameters<typeof createGuardedFetch>[0]) =>
       createGuardedFetch({
         ...options,
+        // Inert fixture transport: no socket or independent DNS lookup is opened.
+        pinningFetch: transport,
         fetch: transport,
         dnsLookup: async () => [{ address: "8.8.8.8", family: 4 }],
       }),

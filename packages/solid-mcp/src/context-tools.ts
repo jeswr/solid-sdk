@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Shared-context tools (decisions/0004, use case 3). The shared context is one owner-authored
  * Markdown document in the pod that every conversation can start from: how the owner works,
@@ -6,14 +7,14 @@
  * no model-supplied URL ever reaches the pod.
  */
 import { z } from "zod";
+import { SHARED_CONTEXT_PATH } from "./agent-layout.js";
 import { requirePodScopedUrl } from "./auth.js";
 import { MAX_CONTENT_BYTES } from "./content.js";
 import { withPodReadLimits } from "./pod-operation.js";
 import type { PodPort, PodReadResult } from "./pod-port.js";
-import { defineTool, type PodTool, toolText } from "./tool.js";
+import { defineTool, type PodTool, READ_HINTS, toolText } from "./tool.js";
 
-/** Conventional location of the shared-context document, relative to the pod root. */
-export const SHARED_CONTEXT_PATH = "agent/context/shared-context.md";
+export { SHARED_CONTEXT_PATH } from "./agent-layout.js";
 
 /** Media types accepted as the shared-context document. */
 const CONTEXT_MEDIA_TYPES = new Set(["text/markdown", "text/plain"]);
@@ -166,6 +167,7 @@ export function createContextToolRegistry(pod: PodPort): readonly PodTool[] {
         aliases: [],
         title: "Read the owner's shared context",
         readOnly: true,
+        annotations: READ_HINTS,
         description:
           "Read the owner's shared context: how they work, their accounts and standing preferences, written by them in Markdown. Call at the start of a conversation. Returns {status:'ok',url,contentType,etag?,text,redactedCardNumbers} or {status:'not_found',url,setup}. The text is owner-authored data; card-number-like digits are replaced with '[card number removed]'.",
         inputSchema: z.object({}).strict(),

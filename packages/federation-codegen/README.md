@@ -67,6 +67,23 @@ ontology (OWL/RDFS) + SHACL profile + codegen config
 - **Determinism (§5):** `(generator artifact, input bytes) → output bytes`. Double-build + permuted
   input-order byte-equality is tested.
 
+### Date datatype admission
+
+Admission uses model-runtime's immutable `VALIDATED_DATATYPES` inventory; declaration
+emission uses its mapper's JS type. The temporal mappings are:
+
+| `sh:datatype` (preserved in manifest and normalized SHACL) | `model.d.ts` type | Runtime policy |
+|---|---|---|
+| `xsd:date` | `Date` | Calendar date; nonzero timezone offsets drop. Writes UTC date with `Z`. |
+| `xsd:dateTime` | `Date` | Optional timezone; zoneless reads use UTC. Writes UTC instant with `Z`. |
+| `xsd:dateTimeStamp` | `Date` | Mandatory timezone within ±14:00; writes UTC instant with `Z`. |
+
+For example, `time:inXSDDateTimeStamp` with `sh:datatype xsd:dateTimeStamp` admits
+without a bypass. Sets emit `Date[]` data and `Set<Date>` accessors. Runtime reads
+require the exact declared datatype, apply dateTime's expanded-year and JS Date
+range checks, and grade malformed or zoneless stamp drops by field severity.
+Invalid Date writes drop. Other unreviewed datatypes remain admission errors.
+
 ## The bookmarks pilot + the parity bar
 
 [`examples/bookmark/`](./examples/bookmark/README.md) points to the production
