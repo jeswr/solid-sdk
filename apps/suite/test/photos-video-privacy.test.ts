@@ -1618,13 +1618,19 @@ describe("track decisions for empty and mislabelled tracks", () => {
   it.each([
     "avc1",
     "mp4a",
-    "zzzz",
     "tx3g",
   ])("refuses a metadata-handler track with a %s sample entry rather than deleting it", (format) => {
     const { bytes } = staticFile("mebx", { handler: "meta", formats: [sample(format)] });
     const before = bytes.slice();
     expect(() => stripVideoLocation(bytes)).toThrow(VideoLocationError);
     expect(bytes).toEqual(before);
+  });
+  it.each([
+    "zzzz",
+    "fdsc",
+    "dbgi",
+  ])("removes a metadata-handler track in the unlisted telemetry format %s", (format) => {
+    scrub(staticFile("mebx", { handler: "meta", formats: [sample(format)] }).bytes, GPS);
   });
   it("still removes a metadata-handler track whose entries are all metadata formats", () => {
     scrub(

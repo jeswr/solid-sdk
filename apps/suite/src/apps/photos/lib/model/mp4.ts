@@ -202,6 +202,7 @@ const TIMED_METADATA_FORMATS = new Set([
 const VIDEO_OBJECT_TYPES = new Set([0x20, 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x6a]);
 const AUDIO_OBJECT_TYPES = new Set([0x40, 0x66, 0x67, 0x68, 0x69, 0x6b]);
 const TEXT_HANDLERS = new Set(["text", "sbtl", "subt", "clcp", "cc  ", "tx3g"]);
+const TEXT_FORMATS = new Set(["tx3g", "text", "wvtt", "stpp", "sbtt", "c608", "c708"]);
 const CODEC_BOXES = new Set(
   "avcC hvcC dvcC dvvC av1C vpcC esds dOps dfLa alac dac3 dec3 btrt pasp colr clap fiel gama chan wave mdcv clli CoLL SmDm".split(
     " ",
@@ -730,7 +731,11 @@ function trackIsRemoved(bytes: Uint8Array, handler: string, descriptions: Atom[]
   const formats = descriptions.map((entry) => entry.type);
   if (!formats.length) refuse(refusal("a track with no sample description"));
   if (TIMED_METADATA_HANDLERS.has(handler)) {
-    if (formats.every((format) => TIMED_METADATA_FORMATS.has(format))) return true;
+    // Removing is the private direction, so vendor telemetry formats this list does not name
+    // (action cameras, drones) are dropped too. Only an entry that claims to be picture, sound
+    // or text refuses, because that track may hold the user's content under the wrong handler.
+    if (!formats.some((format) => SAMPLE_FORMATS.has(format) || TEXT_FORMATS.has(format)))
+      return true;
     refuse(refusal("a metadata track in a format"));
   }
   if (AV_HANDLERS.has(handler)) {
