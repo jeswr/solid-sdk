@@ -2,16 +2,20 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import { correlate, rankSuspicions } from "@jeswr/health-insights";
 import {
   buildMeal,
   buildSymptom,
   deriveExposures,
+  type ExposureData,
   type FoodItemData,
   isSymptomType,
   Meal,
+  type MealData,
   parseMeal,
   parseSymptom,
   Symptom,
+  type SymptomData,
   type SymptomType,
 } from "@jeswr/solid-health-diary";
 import { NS } from "@jeswr/suite-vocab";
@@ -48,6 +52,7 @@ export type DiaryDraft = CommonDraft &
         ingredients: string;
         tags: string[];
         items?: FoodItemData[];
+        exposures?: ExposureData[];
         itemIngredients?: string[];
       }
     | {
@@ -57,7 +62,7 @@ export type DiaryDraft = CommonDraft &
         durationMinutes: number | null;
       }
   );
-export type DiaryEntry = DiaryDraft & { url: string; etag: string | null };
+export type DiaryEntry = DiaryDraft & { url: string; etag: string | null; readOnly?: boolean };
 export interface DiaryReadFailure {
   url: string;
   error: unknown;
@@ -186,15 +191,21 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
       throw new TypeError("Invalid diary entry URL");
     return safe;
   };
-  async function readEntry(url: string): Promise<DiaryEntry | null> {
-    scoped(url);
-    const { document, etag } = await store.read(url);
+  async function readEntry(url: string, priority = false): Promise<DiaryEntry | null> {
+    const safe = assertWithinPodScope(base, url);
+    const legacy = /^(meals|symptoms)\/(?:\d{4}\/(?:0[1-9]|1[0-2])\/)?[A-Za-z0-9_-]+\.ttl$/.test(
+      safe.slice(base.length),
+    );
+    if (!legacy) scoped(url);
+    const { document, etag } = await readDocument(url, priority);
     const fields = new DiaryFields(`${url}#it`, document, DataFactory);
     const compatible = packageDataset(document);
     const meal = parseMeal(url, compatible);
     if (meal)
       return {
         kind: "meal",
+        readOnly: legacy,
+        exposures: meal.exposures ?? [],
         url,
         etag,
         at: meal.startTime,
@@ -221,6 +232,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
       throw new TypeError("Invalid symptom duration");
     return {
       kind: "symptom",
+      readOnly: legacy,
       url,
       etag,
       at: symptom.onset,
@@ -231,20 +243,56 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     };
   }
   async function read(url: string): Promise<DiaryEntry> {
-    const entry = await readEntry(url);
+    const entry = await readEntry(url, true);
     if (!entry) throw new TypeError("This diary entry could not be read");
     return entry;
   }
   type MonthResult = { entries: DiaryEntry[]; failures: DiaryReadFailure[] };
   let catalogue: Promise<string[]> | undefined;
   const monthsCache = new Map<string, Promise<MonthResult>>();
-  function invalidate() {
+  // Legacy data is read-only here. Keep listings and URL-keyed documents across suite mutations.
+  const legacyListings = new Map<string, Promise<string[]>>();
+  const legacyEntries = new Map<string, Promise<DiaryEntry | null>>();
+  function invalidateSuite() {
     catalogue = undefined;
     monthsCache.clear();
   }
+  /** Focus refreshes membership; targeted notifications and Retry also discard documents. */
+  function invalidate(url?: string) {
+    invalidateSuite();
+    for (const cache of [legacyListings, legacyEntries]) {
+      for (const key of cache.keys()) {
+        if (
+          url === undefined ||
+          (cache === legacyListings && url !== base && base.startsWith(url)) ||
+          ((url.startsWith(`${base}meals/`) || url.startsWith(`${base}symptoms/`)) &&
+            (key.startsWith(url) || url.startsWith(key)))
+        )
+          cache.delete(key);
+      }
+    }
+  }
+  // One six-slot pool for every consumer. Entry/mutation reads precede queued listing reads.
+  let activeReads = 0;
+  const waiting: (() => void)[] = [];
+  async function readDocument(url: string, priority = false) {
+    if (activeReads >= 6)
+      await new Promise<void>((resolve) => {
+        if (priority) waiting.unshift(resolve);
+        else waiting.push(resolve);
+      });
+    else activeReads++;
+    try {
+      return await store.read(url);
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else activeReads--;
+    }
+  }
   async function monthUrls(): Promise<string[]> {
     try {
-      const { document } = await store.read(base);
+      const { document } = await readDocument(base);
       return [...new Container(base, document, DataFactory).contains]
         .map((item) => item.value)
         .filter(
@@ -255,30 +303,49 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
       throw error;
     }
   }
-  async function readMonth(month: string): Promise<MonthResult> {
-    const { document } = await store.read(month);
-    const urls = [
+  async function childUrls(container: string, legacy: boolean): Promise<string[]> {
+    let document: DatasetCore;
+    try {
+      document = (await readDocument(container)).document;
+    } catch (error) {
+      if (legacy && missing(error) && /\/(meals|symptoms)\/$/.test(container)) return [];
+      throw error;
+    }
+    return [
       ...new Set(
-        [...new Container(month, document, DataFactory).contains].map((item) => item.value),
+        [...new Container(container, document, DataFactory).contains].map((item) => item.value),
       ),
     ].filter(
-      (url) => url.startsWith(month) && /^[A-Za-z0-9_-]+\.ttl$/.test(url.slice(month.length)),
+      (url) =>
+        url.startsWith(container) &&
+        (/^[A-Za-z0-9_-]+\.ttl$/.test(url.slice(container.length)) ||
+          (legacy &&
+            /^(meals|symptoms)\/(?:\d{4}\/)?$/.test(container.slice(base.length)) &&
+            (/\/(meals|symptoms)\/$/.test(container) ? /^\d{4}\/$/ : /^(0[1-9]|1[0-2])\/$/).test(
+              url.slice(container.length),
+            ))),
     );
+  }
+  async function readDocuments(urls: string[], cachedLegacy = false): Promise<MonthResult> {
     const entries: DiaryEntry[] = [],
       failures: DiaryReadFailure[] = [];
-    let cursor = 0;
     await Promise.all(
-      Array.from({ length: Math.min(6, urls.length) }, async () => {
-        while (cursor < urls.length) {
-          const url = urls[cursor++] as string;
+      urls
+        .filter((url) => !url.endsWith("/"))
+        .map(async (url) => {
+          let task = cachedLegacy ? legacyEntries.get(url) : undefined;
+          if (!task) {
+            task = readEntry(url);
+            if (cachedLegacy) legacyEntries.set(url, task);
+          }
           try {
-            const entry = await readEntry(url);
+            const entry = await task;
             if (entry) entries.push(entry);
           } catch (error) {
+            if (legacyEntries.get(url) === task) legacyEntries.delete(url);
             failures.push({ url, error });
           }
-        }
-      }),
+        }),
     );
     return { entries, failures };
   }
@@ -296,33 +363,83 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     const result: DiaryEntry[] = [];
     if (options.cached && !catalogue) catalogue = monthUrls();
     const months = await (options.cached ? (catalogue as Promise<string[]>) : monthUrls());
-    // Entries are filed under the local month of the device that wrote them, which may be in a
-    // different zone from this one, so widen the folder window by ZONE_SLACK; entries are
-    // filtered exactly below.
-    const first = range && diaryDay(new Date(range.start.getTime() - ZONE_SLACK)).slice(0, 7);
-    const last = range && diaryDay(new Date(range.end.getTime() - 1 + ZONE_SLACK)).slice(0, 7);
-    for (const month of months) {
-      const key = month.slice(base.length, -1);
-      if (first && last && (key < first || key > last)) continue;
-      let task = options.cached ? monthsCache.get(month) : undefined;
-      if (!task) {
-        task = readMonth(month);
-        if (options.cached) monthsCache.set(month, task);
-      }
-      let loaded: MonthResult;
-      try {
-        loaded = await task;
-      } catch (error) {
-        // One unreadable month folder counts as unreadable, like a bad entry, and is retried next time.
-        monthsCache.delete(month);
-        options.failures?.push({ url: month, error });
-        continue;
-      }
+    // Suite folders use the writer's local month; Coeliac folders use UTC. Widen both
+    // for zone boundaries, then apply the precise timestamp filter to the results.
+    const lower = range && new Date(range.start.getTime() - ZONE_SLACK);
+    const upper = range && new Date(range.end.getTime() - 1 + ZONE_SLACK);
+    const first = lower && diaryDay(lower).slice(0, 7);
+    const last = upper && diaryDay(upper).slice(0, 7);
+    const utcFirst = lower?.toISOString().slice(0, 7).replace("-", "/");
+    const utcLast = upper?.toISOString().slice(0, 7).replace("-", "/");
+    function collect(loaded: MonthResult) {
       options.failures?.push(...loaded.failures);
       for (const entry of loaded.entries) {
         if (!range || (entry.at >= range.start && entry.at < range.end)) result.push(entry);
       }
     }
+    async function loadMonth(month: string) {
+      const cache = monthsCache;
+      let task = options.cached ? cache.get(month) : undefined;
+      if (!task) {
+        task = childUrls(month, false).then((urls) => readDocuments(urls));
+        if (options.cached) cache.set(month, task);
+      }
+      try {
+        collect(await task);
+      } catch (error) {
+        if (cache.get(month) === task) cache.delete(month);
+        options.failures?.push({ url: month, error });
+      }
+    }
+    async function walkLegacy(container: string) {
+      let task = options.cached ? legacyListings.get(container) : undefined;
+      if (!task) {
+        task = childUrls(container, true);
+        if (options.cached) legacyListings.set(container, task);
+      }
+      let urls: string[];
+      try {
+        urls = await task;
+      } catch (error) {
+        if (legacyListings.get(container) === task) legacyListings.delete(container);
+        options.failures?.push({ url: container, error });
+        return;
+      }
+      // Drop removed documents, including descendants of a removed year/month container.
+      const children = new Set(urls);
+      for (const key of legacyEntries.keys()) {
+        if (!key.startsWith(container)) continue;
+        const tail = key.slice(container.length);
+        const slash = tail.indexOf("/");
+        const child = slash < 0 ? key : `${container}${tail.slice(0, slash + 1)}`;
+        if (!children.has(child)) legacyEntries.delete(key);
+      }
+      await Promise.all([
+        readDocuments(urls, options.cached).then(collect),
+        ...urls
+          .filter((url) => {
+            if (!url.endsWith("/")) return false;
+            if (!utcFirst || !utcLast) return true;
+            const bucket = url
+              .slice(base.length)
+              .replace(/^(meals|symptoms)\//, "")
+              .slice(0, -1);
+            const length = bucket.length; // YYYY or YYYY/MM, both lexically ordered UTC buckets
+            return bucket >= utcFirst.slice(0, length) && bucket <= utcLast.slice(0, length);
+          })
+          .map(walkLegacy),
+      ]);
+    }
+    await Promise.all([
+      ...months
+        .filter((month) => {
+          const key = month.slice(base.length, -1);
+          return !first || !last || (key >= first && key <= last);
+        })
+        .map(loadMonth),
+      walkLegacy(`${base}meals/`),
+      walkLegacy(`${base}symptoms/`),
+    ]);
     return result.sort((a, b) => b.at.getTime() - a.at.getTime() || a.url.localeCompare(b.url));
   }
   async function container(path: string) {
@@ -338,6 +455,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     existing?: DiaryEntry,
     restoreUrl?: string,
   ): Promise<DiaryEntry> {
+    if (existing?.readOnly) throw new TypeError("Coeliac entries are read-only");
     validate(draft);
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(id)) throw new TypeError("Invalid diary ID");
     const source = existing ? scoped(existing.url) : undefined;
@@ -348,7 +466,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     const etag = existing ? version(existing.etag) : undefined;
     const moving = source !== undefined && source !== url;
     const condition = existing && !moving ? { etag: etag as string } : { create: true as const };
-    const current = existing ? await store.read(source as string) : null;
+    const current = existing ? await readDocument(source as string, true) : null;
     if (moving && current?.etag !== etag) throw new HealthIoError(412, "move diary entry");
     const previous = packageDataset(current ? current.document : emptyHealthDocument());
     const previousMeal = parseMeal(source ?? url, previous);
@@ -378,7 +496,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
             note: draft.note,
             patient: owner,
             items,
-            exposures: deriveExposures(items),
+            exposures: diaryExposures(items, draft.exposures ?? previousMeal?.exposures),
           })
         : buildSymptom(url, {
             ...previousSymptom,
@@ -403,7 +521,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     } catch (error) {
       if (!conflict(error)) throw error;
       // Creation timestamps differ when retrying a create after a lost response.
-      const actual = await store.read(url);
+      const actual = await readDocument(url, true);
       const intended = [...document].filter((quad) => quad.predicate.value !== `${NS.DCT}created`);
       const stored = [...actual.document].filter(
         (quad) => quad.predicate.value !== `${NS.DCT}created`,
@@ -431,10 +549,11 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
         }
       }
     }
-    invalidate();
+    invalidateSuite();
     return saved;
   }
   async function remove(entry: DiaryEntry): Promise<void> {
+    if (entry.readOnly) throw new TypeError("Coeliac entries are read-only");
     const url = scoped(entry.url);
     const etag = version(entry.etag);
     const response = await fetch(url, {
@@ -443,7 +562,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
       headers: { "if-match": etag },
     });
     if (response.ok || response.status === 404) {
-      invalidate();
+      invalidateSuite();
       return;
     }
     if (response.status === 412) {
@@ -451,7 +570,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
         await read(url);
       } catch (error) {
         if (missing(error)) {
-          invalidate();
+          invalidateSuite();
           return;
         }
         throw error;
@@ -538,4 +657,48 @@ export function diaryPatterns(
       a.food.localeCompare(b.food) ||
       a.kind.localeCompare(b.kind),
   );
+}
+
+/** Preserve explicit meal-level observations while recalculating product-derived exposures. */
+export const MANUAL_EXPOSURE_NOTE = "Manually logged exposure";
+export function diaryExposures(
+  items: FoodItemData[],
+  exposures: readonly ExposureData[] = [],
+): ExposureData[] {
+  const result = new Map(deriveExposures(items).map((value) => [value.trigger, value]));
+  const strength = { absent: 0, "possible-undeclared": 1, trace: 2, present: 3 };
+  for (const exposure of exposures) {
+    if (exposure.note !== MANUAL_EXPOSURE_NOTE) continue;
+    const derived = result.get(exposure.trigger);
+    if (!derived || strength[exposure.exposureLevel] >= strength[derived.exposureLevel])
+      result.set(exposure.trigger, {
+        trigger: exposure.trigger,
+        exposureLevel: exposure.exposureLevel,
+        note: MANUAL_EXPOSURE_NOTE,
+      });
+  }
+  return [...result.values()];
+}
+/** Use the shared engine over both storage layouts; future events are excluded. */
+export function likelyDiaryTriggers(entries: readonly DiaryEntry[], now = new Date()) {
+  const meals: MealData[] = [],
+    symptoms: SymptomData[] = [];
+  for (const entry of entries) {
+    if (entry.at > now) continue;
+    if (entry.kind === "meal")
+      meals.push({
+        id: entry.url,
+        startTime: entry.at,
+        items: entry.items ?? entry.foods.map((name) => ({ name })),
+        exposures: entry.exposures ?? deriveExposures(entry.items ?? []),
+      });
+    else
+      symptoms.push({
+        id: entry.url,
+        onset: entry.at,
+        symptomType: entry.symptomType,
+        ...(entry.severity === null ? {} : { severity: entry.severity }),
+      });
+  }
+  return rankSuspicions(correlate(meals, symptoms)).filter((score) => score.exposureCount > 0);
 }

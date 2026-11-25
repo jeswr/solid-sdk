@@ -20,6 +20,7 @@ import {
 } from "../lib/data/diary";
 import { diaryDay } from "../lib/diary-time";
 import type { Range } from "../lib/model";
+import { DiaryModeProvider } from "./diary-mode-context";
 import { type AsyncState, useHealth } from "./health-context";
 
 interface Edit {
@@ -65,22 +66,35 @@ export function DiaryProvider({ children }: { children: ReactNode }) {
     diary.invalidate();
     setRevision((value) => value + 1);
   }, [diary]);
+  const refresh = useCallback(() => {
+    diary.invalidate(diary.base);
+    setRevision((value) => value + 1);
+  }, [diary]);
   useEffect(() => {
     if (!activated) return;
+    const changed = new Set<string>();
     const off = session.subscribe((url) => {
+      const revalidate = url !== diary.base && diary.base.startsWith(url);
+      const legacy =
+        url.startsWith(`${diary.base}meals/`) || url.startsWith(`${diary.base}symptoms/`);
       if (
-        pending.current ||
+        (pending.current && !legacy && !revalidate) ||
         !(url.startsWith(diary.base) || (url.endsWith("/") && diary.base.startsWith(url)))
       )
         return;
       clearTimeout(timer.current);
-      timer.current = setTimeout(retry, 100);
+      changed.add(url);
+      timer.current = setTimeout(() => {
+        for (const path of changed) diary.invalidate(path);
+        changed.clear();
+        setRevision((value) => value + 1);
+      }, 100);
     });
     return () => {
       off();
       clearTimeout(timer.current);
     };
-  }, [session, diary, retry, activated]);
+  }, [session, diary, activated]);
   const load = useCallback(
     async (range?: Range): Promise<Snapshot> => {
       const generation = completed.current;
@@ -148,7 +162,7 @@ export function DiaryProvider({ children }: { children: ReactNode }) {
     } finally {
       pending.current--;
       setBusy((current) => current.filter((entry) => entry !== busyUrl));
-      retry();
+      refresh();
     }
   }
   async function remove(entry: DiaryEntry) {
@@ -176,12 +190,14 @@ export function DiaryProvider({ children }: { children: ReactNode }) {
     } finally {
       pending.current--;
       setBusy((current) => current.filter((url) => url !== entry.url));
-      retry();
+      refresh();
     }
   }
   return (
     <Context value={{ activate, load, revision, edits, busy, retry, save: persist, remove }}>
-      {children}
+      <DiaryModeProvider key={`${session.webId}:${session.storageUrl}`}>
+        {children}
+      </DiaryModeProvider>
     </Context>
   );
 }

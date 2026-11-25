@@ -3,21 +3,30 @@
 "use client";
 import { Button, EmptyState, ErrorState, Input, LoadingSkeleton } from "@jeswr/suite-ui";
 import Link from "next/link";
-import { useState } from "react";
-import { diaryPatterns } from "../lib/data/diary";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { diaryPatterns, likelyDiaryTriggers } from "../lib/data/diary";
 import { useDiary } from "../state/diary-context";
+import { useDiaryMode } from "../state/diary-mode-context";
 import { useHealth } from "../state/health-context";
 import { DiaryReadNote } from "./diary-read-note";
 
 export function DiaryPatterns() {
   const { state, failures, retry } = useDiary();
   const { clock } = useHealth();
+  const mode = useDiaryMode();
+  const { forVisit } = mode;
+  const coeliacVisit = useSearchParams().get("mode") === "coeliac";
+  useEffect(() => {
+    if (coeliacVisit) forVisit();
+  }, [coeliacVisit, forVisit]);
   const [minimum, setMinimum] = useState("2"),
     [maximum, setMaximum] = useState("48");
   const [window, setWindow] = useState({ min: 2, max: 48 });
   const [error, setError] = useState("");
   const entries = state.status === "ready" || state.status === "empty" ? state.data : [];
   const rows = diaryPatterns(entries, window.min, window.max, clock);
+  const triggers = mode.enabled ? likelyDiaryTriggers(entries) : [];
   return (
     <div className="hlt-page">
       <header className="hlt-page-header">
@@ -25,7 +34,9 @@ export function DiaryPatterns() {
           <p className="hlt-eyebrow">FOOD & SYMPTOMS</p>
           <h1>Diary patterns</h1>
         </div>
-        <Link href="/health/diary">Back to diary</Link>
+        <Link href={mode.enabled ? "/health/diary?mode=coeliac" : "/health/diary"}>
+          Back to diary
+        </Link>
       </header>
       <p>
         This is a pattern summary, not a diagnosis or medical advice. Meals and symptoms can occur
@@ -89,6 +100,43 @@ export function DiaryPatterns() {
         windows.
       </p>
       <DiaryReadNote count={failures.length} />
+      {mode.enabled && state.status !== "loading" && state.status !== "error" && (
+        <section aria-label="Likely triggers">
+          <h2>Likely triggers</h2>
+          <aside role="note" aria-label="Not medical advice">
+            <p>
+              This is information, not medical advice — decision support, not diagnosis. Always
+              discuss anything here with your clinician.
+            </p>
+          </aside>
+          <p>
+            Ranked patterns from your logged exposures and symptoms. Counts include suspected
+            exposures; they do not establish a cause. Emergency symptoms are excluded.
+          </p>
+          {triggers.length ? (
+            <ol>
+              {triggers.map((score) => (
+                <li key={score.trigger}>
+                  <h3>{score.trigger.replaceAll("-", " ")}</h3>
+                  <p>
+                    Symptoms followed {score.followedCount} of {score.exposureCount} exposures
+                    within {score.lagWindowMin}–{score.lagWindowMax} hours. Evidence:{" "}
+                    {score.attributedSymptomCount} symptom entries. Confidence: {score.confidence}.
+                  </p>
+                  <p>
+                    {score.disclaimer}
+                    {score.confounded
+                      ? ` Shared with other triggers: ${score.confounders.join(", ")}.`
+                      : ""}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p>No logged trigger exposures to compare yet.</p>
+          )}
+        </section>
+      )}
       {state.status === "loading" ? (
         <LoadingSkeleton label="Loading diary patterns" />
       ) : state.status === "error" ? (

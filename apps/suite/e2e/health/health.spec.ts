@@ -412,3 +412,35 @@ test("exports a FHIR bundle for a date range and refuses a reversed range", asyn
   );
   await accessible(page);
 });
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+test("Coeliac visit mode logs suspected exposures, shows ranked evidence and persists only on request", async ({
+  page,
+}) => {
+  await ready(page, "/health/diary?mode=coeliac", "Diary");
+  await expect(page.getByLabel("Track a food intolerance", { exact: true })).toBeChecked();
+  await expect(page.getByText("Food intolerance tracking is on for this visit.")).toBeVisible();
+  await page.getByRole("button", { name: "Log meal", exact: true }).first().click();
+  const sheet = page.getByRole("dialog", { name: "Log meal", exact: true });
+  await sheet.getByLabel("Foods (one per line)").fill("Bread");
+  await sheet.getByLabel("Contains gluten", { exact: true }).check();
+  await sheet.getByLabel("Suspected exposure", { exact: true }).check();
+  await sheet.getByRole("button", { name: "Save meal", exact: true }).click();
+  await expect(sheet).toBeHidden();
+  await page.getByRole("link", { name: "Patterns", exact: true }).click();
+  const triggers = page.getByRole("region", { name: "Likely triggers", exact: true });
+  await expect(triggers).toContainText("gluten");
+  await expect(triggers).toContainText("of 1 exposures");
+  await expect(triggers).toContainText("decision support, not diagnosis");
+  await page.goto("/health/diary");
+  await page.reload();
+  await expect(page.getByLabel("Track a food intolerance", { exact: true })).not.toBeChecked();
+  await ready(page, "/health/diary?mode=coeliac", "Diary");
+  await page.getByRole("button", { name: "Keep it on", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Keep it on", exact: true })).toHaveCount(0);
+  await page.goto("/health/diary");
+  await page.reload();
+  await expect(page.getByLabel("Track a food intolerance", { exact: true })).toBeChecked();
+  await expect(page.getByLabel("Trigger class", { exact: true })).toHaveValue("gluten");
+  await accessible(page);
+});

@@ -1,7 +1,8 @@
 // AUTHORED-BY Claude Sonnet 5
+
+import { PATTERN_NOT_DIAGNOSIS, type SuspicionScore } from "@jeswr/health-insights";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { PATTERN_NOT_DIAGNOSIS, type SuspicionScore } from "@/lib/inference/types";
 import { LiftMeter } from "./lift-meter";
 
 function suspicion(over: Partial<SuspicionScore> = {}): SuspicionScore {

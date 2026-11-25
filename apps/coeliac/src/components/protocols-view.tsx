@@ -1,5 +1,11 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 "use client";
+import {
+  CLINICIAN_CAVEAT,
+  nextAction,
+  type ProtocolEvent,
+  promptFor,
+} from "@jeswr/health-insights";
 /**
  * The Protocols / Challenges view (DESIGN §3, Brief 2B) — run an elimination
  * challenge: start one from a suspicion, advance the phases, record outcomes, and
@@ -14,7 +20,6 @@
 import { useCallback, useState } from "react";
 import type { StoredConclusion, StoredProtocol } from "@/lib/cache/diary-store";
 import { triggerLabel } from "@/lib/off/exposure-display";
-import { CLINICIAN_CAVEAT, nextAction, type ProtocolEvent, promptFor } from "@/lib/protocol/fsm";
 import { storedProtocolToData } from "@/lib/protocol/persist";
 import { useInsights } from "@/lib/session/use-insights";
 import { useProtocolActions } from "@/lib/session/use-protocol-actions";
@@ -144,7 +149,9 @@ function ConcludedCard({
       </div>
       {conclusion?.note ? <p className="protocol__note">{conclusion.note}</p> : null}
       {conclusion?.reviewAfter ? (
-        <p className="protocol__review">Worth re-testing after {fmtDate(conclusion.reviewAfter)}.</p>
+        <p className="protocol__review">
+          Worth re-testing after {fmtDate(conclusion.reviewAfter)}.
+        </p>
       ) : null}
     </li>
   );
@@ -213,7 +220,8 @@ export function ProtocolsView() {
       <MedicalDisclaimer />
       <p className="protocols__intro">
         An elimination challenge is a careful way to test whether one food really affects you: you
-        leave it out for a while, then reintroduce it in small steps and watch what happens. {CLINICIAN_CAVEAT}
+        leave it out for a while, then reintroduce it in small steps and watch what happens.{" "}
+        {CLINICIAN_CAVEAT}
       </p>
 
       {notice ? (
@@ -269,7 +277,11 @@ export function ProtocolsView() {
           <h2>Concluded</h2>
           <ul className="protocol-list">
             {concluded.map((p) => (
-              <ConcludedCard key={p.ulid} protocol={p} conclusion={conclusionByProtocol.get(p.ulid)} />
+              <ConcludedCard
+                key={p.ulid}
+                protocol={p}
+                conclusion={conclusionByProtocol.get(p.ulid)}
+              />
             ))}
           </ul>
         </section>

@@ -1,13 +1,15 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { buildMeal, SYMPTOM_TYPES, storeToTurtle } from "@jeswr/solid-health-diary";
 import { beforeEach, expect, it, vi } from "vitest";
-import { createDiaryStore } from "../src/apps/health/lib/data/diary";
+import { createDiaryStore, MANUAL_EXPOSURE_NOTE } from "../src/apps/health/lib/data/diary";
+import { createDiaryPreferencesStore } from "../src/apps/health/lib/data/diary-preferences";
 import { createHealthDataStore } from "../src/apps/health/lib/data/store";
 import { diaryDay, diaryMonday, diaryWeek } from "../src/apps/health/lib/diary-time";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { encodeRef } from "../src/lib/refs";
 import type { PodSession } from "../src/lib/session/pod-session";
-import { act, click, h, mount } from "./drive-ui-dom";
+import { act, click, deferred, h, mount } from "./drive-ui-dom";
 
 // Radix portals must be imported after the DOM harness installs document.
 const { HealthProvider } = await import("../src/apps/health/state/health-context");
@@ -16,12 +18,17 @@ const { DiaryPatterns } = await import("../src/apps/health/components/diary-patt
 const { DiaryView } = await import("../src/apps/health/components/diary-view");
 const { SearchView } = await import("../src/apps/health/components/search-view");
 
-const route = vi.hoisted(() => ({ query: "" }));
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(route.query) }));
+const route = vi.hoisted(() => ({ query: "", replace: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(route.query),
+  usePathname: () => "/health/diary",
+  useRouter: () => ({ replace: route.replace }),
+}));
 const ROOT = "https://diary-ui.test/",
   OWNER = `${ROOT}profile#me`;
 beforeEach(() => {
   route.query = "";
+  route.replace.mockClear();
   window.history.replaceState(null, "", "/health/diary");
   vi.stubGlobal("matchMedia", window.matchMedia);
 });
@@ -372,4 +379,379 @@ it("shows pattern counts and the dashboard summary, and finds notes in Health se
       "bloating",
     ),
   );
+});
+
+it("enables Coeliac for a visit, logs suspected exposure and keeps tracking only on request", async () => {
+  const { session, diary, pod } = await setup();
+  route.query = "mode=coeliac";
+  const view = await mount(h(HealthProvider, { session, children: h(DiaryView) }));
+  await eventually(() => expect(button("Keep it on", view.host).disabled).toBe(false));
+  const preferences = createDiaryPreferencesStore(pod.fetch, ROOT, OWNER);
+  expect((await preferences.read()).enabled).toBe(false);
+  await click(button("Log meal", view.host));
+  await fill("#hlt-diary-foods", "Possible gluten");
+  const exposure = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(
+    (input) => input.closest("label")?.textContent?.includes("Contains gluten"),
+  );
+  if (!exposure) throw new Error("Missing gluten toggle");
+  await click(exposure);
+  const suspected = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(
+    (input) => input.closest("label")?.textContent?.includes("Suspected exposure"),
+  );
+  if (!suspected) throw new Error("Missing suspected toggle");
+  await click(suspected);
+  await submit();
+  await eventually(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  const saved = (await diary.list()).find(
+    (entry) => entry.kind === "meal" && entry.foods.includes("Possible gluten"),
+  );
+  expect(saved?.kind === "meal" && saved.exposures).toMatchObject([
+    { trigger: "gluten", exposureLevel: "possible-undeclared" },
+  ]);
+  await click(button("Log symptom", view.host));
+  expect(
+    [...document.querySelectorAll<HTMLOptionElement>("#hlt-diary-type option")].map(
+      (option) => option.value,
+    ),
+  ).toEqual(SYMPTOM_TYPES);
+  await click(button("Cancel"));
+  await act(async () => {
+    const trigger = view.host.querySelector<HTMLSelectElement>("#hlt-diary-trigger");
+    if (!trigger) throw new Error("Missing trigger selector");
+    trigger.value = "lactose";
+    trigger.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect((await preferences.read()).enabled).toBe(false);
+  await click(button("Keep it on", view.host));
+  await eventually(() =>
+    expect(view.host.textContent).not.toContain("Food intolerance tracking is on for this visit."),
+  );
+  expect(await preferences.read()).toEqual({ enabled: true, trigger: "lactose" });
+  await view.render(h(HealthProvider, { session, children: h(DiaryPatterns) }));
+  await eventually(() =>
+    expect(view.host.querySelector('[aria-label="Likely triggers"]')?.textContent).toContain(
+      "of 1 exposures",
+    ),
+  );
+  expect(view.host.textContent).toContain(
+    "This is information, not medical advice — decision support, not diagnosis. Always discuss anything here with your clinician.",
+  );
+});
+it("shows legacy Coeliac entries with their source note and no edit or delete action", async () => {
+  const { session, pod } = await setup();
+  const folder = `${ROOT}health/diary/meals/`,
+    url = `${folder}legacy.ttl`;
+  await pod.fetch(folder, { method: "PUT", headers: { "content-type": "text/turtle" }, body: "" });
+  await pod.fetch(url, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: await storeToTurtle(
+      buildMeal(url, { startTime: new Date(), items: [{ name: "Legacy toast" }] }),
+    ),
+  });
+  const view = await mount(h(HealthProvider, { session, children: h(DiaryView) }));
+  await eventually(() => expect(view.host.textContent).toContain("Legacy toast"));
+  const legacy = [...view.host.querySelectorAll("article")].find((article) =>
+    article.textContent?.includes("Legacy toast"),
+  );
+  expect(legacy?.textContent).toContain("Logged in the Coeliac app");
+  expect(legacy?.querySelectorAll("button")).toHaveLength(0);
+});
+
+it("retains legacy reads after a suite edit and refreshes them on a matching notification", async () => {
+  const { session, pod } = await setup();
+  const folder = `${ROOT}health/diary/meals/`,
+    url = `${folder}legacy.ttl`;
+  await pod.fetch(folder, { method: "PUT", headers: { "content-type": "text/turtle" }, body: "" });
+  const legacyBody = async (name: string) =>
+    storeToTurtle(buildMeal(url, { startTime: new Date(), items: [{ name }] }));
+  await pod.fetch(url, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: await legacyBody("Old toast"),
+  });
+  const gets: string[] = [];
+  const listeners = new Set<(url: string) => void>();
+  const release = deferred<void>();
+  let pauseSave = false,
+    savingPaused = false;
+  const subscribe: PodSession["subscribe"] = (callback) => {
+    listeners.add(callback);
+    return () => listeners.delete(callback);
+  };
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    if (!init?.method || init.method === "GET") gets.push(String(input));
+    if (pauseSave && init?.method === "PUT" && String(input).endsWith("/meal.ttl")) {
+      savingPaused = true;
+      await release.promise;
+    }
+    return pod.fetch(input, init);
+  };
+  const view = await mount(
+    h(HealthProvider, { session: { ...session, fetch, subscribe }, children: h(DiaryView) }),
+  );
+  await eventually(() => expect(button("Edit Porridge", view.host).disabled).toBe(false));
+  expect(view.host.textContent).toContain("Old toast");
+  await click(button("Edit Porridge", view.host));
+  await fill("#hlt-diary-note", "A suite edit");
+  await submit();
+  await eventually(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  await eventually(() => expect(view.host.textContent).toContain("A suite edit"));
+  expect(gets.filter((value) => value === url)).toHaveLength(1);
+  pauseSave = true;
+  await click(button("Edit Porridge", view.host));
+  await fill("#hlt-diary-note", "A second suite edit");
+  await submit();
+  await eventually(() => expect(savingPaused).toBe(true));
+  await pod.fetch(url, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: await legacyBody("Fresh toast"),
+  });
+  await act(async () => {
+    for (const callback of listeners) {
+      callback(`${ROOT}health/diary/2026-11/`);
+      callback(folder);
+    }
+    release.resolve();
+  });
+  await eventually(() => expect(view.host.textContent).toContain("Fresh toast"));
+  expect(gets.filter((value) => value === url)).toHaveLength(2);
+});
+
+function checkbox(label: string) {
+  const input = [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find(
+    (element) => element.closest("label")?.textContent?.includes(label),
+  );
+  if (!input) throw new Error(`Missing checkbox: ${label}`);
+  return input;
+}
+it("waits for late settings before Log/Edit and preserves the stored trigger's manual exposure", async () => {
+  const { session, diary, pod } = await setup();
+  const preferences = createDiaryPreferencesStore(pod.fetch, ROOT, OWNER);
+  await preferences.save({ enabled: true, trigger: "lactose" });
+  await diary.save(
+    {
+      kind: "meal",
+      at: new Date(),
+      foods: ["Manual milk"],
+      ingredients: "",
+      tags: [],
+      note: "",
+      exposures: [{ trigger: "lactose", exposureLevel: "present", note: MANUAL_EXPOSURE_NOTE }],
+    },
+    "manual",
+  );
+  const gate = deferred<void>();
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    if (String(input) === preferences.url && (!init?.method || init.method === "GET"))
+      await gate.promise;
+    return pod.fetch(input, init);
+  };
+  const view = await mount(
+    h(HealthProvider, { session: { ...session, fetch }, children: h(DiaryView) }),
+  );
+  await eventually(() => expect(view.host.textContent).toContain("Manual milk"));
+  expect(button("Log meal", view.host).disabled).toBe(true);
+  expect(button("Log symptom", view.host).disabled).toBe(true);
+  expect(button("Edit Manual milk", view.host).disabled).toBe(true);
+  await act(async () => gate.resolve());
+  await eventually(() => expect(button("Edit Manual milk", view.host).disabled).toBe(false));
+  await click(button("Edit Manual milk", view.host));
+  expect(checkbox("Contains lactose").checked).toBe(true);
+  for (const trigger of ["gluten", "lactose"]) {
+    await act(async () => {
+      const select = view.host.querySelector<HTMLSelectElement>("#hlt-diary-trigger");
+      if (!select) throw new Error("Missing trigger selector");
+      select.value = trigger;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await eventually(() =>
+      expect(checkbox(`Contains ${trigger}`).checked).toBe(trigger === "lactose"),
+    );
+  }
+  await submit();
+  await eventually(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  const saved = (await diary.list()).find(
+    (entry) => entry.kind === "meal" && entry.foods[0] === "Manual milk",
+  );
+  expect(saved?.kind === "meal" && saved.exposures).toMatchObject([
+    { trigger: "lactose", note: MANUAL_EXPOSURE_NOTE },
+  ]);
+});
+it("keeps derived exposures off the manual toggle and recalculates them after an ingredient edit", async () => {
+  const { session, diary, pod } = await setup();
+  await createDiaryPreferencesStore(pod.fetch, ROOT, OWNER).save({
+    enabled: true,
+    trigger: "sulphites",
+  });
+  await diary.save(
+    {
+      kind: "meal",
+      at: new Date(),
+      foods: ["Recipe"],
+      ingredients: "sulphur dioxide",
+      tags: [],
+      note: "",
+    },
+    "derived",
+  );
+  const view = await mount(h(HealthProvider, { session, children: h(DiaryView) }));
+  await eventually(() => expect(button("Edit Recipe", view.host).disabled).toBe(false));
+  await click(button("Edit Recipe", view.host));
+  expect(checkbox("Contains sulphites").checked).toBe(false);
+  await fill("#hlt-diary-note", "Still derived");
+  await submit();
+  await eventually(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  let saved = (await diary.list()).find((entry) => entry.note === "Still derived");
+  expect(saved?.kind === "meal" && saved.exposures?.[0]).toMatchObject({ trigger: "sulphites" });
+  expect(saved?.kind === "meal" && saved.exposures?.[0]?.note).not.toBe(MANUAL_EXPOSURE_NOTE);
+  await click(button("Edit Recipe", view.host));
+  await fill("#hlt-diary-ingredients-0", "rice flour");
+  await submit();
+  await eventually(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  saved = (await diary.list()).find((entry) => entry.note === "Still derived");
+  expect(saved?.kind === "meal" && saved.exposures).toEqual([]);
+});
+it("turns visit-only tracking off locally, removes only mode from the URL and makes no settings write", async () => {
+  const { session, pod } = await setup();
+  route.query = "mode=coeliac&date=2026-11-11";
+  window.history.replaceState(null, "", `/health/diary?${route.query}#diary-entry`);
+  const writes: string[] = [];
+  const fetch: typeof globalThis.fetch = (input, init) => {
+    if (init?.method === "PUT" && String(input).endsWith("/diary-settings.ttl"))
+      writes.push(String(input));
+    return pod.fetch(input, init);
+  };
+  const view = await mount(
+    h(HealthProvider, { session: { ...session, fetch }, children: h(DiaryView) }),
+  );
+  await eventually(() => expect(button("Keep it on", view.host).disabled).toBe(false));
+  await click(checkbox("Track a food intolerance"));
+  expect(checkbox("Track a food intolerance").checked).toBe(false);
+  expect(route.replace).toHaveBeenCalledWith("/health/diary?date=2026-11-11#diary-entry", {
+    scroll: false,
+  });
+  expect(writes).toEqual([]);
+});
+it("keeps settings disabled but allows logging and exposure-preserving edits after a settings read error", async () => {
+  const { session, pod, diary } = await setup();
+  const preferences = createDiaryPreferencesStore(pod.fetch, ROOT, OWNER);
+  await preferences.save({ enabled: true, trigger: "lactose" });
+  const meal = (await diary.list()).find((entry) => entry.kind === "meal");
+  if (meal?.kind !== "meal") throw new Error("Missing meal");
+  await diary.save(
+    {
+      ...meal,
+      exposures: [{ trigger: "lactose", exposureLevel: "present", note: MANUAL_EXPOSURE_NOTE }],
+    },
+    "meal",
+    meal,
+  );
+  route.query = "mode=coeliac";
+  let fail = true;
+  const writes: string[] = [];
+  const fetch: typeof globalThis.fetch = (input, init) => {
+    if (init?.method === "PUT" && String(input).endsWith("/diary-settings.ttl"))
+      writes.push(String(input));
+    if (fail && String(input) === preferences.url && (!init?.method || init.method === "GET"))
+      return Promise.resolve(new Response(null, { status: 503 }));
+    return pod.fetch(input, init);
+  };
+  const view = await mount(
+    h(HealthProvider, { session: { ...session, fetch }, children: h(DiaryView) }),
+  );
+  await eventually(() => expect(view.host.textContent).toContain("Couldn't load diary settings"));
+  expect(checkbox("Track a food intolerance").disabled).toBe(true);
+  expect(button("Log meal", view.host).disabled).toBe(false);
+  expect(button("Log symptom", view.host).disabled).toBe(false);
+  expect(button("Edit Porridge", view.host).disabled).toBe(false);
+  await click(button("Log meal", view.host));
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Contains gluten");
+  await fill("#hlt-diary-foods", "Rice during settings outage");
+  await submit();
+  await eventually(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  await click(button("Log symptom", view.host));
+  await submit();
+  await eventually(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  await click(button("Edit Porridge", view.host));
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain("Contains gluten");
+  await fill("#hlt-diary-note", "Edited during settings outage");
+  await submit();
+  await eventually(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+  const edited = await diary.read(meal.url);
+  expect(edited.kind === "meal" && edited.exposures).toMatchObject([
+    { trigger: "lactose", exposureLevel: "present", note: MANUAL_EXPOSURE_NOTE },
+  ]);
+  expect(view.host.textContent).toContain("Couldn't load diary settings");
+  expect(button("Retry diary settings", view.host).disabled).toBe(false);
+  expect(writes).toEqual([]);
+  fail = false;
+  await click(button("Retry diary settings", view.host));
+  await eventually(() => expect(checkbox("Track a food intolerance").disabled).toBe(false));
+  expect(view.host.querySelector<HTMLSelectElement>("#hlt-diary-trigger")?.value).toBe("lactose");
+  expect(writes).toEqual([]);
+});
+
+it("revalidates legacy listings on storage-root notifications and retries failed documents", async () => {
+  const { session, pod } = await setup();
+  const folder = `${ROOT}health/diary/meals/${new Date().toISOString().slice(0, 7).replace("-", "/")}/`;
+  const original = `${folder}original.ttl`,
+    added = `${folder}added.ttl`;
+  for (const path of ["meals/", `meals/${new Date().getUTCFullYear()}/`, folder]) {
+    await pod.fetch(path.startsWith(ROOT) ? path : `${ROOT}health/diary/${path}`, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: "",
+    });
+  }
+  const put = async (url: string, name: string) =>
+    pod.fetch(url, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: await storeToTurtle(buildMeal(url, { startTime: new Date(), items: [{ name }] })),
+    });
+  await put(original, "Original meal");
+  const gets: string[] = [],
+    listeners = new Set<(url: string) => void>();
+  let fail = false;
+  const fetch: typeof globalThis.fetch = (input, init) => {
+    const url = String(input);
+    if (!init?.method) {
+      if (url.includes("/diary/meals/") || url.includes("/diary/symptoms/")) gets.push(url);
+      if (fail && url === added) return Promise.resolve(new Response(null, { status: 503 }));
+    }
+    return pod.fetch(input, init);
+  };
+  const subscribe: PodSession["subscribe"] = (callback) => {
+    listeners.add(callback);
+    return () => listeners.delete(callback);
+  };
+  const view = await mount(
+    h(HealthProvider, { session: { ...session, fetch, subscribe }, children: h(DiaryView) }),
+  );
+  await eventually(() => expect(view.host.textContent).toContain("Original meal"));
+  await put(added, "Added elsewhere");
+  gets.length = 0;
+  await act(async () => {
+    for (const notify of listeners) notify(ROOT);
+  });
+  await eventually(() => expect(view.host.textContent).toContain("Added elsewhere"));
+  expect(gets.filter((url) => !url.endsWith("/"))).toEqual([added]);
+  // A targeted notification discards this document, then focus retries its failed read.
+  fail = true;
+  await act(async () => {
+    for (const notify of listeners) notify(added);
+  });
+  await eventually(() => expect(view.host.textContent).toContain("1 entry couldn't be read"));
+  fail = false;
+  gets.length = 0;
+  await act(async () => {
+    for (const notify of listeners) notify(ROOT);
+  });
+  await eventually(() => {
+    expect(view.host.textContent).toContain("Added elsewhere");
+    expect(view.host.textContent).not.toContain("1 entry couldn't be read");
+  });
+  expect(gets.filter((url) => !url.endsWith("/"))).toEqual([added]);
 });

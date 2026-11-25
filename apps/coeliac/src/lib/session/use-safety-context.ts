@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Sonnet 5
 "use client";
+import type { SafetyContext } from "@jeswr/health-insights";
 /**
  * Persist the Insights safety-context inputs (DESIGN §4.4 — the confirmed-coeliac
  * toggle, the alarm-symptom checklist, the strict-adherence toggle) in the durable
@@ -13,7 +14,6 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { storedSafetyContextToContext } from "../inference/from-cache";
-import type { SafetyContext } from "../inference/types";
 import { useSession } from "./context";
 
 const EMPTY_CONTEXT: SafetyContext = {};

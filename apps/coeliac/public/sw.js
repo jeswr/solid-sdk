@@ -29,11 +29,10 @@
  * — a drift-guard test fails the build if they diverge.
  */
 
-const SHELL_CACHE_VERSION = "v1";
+const SHELL_CACHE_VERSION = "v2";
 const SHELL_CACHE_NAME = `coeliac-shell-${SHELL_CACHE_VERSION}`;
 const SHELL_CACHE_PREFIX = "coeliac-shell-";
 const APP_SHELL_ROUTES = [
-  "/",
   "/log",
   "/symptoms",
   "/insights",
@@ -43,7 +42,7 @@ const APP_SHELL_ROUTES = [
   "/knowledge/research",
   "/community",
 ];
-const SHELL_FALLBACK_ROUTE = "/";
+const SHELL_FALLBACK_ROUTE = "/log";
 
 /**
  * Fail-closed cacheability check: only store OK, non-opaque, same-origin
@@ -52,7 +51,7 @@ const SHELL_FALLBACK_ROUTE = "/";
  * origin, its (opaque/cross-origin) response is never written to the shell cache.
  */
 function isCacheableResponse(response) {
-  if (!response || !response.ok) return false;
+  if (!response?.ok) return false;
   const type = response.type;
   if (type === "opaque" || type === "opaqueredirect" || type === "cors") return false;
   if (response.url) {
@@ -153,7 +152,7 @@ self.addEventListener("activate", (event) => {
 // privacy requirement — private pod data was never cached here — but it keeps the
 // cache tidy across account switches on a shared device.
 self.addEventListener("message", (event) => {
-  const data = event && event.data;
+  const data = event?.data;
   if (data && data.type === "purge-shell") {
     event.waitUntil(self.caches.delete(SHELL_CACHE_NAME));
   }

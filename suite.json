@@ -53,6 +53,7 @@
     "@jeswr/solid-granary",
     "@jeswr/solid-health",
     "@jeswr/solid-health-diary",
+    "@jeswr/health-insights",
     "@jeswr/solid-mcp",
     "@jeswr/solid-memory",
     "@jeswr/solid-money",
