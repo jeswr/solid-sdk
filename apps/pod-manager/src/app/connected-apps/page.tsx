@@ -17,12 +17,11 @@ import {
   categoriesPhrase,
 } from "@/components/permissions-ui";
 import {
-  freshGrantsForAgent,
   usePermissionsBackend,
   useConnectedApps,
   type ConnectedApp,
 } from "@/components/use-permissions";
-import { describeModes } from "@/lib/permissions";
+import { describeModes, grantsForAgent } from "@/lib/permissions";
 import { TrustedAppsSection } from "@/components/trusted-apps-section";
 import {
   Button,
@@ -49,8 +48,8 @@ export default function ConnectedAppsPage() {
       // SECURITY: revoke against FRESH grants, never the (possibly cached)
       // rendered snapshot. getFreshModel re-discovers live before we act.
       const fresh = await getFreshModel();
-      const grants = freshGrantsForAgent(fresh, app.agentId);
-      await permissionsBackend.revokeGrants(app.agentId, grants);
+      const grants = grantsForAgent(fresh.apps, app.agentId, app.kind);
+      await permissionsBackend.revokeGrants(app.agentId, grants, app.kind);
       toast.success(`${app.name} can no longer access your data.`, {
         description: "You can grant access again anytime.",
       });
@@ -63,8 +62,9 @@ export default function ConnectedAppsPage() {
         return next;
       });
       toast.error(`Couldn't revoke ${app.name}'s access.`, {
-        description: "Nothing was changed. Check your connection and try again.",
+        description: "Some access may already have been removed. The current list is shown.",
       });
+      reload();
     } finally {
       setBusy((b) => {
         const next = new Set(b);

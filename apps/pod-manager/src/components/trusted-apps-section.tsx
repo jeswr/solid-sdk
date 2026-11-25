@@ -74,7 +74,7 @@ export function TrustedAppsSection({
       const freshOrigin = reconcileTrustedApps(fresh.apps).find(
         (o) => o.origin === origin.origin,
       );
-      await permissionsBackend.revokeGrants(origin.origin, freshOrigin?.grants ?? []);
+      await permissionsBackend.revokeGrants(origin.origin, freshOrigin?.grants ?? [], "origin");
       toast.success(`${originLabel(origin.origin)} can no longer access your data.`);
       reload();
     } catch {

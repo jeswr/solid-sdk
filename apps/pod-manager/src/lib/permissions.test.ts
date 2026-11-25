@@ -10,7 +10,12 @@ import {
   WacPermissionsBackend,
   aclUrlFromLinkHeader,
   allGrants,
+  canRestoreGrants,
   describeModes,
+  grantsForAgent,
+  grantsForCategory,
+  PartialGrantError,
+  type AccessGrant,
   fetchAppIdentity,
   roleForModes,
   type PermissionsContext,
@@ -531,5 +536,100 @@ describe("describeModes", () => {
     expect(describeModes(["read", "append", "control"])).toBe(
       "see, add to and manage sharing of",
     );
+  });
+});
+
+describe("review fixes (P-2, P-3, P-5, P-6)", () => {
+  const HEALTH = `${POD}health/`;
+  const FIN = `${POD}finance/`;
+  const X = "https://app.example/id";
+  const PRE = "@prefix acl: <http://www.w3.org/ns/auth/acl#>.\n";
+  const OWNER_RULE = (t: string) => `<#owner> a acl:Authorization ; acl:agent <${OWNER}> ;
+  acl:accessTo <${t}> ; acl:default <${t}> ; acl:mode acl:Read, acl:Write, acl:Control .`;
+  const grantOf = (aclUrl: string, target: string, modes: AccessGrant["modes"], inherits = true) =>
+    ({ aclUrl, authorization: "x", target, inherits, modes }) satisfies AccessGrant;
+
+  it("P-6: a Control-rule refusal in a later document revokes nothing earlier", async () => {
+    const pod = aclPod([POD, HEALTH, FIN], {
+      [`${POD}.acl`]: ROOT_ACL,
+      [`${HEALTH}.acl`]: `${PRE}${OWNER_RULE(HEALTH)}
+<#a> a acl:Authorization ; acl:agent <${X}> ; acl:accessTo <${HEALTH}> ; acl:mode acl:Read .`,
+      [`${FIN}.acl`]: `${PRE}${OWNER_RULE(FIN)}
+<#o> a acl:Authorization ; acl:agent <${OWNER}> ; acl:origin <${X}> ;
+  acl:accessTo <${FIN}> ; acl:default <${FIN}> ; acl:mode acl:Read, acl:Write, acl:Control .`,
+    });
+    const before = pod.docs.get(`${HEALTH}.acl`)?.body;
+    await expect(
+      new WacPermissionsBackend(pod.fetch).revokeGrants(X, [
+        grantOf(`${HEALTH}.acl`, HEALTH, ["read"], false),
+        grantOf(`${FIN}.acl`, FIN, ["read", "write", "control"]),
+      ]),
+    ).rejects.toMatchObject({ code: "owner-lockout" });
+    expect(pod.puts()).toHaveLength(0);
+    expect(pod.docs.get(`${HEALTH}.acl`)?.body).toBe(before);
+  });
+
+  it("P-5: an origin and a WebID with the same string are separate apps", async () => {
+    const pod = aclPod([POD, HEALTH], {
+      [`${POD}.acl`]: ROOT_ACL,
+      [`${HEALTH}.acl`]: `${PRE}${OWNER_RULE(HEALTH)}
+<#agent> a acl:Authorization ; acl:agent <${X}> ; acl:accessTo <${HEALTH}> ; acl:mode acl:Read .
+<#origin> a acl:Authorization ; acl:agent <${APP_HEALTH}> ; acl:origin <${X}> ;
+  acl:accessTo <${HEALTH}> ; acl:mode acl:Read .`,
+    });
+    const backend = new WacPermissionsBackend(pod.fetch);
+    const apps = await backend.listApps(ctx());
+    const origin = grantsForAgent(apps, X, "origin");
+    expect(origin).toHaveLength(1);
+    await backend.revokeGrants(X, origin, "origin");
+    const after = await backend.listApps(ctx());
+    expect(after.some((a) => a.agentId === X && a.kind === "agent")).toBe(true);
+    expect(after.some((a) => a.agentId === X && a.kind === "origin")).toBe(false);
+    expect(grantsForCategory(after, X, "health", "origin")).toEqual([]);
+  });
+
+  it("P-2: a category grant written at one location and refused at another is partial", async () => {
+    const pod = aclPod([POD, HEALTH], { [`${POD}.acl`]: ROOT_ACL, [`${HEALTH}.acl`]: HEALTH_ACL });
+    const partialCtx = ctx();
+    partialCtx.summaries[0].locations.push({
+      forClass: "https://schema.org/MedicalEntity",
+      instance: "https://elsewhere.example/record.ttl",
+    });
+    const error = await new WacPermissionsBackend(pod.fetch)
+      .grant(partialCtx, "https://new-app.example/id#this", "health")
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PartialGrantError);
+    expect((error as PartialGrantError).applied).toEqual([HEALTH]);
+  });
+
+  it("P-3: only exactly role-shaped, expressible grants can be restored", () => {
+    expect(canRestoreGrants([grantOf(`${HEALTH}.acl`, HEALTH, ["read"])])).toBe(true);
+    // accessTo-only on a container, or a partial mode set, is not restorable.
+    expect(canRestoreGrants([grantOf(`${HEALTH}.acl`, HEALTH, ["read"], false)])).toBe(false);
+    expect(canRestoreGrants([grantOf(`${HEALTH}.acl`, HEALTH, ["read", "append"])])).toBe(false);
+    expect(canRestoreGrants([])).toBe(false);
+  });
+
+  it("P-3: restore writes each location's own modes, not the category union", async () => {
+    const FILE = `${HEALTH}one.ttl`;
+    const pod = aclPod([POD, HEALTH, FILE], {
+      [`${POD}.acl`]: ROOT_ACL,
+      [`${HEALTH}.acl`]: HEALTH_ACL,
+    });
+    await new WacPermissionsBackend(pod.fetch).restoreGrants(ctx(), "https://new-app.example/id#this", [
+      grantOf(`${HEALTH}.acl`, HEALTH, ["read"]),
+      grantOf(`${FILE}.acl`, FILE, ["read", "write"], false),
+    ]);
+    const modesFor = async (url: string, target: string) => {
+      const doc = pod.docs.get(url);
+      if (!doc) throw new Error(`no ACL ${url}`);
+      const acl = new AclResource(await parseRdf(doc.body, "text/turtle", { baseIRI: url }), DataFactory);
+      const rule = [...acl.authorizations].find(
+        (a) => a.agent.has("https://new-app.example/id#this") && a.accessTo === target,
+      );
+      return rule && { read: rule.canRead, write: rule.canWrite };
+    };
+    expect(await modesFor(`${HEALTH}.acl`, HEALTH)).toEqual({ read: true, write: false });
+    expect(await modesFor(`${FILE}.acl`, FILE)).toEqual({ read: true, write: true });
   });
 });

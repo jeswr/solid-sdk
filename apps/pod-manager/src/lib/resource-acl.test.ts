@@ -14,6 +14,7 @@ import { NotAuthenticatedError, SharingError } from "./errors.js";
 import {
   type AccessSubject,
   type ResourceAccess,
+  describeCustomModes,
   RoleResourceSharingBackend,
   subjectKey,
   toSharingError,
@@ -340,6 +341,7 @@ describe("wouldLockOutOwner", () => {
         sourceUrl: `${NOTE}.acl`,
       },
     ],
+    custom: [],
     snapshot: { url: NOTE, grants: [] } as unknown as ResourceAccess["snapshot"],
   });
   const me: AccessSubject = { kind: "agent", id: OWNER };
@@ -377,5 +379,42 @@ describe("toSharingError", () => {
     expect(toSharingError(new TypeError("Unknown access mode")).code).toBe("unsupported");
     expect(toSharingError(new TypeError("Failed to fetch")).code).toBe("failed");
     expect(toSharingError(new TypeError("Load failed")).code).toBe("failed");
+  });
+});
+
+describe("custom (non-role) access is never hidden", () => {
+  const PUBLIC_RA = `
+<#public> a acl:Authorization ; acl:agentClass foaf:Agent ; acl:accessTo <${NOTE}> ; acl:mode acl:Read, acl:Append .
+<#carol> a acl:Authorization ; acl:agent <${CAROL}> ; acl:accessTo <${NOTE}> ; acl:mode acl:Control .`;
+
+  it("lists public Read+Append and Control-only as custom access with their modes", async () => {
+    const p = pod({ [`${NOTE}.acl`]: NOTE_ACL + PUBLIC_RA });
+    const access = await backend(p).read(NOTE);
+    const byKey = new Map(access.custom.map((c) => [subjectKey(c.subject), c]));
+    expect(byKey.get("public")?.modes.sort()).toEqual(["append", "read"]);
+    expect(describeCustomModes(byKey.get("public")?.modes ?? [])).toBe("Can view and add");
+    expect(describeCustomModes(byKey.get(`agent|${CAROL}`)?.modes ?? [])).toBe(
+      "Can manage sharing",
+    );
+    expect(byKey.get("public")?.source).toBe("direct");
+    // Role-shaped rows stay out of the custom list.
+    expect(access.custom.some((c) => c.subject.id === FRIEND)).toBe(false);
+  });
+
+  it("refuses to layer a level on top of custom access (no silent no-op) and writes nothing", async () => {
+    const p = pod({ [`${NOTE}.acl`]: NOTE_ACL + PUBLIC_RA });
+    const b = backend(p);
+    const error = await b
+      .setAccess(await b.read(NOTE), { kind: "public", id: "" }, "viewer")
+      .catch((e: unknown) => e);
+    expect((error as SharingError).code).toBe("unsupported");
+    expect(p.puts()).toHaveLength(0);
+  });
+
+  it("removes custom public access", async () => {
+    const p = pod({ [`${NOTE}.acl`]: NOTE_ACL + PUBLIC_RA });
+    const b = backend(p);
+    await b.removeAccess(await b.read(NOTE), { kind: "public", id: "" });
+    expect((await b.read(NOTE)).custom.some((c) => c.subject.kind === "public")).toBe(false);
   });
 });

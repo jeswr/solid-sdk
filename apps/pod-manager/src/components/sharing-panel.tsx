@@ -52,6 +52,7 @@ import { ErrorState } from "@/components/states";
 import { SharingError } from "@/lib/errors";
 import { nameFromUrl } from "@/lib/pod-data";
 import {
+  describeCustomModes,
   LEVEL_DESCRIPTION,
   LEVEL_LABEL,
   subjectKey,
@@ -60,6 +61,7 @@ import {
   type AccessEntry,
   type AccessLevel,
   type AccessSubject,
+  type CustomAccessEntry,
   type ResourceAccess,
 } from "@/lib/resource-acl";
 import { useResourceSharing } from "@/components/use-resource-sharing";
@@ -198,6 +200,13 @@ function SharingEditor({
   const named = access.entries.filter(
     (e) => e.subject.kind === "agent" || e.subject.kind === "group",
   );
+  const customFor = (kind: AccessSubject["kind"]) =>
+    access.custom.filter((c) => c.subject.kind === kind);
+  const publicCustom = customFor("public");
+  const authedCustom = customFor("authenticated");
+  const namedCustom = access.custom.filter(
+    (c) => c.subject.kind === "agent" || c.subject.kind === "group" || c.subject.kind === "app",
+  );
   // App (ACP client) rows are shown read-only so access is never hidden.
   const readOnly = access.entries.filter((e) => e.subject.kind === "app");
 
@@ -207,12 +216,21 @@ function SharingEditor({
 
       <section className="flex flex-col gap-2 p-4" aria-label="People and groups">
         <h3 className="px-1 text-sm font-medium text-muted-foreground">People and groups</h3>
-        {named.length === 0 ? (
+        {named.length === 0 && namedCustom.length === 0 ? (
           <p className="px-1 text-sm text-muted-foreground">
             No people or groups added yet.
           </p>
         ) : (
           <ul className="flex flex-col gap-1.5">
+            {namedCustom.map((entry) => (
+              <CustomRow
+                key={`custom:${entry.subject.kind}:${entry.subject.id}`}
+                entry={entry}
+                isSelf={entry.subject.kind === "agent" && entry.subject.id === ownerWebId}
+                busy={busy}
+                onRemove={() => remove(entry.subject)}
+              />
+            ))}
             {named.map((entry) => (
               <EntryRow
                 key={`${entry.subject.kind}:${entry.subject.id}`}
@@ -273,6 +291,7 @@ function SharingEditor({
           title="Anyone on the web"
           subtitle="Anyone with the link — no sign-in needed."
           entry={publicEntry}
+          custom={publicCustom[0]}
           busy={busy}
           onSetLevel={(level) => setLevel({ kind: "public", id: "" }, level)}
           onRemove={() => remove({ kind: "public", id: "" })}
@@ -282,6 +301,7 @@ function SharingEditor({
           title="Anyone signed in"
           subtitle="Any signed-in person, on any pod."
           entry={authedEntry}
+          custom={authedCustom[0]}
           busy={busy}
           onSetLevel={(level) => setLevel({ kind: "authenticated", id: "" }, level)}
           onRemove={() => remove({ kind: "authenticated", id: "" })}
@@ -293,8 +313,8 @@ function SharingEditor({
         You always keep full control of your own data.
       </p>
       <p className="px-4 pb-4 text-xs text-muted-foreground">
-        Only access that matches these levels is listed. Unusual permissions set
-        by other apps (for example add-only access) aren&apos;t shown here.
+        Access that matches none of these levels (for example add-only access) is
+        listed as Custom access. It can be removed here but not edited.
       </p>
     </div>
   );
@@ -365,12 +385,62 @@ function EntryRow({
   );
 }
 
+/** A subject whose access matches no level: plain-word modes and a remove action. */
+function CustomRow({
+  entry,
+  isSelf,
+  busy,
+  onRemove,
+}: {
+  entry: CustomAccessEntry;
+  isSelf: boolean;
+  busy: boolean;
+  onRemove: () => void;
+}) {
+  const who = entry.subject.id || subjectLabel(entry.subject);
+  return (
+    <li className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
+      <UserCircle className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium" title={entry.subject.id || undefined}>
+          {who}
+          {isSelf ? <span className="ml-1 text-muted-foreground">(you)</span> : null}
+        </p>
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Badge variant="secondary" className="font-normal">
+            Custom access
+          </Badge>
+          {entry.source === "inherited" ? (
+            <Badge variant="secondary" className="font-normal">
+              Inherited
+            </Badge>
+          ) : null}
+          {describeCustomModes(entry.modes)}
+        </p>
+      </div>
+      {!isSelf ? (
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={busy || entry.source === "inherited"}
+          title={entry.source === "inherited" ? INHERITED_REMOVAL_HINT : undefined}
+          aria-label={`Remove custom access for ${who}`}
+          onClick={onRemove}
+        >
+          <Trash2 className="size-4 text-destructive" aria-hidden="true" />
+        </Button>
+      ) : null}
+    </li>
+  );
+}
+
 /** Public / authenticated row with an inline level picker + "off". */
 function PublicToggle({
   icon: Icon,
   title,
   subtitle,
   entry,
+  custom,
   busy,
   onSetLevel,
   onRemove,
@@ -379,10 +449,43 @@ function PublicToggle({
   title: string;
   subtitle: string;
   entry?: AccessEntry;
+  /** Access that matches no level: shown as on, never as "off". */
+  custom?: CustomAccessEntry;
   busy: boolean;
   onSetLevel: (level: AccessLevel) => void;
   onRemove: () => void;
 }) {
+  if (!entry && custom) {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
+        <Icon className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">{title}</p>
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Badge variant="secondary" className="font-normal">
+              Custom access
+            </Badge>
+            {custom.source === "inherited" ? (
+              <Badge variant="secondary" className="font-normal">
+                Inherited
+              </Badge>
+            ) : null}
+            {describeCustomModes(custom.modes)}
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={busy || custom.source === "inherited"}
+          title={custom.source === "inherited" ? INHERITED_REMOVAL_HINT : undefined}
+          aria-label={`Turn off ${title}`}
+          onClick={onRemove}
+        >
+          <Trash2 className="size-4 text-destructive" aria-hidden="true" />
+        </Button>
+      </div>
+    );
+  }
   const on = entry !== undefined;
   return (
     <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">

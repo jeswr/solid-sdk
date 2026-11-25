@@ -18,6 +18,7 @@
  * folder). Refusals are fail-closed and reach the UI as {@link SharingError}.
  */
 import {
+  type AccessModesSnapshot,
   type AgentRef,
   addGrant,
   type GrantMutationOptions,
@@ -25,6 +26,7 @@ import {
   isRoleError,
   type Role,
   type RoleGrant,
+  readAccessModes,
   readGrants,
   removeGrant,
   type SetGrantsResult,
@@ -59,6 +61,21 @@ export interface AccessEntry {
   sourceUrl: string;
 }
 
+/** A raw WAC/ACP access mode, as `@jeswr/pod-access/roles` reports it. */
+export type RawMode = "read" | "append" | "write" | "control";
+
+/**
+ * A subject whose access on this resource is not exactly a level (for example
+ * Read+Append, append-only or Control-only). Shown read-only, with its modes in
+ * plain words, so the panel never presents such a subject as having no access.
+ */
+export interface CustomAccessEntry {
+  subject: AccessSubject;
+  modes: RawMode[];
+  /** `inherited` when the governing access document is an ancestor's. */
+  source: AccessSource;
+}
+
 /** The effective-access read model for one resource. */
 export interface ResourceAccess {
   resourceUrl: string;
@@ -66,6 +83,8 @@ export interface ResourceAccess {
   inherited: boolean;
   /** One row per subject, highest level first. */
   entries: AccessEntry[];
+  /** Subjects with access that matches no level; read-only in the panel, removable. */
+  custom: CustomAccessEntry[];
   /**
    * The pod-access read token. Edits pass it as `expected`, so a change made
    * elsewhere since this read is refused as a `conflict`, never overwritten.
@@ -135,7 +154,11 @@ const KIND_RANK: Record<SubjectKind, number> = {
 };
 
 /** Project a pod-access snapshot onto one row per subject. */
-export function toResourceAccess(resourceUrl: string, snapshot: GrantSnapshot): ResourceAccess {
+export function toResourceAccess(
+  resourceUrl: string,
+  snapshot: GrantSnapshot,
+  raw?: AccessModesSnapshot,
+): ResourceAccess {
   const bySubject = new Map<string, AccessEntry>();
   for (const grant of snapshot.grants) {
     const subject = subjectOf(grant.agent);
@@ -161,8 +184,43 @@ export function toResourceAccess(resourceUrl: string, snapshot: GrantSnapshot): 
     resourceUrl,
     inherited: entries.length > 0 && entries.every((e) => e.source === "inherited"),
     entries,
+    custom: customEntries(resourceUrl, snapshot, raw),
     snapshot,
   };
+}
+
+/** Principals with modes in the raw read but no role row: access no level describes. */
+function customEntries(
+  resourceUrl: string,
+  snapshot: GrantSnapshot,
+  raw: AccessModesSnapshot | undefined,
+): CustomAccessEntry[] {
+  if (!raw) return [];
+  const shown = new Set(snapshot.grants.map((g) => subjectKey(subjectOf(g.agent))));
+  const source: AccessSource = raw.governedBy === resourceUrl ? "direct" : "inherited";
+  const out = new Map<string, CustomAccessEntry>();
+  for (const principal of raw.resource) {
+    const subject = subjectOf(principal.agent);
+    const key = subjectKey(subject);
+    if (shown.has(key) || principal.modes.length === 0) continue;
+    const existing = out.get(key);
+    const modes = new Set<RawMode>([...(existing?.modes ?? []), ...principal.modes]);
+    out.set(key, { subject, modes: [...modes], source });
+  }
+  return [...out.values()];
+}
+
+/** Plain-language summary of a raw mode set, for example "Can view and add". */
+export function describeCustomModes(modes: readonly RawMode[]): string {
+  const set = new Set(modes);
+  const parts: string[] = [];
+  if (set.has("read")) parts.push("view");
+  if (set.has("write")) parts.push("change");
+  else if (set.has("append")) parts.push("add");
+  if (set.has("control")) parts.push("manage sharing");
+  if (parts.length === 0) return "No access";
+  const last = parts.pop() as string;
+  return `Can ${parts.length > 0 ? `${parts.join(", ")} and ` : ""}${last}`;
 }
 
 // ─── Self-lockout guard ─────────────────────────────────────────────────────
@@ -253,10 +311,18 @@ export class RoleResourceSharingBackend implements ResourceSharingBackend {
 
   async read(resourceUrl: string): Promise<ResourceAccess> {
     try {
-      return toResourceAccess(
-        resourceUrl,
-        await readGrants(resourceUrl, this.options(resourceUrl)),
-      );
+      const options = this.options(resourceUrl);
+      // The role projection hides access that is not exactly a level, so the raw
+      // modes are read alongside it. Both reads must describe the same document
+      // state; a change between them is retried once, then refused.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const [snapshot, raw] = await Promise.all([
+          readGrants(resourceUrl, options),
+          readAccessModes(resourceUrl, options),
+        ]);
+        if (snapshot.version === raw.version) return toResourceAccess(resourceUrl, snapshot, raw);
+      }
+      throw new SharingError("conflict", MESSAGES.conflict);
     } catch (error) {
       throw toSharingError(error);
     }
@@ -271,6 +337,14 @@ export class RoleResourceSharingBackend implements ResourceSharingBackend {
       throw new SharingError("owner-lockout", MESSAGES["owner-lockout"]);
     }
     const key = subjectKey(subject);
+    if (access.custom.some((c) => subjectKey(c.subject) === key)) {
+      // Adding a level on top would silently keep (or no-op against) the access
+      // the panel can't describe; make the owner remove it first.
+      throw new SharingError(
+        "unsupported",
+        "This already has access that isn't one of the levels (see Custom access). Remove it first, then choose a level.",
+      );
+    }
     const grant: RoleGrant = {
       agent: agentOf(subject),
       role: level,

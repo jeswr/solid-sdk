@@ -29,6 +29,7 @@ import { categoryById, CATEGORIES, type DataCategory } from "@/lib/categories";
 import {
   describeModes,
   fetchAppIdentity,
+  PartialGrantError,
   roleForModes,
   type AccessMode,
   type AppIdentity,
@@ -177,23 +178,37 @@ function GrantScreen() {
     }
     const granted: string[] = [];
     const failed: string[] = [];
+    const partial: string[] = [];
     for (const { category, grantable } of offered) {
       if (!checked.has(category.id) || grantable === 0) continue;
       try {
         await permissionsBackend.grant(writeCtx, clientId as string, category.id, modes);
         granted.push(category.label.toLowerCase());
-      } catch {
-        failed.push(category.label.toLowerCase());
+      } catch (e) {
+        // A category spans several locations; some may have been written.
+        if (e instanceof PartialGrantError && e.applied.length > 0) {
+          partial.push(category.label.toLowerCase());
+        } else {
+          failed.push(category.label.toLowerCase());
+        }
       }
     }
     setBusy(false);
-    if (failed.length > 0) {
-      toast.error(`Couldn't grant access to ${failed.join(", ")}.`, {
+    if (failed.length > 0 || partial.length > 0) {
+      const done: string[] = [];
+      if (granted.length > 0) done.push(`Access to ${granted.join(", ")} was granted.`);
+      if (partial.length > 0)
+        done.push(
+          `Access to ${partial.join(", ")} was granted at some locations only; review it in Connected apps.`,
+        );
+      toast.error(`Couldn't grant access to ${[...failed, ...partial].join(", ")} fully.`, {
         description:
-          granted.length > 0
-            ? `Access to ${granted.join(", ")} was granted.`
+          done.length > 0
+            ? done.join(" ")
             : "Nothing was changed. Check your connection and try again.",
       });
+      // Some writes may have landed: show the live list, not the pre-grant one.
+      reload();
       return;
     }
     toast.success(`${appName} can now ${describeModes(modes)} your ${granted.join(", ")}.`);
