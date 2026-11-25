@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { computeFireTimes, pendingReminders, type Reminder } from "../model/reminders";
-import type { FiredReminderStore } from "./fired-store";
+import { type FiredReminderStore, reminderKey } from "./fired-store";
 
 export interface ReminderTask {
   url: string;
@@ -22,6 +22,26 @@ export interface ReminderTickResult {
   errors: unknown[];
 }
 
+/** All-day markers are browser-local dates, regardless of the stored UTC due time. */
+export function reminderDue(task: ReminderTask): Date | undefined {
+  if (!task.allDay) return task.due;
+  const [year, month, day] = task.allDay.split("-").map(Number) as [number, number, number];
+  return new Date(year, month - 1, day);
+}
+
+export function reminderFireTimes(task: ReminderTask, reminder: Reminder) {
+  return computeFireTimes(task.url, reminderDue(task), [reminder]);
+}
+
+/** Only scheduling inputs identify an edit; titles, priorities and modified timestamps do not. */
+export function reminderSchedule(task: ReminderTask, reminder: Reminder): string {
+  return JSON.stringify([
+    task.url,
+    reminder.offset ?? (reminder.time as Date).toISOString(),
+    reminderDue(task)?.toISOString(),
+  ]);
+}
+
 /**
  * Scan pending triggers in (now-window, now], capped at 24h and defaulting to that
  * catch-up bound on every tick, including after reload. Atomic claims deduplicate
@@ -36,33 +56,52 @@ export async function collectDueReminders(
   now: Date,
   store: FiredReminderStore,
   windowMs = 86400000,
+  active: () => boolean = () => true,
 ): Promise<ReminderTickResult> {
   if (!Number.isFinite(now.getTime()) || !Number.isFinite(windowMs) || windowMs < 0)
     throw new RangeError("Invalid reminder clock or window.");
   const lower = now.getTime() - Math.min(windowMs, 86400000);
   const due: DueReminder[] = [];
   const errors: unknown[] = [];
+  try {
+    if (active()) await store.prune?.();
+  } catch (error) {
+    errors.push(error);
+  }
   for (const task of tasks) {
     if (task.state !== "open" || !task.due) continue;
-    let date = task.due;
-    if (task.allDay) {
-      const [year, month, day] = task.allDay.split("-").map(Number) as [number, number, number];
-      date = new Date(year, month - 1, day);
-    }
+    const legacyPrefixes = [
+      `${task.url}/reminder-`,
+      `${task.url}#`,
+      ...task.reminders.flatMap((reminder) => (reminder.id ? [`${reminder.id}@`] : [])),
+      ...(task.identity ? [`${task.identity}|`] : []),
+    ];
     for (const reminder of task.reminders) {
       try {
-        const times = pendingReminders(
-          computeFireTimes(task.url, date, [reminder]),
-          now,
-          new Set(),
-        );
+        const times = pendingReminders(reminderFireTimes(task, reminder), now, new Set());
         for (const time of times) {
-          if (time.at.getTime() <= lower || !(await store.claim(time.key))) continue;
+          if (!active()) break;
+          const legacy = {
+            prefixes: legacyPrefixes,
+            fireTime: time.at,
+          };
+          if (
+            time.at.getTime() <= lower ||
+            !(await store.claim(
+              reminderKey(task.url, reminder, time.at, reminderDue(task)),
+              legacy,
+            ))
+          )
+            continue;
           // A moved task's new URL claims afresh; its identity key still records the fire.
           const trigger = reminder.offset ?? (reminder.time as Date).toISOString();
           if (
             task.identity &&
-            !(await store.claim(`${task.identity}|${trigger}@${time.at.toISOString()}`))
+            active() &&
+            !(await store.claim(
+              `${task.identity}|${trigger}@${time.at.toISOString()}|due=${reminderDue(task)?.toISOString()}`,
+              legacy,
+            ))
           )
             continue;
           due.push({ taskUrl: task.url, title: task.title, fireTime: time.at });
