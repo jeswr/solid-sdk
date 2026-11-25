@@ -13,6 +13,7 @@ import {
   musicRoot,
   provision,
 } from "../src/apps/music/lib/data/library";
+import { preferencesStore } from "../src/apps/music/lib/data/preferences";
 import { createPlaylist } from "../src/apps/music/lib/data/playlists";
 import { Album, historyShard, Store, Track } from "../src/apps/music/lib/model";
 import { MusicProvider, useMusic } from "../src/apps/music/state/music-context";
@@ -350,7 +351,8 @@ it("reports integration failures while retaining the local library and history",
   expect(
     await loadHistory(broken, root, new Date(), 1, 0, (failure) => failures.push(failure)),
   ).toEqual([]);
-  expect(failures.map((failure) => failure.area)).toEqual(["library", "history"]);
+  // The imported Spotify file failure is now reported too (F4), besides the live document.
+  expect(failures.map((failure) => failure.area)).toEqual(["library", "history", "history"]);
   await expect(loadLibrary(broken, root)).rejects.toMatchObject({ status: 500 });
   await createPlaylist(pod.fetch, root, "kept", "Kept", "");
 });
@@ -479,4 +481,65 @@ it("retains paginated plays on a partial older load and retries the extended ran
   broken = false;
   await click(button(ui.host, "Retry"));
   expect(music.snapshot?.history).toHaveLength(3);
+});
+
+it("reports a failed imported Spotify file through the designed notice and never rejects (F4)", async () => {
+  const now = new Date();
+  const month = now.toISOString().slice(0, 7);
+  const bad = new URL(`integrations/spotify/music/history/${month}.ttl`, root).href;
+  const { pod } = await open({ existing: true });
+  const wrapped: typeof globalThis.fetch = async (input, init) =>
+    String(input) === bad ? new Response(null, { status: 500 }) : pod.fetch(input, init);
+  const failures: MusicReadFailure[] = [];
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  await expect(
+    loadHistory(wrapped, root, now, 1, 0, (failure) => failures.push(failure)),
+  ).resolves.toEqual([]);
+  expect(failures).toEqual([expect.objectContaining({ url: bad, area: "history" })]);
+  expect(warn).not.toHaveBeenCalled();
+  // Without a reporter it stays best effort.
+  await expect(loadHistory(wrapped, root, now, 1, 0)).resolves.toEqual([]);
+  warn.mockRestore();
+});
+
+it("reports a fully failed older window as a failure and does not advance it (F3)", async () => {
+  const now = new Date();
+  const old = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 13, 10));
+  let broken = false;
+  const { pod, ui } = await open({
+    view: "history",
+    wrap: (fetch) => async (input, init) =>
+      broken && String(input).startsWith(`${base}history/`)
+        ? new Response(null, { status: 500 })
+        : fetch(input, init),
+  });
+  await recordPlay(pod.fetch, root, {
+    iri: `${historyShard(base, old)}#it`,
+    trackIri: `${base}tracks/Good.ttl#it`,
+    startTime: old,
+  });
+  await act(async () => music.refresh());
+  broken = true;
+  await act(async () => music.older());
+  expect(music.olderError).toBe(true);
+  expect(ui.host.textContent).toContain("Couldn’t read older listening history");
+  expect(ui.host.textContent).not.toContain("No older plays found");
+  broken = false;
+  await click(button(ui.host, "Retry"));
+  expect(music.olderError).toBe(false);
+  expect(music.snapshot?.history).toHaveLength(1);
+});
+
+it("reads preferences.json through a streaming byte cap (F7)", async () => {
+  let pulled = 0;
+  const chunk = new Uint8Array(64 * 1024).fill(32);
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (++pulled > 1000) controller.close();
+      else controller.enqueue(chunk);
+    },
+  });
+  const fetch = vi.fn(async () => new Response(body, { status: 200 }));
+  await expect(preferencesStore(fetch, root).load()).rejects.toThrow();
+  expect(pulled).toBeLessThan(50);
 });

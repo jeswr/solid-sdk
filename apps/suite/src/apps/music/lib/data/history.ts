@@ -52,7 +52,7 @@ export async function loadHistory(
   // Imported file history is best effort: it never rejects the user's own history.
   const [history, imported] = await Promise.all([
     readOwn(),
-    loadSpotifyHistory(fetch, storage, dates),
+    loadSpotifyHistory(fetch, storage, dates, report),
   ]);
   const selected = new Set(dates.map(monthKey));
   const liveHistory = new URL("integrations/spotify/music/recently-played.ttl", storage).href;

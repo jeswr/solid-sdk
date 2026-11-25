@@ -545,6 +545,18 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
             months.current,
             (failure) => failures.push(failure),
           );
+          // A window where every month of the user's own history failed is a failure, not "none found".
+          const ownHistory = new URL("history/", musicRoot(session.storageUrl)).href;
+          const failedMonths = new Set(
+            failures
+              .filter((failure) => failure.area === "history" && failure.url.startsWith(ownHistory))
+              .map((failure) => failure.url),
+          );
+          if (failedMonths.size >= 12) {
+            setOlderError(true);
+            setNotice("");
+            return;
+          }
           months.current += 12;
           setNotice(
             history.length
