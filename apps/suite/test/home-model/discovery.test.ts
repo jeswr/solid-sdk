@@ -3,6 +3,7 @@
 import { NS } from "@jeswr/suite-vocab";
 import { describe, expect, it } from "vitest";
 import {
+  capRecords,
   type DomainItem,
   discoverDomainItems,
   domainItemKey,
@@ -30,7 +31,7 @@ describe("domain discovery", () => {
     expect(first.items.map(domainItemKey)).toEqual(second.items.map(domainItemKey));
   });
 
-  it("caps records across documents at 1,000 and marks the refresh as truncated", async () => {
+  it("caps each document at 200 records and reports how many it holds", async () => {
     const urls = Array.from({ length: 6 }, (_, index) => `${STORAGE}history-${index}.ttl`);
     const fetch = fixtureFetch(
       Object.fromEntries(
@@ -51,12 +52,22 @@ describe("domain discovery", () => {
       typeIndex: urls.map((instance) => ({ forClass: `${NS.SCHEMA}WatchAction`, instance })),
     });
     expect(result.failures).toEqual([]);
-    expect(result.items).toHaveLength(1_000);
-    expect(result.truncated).toBe(true);
-    expect(new Set(result.items.map(domainItemKey)).size).toBe(1_000);
-    expect(urls.map((url) => result.items.filter((item) => item.url === url).length)).toEqual([
-      200, 200, 200, 200, 200, 0,
+    expect(result.truncated).toBe(false);
+    expect(result.items).toHaveLength(1_200);
+    expect([...result.limited.values()]).toEqual(urls.map(() => ({ shown: 200, total: 201 })));
+    const capped = capRecords(result.items, result.limited);
+    expect(capped.items).toHaveLength(1_000);
+    expect(new Set(capped.items.map(domainItemKey)).size).toBe(1_000);
+    // A fair share each, remainder in document order, regardless of response order.
+    expect(urls.map((url) => capped.items.filter((item) => item.url === url).length)).toEqual([
+      167, 167, 167, 167, 166, 166,
     ]);
+    expect(capped.cut.size).toBe(6);
+    expect(
+      capRecords([...result.items].reverse(), result.limited)
+        .items.map(domainItemKey)
+        .sort(),
+    ).toEqual(capped.items.map(domainItemKey).sort());
   });
 
   it.each([
@@ -500,22 +511,19 @@ describe("domain discovery", () => {
     ).toHaveLength(2);
   });
 
-  it("drops the contact-details card when the profile identity fills the refresh budget", async () => {
+  it("cuts a document to its share of the refresh budget and reports it as cut", async () => {
     const body =
       '<#me> a vcard:Individual ; vcard:fn "Alice Example" ; vcard:hasEmail [ vcard:hasValue <mailto:alice@example.com> ] .';
-    const fetch = fixtureFetch({ [`${STORAGE}profile/card`]: body });
-    // 999 cards already discovered this refresh leave room for exactly one more.
-    const filler = { items: Array.from({ length: 999 }) } as unknown as Parameters<
-      NonNullable<Parameters<typeof discoverDomainItems>[1]["documentCache"]>["set"]
-    >[1];
     const result = await discoverDomainItems("personal", {
       storage: STORAGE,
-      fetch,
+      fetch: fixtureFetch({ [`${STORAGE}profile/card`]: body }),
       webId: WEB_ID,
-      documentCache: new Map([[`${STORAGE}filler.ttl`, filler]]),
     });
-    expect(result.items.map((item) => item.dataType?.id)).toEqual(["identity"]);
-    expect(result.truncated).toBe(true);
+    expect(result.truncated).toBe(false);
+    const capped = capRecords(result.items, result.limited, 1);
+    expect(capped.items).toHaveLength(1);
+    expect(capped.cut).toEqual(new Set([`${STORAGE}profile/card`]));
+    expect(capped.limited.get(`${STORAGE}profile/card`)).toEqual({ shown: 1, total: 2 });
   });
 
   it.each([

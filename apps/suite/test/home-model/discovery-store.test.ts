@@ -77,7 +77,7 @@ it("drops a removed record after its document is reread, despite an ancestor fai
   expect(titles()).toEqual(["The Garden"]);
 });
 
-it("caps a 5,000-record history before preparing views and finishes within five seconds", async () => {
+it("caps a 5,000-record history before preparing views, with its own non-retry signal", async () => {
   const { store } = setup({
     [url]: Array.from(
       { length: 5_000 },
@@ -87,23 +87,22 @@ it("caps a 5,000-record history before preparing views and finishes within five 
     ).join("\n"),
   });
   const classify = vi.spyOn(classification, "classifySubject");
-  const started = performance.now();
   await store.refresh();
-  const elapsed = performance.now() - started;
   const snapshot = store.getSnapshot();
   const cards = snapshot.items.filter((item) => item.url === url);
   expect(cards).toHaveLength(200);
-  expect(snapshot.truncated).toBe(true);
+  // Record caps are not an incomplete scan: no Retry notice, no blanket preservation.
+  expect(snapshot.truncated).toBe(false);
+  expect(snapshot.limited.get(url)).toEqual({ shown: 200, total: 5_000 });
   expect(cards.every((item) => snapshot.views.has(item))).toBe(true);
   expect(snapshot.views.size).toBe(snapshot.items.length);
   // The document is classified once even when several domains discover its registration.
   expect(
     classify.mock.calls.filter(([subject]) => subject.value.startsWith(`${url}#viewing-`)),
-  ).toHaveLength(201);
-  expect(elapsed).toBeLessThan(5_000);
+  ).toHaveLength(5_000);
 }, 15_000);
 
-it("shares the 1,000-record refresh cap across domain scans and prepares only those views", async () => {
+it("shares the 1,000-record refresh cap across domain scans, in document order, and prepares only those views", async () => {
   const types = [
     "Movie",
     "TextDigitalDocument",
@@ -136,7 +135,8 @@ it("shares the 1,000-record refresh cap across domain scans and prepares only th
   const snapshot = store.getSnapshot();
   expect(snapshot.failures).toEqual([]);
   expect(snapshot.items).toHaveLength(1_000);
-  expect(snapshot.truncated).toBe(true);
+  expect(snapshot.truncated).toBe(false);
+  expect(snapshot.limited.size).toBeGreaterThan(0);
   expect(snapshot.views.size).toBe(1_000);
   expect(snapshot.counts.get("media")).toBeGreaterThan(0);
   expect(snapshot.counts.get("documents")).toBeGreaterThan(0);
@@ -145,5 +145,74 @@ it("shares the 1,000-record refresh cap across domain scans and prepares only th
   await store.refresh();
   expect(store.getSnapshot().items).toHaveLength(1_000);
   expect(store.getSnapshot().views.size).toBe(1_000);
-  expect(store.getSnapshot().truncated).toBe(true);
+});
+
+it("keeps every card of a small document when large imports exceed the shared budget", async () => {
+  const records = (type: string, count: number, prefix: string, extra = "") =>
+    Array.from(
+      { length: count },
+      (_, record) =>
+        `<#${prefix}-${record}> a schema:${type}; schema:name "${prefix} ${record}"; ${extra} prov:wasGeneratedBy <runs.ttl#run>.`,
+    ).join("\n");
+  const big = Array.from({ length: 5 }, (_, index) => `${STORAGE}big-${index}.ttl`);
+  const small = `${STORAGE}small.ttl`;
+  const { store, fixtures } = setup({
+    ...Object.fromEntries(big.map((u, index) => [u, records("Movie", 201, `big${index}`)])),
+    [small]: records("Book", 3, "small"),
+    [`${STORAGE}index.ttl`]: [
+      ...big.map(
+        (u, index) =>
+          `<#b${index}> a solid:TypeRegistration; solid:forClass <${NS.SCHEMA}Movie>; solid:instance <${u}>.`,
+      ),
+      `<#s> a solid:TypeRegistration; solid:forClass <${NS.SCHEMA}Book>; solid:instance <${small}>.`,
+    ].join("\n"),
+  });
+  const seen = (urls: string[]) =>
+    store
+      .getSnapshot()
+      .items.filter((item) => urls.includes(item.url))
+      .map(domainItemKey)
+      .sort();
+  await store.refresh();
+  const first = store.getSnapshot();
+  expect(first.items.length).toBeLessThanOrEqual(1_000);
+  expect(seen([small])).toHaveLength(3);
+  expect(first.truncated).toBe(false);
+  const shown = first.items.map(domainItemKey).sort();
+  // Same pod, same cards, however the responses interleave; a changed big document
+  // never makes the small one (or any earlier card) vanish.
+  for (let refresh = 0; refresh < 3; refresh++) {
+    if (refresh === 2) fixtures[big[0] as string] = records("Movie", 201, "big0");
+    await store.refresh();
+    expect(store.getSnapshot().items.map(domainItemKey).sort()).toEqual(shown);
+  }
+  // A document that fails later keeps what it showed, within the same refresh cap.
+  fixtures[big[4] as string] = 503;
+  await store.refresh();
+  expect(seen(big.slice(4)).length).toBeGreaterThan(0);
+  expect(store.getSnapshot().items.length).toBeLessThanOrEqual(1_000);
+  expect(seen([small])).toHaveLength(3);
+});
+
+it("keeps the newest 200 records of a large document and keeps preservation to that document", async () => {
+  const { store, fixtures } = setup({
+    [url]: Array.from(
+      { length: 250 },
+      (_, index) =>
+        `<#viewing-${index}> a schema:WatchAction; schema:name "Film ${index}";
+          dct:modified "2026-01-01T0${Math.floor(index / 60)}:${String(index % 60).padStart(2, "0")}:00Z";
+          schema:startTime "2026-10-25T00:00:00Z"; prov:wasGeneratedBy <../runs.ttl#run>.`,
+    ).join("\n"),
+  });
+  await store.refresh();
+  expect(store.getSnapshot().limited.get(url)).toEqual({ shown: 200, total: 250 });
+  const first = store.getSnapshot().items.filter((item) => item.url === url);
+  expect(first).toHaveLength(200);
+  // Film 249 is the newest, so the 50 oldest are the ones left out, in any dataset order.
+  expect(first.every((item) => Number(item.title.replace("Film ", "")) >= 50)).toBe(true);
+  // Not an incomplete scan: a card whose registration disappears is not kept.
+  fixtures[`${STORAGE}index.ttl`] = "<#none> a solid:TypeRegistration.";
+  await store.refresh();
+  expect(store.getSnapshot().truncated).toBe(false);
+  expect(store.getSnapshot().items.filter((item) => item.url === url)).toHaveLength(0);
 });

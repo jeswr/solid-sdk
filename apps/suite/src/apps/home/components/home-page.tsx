@@ -217,6 +217,11 @@ export function HomePage({ domain }: { domain: string }) {
                 </Button>
               </p>
             ) : null}
+            {data.limited.size ? (
+              <p className="hm-notice" role="status">
+                {limitNote(data.limited)}
+              </p>
+            ) : null}
             {!items.length ? (
               <EmptyState
                 title="Nothing here yet"
@@ -299,4 +304,16 @@ export function HomePage({ domain }: { domain: string }) {
       ) : null}
     </div>
   );
+}
+
+/** Plain-language note for documents that hold more records than Home lists at once. */
+function limitNote(limited: ReadonlyMap<string, { shown: number; total: number }>): string {
+  let shown = 0;
+  let total = 0;
+  for (const entry of limited.values()) {
+    shown += entry.shown;
+    total += entry.total;
+  }
+  const where = limited.size === 1 ? "one large import" : `${limited.size} large imports`;
+  return `Showing ${shown.toLocaleString("en")} of ${total.toLocaleString("en")} records from ${where}.`;
 }

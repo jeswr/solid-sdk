@@ -10,6 +10,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { typedViewData } from "../../../components/typed-view-data";
 import type { PodSession } from "../../../lib/session/pod-session";
 import {
+  capRecords,
   type DiscoveryOptions,
   type DomainItem,
   type DomainItems,
@@ -17,6 +18,7 @@ import {
   domainItemKey,
   MAX_RECORDS_PER_DOCUMENT,
   MAX_RECORDS_PER_REFRESH,
+  type RecordLimit,
   sortItems,
 } from "../lib/model/discovery";
 import { DiscoveryBudget } from "../lib/model/discovery-budget";
@@ -37,6 +39,8 @@ interface Snapshot {
   failures: readonly DiscoveryFailure[];
   counts: ReadonlyMap<string, number>;
   truncated: boolean;
+  /** Documents shown in part because of the record caps; Retry cannot change this. */
+  limited: ReadonlyMap<string, RecordLimit>;
   refreshing: boolean;
   used: number | undefined;
   updated: number;
@@ -50,6 +54,7 @@ const initial: Snapshot = {
   failures: [],
   counts: new Map(),
   truncated: false,
+  limited: new Map(),
   refreshing: false,
   used: undefined,
   updated: 0,
@@ -91,6 +96,8 @@ function reconcileItems(
    * the item and discard it, which says nothing about whether it still exists.
    */
   visitedFor: (item: DomainItem) => ReadonlyMap<string, string | null>,
+  /** Documents read in full but cut by the record budget: their earlier cards stay. */
+  cut: ReadonlySet<string> = new Set(),
 ): DomainItem[] {
   const items = new Map(result.items.map((item) => [domainItemKey(item), item]));
   const perDocument = new Map<string, number>();
@@ -112,15 +119,12 @@ function reconcileItems(
         result.listings.get(item.containerUrl)?.has(item.url));
     if (
       !items.has(domainItemKey(item)) &&
-      (failedRead || unvisited) &&
+      (failedRead || unvisited || cut.has(item.url)) &&
       !unavailable.some((url) => affectsItem(url, item))
     ) {
       if (item.dataType?.id !== "files") {
         const count = perDocument.get(item.url) ?? 0;
-        if (records >= MAX_RECORDS_PER_REFRESH || count >= MAX_RECORDS_PER_DOCUMENT) {
-          result.truncated = true;
-          continue;
-        }
+        if (records >= MAX_RECORDS_PER_REFRESH || count >= MAX_RECORDS_PER_DOCUMENT) continue;
         records++;
         perDocument.set(item.url, count + 1);
       }
@@ -229,8 +233,19 @@ function createDomainStore(session: HomeSession) {
             }),
           ),
         );
+        // The refresh-wide record budget is shared in a stable document order, once every
+        // scan has finished, so response order never decides which cards appear.
+        const capped = capRecords(
+          [
+            ...new Map(
+              domains.flatMap((domain) => domain.items).map((i) => [domainItemKey(i), i]),
+            ).values(),
+          ],
+          new Map(domains.flatMap((domain) => [...domain.limited])),
+        );
         const result: DomainItems = {
-          items: domains.flatMap((domain) => domain.items),
+          items: capped.items,
+          limited: capped.limited,
           failures: [
             ...new Map(
               domains.flatMap((domain) => domain.failures).map((failure) => [failure.url, failure]),
@@ -272,6 +287,7 @@ function createDomainStore(session: HomeSession) {
           (item) =>
             domains[scanned.findIndex((domain) => domain.id === item.domain.id)]?.etags ??
             result.etags,
+          capped.cut,
         );
         const used = await usage;
         const views = new Map(
@@ -299,6 +315,7 @@ function createDomainStore(session: HomeSession) {
           failures,
           counts: countItems(items),
           truncated: indexes.truncated || result.truncated,
+          limited: capped.limited,
           refreshing: false,
           used,
           updated: background ? snapshot.updated + 1 : snapshot.updated,
