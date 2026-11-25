@@ -18,42 +18,83 @@ import {
   SheetTitle,
 } from "@jeswr/suite-ui";
 import { safeHref } from "@jeswr/suite-ui/sign-in";
-import { type FormEvent, type ReactNode, useRef, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import {
   beliefLabel,
+  correctionBlocker,
   formatKnowledgeDate,
   kindLabel,
+  preserveTemporal,
   timelineCoordinate,
+  uncertaintyNote,
 } from "../lib/knowledge/view-model";
 import { useKnowledge } from "../state/knowledge-context";
 import { useSheetSide } from "./measurement-sheet";
 
 const fieldLabel = (key: string) =>
   key.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
-function FieldValue({ name, value }: { name: string; value: unknown }): ReactNode {
-  if (value === undefined || value === null || value === "") return "Not recorded";
-  if (Array.isArray(value)) return value.length ? value.map(String).join(" · ") : "None";
-  if (typeof value === "object")
-    return (
-      <dl className="hlt-knowledge-fields">
-        {Object.entries(value).map(([key, nested]) => (
-          <div key={key}>
-            <dt>{fieldLabel(key)}</dt>
-            <dd>
-              <FieldValue name={key} value={nested} />
-            </dd>
-          </div>
-        ))}
-      </dl>
-    );
-  if (
-    typeof value === "string" &&
-    ["start", "end", "onset", "abatement", "effectiveTime", "dateCreated", "date"].includes(name)
-  )
-    return formatKnowledgeDate(value);
-  if (name === "belief") return beliefLabel(value as HealthFact["belief"]);
-  if (name === "kind") return kindLabel(value as HealthFact["kind"]);
-  return String(value);
+const VALIDITY: Record<string, string> = {
+  Current: "Current",
+  Contradicted: "Conflicting",
+  Superseded: "Replaced",
+  Retracted: "Forgotten",
+};
+/** An explicit allow-list per kind: no epoch milliseconds, internal flags or raw category IRIs. */
+function detailRows(fact: HealthFact): [string, string][] {
+  const rows: [string, string | undefined][] = [
+    ["Kind", kindLabel(fact.kind)],
+    ["Belief", beliefLabel(fact.belief)],
+    ["Status", VALIDITY[fact.validity] ?? fact.validity],
+    ["Wording", fact.hedge],
+    ["Start", fact.period.start ? formatKnowledgeDate(fact.period.start) : undefined],
+    ["End", fact.period.end ? formatKnowledgeDate(fact.period.end) : undefined],
+    ["Code", [fact.code?.value, fact.code?.system].filter(Boolean).join(" · ") || undefined],
+  ];
+  switch (fact.kind) {
+    case "allergy":
+      rows.push(["Substance", fact.substance]);
+      break;
+    case "medication":
+      rows.push(
+        ["Product", fact.product.name],
+        ["ATC code", fact.product.atcCode],
+        [
+          "Dose",
+          fact.dose
+            ? [`${fact.dose.value} ${fact.dose.unit}`, fact.dose.frequency]
+                .filter(Boolean)
+                .join(" · ")
+            : undefined,
+        ],
+        ["Schedule", fact.doseSchedule],
+      );
+      break;
+    case "observation":
+      rows.push(
+        ["Result", `${fact.value}${fact.unit ? ` ${fact.unit}` : ""}`],
+        ["Recorded interpretation", fact.interpretation],
+        ["Date", fact.effectiveTime ? formatKnowledgeDate(fact.effectiveTime) : undefined],
+      );
+      break;
+    case "immunization":
+      rows.push(["Product", fact.product], ["Date", fact.date && formatKnowledgeDate(fact.date)]);
+      break;
+    case "encounter":
+      rows.push(
+        ["Date", fact.date && formatKnowledgeDate(fact.date)],
+        ["Recorded by", fact.recordedBy],
+      );
+      break;
+    case "note":
+      rows.push([fieldLabel(fact.property), fact.value]);
+      break;
+    case "document":
+      rows.push(["Date created", fact.dateCreated && formatKnowledgeDate(fact.dateCreated)]);
+      break;
+    default:
+      break;
+  }
+  return rows.flatMap(([label, value]) => (value ? [[label, value] as [string, string]] : []));
 }
 function EvidenceTimestamp({ value }: { value: string | undefined }) {
   const time = timelineCoordinate(value);
@@ -96,9 +137,17 @@ function CorrectionForm({ fact, onDone }: { fact: HealthFact; onDone(): void }) 
     setError("");
     let replacement: Fact;
     try {
-      const validFrom = temporal(start.trim()),
-        validThrough = temporal(end.trim());
-      if (!name.trim() || (start && end && start > end)) throw new Error("invalid-form");
+      // A date the user did not touch keeps its recorded literal; only edited dates are re-validated.
+      const keep = (value: string, original: string | undefined) => {
+        if (value.trim() !== (original ?? "")) return temporal(value.trim());
+        const kept = preserveTemporal(original);
+        if (kept === "unsupported") throw new Error("invalid-date");
+        return kept;
+      };
+      const validFrom = keep(start, fact.period.start),
+        validThrough = keep(end, fact.period.end);
+      if (!name.trim() || (start && end && start.trim() > end.trim()))
+        throw new Error("invalid-form");
       const period = {
         ...(validFrom ? { validFrom } : {}),
         ...(validThrough ? { validThrough } : {}),
@@ -147,8 +196,8 @@ function CorrectionForm({ fact, onDone }: { fact: HealthFact; onDone(): void }) 
       return;
     }
     try {
-      await correct(fact, replacement);
-      onDone();
+      if (await correct(fact, replacement)) onDone();
+      else setError("This fact changed or can no longer be edited. Close it and open it again.");
     } catch {
       setError("Couldn't save the correction. Try again.");
     }
@@ -244,7 +293,9 @@ export function KnowledgeDetail({
   const unsupported =
     fact && !["condition", "allergy", "medication"].includes(fact.kind)
       ? "Corrections are available for conditions, allergies and medications only."
-      : "";
+      : fact
+        ? correctionBlocker(fact)
+        : "";
   return (
     <Sheet
       open={!!fact}
@@ -270,20 +321,18 @@ export function KnowledgeDetail({
         {fact && (
           <>
             <span className="hlt-knowledge-badge">{beliefLabel(fact.belief)}</span>
+            {uncertaintyNote(fact) && (
+              <p className="hlt-info-note" role="note">
+                {uncertaintyNote(fact)} It may be out of date.
+              </p>
+            )}
             <dl className="hlt-knowledge-fields">
-              {Object.entries(fact)
-                .filter(
-                  ([key]) =>
-                    !["provenance", "replacedBy", "id", "assertionId", "subject"].includes(key),
-                )
-                .map(([key, value]) => (
-                  <div key={key}>
-                    <dt>{fieldLabel(key)}</dt>
-                    <dd>
-                      <FieldValue name={key} value={value} />
-                    </dd>
-                  </div>
-                ))}
+              {detailRows(fact).map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
             </dl>
             <section className="hlt-knowledge-stack">
               <h3>Replaced by</h3>
@@ -410,7 +459,13 @@ export function KnowledgeDetail({
                       event.preventDefault();
                       setError("");
                       void forget(fact)
-                        .then(() => setConfirm(false))
+                        .then((ok) => {
+                          if (ok) setConfirm(false);
+                          else
+                            setError(
+                              "This fact changed or can no longer be forgotten. Close it and open it again.",
+                            );
+                        })
                         .catch(() => setError("Couldn't forget this fact. Try again."));
                     }}
                   >
