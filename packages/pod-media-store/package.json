@@ -1,0 +1,42 @@
+{
+  "$comment": "AUTHORED-BY Claude Sonnet 5.5",
+  "name": "@jeswr/pod-media-store",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Generic store for a binary resource plus one RDF description document in a Solid or LWS pod. Experimental, AI-agent-generated.",
+  "type": "module",
+  "sideEffects": false,
+  "securityCritical": true,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "SKILL.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/pod-type-index": "workspace:*",
+    "@jeswr/storage-capabilities": "workspace:*",
+    "@jeswr/storage-client": "workspace:*"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}
