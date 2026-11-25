@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import { RdfFetchError } from "@jeswr/fetch-rdf";
@@ -9,9 +10,13 @@ import { useEffect, useSyncExternalStore } from "react";
 import { typedViewData } from "../../../components/typed-view-data";
 import type { PodSession } from "../../../lib/session/pod-session";
 import {
+  type DiscoveryOptions,
   type DomainItem,
   type DomainItems,
   discoverDomainItems,
+  domainItemKey,
+  MAX_RECORDS_PER_DOCUMENT,
+  MAX_RECORDS_PER_REFRESH,
   sortItems,
 } from "../lib/model/discovery";
 import { DiscoveryBudget } from "../lib/model/discovery-budget";
@@ -87,21 +92,40 @@ function reconcileItems(
    */
   visitedFor: (item: DomainItem) => ReadonlyMap<string, string | null>,
 ): DomainItem[] {
-  const key = (item: DomainItem) => `${item.url}|${item.dataType?.id}`;
-  const items = new Map(result.items.map((item) => [key(item), item]));
+  const items = new Map(result.items.map((item) => [domainItemKey(item), item]));
+  const perDocument = new Map<string, number>();
+  let records = 0;
+  for (const item of items.values()) {
+    if (item.dataType?.id === "files") continue;
+    records++;
+    perDocument.set(item.url, (perDocument.get(item.url) ?? 0) + 1);
+  }
   for (const item of previous) {
-    const failedRead = failures.some((failure) => affectsItem(failure.url, item));
+    // A successful read of the item's own document is authoritative: an ancestor
+    // listing failure must not bring back a record that document no longer holds.
+    const failedRead =
+      !visitedFor(item).has(item.url) && failures.some((failure) => affectsItem(failure.url, item));
     const unvisited =
       preserveUnvisited(item) &&
       !visitedFor(item).has(item.url) &&
       (!result.listings.has(item.containerUrl) ||
         result.listings.get(item.containerUrl)?.has(item.url));
     if (
-      !items.has(key(item)) &&
+      !items.has(domainItemKey(item)) &&
       (failedRead || unvisited) &&
       !unavailable.some((url) => affectsItem(url, item))
-    )
-      items.set(key(item), item);
+    ) {
+      if (item.dataType?.id !== "files") {
+        const count = perDocument.get(item.url) ?? 0;
+        if (records >= MAX_RECORDS_PER_REFRESH || count >= MAX_RECORDS_PER_DOCUMENT) {
+          result.truncated = true;
+          continue;
+        }
+        records++;
+        perDocument.set(item.url, count + 1);
+      }
+      items.set(domainItemKey(item), item);
+    }
   }
   return sortItems([...items.values()]);
 }
@@ -192,6 +216,7 @@ function createDomainStore(session: HomeSession) {
         const usage = storageUsage(fetch, session.storageUrl);
         // Independent budgets keep a large domain from starving every other domain.
         const scanned = [...DOMAINS, UNCATEGORISED];
+        const documentCache: NonNullable<DiscoveryOptions["documentCache"]> = new Map();
         const domains = await Promise.all(
           scanned.map((domain) =>
             discoverDomainItems(domain, {
@@ -200,6 +225,7 @@ function createDomainStore(session: HomeSession) {
               webId: session.webId,
               profile,
               typeIndex: indexes.locations,
+              documentCache,
             }),
           ),
         );
@@ -258,6 +284,7 @@ function createDomainStore(session: HomeSession) {
                     item,
                     await typedViewData(item.dataset, item.subject, {
                       storage: session.storageUrl,
+                      includeRawData: false,
                     }),
                   ),
                 ] as const,
