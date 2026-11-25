@@ -2,6 +2,7 @@
 import {
   EVENT_STATUS,
   type EventData,
+  guestListAvailable,
   type Invitation,
   type InviteeData,
   validateEvent,
@@ -33,7 +34,13 @@ export function invitationForm(
     capacity: text("capacity") ? Number(text("capacity")) : undefined,
     rsvpDeadline: text("rsvpDeadline") ? new Date(text("rsvpDeadline")) : undefined,
     visibility: existing?.visibility ?? (text("visibility") === "link" ? "link" : "invitees"),
-    guestListVisible: existing?.guestListVisible ?? form.get("guestListVisible") === "on",
+    // Only invitation-only events can show a guest list; a link holder never reads raw replies.
+    guestListVisible:
+      existing?.guestListVisible ??
+      guestListAvailable({
+        visibility: text("visibility") === "link" ? "link" : "invitees",
+        guestListVisible: form.get("guestListVisible") === "on",
+      }),
     publication: existing
       ? existing.publication === "draft" && text("publication") === "published"
         ? "published"

@@ -105,7 +105,7 @@ it("retains preview, progress and cancellation after the import view unmounts", 
   let signal!: AbortSignal;
   const repo: PlacesRepository = {
     base: "https://pod.example/places/",
-    initialize: vi.fn(async () => {}),
+    initialize: vi.fn(async () => ({})),
     load: vi.fn(async () => snapshot),
     savePlace: vi.fn(),
     importTimeline: vi.fn(async (_data, progress, active) => {

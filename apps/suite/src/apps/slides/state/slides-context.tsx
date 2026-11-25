@@ -11,6 +11,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { warnRegistrationFailed } from "@/lib/registration-notice";
 import type { PodSession } from "@/lib/session/pod-session";
 import { SlideSessionContext } from "../components/slide-canvas";
 import { seedSlides } from "../demo/sample";
@@ -58,6 +59,9 @@ export function SlidesProvider({
     void (async () => {
       const repository = await connectSlides(session);
       await repository.initialise();
+      // Type Index registration only helps other apps find presentations; the deck list is usable.
+      if (active && repository.registration.state === "failed")
+        warnRegistrationFailed("Presentations");
       await seedSlides(session, repository);
       const listing = await repository.list();
       const local = createDraftStorage(key);

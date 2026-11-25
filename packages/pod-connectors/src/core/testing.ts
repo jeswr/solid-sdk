@@ -325,10 +325,15 @@ export function createStorageMemoryPod(): Promise<MemoryPod> {
   return storageMemoryPod(TEST_POD_ROOT, TEST_PROFILE_DOC, PROFILE_TURTLE);
 }
 
+/** Owner-only checks for fixtures where no other principal can access the in-memory pod. */
+export const ownerOnlyFixtureChecks = {
+  verifyPrivateDestination: async () => true,
+  confirmPrivateWrite: async () => true,
+} as const;
+
 /** Keep legacy HTTP fault-injection fixtures available alongside the storage backend. */
 export function testPodWriter(pod: MemoryPod, adapterId: string) {
-  const ownerOnly = async () => true; // No other principal can access this fixture.
-  const privacy = { verifyPrivateDestination: ownerOnly, confirmPrivateWrite: ownerOnly };
+  const privacy = ownerOnlyFixtureChecks;
   return pod.storage
     ? createStoragePodWriter({
         storage: pod.storage,

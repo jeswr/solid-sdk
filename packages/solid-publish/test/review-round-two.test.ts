@@ -3,7 +3,12 @@
 import { readWac } from "@jeswr/pod-access";
 import { StorageError } from "@jeswr/storage-client";
 import { describe, expect, it, vi } from "vitest";
-import { openPublishRepository, PublicationError, publishRepository } from "../src/index.js";
+import {
+  openPublishRepository,
+  PublicationError,
+  publishRepository,
+  RetainedFilesError,
+} from "../src/index.js";
 import { owner, pageData, podFixture, root, siteData } from "./fixtures.js";
 
 async function prepared() {
@@ -232,6 +237,24 @@ describe("Publish second review regressions", () => {
     expect(pod.warning).toHaveBeenCalledWith(expect.stringContaining(directory));
     const refreshed = await pod.repo.refreshPublic(renamed.site);
     expect(refreshed.data.publicUrl).toBeDefined();
+    // Reusing the slug would make the retained file public: refused until the file is removed.
+    await expect(
+      pod.repo.publish(
+        refreshed,
+        renamed.page,
+        { ...renamed.page.data, slug: pageData.slug },
+        false,
+      ),
+    ).rejects.toBeInstanceOf(RetainedFilesError);
+    expect(
+      readWac(
+        (await pod.storage.readRdf(`${directory}.acl`)).dataset,
+        directory,
+        `${directory}.acl`,
+      ).grants.flatMap((g) => g.who.flat()),
+    ).toEqual([{ kind: "agent", webId: owner }]);
+    const extra = await pod.storage.head(`${directory}extra.txt`);
+    await pod.storage.delete(extra.url, { ifMatch: extra.etag as string });
     const reused = await pod.repo.publish(
       refreshed,
       renamed.page,

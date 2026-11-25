@@ -60,7 +60,7 @@ async function seed(session: PodSession, now: Date) {
         eventStatus: index === 4 ? EVENT_STATUS.cancelled : EVENT_STATUS.scheduled,
         capacity: 12 + index * 4,
         visibility: "link",
-        guestListVisible: index !== 1,
+        guestListVisible: false,
         publication: index === 2 ? "draft" : "published",
         created: now,
         modified: now,

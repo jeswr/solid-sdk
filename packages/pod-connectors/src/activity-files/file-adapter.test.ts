@@ -21,6 +21,7 @@ import {
   createMemoryPod,
   fileImport,
   memoryFile,
+  ownerOnlyFixtureChecks,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
   TEST_WEBID,
@@ -318,6 +319,7 @@ describe("activity-files file contract", () => {
         file: memoryFile("run", STRAVA_GPX),
         signal,
         podWriter: createFetchPodWriter({
+          ...ownerOnlyFixtureChecks,
           adapterId: "activity-files",
           webId: TEST_WEBID,
           profileDocumentUrl: TEST_PROFILE_DOC,
@@ -332,6 +334,7 @@ describe("activity-files file contract", () => {
     const pod = createMemoryPod();
     const controller = new AbortController();
     const writer = createFetchPodWriter({
+      ...ownerOnlyFixtureChecks,
       adapterId: "activity-files",
       webId: TEST_WEBID,
       profileDocumentUrl: TEST_PROFILE_DOC,
@@ -380,6 +383,7 @@ it("cancels a pending input stream promptly and releases it", async () => {
       file: input,
       signal: controller.signal,
       podWriter: createFetchPodWriter({
+        ...ownerOnlyFixtureChecks,
         adapterId: "activity-files",
         webId: TEST_WEBID,
         profileDocumentUrl: TEST_PROFILE_DOC,
@@ -450,6 +454,7 @@ it("keeps previous successful connector state on a Pod write failure", async () 
   };
   const onState = vi.fn();
   const writer = createFetchPodWriter({
+    ...ownerOnlyFixtureChecks,
     adapterId: "activity-files",
     webId: TEST_WEBID,
     profileDocumentUrl: TEST_PROFILE_DOC,

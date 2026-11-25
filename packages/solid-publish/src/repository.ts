@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import { checkOwnerOnly } from "@jeswr/pod-access";
 import { isRoleError, type RoleGrant, readGrants, setGrants } from "@jeswr/pod-access/roles";
-import { createTypeIndex } from "@jeswr/pod-type-index";
+import { createTypeIndex, type TypeIndex } from "@jeswr/pod-type-index";
 import {
   createPodClient,
   type StorageClient,
@@ -61,6 +61,20 @@ export class PublicationError extends Error {
 export class UnsupportedPublishAccessError extends PublicationError {
   constructor() {
     super("This pod's access control isn't supported by Publish yet.");
+  }
+}
+/**
+ * A slug folder kept files from an earlier unpublish. Publishing would make them public again,
+ * so Publish refuses before any public write. Remove the files or choose another slug.
+ */
+export class RetainedFilesError extends PublicationError {
+  readonly directory: string;
+  constructor(directory: string) {
+    super(
+      `${directory} still holds files left by an earlier unpublish, and publishing here would make them public. Nothing was published. Remove those files or choose a different URL for this page.`,
+    );
+    this.name = "RetainedFilesError";
+    this.directory = directory;
   }
 }
 class InvalidDocumentError extends PublicationError {}
@@ -265,12 +279,19 @@ export function publishRepository(
       return storage.writeRdf(url, dataset, options);
     },
   };
-  const index = createTypeIndex({
-    storage: indexStorage,
-    features: storage.features,
-    profile: owner,
-    fetch,
-  });
+  // A WebID outside this storage cannot be registered through it (`scope`). Registration is only
+  // discovery metadata, so Publish opens without it and says so when it saves a site.
+  let index: TypeIndex | undefined;
+  try {
+    index = createTypeIndex({
+      storage: indexStorage,
+      features: storage.features,
+      profile: owner,
+      fetch,
+    });
+  } catch (error) {
+    if (!(error instanceof StorageError) || error.code !== "scope") throw error;
+  }
   let indexWarned = false;
   async function listSites(): Promise<PublishListing<StoredSite>> {
     await initialise();
@@ -283,7 +304,7 @@ export function publishRepository(
     }
     let hints: string[] = [];
     try {
-      hints = await index.find(SITE_CLASS);
+      hints = (await index?.find(SITE_CLASS)) ?? [];
     } catch (cause) {
       if (cause instanceof StorageError && cause.code === "unauthenticated")
         throw new PublicationError("Your pod session has expired. Reconnect to open Publish.", {
@@ -377,6 +398,7 @@ export function publishRepository(
     );
     const site = { ...made, data: validateSite({ ...data, publicUrl: undefined }) };
     try {
+      if (!index) throw new PublicationError("The WebID profile is outside this pod's storage.");
       await index.register(SITE_CLASS, { instance: made.url });
     } catch {
       onWarning(
@@ -405,6 +427,11 @@ export function publishRepository(
   async function createPage(site: StoredSite, id: string, data: PageData): Promise<StoredPage> {
     assertSlug(id);
     validatePage(data);
+    // A new page is always a private draft; only `publish` makes a page public.
+    if (data.status === "published")
+      throw new PublicationError(
+        "A new page starts as a private draft. Create it, then use publish. Nothing was saved.",
+      );
     await checkSlug(site, data);
     const root = await container(new URL("./", site.url).href, "pages", true);
     const url = new URL(`${id}.ttl`, root).href;
@@ -412,8 +439,33 @@ export function publishRepository(
     const made = await privateCreate(root, `${id}.ttl`, await serializePage(url, valid));
     return { ...made, data: valid };
   }
+  // Saving a draft source must never change what is public. Once a page is published (or would
+  // become so), its source only changes through `publish`, which rebuilds the public copy in the
+  // same explicit step. Re-ordering is the one exception: it changes no page content.
+  async function assertDraftSave(page: StoredPage, data: PageData) {
+    // Judge the stored page, never the caller's copy of it; a stale write still fails `If-Match`.
+    const current = await read<PageData>(page.url, parsePage);
+    if (current.data.status !== "published" && data.status !== "published") return;
+    // The one change a published page accepts here is its position.
+    if (current.data.status === "published" && data.status === "published") {
+      const moved = { ...data, position: current.data.position };
+      if ((await serializePage(page.url, moved)) === (await serializePage(page.url, current.data)))
+        return;
+    }
+    throw new PublicationError(
+      "This page is published. Use publish to update it, or unpublish it to edit a private draft. Nothing was saved.",
+    );
+  }
   async function savePage(site: StoredSite, page: StoredPage, data: PageData): Promise<StoredPage> {
     pageScope(site, page);
+    await assertDraftSave(page, validatePage(data));
+    return writePage(site, page, data);
+  }
+  async function writePage(
+    site: StoredSite,
+    page: StoredPage,
+    data: PageData,
+  ): Promise<StoredPage> {
     const valid = validatePage(data);
     await checkSlug(site, valid, page.url);
     const saved = await storage.write(page.url, await serializePage(page.url, valid), {
@@ -494,10 +546,38 @@ export function publishRepository(
       `Publish couldn't read these page sources: ${sources}. It left existing public page folders in place. Fix or remove those sources, then update the site to remove stale pages.`,
     );
   }
+  // A slug folder made owner-only by an earlier unpublish may still hold unrelated files, which
+  // widening it would publish. Detect that read-only, so every refusal precedes any public write.
+  async function hasRetainedFiles(directory: string): Promise<boolean> {
+    if (!(await exists(directory))) return false;
+    const access = await currentGrants(directory);
+    if (!access.grants.some((grant) => !grant.inherited)) return false;
+    if (access.grants.some((grant) => grant.agent.type === "public")) return false;
+    // Some pods list the folder's own access document.
+    const policies = new Set(access.grants.map((grant) => grant.source));
+    for await (const entry of storage.listAll(directory)) if (!policies.has(entry.url)) return true;
+    return false;
+  }
+  async function assertNoRetainedFiles(slugs: readonly string[], site: StoredSite) {
+    for (const slug of slugs) {
+      assertSlug(slug);
+      const directory = new URL(`${slug}/`, publicUrl(site)).href;
+      if (await hasRetainedFiles(directory)) throw new RetainedFilesError(directory);
+    }
+  }
   async function rebuild(site: StoredSite, publishingSlug?: string): Promise<StoredSite> {
     const listing = await listPages(site);
     const pages = listing.items.map((p) => p.data).filter((p) => p.status === "published");
     const incomplete = listing.invalid.length > 0;
+    if (pages.length) {
+      const writable: string[] = [];
+      for (const page of pages) {
+        const url = new URL(`${page.slug}/index.html`, publicUrl(site)).href;
+        // Pages whose public HTML is kept as is are not rewritten, so they are not checked.
+        if (!(incomplete && (await exists(url)))) writable.push(page.slug);
+      }
+      await assertNoRetainedFiles(writable, site);
+    }
     if (incomplete) {
       unreadableWarning(listing.invalid);
       if (!pages.length) return site;
@@ -526,22 +606,10 @@ export function publishRepository(
         continue;
       }
       const directory = await container(root, page.slug);
+      // Checked again here: files can appear between the pre-check and this write.
+      if (await hasRetainedFiles(directory)) throw new RetainedFilesError(directory);
       const access = await currentGrants(directory);
-      if (access.grants.some((grant) => !grant.inherited)) {
-        // An own ACL without public Read means an earlier unpublish kept extra files private.
-        let retainedFiles = false;
-        if (!access.grants.some((grant) => grant.agent.type === "public")) {
-          // Some pods list the folder's own access document.
-          const policies = new Set(access.grants.map((grant) => grant.source));
-          for await (const entry of storage.listAll(directory))
-            if (!policies.has(entry.url)) retainedFiles = true;
-        }
-        await permissions(directory, true);
-        if (retainedFiles)
-          onWarning(
-            `Publish reused ${directory}. Files left in this folder by an earlier unpublish are public again.`,
-          );
-      }
+      if (access.grants.some((grant) => !grant.inherited)) await permissions(directory, true);
       await output(
         url,
         renderPage(renderSite, page, pages),
@@ -591,11 +659,14 @@ export function publishRepository(
       if (await exists(new URL(`${data.slug}/index.html`, publicUrl(site)).href))
         throw occupiedSlug();
     }
-    const saved = await savePage(site, page, {
+    const next: PageData = {
       ...data,
       status: "published",
       published: data.published ?? page.data.published ?? new Date(),
-    });
+    };
+    // Refuse before the source is marked published or any public byte is written.
+    await assertNoRetainedFiles([validatePage(next).slug], site);
+    const saved = await writePage(site, page, next);
     try {
       return { page: saved, site: await rebuild(site, saved.data.slug) };
     } catch (cause) {
@@ -619,7 +690,7 @@ export function publishRepository(
       site,
       listing.items.filter((p) => p.url !== page.url).map((p) => p.data),
     );
-    const saved = await savePage(site, page, { ...page.data, status: "draft" });
+    const saved = await writePage(site, page, { ...page.data, status: "draft" });
     return { page: saved, site: await rebuild(site) };
   }
   return {

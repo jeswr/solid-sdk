@@ -4,7 +4,7 @@ import { readWac } from "@jeswr/pod-access";
 import { StorageError } from "@jeswr/storage-client";
 import { describe, expect, it } from "vitest";
 import { publishRepository } from "../src/index.js";
-import { owner, pageData, podFixture, root, siteData } from "./fixtures.js";
+import { editSourceDirectly, owner, pageData, podFixture, root, siteData } from "./fixtures.js";
 
 async function prepared() {
   const pod = await podFixture();
@@ -195,7 +195,7 @@ describe("Publish review regressions", () => {
   it("does not claim a private draft while an old public slug cannot be deleted", async () => {
     const pod = await prepared();
     const published = await pod.repo.publish(pod.site, pod.page, pageData, true);
-    const renamed = await pod.repo.savePage(published.site, published.page, {
+    const renamed = await editSourceDirectly(pod.storage, published.page, {
       ...published.page.data,
       slug: "renamed",
     });

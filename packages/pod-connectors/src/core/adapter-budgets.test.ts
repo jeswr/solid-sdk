@@ -5,7 +5,13 @@ import type { RunLimits } from "./budget.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { runImport } from "./import-runner.js";
 import { createFetchPodWriter } from "./pod-writer.js";
-import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "./testing.js";
+import {
+  createMemoryPod,
+  ownerOnlyFixtureChecks,
+  TEST_POD_ROOT,
+  TEST_PROFILE_DOC,
+  TEST_WEBID,
+} from "./testing.js";
 import type { ConnectorState, IntegrationAdapter } from "./types.js";
 
 const state: ConnectorState = {
@@ -29,6 +35,7 @@ async function capped(
     mode: "live",
     sourceAuth: { fetch: api },
     podWriter: createFetchPodWriter({
+      ...ownerOnlyFixtureChecks,
       adapterId: adapter.metadata.id,
       webId: TEST_WEBID,
       profileDocumentUrl: TEST_PROFILE_DOC,
