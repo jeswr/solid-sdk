@@ -42,6 +42,8 @@ export class RdfIO {
     url: string,
     dataset: DatasetCore,
     precondition: { create: true } | { etag: string | null },
+    /** Set once the PUT itself succeeded, so callers can tell read-back failures apart. */
+    phase?: { committed: boolean },
   ): Promise<Resource> {
     const headers: Record<string, string> = { "Content-Type": "text/turtle" };
     if ("create" in precondition) headers["If-None-Match"] = "*";
@@ -51,6 +53,7 @@ export class RdfIO {
       headers,
       body: await serialize(dataset),
     });
+    if (phase) phase.committed = true;
     const resource = { url, dataset: new Store([...dataset]), etag: response.headers.get("ETag") };
     if (resource.etag) return resource;
     // A transformed PUT may omit validators. Never attach a read validator to
