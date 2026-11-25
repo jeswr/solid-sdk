@@ -14,6 +14,7 @@
 // AUTH SEAM: the `fetch` prop is the injected authenticated fetch, threaded to
 // `usePhotoGallery` → the data layer. See usePhotoGallery.ts for the full note.
 
+import { useState } from 'react';
 import { breadcrumbFor } from './breadcrumb.js';
 import { photoAltText, photoDimensions, photoTitle } from './format.js';
 import { usePhotoGallery } from './usePhotoGallery.js';
@@ -30,6 +31,33 @@ export interface PhotoGalleryProps {
   fetch?: typeof fetch;
   /** Optional heading rendered above the gallery. */
   title?: string;
+  /** The root is a media-store library: also list its `<yyyy>/<mm>/` shard containers. */
+  aggregateShards?: boolean;
+}
+
+/**
+ * One grid tile image. The binary is requested by the browser without the session's
+ * credentials, so a private image answers 401 and fails to load; show the same
+ * placeholder as a photo with no `contentUrl` instead of a broken image.
+ */
+function Thumb({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <div className="pod-photos-thumb-missing" role="img" aria-label={alt}>
+        🖼️
+      </div>
+    );
+  }
+  return (
+    <img
+      className="pod-photos-thumb"
+      src={src}
+      alt={alt}
+      loading="lazy"
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 /**
@@ -38,10 +66,10 @@ export interface PhotoGalleryProps {
  * (`schema:contentUrl`) as the thumbnail, a title caption, and optional pixel
  * dimensions. Empty / loading / error / access-denied states are all handled.
  */
-export function PhotoGallery({ rootUrl, fetch, title }: PhotoGalleryProps) {
+export function PhotoGallery({ rootUrl, fetch, title, aggregateShards }: PhotoGalleryProps) {
   const { listing, loading, error, isAccessError, currentUrl, navigate, refresh } = usePhotoGallery(
     rootUrl,
-    fetch ? { fetch } : {},
+    { ...(fetch ? { fetch } : {}), ...(aggregateShards ? { aggregateShards } : {}) },
   );
 
   const crumbs = breadcrumbFor(currentUrl, rootUrl);
@@ -119,12 +147,7 @@ export function PhotoGallery({ rootUrl, fetch, title }: PhotoGalleryProps) {
               <li key={entry.url} className="pod-photos-tile">
                 <figure>
                   {src ? (
-                    <img
-                      className="pod-photos-thumb"
-                      src={src}
-                      alt={photoAltText(entry.url, entry.photo)}
-                      loading="lazy"
-                    />
+                    <Thumb src={src} alt={photoAltText(entry.url, entry.photo)} />
                   ) : (
                     // A photo description with no image binary — render a
                     // placeholder rather than a broken <img> with an empty src.

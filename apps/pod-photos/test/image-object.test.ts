@@ -1,250 +1,234 @@
 // AUTHORED-BY Claude Sonnet 5.5
 /**
  * `schema:ImageObject` documents written by other apps (creative-assets) are read as
- * photos; `schema:Photograph` is unchanged; the thumbnail node is skipped; edits keep
- * the other app's triples.
+ * photos; `schema:Photograph` is unchanged; a thumbnail is never a second photo; and
+ * documents Pod Photos does not own are read-only (update and remove refuse before any
+ * write).
  *
- * The documents below follow the layout `@jeswr/solid-creative-assets` writes (`<doc#it>`
- * with `#thumbnail`, `#run`, `#prompt`, `#model`, `#setting-n`). They are Turtle fixtures,
- * not the package's own output: see the creative-assets README for why.
+ * `ASSET_TTL` and `VIDEO_TTL` are the verbatim output of `serializeAssetDocument` from
+ * `@jeswr/solid-creative-assets` (image with thumbnail, run, prompt, model and one
+ * setting; and a video), with the document URL `https://alice.example/creative/2026/06/abc`.
+ * An import-based interop test is still pending: it needs that package as an app
+ * devDependency.
  */
-import { DataFactory, Parser, Store } from 'n3';
-import { describe, expect, it } from 'vitest';
-import { mergePhoto, parsePhoto } from '../src/photos/photograph.js';
-import { albumsStore, photosStore } from '../src/photos/stores.js';
-import { IMAGE_OBJECT_CLASS, PHOTOGRAPH_CLASS, SCHEMA } from '../src/photos/vocab.js';
-import { MockPod, containerTurtle } from './helpers/mock-pod.js';
+import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { Parser, Store } from "n3";
+import { describe, expect, it } from "vitest";
+import { parsePhoto, thumbnailDocuments } from "../src/photos/photograph.js";
+import { albumsStore, photosStore } from "../src/photos/stores.js";
+import { IMAGE_OBJECT_CLASS, PHOTOGRAPH_CLASS, SCHEMA } from "../src/photos/vocab.js";
+import { ForeignDocumentError } from "../src/pod/errors.js";
+import { containerTurtle, MockPod } from "./helpers/mock-pod.js";
 
-const POD = 'https://alice.example/';
-const WEBID = 'https://alice.example/profile/card#me';
-const SOLID = 'http://www.w3.org/ns/solid/terms#';
-const DOC = 'https://alice.example/photos/sunset';
-const PROV = 'http://www.w3.org/ns/prov#';
+const POD = "https://alice.example/";
+const WEBID = "https://alice.example/profile/card#me";
+const BASE = "https://alice.example/creative/2026/06/abc";
 
-function parse(ttl: string): Store {
-  return new Store(new Parser({ baseIRI: DOC }).parse(ttl));
-}
+const ASSET_TTL = `@prefix schema: <https://schema.org/>.
+@prefix prov: <http://www.w3.org/ns/prov#>.
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
 
-/** An image document in the creative-assets layout, typed with `type` (default ImageObject). */
-function assetTtl(type = `<${SCHEMA}ImageObject>`): string {
-  return `
-@prefix schema: <${SCHEMA}> .
-@prefix prov: <${PROV}> .
-@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-<${DOC}#it> a ${type} ;
-  schema:name "Sunset fox" ;
-  schema:description "A red fox at sunset." ;
-  schema:contentUrl <https://alice.example/creative/files/sunset.png> ;
-  schema:keywords "ai", "sunset" ;
-  schema:width 1024 ; schema:height 768 ;
-  schema:dateCreated "2026-06-15T09:41:07.000Z"^^xsd:dateTime ;
-  schema:encodingFormat "image/png" ;
-  schema:thumbnail <${DOC}#thumbnail> ;
-  prov:wasGeneratedBy <${DOC}#run> .
-<${DOC}#thumbnail> a <${SCHEMA}ImageObject> ;
-  schema:contentUrl <https://alice.example/creative/files/sunset-thumb.webp> ;
-  schema:width 128 ; schema:height 96 .
-<${DOC}#run> a prov:Activity ;
-  prov:used <${DOC}#prompt> ;
-  prov:wasAssociatedWith <${DOC}#model> ;
-  schema:additionalProperty <${DOC}#setting-1> .
-<${DOC}#prompt> a prov:Entity ; schema:text "a red fox at sunset" .
-<${DOC}#model> a <${SCHEMA}SoftwareApplication> ; schema:name "Flux Pro" .
-<${DOC}#setting-1> a <${SCHEMA}PropertyValue> ; schema:propertyID "seed" ; schema:value "42" .
+<${BASE}#it> a schema:ImageObject;
+    prov:wasGeneratedBy <${BASE}#run>;
+    schema:contentUrl <https://alice.example/creative/files/sunset.png>;
+    schema:creator <https://alice.example/profile/card#me>;
+    schema:dateCreated "2026-06-15T09:41:07.000Z"^^xsd:dateTime;
+    schema:description "A red fox at sunset.";
+    schema:encodingFormat "image/png";
+    schema:height 768;
+    schema:keywords "ai", "sunset";
+    schema:name "Sunset fox";
+    schema:thumbnail <${BASE}#thumbnail>;
+    schema:width 1024.
+<${BASE}#run> a prov:Activity;
+    prov:used <${BASE}#prompt>, <${BASE}#setting-1>;
+    prov:wasAssociatedWith <https://alice.example/profile/card#me>, <${BASE}#model>.
+<${BASE}#thumbnail> a schema:ImageObject;
+    schema:contentUrl <https://alice.example/creative/files/sunset-thumb.webp>;
+    schema:encodingFormat "image/webp";
+    schema:height 96;
+    schema:width 128.
+<${BASE}#prompt> a schema:CreativeWork, prov:Entity;
+    schema:text "a red fox at sunset".
+<${BASE}#setting-1> a schema:PropertyValue;
+    schema:propertyID "seed";
+    schema:value "42".
+<${BASE}#model> a schema:SoftwareApplication, prov:SoftwareAgent;
+    schema:name "Flux Pro";
+    schema:identifier "flux-pro-1.1".
 `;
-}
 
-describe('parsePhoto: schema:ImageObject', () => {
-  it('reads an ImageObject document as a photo', () => {
-    const photo = parsePhoto(DOC, parse(assetTtl()));
-    expect(photo).toEqual({
-      name: 'Sunset fox',
-      description: 'A red fox at sunset.',
-      contentUrl: 'https://alice.example/creative/files/sunset.png',
-      keywords: ['ai', 'sunset'],
-      exif: { pixelWidth: 1024, pixelHeight: 768, dateTimeOriginal: '2026-06-15T09:41:07.000Z' },
-    });
+const VIDEO_TTL = `@prefix schema: <https://schema.org/>.
+<${BASE}#it> a schema:VideoObject;
+    schema:contentUrl <https://alice.example/creative/files/fox.mp4>;
+    schema:name "Fox run".
+`;
+
+/** Move a fixture document to another URL. */
+const at = (ttl: string, url: string) => ttl.replaceAll(BASE, url);
+const parse = (ttl: string, url = BASE) => new Store(new Parser({ baseIRI: url }).parse(ttl));
+const typed = (type: string) =>
+  ASSET_TTL.replace(
+    "a schema:ImageObject;\n    prov:wasGeneratedBy",
+    `a ${type};\n    prov:wasGeneratedBy`,
+  );
+
+const SUNSET = {
+  name: "Sunset fox",
+  description: "A red fox at sunset.",
+  contentUrl: "https://alice.example/creative/files/sunset.png",
+  keywords: ["ai", "sunset"],
+  exif: { pixelWidth: 1024, pixelHeight: 768, dateTimeOriginal: "2026-06-15T09:41:07.000Z" },
+};
+
+describe("parsePhoto: schema:ImageObject", () => {
+  it("reads a creative-assets image document as a photo", () => {
+    expect(parsePhoto(BASE, parse(ASSET_TTL))).toEqual(SUNSET);
   });
 
-  it('still reads a schema:Photograph', () => {
-    expect(parsePhoto(DOC, parse(assetTtl(`<${PHOTOGRAPH_CLASS}>`)))?.name).toBe('Sunset fox');
+  it("still reads a schema:Photograph", () => {
+    expect(parsePhoto(BASE, parse(typed("schema:Photograph")))).toEqual(SUNSET);
   });
 
-  it('reads a Photograph that is also an ImageObject target of a thumbnail', () => {
-    const ds = parse(assetTtl(`<${PHOTOGRAPH_CLASS}>, <${IMAGE_OBJECT_CLASS}>`));
-    ds.addQuad(
-      DataFactory.namedNode(`${DOC}#other`),
-      DataFactory.namedNode(`${SCHEMA}thumbnail`),
-      DataFactory.namedNode(`${DOC}#it`),
-    );
-    expect(parsePhoto(DOC, ds)?.name).toBe('Sunset fox');
+  it("reads one photo per document: the #thumbnail image is not a second photo", () => {
+    // Only <doc#it> is a photo subject, so the thumbnail's own dimensions never leak.
+    const photo = parsePhoto(BASE, parse(ASSET_TTL));
+    expect(photo?.exif.pixelWidth).toBe(1024);
+    expect(photo?.contentUrl).not.toContain("thumb");
   });
 
-  it('does not read the thumbnail node as a photo', () => {
-    // The library item is <doc#it>; a node that is a schema:thumbnail object is skipped.
+  it("does not read a video document as a photo", () => {
+    expect(parsePhoto(BASE, parse(VIDEO_TTL))).toBeUndefined();
+  });
+
+  it("skips an ImageObject that another node names as its thumbnail", () => {
     const ds = parse(`
-      <${DOC}#parent> <${SCHEMA}thumbnail> <${DOC}#it> .
-      <${DOC}#it> a <${IMAGE_OBJECT_CLASS}> ; <${SCHEMA}name> "thumb" .
+      <${BASE}#parent> <${SCHEMA}thumbnail> <${BASE}#it> .
+      <${BASE}#it> a <${IMAGE_OBJECT_CLASS}> ; <${SCHEMA}name> "thumb" .
     `);
-    expect(parsePhoto(DOC, ds)).toBeUndefined();
+    expect(parsePhoto(BASE, ds)).toBeUndefined();
   });
 
-  it('ignores the extra provenance nodes (one photo per document)', () => {
-    const ds = parse(assetTtl());
-    expect(parsePhoto(DOC, ds)?.keywords).toEqual(['ai', 'sunset']);
-    // Only #it is ever a photo subject; the #thumbnail image is never a second photo.
-    expect(parsePhoto(`${DOC}-other`, ds)).toBeUndefined();
+  it("reads a Photograph even when a node names it as a thumbnail", () => {
+    const ds = parse(`
+      <${BASE}#parent> <${SCHEMA}thumbnail> <${BASE}#it> .
+      <${BASE}#it> a <${PHOTOGRAPH_CLASS}> ; <${SCHEMA}name> "keep" .
+    `);
+    expect(parsePhoto(BASE, ds)?.name).toBe("keep");
   });
 
-  it('behaves as before for the legacy http://schema.org/ scheme (not a photo)', () => {
-    const legacy = `
-      <${DOC}#it> a <http://schema.org/Photograph> ; <http://schema.org/name> "Old" .
-    `;
-    expect(parsePhoto(DOC, parse(legacy))).toBeUndefined();
-    const legacyImage = `
-      <${DOC}#it> a <http://schema.org/ImageObject> ; <http://schema.org/name> "Old" .
-    `;
-    expect(parsePhoto(DOC, parse(legacyImage))).toBeUndefined();
-  });
-
-  it('is not a photo when the type is neither', () => {
-    expect(parsePhoto(DOC, parse(assetTtl(`<${SCHEMA}VideoObject>`)))).toBeUndefined();
+  it("behaves as before for the legacy http://schema.org/ scheme (not a photo)", () => {
+    for (const type of ["Photograph", "ImageObject"]) {
+      const legacy = `<${BASE}#it> a <http://schema.org/${type}> ; <http://schema.org/name> "Old" .`;
+      expect(parsePhoto(BASE, parse(legacy))).toBeUndefined();
+    }
   });
 });
 
-describe('listing through the store', () => {
-  it('lists an ImageObject, a Photograph and a creative-assets document once each', async () => {
+describe("thumbnailDocuments", () => {
+  it("names a thumbnail kept in another document, not the document itself", () => {
+    const other = "https://alice.example/creative/2026/06/abc-thumb";
+    const ds = parse(`
+      <${BASE}#it> <${SCHEMA}thumbnail> <${other}#it>, <${BASE}#thumbnail>, "text" .
+    `);
+    expect(thumbnailDocuments(BASE, ds)).toEqual([other]);
+  });
+});
+
+describe("listing through the store", () => {
+  it("lists an ImageObject, a Photograph and a creative-assets document once each, and skips other types", async () => {
     const pod = new MockPod();
     const store = photosStore({ podRoot: POD, webId: WEBID, fetchImpl: pod.fetch });
-    const a = `${POD}photos/a`;
-    const b = `${POD}photos/b`;
-    const c = `${POD}photos/c`;
-    const rewrite = (ttl: string, url: string) => ttl.replaceAll(DOC, url);
-    pod.seed(a, rewrite(assetTtl(), a));
-    pod.seed(b, rewrite(assetTtl(`<${PHOTOGRAPH_CLASS}>`), b));
+    const [a, b, c, d] = ["a", "b", "c", "d"].map((n) => `${POD}photos/${n}`);
+    pod.seed(a as string, at(ASSET_TTL, a as string));
+    pod.seed(b as string, at(typed("schema:Photograph"), b as string));
+    pod.seed(c as string, at(VIDEO_TTL, c as string));
+    // A malformed ImageObject (literal contentUrl) is skipped, not thrown out of the list.
     pod.seed(
-      c,
-      `<${c}#it> a <${SCHEMA}VideoObject> ; <${SCHEMA}name> "clip" .`,
+      d as string,
+      `<${d}#it> a <${IMAGE_OBJECT_CLASS}> ; <${SCHEMA}contentUrl> "not an iri" .`,
     );
-    pod.seed(`${POD}photos/`, containerTurtle(`${POD}photos/`, [a, b, c]));
+    pod.seed(`${POD}photos/`, containerTurtle(`${POD}photos/`, [a, b, c, d] as string[]));
     const listed = await store.list();
     expect(listed.map((i) => i.url)).toEqual([a, b]);
-    expect(listed.map((i) => i.data.name)).toEqual(['Sunset fox', 'Sunset fox']);
+    expect(listed.map((i) => i.data)).toEqual([SUNSET, SUNSET]);
   });
 });
 
-describe('editing a foreign ImageObject keeps the other app’s triples', () => {
-  it('mergePhoto replaces modelled triples and keeps type and provenance nodes', () => {
-    const existing = parse(assetTtl());
-    const photo = parsePhoto(DOC, existing);
-    if (!photo) throw new Error('expected a photo');
-    const merged = mergePhoto(DOC, existing, {
-      ...photo,
-      name: 'Renamed',
-      description: undefined,
-      keywords: ['fox'],
-    });
-    const reread = parsePhoto(DOC, merged);
-    expect(reread?.name).toBe('Renamed');
-    expect(reread?.description).toBeUndefined();
-    expect(reread?.keywords).toEqual(['fox']);
-    expect(reread?.contentUrl).toBe(photo.contentUrl);
+describe("foreign documents are read-only", () => {
+  const PHOTO = { ...SUNSET, name: "Renamed" };
 
-    const has = (s: string, p: string) =>
-      merged.match(DataFactory.namedNode(s), DataFactory.namedNode(p), null).size;
-    // Type is kept (not re-stamped schema:Photograph) and no duplicates appear.
-    const types = [
-      ...merged.match(
-        DataFactory.namedNode(`${DOC}#it`),
-        DataFactory.namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'),
-        null,
-      ),
-    ].map((q) => q.object.value);
-    expect(types).toEqual([IMAGE_OBJECT_CLASS]);
-    expect(has(`${DOC}#it`, `${SCHEMA}name`)).toBe(1);
-    // Other app's nodes and properties survive.
-    expect(has(`${DOC}#it`, `${SCHEMA}thumbnail`)).toBe(1);
-    expect(has(`${DOC}#it`, `${SCHEMA}encodingFormat`)).toBe(1);
-    expect(has(`${DOC}#it`, `${PROV}wasGeneratedBy`)).toBe(1);
-    expect(has(`${DOC}#thumbnail`, `${SCHEMA}contentUrl`)).toBe(1);
-    expect(has(`${DOC}#run`, `${PROV}used`)).toBe(1);
-    expect(has(`${DOC}#prompt`, `${SCHEMA}text`)).toBe(1);
-    expect(has(`${DOC}#model`, `${SCHEMA}name`)).toBe(1);
-    expect(has(`${DOC}#setting-1`, `${SCHEMA}value`)).toBe(1);
-  });
-
-  it('replaces an owned geo node and keeps a foreign one', () => {
-    const existing = parse(`
-      <${DOC}#it> a <${IMAGE_OBJECT_CLASS}> ; <${SCHEMA}name> "x" ; <${SCHEMA}geo> <${DOC}#geo> .
-      <${DOC}#geo> <http://www.w3.org/2003/01/geo/wgs84_pos#lat> 1 .
-    `);
-    const merged = mergePhoto(DOC, existing, {
-      name: 'x',
-      contentUrl: '',
-      keywords: [],
-      exif: { location: { lat: 2, long: 3 } },
-    });
-    expect(parsePhoto(DOC, merged)?.exif.location).toEqual({ lat: 2, long: 3 });
-
-    const foreign = parse(`
-      <${DOC}#it> a <${IMAGE_OBJECT_CLASS}> ; <${SCHEMA}geo> <https://elsewhere.example/place> .
-      <https://elsewhere.example/place> <${SCHEMA}name> "Place" .
-    `);
-    const kept = mergePhoto(DOC, foreign, { name: 'x', contentUrl: '', keywords: [], exif: {} });
-    expect(
-      kept.match(DataFactory.namedNode('https://elsewhere.example/place'), null, null).size,
-    ).toBe(1);
-
-    const blank = parse(`
-      <${DOC}#it> a <${IMAGE_OBJECT_CLASS}> ; <${SCHEMA}geo> [ <${SCHEMA}name> "blank" ] .
-    `);
-    const dropped = mergePhoto(DOC, blank, { name: 'x', contentUrl: '', keywords: [], exif: {} });
-    expect(dropped.match(null, DataFactory.namedNode(`${SCHEMA}name`), null).size).toBe(1);
-  });
-
-  it('drops a malformed literal schema:geo value', () => {
-    const odd = parse(`<${DOC}#it> a <${IMAGE_OBJECT_CLASS}> ; <${SCHEMA}geo> "nowhere" .`);
-    const merged = mergePhoto(DOC, odd, { name: 'x', contentUrl: '', keywords: [], exif: {} });
-    expect(merged.match(null, DataFactory.namedNode(`${SCHEMA}geo`), null).size).toBe(0);
-  });
-
-  it('falls back to a fresh Photograph when the document holds no photo node', () => {
-    const merged = mergePhoto(DOC, new Store(), {
-      name: 'New',
-      contentUrl: '',
-      keywords: [],
-      exif: {},
-    });
-    expect(parsePhoto(DOC, merged)?.name).toBe('New');
-  });
-
-  it('store.update writes the merged document through to the pod', async () => {
+  function setup(ttl: string | undefined) {
     const pod = new MockPod();
-    pod.seed(WEBID, `<${WEBID}> <${SOLID}oidcIssuer> <https://idp.example/> .`);
-    const store = photosStore({ podRoot: POD, webId: WEBID, fetchImpl: pod.fetch });
-    pod.seed(DOC, assetTtl());
-    const item = await store.read(DOC);
-    if (!item) throw new Error('expected an item');
-    await store.update(DOC, { ...item.data, name: 'Renamed' }, item.etag);
-    const body = pod.resources.get(DOC)?.body ?? '';
-    expect(body).toContain('Renamed');
-    expect(body).toContain('wasGeneratedBy');
-    expect(body).toContain('setting-1');
-    expect(body).toContain('ImageObject');
-    expect(body).not.toContain('Photograph');
-  });
-});
+    const url = `${POD}photos/doc`;
+    if (ttl !== undefined) pod.seed(url, at(ttl, url));
+    const writes: string[] = [];
+    const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+      const method = (init?.method ?? "GET").toUpperCase();
+      if (method !== "GET" && method !== "HEAD") writes.push(`${method} ${String(input)}`);
+      return pod.fetch(input, init);
+    }) as typeof fetch;
+    const store = photosStore({ podRoot: POD, webId: WEBID, fetchImpl });
+    return { pod, url, writes, store };
+  }
 
-describe('albums are still rewritten from the model (no merge)', () => {
-  it('updates an album document', async () => {
+  it.each([
+    ["an ImageObject", ASSET_TTL],
+    ["a video document", VIDEO_TTL],
+    [
+      "a document with no photo node",
+      `<https://alice.example/photos/doc#other> <${SCHEMA}name> "x" .`,
+    ],
+  ])("refuses update and remove of %s with zero write requests", async (_label, ttl) => {
+    const { pod, url, writes, store } = setup(ttl);
+    const before = pod.resources.get(url)?.body;
+    await expect(store.update(url, PHOTO)).rejects.toBeInstanceOf(ForeignDocumentError);
+    await expect(store.update(url, PHOTO, '"etag-1"')).rejects.toBeInstanceOf(ForeignDocumentError);
+    await expect(store.remove(url)).rejects.toBeInstanceOf(ForeignDocumentError);
+    expect(writes).toEqual([]);
+    expect(pod.resources.get(url)?.body).toBe(before);
+  });
+
+  it("still updates and removes a genuine Photograph", async () => {
+    const { pod, url, writes, store } = setup(typed("schema:Photograph"));
+    await store.update(url, PHOTO);
+    expect(writes).toEqual([`PUT ${url}`]);
+    expect((await store.read(url))?.data.name).toBe("Renamed");
+    await store.remove(url);
+    expect(pod.resources.has(url)).toBe(false);
+  });
+
+  it("writes a missing document as before (no document to protect)", async () => {
+    const { writes, url, store } = setup(undefined);
+    await store.update(url, PHOTO);
+    expect(writes).toEqual([`PUT ${url}`]);
+    const gone = setup(undefined);
+    await gone.store.remove(gone.url);
+    expect(gone.writes).toEqual([`DELETE ${gone.url}`]);
+  });
+
+  it("writes nothing when the existing document cannot be read", async () => {
+    const { writes, store, url } = setup("this is { not turtle");
+    await expect(store.update(url, PHOTO)).rejects.toBeDefined();
+    await expect(store.remove(url)).rejects.toBeDefined();
+    expect(writes).toEqual([]);
+  });
+
+  it("does not guard albums (they are always this app’s own documents)", async () => {
     const pod = new MockPod();
     const albums = albumsStore({ podRoot: POD, webId: WEBID, fetchImpl: pod.fetch });
     const url = `${POD}albums/trip`;
-    pod.seed(
-      url,
-      `<${url}#it> a <${SCHEMA}ImageGallery> ; <${SCHEMA}name> "Trip" .`,
-    );
-    await albums.update(url, { name: 'Trip 2', members: [`${DOC}#it`] });
-    expect(pod.resources.get(url)?.body).toContain('Trip 2');
+    pod.seed(url, `<${url}#it> a <${SCHEMA}ImageGallery> ; <${SCHEMA}name> "Trip" .`);
+    await albums.update(url, { name: "Trip 2", members: [`${BASE}#it`] });
+    expect((await albums.read(url))?.data.name).toBe("Trip 2");
+  });
+});
+
+describe("RdfFetchError is what a missing document raises", () => {
+  it("read of a missing photo document is a 404", async () => {
+    const store = photosStore({ podRoot: POD, webId: WEBID, fetchImpl: new MockPod().fetch });
+    await expect(store.read(`${POD}photos/none`)).rejects.toMatchObject({ status: 404 });
+    await expect(store.read(`${POD}photos/none`)).rejects.toBeInstanceOf(RdfFetchError);
   });
 });

@@ -45,8 +45,10 @@ vi.mock("@jeswr/pod-photos/ui", () => ({
 }));
 
 vi.mock("./photos-root", () => ({
-  resolvePhotosRoot: () =>
-    Promise.resolve({ rootUrl: "https://alice.example/photos/", isFallback: false }),
+  resolvePhotosRoots: () =>
+    Promise.resolve([
+      { rootUrl: "https://alice.example/photos/", isFallback: false, aggregateShards: false },
+    ]),
 }));
 
 import { App } from "./App";

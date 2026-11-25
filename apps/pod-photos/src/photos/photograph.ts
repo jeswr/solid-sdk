@@ -323,51 +323,31 @@ export function buildPhoto(itemUrl: string, photo: Photo): Store {
   return store;
 }
 
-/** Predicates of `#it` that the Photo model owns; everything else is another app's data. */
-const MODELLED_PREDICATES = [
-  ...['name', 'description', 'contentUrl', 'keywords', 'width', 'height', 'dateCreated', 'geo'].map(
-    (p) => `${SCHEMA}${p}`,
-  ),
-  ...[
-    'make',
-    'model',
-    'lensModel',
-    'focalLength',
-    'fNumber',
-    'exposureTime',
-    'isoSpeedRatings',
-    'orientation',
-  ].map((p) => `${EXIF}${p}`),
-];
+/**
+ * Whether `<itemUrl>#it` is typed `schema:Photograph`, i.e. an item Pod Photos itself
+ * writes. Only such documents may be updated or deleted through the store.
+ */
+export function isPhotographDocument(itemUrl: string, dataset: DatasetCore): boolean {
+  return new PhotographDoc(`${itemUrl}#it`, dataset, DataFactory).types.has(PHOTOGRAPH_CLASS);
+}
 
 /**
- * Serialise an edited {@link Photo} over the document's EXISTING dataset, replacing only
- * the triples the model owns (and the in-document `schema:geo` node) and keeping every
- * other triple: the `rdf:type` (a `schema:ImageObject` stays one), the other app's
- * `#run`, `#prompt`, `#model`, `#thumbnail` and `#setting-n` nodes, and `#it`'s other
- * properties. Falls back to {@link buildPhoto} when the document holds no photo node.
+ * The document URLs (fragment stripped) that this document's `#it` names as its
+ * `schema:thumbnail`. A listing pass uses them to drop a thumbnail that lives in its own
+ * document, so the asset is shown once.
  */
-export function mergePhoto(itemUrl: string, existing: DatasetCore, photo: Photo): Store {
-  const subject = DataFactory.namedNode(`${itemUrl}#it`);
-  const store = new Store([...existing]);
-  if (!isPhotoNode(new PhotographDoc(subject.value, store, DataFactory), store)) {
-    return buildPhoto(itemUrl, photo);
+export function thumbnailDocuments(itemUrl: string, dataset: DatasetCore): string[] {
+  const targets = dataset.match(
+    DataFactory.namedNode(`${itemUrl}#it`),
+    DataFactory.namedNode(THUMBNAIL_PREDICATE),
+    null,
+  );
+  const urls: string[] = [];
+  for (const quad of targets) {
+    if (quad.object.termType !== 'NamedNode') continue;
+    const target = new URL(quad.object.value);
+    target.hash = '';
+    if (target.href !== itemUrl) urls.push(target.href);
   }
-  for (const predicate of MODELLED_PREDICATES) {
-    for (const quad of store.match(subject, DataFactory.namedNode(predicate), null)) {
-      const object = quad.object;
-      const ownedGeo =
-        predicate === `${SCHEMA}geo` &&
-        (object.termType === 'BlankNode' ||
-          (object.termType === 'NamedNode' && object.value.startsWith(`${itemUrl}#`)));
-      if (ownedGeo) store.removeQuads(store.getQuads(object, null, null, null));
-      store.removeQuad(quad);
-    }
-  }
-  const rdfType = DataFactory.namedNode(RDF_TYPE);
-  for (const quad of buildPhoto(itemUrl, photo)) {
-    // The document already carries its own type; never re-stamp it.
-    if (!(quad.subject.equals(subject) && quad.predicate.equals(rdfType))) store.addQuad(quad);
-  }
-  return store;
+  return urls;
 }

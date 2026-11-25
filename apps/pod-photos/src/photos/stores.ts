@@ -6,7 +6,7 @@
  * and albums, with Type-Index registration handled automatically.
  */
 import { type Album, buildAlbum, parseAlbum } from './album.js';
-import { type Photo, buildPhoto, mergePhoto, parsePhoto } from './photograph.js';
+import { type Photo, buildPhoto, isPhotographDocument, parsePhoto } from './photograph.js';
 import { type PodStore, type StoreConfig, createStore } from './store.js';
 import {
   ALBUMS_SLUG,
@@ -16,14 +16,17 @@ import {
   PREFIXES,
 } from './vocab.js';
 
-/** Store config for `schema:Photograph` items under `photos/` (also reads `schema:ImageObject`; edits keep foreign triples). */
+/**
+ * Store config for `schema:Photograph` items under `photos/`. Reads also accept
+ * `schema:ImageObject`, but update and remove only touch documents typed Photograph.
+ */
 export const PHOTOS_CONFIG: StoreConfig<Photo> = {
   containerSlug: PHOTOS_SLUG,
   forClass: PHOTOGRAPH_CLASS,
   prefixes: PREFIXES,
   parse: parsePhoto,
   build: buildPhoto,
-  merge: mergePhoto,
+  owns: isPhotographDocument,
 };
 
 /** Store config for `schema:ImageGallery` items under `albums/`. */

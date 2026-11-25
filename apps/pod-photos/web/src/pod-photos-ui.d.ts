@@ -22,6 +22,8 @@ declare module "@jeswr/pod-photos/ui" {
     fetch?: typeof fetch;
     /** Optional heading rendered above the gallery. */
     title?: string;
+    /** The root is a media-store library: also list its `<yyyy>/<mm>/` shard containers. */
+    aggregateShards?: boolean;
   }
 
   export function PhotoGallery(props: PhotoGalleryProps): JSX.Element;

@@ -94,18 +94,18 @@ prompt, model, each setting) is missing, so a build never returns a disconnected
 
 ## Compatibility with pod-photos
 
-`apps/pod-photos` reads `schema:ImageObject` documents as photos (and finds containers
-registered for `schema:ImageObject` in the Type Index), in addition to `schema:Photograph`,
-which it still writes. It reads the `<doc#it>` node and skips a node that is the object of
-`schema:thumbnail`, so each asset appears once; the `#run`, `#prompt`, `#model` and
-`#setting-n` nodes are ignored, and editing such a photo in Pod Photos replaces only the
-properties it models and keeps those nodes. The app's own tests (`apps/pod-photos/test/image-object.test.ts`)
-cover this against Turtle fixtures in this package's layout.
+`apps/pod-photos` shows `schema:ImageObject` documents as photos (and finds containers registered
+for `schema:ImageObject` in the Type Index), alongside `schema:Photograph`, which it still writes.
+It reads the `<doc#it>` node, so each asset appears once and the `#thumbnail`, `#run`, `#prompt`,
+`#model` and `#setting-n` nodes are ignored. These documents are read-only there: Pod Photos refuses
+to update or delete a document whose `#it` is not a `schema:Photograph`. Its tests
+(`apps/pod-photos/test/image-object.test.ts`) use this package's `serializeAssetDocument` output
+copied verbatim as fixtures. An import-based interop test that calls `serializeAssetDocument`
+inside the app is still pending: it needs this package as a `workspace:*` devDependency of
+`apps/pod-photos` (`check:sdk-layers` allows that edge), which is a manifest and lockfile edit.
 
-`test/photograph.test.ts` in this package is a mirror of the reader's accessors (a package cannot
-import an app) and can drift from the real `parsePhoto`. The real check, building the image with
-`serializeAssetDocument` inside `apps/pod-photos` with this package as a `workspace:*`
-devDependency, is still to be added; `check:sdk-layers` does not forbid that edge.
+`test/photograph.test.ts` here mirrors the old reader's accessors and can drift from the real
+`parsePhoto`; the app's tests are the real check.
 
 ## Generated, not hand-written
 
