@@ -107,10 +107,15 @@ it("counts a malformed inbox item as unreadable, never a share notification", as
   expect(binding.pending).toEqual([pending]);
   expect(binding.unreadable).toEqual([{ id: `${ROOT}inbox/x`, status: "unreadable" }]);
   // Only the members listRequests couldn't place are offered to the share reader.
-  expect(mocks.shares).toHaveBeenCalledWith([share, `${ROOT}inbox/x`], {
-    fetch: mocks.session.fetch,
-    webId: `${ROOT}profile#me`,
-  });
+  // The share reader is confined to the storage, so it must be told where that is.
+  expect(mocks.shares).toHaveBeenCalledWith(
+    [share, `${ROOT}inbox/x`],
+    expect.objectContaining({
+      fetch: mocks.session.fetch,
+      webId: `${ROOT}profile#me`,
+      storageUrl: mocks.session.storageUrl,
+    }),
+  );
 });
 
 it("passes an extension session's unauthenticated fetch for public reads", () => {
