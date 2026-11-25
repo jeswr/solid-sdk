@@ -63,10 +63,13 @@ export function PodSessionGate({
 }
 
 /** Apps retain their sidebar and details; the shell owns global navigation and account UI. */
-export function AppFrame(props: Omit<SuiteFrameProps, "app"> & { app: AppSlug }) {
+export function AppFrame({
+  pageTitle,
+  ...props
+}: Omit<SuiteFrameProps, "app"> & { app: AppSlug; pageTitle?: string | undefined }) {
   const accounts = useShellAccounts();
   if (!accounts) return <SuiteFrame {...props} />;
-  const title = suiteApps.find((app) => app.slug === props.app)?.name ?? props.app;
+  const title = pageTitle ?? suiteApps.find((app) => app.slug === props.app)?.name ?? props.app;
   return (
     <Suspense>
       <Shell

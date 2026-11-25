@@ -27,6 +27,7 @@ import { seedLegacy, withDemoRecoveryProfile } from "./seed-legacy";
 import { seedPermissionApp } from "./seed-permission-app";
 import { seedPermissions } from "./seed-permissions";
 import { DEMO_INBOX, seedRequests } from "./seed-requests";
+import { seedShared } from "./seed-shared";
 import { seedTemplates } from "./seed-templates";
 
 const { namedNode, literal, quad } = DataFactory;
@@ -203,5 +204,13 @@ export async function buildDemoSeed(
     const { seedCalendar } = await import("./seed-calendar");
     return seedContacts(await seedCalendar(files, now), now);
   };
-  return seedGroups(await seedRequests(await seeded(), DEMO_ROOT, DEMO_WEBID, now), now);
+  return seedGroups(
+    await seedRequests(
+      [...(await seeded()), ...(await seedShared(now))],
+      DEMO_ROOT,
+      DEMO_WEBID,
+      now,
+    ),
+    now,
+  );
 }

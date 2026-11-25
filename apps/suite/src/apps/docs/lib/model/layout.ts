@@ -1,4 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { isDirectChild } from "@jeswr/suite-sdk/shared";
+
+export { isDirectChild } from "@jeswr/suite-sdk/shared";
+
 export const DOCS_SLUG = "docs/";
 export const LEGACY_DOCS_SLUG = "pod-docs/";
 
@@ -46,28 +50,6 @@ export function docContainerUrls(slugOrResource: string, docsContainer?: string)
     comments: `${container}comments/`,
     versions: `${container}versions/`,
   };
-}
-
-/** Fail closed on non-direct children, including encoded separators and credentials. */
-export function isDirectChild(resourceUrl: string, container: string): boolean {
-  try {
-    const url = new URL(resourceUrl);
-    const parent = new URL(container);
-    const rest = url.pathname.slice(parent.pathname.length);
-    return (
-      /^https?:$/.test(url.protocol) &&
-      !url.username &&
-      !url.password &&
-      url.origin === parent.origin &&
-      url.pathname.startsWith(parent.pathname) &&
-      !url.search &&
-      !url.hash &&
-      rest.length > 0 &&
-      !/[\\/]|%2f|%5c/i.test(rest)
-    );
-  } catch {
-    return false;
-  }
 }
 
 /** Validate snapshot-selected logs before any authenticated discovery or replay. */

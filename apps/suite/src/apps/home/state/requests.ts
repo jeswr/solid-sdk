@@ -3,7 +3,8 @@
 /**
  * The Requests inbox binding (03-home-permissions §2.5): one shared list per session, so the
  * Permissions tab badge, the Requests page and a review sheet mounted elsewhere agree. Listing and
- * decisions go only through `@jeswr/pod-access/requests-solid`; every decision is one call.
+ * decisions go only through `@jeswr/pod-access/requests-solid` (listing via `listInboxRequests`,
+ * which also recognises share notifications); every decision is one call.
  */
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
@@ -12,7 +13,6 @@ import {
   type AccessRequestEntry,
   type DecisionResult,
   decide as decideRequest,
-  listRequests,
   type RequestDecision,
 } from "@jeswr/pod-access/requests-solid";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
@@ -25,6 +25,7 @@ import { provenanceOf } from "../lib/model/provenance";
 import { inStorage } from "../lib/model/rdf";
 import { readTypeIndexes } from "../lib/model/type-index";
 import { type RequestCaps, requestCaps } from "../lib/requests/caps";
+import { listInboxRequests } from "../lib/requests/listing";
 import { type RequestCard, type RequestLists, splitRequests } from "../lib/requests/model";
 
 /** Focus refreshes at most this often (§3). */
@@ -33,6 +34,8 @@ export const FOCUS_REFRESH_MS = 60_000;
 export interface RequestsSnapshot {
   status: "loading" | "ready" | "error";
   entries: readonly AccessRequestEntry[];
+  /** Unreadable entries recognised as share notifications, kept out of the unreadable note. */
+  shares: ReadonlySet<string>;
 }
 
 interface RequestsStore {
@@ -56,7 +59,7 @@ function storeFor(session: PodSession): RequestsStore {
   if (!store || store.identity !== identity) {
     store = {
       identity,
-      snapshot: { status: "loading", entries: [] },
+      snapshot: { status: "loading", entries: [], shares: new Set() },
       loadedAt: 0,
       generation: 0,
       answered: new Set(),
@@ -89,12 +92,12 @@ function load(store: RequestsStore, session: PodSession): Promise<void> {
   const generation = ++store.generation;
   const loading = (async () => {
     try {
-      const entries = await listRequests(requestOptions(session));
-      if (generation === store.generation) publish(store, { status: "ready", entries });
+      const { entries, shares } = await listInboxRequests(requestOptions(session));
+      if (generation === store.generation) publish(store, { status: "ready", entries, shares });
     } catch {
       // A failed refresh keeps the requests already shown.
       if (generation === store.generation && store.snapshot.status !== "ready")
-        publish(store, { status: "error", entries: [] });
+        publish(store, { status: "error", entries: [], shares: new Set() });
     } finally {
       store.loadedAt = Date.now();
       store.loading = undefined;
@@ -168,7 +171,7 @@ export function useRequests(): RequestsBinding {
 
   return {
     status: snapshot.status,
-    ...splitRequests(snapshot.entries, new Date(), store.answered),
+    ...splitRequests(snapshot.entries, new Date(), store.answered, snapshot.shares),
     refresh,
     decide,
     unreadableDismissed: store.unreadableDismissed,

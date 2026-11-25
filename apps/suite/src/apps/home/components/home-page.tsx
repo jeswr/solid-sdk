@@ -19,6 +19,8 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { StartSomethingNew } from "@/components/templates/start-something-new";
 import { domainItemKey } from "../lib/model/discovery";
+import { SharedCard } from "@/lib/shared/shared-card";
+import "@/lib/shared/shared.css";
 import { DOMAINS, UNCATEGORISED, visibleDomains } from "../lib/model/domains";
 import {
   connectedSources,
@@ -130,6 +132,7 @@ export function HomePage({ domain }: { domain: string }) {
       />
       <HomeAgentPermissions />
       <StartSomethingNew session={session} />
+      {domain === "personal" ? <SharedCard /> : null}
       <DomainNavigation
         domains={visibleDomains(data.items)}
         active={entry.id}
