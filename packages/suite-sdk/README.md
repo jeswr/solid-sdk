@@ -365,12 +365,16 @@ framework-independent, in-memory history. Import `UndoEntry`, `UndoStack`, `Undo
   that scope's redo history. `undo(scope)` selects the latest live entry;
   `undoById(id)` selects the exact entry offered by a toast; `redo(scope)` reapplies it.
 - All callbacks receive an `AbortSignal`. One callback runs at a time across the stack;
-  concurrent requests resolve `{ status: 'busy' }`. Results are `done`, `nothing`,
-  `busy`, `expired`, or `{ status: 'failed', error }`. Expiry uses milliseconds since
+  concurrent requests resolve `{ status: 'busy' }`. Results are `{ status: 'done', id,
+  label }` (the entry that ran), `nothing`, `busy`, `expired`, or `{ status: 'failed', error }`. Expiry uses milliseconds since
   epoch; entries with `expiresAt <= now()` are dropped without running.
 - Failed operations are consumed unless `isRetryable(error)` returns true. Retryable
   entries stay in their original position. A new push during undo prevents its redo
-  from becoming available. Undo-only entries are consumed on success.
+  from becoming available; a redo that was running when a push retired it is kept as an
+  undo entry below the push. Undo-only entries are consumed on success.
+- `canUndo(scope)` and `canRedo(scope)` say whether a live entry exists, so a shortcut can
+  leave the key alone when there is nothing to do. Subscribers are notified when an
+  entry with `expiresAt` expires.
 - At most `limit` entries, counting undo and redo history, are retained per scope;
   oldest entries are dropped. `limit` must be a positive integer.
 - `entries(scope?)` returns pending undo entries oldest first, with `{ id, label,

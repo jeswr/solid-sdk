@@ -7,7 +7,8 @@ export interface UndoEntry {
   expiresAt?: number;
 }
 export type UndoResult =
-  | { status: "done" | "nothing" | "busy" | "expired" }
+  | { status: "done"; id: string; label: string }
+  | { status: "nothing" | "busy" | "expired" }
   | { status: "failed"; error: unknown };
 export interface UndoItem {
   id: string;
@@ -22,6 +23,10 @@ export interface UndoStack {
   redo(scope: string): Promise<UndoResult>;
   /** Pending undo entries, oldest first. canRedo describes the optional redo callback. */
   entries(scope?: string): ReadonlyArray<UndoItem>;
+  /** True when undo(scope) has a live entry to run. */
+  canUndo(scope: string): boolean;
+  /** True when redo(scope) has a live entry to run. */
+  canRedo(scope: string): boolean;
   subscribe(listener: () => void): () => void;
   clear(): void;
 }
@@ -44,6 +49,7 @@ export function createUndoStack({
   let snapshot: ReadonlyArray<UndoItem> = [];
   let operation: AbortController | undefined;
   const listeners = new Set<() => void>();
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const branches = new Map<string, number>();
   const expired = ({ entry }: RecordEntry) =>
     entry.expiresAt !== undefined && entry.expiresAt <= now();
@@ -56,7 +62,25 @@ export function createUndoStack({
         ),
     );
   };
+  /** Wake subscribers when the next deadline passes so expired entries leave their view. */
+  const schedule = () => {
+    clearTimeout(timer);
+    timer = undefined;
+    const deadlines = records.flatMap(({ entry }) =>
+      entry.expiresAt === undefined ? [] : [entry.expiresAt],
+    );
+    if (!deadlines.length) return;
+    const delay = Math.min(Math.max(Math.min(...deadlines) - now(), 0), 2 ** 31 - 1);
+    timer = setTimeout(() => {
+      timer = undefined;
+      const before = records.length;
+      prune();
+      if (records.length === before) schedule();
+      else publish();
+    }, delay);
+  };
   const publish = () => {
+    schedule();
     update();
     for (const listener of listeners) {
       try {
@@ -85,6 +109,10 @@ export function createUndoStack({
     const dropped = new Set(scoped.slice(0, Math.max(0, scoped.length - limit)));
     records = records.filter((record) => !dropped.has(record));
   };
+  const has = (phase: RecordEntry["phase"], scope: string) =>
+    records.some(
+      (record) => record.phase === phase && record.entry.scope === scope && !expired(record),
+    );
   const run = async (
     phase: RecordEntry["phase"],
     matches: (record: RecordEntry) => boolean,
@@ -116,8 +144,17 @@ export function createUndoStack({
           records.push({ ...record, phase: phase === "undo" ? "redo" : "undo" });
           trim(record.entry.scope);
         } else if (phase === "undo" && !record.entry.redo) retireRedo(record.entry.scope);
+      } else if (phase === "redo" && !expired(record)) {
+        // A push retired this redo while it ran: keep the applied action undoable, below the push.
+        const order = (candidate: RecordEntry) => Number(candidate.id.slice(5));
+        const newer = records.findIndex(
+          (candidate) =>
+            candidate.entry.scope === record.entry.scope && order(candidate) > order(record),
+        );
+        records.splice(newer < 0 ? records.length : newer, 0, { ...record, phase: "undo" });
+        trim(record.entry.scope);
       }
-      return { status: "done" };
+      return { status: "done", id: record.id, label: record.entry.label };
     } catch (error) {
       if (controller.signal.aborted) return { status: "nothing" };
       if (!isRetryable(error)) {
@@ -151,6 +188,8 @@ export function createUndoStack({
     undo: (scope) => run("undo", (record) => record.entry.scope === scope),
     undoById: (id) => run("undo", (record) => record.id === id),
     redo: (scope) => run("redo", (record) => record.entry.scope === scope),
+    canUndo: (scope) => has("undo", scope),
+    canRedo: (scope) => has("redo", scope),
     entries(scope) {
       prune();
       return scope === undefined ? snapshot : snapshot.filter((entry) => entry.scope === scope);

@@ -29,10 +29,10 @@ describe("account undo history", () => {
     expect(stack.entries("tasks").map((item) => item.label)).toEqual(["A", "B"]);
     expect(stack.entries()).toBe(stack.entries());
     expect(stack.entries()[0]).toEqual({ id, label: "A", scope: "tasks", canRedo: true });
-    expect(await stack.undo("tasks")).toEqual({ status: "done" });
+    expect(await stack.undo("tasks")).toMatchObject({ status: "done" });
     expect(b.undo).toHaveBeenCalledWith(expect.any(AbortSignal));
     expect(c.undo).not.toHaveBeenCalled();
-    expect(await stack.undoById(id)).toEqual({ status: "done" });
+    expect(await stack.undoById(id)).toMatchObject({ status: "done" });
     await stack.redo("tasks");
     expect(a.redo).toHaveBeenCalledOnce();
     await stack.redo("tasks");
@@ -40,7 +40,9 @@ describe("account undo history", () => {
     await stack.undo("drive");
     expect(c.undo).toHaveBeenCalledOnce();
     expect(await stack.undoById("missing")).toEqual({ status: "nothing" });
-    expect(await stack.undoById(stack.entries()[0]?.id ?? "missing")).toEqual({ status: "done" });
+    expect(await stack.undoById(stack.entries()[0]?.id ?? "missing")).toMatchObject({
+      status: "done",
+    });
   });
   it("consumes undo-only entries and clears redo only for the pushed scope", async () => {
     const stack = createUndoStack();
@@ -53,7 +55,7 @@ describe("account undo history", () => {
     stack.push({ label: "C", scope: "tasks", undo: async () => {} });
     expect(stack.entries()[0]?.canRedo).toBe(false);
     expect(await stack.redo("tasks")).toEqual({ status: "nothing" });
-    expect(await stack.redo("drive")).toEqual({ status: "done" });
+    expect(await stack.redo("drive")).toMatchObject({ status: "done" });
     await stack.undo("tasks");
     expect(await stack.undo("tasks")).toEqual({ status: "nothing" });
     expect(await stack.redo("tasks")).toEqual({ status: "nothing" });
@@ -102,7 +104,7 @@ describe("account undo history", () => {
     stack.push(entry("under expired"));
     stack.push({ ...entry("top expired"), expiresAt: 50 });
     now = 50;
-    expect(await stack.undo("tasks")).toEqual({ status: "done" });
+    expect(await stack.undo("tasks")).toMatchObject({ status: "done" });
   });
   it("serializes undo, redo and toast calls across scopes, including reentrant subscribers", async () => {
     const stack = createUndoStack();
@@ -120,7 +122,7 @@ describe("account undo history", () => {
     expect(await stack.redo("tasks")).toEqual({ status: "busy" });
     stop();
     wait.resolve();
-    expect(await running).toEqual({ status: "done" });
+    expect(await running).toMatchObject({ status: "done" });
     const redoWait = deferred();
     const b = { ...entry("redo slow"), redo: () => redoWait.promise };
     stack.push(b);
@@ -144,7 +146,7 @@ describe("account undo history", () => {
       await stack.undo("tasks");
       vi.mocked(a.redo).mockRejectedValueOnce(error);
       expect(await stack.redo("tasks")).toEqual({ status: "failed", error });
-      expect(await stack.redo("tasks")).toEqual({ status: "done" });
+      expect(await stack.redo("tasks")).toMatchObject({ status: "done" });
     }
   });
   it("drops errors by default, including synchronous throws and failed redo", async () => {
@@ -209,7 +211,7 @@ describe("account undo history", () => {
     broader.push(entry("branch"));
     redoHold.resolve();
     await redo;
-    expect(broader.entries().map((item) => item.label)).toEqual(["new", "branch"]);
+    expect(broader.entries().map((item) => item.label)).toEqual(["new", "redo", "branch"]);
     let now = 0;
     const expiring = createUndoStack({ now: () => now });
     const last = deferred();
@@ -264,8 +266,8 @@ describe("history integrity", () => {
     stack.push({ label: "rename A", scope: "drive", undo: async () => {} });
     const move = entry("move B", "drive");
     stack.push(move);
-    expect(await stack.undo("drive")).toEqual({ status: "done" });
-    expect(await stack.undo("drive")).toEqual({ status: "done" });
+    expect(await stack.undo("drive")).toMatchObject({ status: "done" });
+    expect(await stack.undo("drive")).toMatchObject({ status: "done" });
     expect(await stack.redo("drive")).toEqual({ status: "nothing" });
     expect(move.redo).not.toHaveBeenCalled();
   });
@@ -295,7 +297,7 @@ describe("history integrity", () => {
     stack.clear();
     const next = entry("next");
     stack.push(next);
-    expect(await stack.undo("tasks")).toEqual({ status: "done" });
+    expect(await stack.undo("tasks")).toMatchObject({ status: "done" });
     expect(next.undo).toHaveBeenCalledOnce();
   });
 
@@ -313,7 +315,7 @@ describe("history integrity", () => {
     stack.push(entry("other", "drive"));
     expect(await stack.undo("drive")).toEqual({ status: "busy" });
     slow.resolve();
-    expect(await second).toEqual({ status: "done" });
+    expect(await second).toMatchObject({ status: "done" });
   });
 
   it("runs the entry even when a subscriber throws", async () => {
@@ -327,11 +329,114 @@ describe("history integrity", () => {
       });
       const a = entry("A");
       stack.push(a);
-      expect(await stack.undo("tasks")).toEqual({ status: "done" });
+      expect(await stack.undo("tasks")).toMatchObject({ status: "done" });
       expect(a.undo).toHaveBeenCalledOnce();
     } finally {
       await new Promise((resolve) => setTimeout(resolve, 0));
       process.off("uncaughtException", onError);
     }
+  });
+
+  it("reports the undone entry's id and label, and whether undo or redo is available", async () => {
+    const stack = createUndoStack();
+    const id = stack.push(entry("Renamed"));
+    expect(stack.canUndo("tasks")).toBe(true);
+    expect(stack.canUndo("drive")).toBe(false);
+    expect(stack.canRedo("tasks")).toBe(false);
+    expect(await stack.undo("tasks")).toEqual({ status: "done", id, label: "Renamed" });
+    expect(stack.canUndo("tasks")).toBe(false);
+    expect(stack.canRedo("tasks")).toBe(true);
+    await stack.redo("tasks");
+    expect(stack.canRedo("tasks")).toBe(false);
+  });
+  it("does not report expired entries as available", () => {
+    let now = 0;
+    const stack = createUndoStack({ now: () => now });
+    stack.push({ ...entry("short"), expiresAt: 10 });
+    expect(stack.canUndo("tasks")).toBe(true);
+    now = 10;
+    expect(stack.canUndo("tasks")).toBe(false);
+  });
+  it("notifies subscribers when an entry expires, and stops after clear", () => {
+    vi.useFakeTimers();
+    try {
+      const stack = createUndoStack();
+      const listener = vi.fn();
+      stack.push({ ...entry("later"), expiresAt: Date.now() + 1000 });
+      stack.push({ ...entry("never") });
+      stack.subscribe(listener);
+      vi.advanceTimersByTime(999);
+      expect(listener).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(listener).toHaveBeenCalledOnce();
+      expect(stack.entries().map((item) => item.label)).toEqual(["never"]);
+      const cleared = createUndoStack();
+      const stopped = vi.fn();
+      cleared.push({ ...entry("x"), expiresAt: Date.now() + 1000 });
+      cleared.subscribe(stopped);
+      cleared.clear();
+      stopped.mockClear();
+      vi.advanceTimersByTime(5000);
+      expect(stopped).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("re-arms the expiry wake when the injected clock has not reached the deadline", () => {
+    vi.useFakeTimers();
+    try {
+      let now = 0;
+      const stack = createUndoStack({ now: () => now });
+      const listener = vi.fn();
+      stack.push({ ...entry("slow clock"), expiresAt: 50 });
+      stack.subscribe(listener);
+      vi.advanceTimersByTime(60);
+      expect(listener).not.toHaveBeenCalled();
+      now = 50;
+      vi.advanceTimersByTime(60);
+      expect(listener).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("keeps a redone action undoable when a push retires it during the redo", async () => {
+    const stack = createUndoStack();
+    const wait = deferred();
+    const x = { ...entry("X"), redo: vi.fn(() => wait.promise) };
+    stack.push(entry("older"));
+    const xId = stack.push(x);
+    await stack.undo("tasks");
+    const redoing = stack.redo("tasks");
+    const pId = stack.push(entry("P"));
+    wait.resolve();
+    expect(await redoing).toMatchObject({ status: "done", id: xId });
+    expect(stack.entries("tasks").map((item) => item.label)).toEqual(["older", "X", "P"]);
+    expect(stack.entries("tasks")[2]?.id).toBe(pId);
+    expect(await stack.undo("tasks")).toMatchObject({ label: "P" });
+    expect(await stack.undo("tasks")).toMatchObject({ label: "X" });
+  });
+  it("appends a redone action when nothing newer remains in its scope, and skips it once expired", async () => {
+    let now = 0;
+    const stack = createUndoStack({ now: () => now });
+    const wait = deferred();
+    stack.push({ ...entry("X"), redo: vi.fn(() => wait.promise) });
+    await stack.undo("tasks");
+    const redoing = stack.redo("tasks");
+    stack.push(entry("other scope", "drive"));
+    stack.push({ ...entry("P"), expiresAt: 0 });
+    wait.resolve();
+    await redoing;
+    expect(stack.entries("tasks").map((item) => item.label)).toEqual(["X"]);
+    now = 5;
+    const second = createUndoStack({ now: () => now });
+    const lateWait = deferred();
+    second.push({ ...entry("Y"), expiresAt: 10, redo: () => lateWait.promise });
+    await second.undo("tasks");
+    const late = second.redo("tasks");
+    second.push(entry("Q"));
+    now = 10;
+    lateWait.resolve();
+    await late;
+    expect(second.entries("tasks").map((item) => item.label)).toEqual(["Q"]);
   });
 });

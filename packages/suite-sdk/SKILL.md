@@ -277,7 +277,8 @@ browser, without cross-device guarantees; distributed deduplication needs a shar
 is framework-independent. Push `UndoEntry` (`label`, `scope`, async `undo(signal)`, optional
 `redo(signal)` and epoch-ms `expiresAt`) and retain its ID for the toast. `undo(scope)` and
 `redo(scope)` select latest live history; `undoById(id)` addresses one pending undo.
-Results: `done`, `nothing`, `busy`, `expired`, or `failed` with `error`. One operation runs
+Results: `done` (with the entry's `id` and `label`), `nothing`, `busy`, `expired`, or `failed` with `error`.
+`canUndo(scope)`/`canRedo(scope)` report live entries; subscribers are notified on expiry. One operation runs
 at a time across scopes. Failed entries are dropped unless explicitly retryable; retries
 keep their original position. Expired entries never run. Push clears only its scope's
 redo history, including a running undo's future redo. History defaults to 50 entries per
@@ -294,6 +295,11 @@ Own the stack per authenticated session; clear on replacement/sign-out. `clear()
 in-flight work and fences late settlements. Callbacks must pass/check the signal before
 I/O and local mutations. No auth, React, toast or app policy belongs in the stack module.
 The shell's `useUndo()` injects the current app scope and supplies the toast and shortcuts.
+Shell-level actions (notification tray) use `pushShell`, filed under the `shell` scope that
+Ctrl/Cmd+Z consults after the route's scope, with a short `expiresAt`. The shortcut only
+consumes the key when a live entry exists and the event is not already `defaultPrevented`;
+an app that owns undo marks the event handled (capture-phase listener) or declares
+`data-undo-scope="native"` on its surface (whiteboard, spreadsheet grid).
 Capture completion state before a Tasks change, push only after success, and undo/redo
 through the existing persistence adapter (see README). Do not duplicate app undo logic
 in this package. Update README and this skill together for public API changes.
