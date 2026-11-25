@@ -32,6 +32,7 @@ import {
 } from "@jeswr/reactive-authentication";
 import { boundProxy } from "./bound-proxy.js";
 import { createBoundary } from "./boundary.js";
+import { ResourceGrantError } from "./grants.js";
 import { protectStore, scopedStore } from "./kv.js";
 import { createLwsProvider } from "./lws-provider.js";
 import { namespaceFence } from "./namespace.js";
@@ -275,6 +276,20 @@ export class AmbiguousIssuerError extends Error {
   }
 }
 
+/**
+ * Metadata documents for an issuer: Solid-OIDC's appended `/.well-known/openid-configuration`
+ * and the RFC 8414 / OIDC forms that insert the well-known segment before the issuer's path.
+ */
+function discoveryUrls(issuer: string) {
+  const url = new URL(issuer);
+  const path = url.pathname.replace(/\/$/, "");
+  return [
+    `${url.origin}${path}/.well-known/openid-configuration`,
+    `${url.origin}/.well-known/openid-configuration${path}`,
+    `${url.origin}/.well-known/oauth-authorization-server${path}`,
+  ];
+}
+
 export function createProviders(
   options: PodAuthOptions,
   hooks: {
@@ -346,6 +361,13 @@ export function createProviders(
   // first verified storage root, the context login would have used had the roots been known.
   let loginContext: { selected: LoginHint; context: string; root: string } | undefined;
   let sessionRequest: Request | undefined;
+  /** The URL whose context holds the account's session: login, restore or reactive sign-in. */
+  let established = bootstrapUri;
+  const setSession = (request: Request | undefined) => {
+    sessionRequest = request;
+    established = request?.url ?? bootstrapUri;
+  };
+  const establishedUrl = () => established;
   const selections = new Map<string, Promise<LoginHint>>();
   const requestSelections = new WeakMap<Request, Promise<LoginHint>>();
   const selectionFor = (request: Request, selected = hint) => {
@@ -378,7 +400,11 @@ export function createProviders(
     const selection = JSON.stringify(selected);
     if (restoredContext !== undefined && selection === JSON.stringify(restoredContext.selected))
       return restoredContext.context;
-    const key = await boundary.contextKey(request);
+    let key = await boundary.contextKey(request);
+    // A consented grant uses the account's own Solid-OIDC session (the context login or restore
+    // established), so opening a shared resource needs no second authorization. Its DPoP-bound
+    // token is the one every storage already receives; UMA and LWS keep their own contexts.
+    if (boundary.consented(key)) key = await boundary.contextKey(new Request(establishedUrl()));
     if (
       loginContext !== undefined &&
       selection === JSON.stringify(loginContext.selected) &&
@@ -578,7 +604,7 @@ export function createProviders(
         const claims = await oidc.identity();
         if (claims === undefined) throw new Error("Authentication did not establish an identity");
         await hooks.session(new Request(target.url, { signal }), claims, "lws", selected);
-        sessionRequest = target;
+        setSession(target);
       };
       const source: CredentialSource = {
         id: key,
@@ -640,6 +666,8 @@ export function createProviders(
       return true;
     },
     upgrade: async (request, challenge) => {
+      // Decided before any await: a grant revoked mid-upgrade is still not the account's session.
+      const granted = !boundary.allowsOwn(request.url);
       // UMA performs its trust check before resolving the selected account or requesting credentials.
       const attemptHint = hint;
       const selected = solid ? await selectionFor(request) : undefined;
@@ -648,11 +676,21 @@ export function createProviders(
         throw new Error("Login selection changed during authentication");
       const claims = await solidProvider.identity(request);
       if (claims === undefined) throw new Error("Authentication did not establish an identity");
-      await hooks.session(request, claims, protocol, selected ?? (await selectionFor(request)));
-      sessionRequest = request;
+      // A granted upgrade reports and remembers the established session, never the foreign URL.
+      await hooks.session(
+        granted ? new Request(establishedUrl(), { signal: request.signal }) : request,
+        claims,
+        protocol,
+        selected ?? (await selectionFor(request)),
+      );
+      if (!granted) setSession(request);
       return upgraded;
     },
-    invalidate: async (request, challenge) => await provider.invalidate!(request, challenge),
+    invalidate: async (request, challenge) => {
+      // A grant's server cannot force the account's shared session to renew by rejecting it.
+      if (!boundary.allowsOwn(request.url)) return;
+      await provider.invalidate!(request, challenge);
+    },
     forget: async () => await provider.forget!(),
   });
   const manager = new ReactiveFetchManager({
@@ -787,6 +825,42 @@ export function createProviders(
         );
       };
     },
+    /**
+     * Checks and records a consented resource grant for the signed-in account. The issuer's
+     * metadata names the endpoints a grant may not contain. `current` is checked synchronously
+     * just before the grant is recorded, after every await.
+     */
+    grant: async (
+      url: string,
+      issuer: string,
+      signal: AbortSignal,
+      created: () => number,
+      current: () => boolean,
+    ) => {
+      const started = boundary.generation();
+      const generation = fence.signal;
+      // Refuse malformed, origin-wide and own-storage grants before any network access.
+      boundary.grantRoot(url);
+      const as = await asProvider.getAuthorizationServer(
+        new Request(establishedUrl(), {
+          signal: AbortSignal.any([signal, lifetime, generation]),
+        }),
+      );
+      signal.throwIfAborted();
+      lifetime.throwIfAborted();
+      if (!current()) throw new ResourceGrantError("signed-out");
+      const endpoints = Object.entries(as)
+        .filter(([name, value]) => /(_endpoint|_uri)$/.test(name) && typeof value === "string")
+        .map(([, value]) => value as string)
+        .filter((value) => URL.canParse(value));
+      return boundary.consent(
+        url,
+        created(),
+        { issuer, endpoints: [as.issuer, ...discoveryUrls(issuer), ...endpoints] },
+        started,
+        generation,
+      );
+    },
     restore: async (account: import("./sessions.js").ActiveAccount, signal: AbortSignal) => {
       const selected = { ...account.selected, issuer: account.issuer };
       // Pin discovery to the remembered issuer while retaining the original credential key.
@@ -806,7 +880,7 @@ export function createProviders(
         throw new Error("Restored identity does not match the remembered account");
       }
       await hooks.session(request, claims, "solid-oidc", selected);
-      sessionRequest = request;
+      setSession(request);
       return claims;
     },
     logout: async () => await persistence.exclusive(logout),
@@ -889,7 +963,7 @@ export function createProviders(
     hint = {};
     restoredContext = undefined;
     loginContext = undefined;
-    sessionRequest = undefined;
+    setSession(undefined);
     selections.clear();
     authorizationServers.clear();
     if (failures.length > 0) throw new AggregateError(failures, "Logout cleanup failed");
@@ -932,7 +1006,7 @@ export function createProviders(
       loginContext = { selected, context, root: await boundary.contextKey(new Request(root)) };
     // Later requests keep the account login selected instead of asking for a WebID again.
     hint = selected;
-    sessionRequest = request;
+    setSession(request);
   }
 }
 

@@ -1,6 +1,6 @@
 ---
 name: pod-auth
-description: Use when integrating @jeswr/pod-auth login, multi-account managers, bounded auth.fetch, restore, React sessions, Node agents, CSS self-registration or Client Identifier Documents, or migrating deprecated suite client authentication.
+description: Use when integrating @jeswr/pod-auth login, multi-account managers, bounded auth.fetch, resource grants for items shared from other pods, restore, React sessions, Node agents, CSS self-registration or Client Identifier Documents, or migrating deprecated suite client authentication.
 ---
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- // AUTHORED-BY Codex GPT-6 -->
@@ -160,6 +160,16 @@ first; storage failures are harmless. Providers use monograms by default; host-s
   composition. Exchange endpoints must use granted origins and reject redirects. LWS audiences
   must stay inside an existing grant, directly or through a description rooted within it; metadata
   can only narrow authority. Refuse before sending claim/subject tokens to untrusted endpoints.
+- Resource grants (`grantResource`, README "Open a resource shared from another pod") are the only
+  consented foreign-credential mechanism; never add a second one. They live in a third
+  `consented` CredentialBoundary inside `createBoundary`: included in `allows`/`contextKey`, never
+  in `roots()`, `storages()`, `trustsOrigin`, AS/LWS trust (`allowsOwn`) or login contexts.
+  Requests starting in a grant use `redirect: "error"` (index.ts `confined`), and a granted
+  upgrade neither renews the shared session nor becomes `sessionRequest`. Their Solid session context aliases
+  the account's primary root (`contextFor`); UMA/LWS contexts stay per grant and stay untrusted.
+  Validate grants before network, re-validate synchronously at `consent` after awaits, fence on
+  the boundary generation and account, and clear them in `clear()`. Apps call it only from the
+  consent click; the core refuses calls without browser user activation.
 - Keep authenticated fetch's manual redirects and per-hop credential checks. Clear automatic roots
   on logout/session supersession, fence pending identity discovery, and reload profile roots on restore.
 - Keep provider composition in `src/providers.ts`, ordered Solid-OIDC, UMA, then LWS. Share the Solid
