@@ -177,6 +177,7 @@ function Grid({
   return (
     <section
       className="sht-grid-region"
+      data-undo-scope="native"
       aria-label="Spreadsheet grid"
       aria-describedby="sht-grid-note"
     >

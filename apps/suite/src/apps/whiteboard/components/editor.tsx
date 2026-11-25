@@ -462,7 +462,7 @@ export function BoardEditor({
     })().catch(() => toast.error("Couldn't export this board. Try another format."));
   };
   return (
-    <div className="wb-editor">
+    <div className="wb-editor" data-undo-scope="native">
       <header className="wb-editor-head">
         <div className="wb-editor-title">
           <IconButton label="All boards" variant="ghost" onClick={onBack}>

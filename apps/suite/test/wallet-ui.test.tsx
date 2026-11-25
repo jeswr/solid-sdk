@@ -103,6 +103,40 @@ it("offers keyboard undo while preserving undo inside text fields", async () => 
   expect(state.getSnapshot().items).toEqual([item]);
   expect(container.querySelector(".wallet-undo")).toBeNull();
 });
+it("F2: wallet's undo runs before the shell's bubble listener, once, and skips handled events", async () => {
+  await act(async () => root.render(<WalletHome />));
+  const open = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === item.name,
+  );
+  await act(async () => open?.click());
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "Delete document")
+      ?.click(),
+  );
+  // A shell-style bubble listener must see the event already handled.
+  const seen: boolean[] = [];
+  const shell = (event: KeyboardEvent) => seen.push(event.defaultPrevented);
+  document.addEventListener("keydown", shell);
+  // An earlier owner of the key (for example an app surface) keeps it: the wallet skips.
+  const claim = (event: KeyboardEvent) => event.preventDefault();
+  window.addEventListener("keydown", claim, true);
+  await act(async () =>
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true }),
+    ),
+  );
+  window.removeEventListener("keydown", claim, true);
+  expect(state.getSnapshot().items).toEqual([]);
+  await act(async () =>
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true }),
+    ),
+  );
+  document.removeEventListener("keydown", shell);
+  expect(state.getSnapshot().items).toEqual([item]);
+  expect(seen).toEqual([true, true]);
+});
 it("shows skipped record warnings without hiding valid cards", async () => {
   vi.mocked(state.repository.list).mockImplementationOnce(async (report) => {
     report?.("broken.ttl");

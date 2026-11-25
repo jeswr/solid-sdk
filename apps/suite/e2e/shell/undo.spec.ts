@@ -46,7 +46,7 @@ test("notification undo works from toast and page keyboard while search keeps na
   await expect(
     page
       .getByRole("status")
-      .filter({ hasText: /^Undone$/ })
+      .filter({ hasText: /^Undone: Notification dismissed$/ })
       .last(),
   ).toBeVisible();
 

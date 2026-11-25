@@ -18,6 +18,7 @@ const state = vi.hoisted(() => ({
   } | null,
   status: "ready",
   live: true,
+  version: 1,
   notify: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn(), dismiss: vi.fn() }),
 }));
 vi.mock("next/navigation", () => ({ usePathname: () => state.pathname }));
@@ -25,8 +26,12 @@ vi.mock("../src/shell/session/accounts-provider", () => ({
   useAccounts: () => ({
     active: state.account,
     status: state.status,
-    isActiveAccount: (id: string) =>
-      state.live && id === state.account?.id && state.status === "ready",
+    sessionVersion: state.version,
+    isActiveAccount: (id: string, version?: number) =>
+      state.live &&
+      id === state.account?.id &&
+      state.status === "ready" &&
+      (version === undefined || version === state.version),
   }),
 }));
 vi.mock("@jeswr/suite-ui", () => ({ toast: state.notify }));
@@ -61,6 +66,7 @@ beforeEach(() => {
   state.account = { id: "alice", webId: "https://alice.example/me" };
   state.status = "ready";
   state.live = true;
+  state.version = 1;
   let id = 0;
   state.notify.mockImplementation(() => ++id);
   state.notify.success.mockImplementation(() => ++id);
@@ -108,7 +114,7 @@ it("scopes actions by route, targets toast IDs, and registers settings commands"
   });
   expect(first).toHaveBeenCalledOnce();
   expect(second).not.toHaveBeenCalled();
-  expect(state.notify.success).toHaveBeenCalledWith("Undone", expect.any(Object));
+  expect(state.notify.success).toHaveBeenCalledWith("Undone: Task completed", expect.any(Object));
   state.pathname = "/tasks/inbox";
   view.rerender(tree());
   await actions.redo();
@@ -255,4 +261,116 @@ it("notification actions register their label and inverse with the shared shell 
     await actions.undo();
   });
   expect(notifications.items).toEqual(previous);
+});
+
+it("F2: leaves Ctrl/Cmd+Z alone when this scope and the shell scope have nothing to undo or redo", async () => {
+  const view = render(tree());
+  expect((await keyboard(document.body, { ctrlKey: true })).defaultPrevented).toBe(false);
+  expect((await keyboard(document.body, { ctrlKey: true, shiftKey: true })).defaultPrevented).toBe(
+    false,
+  );
+  // Another app's history is not this route's to consume.
+  actions.push({ label: "Task", undo: vi.fn(async () => {}) });
+  state.pathname = "/drive";
+  view.rerender(tree());
+  expect((await keyboard(document.body, { ctrlKey: true })).defaultPrevented).toBe(false);
+  // Redo is only claimed once something was undone.
+  state.pathname = "/tasks";
+  view.rerender(tree());
+  expect((await keyboard(document.body, { ctrlKey: true, shiftKey: true })).defaultPrevented).toBe(
+    false,
+  );
+});
+it("F2: skips events another handler already claimed, so one press is one undo", async () => {
+  render(tree());
+  const undo = vi.fn(async () => {});
+  actions.push({ label: "Changed", undo });
+  const claim = (event: KeyboardEvent) => event.preventDefault();
+  document.addEventListener("keydown", claim, true);
+  try {
+    await keyboard(document.body, { ctrlKey: true });
+  } finally {
+    document.removeEventListener("keydown", claim, true);
+  }
+  expect(undo).not.toHaveBeenCalled();
+  await keyboard(document.body, { ctrlKey: true });
+  expect(undo).toHaveBeenCalledOnce();
+});
+it("F2: surfaces with their own undo keep the key, even with shell history", async () => {
+  render(tree());
+  const undo = vi.fn(async () => {});
+  actions.push({ label: "Changed", undo });
+  const surface = document.createElement("div");
+  surface.setAttribute("data-undo-scope", "native");
+  const button = surface.appendChild(document.createElement("button"));
+  document.body.appendChild(surface);
+  button.focus();
+  expect((await keyboard(button, { ctrlKey: true })).defaultPrevented).toBe(false);
+  expect(undo).not.toHaveBeenCalled();
+  button.blur();
+  surface.remove();
+  expect((await keyboard(document.body, { ctrlKey: true })).defaultPrevented).toBe(true);
+  expect(undo).toHaveBeenCalledOnce();
+});
+it("F1/F9: shell-scope entries undo from any route, name what was undone, and dismiss their own toast", async () => {
+  let shell!: ReturnType<typeof useUndo>;
+  function ShellProbe() {
+    shell = useUndo();
+    return null;
+  }
+  const view = render(
+    h(UndoProvider, {
+      children: h(ShortcutsProvider, {
+        platform: "Linux",
+        children: [h(UndoShortcuts, { key: "keys" }), h(ShellProbe, { key: "probe" })],
+      }),
+    }),
+  );
+  const undo = vi.fn(async () => {});
+  shell.pushShell({ label: "Notification dismissed", undo, redo: vi.fn(async () => {}) });
+  const toastId = state.notify.mock.results.at(-1)?.value;
+  state.pathname = "/drive/files";
+  view.rerender(
+    h(UndoProvider, {
+      children: h(ShortcutsProvider, {
+        platform: "Linux",
+        children: [h(UndoShortcuts, { key: "keys" }), h(ShellProbe, { key: "probe" })],
+      }),
+    }),
+  );
+  expect((await keyboard(document.body, { ctrlKey: true })).defaultPrevented).toBe(true);
+  expect(undo).toHaveBeenCalledOnce();
+  expect(state.notify.success).toHaveBeenCalledWith(
+    "Undone: Notification dismissed",
+    expect.any(Object),
+  );
+  expect(state.notify.dismiss).toHaveBeenCalledWith(toastId);
+  await keyboard(document.body, { ctrlKey: true, shiftKey: true });
+  expect(state.notify.success).toHaveBeenLastCalledWith(
+    "Redone: Notification dismissed",
+    expect.any(Object),
+  );
+});
+it("F5: a same-account session replacement clears history and retires old actions", async () => {
+  const view = render(tree());
+  const undo = vi.fn(async () => {});
+  actions.push({ label: "Old session", undo });
+  const retained = actions;
+  state.version = 2;
+  view.rerender(tree());
+  expect(await retained.undo()).toEqual({ status: "nothing" });
+  expect(await actions.undo()).toEqual({ status: "nothing" });
+  expect(undo).not.toHaveBeenCalled();
+});
+it("F3: a retryable failure keeps the entry so the next press can try again", async () => {
+  const { RetryableUndoError } = await import("../src/shell/notifications/controller");
+  render(tree());
+  let attempts = 0;
+  const undo = vi.fn(async () => {
+    if (++attempts === 1) throw new RetryableUndoError("offline");
+  });
+  actions.push({ label: "Retry me", undo });
+  expect((await actions.undo()).status).toBe("failed");
+  expect((await actions.undo()).status).toBe("done");
+  expect(undo).toHaveBeenCalledTimes(2);
 });
