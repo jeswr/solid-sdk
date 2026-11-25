@@ -1,8 +1,17 @@
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /** Role mapping and conditional Solid sharing; the offline root API remains independent. */
 
-export { addGrant, grantsWithRoles, readGrants, removeGrant, setGrants } from "./client.js";
+export {
+  addGrant,
+  grantsWithRoles,
+  readGrants,
+  readScopedGrants,
+  removeGrant,
+  setGrants,
+  setScopedGrants,
+} from "./client.js";
 export { isRoleError } from "./errors.js";
 export { modesToRole, rolesToModes } from "./mapping.js";
 export type {
@@ -22,6 +31,8 @@ export type {
   RoleGrant,
   RoleModes,
   RolesOptions,
+  ScopedGrantSelection,
+  ScopedGrantSnapshot,
   SetGrantsOptions,
   SetGrantsResult,
 } from "./types.js";
