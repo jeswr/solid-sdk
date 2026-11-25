@@ -21,6 +21,8 @@ import {
   TYPE,
 } from "./rdf.js";
 
+// Hoisted (not inline) for bundler-lexer safety; no `g`/`y` flag, so no shared `lastIndex` state.
+const STRONG_ETAG_PATTERN = /^"[\x21\x23-\x7E\x80-\xFF]*"$/;
 const MAX_DOCUMENTS = 64;
 const MAX_RESULTS = 10_000;
 
@@ -120,7 +122,7 @@ export function solidIndex(storage: StorageClient, webId: string) {
   async function save(document: RdfReadResult, fresh: boolean, signal: AbortSignal) {
     if (new URL(document.url).search) throw error("bad-request", storage.root, "PUT");
     if (!fresh) {
-      if (!document.etag || !/^"[\x21\x23-\x7E\x80-\xFF]*"$/.test(document.etag)) {
+      if (!document.etag || !STRONG_ETAG_PATTERN.test(document.etag)) {
         throw error("precondition-required", document.url, "PUT");
       }
       await storage.writeRdf(document.url, document.dataset, {

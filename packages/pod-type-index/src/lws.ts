@@ -2,7 +2,7 @@
 import { parseLinkHeaders } from "@jeswr/storage-capabilities";
 import { StorageError, toStorageError } from "@jeswr/storage-client";
 import { canonicalize } from "@jeswr/suite-vocab";
-import { aliases, error, requireScoped, scoped } from "./common.js";
+import { aliases, CLASS_IRI_PATTERN, error, requireScoped, scoped } from "./common.js";
 import type { TypeIndexOptions } from "./types.js";
 
 const MEDIA = "application/lws+json";
@@ -188,8 +188,7 @@ export function lwsIndex({ storage, features, fetch: transport }: TypeIndexOptio
     const result = new Set<string>();
     for await (const { item } of pages(endpoint("indexEndpoint"))) {
       // Type identifiers are vocabulary IRIs, not resource URLs to fetch.
-      if (/^[a-z][a-z0-9+.-]*:[^\s\p{Cc}<>"{}|^`\\]+$/iu.test(item.id as string))
-        result.add(canonicalize(item.id as string));
+      if (CLASS_IRI_PATTERN.test(item.id as string)) result.add(canonicalize(item.id as string));
     }
     return [...result];
   }
