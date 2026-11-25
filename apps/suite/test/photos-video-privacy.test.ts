@@ -128,7 +128,7 @@ function canonGpsIfd(bigEndian: boolean) {
 function refusesUnchanged(bytes: Uint8Array<ArrayBuffer>) {
   const before = bytes.slice();
   expect(() => stripVideoLocation(bytes)).toThrow(VideoLocationError);
-  expect(() => stripVideoLocation(bytes)).toThrow("metadata is unreadable");
+  expect(() => stripVideoLocation(bytes)).toThrow("couldn't be fully checked");
   expect(bytes).toEqual(before);
 }
 function contains(bytes: Uint8Array, needle: Uint8Array) {
@@ -144,10 +144,9 @@ function scrub(bytes: Uint8Array<ArrayBuffer>, ...secrets: Uint8Array[]) {
 }
 const AUDIO =
   "mp4a ac-3 ec-3 Opus fLaC alac lpcm sowt twos ipcm fpcm in24 in32 fl32 fl64 ulaw alaw".split(" ");
+const JPEG = ["jpeg", "mjpa", "mjpb"];
 const VIDEO = [
-  ..."avc1 avc3 hvc1 hev1 dvh1 dvhe mp4v av01 vp08 vp09 apcn apch apcs apco ap4h ap4x jpeg mjpa mjpb".split(
-    " ",
-  ),
+  ..."avc1 avc3 hvc1 hev1 dvh1 dvhe mp4v av01 vp08 vp09 apcn apch apcs apco ap4h ap4x".split(" "),
   "raw ",
 ];
 function sample(format = "avc1", children: Uint8Array[] = [], version = 0) {
@@ -158,7 +157,7 @@ function sample(format = "avc1", children: Uint8Array[] = [], version = 0) {
         : 28
       : AUDIO.includes(format)
         ? 28 + (version === 1 ? 16 : version === 2 ? 36 : 0)
-        : VIDEO.includes(format)
+        : [...VIDEO, ...JPEG].includes(format)
           ? 78
           : 8,
   );
@@ -211,7 +210,7 @@ function track(id: number, options: TrackOptions = {}) {
       full(0, version),
       new Uint8Array(version === 1 ? 16 : 8),
       uint(id),
-      new Uint8Array(64),
+      new Uint8Array(version === 1 ? 72 : 68),
     ),
     box(
       "mdia",
@@ -730,8 +729,6 @@ describe("video allow-list privacy rebuild", () => {
   });
   it.each([
     "meta",
-    "text",
-    "sbtl",
     "djmd",
     "rtmd",
     "gps ",
@@ -739,8 +736,8 @@ describe("video allow-list privacy rebuild", () => {
     const { bytes } = staticFile("avc1", { handler });
     scrub(bytes, GPS);
   });
-  it("removes a disallowed sample entry even from a vide track, and drops tref", () => {
-    scrub(staticFile("mebx", { handler: "vide", formats: [sample(), sample("mebx")] }).bytes, GPS);
+  it("removes a metadata-only track from a vide handler, and drops tref", () => {
+    scrub(staticFile("mebx", { handler: "vide", formats: [sample("mebx")] }).bytes, GPS);
     const bytes = movie(track(1, { extra: [box("tref", box("cdsc", uint(2)))] }));
     scrub(bytes, text("cdsc"));
     expect(contains(bytes, text("tref"))).toBe(false);
@@ -787,8 +784,27 @@ describe("video allow-list privacy rebuild", () => {
     }
   });
   it("preserves the allowed structural boxes and drops misplaced ones", () => {
+    // Retained leaf boxes need the exact payload their own fields define.
+    const sizes: Record<string, number> = {
+      ftyp: 8,
+      styp: 8,
+      mehd: 8,
+      elst: 8,
+      stts: 8,
+      ctts: 8,
+      stss: 8,
+      stps: 8,
+      sidx: 24,
+      vmhd: 12,
+      smhd: 8,
+      mfro: 8,
+    };
     const leaf = (type: string) =>
-      box(type, uint(0), ...(["sbgp", "sgpd"].includes(type) ? [text("roll"), uint(0)] : []));
+      box(
+        type,
+        type in sizes ? new Uint8Array(sizes[type] as number) : uint(0),
+        ...(["sbgp", "sgpd"].includes(type) ? [text("roll"), uint(0)] : []),
+      );
     const bytes = join(
       leaf("ftyp"),
       leaf("styp"),
@@ -1135,7 +1151,11 @@ describe("video allow-list privacy rebuild", () => {
     const kept = "tfdt sbgp sgpd saiz saio subs"
       .split(" ")
       .map((type) =>
-        box(type, uint(0), ...(["sbgp", "sgpd"].includes(type) ? [text("roll"), uint(0)] : [])),
+        box(
+          type,
+          type === "tfdt" ? new Uint8Array(8) : uint(0),
+          ...(["sbgp", "sgpd"].includes(type) ? [text("roll"), uint(0)] : []),
+        ),
       );
     const bytes = join(
       init,
@@ -1215,5 +1235,109 @@ describe("video allow-list privacy rebuild", () => {
       expect(prepared.photo.exif.dateTimeOriginal).toBe(metadata.created);
       expect(prepared.photo.durationSeconds).toBe(2.5);
     }
+  });
+});
+
+describe("fail-closed video refusals", () => {
+  const exif = text("Exif\0\0+51.5074-000.1278/");
+  function jpegFile(format: string) {
+    const frame = join(Uint8Array.of(0xff, 0xd8, 0xff, 0xe1), exif);
+    const mdat = box("mdat", frame);
+    return join(
+      mdat,
+      movie(track(1, { formats: [sample(format)], sizes: [frame.length], offsets: [8] })),
+    );
+  }
+  it.each(JPEG)("refuses %s tracks, whose JPEG frames can carry EXIF GPS", (format) => {
+    const bytes = jpegFile(format);
+    const before = bytes.slice();
+    expect(() => stripVideoLocation(bytes)).toThrow(VideoLocationError);
+    expect(() => stripVideoLocation(bytes)).toThrow("JPEG");
+    expect(bytes).toEqual(before);
+  });
+  it("refuses a JPEG video track through upload preparation instead of uploading its bytes", async () => {
+    const original = new Blob([jpegFile("mjpa")], { type: "video/quicktime" });
+    const encoder: ImageEncoder = {
+      dimensions: async () => ({ width: 16, height: 16 }),
+      thumbnail: async () => new Blob(["t"], { type: "image/webp" }),
+      stripLocation: async (blob) => blob,
+    };
+    await expect(
+      preparePhoto(
+        "https://video.example/",
+        { id: "clip", name: "Clip", original, stripLocation: true },
+        encoder,
+        metadata.created,
+      ),
+    ).rejects.toThrow(VideoLocationError);
+  });
+  it.each([
+    ["samr", "soun", "audio"],
+    [".mp3", "soun", "audio"],
+    ["ac-4", "soun", "audio"],
+    ["apac", "soun", "audio"],
+    ["tx3g", "text", "subtitle"],
+    ["tx3g", "sbtl", "subtitle"],
+    ["c608", "clcp", "subtitle"],
+    ["zzzz", "hint", "kind"],
+  ])("refuses a %s track with handler %s instead of silently deleting it", (format, handler, word) => {
+    const { bytes } = staticFile("avc1", { handler, formats: [sample(format)] });
+    const before = bytes.slice();
+    expect(() => stripVideoLocation(bytes)).toThrow(VideoLocationError);
+    expect(() => stripVideoLocation(bytes)).toThrow(word);
+    expect(bytes).toEqual(before);
+  });
+  it("names the kind of track but never file contents", () => {
+    const { bytes } = staticFile("avc1", { handler: "soun", formats: [sample("samr")] });
+    try {
+      stripVideoLocation(bytes);
+      expect.unreachable();
+    } catch (error) {
+      expect((error as Error).message).toContain("audio");
+      expect((error as Error).message).not.toContain("samr");
+      expect((error as Error).message).not.toContain("+51");
+    }
+  });
+  it("refuses a video track that mixes a kept format with a metadata format", () => {
+    const { bytes } = staticFile("mebx", { handler: "vide", formats: [sample(), sample("mebx")] });
+    expect(() => stripVideoLocation(bytes)).toThrow(VideoLocationError);
+  });
+  it("never recommends turning the privacy option off", () => {
+    const messages: string[] = [];
+    for (const bytes of [
+      box("moov", text("bad")),
+      jpegFile("jpeg"),
+      staticFile("avc1", { handler: "soun", formats: [sample("samr")] }).bytes,
+    ]) {
+      try {
+        stripVideoLocation(bytes);
+      } catch (error) {
+        messages.push((error as Error).message);
+      }
+    }
+    expect(messages).toHaveLength(3);
+    for (const message of messages) expect(message).not.toMatch(/turn off|disable/iu);
+  });
+  it("zero-fills bytes after the fields that retained leaf boxes define", () => {
+    const tail = text("+51.5074-000.1278/");
+    const bytes = join(
+      box("ftyp", text("isom0000"), tail.slice(0, 3)),
+      box(
+        "moov",
+        box("mvhd", new Uint8Array(100), tail),
+        track(1, { tableExtra: [box("stts", full(), uint(0), tail)] }),
+      ),
+    );
+    const size = bytes.length;
+    expect(contains(bytes, tail)).toBe(true);
+    stripVideoLocation(bytes);
+    expect(bytes.length).toBe(size);
+    expect(contains(bytes, tail)).toBe(false);
+    expect(contains(bytes, tail.slice(0, 3))).toBe(false);
+    expect(contains(bytes, text("isom0000"))).toBe(true);
+  });
+  it("refuses retained leaf boxes shorter than their own fields", () => {
+    refusesUnchanged(box("ftyp", text("isom")));
+    refusesUnchanged(box("moov", box("mvhd", new Uint8Array(50))));
   });
 });

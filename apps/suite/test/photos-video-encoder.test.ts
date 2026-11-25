@@ -138,8 +138,6 @@ describe("video browser encoder", () => {
         browserEncoder.stripLocation(new Blob(["com.apple.quicktime.location.ISO6709"], { type })),
       ).rejects.toThrow(VideoLocationError);
     }
-    await expect(browserEncoder.stripLocation(original)).rejects.toThrow(
-      "Turn off Remove location for this video",
-    );
+    await expect(browserEncoder.stripLocation(original)).rejects.toThrow("wasn't uploaded");
   });
 });

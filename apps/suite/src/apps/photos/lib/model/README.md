@@ -54,7 +54,7 @@ names, visual sample entries' 32-byte compressor names and trailing payloads of 
 refused. Optional timecode reel-name atoms and `sbgp`/`sgpd` boxes with grouping types other than
 `roll`, `prol`, `rap `, `sync`, `tele`, `alst`, `tscl`, `stsa` and `sap ` are neutralised as `free`.
 
-Only `vide`, `soun` and `tmcd` tracks with allow-listed sample formats survive. Other tracks,
+Only `vide`, `soun` and `tmcd` tracks with allow-listed sample formats survive. Timed-metadata tracks,
 including iPhone `mebx` orientation tracks and vendor telemetry, are removed together with their
 sample bytes in `mdat`. Every `mdat` payload byte outside retained tracks' sample ranges is
 zero-filled too, including unreferenced gaps left by editors and entire unused payloads.
@@ -62,11 +62,18 @@ Static ranges are resolved from `stsc`, `stsz`/`stz2` and `stco`/`co64`;
 fragment ranges use `tfhd`/`trex` defaults and `trun` offsets, including implicit base offsets.
 File-backed `iloc` item extents in removed metadata are erased too. Bounds, counts, offsets and
 sample aliasing are validated before mutation. Inconsistent or unresolved layouts fail closed
-with `VideoLocationError` and instructions to disable Remove location; refusal leaves the buffer
+with `VideoLocationError` (the message says what was refused and why, and does not recommend turning the option off); refusal leaves the buffer
 untouched. No sizes change, so retained media and chunk offsets stay valid.
 
+A track whose loss would change the video (audio in an unlisted format, subtitle, caption or
+chapter tracks, unknown handler kinds) is refused rather than silently dropped, and so is any
+retained track using `jpeg`/`mjpa`/`mjpb` samples, whose JPEG frames can carry their own EXIF.
+Retained leaf boxes (`ftyp`, `mvhd`, `tkhd`, `mdhd`, `stts`, `sidx`, ...) keep only the bytes
+their own fields define; trailing bytes are zero-filled.
+
 The codec bitstreams of retained audio/video samples are not inspected: embedded metadata such
-as SEI user data inside H.264/HEVC frames may remain. `readVideoMetadata` still reads legacy
+as SEI user data inside H.264/HEVC frames may remain. The user-facing option text says so
+(`REMOVE_LOCATION_HELP`). `readVideoMetadata` still reads legacy
 location atoms for display before stripping. Upload preparation reads the MP4/MOV file once,
 extracts metadata, then scrubs the same caller-owned buffer without another full-buffer copy.
 The input Blob remains immutable.
