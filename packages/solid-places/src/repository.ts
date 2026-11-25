@@ -2,7 +2,8 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { checkOwnerOnly, ownerPolicy, writeWac } from "@jeswr/pod-access";
+import { checkOwnerOnly } from "@jeswr/pod-access";
+import { setGrants } from "@jeswr/pod-access/roles";
 import { createTypeIndex } from "@jeswr/pod-type-index";
 import { createPodClient, type StorageClient, StorageError } from "@jeswr/storage-client";
 import placesModel from "./generated/model.js";
@@ -192,21 +193,25 @@ export function createPlacesRepository(
       for await (const entry of storage.listAll(url, { maxBytes: MAX_RESOURCE_BYTES }))
         if (entry.url !== aclUrl)
           throw new Error("Make this Places folder private before opening it");
-      const body = await writeWac(ownerPolicy(owner, true), url, aclUrl);
-      const saved = await fetch(aclUrl, {
-        method: "PUT",
-        redirect: "error",
-        headers: { "Content-Type": "text/turtle", "If-None-Match": "*" },
-        body,
-      });
-      void saved.body?.cancel();
-      if (!saved.ok && saved.status !== 412) throw new Error("Cannot protect Places storage");
+      // Sealed through pod-access, which owns the access-control dialect; never written here.
+      const sealed = await setGrants(
+        [url],
+        [{ agent: { type: "webid", id: owner }, role: "manager", inherited: false, source: url }],
+        { fetch, root: storage.root, webId: owner, kind: "folder", ownOnly: true },
+      );
+      // Another writer may have created the policy first: verifyPrivacy judges the winner.
+      if (sealed.failed.length && !(await head(aclUrl)))
+        throw new Error("Cannot protect Places storage");
     }
     await verifyPrivacy(url);
     return url;
   }
-  async function initialize() {
+  /** Set when the last `initialize()` could not register Places in the private Type Index. The
+   * data is still readable and writable; only discovery by other apps is affected. */
+  let registrationWarning: string | undefined;
+  async function initialize(): Promise<{ registrationWarning?: string }> {
     initialized = false;
+    registrationWarning = undefined;
     forgetProofs();
     if (
       storage.protocol !== "solid" ||
@@ -242,12 +247,21 @@ export function createPlacesRepository(
         return typeof value === "function" ? value.bind(target) : value;
       },
     });
-    await createTypeIndex({
-      storage: indexStorage,
-      features: storage.features,
-      profile: owner,
-    }).register(PLACE_CLASS, { container: collection }, { index: "private" });
+    // Registration is best-effort discovery metadata. A WebID outside this storage (createTypeIndex
+    // throws a scope error), a missing or shared private index, or a failed write must never keep
+    // the private folders closed: record a recoverable warning and carry on.
+    try {
+      await createTypeIndex({
+        storage: indexStorage,
+        features: storage.features,
+        profile: owner,
+      }).register(PLACE_CLASS, { container: collection }, { index: "private" });
+    } catch {
+      registrationWarning =
+        "Places is open, but it couldn't be added to your private Type Index, so other apps may not find it.";
+    }
     initialized = true;
+    return registrationWarning ? { registrationWarning } : {};
   }
   function ready() {
     if (!initialized) throw new Error("Open private Places storage first");
@@ -346,25 +360,36 @@ export function createPlacesRepository(
         throw new Error("Import identifier conflicts with existing data");
       return url;
     }
-    const body =
+    const serialize = (target: string) =>
       kind === "Place"
-        ? await serializeRecord(kind, url, data as PlaceData)
+        ? serializeRecord(kind, target, data as PlaceData)
         : kind === "Visit"
-          ? await serializeRecord(kind, url, data as Parameters<typeof entities.Visit.serialize>[1])
-          : await serializeRecord(
-              kind,
-              url,
-              data as Parameters<typeof entities.Journey.serialize>[1],
-            );
+          ? serializeRecord(kind, target, data as Parameters<typeof entities.Visit.serialize>[1])
+          : serializeRecord(kind, target, data as Parameters<typeof entities.Journey.serialize>[1]);
+    const body = await serialize(url);
     signal?.throwIfAborted();
     try {
-      return (
-        await storage.create(parent, body, {
-          name: new URL(url).pathname.split("/").pop()!,
-          contentType: "text/turtle",
-          ...(signal ? { signal } : {}),
-        })
-      ).url;
+      const created = await storage.create(parent, body, {
+        name: new URL(url).pathname.split("/").pop()!,
+        contentType: "text/turtle",
+        ...(signal ? { signal } : {}),
+      });
+      if (created.url === url) return url;
+      // The server chose another name: the document must name the location it was given.
+      const assigned = scope(created.url);
+      if (
+        new URL(".", assigned).href !== parent ||
+        new URL(assigned).search ||
+        new URL(assigned).hash
+      )
+        throw new Error("The pod returned an unexpected location");
+      const etag = created.etag ?? (await head(assigned))?.etag ?? null;
+      await storage.write(assigned, await serialize(assigned), {
+        ifMatch: version(etag),
+        contentType: "text/turtle",
+        ...(signal ? { signal } : {}),
+      });
+      return assigned;
     } catch (error) {
       if (!(error instanceof StorageError && error.code === "conflict")) throw error;
       const existing = await resource(url);

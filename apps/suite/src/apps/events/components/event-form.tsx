@@ -219,8 +219,8 @@ export function EventForm({
                 </p>
               </div>
               <Label className="ev-choice">
-                <Input type="checkbox" name="guestListVisible" /> Let guests see the guest list and
-                replies
+                <Input type="checkbox" name="guestListVisible" /> Let invited guests see the guest
+                list and replies (invitation-only events; link invitations keep replies private)
               </Label>
               <fieldset className="ev-fieldset">
                 <legend>Ready to share?</legend>

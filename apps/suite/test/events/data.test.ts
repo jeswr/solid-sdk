@@ -101,7 +101,9 @@ it("creates invitation containers, registers Event, grants Append without guest 
 });
 it("round-trips replies, changes and visible guest-list access", async () => {
   const { pod, repository } = fixture();
+  // A link invitation has no guest list: asking for one never grants the public Read.
   const event = await repository.create(draft({ guestListVisible: true }), [], "visible");
+  expect(event.guestListVisible).toBe(false);
   const first = await appendRsvp(
     pod.fetch,
     event,
@@ -145,12 +147,9 @@ it("round-trips replies, changes and visible guest-list access", async () => {
   );
   expect(
     policy.grants.some(
-      (g) =>
-        g.who.some((c) => c.some((s) => s.kind === "public")) &&
-        g.modes.has("read") &&
-        g.appliesTo === "both",
+      (g) => g.who.some((c) => c.some((s) => s.kind === "public")) && g.modes.has("read"),
     ),
-  ).toBe(true);
+  ).toBe(false);
   expect(await readInvitation(pod.fetch, `${event.url}#it`)).toMatchObject({ name: event.name });
 });
 it("keeps drafts private, persists invited WebIDs and refuses anonymous replies to private invitations", async () => {

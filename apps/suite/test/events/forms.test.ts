@@ -40,12 +40,20 @@ it("parses form dates, trims text, supports optional fields and preserves creati
   value.set("guestListVisible", "on");
   value.set("publication", "draft");
   const detailed = invitationForm(value, owner, undefined, now);
+  // A link invitation cannot show a guest list: a link holder never reads raw replies.
   expect(detailed).toMatchObject({
     capacity: 12,
     description: "A lovely time",
     publication: "draft",
+    visibility: "link",
+    guestListVisible: false,
+  });
+  value.set("visibility", "invitees");
+  expect(invitationForm(value, owner, undefined, now)).toMatchObject({
+    visibility: "invitees",
     guestListVisible: true,
   });
+  value.set("visibility", "link");
   const existing = { ...data, url: "https://host.example/event", etag: '"a"' };
   expect(invitationForm(value, owner, existing)).toMatchObject({
     created: now,
