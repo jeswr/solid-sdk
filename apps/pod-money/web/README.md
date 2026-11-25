@@ -68,7 +68,7 @@ APP_ORIGIN=https://money.solid-test.jeswr.org npm run build
 ```
 
 `VITE_HOME_IDP` configures the first provider (default
-`https://idp.solid-test.jeswr.org`); `VITE_HOME_IDP_NAME` supplies its label.
+`https://solidcommunity.net/`); `VITE_HOME_IDP_NAME` supplies its label.
 `VITE_KNOWN_PROVIDERS` optionally supplies comma-separated HTTPS provider URLs.
 
 ## Validation
