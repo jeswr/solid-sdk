@@ -27,7 +27,7 @@ const files = [
   { name: "b.webm", original: new Blob(["b"], { type: "video/webm" }) },
 ];
 let next = 0;
-const options = (verifyDestination?: (container: string) => Promise<boolean>) => ({
+const options = (verifyDestination: (container: string) => Promise<boolean>) => ({
   encoder,
   stripLocation: false,
   now: NOW,
@@ -36,6 +36,12 @@ const options = (verifyDestination?: (container: string) => Promise<boolean>) =>
 });
 
 describe("owner-only upload destination", () => {
+  it("fails closed at runtime when the check is omitted by a caller that bypasses types", async () => {
+    const { io, puts } = setup();
+    await expect(uploadFiles(io, files, options(undefined as never))).rejects.toThrow(TypeError);
+    await expect(io.uploadPhotos([], encoder, NOW, undefined as never)).rejects.toThrow(TypeError);
+    expect(puts).toEqual([]);
+  });
   it.each([
     ["not owner-only", async () => false],
     [

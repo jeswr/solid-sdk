@@ -57,6 +57,7 @@ function setup() {
   const io = photoDataStorage(fetch, ROOT);
   const upload = (id = "photo", now = NOW, changes = {}) =>
     uploadFiles(io, [{ name: "photo.png", original: png, ...changes }], {
+      verifyDestination: async () => true,
       encoder,
       stripLocation: true,
       now,
@@ -247,6 +248,7 @@ describe("Photos recovery regressions", () => {
     const s = setup();
     const original = animatedPng();
     const options = {
+      verifyDestination: async () => true,
       encoder: { ...encoder, stripLocation: browserEncoder.stripLocation },
       stripLocation: true,
       now: NOW,
@@ -567,6 +569,7 @@ describe("Photos recovery regressions", () => {
     expect(
       (
         await uploadFiles(s.io, [{ name: "photo.png", original: png }], {
+          verifyDestination: async () => true,
           encoder,
           stripLocation: false,
           now: NOW,

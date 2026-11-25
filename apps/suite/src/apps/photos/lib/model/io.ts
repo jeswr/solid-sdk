@@ -167,8 +167,11 @@ export function photoStorage(fetch: typeof globalThis.fetch, storage: string) {
       encoder: ImageEncoder,
       now: string,
       /** Resolves true only when a container is verifiably owner-only; false or a throw refuses. */
-      verifyDestination?: (container: string) => Promise<boolean>,
+      verifyDestination: (container: string) => Promise<boolean>,
     ) {
+      // Fail closed: a caller that omits the owner-only check must not write unchecked.
+      if (typeof verifyDestination !== "function")
+        throw new TypeError("An owner-only destination check is required");
       const uploaded = [];
       // Prepare before creating/writing resources, so invalid inputs do not publish metadata.
       for (const input of inputs) {
@@ -176,16 +179,15 @@ export function photoStorage(fetch: typeof globalThis.fetch, storage: string) {
         await ensureContainers(["", "originals/", "thumbs/", "items/"]);
         // Containers exist now, so their effective policy can be read; nothing private is written
         // until every destination has been shown to be owner-only.
-        if (verifyDestination)
-          for (const path of ["originals/", "thumbs/", "items/"]) {
-            let verified = false;
-            try {
-              verified = await verifyDestination(new URL(path, root).href);
-            } catch {
-              /* An unreadable policy is a refusal. */
-            }
-            if (!verified) throw new PrivateDestinationError();
+        for (const path of ["originals/", "thumbs/", "items/"]) {
+          let verified = false;
+          try {
+            verified = await verifyDestination(new URL(path, root).href);
+          } catch {
+            /* An unreadable policy is a refusal. */
           }
+          if (!verified) throw new PrivateDestinationError();
+        }
         await put(prepared.photo.contentUrl, prepared.original, prepared.original.type, {
           create: true,
         });
