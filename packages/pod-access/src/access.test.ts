@@ -536,19 +536,40 @@ describe("conditional writes and discovery", () => {
   test.each([
     "share",
     "revoke",
-  ] as const)("refuses %s when WAC-Allow denies Control", async (operation) => {
-    const { client, target, storage, head } = await setup();
+  ] as const)("%s ignores a WAC-Allow without Control: the server authorises the conditional write", async (operation) => {
+    // Under reactive auth `allow` can describe the anonymous caller of a publicly readable resource.
+    const { client, target, storage, head, accessUrl } = await setup();
     head.mockResolvedValue({
       ...(await head(target)),
-      allow: { read: true, write: true, append: true, control: false },
+      allow: { read: true, write: false, append: false, control: false },
     });
-    const result =
+    const grant = await client.share(target, { agent: BOB, modes: ["read"] }, {});
+    vi.mocked(storage.writeRdf).mockClear();
+    await (operation === "share"
+      ? client.share(target, { agent: BOB, modes: ["write"] }, {})
+      : client.revoke(target, grant.id as string));
+    expect(storage.writeRdf).toHaveBeenCalledTimes(1);
+    expect(storage.writeRdf).toHaveBeenCalledWith(accessUrl, expect.anything(), {
+      ifMatch: expect.stringMatching(/^"/),
+    });
+  });
+  test.each([
+    "share",
+    "revoke",
+  ] as const)("a real server 403 on %s propagates as forbidden", async (operation) => {
+    const { client, target, storage, head, accessUrl } = await setup();
+    head.mockResolvedValue({
+      ...(await head(target)),
+      allow: { read: true, write: false, append: false, control: false },
+    });
+    const grant = await client.share(target, { agent: BOB, modes: ["read"] }, {});
+    const denied = new StorageError("forbidden", { status: 403, method: "PUT", url: accessUrl });
+    vi.mocked(storage.writeRdf).mockRejectedValue(denied);
+    await expect(
       operation === "share"
-        ? client.share(target, { agent: BOB, modes: ["read"] }, {})
-        : client.revoke(target, BOB);
-    await expect(result).rejects.toMatchObject({ code: "forbidden", status: 403 });
-    expect(storage.readRdf).not.toHaveBeenCalled();
-    expect(storage.writeRdf).not.toHaveBeenCalled();
+        ? client.share(target, { agent: BOB, modes: ["write"] }, {})
+        : client.revoke(target, grant.id as string),
+    ).rejects.toBe(denied);
   });
   test("defers authorization to the server when WAC-Allow is absent, preserves forbidden mapping", async () => {
     const { client, target, storage, head, accessUrl } = await setup();

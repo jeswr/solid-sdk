@@ -112,9 +112,11 @@ See the [WAC discovery rules](https://solidproject.org/TR/wac#acl-link-relation)
 Edits clone the complete dataset and call `storage.writeRdf` with the access document's ETag,
 preserving unrelated RDF. Missing/empty/wildcard validators fail with `precondition-required`;
 412 conflicts propagate without retry. Missing, unreadable or unparsable documents propagate
-their storage errors. A reported lack of Control fails locally with `forbidden`; when
-WAC-Allow is absent, the server remains responsible for authorizing the conditional write.
-Server 401/403 errors propagate unchanged. Named graphs and unexpected 304s are rejected.
+their storage errors. `WAC-Allow` is never used to refuse a share or revoke: authentication
+is reactive (anonymous first, upgraded only on a 401), so once a resource is publicly readable
+the HEAD succeeds anonymously and `allow` describes the anonymous caller, not the signed-in
+user. The server authorises the ACL read and the conditional write. Server 401/403 errors propagate unchanged
+as `forbidden`. Named graphs and unexpected 304s are rejected.
 
 ## Solid grants
 
@@ -881,3 +883,21 @@ The subpath exports frozen `ACCM`, `DPV`, `ODRL`, `ACL`, `LDP` and supporting vo
 accm helpers. RDF uses `@jeswr/fetch-rdf`, typed accessors/RDF factories, and `n3.Writer`.
 Access Manager imports shared vocabulary and
 canonicalisation; its UI-specific request/approval interfaces remain deprecated compatibility code.
+
+## Known limitation: `ReadResult.allow` under reactive authentication
+
+`@jeswr/storage-client` documents `ReadResult.allow` as the caller's permissions, but with
+reactive authentication a resource that anonymous requests can read is answered to an
+unauthenticated request, so `allow` is the anonymous caller's `WAC-Allow` (`user` equals
+`public`), correctly reported by the server. `createAccessClient().effective()` and the
+move-destination Control guard in `./roles` (`movePreservingAccess`) still read `allow` and are
+therefore wrong for publicly readable resources (for example `effective().me` omits `control`
+for the owner of a publicly shared resource). To be fixed at the storage-client / pod-auth
+layer (treat `allow` as unknown, or re-probe with credentials, when the response was obtained
+without an upgrade). Discovery of the access link in `share`/`revoke` also uses the same
+possibly anonymous HEAD; a server that advertises it only to agents with Control would be
+`unsupported` on a public resource.
+
+The real-server regression lane is opt-in: from `tools/storage-conformance`, run
+`pnpm run test:registration` (starts Community Solid Server on a loopback port). It is not part
+of the gate.

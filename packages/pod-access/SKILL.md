@@ -51,7 +51,11 @@ Use the public StorageClient interface. Never fetch directly or reach into backe
 comes from available `features.accessControl`; Solid methods use HEAD's advertised ACL/ACR
 link, readRdf, then writeRdf with the access document's non-wildcard ETag. No automatic retries,
 suffix guesses, ancestor resolution or creation of missing access documents. Preserve unrelated
-RDF. Refuse advertised lack of Control; absent WAC-Allow leaves authorization to the server.
+RDF. Do not refuse on `head.allow`/WAC-Allow: with reactive (anonymous-first)
+auth it describes the anonymous caller on any publicly readable resource, so it would block the
+owner from revoking exactly when a resource is public. The server authorises the ACL read and
+the If-Match write; propagate its 401/403 as `forbidden`. Do not trust `allow` as the signed-in
+user's permissions (`effective()` and the move guard still do; see the README known limitation).
 
 Read and author access graphs using `@solid/object` AclResource/Authorization and
 AccessControlResource/AccessControl/Policy/Matcher, with typed `@rdfjs/wrapper` accessors for
