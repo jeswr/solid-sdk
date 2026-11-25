@@ -4,6 +4,8 @@ export {
   createNativeCodeDriver,
   type GetCode,
   type NativeCodeDriverOptions,
+  parseRedirect,
+  type Redirect,
   USER_CANCELLED,
 } from "./auth-session.js";
 export {

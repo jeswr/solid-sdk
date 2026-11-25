@@ -3436,6 +3436,28 @@ importers:
         specifier: ^4.1.9
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  packages/desktop-auth:
+    dependencies:
+      '@jeswr/suite-native':
+        specifier: workspace:*
+        version: link:../suite-native
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@jeswr/pod-auth':
+        specifier: workspace:*
+        version: link:../pod-auth
+      '@vitest/coverage-v8':
+        specifier: ^4.1.10
+        version: 4.1.10(vitest@4.1.10)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
   packages/federation-client:
     dependencies:
       '@jeswr/federation-registry':
@@ -6426,6 +6448,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@jeswr/desktop-auth':
+        specifier: workspace:*
+        version: link:../../packages/desktop-auth
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
