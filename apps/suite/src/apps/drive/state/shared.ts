@@ -2,6 +2,7 @@
 "use client";
 import { latestSharedEntries } from "@jeswr/suite-sdk/shared";
 import { useCallback } from "react";
+import { isAnnouncedLocation } from "@/lib/shared/announced";
 import { clearHiddenSharedForAccount } from "@/lib/shared/hidden";
 import type { DriveItem } from "../lib/client/client";
 import { isOwnStorage } from "../lib/client/ownership";
@@ -17,7 +18,11 @@ export function sharedContentType(name: string, contentType?: string): string | 
 export function latestShared(
   entries: DrivePreferences["openedShared"],
 ): DrivePreferences["openedShared"] {
-  return latestSharedEntries(entries, (entry) => entry.openedAt);
+  const announced = new Set(entries.filter((entry) => entry.announced).map((entry) => entry.url));
+  // Announced is sticky: a later open of the same URL never lifts the preview-only rule.
+  return latestSharedEntries(entries, (entry) => entry.openedAt).map((entry) =>
+    announced.has(entry.url) && !entry.announced ? { ...entry, announced: true } : entry,
+  );
 }
 
 /** Called only after a successful open, using the existing account-scoped preference writer. */
@@ -35,6 +40,8 @@ export function useRecordSharedOpen() {
         ...(item.size !== undefined ? { size: item.size } : {}),
         ...(item.modified ? { modified: item.modified.toISOString() } : {}),
         openedAt: new Date().toISOString(),
+        // Reached from an announced row: keep that provenance on the record.
+        ...(isAnnouncedLocation(globalThis.location?.search) ? { announced: true } : {}),
       };
       updatePrefs((current) => ({
         ...current,
