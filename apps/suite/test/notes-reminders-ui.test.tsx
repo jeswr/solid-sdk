@@ -16,7 +16,7 @@ import { act, click, deferred, h, mount } from "./drive-ui-dom";
 const mocks = vi.hoisted(() => ({
   context: {} as Record<string, unknown>,
   push: vi.fn(),
-  toast: Object.assign(vi.fn(), { error: vi.fn() }),
+  toast: Object.assign(vi.fn(), { error: vi.fn(), dismiss: vi.fn() }),
 }));
 vi.mock("../src/apps/notes/state/notes-context", () => ({
   useNotesContext: () => mocks.context,
