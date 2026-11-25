@@ -66,10 +66,31 @@ with `VideoLocationError` (the message says what was refused and why, and does n
 untouched. No sizes change, so retained media and chunk offsets stay valid.
 
 A track whose loss would change the video (audio in an unlisted format, subtitle, caption or
-chapter tracks, unknown handler kinds) is refused rather than silently dropped, and so is any
-retained track using `jpeg`/`mjpa`/`mjpb` samples, whose JPEG frames can carry their own EXIF.
-Retained leaf boxes (`ftyp`, `mvhd`, `tkhd`, `mdhd`, `stts`, `sidx`, ...) keep only the bytes
-their own fields define; trailing bytes are zero-filled.
+chapter tracks, unknown handler kinds, a track with no sample description, a metadata-handler
+track whose entries are not metadata formats) is refused rather than silently dropped. The
+refusal says what to do next (export or convert the video without that track), never to turn the
+option off. Timed-metadata tracks (`mebx`, `gpmd`, `djmd`, `rtmd`, `gps `, `camm`, `mett`,
+`metx`, `urim`) are removed on purpose. Allow-list changes are out of scope for refusals.
+
+Still pictures are refused: any retained track using `jpeg`/`mjpa`/`mjpb` samples, and any `mp4v`
+or `mp4a` entry whose `esds` (read from the descriptor chain, strictly bounded; also inside
+`wave`) is missing, unparseable, or has an object type outside the allow-list. Allowed:
+MPEG-4 Visual 0x20, MPEG-2 Visual 0x60-0x65, MPEG-1 Visual 0x6A for `mp4v`; MPEG-4 AAC 0x40,
+MPEG-2 AAC 0x66-0x68, MPEG-2 audio 0x69, MPEG-1 audio 0x6B for `mp4a`. JPEG (0x6C), PNG (0x6D),
+JPEG 2000 (0x6E) and the rest refuse. A `fLaC` entry is kept only when its `dfLa` holds nothing
+but the 34-byte STREAMINFO block (tags and pictures live in other blocks); otherwise it refuses.
+
+Retained leaf boxes keep only the bytes their own fields define; trailing bytes are zero-filled.
+Trimmed exactly: `ftyp` and `styp` (to a whole number of 4-byte brands), `mvhd`, `tkhd`, `mdhd`
+(versions 0 and 1), `mehd`, `tfdt`, `vmhd`, `smhd`, `mfhd`, `mfro`, `stts`, `ctts`, `stss`,
+`stps`, `elst` and `sidx` (lengths from their own counts). Their lengths are checked: a box
+shorter than its fields is refused. Already exact elsewhere: `stsc`, `stsz`/`stz2`, `stco`/`co64`,
+`trex`, `tfhd`, `trun`, `hdlr` (name zeroed), `dref` entries and visual compressor names.
+Still kept whole (opaque, not trimmed): `colr` (an ICC profile may carry free text), `esds`
+beyond its object type, `avcC`/`hvcC`/`av1C`/`dvcC`/`vpcC`, `dOps`, `alac`, `dac3`/`dec3`,
+`btrt`, `pasp`, `clap`, `fiel`, `gama`, `chan`, `mdcv`, `clli`, `sgpd`, `sbgp`, `trep`, `tfra`,
+`cslg`, `sdtp`, `stsh`, `subs`, `saiz`, `saio`, `nmhd`, `gmin`, `gmhd`/`tmcd` children, the brand
+list of `ftyp`/`styp`, 12 bytes of `hdlr`, and the 4-byte vendor field of visual entries.
 
 The codec bitstreams of retained audio/video samples are not inspected: embedded metadata such
 as SEI user data inside H.264/HEVC frames may remain. The user-facing option text says so

@@ -162,7 +162,34 @@ function sample(format = "avc1", children: Uint8Array[] = [], version = 0) {
           : 8,
   );
   if (AUDIO.includes(format)) new DataView(prefix.buffer).setUint16(8, version);
-  return box(format, prefix, ...children);
+  // Real entries always carry the box that says what the stream is; add a valid one by default.
+  const has = (type: string) =>
+    children.some((child) => String.fromCharCode(...child.slice(4, 8)) === type);
+  const defaults: Uint8Array[] = [];
+  if (format === "mp4v" && !has("esds")) defaults.push(esdsBox(0x20));
+  if (format === "mp4a" && !has("esds") && !has("wave")) defaults.push(esdsBox(0x40));
+  if (format === "fLaC" && !has("dfLa")) defaults.push(dfLaBox());
+  return box(format, prefix, ...children, ...defaults);
+}
+/** An MPEG-4 systems descriptor, with the 4-byte length encoding FFmpeg writes. */
+function descriptor(tag: number, ...parts: Uint8Array[]) {
+  const body = join(...parts);
+  return join(Uint8Array.of(tag, 0x80, 0x80, 0x80, body.length), body);
+}
+function esdsBox(objectType: number) {
+  const config = descriptor(0x04, Uint8Array.of(objectType, 0x15), new Uint8Array(11));
+  return box("esds", full(), descriptor(0x03, uint(1, 2), Uint8Array.of(0), config));
+}
+/** A FLAC dfLa: STREAMINFO, then any further metadata blocks (the last one flags the end). */
+function dfLaBox(...more: { type: number; data: Uint8Array }[]) {
+  const blocks = [{ type: 0, data: new Uint8Array(34) }, ...more].map((block, index, all) =>
+    join(
+      Uint8Array.of((index === all.length - 1 ? 0x80 : 0) | block.type),
+      uint(block.data.length, 3),
+      block.data,
+    ),
+  );
+  return box("dfLa", full(), ...blocks);
 }
 interface TrackOptions {
   handler?: string;
@@ -178,6 +205,9 @@ interface TrackOptions {
   tableExtra?: Uint8Array[];
   extra?: Uint8Array[];
   version?: number;
+  tkhdTail?: Uint8Array;
+  mdhdTail?: Uint8Array;
+  mdhdVersion?: number;
 }
 function track(id: number, options: TrackOptions = {}) {
   const {
@@ -194,6 +224,9 @@ function track(id: number, options: TrackOptions = {}) {
     tableExtra = [],
     extra = [],
     version = 0,
+    tkhdTail = new Uint8Array(),
+    mdhdTail = new Uint8Array(),
+    mdhdVersion = 0,
   } = options;
   const sizeData =
     compact === 4
@@ -208,13 +241,20 @@ function track(id: number, options: TrackOptions = {}) {
     box(
       "tkhd",
       full(0, version),
-      new Uint8Array(version === 1 ? 16 : 8),
+      // Non-zero, but small enough to be a safe integer in the 64-bit version 1 fields.
+      version === 1 ? join(uint(0xabababab, 8), uint(0xabababab, 8)) : new Uint8Array(8).fill(0xab),
       uint(id),
-      new Uint8Array(version === 1 ? 72 : 68),
+      new Uint8Array(version === 1 ? 72 : 68).fill(0xab),
+      tkhdTail,
     ),
     box(
       "mdia",
-      box("mdhd", new Uint8Array(24)),
+      box(
+        "mdhd",
+        Uint8Array.of(mdhdVersion),
+        new Uint8Array(mdhdVersion === 1 ? 35 : 23).fill(0xab),
+        mdhdTail,
+      ),
       box("hdlr", new Uint8Array(8), text(handler), new Uint8Array(12), handlerName),
       box(
         "minf",
@@ -377,7 +417,7 @@ describe("video allow-list privacy rebuild", () => {
           sizes: [5],
           offsets: [firstVideo + 5 + GPS.length],
         }),
-        track(3, { handler: "meta", sizes: [GPS.length], offsets: [8] }),
+        track(3, { handler: "meta", formats: [sample("mebx")], sizes: [GPS.length], offsets: [8] }),
       ),
     );
     const zero = new Uint8Array(GPS.length);
@@ -396,7 +436,7 @@ describe("video allow-list privacy rebuild", () => {
     const init = movie(
       track(1, { sizes: [5], offsets: [8] }),
       track(2, { handler: "soun", formats: [sample("mp4a")] }),
-      track(3, { handler: "meta" }),
+      track(3, { handler: "meta", formats: [sample("mebx")] }),
     );
     const build = (offset: number) =>
       box(
@@ -512,7 +552,14 @@ describe("video allow-list privacy rebuild", () => {
       const bytes = movie(
         track(1, {
           handlerName: join(GPS, Uint8Array.of(0)),
-          formats: [box(format, visual, box("avcC", Uint8Array.of(1, 2)))],
+          formats: [
+            box(
+              format,
+              visual,
+              box("avcC", Uint8Array.of(1, 2)),
+              ...(format === "mp4v" ? [esdsBox(0x20)] : []),
+            ),
+          ],
         }),
       );
       const before = bytes.slice();
@@ -712,7 +759,7 @@ describe("video allow-list privacy rebuild", () => {
     "djmd",
     "rtmd",
     "gps ",
-    "zzzz",
+    "mett",
     "camm",
   ])("removes %s samples from mdat and preserves video/audio, including moov after mdat", (format) => {
     for (const after of [false, true]) {
@@ -732,8 +779,8 @@ describe("video allow-list privacy rebuild", () => {
     "djmd",
     "rtmd",
     "gps ",
-  ])("removes %s handlers even with an allowed codec", (handler) => {
-    const { bytes } = staticFile("avc1", { handler });
+  ])("removes %s handlers carrying metadata formats", (handler) => {
+    const { bytes } = staticFile("mebx", { handler });
     scrub(bytes, GPS);
   });
   it("removes a metadata-only track from a vide handler, and drops tref", () => {
@@ -743,20 +790,30 @@ describe("video allow-list privacy rebuild", () => {
     expect(contains(bytes, text("tref"))).toBe(false);
   });
   it("preserves every allowed AV sample entry/config and scrubs arbitrary children and sinf", () => {
-    const configs =
-      "avcC hvcC dvcC dvvC av1C vpcC esds dOps dfLa alac dac3 dec3 btrt pasp colr clap fiel gama chan mdcv clli CoLL SmDm"
-        .split(" ")
-        .map((type) => box(type, Uint8Array.of(1, 2, 3)));
-    configs.push(
-      box(
-        "wave",
-        box("frma", text("mp4a")),
-        box("esds", new Uint8Array(4)),
-        box("enda", uint(1, 2)),
-        box("\0\0\0\0"),
-      ),
-    );
+    // esds and dfLa are parsed, so they must describe an allowed stream for the entry's format.
+    const makeConfigs = (format: string) => {
+      const oti = format === "mp4v" ? 0x20 : 0x40;
+      return [
+        ..."avcC hvcC dvcC dvvC av1C vpcC esds dOps dfLa alac dac3 dec3 btrt pasp colr clap fiel gama chan mdcv clli CoLL SmDm"
+          .split(" ")
+          .map((type) =>
+            type === "esds"
+              ? esdsBox(oti)
+              : type === "dfLa"
+                ? dfLaBox()
+                : box(type, Uint8Array.of(1, 2, 3)),
+          ),
+        box(
+          "wave",
+          box("frma", text("mp4a")),
+          esdsBox(oti),
+          box("enda", uint(1, 2)),
+          box("\0\0\0\0"),
+        ),
+      ];
+    };
     for (const format of [...VIDEO, ...AUDIO, "tmcd"]) {
+      const configs = makeConfigs(format);
       const entry = sample(format, configs);
       const bytes = movie(track(1, { formats: [entry] }));
       const before = bytes.slice();
@@ -777,7 +834,11 @@ describe("video allow-list privacy rebuild", () => {
     }
     for (const version of [1, 2]) {
       const bytes = movie(
-        track(1, { handler: "soun", formats: [sample("mp4a", configs, version)], version: 1 }),
+        track(1, {
+          handler: "soun",
+          formats: [sample("mp4a", makeConfigs("mp4a"), version)],
+          version: 1,
+        }),
       );
       const before = bytes.slice();
       expect(stripVideoLocation(bytes)).toEqual(before);
@@ -1019,7 +1080,12 @@ describe("video allow-list privacy rebuild", () => {
       track(1, {
         formats: [
           sample("mp4a", [
-            box("wave", box("frma", text("mp4a")), box("sinf", box("schi", box("uuid", GPS)))),
+            box(
+              "wave",
+              box("frma", text("mp4a")),
+              esdsBox(0x40),
+              box("sinf", box("schi", box("uuid", GPS))),
+            ),
           ]),
         ],
       }),
@@ -1252,7 +1318,7 @@ describe("fail-closed video refusals", () => {
     const bytes = jpegFile(format);
     const before = bytes.slice();
     expect(() => stripVideoLocation(bytes)).toThrow(VideoLocationError);
-    expect(() => stripVideoLocation(bytes)).toThrow("JPEG");
+    expect(() => stripVideoLocation(bytes)).toThrow("still pictures");
     expect(bytes).toEqual(before);
   });
   it("refuses a JPEG video track through upload preparation instead of uploading its bytes", async () => {
@@ -1339,5 +1405,242 @@ describe("fail-closed video refusals", () => {
   it("refuses retained leaf boxes shorter than their own fields", () => {
     refusesUnchanged(box("ftyp", text("isom")));
     refusesUnchanged(box("moov", box("mvhd", new Uint8Array(50))));
+  });
+});
+
+describe("retained leaf boxes keep exactly their defined fields", () => {
+  const tail = new Uint8Array(5).fill(0xcd);
+  const filled = (length: number) => new Uint8Array(length).fill(0xab);
+  const versioned = (version: number, length: number) =>
+    join(Uint8Array.of(version), filled(length - 1));
+  const counted = (version: number, count: number, each: number, base = 8) =>
+    join(Uint8Array.of(version, 0, 0, 0), uint(count), filled(base - 8 + count * each));
+  // [name, file builder, type, defined payload length]; every payload is non-zero so that
+  // zeroing too much would be seen as well as zeroing too little.
+  const cases: [string, (tail: Uint8Array) => Uint8Array<ArrayBuffer>, string, number][] = [
+    ["ftyp", (t) => box("ftyp", text("isom0000"), filled(8), t.slice(0, 3)), "ftyp", 16],
+    ["styp", (t) => box("styp", text("msdh0000"), filled(4), t.slice(0, 1)), "styp", 12],
+    ...[0, 1].flatMap((v): typeof cases => [
+      [
+        `mvhd v${v}`,
+        (t) => box("moov", box("mvhd", versioned(v, v ? 112 : 100), t)),
+        "mvhd",
+        v ? 112 : 100,
+      ],
+      [
+        `mehd v${v}`,
+        (t) => box("moov", box("mvex", box("mehd", versioned(v, v ? 12 : 8), t))),
+        "mehd",
+        v ? 12 : 8,
+      ],
+      [`tkhd v${v}`, (t) => movie(track(1, { version: v, tkhdTail: t })), "tkhd", v ? 96 : 84],
+      [`mdhd v${v}`, (t) => movie(track(1, { mdhdVersion: v, mdhdTail: t })), "mdhd", v ? 36 : 24],
+      [
+        `elst v${v}`,
+        (t) =>
+          movie(track(1, { extra: [box("edts", box("elst", counted(v, 2, v ? 20 : 12), t))] })),
+        "elst",
+        8 + 2 * (v ? 20 : 12),
+      ],
+      [
+        `sidx v${v}`,
+        (t) => box("sidx", versioned(v, (v ? 32 : 24) - 2), uint(2, 2), filled(24), t),
+        "sidx",
+        (v ? 32 : 24) + 24,
+      ],
+    ]),
+    ["mfhd", (t) => box("moof", box("mfhd", filled(8), t)), "mfhd", 8],
+    ["mfro", (t) => box("mfra", box("mfro", filled(8), t)), "mfro", 8],
+    ["vmhd", (t) => movie(track(1, { minfExtra: [box("vmhd", filled(12), t)] })), "vmhd", 12],
+    ["smhd", (t) => movie(track(1, { minfExtra: [box("smhd", filled(8), t)] })), "smhd", 8],
+    ...(["stts", "ctts"] as const).map((type): (typeof cases)[number] => [
+      type,
+      (t) => movie(track(1, { tableExtra: [box(type, counted(0, 3, 8), t)] })),
+      type,
+      8 + 3 * 8,
+    ]),
+    ...(["stss", "stps"] as const).map((type): (typeof cases)[number] => [
+      type,
+      (t) => movie(track(1, { tableExtra: [box(type, counted(0, 3, 4), t)] })),
+      type,
+      8 + 3 * 4,
+    ]),
+  ];
+  it.each(
+    cases,
+  )("%s: real fields survive, only the tail is zeroed", (_name, build, type, defined) => {
+    const bytes = build(tail);
+    const before = bytes.slice();
+    const start = Buffer.from(bytes).indexOf(type) + 4;
+    // The box tail really is in the file and is exactly what follows the defined fields.
+    expect(
+      bytes.slice(
+        start + defined,
+        start + defined + (type === "ftyp" ? 3 : type === "styp" ? 1 : 5),
+      ),
+    ).toEqual(tail.slice(0, type === "ftyp" ? 3 : type === "styp" ? 1 : 5));
+    stripVideoLocation(bytes);
+    expect(bytes.length).toBe(before.length);
+    const tailLength = type === "ftyp" ? 3 : type === "styp" ? 1 : 5;
+    expect(bytes.slice(start, start + defined)).toEqual(before.slice(start, start + defined));
+    expect(bytes.slice(start + defined, start + defined + tailLength)).toEqual(
+      new Uint8Array(tailLength),
+    );
+    // Nothing outside the tail changed.
+    for (let index = 0; index < bytes.length; index++)
+      if (index < start + defined || index >= start + defined + tailLength)
+        expect(bytes[index]).toBe(before[index]);
+  });
+});
+
+describe("elementary stream and FLAC checks", () => {
+  const mp4vTrack = (...children: Uint8Array[]) =>
+    movie(track(1, { formats: [box("mp4v", new Uint8Array(78), ...children)] }));
+  it.each([
+    0x20, 0x60, 0x65, 0x6a,
+  ])("keeps an mp4v track with MPEG video object type %s (decimal)", (oti) => {
+    const bytes = mp4vTrack(esdsBox(oti));
+    const before = bytes.slice();
+    expect(stripVideoLocation(bytes)).toEqual(before);
+  });
+  it.each([
+    [0x6c, "JPEG"],
+    [0x6d, "PNG"],
+    [0x6e, "JPEG 2000"],
+    [0x21, "AVC"],
+    [0x40, "AAC"],
+    [0x00, "forbidden"],
+    [0xff, "no type"],
+  ])("refuses an mp4v track whose esds says object type %s (decimal) (%s), even with EXIF GPS in its frame", (oti) => {
+    const frame = join(Uint8Array.of(0xff, 0xd8, 0xff, 0xe1), text("Exif\0\0+51.5074-000.1278/"));
+    const bytes = join(
+      box("mdat", frame),
+      movie(
+        track(1, {
+          formats: [box("mp4v", new Uint8Array(78), esdsBox(oti))],
+          sizes: [frame.length],
+          offsets: [8],
+        }),
+      ),
+    );
+    const before = bytes.slice();
+    expect(() => stripVideoLocation(bytes)).toThrow(VideoLocationError);
+    expect(() => stripVideoLocation(bytes)).toThrow("real format");
+    expect(bytes).toEqual(before);
+  });
+  it("fails closed on a missing, truncated or malformed esds", () => {
+    const entry = (...children: Uint8Array[]) => mp4vTrack(...children);
+    refusesUnchanged(entry());
+    refusesUnchanged(entry(box("esds", uint(0), Uint8Array.of(9, 9, 9))));
+    refusesUnchanged(entry(box("esds", uint(1), Uint8Array.of(3, 0, 0, 0, 0))));
+    // A descriptor longer than its box, a five-byte length, a short DecoderConfigDescriptor,
+    // and an ES descriptor with no DecoderConfigDescriptor at all.
+    refusesUnchanged(entry(box("esds", full(), Uint8Array.of(3, 40, 0, 1, 0))));
+    refusesUnchanged(entry(box("esds", full(), Uint8Array.of(3, 0x80, 0x80, 0x80, 0x80, 1))));
+    refusesUnchanged(
+      entry(box("esds", full(), Uint8Array.of(3, 10, 0, 1, 0, 4, 5, 0x20, 0x11, 0, 0, 0))),
+    );
+    refusesUnchanged(entry(box("esds", full(), Uint8Array.of(3, 3, 0, 1, 0))));
+    refusesUnchanged(entry(box("esds", full(), Uint8Array.of(5, 3, 0, 1, 0))));
+    expect(() => stripVideoLocation(entry(esdsBox(0x20), box("wave", esdsBox(0x6c))))).toThrow(
+      "real format",
+    );
+  });
+  it("reads single-byte descriptor lengths and the optional ES descriptor fields", () => {
+    const config = Uint8Array.of(4, 13, 0x20, 0x11, ...new Uint8Array(11));
+    const plain = box("esds", full(), Uint8Array.of(3, 3 + config.length, 0, 1, 0), config);
+    const withFields = box(
+      "esds",
+      full(),
+      Uint8Array.of(3, 3 + 2 + 3 + 2 + config.length, 0, 1, 0xe0, 0, 7, 2, 65, 66, 0, 9),
+      config,
+    );
+    for (const esds of [plain, withFields]) {
+      const bytes = mp4vTrack(esds);
+      const before = bytes.slice();
+      expect(stripVideoLocation(bytes)).toEqual(before);
+    }
+  });
+  it.each([
+    [0x40, true],
+    [0x69, true],
+    [0x6b, true],
+    [0x20, false],
+    [0x6c, false],
+    [0xa5, false],
+    [0xdd, false],
+  ])("mp4a with esds object type %s (decimal) is kept: %s", (oti, kept) => {
+    const bytes = movie(
+      track(1, { handler: "soun", formats: [box("mp4a", new Uint8Array(28), esdsBox(oti))] }),
+    );
+    if (kept) expect(stripVideoLocation(bytes)).toBeDefined();
+    else expect(() => stripVideoLocation(bytes)).toThrow("real format");
+    refusesUnchanged(
+      movie(track(1, { handler: "soun", formats: [box("mp4a", new Uint8Array(28))] })),
+    );
+  });
+  it("keeps a FLAC track whose dfLa holds only STREAMINFO", () => {
+    const bytes = movie(track(1, { handler: "soun", formats: [sample("fLaC")] }));
+    const before = bytes.slice();
+    expect(stripVideoLocation(bytes)).toEqual(before);
+  });
+  it.each([
+    ["Vorbis comment", { type: 4, data: text("LOCATION=+51.5074-000.1278/") }],
+    ["picture", { type: 6, data: join(text("image/jpeg"), text("Exif\0\0+51.5074-000.1278/")) }],
+    ["padding", { type: 1, data: new Uint8Array(8) }],
+  ])("refuses a FLAC track whose dfLa also holds a %s block", (_name, block) => {
+    const bytes = movie(track(1, { handler: "soun", formats: [sample("fLaC", [dfLaBox(block)])] }));
+    const before = bytes.slice();
+    expect(() => stripVideoLocation(bytes)).toThrow("tags or pictures");
+    expect(bytes).toEqual(before);
+  });
+  it("fails closed on a FLAC entry with no usable dfLa", () => {
+    const entry = (...children: Uint8Array[]) =>
+      movie(track(1, { handler: "soun", formats: [box("fLaC", new Uint8Array(28), ...children)] }));
+    refusesUnchanged(entry());
+    refusesUnchanged(entry(box("dfLa", full(), Uint8Array.of(0x80, 0, 0, 5, 1, 2, 3, 4, 5))));
+    // STREAMINFO not flagged as last, with nothing after it.
+    expect(() =>
+      stripVideoLocation(
+        entry(box("dfLa", full(), Uint8Array.of(0, 0, 0, 34), new Uint8Array(34))),
+      ),
+    ).toThrow("tags or pictures");
+  });
+});
+
+describe("track decisions for empty and mislabelled tracks", () => {
+  it("refuses a track whose stsd has no entries instead of keeping it", () => {
+    const bytes = movie(track(1, { formats: [] }));
+    const before = bytes.slice();
+    expect(() => stripVideoLocation(bytes)).toThrow("no sample description");
+    expect(bytes).toEqual(before);
+  });
+  it.each([
+    "avc1",
+    "mp4a",
+    "zzzz",
+    "tx3g",
+  ])("refuses a metadata-handler track with a %s sample entry rather than deleting it", (format) => {
+    const { bytes } = staticFile("mebx", { handler: "meta", formats: [sample(format)] });
+    const before = bytes.slice();
+    expect(() => stripVideoLocation(bytes)).toThrow(VideoLocationError);
+    expect(bytes).toEqual(before);
+  });
+  it("still removes a metadata-handler track whose entries are all metadata formats", () => {
+    scrub(
+      staticFile("mebx", { handler: "meta", formats: [sample("mett"), sample("mebx")] }).bytes,
+      GPS,
+    );
+  });
+  it("gives a way forward that does not recommend the less private choice", () => {
+    const { bytes } = staticFile("avc1", { handler: "soun", formats: [sample("apac")] });
+    try {
+      stripVideoLocation(bytes);
+      expect.unreachable();
+    } catch (error) {
+      const message = (error as Error).message;
+      expect(message).toMatch(/export or convert/iu);
+      expect(message).not.toMatch(/turn off|disable|remove location/iu);
+    }
   });
 });

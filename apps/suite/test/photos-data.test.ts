@@ -78,6 +78,7 @@ function setup() {
 }
 async function upload(io: ReturnType<typeof photoDataStorage>, id = "one", stripLocation = true) {
   const outcomes = await uploadFiles(io, [{ name: `${id}.png`, original: png }], {
+    verifyDestination: async () => true,
     encoder,
     stripLocation,
     now: NOW,
@@ -365,6 +366,7 @@ describe("Photos upload orchestration", () => {
         { name: "good.png", original: png },
       ],
       {
+        verifyDestination: async () => true,
         encoder,
         now: NOW,
         stripLocation: true,
@@ -376,7 +378,13 @@ describe("Photos upload orchestration", () => {
     expect(progress).toEqual([0, 0, 30, 100]);
     expect((await listLibrary(io)).items).toHaveLength(1);
     expect(
-      await uploadFiles(io, [], { encoder, now: NOW, stripLocation: false, id: () => "empty" }),
+      await uploadFiles(io, [], {
+        verifyDestination: async () => true,
+        encoder,
+        now: NOW,
+        stripLocation: false,
+        id: () => "empty",
+      }),
     ).toEqual([]);
     expect(writes.every(({ headers }) => headers.get("if-none-match") === "*")).toBe(true);
   });
@@ -386,6 +394,7 @@ describe("Photos upload orchestration", () => {
     expect(
       (
         await uploadFiles(io, [{ name: "a.png", original: png }], {
+          verifyDestination: async () => true,
           encoder,
           now: NOW,
           stripLocation: false,
@@ -398,6 +407,7 @@ describe("Photos upload orchestration", () => {
     expect(
       (
         await uploadFiles(io, [{ name: "b.png", original: png }], {
+          verifyDestination: async () => true,
           encoder,
           now: NOW,
           stripLocation: false,
@@ -410,6 +420,7 @@ describe("Photos upload orchestration", () => {
     expect(
       (
         await uploadFiles(io, [{ name: "collision.png", original: png }], {
+          verifyDestination: async () => true,
           encoder,
           now: NOW,
           stripLocation: false,
@@ -423,6 +434,7 @@ describe("Photos upload orchestration", () => {
     expect(
       (
         await uploadFiles(io, [{ name: "c.png", original: png }], {
+          verifyDestination: async () => true,
           encoder,
           now: NOW,
           stripLocation: false,
@@ -441,6 +453,7 @@ describe("Photos upload orchestration", () => {
     expect(
       (
         await uploadFiles(io, [{ name: "d.png", original: png }], {
+          verifyDestination: async () => true,
           encoder,
           now: NOW,
           stripLocation: false,
@@ -500,6 +513,7 @@ it("does not delete binary writes without ownership validators or after an unkno
   const io = photoDataStorage(fetch, ROOT);
   for (const id of ["missing-validator", "weak-validator"]) {
     const result = await uploadFiles(io, [{ name: "photo.png", original: png }], {
+      verifyDestination: async () => true,
       encoder,
       stripLocation: false,
       now: NOW,
@@ -516,6 +530,7 @@ it("does not delete binary writes without ownership validators or after an unkno
   });
   another.failures.set(`PUT ${another.io.root}originals/pre-existing.png`, 500);
   const result = await uploadFiles(another.io, [{ name: "photo.png", original: png }], {
+    verifyDestination: async () => true,
     encoder,
     stripLocation: false,
     now: NOW,
