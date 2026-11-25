@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Sonnet 5.5 -->
 # @jeswr/pod-type-index
 
 **Experimental — AI-agent-generated.** Discover RDF classes across Solid Type Index documents
@@ -16,6 +17,41 @@ const hint = await index.register(documentClass, { container: documents });
 await storage.create(documents, body, { contentType: 'text/turtle', ...hint });
 await index.unregister(documentClass, { container: documents });
 ```
+
+## Registration source
+
+`find`/`findAll` keep returning plain URL strings (locations de-duplicated across sources).
+`findRegistrations(class, options?)` and `findAllRegistrations(classes, options?)` return
+`{ location, source }` entries instead, one per (source, location): a location asserted by both
+indexes is returned twice, never merged. `source` is `'private'` (Solid `solid:privateTypeIndex`,
+from preferences or a legacy direct profile pointer), `'public'` (`solid:publicTypeIndex`), or
+`'lws-search'` (LWS TypeSearchService; the server asserts types but not private/public, so this says
+nothing about visibility).
+
+```ts
+// Private media must never be redirected by a planted public registration:
+const dirs = await index.findRegistrations(mediaClass, { sources: ['private'] });
+```
+
+`options.sources` restricts discovery to a subset (`[]` returns nothing; unknown values, sparse arrays, non-plain options or unknown option keys
+throw `TypeError`). Excluded documents are never fetched: `['private']` does not read the public index,
+`['public']` reads neither preferences nor the private index, and a Solid-only or LWS-only
+restriction that excludes the active protocol's source makes no request at all. Order is private
+documents (legacy direct profile pointers, then preferences pointers) before public; LWS keeps server order.
+The profile document is read for any Solid source; preferences only when `private` is requested.
+Fail closed: a document the profile also lists via `solid:publicTypeIndex` is `public` (fragment
+variants included), never `private`, regardless of `sources`; private-only lookups skip it.
+Within a document the order is unspecified but stable. `find`/`findAll` count at most 10,000 distinct
+locations per call, as before.
+
+On LWS only `'lws-search'` applies: `sources: ['private']` (or `['public']`, `[]`) returns `[]`
+with no request, which is "not applicable", not "nothing registered". LWS callers should not pass
+a private-only restriction; they get server-asserted types with no private/public distinction.
+
+**Security note.** The private index is *unlisted*, not access-controlled: `source` tells a
+consumer which document asserted the registration, nothing more. It does not prove the document is
+unreadable by others, and a registration is still only a hint. Consumers that write private data
+should request `sources: ['private']` and still check where they write.
 
 `register` and `unregister` require exactly one `container` or `instance`. Their optional third
 argument is `{ index: 'private' | 'public' }` (default `private`). Solid registration returns

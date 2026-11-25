@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 import type { RdfReadResult, StorageClient } from "@jeswr/storage-client";
 import { StorageError } from "@jeswr/storage-client";
 import { canonicalize, NS } from "@jeswr/suite-vocab";
@@ -20,6 +21,7 @@ import {
   serialize,
   TYPE,
 } from "./rdf.js";
+import type { FoundRegistration, TypeSource } from "./types.js";
 
 // Hoisted (not inline) for bundler-lexer safety; no `g`/`y` flag, so no shared `lastIndex` state.
 const STRONG_ETAG_PATTERN = /^"[\x21\x23-\x7E\x80-\xFF]*"$/;
@@ -75,29 +77,47 @@ export function solidIndex(storage: StorageClient, webId: string) {
     ];
   }
 
-  async function discovery(read: ReturnType<typeof reader>) {
+  /**
+   * Documents to read, keyed by URL (fragment-insensitive), private before public: legacy direct
+   * profile pointers, then preferences pointers, then public. Fail closed: a document that the
+   * profile's public pointers also name is `public`, never `private`, whatever `sources` is (the
+   * profile is already read, so this costs no request). Excluded kinds are never fetched; the
+   * preferences document is read only when private is requested.
+   */
+  async function discovery(read: ReturnType<typeof reader>, sources: Set<TypeSource>) {
     const card = await read(profileUrl);
     if (!card) throw error("not-found", profileUrl);
     const owner = resource(card, profile);
-    const indexes = new Set(links(owner, PRIVATE));
-    for (const url of links(owner, PREFS)) {
-      const preferences = await read(url);
-      if (preferences)
-        for (const index of links(resource(preferences, profile), PRIVATE)) indexes.add(index);
+    const listed = new Set(links(owner, PUBLIC));
+    const indexes = new Map<string, "private" | "public">();
+    if (sources.has("private")) {
+      for (const url of links(owner, PRIVATE)) if (!listed.has(url)) indexes.set(url, "private");
+      for (const url of links(owner, PREFS)) {
+        const preferences = await read(url);
+        if (preferences)
+          for (const index of links(resource(preferences, profile), PRIVATE))
+            if (!listed.has(index)) indexes.set(index, "private");
+      }
     }
-    for (const index of links(owner, PUBLIC)) indexes.add(index);
+    if (sources.has("public")) for (const index of listed) indexes.set(index, "public");
     return { indexes };
   }
 
-  async function findAll(classes: string[]): Promise<Map<string, string[]>> {
-    const output = new Map(classes.map((iri) => [iri, [] as string[]]));
-    if (output.size === 0) return output;
-    const wanted = new Map<string, Set<string>>();
-    for (const iri of classes) wanted.set(canonicalize(iri), new Set());
+  async function findAll(
+    classes: string[],
+    sources: Set<TypeSource>,
+  ): Promise<Map<string, FoundRegistration[]>> {
+    const output = new Map(classes.map((iri) => [iri, [] as FoundRegistration[]]));
+    // Neither Solid index requested (e.g. only "lws-search"): no request, not even the profile.
+    if (output.size === 0 || !(sources.has("private") || sources.has("public"))) return output;
+    const wanted = new Map<string, Map<string, FoundRegistration>>();
+    for (const iri of classes) wanted.set(canonicalize(iri), new Map());
     const read = reader(storage, AbortSignal.timeout(30_000));
-    const { indexes } = await discovery(read);
+    const { indexes } = await discovery(read, sources);
+    // The cap counts distinct locations per class, as before sources existed.
+    const distinct = new Map<string, Set<string>>();
     let count = 0;
-    for (const url of indexes) {
+    for (const [url, source] of indexes) {
       const document = await read(url);
       if (!document) continue;
       for (const reg of indexDataset(document).registrations) {
@@ -106,16 +126,25 @@ export function solidIndex(storage: StorageClient, webId: string) {
           if (!targets) continue;
           for (const value of [...reg.iris(INSTANCE), ...reg.iris(CONTAINER)]) {
             const target = scoped(storage, value);
-            if (target && !targets.has(target)) {
+            if (!target) continue;
+            // One entry per (source, location): never merged across sources.
+            const key = `${source} ${target}`;
+            if (targets.has(key)) continue;
+            const seen = distinct.get(canonicalize(iri)) ?? new Set<string>();
+            distinct.set(canonicalize(iri), seen);
+            if (!seen.has(target)) {
+              seen.add(target);
               if (++count > MAX_RESULTS) throw error("invalid-response", storage.root);
-              targets.add(target);
             }
+            targets.set(key, { location: target, source });
           }
         }
       }
     }
     for (const iri of output.keys())
-      output.set(iri, [...(wanted.get(canonicalize(iri)) as Set<string>)]);
+      output.set(iri, [
+        ...(wanted.get(canonicalize(iri)) as Map<string, FoundRegistration>).values(),
+      ]);
     return output;
   }
 

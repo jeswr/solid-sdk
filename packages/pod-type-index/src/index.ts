@@ -1,15 +1,19 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { classIri, error, registration } from "./common.js";
+// AUTHORED-BY Claude Sonnet 5.5
+import { classIri, error, locations, registration, selectSources } from "./common.js";
 import { lwsIndex } from "./lws.js";
 import { solidIndex } from "./solid.js";
-import type { TypeIndex, TypeIndexOptions } from "./types.js";
+import type { FoundRegistration, TypeIndex, TypeIndexOptions } from "./types.js";
 
 export type {
+  FindOptions,
+  FoundRegistration,
   RegistrationOptions,
   TypeHint,
   TypeIndex,
   TypeIndexOptions,
   TypeLocation,
+  TypeSource,
 } from "./types.js";
 
 /** Create an account-scoped Solid Type Index or LWS service client. No I/O at construction. */
@@ -20,13 +24,24 @@ export function createTypeIndex(options: TypeIndexOptions): TypeIndex {
   const solid = storage.protocol === "solid" ? solidIndex(storage, profile) : undefined;
   const lws = lwsIndex(options);
 
-  const findAll: TypeIndex["findAll"] = async (classes) => {
+  const findAllRegistrations: TypeIndex["findAllRegistrations"] = async (classes, opts) => {
     for (const iri of classes) classIri(iri);
-    return solid ? solid.findAll(classes) : lws.findAll(classes);
+    const sources = selectSources(opts);
+    return solid ? solid.findAll(classes, sources) : lws.findAll(classes, sources);
   };
+  const findAll: TypeIndex["findAll"] = async (classes, opts) =>
+    new Map(
+      [...(await findAllRegistrations(classes, opts))].map(([iri, found]) => [
+        iri,
+        locations(found),
+      ]),
+    );
   return {
-    find: async (iri) => (await findAll([iri])).get(iri) as string[],
+    find: async (iri, opts) => (await findAll([iri], opts)).get(iri) as string[],
     findAll,
+    findRegistrations: async (iri, opts) =>
+      (await findAllRegistrations([iri], opts)).get(iri) as FoundRegistration[],
+    findAllRegistrations,
     async register(iri, location, opts = {}) {
       const args = registration(storage, iri, location, opts);
       if (!solid) return { links: [{ rel: "type", target: args.canonical }] };

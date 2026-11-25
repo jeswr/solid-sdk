@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 import { parseLinkHeaders } from "@jeswr/storage-capabilities";
 import { StorageError, toStorageError } from "@jeswr/storage-client";
 import { canonicalize } from "@jeswr/suite-vocab";
 import { aliases, CLASS_IRI_PATTERN, error, requireScoped, scoped } from "./common.js";
-import type { TypeIndexOptions } from "./types.js";
+import type { FoundRegistration, TypeIndexOptions, TypeSource } from "./types.js";
 
 const MEDIA = "application/lws+json";
 const LWS = "https://www.w3.org/ns/lws#";
@@ -155,9 +156,13 @@ export function lwsIndex({ storage, features, fetch: transport }: TypeIndexOptio
     }
   }
 
-  async function findAll(classes: string[]): Promise<Map<string, string[]>> {
-    const output = new Map(classes.map((iri) => [iri, [] as string[]]));
-    if (output.size === 0) return output;
+  async function findAll(
+    classes: string[],
+    sources: Set<TypeSource>,
+  ): Promise<Map<string, FoundRegistration[]>> {
+    const output = new Map(classes.map((iri) => [iri, [] as FoundRegistration[]]));
+    // The only LWS source is the search service; excluding it means no request at all.
+    if (output.size === 0 || !sources.has("lws-search")) return output;
     const wanted = new Map([...output.keys()].map((iri) => [canonicalize(iri), new Set<string>()]));
     const types = [...new Set(classes.flatMap(aliases))];
     for await (const { item, url } of pages(
@@ -180,7 +185,13 @@ export function lwsIndex({ storage, features, fetch: transport }: TypeIndexOptio
       }
     }
     for (const iri of output.keys())
-      output.set(iri, [...(wanted.get(canonicalize(iri)) as Set<string>)]);
+      output.set(
+        iri,
+        [...(wanted.get(canonicalize(iri)) as Set<string>)].map((location) => ({
+          location,
+          source: "lws-search" as const,
+        })),
+      );
     return output;
   }
 
