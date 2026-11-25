@@ -146,7 +146,8 @@ export function Invitations() {
     target?.focus();
     nextFocus.current = undefined;
   }, [dismissals]);
-  const visible = result.data?.filter((invitation) => !hidden.has(invitation.room)) ?? [];
+  const visible =
+    result.data?.invitations.filter((invitation) => !hidden.has(invitation.room)) ?? [];
   const own = visible.filter((invitation) => client.canOpen(invitation.room));
   const foreign = visible.filter((invitation) => !client.canOpen(invitation.room));
   const dismiss = (rooms: string[]) => {
@@ -171,7 +172,13 @@ export function Invitations() {
       </Button>
     </p>
   );
-  if (!visible.length && retainHeading !== session.webId) return failure || null;
+  // Static text only: nothing from the inbox reaches the notice.
+  const notice = result.data?.truncated && (
+    <p className="chat-hint" role="status">
+      Some invitations are not shown.
+    </p>
+  );
+  if (!visible.length && retainHeading !== session.webId) return failure || notice || null;
   return (
     <section ref={section} aria-labelledby={headingId}>
       <h2 ref={heading} id={headingId} tabIndex={-1} onBlur={() => setRetainHeading(undefined)}>
@@ -208,6 +215,7 @@ export function Invitations() {
           Dismiss all {visible.length} invitations
         </Button>
       )}
+      {notice}
       {failure}
     </section>
   );

@@ -64,9 +64,9 @@ import { aggregateReactions, type ReactionSummary } from "../timeline";
 import {
   deliverInvitations,
   INBOX_SCAN_LIMIT,
-  type Invitation,
   type InvitationDelivery,
   type InvitationRoomCache,
+  type InvitationScan,
   readInvitations,
 } from "./invitations";
 import { PreferencesStore } from "./preferences-store";
@@ -186,9 +186,10 @@ export class ChatClient {
   private readonly profiles = new Map<string, Promise<string>>();
   private readonly resolvedNames = new Map<string, string>();
   private invitationSignal = new AbortController().signal;
+  private inboxTruncated = false;
   private invitationQueue: Promise<unknown> = Promise.resolve();
   private invitationScan:
-    | { controller: AbortController; callers: number; pending: Promise<Invitation[]> }
+    | { controller: AbortController; callers: number; pending: Promise<InvitationScan> }
     | undefined;
   private readonly invitationRooms: InvitationRoomCache = new Map();
   private readonly inboxReader;
@@ -207,6 +208,9 @@ export class ChatClient {
     this.inboxReader = createInboxReader({
       fetch: withAbortSignal(sessionFetch, () => this.invitationSignal),
       maxItems: INBOX_SCAN_LIMIT,
+      onTruncated: () => {
+        this.inboxTruncated = true;
+      },
     });
     httpIri(webId);
     this.preferences = new PreferencesStore(this.fetch, storageUrl);
@@ -613,13 +617,14 @@ export class ChatClient {
    * the scan is aborted only once every caller has left. Scans run one at a time, so a scan's
    * discovery requests never run under a later scan's signal.
    */
-  invitations({ signal }: { signal?: AbortSignal | undefined } = {}): Promise<Invitation[]> {
+  invitations({ signal }: { signal?: AbortSignal | undefined } = {}): Promise<InvitationScan> {
     if (signal?.aborted) return Promise.reject(signal.reason);
     let scan = this.invitationScan;
     if (!scan) {
       const controller = new AbortController();
       const read = () => {
         this.invitationSignal = controller.signal;
+        this.inboxTruncated = false;
         return readInvitations({
           reader: this.inboxReader,
           joinedFetch: this.fetch,
@@ -628,6 +633,7 @@ export class ChatClient {
           signal: controller.signal,
           loadRoom: (url, signal) => this.room(url, { signal }),
           cache: this.invitationRooms,
+          inboxTruncated: () => this.inboxTruncated,
         });
       };
       const pending = this.invitationQueue.then(read, read);
@@ -641,7 +647,7 @@ export class ChatClient {
     }
     const shared = scan;
     shared.callers++;
-    return new Promise<Invitation[]>((resolve, reject) => {
+    return new Promise<InvitationScan>((resolve, reject) => {
       let left = false;
       const leave = () => {
         left = true;

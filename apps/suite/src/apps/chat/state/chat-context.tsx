@@ -122,6 +122,7 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
       },
       // The newest session knows an account switch or sign-out before React commits it.
       () => current.current.active?.() ?? true,
+      () => current.current,
     );
   }, [webId, storageUrl, mode]);
   const outbox = useSyncExternalStore(queue.subscribe, queue.snapshot, queue.snapshot);

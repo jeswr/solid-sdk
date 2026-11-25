@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
+import { readContainerMembers } from "@jeswr/ldp-container";
 import {
   createNotify,
   type InboxReader,
@@ -89,19 +90,30 @@ function missingRoom(error: unknown): boolean {
 /**
  * Inbox children read per scan, in listing order (the listing carries no dates, so the reader
  * cannot choose the newest before fetching). Kind filtering happens after the fetch, so this is
- * the scan's request bound, not a result cap.
+ * the scan's request bound, not a result cap. Children beyond it are reported as `truncated`.
  */
 export const INBOX_SCAN_LIMIT = 300;
 /** Most invitation rows shown. */
 const MAX_INVITATIONS = 50;
 /** Own-pod rooms whose index is loaded for verification in one scan. */
 const MAX_ROOM_CHECKS = 100;
-/** Rows one claimed sender may occupy among unverified (foreign or unreachable) invitations. */
-const MAX_UNVERIFIED_PER_SENDER = 5;
-/** Rows foreign or unverified claims may occupy together, leaving the rest to verified rooms. */
+/** Rows foreign or unverifiable claims may occupy together; verified rooms take the rest. */
 const MAX_UNVERIFIED = 20;
-/** Own-pod room claims checked per claimed sender, so one poster cannot spend every check. */
-const MAX_CLAIMS_PER_SENDER = 20;
+/** Bytes read from the user's own rooms listing. */
+const MAX_ROOMS_LISTING_BYTES = 1024 * 1024;
+/**
+ * Requests one scan makes beyond inbox discovery: the joined-rooms document, the inbox listing,
+ * at most INBOX_SCAN_LIMIT inbox children, the own rooms listing and at most MAX_ROOM_CHECKS
+ * room indexes. No limit is keyed on a claimed sender or any other poster-chosen value.
+ */
+export const MAX_SCAN_REQUESTS = 1 + 1 + INBOX_SCAN_LIMIT + 1 + MAX_ROOM_CHECKS;
+
+/** What a scan found, and whether valid rows were left out. */
+export interface InvitationScan {
+  invitations: Invitation[];
+  /** True when the inbox listing, an own-room check budget or a row cap left invitations out. */
+  truncated: boolean;
+}
 
 export async function readInvitations({
   reader,
@@ -111,6 +123,7 @@ export async function readInvitations({
   signal,
   loadRoom,
   cache,
+  inboxTruncated,
 }: {
   reader: InboxReader;
   joinedFetch: typeof globalThis.fetch;
@@ -119,7 +132,9 @@ export async function readInvitations({
   signal: AbortSignal;
   loadRoom(room: string, signal: AbortSignal): Promise<InvitationRoom>;
   cache: InvitationRoomCache;
-}): Promise<Invitation[]> {
+  /** Read after the inbox listing: did the reader leave children unread? */
+  inboxTruncated(): boolean;
+}): Promise<InvitationScan> {
   signal.throwIfAborted();
   const joined = new Set((await loadRooms(withAbortSignal(joinedFetch, signal), storage)).rooms);
   // Own-pod claims are kept per room and sender, so a forged newer Offer from a non-member
@@ -141,15 +156,27 @@ export async function readInvitations({
       };
     },
   });
+  signal.throwIfAborted();
+  let truncated = inboxTruncated();
+  const claimed = new Set(items.filter((item) => item.own).map((item) => item.room));
+  // An own-pod claim can only name a room that exists in the user's own rooms container, which
+  // is listed once. Claims for rooms that do not exist cost nothing, however many are posted.
+  const existing = new Set<string>();
+  if (claimed.size) {
+    const listing = await readContainerMembers(
+      withAbortSignal(joinedFetch, signal),
+      `${new URL("chat/rooms/", storage).href}`,
+      { scope: storage, signal, package: "chat", maxBytes: MAX_ROOMS_LISTING_BYTES },
+    );
+    for (const member of listing ?? []) if (claimed.has(member.url)) existing.add(member.url);
+  }
   const claims = new Map<string, (string | undefined)[]>();
-  const perSender = new Map<string, number>();
-  // Newest first: one sender's flood of claims is cut off before it uses the room-check budget.
-  for (const item of items.filter((item) => item.own)) {
-    const sender = item.actor ?? "";
-    const count = perSender.get(sender) ?? 0;
-    if (count >= MAX_CLAIMS_PER_SENDER) continue;
-    if (!claims.has(item.room) && claims.size >= MAX_ROOM_CHECKS) continue;
-    perSender.set(sender, count + 1);
+  for (const item of items) {
+    if (!item.own || !existing.has(item.room)) continue;
+    if (!claims.has(item.room) && claims.size >= MAX_ROOM_CHECKS) {
+      truncated = true;
+      continue;
+    }
     claims.set(item.room, [...(claims.get(item.room) ?? []), item.actor]);
   }
   for (const room of cache.keys()) {
@@ -169,6 +196,7 @@ export async function readInvitations({
   };
   const rooms = [...claims.keys()];
   const verified = new Map<string, Invitation | null>();
+  const names = new Set<string>();
   let cursor = 0;
   // Settle every worker before returning, so no load of this scan outlives it and touches the
   // cache a later scan owns.
@@ -188,30 +216,39 @@ export async function readInvitations({
         }
         signal.throwIfAborted();
         const actor = actors.find((claim) => claim && loaded?.members.includes(claim));
+        if (loaded && actor) names.add(room);
         verified.set(room, loaded && actor ? { room, actor, name: loaded.name } : null);
       }
     }),
   );
   signal.throwIfAborted();
-  // Verified own-pod rooms are never crowded out by claims about rooms we cannot check: those
-  // (and verification-failed fallbacks) share a smaller budget, split per claimed sender.
-  const chosen = new Map<string, Invitation>();
-  const unverifiedBySender = new Map<string, number>();
-  let unverified = 0;
+  // Verified own-pod rooms (a loaded room naming a claimed member, whatever its name) come first
+  // and are never crowded out by unverified rows: foreign claims and verification-failed
+  // fallbacks share one global budget, deduplicated by room URL only.
+  const candidates = new Map<string, { invitation: Invitation; verified: boolean }>();
   for (const item of items) {
     const invitation = item.own
       ? verified.get(item.room)
       : { room: item.room, ...(item.actor ? { actor: item.actor } : {}) };
-    if (!invitation || chosen.has(invitation.room)) continue;
-    if (!invitation.name) {
-      const sender = invitation.actor ?? "";
-      const count = unverifiedBySender.get(sender) ?? 0;
-      if (unverified >= MAX_UNVERIFIED || count >= MAX_UNVERIFIED_PER_SENDER) continue;
-      unverifiedBySender.set(sender, count + 1);
-      unverified++;
-    }
-    chosen.set(invitation.room, invitation);
-    if (chosen.size === MAX_INVITATIONS) break;
+    if (!invitation || candidates.has(invitation.room)) continue;
+    candidates.set(invitation.room, { invitation, verified: names.has(invitation.room) });
   }
-  return [...chosen.values()];
+  const chosen = new Set<string>();
+  for (const [room, candidate] of candidates) {
+    if (!candidate.verified) continue;
+    if (chosen.size < MAX_INVITATIONS) chosen.add(room);
+    else truncated = true;
+  }
+  let unverified = 0;
+  for (const [room, candidate] of candidates) {
+    if (candidate.verified) continue;
+    if (unverified < MAX_UNVERIFIED && chosen.size < MAX_INVITATIONS) {
+      unverified++;
+      chosen.add(room);
+    } else truncated = true;
+  }
+  const invitations = [...candidates]
+    .filter(([room]) => chosen.has(room))
+    .map(([, candidate]) => candidate.invitation);
+  return { invitations, truncated };
 }

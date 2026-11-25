@@ -2,7 +2,12 @@
 // AUTHORED-BY Claude Opus 5.5
 import { createRequire } from "node:module";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { ChatClient, type Invitation, type Room } from "../src/apps/chat/lib/client";
+import {
+  ChatClient,
+  type Invitation,
+  type InvitationScan,
+  type Room,
+} from "../src/apps/chat/lib/client";
 import {
   ChatProvider,
   type ChatSession,
@@ -65,9 +70,13 @@ const requireUi = createRequire(
 const axe = requireUi("axe-core") as {
   run(node: Element, options: object): Promise<{ violations: unknown[] }>;
 };
+const scan = (invitations: Invitation[], truncated = false): InvitationScan => ({
+  invitations,
+  truncated,
+});
 beforeEach(() => {
   localStorage.clear();
-  vi.spyOn(ChatClient.prototype, "invitations").mockResolvedValue([]);
+  vi.spyOn(ChatClient.prototype, "invitations").mockResolvedValue(scan([]));
   vi.spyOn(ChatClient.prototype, "room").mockResolvedValue(room);
 });
 afterEach(() => vi.restoreAllMocks());
@@ -75,9 +84,9 @@ afterEach(() => vi.restoreAllMocks());
 it("renders a section only with invitations, links the name to Join, and passes axe", async () => {
   const view = await mount(content());
   expect(view.host.querySelector("section")).toBeNull();
-  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([
-    { room: ROOM, actor: "https://sender.example/profile#me", name: "Book club" },
-  ]);
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(
+    scan([{ room: ROOM, actor: "https://sender.example/profile#me", name: "Book club" }]),
+  );
   await view.unmount();
   const populated = await mount(content());
   expect(populated.host.querySelector("h2")?.textContent).toBe("Invitations");
@@ -94,10 +103,27 @@ it("renders a section only with invitations, links the name to Join, and passes 
     ).violations,
   ).toEqual([]);
 });
+it("tells the user when invitations were left out, in static text only", async () => {
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(
+    scan([{ room: ROOM, actor: "https://hostile.example/<b>x</b>#me", name: "Book club" }], true),
+  );
+  const view = await mount(content());
+  expect(view.host.textContent).toContain("Some invitations are not shown.");
+  expect(view.host.textContent).not.toContain("<b>");
+  await view.unmount();
+  // Nothing visible but truncated: the notice still shows.
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(scan([], true));
+  const empty = await mount(content());
+  expect(empty.host.textContent).toContain("Some invitations are not shown.");
+  await empty.unmount();
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(scan([], false));
+  const none = await mount(content());
+  expect(none.host.textContent).not.toContain("not shown");
+});
 it("shows an unreachable own room under its fallback name without fetching the claimed sender's profile", async () => {
-  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([
-    { room: ROOM, actor: "https://hostile.example/profile#me" },
-  ]);
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(
+    scan([{ room: ROOM, actor: "https://hostile.example/profile#me" }]),
+  );
   const profile = vi.spyOn(ChatClient.prototype, "profile");
   const view = await mount(content());
   expect(view.host.querySelector("a")?.textContent).toBe("Room invitation (book-club)");
@@ -106,7 +132,9 @@ it("shows an unreachable own room under its fallback name without fetching the c
   expect(ChatClient.prototype.room).not.toHaveBeenCalled();
 });
 it("persists bounded local dismissals per WebID without deleting inbox items", async () => {
-  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([{ room: ROOM, actor: SENDER }]);
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(
+    scan([{ room: ROOM, actor: SENDER }]),
+  );
   localStorage.setItem(
     key(ME),
     JSON.stringify({
@@ -152,17 +180,19 @@ it("contains read failures with inline retry and throttles focus refreshes", asy
 });
 it("aborts stale reads on unmount and tolerates malformed dismissal storage", async () => {
   localStorage.setItem(key(ME), "not JSON");
-  const pending = deferred<Invitation[]>();
+  const pending = deferred<InvitationScan>();
   vi.mocked(ChatClient.prototype.invitations).mockReturnValue(pending.promise);
   const view = await mount(content());
   const signal = vi.mocked(ChatClient.prototype.invitations).mock.calls[0]?.[0]?.signal;
   await view.unmount();
   expect(signal?.aborted).toBe(true);
-  await act(() => pending.resolve([{ room: ROOM, actor: "urn:forged:sender" }]));
+  await act(() => pending.resolve(scan([{ room: ROOM, actor: "urn:forged:sender" }])));
 });
 
 it("synchronizes dismissal across sidebar copies while keeping another WebID visible", async () => {
-  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([{ room: ROOM, actor: SENDER }]);
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(
+    scan([{ room: ROOM, actor: SENDER }]),
+  );
   const view = await mount(content(ME, true));
   const other = await mount(content("https://bob.example/#me"));
   expect(view.host.querySelectorAll("section")).toHaveLength(2);
@@ -176,7 +206,7 @@ it("does not refresh for revisions, changes, online events or polling, and prese
   vi.spyOn(Date, "now").mockImplementation(() => now);
   const read = vi
     .mocked(ChatClient.prototype.invitations)
-    .mockImplementation(async () => [{ room: ROOM, actor: SENDER, name: "Book club" }]);
+    .mockImplementation(async () => scan([{ room: ROOM, actor: SENDER, name: "Book club" }]));
   const view = await mount(content());
   const link = view.host.querySelector("a");
   await click(
@@ -197,8 +227,8 @@ it("does not refresh for revisions, changes, online events or polling, and prese
 
 it("refreshes after an explicit Join and removes the joined invitation", async () => {
   vi.mocked(ChatClient.prototype.invitations)
-    .mockResolvedValueOnce([{ room: ROOM, actor: SENDER }])
-    .mockResolvedValue([]);
+    .mockResolvedValueOnce(scan([{ room: ROOM, actor: SENDER }]))
+    .mockResolvedValue(scan([]));
   const view = await mount(content());
   await click(
     Array.from(view.host.querySelectorAll("button")).find(
@@ -219,7 +249,7 @@ it("renders foreign-pod invitations as plain text with short dismiss names, coll
     room: `https://foreign.example/chat/rooms/r${i}/`,
     actor: SENDER,
   }));
-  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(invitations);
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(scan(invitations));
   const view = await mount(content());
   expect(view.host.querySelector("a")).toBeNull();
   expect(view.host.querySelector("details")?.open).toBe(false);
@@ -245,7 +275,7 @@ it("collapses more than three own-pod invitations, and Dismiss all covers every 
     name: `Room ${i}`,
   }));
   const foreign = { room: "https://foreign.example/chat/rooms/f/", actor: SENDER };
-  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([...own, foreign]);
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(scan([...own, foreign]));
   const view = await mount(content());
   expect(
     Array.from(view.host.querySelectorAll("summary")).map((summary) => summary.textContent),
@@ -260,11 +290,13 @@ it("collapses more than three own-pod invitations, and Dismiss all covers every 
 });
 
 it("shows up to three invitations without collapsing or a bulk dismissal", async () => {
-  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([
-    { room: "https://foreign.example/chat/rooms/r/" },
-    { room: ROOM, actor: SENDER, name: "Book club" },
-    { room: `${ROOT}chat/rooms/two/`, actor: SENDER, name: "Two" },
-  ]);
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(
+    scan([
+      { room: "https://foreign.example/chat/rooms/r/" },
+      { room: ROOM, actor: SENDER, name: "Book club" },
+      { room: `${ROOT}chat/rooms/two/`, actor: SENDER, name: "Two" },
+    ]),
+  );
   const view = await mount(content());
   expect(view.host.querySelector("details")).toBeNull();
   expect(view.host.textContent).toContain("Unknown sender");
@@ -272,9 +304,9 @@ it("shows up to three invitations without collapsing or a bulk dismissal", async
 });
 
 it("removes the empty Invitations heading once focus leaves it, and at once in other copies", async () => {
-  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([
-    { room: ROOM, actor: SENDER, name: "Book club" },
-  ]);
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(
+    scan([{ room: ROOM, actor: SENDER, name: "Book club" }]),
+  );
   const view = await mount(content(ME, true));
   const [acting, other] = Array.from(view.host.querySelectorAll("section"));
   await click(acting?.querySelector("li button") as HTMLElement);
@@ -291,10 +323,12 @@ it("removes the empty Invitations heading once focus leaves it, and at once in o
 
 it("names dismiss buttons and moves focus to the next row, then the heading", async () => {
   const other = `${ROOT}chat/rooms/other/`;
-  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([
-    { room: ROOM, actor: SENDER, name: "Book club" },
-    { room: other, actor: SENDER, name: "Other room" },
-  ]);
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(
+    scan([
+      { room: ROOM, actor: SENDER, name: "Book club" },
+      { room: other, actor: SENDER, name: "Other room" },
+    ]),
+  );
   const view = await mount(content());
   const first = view.host.querySelector(
     'button[aria-label="Dismiss invitation to Book club"]',
@@ -310,9 +344,9 @@ it("names dismiss buttons and moves focus to the next row, then the heading", as
 
 it("does not read invitations on the Chat polling tick", async () => {
   const interval = vi.spyOn(globalThis, "setInterval");
-  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([
-    { room: ROOM, actor: SENDER, name: "Book club" },
-  ]);
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(
+    scan([{ room: ROOM, actor: SENDER, name: "Book club" }]),
+  );
   const view = await mount(content(ME, false, true));
   const tick = interval.mock.calls.find(([, delay]) => delay === 30_000)?.[0];
   if (typeof tick !== "function") throw new Error("Chat poll was not installed");
@@ -322,7 +356,9 @@ it("does not read invitations on the Chat polling tick", async () => {
 });
 
 it("keeps dismissal live when storage writes are blocked", async () => {
-  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue([{ room: ROOM, actor: SENDER }]);
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(
+    scan([{ room: ROOM, actor: SENDER }]),
+  );
   const storagePrototype = Object.getPrototypeOf(localStorage);
   vi.spyOn(storagePrototype, "setItem").mockImplementation(() => {
     throw new Error("Denied");
