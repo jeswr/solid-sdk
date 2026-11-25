@@ -1,31 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { mkdir } from "node:fs/promises";
-import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, test } from "@playwright/test";
-
-async function audit(page: Page) {
-  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-}
-async function navigate(page: Page, label: string) {
-  const link = page
-    .getByRole("navigation", { name: "Notes folders", exact: true })
-    .getByRole("link", { name: label, exact: true })
-    .filter({ visible: true });
-  if (!(await link.count()))
-    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
-  await link.click();
-}
-function card(page: Page, title: string) {
-  return page.getByRole("article", { name: title, exact: true });
-}
-async function capture(page: Page, title: string, body: string) {
-  await page.getByRole("textbox", { name: "Take a note", exact: true }).focus();
-  await page.getByRole("textbox", { name: "Note title", exact: true }).fill(title);
-  await page.getByRole("textbox", { name: "Note text", exact: true }).fill(body);
-  await page.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(card(page, title)).toHaveAttribute("aria-busy", "false");
-}
+import { audit, capture, card, expect, navigate, test } from "../fixtures/notes";
 
 test("keyboard folder navigation saves an unfinished capture", async ({ page }) => {
   await page.goto("/notes");
@@ -86,14 +62,12 @@ test("Notes capture, checklist, labels, archive, trash, search and persistence a
     .click();
   await page.getByRole("radio", { name: "Yellow", exact: true }).check();
   await page.keyboard.press("Escape");
-  await audit(page);
+  await audit(page, "populated-list");
   await page.screenshot({
     path: `${artifactDir}/${testInfo.project.name}-grid.png`,
     fullPage: true,
   });
-  await card(page, "Garden ideas")
-    .getByRole("button", { name: "Open Garden ideas", exact: true })
-    .click();
+  await card(page, "Garden ideas").getByRole("button", { name: "Garden ideas" }).click();
   const dialog = page.getByRole("dialog", { name: "Edit note", exact: true });
   await expect(dialog.getByRole("textbox", { name: "Note body", exact: true })).toContainText(
     "heliotrope",
@@ -103,7 +77,7 @@ test("Notes capture, checklist, labels, archive, trash, search and persistence a
   await page.getByRole("button", { name: "Add label", exact: true }).click();
   await dialog.getByRole("textbox", { name: "Note title", exact: true }).click();
   await expect(dialog.getByRole("status")).toHaveText("Saved");
-  await audit(page);
+  await audit(page, "editor");
   await page.screenshot({
     path: `${artifactDir}/${testInfo.project.name}-dialog.png`,
     fullPage: true,
@@ -115,9 +89,7 @@ test("Notes capture, checklist, labels, archive, trash, search and persistence a
   await expect(card(page, "Garden ideas")).toBeVisible();
   await expect(card(page, "Trip plan")).toHaveCount(0);
   // Closing from a label returns to that label, including after changing its note.
-  await card(page, "Garden ideas")
-    .getByRole("button", { name: "Open Garden ideas", exact: true })
-    .click();
+  await card(page, "Garden ideas").getByRole("button", { name: "Garden ideas" }).click();
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page).toHaveURL(/\/notes\/label\//);
   await card(page, "Garden ideas").hover();
@@ -127,7 +99,7 @@ test("Notes capture, checklist, labels, archive, trash, search and persistence a
   await expect(card(page, "Garden ideas")).toHaveCount(0);
   await navigate(page, "Archive");
   await expect(card(page, "Garden ideas")).toBeVisible();
-  await audit(page);
+  await audit(page, "archive");
   await card(page, "Garden ideas").hover();
   await card(page, "Garden ideas")
     .getByRole("button", { name: "Unarchive note", exact: true })
@@ -142,7 +114,7 @@ test("Notes capture, checklist, labels, archive, trash, search and persistence a
   await page.keyboard.press("Escape");
   await navigate(page, "Trash");
   await expect(card(page, "Trip plan")).toBeVisible();
-  await audit(page);
+  await audit(page, "trash");
   await page.screenshot({
     path: `${artifactDir}/${testInfo.project.name}-trash.png`,
     fullPage: true,

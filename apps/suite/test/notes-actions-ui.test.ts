@@ -111,6 +111,43 @@ beforeEach(() => {
   };
 });
 
+it("opens the capture bar from the first-run primary action", async () => {
+  const resource = { data: [], loading: false, error: undefined };
+  Object.assign(mocks.context, {
+    notes: [],
+    active: resource,
+    archived: resource,
+    trashed: resource,
+    prefs: { pinned: [], colours: {}, view: "grid" },
+  });
+  await mount(h(NotesGrid));
+  await click(button("Create a note"));
+  expect(document.querySelector('[aria-label="Note text"]')).toBe(document.activeElement);
+  await fill("Note text", "My first note");
+  await click(button("Close"));
+  expect(mocks.context.create).toHaveBeenCalledWith(
+    expect.objectContaining({ title: "My first note" }),
+    false,
+    "default",
+  );
+});
+
+it("retries a failed Notes list instead of presenting it as an empty list", async () => {
+  const resource = { data: undefined, loading: false, error: new Error("Unavailable") };
+  Object.assign(mocks.context, {
+    notes: [],
+    active: resource,
+    archived: resource,
+    trashed: resource,
+    prefs: { pinned: [], colours: {}, view: "grid" },
+  });
+  await mount(h(NotesGrid));
+  expect(document.querySelector('[data-category="unreachable"]')).toBeTruthy();
+  expect(document.querySelector('[data-variant="first-use"]')).toBeNull();
+  await click(button("Retry"));
+  expect(mocks.context.refresh).toHaveBeenCalledOnce();
+});
+
 it("submits a nonempty capture on keyboard navigation unmount, once", async () => {
   const ui = await mount(h(CaptureBar));
   await act(() => document.querySelector<HTMLInputElement>('[aria-label="Take a note"]')?.focus());

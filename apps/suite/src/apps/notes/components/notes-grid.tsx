@@ -1,9 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { Button, ErrorState, Skeleton } from "@jeswr/suite-ui";
-import { Search, StickyNote } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Button, Skeleton } from "@jeswr/suite-ui";
+import { useEffect, useRef, useState } from "react";
 import { selectNotes } from "../lib/model/query";
 import type { NoteFailure, StoredNote } from "../lib/model/store";
 import { useNotesContext } from "../state/notes-context";
@@ -11,17 +10,19 @@ import { CaptureBar } from "./capture-bar";
 import { ConfirmDialog } from "./controls";
 import { NoteCard } from "./note-card";
 import { NoteFailures } from "./note-failures";
+import { NotesAvailability, NotesEmptyState, NotesLoadError, type NotesView } from "./notes-states";
 
 export function NotesGrid({
   view = "active",
   label,
   query = "",
 }: {
-  view?: "active" | "archived" | "trashed" | "label" | "search" | "reminders";
+  view?: NotesView;
   label?: string;
   query?: string;
 }) {
   const { notes, prefs, active, archived, trashed, refresh, store } = useNotesContext();
+  const workspace = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(Date.now);
   const hasReminders = notes.some((note) => note.location !== "trashed" && !!note.reminder);
   useEffect(() => {
@@ -72,24 +73,13 @@ export function NotesGrid({
             : searching
               ? "Search notes"
               : "Notes";
-  const empty =
-    view === "reminders"
-      ? "Notes with reminders appear here"
-      : view === "archived"
-        ? "Your archived notes appear here"
-        : view === "trashed"
-          ? "No notes in Trash"
-          : view === "label"
-            ? "No notes with this label"
-            : searching
-              ? "No matching notes"
-              : "Notes you add appear here";
   return (
-    <div className="notes-workspace" data-view={prefs.view}>
+    <div ref={workspace} className="notes-workspace" data-view={prefs.view}>
       <header className="notes-page-heading">
         <h1>{title}</h1>
         {searching && <p>Results for “{query}”</p>}
       </header>
+      <NotesAvailability />
       {(view === "active" || view === "label") && (
         <CaptureBar key={label ?? "active"} {...(label === undefined ? {} : { label })} />
       )}
@@ -117,16 +107,16 @@ export function NotesGrid({
           ))}
         </div>
       ) : error ? (
-        <ErrorState error="unreachable" actions={{ retry: () => void refresh() }} />
+        <NotesLoadError retry={() => void refresh()} />
       ) : count === 0 ? (
-        <div className="notes-empty">
-          {searching ? (
-            <Search size={52} aria-hidden="true" />
-          ) : (
-            <StickyNote size={52} aria-hidden="true" />
-          )}
-          <h2>{empty}</h2>
-        </div>
+        <NotesEmptyState
+          view={view}
+          onCreate={() =>
+            workspace.current
+              ?.querySelector<HTMLInputElement>('[aria-label="Take a note"]')
+              ?.focus()
+          }
+        />
       ) : (
         sections
           .filter((section) => section.notes.length > 0)
