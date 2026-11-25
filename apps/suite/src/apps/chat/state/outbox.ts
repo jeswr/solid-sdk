@@ -8,8 +8,26 @@ import { ChatModelError, messageSubject, roomContainer } from "../lib/model";
 import { ChatLocalState } from "./local-state";
 
 const TAG = "chat.message.v1";
-/** Chat's own solid-offline queue: the shell's queue and sync sheet never see its records. */
-export const CHAT_OUTBOX_NAMESPACE = "chat";
+/**
+ * Chat's own solid-offline queue for one account: the shell's queue and sync sheet never see its
+ * records, and each (WebID, storage) pair gets its own database, channel and replay lock (the
+ * SDK adds the WebID), so a session on another storage never sees or fails this one's rows. The
+ * storage is hashed (53-bit cyrb53) to fit the SDK's namespace alphabet; a collision could only
+ * share a database, and every intent also carries its exact storage URL, which `decode` checks.
+ */
+export function chatOutboxNamespace(storageUrl: string): string {
+  let a = 0xdeadbeef;
+  let b = 0x41c6ce57;
+  for (let i = 0; i < storageUrl.length; i++) {
+    const code = storageUrl.charCodeAt(i);
+    a = Math.imul(a ^ code, 2654435761);
+    b = Math.imul(b ^ code, 1597334677);
+  }
+  a = Math.imul(a ^ (a >>> 16), 2246822507) ^ Math.imul(b ^ (b >>> 13), 3266489909);
+  b = Math.imul(b ^ (b >>> 16), 2246822507) ^ Math.imul(a ^ (a >>> 13), 3266489909);
+  const hash = (4294967296 * (2097151 & b) + (a >>> 0)).toString(16).padStart(14, "0");
+  return `chat-${hash}`;
+}
 const DAY_DOCUMENT = /\/\d{4}\/\d{2}\/\d{2}\.ttl$/;
 export interface Outgoing extends Message {
   status?: "sending" | "failed" | undefined;
@@ -25,8 +43,16 @@ export interface ChatOutboxConnection {
   outbox: Outbox;
   storage(): Promise<StorageClient>;
 }
-const isDuplicate = (error: unknown) =>
+const isDuplicate = (error: unknown): error is ChatModelError =>
   error instanceof ChatModelError && error.code === "duplicate";
+/**
+ * The message a resend that reported a duplicate refers to. A v2 room stores it in the sender's
+ * member container, so the stored ID (not the room-level intent ID) is the one the timeline holds.
+ */
+const duplicateOf = (item: Outgoing, error: ChatModelError): Message => ({
+  ...item,
+  id: error.subject ?? item.id,
+});
 /** The SDK's rejection of a destination it can never replay (enqueue's `describeRequest`). */
 const invalidDestination = (error: unknown) =>
   error instanceof TypeError ||
@@ -58,6 +84,8 @@ export class ChatOutbox {
   private lanes = new Map<string, Promise<void>>();
   /** In-memory rows whose legacy localStorage copy is kept until they are sent or discarded. */
   private legacy = new Set<string>();
+  /** Intent IDs delivered under another stored ID (v2 rooms) whose record is not yet pruned. */
+  private settled = new Set<string>();
   /** Replay failed while online (say, IndexedDB writes keep failing): rows show Retry. */
   private stalled = false;
   ready: Promise<void> = Promise.resolve();
@@ -66,6 +94,12 @@ export class ChatOutbox {
     private online: () => boolean,
     private open: () => ChatOutboxConnection,
     private onSaved?: (message: Message) => void,
+    /**
+     * False once the account was switched or signed out, possibly before React retires this
+     * queue (the session's fetch then throws). Fences delivery as the shell's `outboxTransport`
+     * does: a send that fails then is not the message's fault, so it stays pending.
+     */
+    private active: () => boolean = () => true,
   ) {}
   snapshot = (): Outgoing[] => this.entries;
   subscribe = (listener: () => void): (() => void) => {
@@ -103,6 +137,7 @@ export class ChatOutbox {
     const value = JSON.parse(new TextDecoder().decode(body ?? new Uint8Array()));
     if (
       value?.webId !== this.client.webId ||
+      value.storageUrl !== this.client.storageUrl ||
       typeof value.room !== "string" ||
       typeof value.draft !== "string" ||
       typeof value.localId !== "string" ||
@@ -160,12 +195,15 @@ export class ChatOutbox {
     if (this.connection !== connection || revision !== this.revision) return;
     const live = new Set(pending.map((item) => item.id));
     for (const id of this.intents.keys()) if (!live.has(id)) this.intents.delete(id);
+    const decoded = new Set(entries.map((entry) => entry?.id));
+    for (const id of this.settled) if (!decoded.has(id)) this.settled.delete(id);
     const kept = this.entries.filter((entry) => !entry.queueId || !entry.status);
     const byId = new Map(kept.map((entry) => [entry.id, entry]));
     for (const entry of entries)
       if (
         entry &&
         !this.removing.has(entry.id) &&
+        !this.settled.has(entry.id) &&
         (!byId.has(entry.id) || byId.get(entry.id)?.status !== undefined)
       )
         byId.set(entry.id, entry);
@@ -187,6 +225,7 @@ export class ChatOutbox {
       url: documentOf(item),
       body: JSON.stringify({
         webId: this.client.webId,
+        storageUrl: this.client.storageUrl,
         room: item.room,
         draft: item.draft,
         localId: item.localId,
@@ -198,27 +237,55 @@ export class ChatOutbox {
       initialStatus: item.status === "failed" ? "failed" : "waiting",
     });
   }
+  /** The valid legacy entries of one room's localStorage envelope; corrupt ones are skipped. */
+  private legacyEntries(local: ChatLocalState, room: string) {
+    const stored = local.read("outbox", room);
+    const entries: { value: { localId: string; status: string }; item: Outgoing }[] = [];
+    for (const value of Array.isArray(stored) ? stored : []) {
+      try {
+        const item = this.decode(
+          new TextEncoder().encode(
+            JSON.stringify({
+              ...value,
+              webId: this.client.webId,
+              storageUrl: this.client.storageUrl,
+              room,
+            }),
+          ),
+          documentOf(this.outgoing(room, "", String(value.localId), new Date(value.at))),
+        );
+        if (["sending", "failed"].includes(value.status)) {
+          item.status = value.status;
+          entries.push({ value, item });
+        }
+      } catch {
+        // Corrupt: dropped, and must not block the rest or hydration.
+      }
+    }
+    return entries;
+  }
+  /** Show a legacy entry that only lives in memory; its localStorage copy goes once it is sent. */
+  private hold(item: Outgoing) {
+    this.legacy.add(item.id);
+    this.local.add(item.id);
+    if (!this.entries.some((entry) => entry.id === item.id)) this.update([...this.entries, item]);
+  }
+  /**
+   * Without a durable queue (no IndexedDB), legacy localStorage entries are still shown and sent
+   * from memory; each leaves localStorage only once delivered or discarded.
+   */
+  private holdLegacy() {
+    const local = new ChatLocalState(this.client.webId);
+    for (const room of local.pendingRooms())
+      for (const { item } of this.legacyEntries(local, room)) this.hold(item);
+  }
   /** One-time import only: localStorage no longer participates in live queue state. */
   private async migrate(connection: ChatOutboxConnection) {
     const local = new ChatLocalState(this.client.webId);
     const run = async () => {
       for (const room of local.pendingRooms()) {
-        const stored = local.read("outbox", room);
         const kept: unknown[] = [];
-        for (const value of Array.isArray(stored) ? stored : []) {
-          let item: Outgoing;
-          try {
-            item = this.decode(
-              new TextEncoder().encode(
-                JSON.stringify({ ...value, webId: this.client.webId, room }),
-              ),
-              messageSubject(room, new Date(value.at), value.localId).split("#")[0]!,
-            );
-          } catch {
-            continue; // Corrupt: dropped, and must not block the rest or hydration.
-          }
-          if (!["sending", "failed"].includes(value.status)) continue;
-          item.status = value.status;
+        for (const { value, item } of this.legacyEntries(local, room)) {
           try {
             if (!this.queueable(item)) throw new Error("Not replayable from the queue");
             await this.enqueue(connection, item);
@@ -227,9 +294,7 @@ export class ChatOutbox {
             // A room outside the storage, or a storage failure (quota, a write error): keep
             // the legacy copy and show the entry so it can still be sent.
             kept.push(value);
-            this.legacy.add(item.id);
-            this.local.add(item.id);
-            this.update([...this.entries, item]);
+            this.hold(item);
           }
         }
         // Processed, including invalid envelopes and non-array values: never re-read.
@@ -254,7 +319,7 @@ export class ChatOutbox {
       return storage;
     } catch (error) {
       this.storages.delete(connection);
-      if (this.online()) this.setUnreachable(connection, true);
+      if (this.online() && this.active()) this.setUnreachable(connection, true);
       throw error;
     }
   }
@@ -276,6 +341,7 @@ export class ChatOutbox {
   }
   private delivered(item: Outgoing, message: Message) {
     this.forget(item);
+    if (message.id !== item.id) this.settled.add(item.id);
     this.onSaved?.(message);
     this.patch(item.id, (entry) => ({
       ...entry,
@@ -312,6 +378,7 @@ export class ChatOutbox {
         message = await this.client.send(item.room, item.draft, { id: item.localId, at: item.at });
       } catch (error) {
         if (!isDuplicate(error)) throw error;
+        message = duplicateOf(item, error);
       }
       this.delivered(item, message);
     } catch {
@@ -319,7 +386,7 @@ export class ChatOutbox {
       // failure while online offers Retry and Discard.
       this.patch(item.id, (entry) => ({
         ...entry,
-        status: this.online() || entry.unsaved ? "failed" : "sending",
+        status: (this.online() && this.active()) || entry.unsaved ? "failed" : "sending",
       }));
     }
   }
@@ -334,6 +401,7 @@ export class ChatOutbox {
     } catch {
       // No IndexedDB (blocked site data, some embedded webviews): deliver directly.
       this.connection = undefined;
+      this.holdLegacy();
       this.ready = Promise.resolve();
       return () => {};
     }
@@ -358,7 +426,8 @@ export class ChatOutbox {
           throw new TypeError("Invalid chat delivery");
         const item = this.decode(delivery.body, delivery.url);
         const network = () => new StorageError("network", { url: delivery.url, method: "PATCH" });
-        if (!this.online()) throw network();
+        const fenced = () => !this.online() || !this.active() || this.connection !== connection;
+        if (fenced()) throw network();
         let message: Message = item;
         try {
           message = await this.client.send(item.room, item.draft, {
@@ -367,11 +436,13 @@ export class ChatOutbox {
           });
         } catch (error) {
           if (!isDuplicate(error)) {
-            // Offline: the SDK keeps the entry waiting for reconnection. Online, every failure
-            // (5xx, 429 and fetch errors included) fails the row so Retry and Discard show.
-            if (!this.online()) throw network();
+            // Offline, or the account left (or this queue was retired) mid-replay: the SDK keeps
+            // the entry waiting. Otherwise every failure (5xx, 429 and fetch errors included)
+            // fails the row so Retry and Discard show.
+            if (signal.aborted || fenced()) throw network();
             throw new Error(error instanceof Error ? error.message : "Couldn't send the message");
           }
+          message = duplicateOf(item, error);
         }
         if (this.connection === connection) this.delivered(item, message);
       }),
@@ -394,6 +465,7 @@ export class ChatOutbox {
         // IndexedDB exists but cannot open: keep Chat usable by sending directly.
         if (this.connection !== connection) return;
         disconnect();
+        this.holdLegacy();
         for (const entry of this.entries) this.local.add(entry.id);
         this.update(this.entries.map((entry) => ({ ...entry, queueId: undefined })));
       },
@@ -475,7 +547,7 @@ export class ChatOutbox {
       replayed = false;
     }
     // Offline, the rows keep waiting for reconnection as before.
-    const stalled = !replayed && this.online();
+    const stalled = !replayed && this.online() && this.active();
     if (this.stalled !== stalled) {
       this.stalled = stalled;
       await this.refresh(connection);

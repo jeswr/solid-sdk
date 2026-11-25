@@ -14,8 +14,10 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   and expose the backwards UTC cursor. Authorship checks use the client's previously loaded
   messages; unknown subjects fail closed before any edit/delete request.
 - Appends use stable IDs and retry exactly one 412 after reading the winning document.
-  The Chat outbox uses `@jeswr/solid-offline`'s WebID-scoped IndexedDB queue in Chat's own
-  `chat` namespace (its own database, BroadcastChannel and Web Locks replay), so Chat never
+  The Chat outbox uses `@jeswr/solid-offline`'s IndexedDB queue in Chat's own namespace, one
+  per WebID and storage root (`chatOutboxNamespace`: its own database, BroadcastChannel and
+  Web Locks replay; each intent also records its storage URL, which decoding checks), so a
+  session on another storage of the same WebID never sees or fails these rows. Chat never
   replays the shell's queued writes and the shell's sync sheet never lists chat intents. Its
   guard policy covers only day documents under the pod's `chat/` container. Composer drafts
   remain in guarded localStorage envelopes keyed by WebID and room. Restored entries retain

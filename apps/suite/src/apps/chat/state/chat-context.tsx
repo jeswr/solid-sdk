@@ -1,9 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { notifySavedText } from "@jeswr/suite-sdk/chips";
 import { createPodClient } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
+import { notifySavedText } from "@jeswr/suite-sdk/chips";
 import { createOutbox } from "@jeswr/suite-sdk/offline";
 import {
   createContext,
@@ -21,7 +21,7 @@ import type { PodSession } from "@/lib/session/pod-session";
 import { ChatClient, classifyChatError, type JoinedRoom, type Message } from "../lib/client";
 import type { ReadPreferences } from "../lib/model";
 import { ChatLocalState, INVITATIONS_JOINED } from "./local-state";
-import { CHAT_OUTBOX_NAMESPACE, ChatOutbox, type Outgoing } from "./outbox";
+import { ChatOutbox, chatOutboxNamespace, type Outgoing } from "./outbox";
 
 export type { Outgoing } from "./outbox";
 
@@ -85,26 +85,45 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
       notifySaved.current = () => {};
     };
   }, [session]);
-  const queue = useMemo(
-    () =>
-      new ChatOutbox(
-        client,
-        () => navigator.onLine !== false,
-        () => ({
-          // Chat's own queue: the shell's replay and sync sheet never handle chat intents.
-          outbox: createOutbox({ webId: client.webId, namespace: CHAT_OUTBOX_NAMESPACE }),
-          storage: async () =>
-            session.mode === "demo"
-              ? createMemoryStorage({ root: client.storageUrl, protocol: "solid" })
-              : (await createPodClient({ fetch: client.fetch, storage: client.storageUrl }))
-                  .storage,
-        }),
-        (message) => {
-          notifySaved.current(message);
-        },
-      ),
-    [client, session.mode],
-  );
+  // The queue belongs to the account (WebID and storage), not to the client object: a rebuilt
+  // client (a new session version or display name) must not drop rows held in memory.
+  const latest = useRef(client);
+  const current = useRef(session);
+  useLayoutEffect(() => {
+    latest.current = client;
+    current.current = session;
+  }, [client, session]);
+  const { webId, storageUrl } = session;
+  const mode = session.mode;
+  const queue = useMemo(() => {
+    const account = {
+      webId,
+      storageUrl,
+      send: (...args: Parameters<ChatClient["send"]>) => latest.current.send(...args),
+    };
+    return new ChatOutbox(
+      account,
+      () => navigator.onLine !== false,
+      () => ({
+        // Chat's own queue: the shell's replay and sync sheet never handle chat intents.
+        outbox: createOutbox({ webId, namespace: chatOutboxNamespace(storageUrl) }),
+        storage: async () =>
+          mode === "demo"
+            ? createMemoryStorage({ root: storageUrl, protocol: "solid" })
+            : (
+                await createPodClient({
+                  fetch: (input, init) => latest.current.fetch(input, init),
+                  storage: storageUrl,
+                })
+              ).storage,
+      }),
+      (message) => {
+        notifySaved.current(message);
+      },
+      // The newest session knows an account switch or sign-out before React commits it.
+      () => current.current.active?.() ?? true,
+    );
+  }, [webId, storageUrl, mode]);
   const outbox = useSyncExternalStore(queue.subscribe, queue.snapshot, queue.snapshot);
   const rooms = useRef<string[]>([]);
   const [details, setDetails] = useState(false);
@@ -151,6 +170,11 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
       removeEventListener("online", online);
     };
   }, [queue, invalidate]);
+  // A rebuilt session may follow a fenced attempt: resume any rows it left pending.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the session object is the trigger
+  useEffect(() => {
+    queue.flush();
+  }, [queue, session]);
   const send = queue.send;
   const retrySend = queue.retry;
   const discard = queue.discard;
