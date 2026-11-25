@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Run: pnpm --filter @jeswr/app-suite run generate:icons [--out <dir>]
-// The drift test (test/pwa-icons-drift.test.ts) renders into a temp dir and compares bytes.
+// It also writes icons.stamp.json (scripts/pwa-icons-stamp.mjs); test/pwa-icons-stamp.test.ts
+// checks the stamp without a browser, so commit the regenerated icons and stamp together.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { chromium } from "@playwright/test";
+import { buildStamp, STAMP_NAME } from "./pwa-icons-stamp.mjs";
 
 const publicDir = new URL("../public/", import.meta.url);
 const outFlag = process.argv.indexOf("--out");
@@ -79,3 +81,17 @@ try {
 } finally {
   await browser.close();
 }
+// Written after the browser closes; PNG hashes are recorded as generated, not recomputed in CI.
+await writeFile(
+  new URL(STAMP_NAME, destination),
+  `${JSON.stringify(
+    await buildStamp({
+      publicDir,
+      tokensCss: new URL("../../../packages/suite-ui/src/styles/tokens.css", import.meta.url),
+      scriptsDir: new URL("./", import.meta.url),
+      iconsDir: destination,
+    }),
+    null,
+    2,
+  )}\n`,
+);
