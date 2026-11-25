@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { type Category, type CategoryNode, categoryTree } from "@jeswr/solid-money";
@@ -203,7 +204,7 @@ export function CategoriesScreen() {
         <h2 className="sr-only">Category tree</h2>
         {!roots.length ? (
           <EmptyState
-            title="Give your spending a home"
+            title="No categories yet"
             body="Create your first category, then add children to group related spending."
             primaryAction={<Button onClick={() => open({ kind: "add" })}>Add category</Button>}
           />

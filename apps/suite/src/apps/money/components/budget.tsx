@@ -16,6 +16,7 @@ import {
 import { type Category, type CategoryNode, categoryTree } from "../lib/model";
 import { useMoney } from "../state/money-context";
 import { Amount } from "./money-forms";
+import { focusMoneyHeading } from "./money-states";
 
 const validMonth = (value: string) => /^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(value);
 function adjacent(month: string, offset: number) {
@@ -29,7 +30,7 @@ function useBudget(month: string) {
   const state = useMoney();
   return useMemo(() => {
     try {
-      if (state.budgetProblem) throw state.budgetProblem;
+      if (state.budgetProblem && !state.budgets.length) throw state.budgetProblem;
       return {
         data: budgetView(
           state.budgets,
@@ -268,7 +269,15 @@ export function BudgetScreen() {
               ? "We couldn't read your saved budget. Try again to refresh it."
               : "Check for unsupported currencies or amounts with extra decimal places, then retry."}
           </p>
-          <ErrorState error="unreachable" actions={{ retry: state.refresh }} />
+          <ErrorState
+            error="unreachable"
+            actions={{
+              retry: async () => {
+                await state.refresh();
+                focusMoneyHeading();
+              },
+            }}
+          />
         </section>
       ) : (
         <>
@@ -292,7 +301,13 @@ export function BudgetScreen() {
               <EmptyState
                 title="Assign money to categories to start budgeting"
                 icon={<PiggyBank aria-hidden="true" />}
-                body="Choose a category below and give it an amount."
+                body={
+                  roots.length
+                    ? data.current.currencies.length
+                      ? "Choose a category below and give it an amount."
+                      : "Add an account to choose the currency for your budget envelopes."
+                    : "Create categories to plan how your money will be spent."
+                }
                 primaryAction={
                   roots.length && data.current.currencies.length ? (
                     <Button
@@ -458,7 +473,13 @@ export function BudgetSummary() {
       {problem || !data ? (
         <p>
           Budget unavailable.{" "}
-          <Button variant="ghost" onClick={state.refresh}>
+          <Button
+            variant="ghost"
+            onClick={async () => {
+              await state.refresh();
+              focusMoneyHeading();
+            }}
+          >
             Retry
           </Button>
         </p>

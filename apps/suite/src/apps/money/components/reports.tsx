@@ -1,6 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
-import { Button, EmptyState } from "@jeswr/suite-ui";
+import { Button, EmptyState, ErrorState } from "@jeswr/suite-ui";
 import { ArrowDownRight, ArrowUpRight, BarChart3, Minus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
@@ -16,6 +17,7 @@ import {
 import { minorUnits } from "../lib/reports";
 import { useMoney } from "../state/money-context";
 import { Amount } from "./money-forms";
+import { focusMoneyHeading } from "./money-states";
 
 const monthLabel = (month: string, style: "short" | "long" = "short") =>
   new Intl.DateTimeFormat("en-GB", { month: style, year: "numeric", timeZone: "UTC" }).format(
@@ -105,10 +107,18 @@ export function ReportsScreen() {
       </div>
       {!report ? (
         <section className="mon-panel">
-          <EmptyState
-            title="Can't build this report"
-            body={`Your ${currency} transactions can't be added up exactly, so there's no report for them.${currencies.length > 1 ? " Try another currency." : ""}`}
-          />
+          <h2>Couldn't calculate this report</h2>
+          <ErrorState error="unknown">
+            <p>{`Your ${currency} transactions couldn't be added up exactly.${currencies.length > 1 ? " Try another currency or retry." : " Retry to read them again."}`}</p>
+            <Button
+              onClick={async () => {
+                await money.refresh();
+                focusMoneyHeading();
+              }}
+            >
+              Retry
+            </Button>
+          </ErrorState>
         </section>
       ) : (
         <ReportBody report={report} versus={versus} rollUp={rollUp} onRollUp={setRollUp} />
