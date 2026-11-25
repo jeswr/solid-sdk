@@ -83,7 +83,11 @@ export const asFailure = (error: unknown): FeedbackFailure =>
 const keep = "Use Download my feedback to keep a copy.";
 export function failureMessage(
   kind: FailureKind,
-  { recordingsHere, stage }: { recordingsHere: boolean; stage: "upload" | "submit" },
+  {
+    recordingsHere,
+    stage,
+    frozen = false,
+  }: { recordingsHere: boolean; stage: "upload" | "submit"; frozen?: boolean },
 ): string {
   const kept = recordingsHere
     ? "Your answers and recordings are still here."
@@ -106,6 +110,9 @@ export function failureMessage(
     case "unsupported":
       return `We couldn't send this ${stage === "upload" ? "recording" : "feedback"} in a format the server accepts. ${keep}`;
     case "invalid":
+      // A record that may already be stored cannot be edited, so "check your answers" is wrong.
+      if (frozen && stage === "submit")
+        return `We couldn't accept this feedback, and it can't be changed here because an earlier attempt may already have reached the team. ${keep} Then choose Start a new submission.`;
       return stage === "upload"
         ? `A recording was rejected. It may be too large or in an unsupported format. ${keep}`
         : `We couldn't accept this feedback. Check your answers and contact details (for example, the email address) and submit again. ${keep}`;

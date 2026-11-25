@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Sonnet 5.5
 import { describe, expect, it } from "vitest";
 import {
+  allowDrafts,
   audioIndices,
   clearDraft,
   DRAFT_TTL_MS,
@@ -12,6 +13,7 @@ import {
   purgeDrafts,
   RENEW_MARGIN_MS,
   receiptUsable,
+  revokeDrafts,
   saveDraft,
   withoutRecordings,
 } from "../src/feedback/draft";
@@ -42,6 +44,7 @@ function memory(initial: Record<string, string> = {}) {
 const draft = (receipts: unknown[] = []) => ({
   submissionId,
   record: JSON.stringify({ transcript: [] }),
+  uncertain: false,
   receipts: receipts as never,
 });
 
@@ -76,6 +79,46 @@ describe("draft ownership", () => {
     clearDraft(storage, ownerOf("alice"));
     expect(loadDraft(storage, ownerOf("alice"), now)).toBeUndefined();
     expect(loadDraft(storage, ownerOf("bob"), now)).toBeDefined();
+  });
+});
+
+describe("uncertainty and revocation", () => {
+  it("remembers whether the saved attempt may have reached storage", () => {
+    const storage = memory();
+    saveDraft(storage, "signed-out", { ...draft(), uncertain: true }, now);
+    expect(loadDraft(storage, "signed-out", now)?.uncertain).toBe(true);
+    saveDraft(storage, "signed-out", { ...draft(), uncertain: false }, now);
+    expect(loadDraft(storage, "signed-out", now)?.uncertain).toBe(false);
+  });
+  it("treats a draft saved without the flag as possibly stored", () => {
+    const storage = memory({
+      "suite.feedback.draft.v2:signed-out": JSON.stringify({
+        version: 2,
+        owner: "signed-out",
+        savedAt: now,
+        record: "{}",
+        submissionId,
+        receipts: [],
+      }),
+    });
+    expect(loadDraft(storage, "signed-out", now)?.uncertain).toBe(true);
+  });
+  it("removes a revoked owner's draft and refuses later saves until allowed again", () => {
+    const storage = memory();
+    saveDraft(storage, ownerOf("alice"), draft(), now);
+    revokeDrafts(storage, ownerOf("alice"));
+    expect(storage.data.size).toBe(0);
+    saveDraft(storage, ownerOf("alice"), draft(), now);
+    expect(storage.data.size).toBe(0);
+    saveDraft(storage, ownerOf("bob"), draft(), now);
+    expect(storage.data.size).toBe(1);
+    allowDrafts(ownerOf("alice"));
+    saveDraft(storage, ownerOf("alice"), draft(), now);
+    expect(storage.data.size).toBe(2);
+  });
+  it("revokes without storage", () => {
+    expect(() => revokeDrafts(undefined, "account:x")).not.toThrow();
+    allowDrafts("account:x");
   });
 });
 

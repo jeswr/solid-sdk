@@ -105,8 +105,10 @@ using the original record directory, without another record commit.
 Overlapping issue creation within one instance returns 503 until the current request finishes.
 The first submit attempt freezes the serialized record and keeps it with its submission ID and
 recording receipts in local storage, under `suite.feedback.draft.v2:<owner>` where the owner is
-the active suite account (or `signed-out`). A draft expires after 24 hours, is removed when its
-account signs out, and is never offered to another account. After a reload the page asks whether
+the active suite account (or `signed-out`). A draft expires after 24 hours and is never offered to another account. It is offered only while
+the account's session is ready (an expired session locks the page). A shell-level handler removes it
+when its account signs out from any page, and a submit still running cannot write it back; a
+draft is lost only if the browser closes without sign-out, and then it expires. After a reload the page asks whether
 to restore it; the unowned `suite.feedback.draft.v1` key of earlier builds is deleted, never restored.
 Retries resend the frozen record verbatim, and answers stay read-only until completion.
 Recording audio lives only in the open page. After a reload, receipts that are missing, corrupt or

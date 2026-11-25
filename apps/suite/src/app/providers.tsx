@@ -7,6 +7,7 @@ import { ThemeProvider, useTheme } from "next-themes";
 import { Suspense, useEffect } from "react";
 import { NativePreviewCleanup } from "@/components/native-preview-cleanup";
 import { NativeShareLaunch } from "@/components/native-share-launch";
+import { FeedbackDraftCleanup } from "@/feedback/draft-cleanup";
 import { accountFixtureProps } from "@/shell/account/test-backends";
 import { SuiteEnvironmentContext } from "@/shell/environment";
 import { SuiteI18nProvider } from "@/shell/i18n";
@@ -47,6 +48,7 @@ export function Providers({
       <SuiteEnvironmentContext.Provider value={environment}>
         <AccountsProvider {...accountFixtureProps()}>
           <RememberedPagesAccountGuard />
+          <FeedbackDraftCleanup />
           <NativePushProvider>
             <Suspense>
               <NativeShareLaunch />

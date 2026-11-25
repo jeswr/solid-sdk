@@ -1,15 +1,27 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { Button, Input, Label, Textarea } from "@jeswr/suite-ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  Button,
+  Input,
+  Label,
+  Textarea,
+} from "@jeswr/suite-ui";
 import { Mic, Square } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { publicBaseUrl } from "@/lib/public-url";
 import { useOptionalAccounts } from "@/shell/session/accounts-context";
-import { onBeforeSignOut } from "@/shell/session/sign-out-cleanup";
 import { asFailure, FeedbackFailure, failureMessage, feedbackResponse } from "./client-errors";
 import { feedbackArchive, saveFeedbackArchive } from "./download";
 import {
+  allowDrafts,
   audioIndices,
   loadDraft,
   lostRecordings,
@@ -48,6 +60,9 @@ export function feedbackApiBase(): string {
     return "";
   }
 }
+/** Focus after React has removed the control that held it. */
+const focusSoon = (target: () => HTMLElement | null | undefined) =>
+  setTimeout(() => target()?.focus(), 0);
 const browserStorage = (): Storage | undefined => {
   try {
     return localStorage;
@@ -169,6 +184,21 @@ export function FeedbackPage() {
         <p role="status">Loading your account...</p>
       </main>
     );
+  // An account whose session is not live (expired, or any state but ready) is locked: its draft
+  // is neither offered, shown, downloaded nor submitted until the person signs in again.
+  if (accounts?.active && accounts.status !== "ready")
+    return (
+      <main id="main-content" className="mx-auto max-w-3xl space-y-3 px-4 py-10">
+        <h1 className="text-3xl font-semibold">Give feedback</h1>
+        <p role="status">
+          Your session has ended. Sign in again to give feedback. Anything you saved for this
+          account stays private until you do.
+        </p>
+        <Link href="/welcome" className="text-sm underline">
+          Back to welcome
+        </Link>
+      </main>
+    );
   const owner = ownerOf(accounts?.active?.id);
   return <FeedbackForm key={owner} owner={owner} />;
 }
@@ -206,8 +236,12 @@ function FeedbackForm({ owner }: { owner: string }) {
   const [confirmingNew, setConfirmingNew] = useState(false);
   const [notice, setNotice] = useState("");
   const draftHeading = useRef<HTMLHeadingElement>(null);
-  const newHeading = useRef<HTMLHeadingElement>(null);
   const startNewButton = useRef<HTMLButtonElement>(null);
+  const goneHeading = useRef<HTMLHeadingElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const logRef = useRef<HTMLDivElement>(null);
+  const answerRef = useRef<HTMLTextAreaElement>(null);
+  const startedNew = useRef(false);
   const voice = useVoice(
     (text) => setInput([voiceBase.current, text].filter(Boolean).join(" ").slice(0, 4000)),
     (clip) => {
@@ -226,6 +260,7 @@ function FeedbackForm({ owner }: { owner: string }) {
   );
   useEffect(() => {
     // Drafts are offered, never restored silently, and only ever to the account that saved them.
+    allowDrafts(owner);
     purgeDrafts(browserStorage());
     setPendingDraft(loadDraft(browserStorage(), owner));
     try {
@@ -248,27 +283,20 @@ function FeedbackForm({ owner }: { owner: string }) {
       clearTimeout(timer);
     };
   }, [owner]);
-  // The account's draft holds a transcript, name and email: it must not outlive its session.
-  useEffect(
-    () =>
-      onBeforeSignOut(async (account) => {
-        removeDraft(browserStorage(), ownerOf(account.id));
-      }),
-    [],
-  );
   useEffect(() => {
     if (pendingDraft) draftHeading.current?.focus();
   }, [pendingDraft]);
   useEffect(() => {
-    if (confirmingNew) newHeading.current?.focus();
-  }, [confirmingNew]);
+    // Submit is disabled while recordings are lost, so focus must land on the explanation.
+    if (goneReason) goneHeading.current?.focus();
+  }, [goneReason]);
   function restoreDraft(draft: StoredDraft) {
     setPendingDraft(undefined);
     try {
       const saved = validateSubmission(JSON.parse(draft.record));
       submissionId.current = draft.submissionId;
       receipts.current = draft.receipts.map((receipt) => receipt ?? undefined);
-      uncertain.current = true;
+      uncertain.current = draft.uncertain;
       setFrozenRecord(draft.record);
       setPathway(saved.pathway);
       setAnswers(saved.answers);
@@ -278,7 +306,7 @@ function FeedbackForm({ owner }: { owner: string }) {
       setDone(true);
       // Audio never survives a reload, so only receipts that are still valid can be sent.
       if (lostRecordings(saved, draft.receipts, () => false).length)
-        setGoneReason(recordingsLostMessage(true));
+        setGoneReason(recordingsLostMessage(draft.uncertain));
     } catch {
       /* An invalid local draft must not prevent a new interview. */
       removeDraft(browserStorage(), owner);
@@ -288,6 +316,7 @@ function FeedbackForm({ owner }: { owner: string }) {
   function discardDraft() {
     removeDraft(browserStorage(), owner);
     setPendingDraft(undefined);
+    focusSoon(() => titleRef.current);
   }
   useEffect(() => {
     if (messages.length) transcriptEnd.current?.scrollIntoView?.({ block: "nearest" });
@@ -561,6 +590,8 @@ function FeedbackForm({ owner }: { owner: string }) {
       // Only an answer that may have reached storage makes the record uncertain; a limiter
       // refusal or a rejected upload never did.
       if (stage === "submit" && failure.mayHaveStored) uncertain.current = true;
+      // The saved draft must remember that an attempt may have reached storage.
+      if (uncertain.current && serialized) saveDraft(serialized);
       let parsed: Submission | undefined;
       try {
         parsed = JSON.parse(serialized) as Submission;
@@ -573,7 +604,10 @@ function FeedbackForm({ owner }: { owner: string }) {
         setGoneReason(recordingsLostMessage(uncertain.current));
       else if (stage === "upload" && ["invalid", "too-large", "unsupported"].includes(failure.kind))
         setGoneReason(failureMessage(failure.kind, { recordingsHere: here, stage }));
-      else setError(failureMessage(failure.kind, { recordingsHere: here, stage }));
+      else
+        setError(
+          failureMessage(failure.kind, { recordingsHere: here, stage, frozen: uncertain.current }),
+        );
       // The server validates before it writes anything, so a rejected first attempt can be edited.
       if (
         stage === "submit" &&
@@ -597,6 +631,8 @@ function FeedbackForm({ owner }: { owner: string }) {
     setClips([]);
     receipts.current = [];
     setPending([]);
+    // The unsent text is now in the transcript; leaving it in the box would send it twice.
+    setInput("");
     uncertain.current = false;
     setGoneReason("");
     setError("");
@@ -620,6 +656,7 @@ function FeedbackForm({ owner }: { owner: string }) {
     storeDraft(browserStorage(), owner, {
       submissionId: submissionId.current,
       record: serialized,
+      uncertain: uncertain.current,
       receipts: Array.from(
         { length: receipts.current.length },
         (_, i) => receipts.current[i] ?? null,
@@ -659,7 +696,9 @@ function FeedbackForm({ owner }: { owner: string }) {
         Back to welcome
       </Link>
       <header className="space-y-3">
-        <h1 className="text-3xl font-semibold">Give feedback</h1>
+        <h1 ref={titleRef} tabIndex={-1} className="text-3xl font-semibold">
+          Give feedback
+        </h1>
         <p>Tell us honestly what worked and what got in the way. Type or talk.</p>
       </header>
       <aside className="rounded-xl border bg-muted p-4 text-sm space-y-2">
@@ -684,7 +723,6 @@ function FeedbackForm({ owner }: { owner: string }) {
       )}
       {pendingDraft && !pathway && (
         <section
-          role="alert"
           aria-labelledby="feedback-draft-heading"
           className="space-y-3 rounded-xl border p-4"
         >
@@ -702,7 +740,14 @@ function FeedbackForm({ owner }: { owner: string }) {
             browser for this account only. Recordings are not kept across a reload.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Button onClick={() => restoreDraft(pendingDraft)}>Restore it</Button>
+            <Button
+              onClick={() => {
+                restoreDraft(pendingDraft);
+                focusSoon(() => goneHeading.current ?? logRef.current);
+              }}
+            >
+              Restore it
+            </Button>
             <Button variant="outline" onClick={discardDraft}>
               Discard it
             </Button>
@@ -749,6 +794,8 @@ function FeedbackForm({ owner }: { owner: string }) {
             />
           </div>
           <div
+            ref={logRef}
+            tabIndex={-1}
             role="log"
             aria-label="Feedback conversation"
             aria-live="polite"
@@ -783,6 +830,7 @@ function FeedbackForm({ owner }: { owner: string }) {
               <Label htmlFor="feedback-answer">Your answer</Label>
               <Textarea
                 id="feedback-answer"
+                ref={answerRef}
                 maxLength={4000}
                 rows={4}
                 value={input}
@@ -893,11 +941,15 @@ function FeedbackForm({ owner }: { owner: string }) {
           )}
           {goneReason && (
             <section
-              role="alert"
               aria-labelledby="feedback-recordings-heading"
               className="space-y-3 rounded-lg border p-3"
             >
-              <h2 id="feedback-recordings-heading" className="font-semibold">
+              <h2
+                id="feedback-recordings-heading"
+                tabIndex={-1}
+                ref={goneHeading}
+                className="font-semibold"
+              >
                 Recordings can't be sent
               </h2>
               <p>{goneReason}</p>
@@ -911,49 +963,40 @@ function FeedbackForm({ owner }: { owner: string }) {
               </div>
             </section>
           )}
-          {confirmingNew && (
-            <section
-              role="alert"
-              aria-labelledby="feedback-new-heading"
-              className="space-y-3 rounded-lg border p-3"
-              onKeyDown={(e) => {
-                if (e.key !== "Escape") return;
-                setConfirmingNew(false);
-                startNewButton.current?.focus();
+          <AlertDialog open={confirmingNew} onOpenChange={setConfirmingNew}>
+            <AlertDialogContent
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                const started = startedNew.current;
+                startedNew.current = false;
+                focusSoon(() =>
+                  started ? (answerRef.current ?? titleRef.current) : startNewButton.current,
+                );
               }}
             >
-              <h2
-                id="feedback-new-heading"
-                tabIndex={-1}
-                ref={newHeading}
-                className="font-semibold"
-              >
-                Discard this submission?
-              </h2>
-              <p>
+              <AlertDialogTitle>Discard this submission?</AlertDialogTitle>
+              <AlertDialogDescription>
                 Starting a new submission permanently removes your answers, contact details and
                 recordings from this page. If it may already have reached the team, they keep that
                 copy. Download first if you want your own.
-              </p>
-              <div className="flex flex-wrap gap-3">
+              </AlertDialogDescription>
+              <AlertDialogFooter>
                 <Button variant="outline" disabled={locked} onClick={() => void download()}>
                   Download my feedback first
                 </Button>
-                <Button disabled={locked} onClick={() => start(pathway)}>
-                  Discard and start a new submission
-                </Button>
-                <Button
-                  variant="outline"
+                <AlertDialogAction
+                  disabled={locked}
                   onClick={() => {
-                    setConfirmingNew(false);
-                    startNewButton.current?.focus();
+                    startedNew.current = true;
+                    start(pathway);
                   }}
                 >
-                  Keep this submission
-                </Button>
-              </div>
-            </section>
-          )}
+                  Discard and start a new submission
+                </AlertDialogAction>
+                <AlertDialogCancel>Keep this submission</AlertDialogCancel>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <div className="flex flex-wrap gap-3">
             <Button
               disabled={

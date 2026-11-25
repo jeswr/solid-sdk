@@ -9,7 +9,8 @@ import {
   screen,
   waitFor,
 } from "../../../packages/suite-ui/node_modules/@testing-library/react";
-import { legacyDraftKey, saveDraft } from "../src/feedback/draft";
+import { allowDrafts, legacyDraftKey, saveDraft } from "../src/feedback/draft";
+import { FeedbackDraftCleanup } from "../src/feedback/draft-cleanup";
 import { FeedbackPage } from "../src/feedback/feedback-page";
 import { AccountsContext } from "../src/shell/session/accounts-context";
 import { beforeSignOut } from "../src/shell/session/sign-out-cleanup";
@@ -57,11 +58,17 @@ const record = (audio?: number[]) =>
   });
 const draftKey = (owner: string) => `suite.feedback.draft.v2:${owner}`;
 const stored = (owner: string) => window.localStorage.getItem(draftKey(owner));
-const seed = (owner: string, audio?: number[], receipts: unknown[] = [], at = Date.now()) =>
+const seed = (
+  owner: string,
+  audio?: number[],
+  receipts: unknown[] = [],
+  at = Date.now(),
+  uncertain = true,
+) =>
   saveDraft(
     window.localStorage,
     owner,
-    { submissionId, record: record(audio), receipts: receipts as never },
+    { submissionId, record: record(audio), uncertain, receipts: receipts as never },
     at,
   );
 const alice = {
@@ -76,6 +83,7 @@ const accounts = (active: typeof alice | null, status = "ready") =>
 const view = (active: typeof alice | null = alice, status = "ready") =>
   render(
     <AccountsContext.Provider value={accounts(active, status)}>
+      <FeedbackDraftCleanup />
       <FeedbackPage />
     </AccountsContext.Provider>,
   );
@@ -94,6 +102,7 @@ const sentId = () => started || submissionId;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   window.localStorage.clear();
+  for (const owner of ["account:alice", "account:bob", "signed-out"]) allowDrafts(owner);
   routes.audio = [okReceipt];
   routes.submit = [Response.json({ reference: 9 })];
   calls.length = 0;
@@ -214,6 +223,7 @@ describe("draft ownership and restore (M2)", () => {
     await screen.findByRole("heading", { name: "Restore your unsent feedback?" });
     rerender(
       <AccountsContext.Provider value={accounts(bob)}>
+        <FeedbackDraftCleanup />
         <FeedbackPage />
       </AccountsContext.Provider>,
     );
@@ -248,7 +258,12 @@ describe("draft ownership and restore (M2)", () => {
     expect(stored("account:alice")).toBeNull();
   });
   it("discards a draft whose record is invalid and says so", async () => {
-    saveDraft(window.localStorage, "account:alice", { submissionId, record: "{}", receipts: [] });
+    saveDraft(window.localStorage, "account:alice", {
+      submissionId,
+      record: "{}",
+      uncertain: true,
+      receipts: [],
+    });
     view();
     await screen.findByRole("heading", { name: "Restore your unsent feedback?" });
     fireEvent.click(button("Restore it"));
@@ -553,6 +568,10 @@ describe("classified failures (M5, L6)", () => {
   });
 });
 
+const closed = () => expect(screen.queryByRole("alertdialog")).toBeNull();
+const focused = (element: HTMLElement | null) =>
+  waitFor(() => expect(document.activeElement).toBe(element));
+
 describe("Start a new submission asks first", () => {
   async function failedSubmission() {
     routes.submit = [failure(502)];
@@ -561,12 +580,12 @@ describe("Start a new submission asks first", () => {
     await press("Submit what I've said so far");
     await screen.findByRole("alert");
   }
-  it("does nothing destructive until confirmed, announces itself and moves focus", async () => {
+  it("does nothing destructive until confirmed and starts on the safe choice", async () => {
     await failedSubmission();
     await press("Start a new submission");
-    const heading = screen.getByRole("heading", { name: "Discard this submission?" });
-    expect(heading.closest('[role="alert"]')).not.toBeNull();
-    expect(document.activeElement).toBe(heading);
+    const dialog = await screen.findByRole("alertdialog", { name: "Discard this submission?" });
+    expect(dialog.getAttribute("aria-describedby")).toBeTruthy();
+    expect(document.activeElement).toBe(button("Keep this submission"));
     expect(textarea().value).toBe("Valuable text");
     expect(stored("account:alice")).not.toBeNull();
   });
@@ -574,42 +593,258 @@ describe("Start a new submission asks first", () => {
     await failedSubmission();
     await press("Start a new submission");
     await press("Keep this submission");
-    expect(screen.queryByRole("heading", { name: "Discard this submission?" })).toBeNull();
-    expect(document.activeElement).toBe(button("Start a new submission"));
+    await waitFor(closed);
+    await focused(button("Start a new submission"));
     expect(textarea().value).toBe("Valuable text");
   });
   it("closes with Escape and returns focus", async () => {
     await failedSubmission();
     await press("Start a new submission");
-    fireEvent.keyDown(screen.getByRole("heading", { name: "Discard this submission?" }), {
-      key: "Escape",
-    });
-    expect(screen.queryByRole("heading", { name: "Discard this submission?" })).toBeNull();
-    expect(document.activeElement).toBe(button("Start a new submission"));
+    fireEvent.keyDown(await screen.findByRole("alertdialog"), { key: "Escape" });
+    await waitFor(closed);
+    await focused(button("Start a new submission"));
   });
   it("ignores other keys", async () => {
     await failedSubmission();
     await press("Start a new submission");
-    fireEvent.keyDown(screen.getByRole("heading", { name: "Discard this submission?" }), {
-      key: "a",
-    });
-    expect(screen.getByRole("heading", { name: "Discard this submission?" })).toBeTruthy();
+    fireEvent.keyDown(await screen.findByRole("alertdialog"), { key: "a" });
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
   });
   it("offers a download first without discarding", async () => {
     await failedSubmission();
     await press("Start a new submission");
     await press("Download my feedback first");
     await waitFor(() => expect(download.saveFeedbackArchive).toHaveBeenCalled());
-    expect(screen.getByRole("heading", { name: "Discard this submission?" })).toBeTruthy();
-    expect(textarea().value).toBe("Valuable text");
+    expect(screen.getByRole("alertdialog")).toBeTruthy();
+    expect(stored("account:alice")).not.toBeNull();
   });
-  it("discards only when confirmed", async () => {
+  it("discards only when confirmed and puts focus in the new interview", async () => {
     await failedSubmission();
     await press("Start a new submission");
     await press("Discard and start a new submission");
-    expect(screen.queryByRole("heading", { name: "Discard this submission?" })).toBeNull();
+    await waitFor(closed);
     expect(textarea().value).toBe("");
     expect(frozen()).toBe(false);
     expect(stored("account:alice")).toBeNull();
+    await focused(textarea());
+  });
+});
+
+describe("a session that is not live (N1)", () => {
+  it.each([
+    "expired",
+    "signed-out",
+    "loading-more",
+  ])("treats status %s with an account still set as locked", async (status) => {
+    seed("account:alice");
+    view(alice, status);
+    expect(screen.getByRole("status").textContent).toContain("Your session has ended");
+    expect(screen.queryByRole("heading", { name: "Restore your unsent feedback?" })).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(document.body.textContent).not.toContain("Private story");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(calls).toHaveLength(0);
+    expect(stored("account:alice")).not.toBeNull();
+  });
+  it("offers the draft again once the session is ready", async () => {
+    seed("account:alice");
+    const { rerender } = view(alice, "expired");
+    rerender(
+      <AccountsContext.Provider value={accounts(alice, "ready")}>
+        <FeedbackPage />
+      </AccountsContext.Provider>,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Restore your unsent feedback?" }),
+    ).toBeTruthy();
+  });
+  it("locks an open form whose session expires, without submitting or downloading", async () => {
+    const { rerender } = view();
+    await startQuick("Secret words");
+    rerender(
+      <AccountsContext.Provider value={accounts(alice, "expired")}>
+        <FeedbackPage />
+      </AccountsContext.Provider>,
+    );
+    expect(screen.queryByRole("button", { name: /Submit|Download/ })).toBeNull();
+    expect(document.body.textContent).not.toContain("Secret words");
+    expect(submits()).toHaveLength(0);
+  });
+});
+
+describe("sign-out clears the draft wherever the person is (N2)", () => {
+  const onlyCleanup = () => render(<FeedbackDraftCleanup />);
+  it("removes the account's draft when /feedback is not mounted, keeping others", async () => {
+    seed("account:alice");
+    seed("account:bob");
+    seed("signed-out");
+    onlyCleanup();
+    await beforeSignOut(alice);
+    expect(stored("account:alice")).toBeNull();
+    expect(stored("account:bob")).not.toBeNull();
+    expect(stored("signed-out")).not.toBeNull();
+  });
+  it("removes every signed-in account's draft on sign-out of all accounts", async () => {
+    const bob = { ...alice, id: "bob" };
+    seed("account:alice");
+    seed("account:bob");
+    seed("account:carol");
+    onlyCleanup();
+    await Promise.all([beforeSignOut(alice), beforeSignOut(bob)]);
+    expect(stored("account:alice")).toBeNull();
+    expect(stored("account:bob")).toBeNull();
+    expect(stored("account:carol")).not.toBeNull();
+  });
+  it("survives blocked storage", async () => {
+    onlyCleanup();
+    const spy = vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    await expect(beforeSignOut(alice)).resolves.toBeUndefined();
+    spy.mockRestore();
+  });
+  it("stops the handler on unmount", async () => {
+    seed("account:alice");
+    const { unmount } = onlyCleanup();
+    unmount();
+    expect(beforeSignOut(alice)).toBeUndefined();
+    expect(stored("account:alice")).not.toBeNull();
+  });
+  it("does not let a submit still running re-save the draft after sign-out", async () => {
+    let release: (reply: Response) => void = () => {};
+    routes.audio = [okReceipt, () => new Promise<Response>((resolve) => (release = resolve))];
+    routes.submit = [failure(502)];
+    view();
+    await startQuick();
+    await attachClip();
+    // Make the saved receipt too old, so Submit uploads again and waits there.
+    const real = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(real + 3 * 3_600_000);
+    await act(async () => {
+      fireEvent.click(button("Submit what I've said so far"));
+    });
+    await waitFor(() => expect(stored("account:alice")).not.toBeNull());
+    await beforeSignOut(alice);
+    expect(stored("account:alice")).toBeNull();
+    await act(async () => release(okReceipt()));
+    await waitFor(() => expect(submits()).toHaveLength(1));
+    await screen.findByRole("alert");
+    expect(stored("account:alice")).toBeNull();
+  });
+  it("allows drafts again for the same account in a new session", async () => {
+    onlyCleanup();
+    await beforeSignOut(alice);
+    cleanup();
+    routes.submit = [failure(502)];
+    view();
+    await startQuick();
+    await press("Submit what I've said so far");
+    await screen.findByRole("alert");
+    expect(stored("account:alice")).not.toBeNull();
+  });
+});
+
+describe("prompts are labelled regions and manage focus (N4)", () => {
+  it("shows the restore prompt as a labelled region, not an alert, and focuses its heading", async () => {
+    seed("account:alice");
+    view();
+    const heading = await screen.findByRole("heading", { name: "Restore your unsent feedback?" });
+    expect(screen.getByRole("region", { name: "Restore your unsent feedback?" })).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(document.activeElement).toBe(heading);
+  });
+  it("moves focus to the conversation after Restore", async () => {
+    seed("account:alice");
+    view();
+    await screen.findByRole("heading", { name: "Restore your unsent feedback?" });
+    fireEvent.click(button("Restore it"));
+    await focused(screen.getByRole("log"));
+  });
+  it("moves focus to the page heading after Discard", async () => {
+    seed("account:alice");
+    view();
+    await screen.findByRole("heading", { name: "Restore your unsent feedback?" });
+    fireEvent.click(button("Discard it"));
+    await focused(screen.getByRole("heading", { name: "Give feedback" }));
+  });
+  it("shows lost recordings as a labelled region that receives focus, not an alert", async () => {
+    seed("account:alice", [0], []);
+    view();
+    await screen.findByRole("heading", { name: "Restore your unsent feedback?" });
+    fireEvent.click(button("Restore it"));
+    const heading = await screen.findByRole("heading", { name: "Recordings can't be sent" });
+    expect(screen.getByRole("region", { name: "Recordings can't be sent" })).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    // Submit is disabled at this point; focus must already be on the explanation.
+    await focused(heading);
+    expect((button("Submit") as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("restored state and wording (N8)", () => {
+  it("does not mark a draft saved before any request as possibly stored", async () => {
+    routes.submit = [failure(400, "invalid")];
+    seed("account:alice", undefined, [], Date.now(), false);
+    view();
+    await screen.findByRole("heading", { name: "Restore your unsent feedback?" });
+    fireEvent.click(button("Restore it"));
+    await screen.findByText("Private story");
+    await press("Submit");
+    expect((await screen.findByRole("alert")).textContent).toContain("email address");
+    await waitFor(() => expect(screen.queryByLabelText("Your answer")).toBeNull());
+    expect(stored("account:alice")).toBeNull();
+  });
+  it("keeps a draft saved after an uncertain attempt frozen and words the rejection accordingly", async () => {
+    routes.submit = [failure(400, "invalid")];
+    seed("account:alice");
+    view();
+    await screen.findByRole("heading", { name: "Restore your unsent feedback?" });
+    fireEvent.click(button("Restore it"));
+    await screen.findByText("Private story");
+    await press("Submit");
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("can't be changed here");
+    expect(alert.textContent).not.toContain("email address");
+    expect(stored("account:alice")).not.toBeNull();
+  });
+  it("persists that an attempt may have reached storage", async () => {
+    routes.submit = [failure(502)];
+    view();
+    await startQuick();
+    await press("Submit what I've said so far");
+    await screen.findByRole("alert");
+    expect(JSON.parse(stored("account:alice") ?? "{}").uncertain).toBe(true);
+  });
+  it("persists a draft from a failure that never reached storage as not uncertain", async () => {
+    routes.submit = [failure(429, "rate_limited", { "Retry-After": "60" })];
+    view();
+    await startQuick();
+    await press("Submit what I've said so far");
+    await screen.findByRole("alert");
+    expect(JSON.parse(stored("account:alice") ?? "{}").uncertain).toBe(false);
+  });
+  it("does not send unsent textarea text twice after removing recordings", async () => {
+    routes.audio = [okReceipt, failure(400, "invalid")];
+    view();
+    await startQuick("Typed once");
+    await attachClip();
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 3 * 3_600_000);
+    await press("Submit what I've said so far");
+    await screen.findByRole("heading", { name: "Recordings can't be sent" });
+    await press("Remove recordings and record again");
+    expect(textarea().value).toBe("");
+    vi.restoreAllMocks();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      calls.push({
+        path: new URL(String(input), "https://suite.test").pathname,
+        method: init?.method ?? "GET",
+        body: init?.body ? String(init.body) : undefined,
+      });
+      return Response.json({ reference: 9 });
+    });
+    await press("Submit what I've said so far");
+    await waitFor(() => expect(submits()).toHaveLength(1));
+    const transcript = sentBody().record.transcript as { content: string }[];
+    expect(transcript.filter((m) => m.content === "Typed once")).toHaveLength(1);
   });
 });

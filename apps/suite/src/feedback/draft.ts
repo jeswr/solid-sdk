@@ -22,6 +22,19 @@ export interface StoredDraft {
   /** Indexed by recording number; a gap is null and never shifts later recordings. */
   receipts: (AudioReceipt | null)[];
   savedAt: number;
+  /** True when an attempt may already have reached storage, so the record must stay frozen. */
+  uncertain: boolean;
+}
+// Owners whose session ended: a submit still running in the page must not re-create their draft.
+const revoked = new Set<string>();
+/** Removes the owner's draft and blocks any in-flight save from writing it back. */
+export function revokeDrafts(storage: DraftStorage | undefined, owner: string): void {
+  revoked.add(owner);
+  clearDraft(storage, owner);
+}
+/** A form for this owner is open again (a new session), so drafts may be written. */
+export function allowDrafts(owner: string): void {
+  revoked.delete(owner);
 }
 
 export const ownerOf = (accountId?: string | null) =>
@@ -55,6 +68,7 @@ export function saveDraft(
   draft: Omit<StoredDraft, "savedAt">,
   now = Date.now(),
 ): void {
+  if (revoked.has(owner)) return;
   try {
     storage?.setItem(keyFor(owner), JSON.stringify({ version: 2, owner, savedAt: now, ...draft }));
   } catch {
@@ -102,6 +116,8 @@ export function loadDraft(
       submissionId: draft.submissionId,
       record: draft.record,
       savedAt: draft.savedAt,
+      // Drafts saved without the flag are treated as possibly stored.
+      uncertain: draft.uncertain !== false,
       receipts: draft.receipts.map((entry: unknown) =>
         isReceipt(entry, draft.submissionId) ? entry : null,
       ),
