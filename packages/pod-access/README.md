@@ -318,7 +318,7 @@ pin DNS and use guarded-fetch's browser policy. Activity IRIs currently require 
 React applications can use `useNotify()` from `@jeswr/suite-sdk` under `PodAuthProvider`; it
 supplies the current actor/fetch and resets the cache on identity changes.
 
-`createInboxReader({ fetch, pinningFetch?, clock?, maxItems? })` at the same `./notify` subpath
+`createInboxReader({ fetch, pinningFetch?, clock?, maxItems?, onTruncated? })` at the same `./notify` subpath
 is a thin browser-safe reader wrapper. `inbox(webId)` discovers the owner's inbox or returns
 null (including LWS profiles). `list(inboxUrl, { signal? })` returns `InboxNotification[]`,
 newest first with undated items last and URL ties deterministic. Items carry `url`, `type`
@@ -329,7 +329,8 @@ Reads use the delivery transport's HTTPS, redirect, byte and deadline guards. At
 order, with concurrency at most six. Foreign, outside-container, nested, query/fragment and
 encoded-slash members are never dereferenced; unreadable members are skipped. Container
 401/403/404 or RDF parse failures return `[]`; other container failures reject. Abort rejects
-with `AbortError` and stops new work. There is no mark-read or delete operation.
+with `AbortError` and stops new work. `onTruncated(listed, read)` is called once per `list`
+whose container holds more children than `maxItems`. There is no mark-read or delete operation.
 
 `notificationKind(notification)` classifies builder round-trips as `share` (Announce with
 summary starting `Shared with you as `), `assignment` (Announce with target), `mention`
