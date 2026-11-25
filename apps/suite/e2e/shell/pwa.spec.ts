@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { mkdir } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -26,7 +25,7 @@ test("serves an installable manifest and every icon", async ({ page, context, re
   expect(manifest).toMatchObject({
     name: "Solid Suite",
     id: "/",
-    start_url: "/",
+    start_url: "/home",
     display: "standalone",
   });
   for (const icon of [
@@ -113,9 +112,7 @@ test("keeps maskable artwork inside the safe circle and the monochrome centre tr
   expect(pixels).toEqual({ outsideSafeCircle: 0, centreAlpha: 0, ringAlpha: 255 });
 });
 
-test("shows the Settings install row in both themes and handles dismissal", async ({
-  page,
-}, info) => {
+test("shows the Settings install row in both themes and handles dismissal", async ({ page }) => {
   await page.goto("/settings/advanced");
   await expect(page.getByRole("heading", { name: "Advanced", exact: true })).toBeVisible();
   // Native prompt availability varies under automation; installability is verified separately.
@@ -129,11 +126,6 @@ test("shows the Settings install row in both themes and handles dismissal", asyn
   });
   const row = page.getByRole("region", { name: "Install app", exact: true });
   await expect(row.getByRole("button", { name: "Install", exact: true })).toBeVisible();
-  await mkdir("/tmp/pwa-shots", { recursive: true });
-  await page.screenshot({
-    path: `/tmp/pwa-shots/settings-${info.project.name}.png`,
-    fullPage: true,
-  });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await row.getByRole("button", { name: "Install", exact: true }).click();
   await expect(row.getByRole("status")).toContainText("Installation dismissed");
@@ -141,11 +133,19 @@ test("shows the Settings install row in both themes and handles dismissal", asyn
   await expect(row).toHaveCount(0);
 });
 
-test("opens the root and an unvisited sub-app offline after one online visit", async ({
+const offlineHeading = /You're offline/;
+
+test("opens the installed app's launch routes offline and falls back only for unvisited routes", async ({
   page,
   context,
+  request,
 }) => {
-  await page.goto("/");
+  const manifest = await (await request.get("/manifest.webmanifest")).json();
+  const launchRoutes: string[] = [
+    manifest.start_url,
+    ...manifest.shortcuts.map((shortcut: { url: string }) => shortcut.url),
+  ];
+  await page.goto("/home");
   await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
@@ -157,10 +157,19 @@ test("opens the root and an unvisited sub-app offline after one online visit", a
       );
   });
   await context.setOffline(true);
-  for (const path of ["/", "/docs"]) {
+  // Each launch target (start_url and every shortcut) opens its own app, never the fallback.
+  for (const path of launchRoutes) {
     const response = await page.goto(path);
-    expect(response?.status()).toBe(200);
-    await expect(page.locator(".suite-shell, .shell-public-card").first()).toBeVisible();
+    expect(response?.status(), path).toBe(200);
+    await expect(page.locator(".suite-shell"), path).toBeVisible();
+    await expect(page.getByRole("heading", { name: offlineHeading }), path).toHaveCount(0);
     await expect(page.getByText("Application error", { exact: false })).toHaveCount(0);
   }
+  await page.goto("/home");
+  await expect(page.getByRole("heading", { name: "Home", exact: true })).toBeVisible();
+  // A route that was never visited or precached shows the designed fallback instead.
+  const response = await page.goto("/sheets");
+  expect(response?.status()).toBe(200);
+  await expect(page.getByRole("heading", { name: offlineHeading })).toBeVisible();
+  await expect(page.locator(".shell-public-card")).toBeVisible();
 });
