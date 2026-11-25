@@ -253,10 +253,12 @@ export function SessionProvider({
     let disposed = false;
     let inflight: Promise<void> | null = null;
     const check = () => {
+      // A sign-in already under way owns the session state; its own result settles it.
+      if (activeLogin.current) return;
       inflight ??= auth
         .identity()
         .then((current) => {
-          if (disposed) return;
+          if (disposed || activeLogin.current) return;
           if (current === null) {
             ++generation.current;
             activeLogin.current = null;

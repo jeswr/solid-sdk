@@ -74,6 +74,35 @@ describe("cross-tab sign-out detection", () => {
     expect(value.session).toBeNull();
   });
 
+  it("leaves a sign-in that is under way alone", async () => {
+    const fake = mount();
+    await signedIn();
+    const login = deferred<Identity>();
+    fake.auth.login.mockReturnValue(login.promise);
+    await act(async () => void value.loginWithIssuer("https://idp.example/"));
+    await waitFor(() => expect(fake.auth.login).toHaveBeenCalledTimes(1));
+    fake.auth.identity.mockResolvedValue(null);
+    await act(async () => void window.dispatchEvent(new Event("focus")));
+    expect(fake.auth.identity).not.toHaveBeenCalled();
+    expect(value.webId).toBe(WEB_ID);
+    await act(async () => login.resolve(identity));
+  });
+
+  it("drops a check that resolves once a sign-in has started", async () => {
+    const fake = mount();
+    await signedIn();
+    const current = deferred<Identity | null>();
+    fake.auth.identity.mockReturnValue(current.promise);
+    await act(async () => void window.dispatchEvent(new Event("focus")));
+    const login = deferred<Identity>();
+    fake.auth.login.mockReturnValue(login.promise);
+    await act(async () => void value.loginWithIssuer("https://idp.example/"));
+    await waitFor(() => expect(fake.auth.login).toHaveBeenCalledTimes(1));
+    await act(async () => current.resolve(null));
+    expect(value.webId).toBe(WEB_ID);
+    await act(async () => login.resolve(identity));
+  });
+
   it("detects a foreign account switch and unmounts the old session", async () => {
     const fake = mount();
     await signedIn();
