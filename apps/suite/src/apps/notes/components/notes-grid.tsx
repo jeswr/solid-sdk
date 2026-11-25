@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { Button, EmptyState, Skeleton } from "@jeswr/suite-ui";
+import { Button, Skeleton } from "@jeswr/suite-ui";
 import { useEffect, useRef, useState } from "react";
 import { bulkFailureMessage, bulkNeedsConnection } from "../lib/bulk";
 import { hasNoteReminder, selectNotes } from "../lib/model/query";
@@ -17,10 +17,10 @@ import { CaptureBar } from "./capture-bar";
 import { ConfirmDialog } from "./controls";
 import { NoteCard } from "./note-card";
 import { NoteFailures } from "./note-failures";
-import { NotesAvailability, NotesEmptyState, NotesLoadError, type NotesView } from "./notes-states";
 import { NotesShortcuts } from "./notes-shortcuts";
-import { NotesSelectionToolbar } from "./selection-toolbar";
+import { NotesAvailability, NotesEmptyState, NotesLoadError, type NotesView } from "./notes-states";
 import { SearchFilters } from "./search-filters";
+import { NotesSelectionToolbar } from "./selection-toolbar";
 
 export function NotesGrid({
   view = "active",
@@ -90,8 +90,12 @@ export function NotesGrid({
     { title: "Pinned", notes: selected.pinned },
     { title: selected.pinned.length ? "Others" : "Notes", notes: selected.others },
   ];
-  const visible = loading || error ? [] : sections.flatMap((section) => section.notes);
-  const bulk = useNotesSelection(visible, JSON.stringify([view, label, query]));
+  // Nothing is shown on the empty search landing, so nothing there may be acted on.
+  const visible = loading || error || browsing ? [] : sections.flatMap((section) => section.notes);
+  const bulk = useNotesSelection(
+    visible,
+    JSON.stringify([view, label, serializeNoteSearch(search)]),
+  );
   const [focused, setFocused] = useState<string>();
   const focusCard = (url: string) => {
     setFocused(url);
@@ -205,13 +209,7 @@ export function NotesGrid({
         </div>
       ) : error ? (
         <NotesLoadError retry={() => void refresh()} />
-      ) : browsing ? null : count === 0 && searching ? (
-        <EmptyState
-          variant="filtered-empty"
-          title="No matching notes"
-          body="Try another search or remove a filter."
-        />
-      ) : count === 0 ? (
+      ) : browsing ? null : count === 0 ? (
         <NotesEmptyState
           view={view}
           onCreate={() =>

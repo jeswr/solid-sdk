@@ -82,13 +82,17 @@ function checkbox(title: string) {
 function toolbar() {
   return document.querySelector('[role="toolbar"][aria-label="Selected notes"]') as HTMLElement;
 }
-function render(view: "active" | "archived" | "trashed" | "search" = "active", query = "") {
+function render(
+  view: "active" | "archived" | "trashed" | "search" = "active",
+  query = "",
+  filters?: { q: string; colour?: string; type?: string; label?: string },
+) {
   return h(ShortcutsProvider, {
     children: h(
       "div",
       {},
       h("input", { "data-global-search": true, "aria-label": "Search notes" }),
-      h(NotesGrid, { view, query }),
+      h(NotesGrid, { view, query, ...(filters ? { filters } : {}) } as never),
     ),
   });
 }
@@ -176,7 +180,7 @@ it("selects ranges across sections, toggles with a card click, announces the cou
   );
   expect(document.querySelector("h1")?.textContent).toBe("3 selected");
   expect(document.querySelector('p[aria-live="polite"]')?.textContent).toBe("3 selected");
-  await click(button(`Open ${titles[1]}`));
+  await click(button(`${titles[1]}`));
   expect(checkbox(titles[1] as string).checked).toBe(false);
   expect(mocks.context.openNote).not.toHaveBeenCalled();
   await key(document.body, "Escape");
@@ -382,14 +386,14 @@ it("disables unqueueable pod writes offline with a reason while allowing local p
 it("navigates, opens, selects, pins and archives using the shared shortcut registry", async () => {
   await mount(render());
   await key(document.body, "j");
-  expect(document.activeElement).toBe(button("Open Alpha"));
+  expect(document.activeElement).toBe(button("Alpha"));
   await key(document.activeElement as HTMLElement, "j");
   const next = document.activeElement as HTMLElement;
-  expect(next).not.toBe(button("Open Alpha"));
+  expect(next).not.toBe(button("Alpha"));
   await key(next, "k");
-  expect(document.activeElement).toBe(button("Open Alpha"));
+  expect(document.activeElement).toBe(button("Alpha"));
   await key(document.activeElement as HTMLElement, "o");
-  expect(mocks.context.openNote).toHaveBeenCalledWith(saved("Alpha"), button("Open Alpha"));
+  expect(mocks.context.openNote).toHaveBeenCalledWith(saved("Alpha"), button("Alpha"));
   await key(document.activeElement as HTMLElement, "Enter");
   expect(mocks.context.openNote).toHaveBeenCalledTimes(2);
   await key(document.activeElement as HTMLElement, "x");
@@ -415,7 +419,7 @@ it("handles shifted #, ignores editable targets and dialogs, and lists Notes key
   }
   expect(mocks.context.move).not.toHaveBeenCalled();
   expect(mocks.context.openNote).not.toHaveBeenCalled();
-  await act(() => button("Open Alpha").focus());
+  await act(() => button("Alpha").focus());
   await key(document.activeElement as HTMLElement, "?", true);
   const help = document.querySelector('[role="dialog"]') as HTMLElement;
   expect(help.textContent).toContain("Keyboard shortcuts");
@@ -435,14 +439,15 @@ it("handles shifted #, ignores editable targets and dialogs, and lists Notes key
   expect(mocks.context.move).not.toHaveBeenCalled();
   await key(help, "Escape");
   expect(document.querySelector('[role="dialog"]')).toBeNull();
-  await key(document.body, "#", true);
+  await act(() => button("Alpha").focus());
+  await key(document.activeElement as HTMLElement, "#", true);
   expect(mocks.context.move).toHaveBeenCalledWith(saved("Alpha"), "trash");
 });
 
 it("clears selection when the folder or search changes and respects the single-key setting", async () => {
   const ui = await mount(render());
   await click(checkbox("Alpha"));
-  await ui.render(render("search"));
+  await ui.render(render("search", "", { q: "", label: "Work" }));
   expect(toolbar()).toBeNull();
   await act(() =>
     checkbox("Gamma").dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true })),
@@ -460,7 +465,7 @@ it("clears selection when the folder or search changes and respects the single-k
   expect(document.activeElement).toBe(document.body);
 });
 
-it("focuses search and capture, and creates a new note from Archive", async () => {
+it("focuses search and capture, and never creates a pod note where there is no capture bar", async () => {
   const ui = await mount(render());
   await key(document.body, "/");
   expect(document.activeElement?.getAttribute("aria-label")).toBe("Search notes");
@@ -468,9 +473,12 @@ it("focuses search and capture, and creates a new note from Archive", async () =
   await key(document.body, "c");
   expect(document.activeElement?.getAttribute("aria-label")).toBe("Take a note");
   await ui.render(render("archived"));
-  await key(document.body, "c");
-  expect(mocks.context.create).toHaveBeenCalledExactlyOnceWith({}, false, "default");
-  expect(mocks.context.openNote).toHaveBeenCalledWith(saved("New"), document.body);
+  for (const view of ["archived", "trashed", "search"] as const) {
+    await ui.render(render(view, view === "search" ? "Beta" : ""));
+    await key(document.body, "c");
+  }
+  expect(mocks.context.create).not.toHaveBeenCalled();
+  expect(mocks.context.openNote).not.toHaveBeenCalled();
 });
 
 it("focuses an expanded checklist capture from its footer without creating a blank note", async () => {
@@ -613,4 +621,124 @@ it("retains multiple selected notes after pinning so the next action applies to 
   await click(button("Archive", toolbar()));
   expect(mocks.context.move).toHaveBeenCalledTimes(2);
   expect(toolbar()).toBeNull();
+});
+
+it("acts on nothing on the empty search landing, even after keys or earlier focus", async () => {
+  const ui = await mount(render());
+  await act(() => button("Alpha").focus());
+  await ui.render(render("search"));
+  expect(document.querySelector(".notes-card")).toBeNull();
+  await key(document.body, "#", true);
+  await key(document.body, "e");
+  await key(document.body, "f");
+  await key(document.body, "j");
+  await key(document.body, "x");
+  await key(document.body, "#", true);
+  expect(mocks.context.move).not.toHaveBeenCalled();
+  expect(mocks.context.pin).not.toHaveBeenCalled();
+  expect(toolbar()).toBeNull();
+  expect(document.querySelector('p[aria-live="polite"]')?.textContent).toBe("0 selected");
+});
+
+it("resets selection when only the search filters change", async () => {
+  const ui = await mount(render("search", "", { q: "a" }));
+  await click(checkbox("Alpha"));
+  expect(checkbox("Alpha").checked).toBe(true);
+  await ui.render(render("search", "", { q: "a", colour: "blue" }));
+  await ui.render(render("search", "", { q: "a" }));
+  expect(toolbar()).toBeNull();
+  expect(checkbox("Alpha").checked).toBe(false);
+  await click(checkbox("Alpha"));
+  await ui.render(render("search", "", { q: "Alpha" }));
+  expect(toolbar()).toBeNull();
+  expect(checkbox("Alpha").checked).toBe(false);
+});
+
+it("only acts on the card that currently has focus", async () => {
+  await mount(render());
+  await act(() => button("Alpha").focus());
+  await act(() => (document.activeElement as HTMLElement).blur());
+  await key(document.body, "#", true);
+  await key(document.body, "e");
+  await key(document.body, "f");
+  await key(document.body, "x");
+  expect(mocks.context.move).not.toHaveBeenCalled();
+  expect(mocks.context.pin).not.toHaveBeenCalled();
+  expect(toolbar()).toBeNull();
+  await act(() => button("Beta").focus());
+  await key(document.activeElement as HTMLElement, "#", true);
+  expect(mocks.context.move).toHaveBeenCalledExactlyOnceWith(saved("Beta"), "trash");
+});
+
+it("does not select an unselected card whose shortcut action failed", async () => {
+  mocks.context.move.mockRejectedValue(new Error("403"));
+  await mount(render());
+  await act(() => button("Beta").focus());
+  await key(document.activeElement as HTMLElement, "#", true);
+  expect(mocks.toast.error).toHaveBeenCalled();
+  expect(checkbox("Beta").checked).toBe(false);
+  expect(toolbar()).toBeNull();
+});
+
+it("dismisses the failure toast on unmount and never retries through the stale context", async () => {
+  mocks.context.move.mockRejectedValue(new Error("403"));
+  const ui = await mount(render());
+  await click(checkbox("Beta"));
+  await key(document.body, "#", true);
+  const [, options] = mocks.toast.error.mock.lastCall ?? [];
+  expect(options.action.label).toBe("Retry");
+  mocks.toast.dismiss.mockClear();
+  await ui.unmount();
+  expect(mocks.toast.dismiss).toHaveBeenCalledWith(options.id);
+  mocks.context.move.mockClear();
+  await act(() => options.action.onClick());
+  expect(mocks.context.move).not.toHaveBeenCalled();
+});
+
+it("dismisses the failure toast and refuses retry when the account changes", async () => {
+  mocks.context.move.mockRejectedValue(new Error("403"));
+  const ui = await mount(render());
+  await click(checkbox("Beta"));
+  await key(document.body, "#", true);
+  const [, options] = mocks.toast.error.mock.lastCall ?? [];
+  mocks.toast.dismiss.mockClear();
+  mocks.context = {
+    ...mocks.context,
+    session: { ...mocks.context.session, webId: "https://other.example/#me" },
+  };
+  await ui.render(render());
+  expect(mocks.toast.dismiss).toHaveBeenCalledWith(options.id);
+  mocks.context.move.mockClear();
+  await act(() => options.action.onClick());
+  expect(mocks.context.move).not.toHaveBeenCalled();
+});
+
+it.each([
+  "trash",
+  "deleteForever",
+] as const)("does not adopt a refreshed ETag when retrying %s on a note that changed", async (type) => {
+  const failing = vi.fn(async () => {
+    throw new Error("412");
+  });
+  mocks.context.move.mockImplementation(failing);
+  mocks.context.mutations.deleteForever.mockImplementation(failing);
+  const trashed = saved("Beta", type === "trash" ? "active" : "trashed");
+  mocks.context.notes = [saved("Alpha"), trashed];
+  mocks.context.trashed = { data: type === "trash" ? [] : [trashed] };
+  const ui = await mount(render(type === "trash" ? "active" : "trashed"));
+  await click(checkbox("Beta"));
+  if (type === "trash") await key(document.body, "#", true);
+  else {
+    await click(button("Delete forever", toolbar()));
+    await click(button("Delete forever", document.querySelector('[role="dialog"]') as HTMLElement));
+  }
+  const [, options] = mocks.toast.error.mock.lastCall ?? [];
+  expect(failing).toHaveBeenCalledTimes(1);
+  mocks.context.notes = mocks.context.notes.map((note) =>
+    note.url === trashed.url ? { ...note, etag: '"v9"' } : note,
+  );
+  await ui.render(render(type === "trash" ? "active" : "trashed"));
+  await act(() => options.action.onClick());
+  expect(failing).toHaveBeenCalledTimes(1);
+  expect(document.querySelector(".notes-bulk-failure")?.textContent).toContain("changed");
 });

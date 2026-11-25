@@ -18,7 +18,7 @@ test("Notes filters compose with text, include archives and survive reload and h
   await card.getByRole("button", { name: "Note colour", exact: true }).click();
   await page.getByRole("radio", { name: "Blue", exact: true }).check();
   await page.keyboard.press("Escape");
-  await card.getByRole("button", { name: "Open Filtered errands", exact: true }).click();
+  await card.getByRole("button", { name: "Filtered errands" }).click();
   const dialog = page.getByRole("dialog", { name: "Edit note", exact: true });
   await dialog.getByRole("button", { name: "Edit note labels", exact: true }).click();
   await page.getByRole("textbox", { name: "New label", exact: true }).fill(label);

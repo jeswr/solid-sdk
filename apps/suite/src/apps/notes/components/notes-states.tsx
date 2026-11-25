@@ -15,7 +15,7 @@ const emptyCopy = {
   ],
   trashed: ["No notes in Trash", "Notes you move to Trash stay here for 30 days."],
   label: ["No notes with this label", "Create a note with this label or return to all your notes."],
-  search: ["No matching notes", "Try another search or return to all your notes."],
+  search: ["No matching notes", "Try another search or remove a filter."],
   reminders: ["Notes with reminders appear here", "Set a reminder on a note to find it here."],
 } as const;
 

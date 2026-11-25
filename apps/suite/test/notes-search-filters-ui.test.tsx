@@ -293,7 +293,7 @@ it("uses the suite empty state for no results and returns to entry tiles on clea
   expect(
     screen
       .getByRole("heading", { name: "No matching notes" })
-      .closest('[data-variant="filtered-empty"]'),
+      .closest('[data-variant="no-results"]'),
   ).not.toBeNull();
   expect(screen.getByText("0 notes found").getAttribute("aria-live")).toBe("polite");
   fireEvent.click(screen.getByRole("link", { name: "Clear all" }));

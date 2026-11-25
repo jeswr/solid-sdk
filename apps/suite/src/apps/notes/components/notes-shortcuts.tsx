@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { toast } from "@jeswr/suite-ui";
 import { useState } from "react";
 import { ShortcutHelpSheet } from "@/shell/shortcuts/help-sheet";
 import { useShortcut } from "@/shell/shortcuts/provider";
@@ -36,7 +35,24 @@ export function NotesShortcuts({
 }) {
   const [help, setHelp] = useState(false);
   const context = useNotesContext();
-  const current = notes.find((note) => note.url === focused);
+  // Single-key actions follow real keyboard focus at key time, never a stale remembered card.
+  const activeNote = () => {
+    const element = document.activeElement;
+    const url =
+      element instanceof Element
+        ? element.closest<HTMLElement>(".notes-card")?.dataset.noteUrl
+        : undefined;
+    return url === undefined ? undefined : notes.find((note) => note.url === url);
+  };
+  const targets = () => {
+    if (state.selected.length) return state.selected;
+    const current = activeNote();
+    return current ? [current] : [];
+  };
+  const act = (action: (targets: readonly StoredNote[]) => Parameters<typeof state.run>[0]) => {
+    const list = targets();
+    if (list.length) void state.run(action(list), list);
+  };
   const available = () =>
     !document.querySelector('[role="dialog"], [role="alertdialog"], dialog[open]');
   const moveFocus = (direction: number) => {
@@ -51,9 +67,9 @@ export function NotesShortcuts({
       ];
     if (next) focus(next.url);
   };
-  const targets = state.selected.length ? state.selected : current ? [current] : [];
   const open = () => {
     const element = document.activeElement;
+    const current = activeNote();
     if (current && element instanceof HTMLElement && element.closest(".notes-card-body"))
       context.openNote(current, element);
   };
@@ -71,33 +87,28 @@ export function NotesShortcuts({
       keys: "e",
       label: "Archive or unarchive notes",
       run: () =>
-        void state.run(
-          { type: targets.every((note) => note.location === "archived") ? "unarchive" : "archive" },
-          targets,
-        ),
+        act((list) => ({
+          type: list.every((note) => note.location === "archived") ? "unarchive" : "archive",
+        })),
     },
     {
       keys: "#",
       label: "Move notes to trash",
-      run: () => void state.run({ type: "trash" }, targets),
+      run: () => act(() => ({ type: "trash" })),
     },
     {
       keys: "f",
       label: "Pin or unpin notes",
       run: () =>
-        void state.run(
-          {
-            type: targets.every((note) => context.prefs.pinned.includes(note.url))
-              ? "unpin"
-              : "pin",
-          },
-          targets,
-        ),
+        act((list) => ({
+          type: list.every((note) => context.prefs.pinned.includes(note.url)) ? "unpin" : "pin",
+        })),
     },
     {
       keys: "x",
       label: "Select note",
       run: () => {
+        const current = activeNote();
         if (current && !state.busy) state.selection.toggle(current.url);
       },
     },
@@ -119,12 +130,7 @@ export function NotesShortcuts({
               '[aria-label="Take a note"], [aria-label="Note title"], [aria-label="List item 1"], [aria-label="Note text"]',
             )
             ?.focus();
-        else if (state.online)
-          context.attempt(async () => {
-            const note = await context.create({}, false, "default");
-            context.openNote(note, document.getElementById("main-content") ?? document.body);
-          });
-        else toast.error("You're offline. Creating a note here needs a connection.");
+        // Views without a capture bar (Archive, Trash, Search, Reminders) never write a note here.
       },
     },
     {

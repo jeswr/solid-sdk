@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({
   usePathname: () => mocks.path,
   useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: vi.fn() }),
 }));
 vi.mock("../src/apps/notes/state/notes-context", () => ({
   useNotesContext: () => mocks.context,
