@@ -208,7 +208,12 @@ function AccountPlaces({ session }: { session: PodSession }) {
     void openPlaces(session).then(
       (repo) => {
         if (!active) return;
-        store = placesController(repo, session.mode === "demo", (message) => toast.error(message));
+        store = placesController(
+          repo,
+          session.mode === "demo",
+          (message) => toast.error(message),
+          (message) => toast.warning(message),
+        );
         setController(store);
         void store.open();
       },
