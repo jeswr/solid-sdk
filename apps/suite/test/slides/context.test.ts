@@ -5,10 +5,15 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { PodSession } from "../../src/lib/session/pod-session";
 import { act, h, mount } from "../drive-ui-dom";
 
-const fixtures = vi.hoisted(() => ({ connect: vi.fn(), seed: vi.fn(), error: vi.fn() }));
+const fixtures = vi.hoisted(() => ({
+  connect: vi.fn(),
+  seed: vi.fn(),
+  error: vi.fn(),
+  warning: vi.fn(),
+}));
 vi.mock("../../src/apps/slides/lib/data/connect", () => ({ connectSlides: fixtures.connect }));
 vi.mock("../../src/apps/slides/demo/sample", () => ({ seedSlides: fixtures.seed }));
-vi.mock("@jeswr/suite-ui", () => ({ toast: { error: fixtures.error } }));
+vi.mock("@jeswr/suite-ui", () => ({ toast: { error: fixtures.error, warning: fixtures.warning } }));
 
 import { SlidesProvider, useSlides } from "../../src/apps/slides/state/slides-context";
 
@@ -31,9 +36,10 @@ function node() {
     children: h(Reader),
   });
 }
-function repository() {
+function repository(registration: { state: string; reason?: string } = { state: "registered" }) {
   return {
     container: "https://pod.example/slides/",
+    registration,
     initialise: vi.fn(async () => {}),
     list: vi.fn(async () => ({ decks: [], broken: [] })),
     save: vi.fn(
@@ -55,6 +61,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   fixtures.connect.mockReset();
   fixtures.seed.mockReset();
+  fixtures.warning.mockReset();
 });
 it("requires a provider", async () => {
   await expect(mount(h(Reader))).rejects.toThrow("provider");
@@ -197,4 +204,20 @@ it("keeps another window's crash-recovery drafts when this window saves its own"
   expect(saved.windows.open).toEqual(elsewhere.windows.open);
   expect(Object.keys(saved.windows)).toHaveLength(2);
   await view.unmount();
+});
+it("opens with a visible warning when Type Index registration failed", async () => {
+  fixtures.connect.mockResolvedValue(repository({ state: "failed", reason: "forbidden" }));
+  const view = await mount(node());
+  expect(view.host.textContent).not.toContain("Retry");
+  expect(fixtures.warning).toHaveBeenCalledOnce();
+  expect(String(fixtures.warning.mock.calls[0]?.[0])).toMatch(/Type Index/);
+  await view.unmount();
+});
+it("stays quiet when registration succeeded or is unavailable for an external WebID", async () => {
+  for (const state of ["registered", "unavailable"]) {
+    fixtures.connect.mockResolvedValue(repository({ state }));
+    const view = await mount(node());
+    await view.unmount();
+  }
+  expect(fixtures.warning).not.toHaveBeenCalled();
 });
