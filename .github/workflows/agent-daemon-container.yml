@@ -68,6 +68,10 @@ jobs:
         run: pnpm exec turbo run build --filter=@jeswr/app-mcp-server...
       - name: Exercise CSS SDK and Claude/ChatGPT connector profiles
         run: pnpm --filter @jeswr/app-mcp-server run test:e2e
+      - name: Build the conformance harness and pod-media-store
+        run: pnpm exec turbo run build --filter=@jeswr/storage-conformance...
+      - name: Exercise pod-media-store against a real CSS
+        run: pnpm --filter @jeswr/storage-conformance run test:media-store
   bicep:
     runs-on: ubuntu-latest
     steps:

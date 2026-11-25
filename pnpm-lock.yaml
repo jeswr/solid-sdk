@@ -6505,9 +6505,15 @@ importers:
       '@jeswr/pod-auth':
         specifier: workspace:*
         version: link:../../packages/pod-auth
+      '@jeswr/pod-media-store':
+        specifier: workspace:*
+        version: link:../../packages/pod-media-store
       '@jeswr/pod-type-index':
         specifier: workspace:*
         version: link:../../packages/pod-type-index
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../../packages/rdf-serialize
       '@jeswr/storage-capabilities':
         specifier: workspace:*
         version: link:../../packages/storage-capabilities
@@ -6520,10 +6526,16 @@ importers:
       '@sparq-org/solid-server':
         specifier: 0.1.6
         version: 0.1.6
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
       '@types/node':
         specifier: ^25.9.2
         version: 25.9.5
