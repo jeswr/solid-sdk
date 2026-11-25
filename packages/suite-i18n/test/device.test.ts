@@ -6,6 +6,7 @@ import {
   dir,
   localeBootScript,
   locales,
+  negotiateLocale,
   readDeviceLocale,
   rtlLanguages,
   writeDeviceLocale,
@@ -82,6 +83,26 @@ describe("boot script", () => {
       throw new Error("no document");
     });
     expect(() => new Function(localeBootScript())()).not.toThrow();
+  });
+  it("applies exactly the stored-value rule of readDeviceLocale, then falls back to browsers", () => {
+    const stored = ["ar", "de", "AR", "ar-EG", "ar ", " ar", "xx", "", "constructor", "length"];
+    for (const value of stored) {
+      localStorage.setItem(DEVICE_LOCALE_KEY, value);
+      const expected = readDeviceLocale() || "fr";
+      const [lang, direction] = run(["fr-CA"]);
+      expect(lang, JSON.stringify(value)).toBe(expected);
+      expect(direction).toBe(dir(expected));
+    }
+  });
+  it("matches the provider's negotiation for browser languages, including malformed tags", () => {
+    for (const languages of [["fr-"], ["pt_BR", "de"], ["EN-us"], ["ar-u-nu-latn"], ["x", "es"]]) {
+      const expected = negotiateLocale("", languages);
+      expect(run(languages), JSON.stringify(languages)).toEqual([expected, dir(expected)]);
+    }
+  });
+  it("contains no value that could differ per user or per request", () => {
+    expect(localeBootScript()).toBe(localeBootScript(DEVICE_LOCALE_KEY));
+    expect(localeBootScript()).not.toMatch(/\d{6,}/);
   });
   it("agrees with dir() for every supported locale", () => {
     for (const locale of locales) {
