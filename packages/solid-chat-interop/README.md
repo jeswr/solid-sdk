@@ -407,8 +407,13 @@ What the repair guarantees, and what it does not:
   of equal timestamps is redacted as if stored in ANY order: a field is redacted if it would
   be under some ordering, which can redact more than `save` would have (for example a
   message beside a key block, a word after a token at the end of a sibling). Every adjacent
-  pair a run can produce is examined, and a PEM block that any member opens covers the rest
-  of the run up to its first END. Over-redaction is the price; a surviving fragment is not,
+  pair a run can produce is examined. A PEM block that any member of a run opens (a BEGIN
+  without an END in the same message, even a plain mention such as "keys start with
+  -----BEGIN RSA PRIVATE KEY-----") redacts every other tied message up to its first END,
+  and, because a run holding an opener always leaves the block open, every later message of
+  the conversation to its end or first END. In a conversation saved with one timestamp for
+  all messages that is everything but the title. A key split over two tied messages
+  redacts both, and everything after them as well. Over-redaction is the price; a surviving fragment is not,
   within the detectors' own limits (adjacent pairs and PEM continuation, see above).
   A run of more than 64 messages, or two neighbouring runs with more than 4096 ordered pairs
   between them, is too large for that and is NEVER blanket-redacted: each member is redacted
@@ -435,13 +440,20 @@ What the repair guarantees, and what it does not:
   interruption point, re-running converges on the uninterrupted result and no fragment
   survives (the test suite injects a failure at every write of three split-secret
   conversations, in both naming schemes, and for every stored order of a tied key block).
-  Where no such order exists (two fields that each need the other raw, such as one
-  unterminated quoted value repeated in two messages) or the conversation has more than 48
-  mutually dependent changed fields (each check re-redacts the conversation), the run still
-  repairs, last field first, but counts one `failed` for the conversation so it never reports
-  clean; the following run, with nothing left to change, reports clean. An interruption
-  inside such a conversation can leave half a secret that the next run no longer detects;
-  a durable "repair in progress" record would close that and is not implemented.
+  The check always runs, including when every field redacts correctly alone: a key split over
+  two messages must write its END message after its BEGIN message, or an interruption would
+  leave an unterminated BEGIN that wipes everything after it. Where no such order exists (two
+  fields that each need the other raw, such as one unterminated quoted value repeated in two
+  messages), or a conversation with tied messages has more than 48 changed fields (1000
+  without ties; each check re-redacts the conversation), the run still repairs, last field
+  first, but its order is not proven recoverable. If every write lands, it re-reads the
+  stored state and reports clean only when redacting that changes nothing; otherwise it
+  counts one `failed`. The dry run does not simulate this and reports such a conversation as
+  it would be if the run completes. If such a run is interrupted, it counts `failed`, but the
+  NEXT run cannot tell: it sees the half-redacted state, may redact the remaining fields
+  without the context they needed (leaving a fragment the detectors treat as secret) and
+  reports clean. Detecting that needs a durable "repair in progress" record, which is not
+  implemented.
 - A message that is already the redacted copy of a sibling with the same role and time (an
   interrupted move leaves the copy and the original side by side) is kept as it is and
   excluded from the redaction input, so it neither widens nor is widened by the original.
