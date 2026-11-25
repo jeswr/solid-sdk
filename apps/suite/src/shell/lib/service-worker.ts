@@ -33,6 +33,10 @@ export const SHELL_ROUTES = [
   "/mail",
   "/calendar",
   "/tasks",
+  // Where the Mail, Calendar and Tasks launch routes redirect, so the installed app opens offline.
+  "/mail/inbox",
+  "/calendar/week",
+  "/tasks/inbox",
   "/search",
   "/notifications",
   "/settings/account",

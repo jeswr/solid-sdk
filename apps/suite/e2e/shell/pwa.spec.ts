@@ -130,7 +130,9 @@ test("shows the Settings install row in both themes and handles dismissal", asyn
   await row.getByRole("button", { name: "Install", exact: true }).click();
   await expect(row.getByRole("status")).toContainText("Installation dismissed");
   await page.evaluate(() => window.dispatchEvent(new Event("appinstalled")));
-  await expect(row).toHaveCount(0);
+  // The section stays mounted so the outcome is announced; only the Install action goes away.
+  await expect(row.getByRole("button", { name: "Install", exact: true })).toHaveCount(0);
+  await expect(row.getByRole("status")).toContainText("Installation dismissed");
 });
 
 const offlineHeading = /You're offline/;
@@ -161,7 +163,8 @@ test("opens the installed app's launch routes offline and falls back only for un
   for (const path of launchRoutes) {
     const response = await page.goto(path);
     expect(response?.status(), path).toBe(200);
-    await expect(page.locator(".suite-shell"), path).toBeVisible();
+    // Both shell frames (the suite shell and the interim app frame) render this main landmark.
+    await expect(page.locator("main#main-content"), path).toBeVisible();
     await expect(page.getByRole("heading", { name: offlineHeading }), path).toHaveCount(0);
     await expect(page.getByText("Application error", { exact: false })).toHaveCount(0);
   }
