@@ -119,12 +119,15 @@ export class ReferenceStore extends Store {
     // serialization and assertion hashes keep that spelling.
     const key = languageKey(quad);
     let keys = languageKeys.get(this);
-    if (key !== undefined) {
-      if (keys?.has(key)) return false;
-      if (!keys) languageKeys.set(this, (keys = new Set()));
-    }
+    if (key !== undefined && keys?.has(key)) return false;
     const added = super.addQuad(quad);
-    if (key !== undefined && added) (keys as Set<string>).add(key);
+    if (key !== undefined && added) {
+      if (!keys) {
+        keys = new Set();
+        languageKeys.set(this, keys);
+      }
+      keys.add(key);
+    }
     return added;
   }
 

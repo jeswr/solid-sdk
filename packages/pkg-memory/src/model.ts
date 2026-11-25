@@ -164,10 +164,16 @@ export interface Nanopublications {
   nanopubs: Nanopublication[];
   /** Retained nanopub IDs targeted by updates that tolerant parsing could not read. */
   affected?: string[];
+  /**
+   * Safe IRIs that updates tolerant parsing could not read pointed at, whether or
+   * not they matched a retained nanopub. Lets a merge mark targets held by the
+   * other input. IRIs only: no literal, label or backend diagnostic.
+   */
+  skippedTargets?: string[];
 }
 
 function known<T extends string>(value: string, values: readonly T[]): T {
-  if (!values.includes(value as T)) throw new Error(`Unknown status: ${value}`);
+  if (!values.includes(value as T)) throw new Error("Unknown status");
   return value as T;
 }
 function localFile(value: string): string {
@@ -293,7 +299,7 @@ export async function buildNanopublications(
   }
   const ref = (id: string) => {
     const c = claims.get(id);
-    if (!c) throw new Error(`Unknown claim reference: ${id}`);
+    if (!c) throw new Error("Unknown claim reference");
     return c;
   };
   for (const c of batch.claims) {
@@ -457,6 +463,18 @@ function nanopubIds(dataset: Store): string[] {
   if (!ids.size) throw new Error("No nanopublications");
   return [...ids].sort();
 }
+/** Snapshot each graph once per read, so heads sharing a graph do not recopy it. */
+function cachedGraphReader(dataset: Store): (name: string) => DatasetCore {
+  const graphs = new Map<string, DatasetCore>();
+  return (name) => {
+    let contents = graphs.get(name);
+    if (!contents) {
+      contents = graph(dataset, name);
+      graphs.set(name, contents);
+    }
+    return contents;
+  };
+}
 function readNanopublication(
   dataset: Store,
   id: string,
@@ -465,10 +483,9 @@ function readNanopublication(
     assertionId: string;
     provenanceId: string;
     pubinfoId: string;
-    readGraph: (name: string) => DatasetCore;
   },
+  readGraph: (name: string) => DatasetCore = cachedGraphReader(dataset),
 ): Nanopublication {
-  const readGraph = parsedHead?.readGraph ?? ((name: string) => graph(dataset, name));
   const head = parsedHead?.head ?? new RdfNode(id, readGraph(id));
   if (!iriValues(head, `${NS.rdf}type`).includes(`${NS.np}Nanopublication`))
     throw new Error("Invalid nanopub head type");
@@ -530,7 +547,13 @@ function readNanopublication(
 }
 function readNanopublications(dataset: Store): Nanopublications {
   validateLiterals(dataset);
-  return { dataset, nanopubs: nanopubIds(dataset).map((id) => readNanopublication(dataset, id)) };
+  const readGraph = cachedGraphReader(dataset);
+  return {
+    dataset,
+    nanopubs: nanopubIds(dataset).map((id) =>
+      readNanopublication(dataset, id, undefined, readGraph),
+    ),
+  };
 }
 /** Serialize all named graphs as TriG through the suite Writer. */
 export async function serializeNanopublications(value: Nanopublications): Promise<string> {
@@ -551,6 +574,7 @@ export interface SkippedNanopublication {
 export interface TolerantNanopublications extends Nanopublications {
   skipped: SkippedNanopublication[];
   affected: string[];
+  skippedTargets: string[];
 }
 
 /** Explicit tolerant entry point, including an unambiguous return type for callers. */
@@ -582,15 +606,7 @@ export async function parseNanopublications(
   // Cache graph validation, including shared assertion and batch graphs. No term,
   // datatype, literal value or backend diagnostic escapes in the skip report.
   const errors = new Map<string, string | undefined>();
-  const graphs = new Map<string, DatasetCore>();
-  const readGraph = (name: string): DatasetCore => {
-    let contents = graphs.get(name);
-    if (!contents) {
-      contents = graph(dataset, name);
-      graphs.set(name, contents);
-    }
-    return contents;
-  };
+  const readGraph = cachedGraphReader(dataset);
   const safeIris = new Set<string>();
   const validate = (name: string): string | undefined => {
     if (!errors.has(name)) {
@@ -628,7 +644,9 @@ export async function parseNanopublications(
     }
     return names;
   };
-  for (const id of nanopubIds(dataset)) {
+  const ids = nanopubIds(dataset);
+  const position = new Map(ids.map((id, i) => [id, i]));
+  for (const id of ids) {
     const headError = validate(id);
     if (headError) {
       skipped.push({ id, errorClass: headError });
@@ -644,13 +662,12 @@ export async function parseNanopublications(
       skipped.push({ id, errorClass });
       continue;
     }
-    const np = readNanopublication(dataset, id, {
-      head,
-      assertionId,
-      provenanceId,
-      pubinfoId,
+    const np = readNanopublication(
+      dataset,
+      id,
+      { head, assertionId, provenanceId, pubinfoId },
       readGraph,
-    });
+    );
     const batchGraphs = [...correspondenceBatches(np, dataset)].flatMap(batchGraphNames);
     errorClass = batchGraphs.map(validate).find((name) => name !== undefined);
     if (errorClass) {
@@ -677,8 +694,43 @@ export async function parseNanopublications(
   // Read only IRI update targets from skipped metadata, without decoding any
   // rejected literals. Resolve both envelope and assertion targets to kept IDs.
   const targets = new Set<string>();
+  const unresolved = new Set<string>();
+  // Many skipped heads may share one metadata graph, so each graph's update links
+  // are read and applied once (per mode), keeping the scan linear in graph size.
+  interface UpdateLinks {
+    keptRevisions: string[];
+    revisions: string[];
+    appliedKept: boolean;
+    appliedAll: boolean;
+  }
+  const updateLinks = new Map<string, UpdateLinks>();
+  const linksOf = (name: string): UpdateLinks => {
+    let links = updateLinks.get(name);
+    if (!links) {
+      const revisions = new Set<string>();
+      for (const q of readGraph(name)) {
+        if (q.object.termType !== "NamedNode") continue;
+        const target = q.object.value;
+        // Contradictions always apply, as in classifyNanopublications.
+        if (q.predicate.value === `${NS.pkg}contradicts`) {
+          targets.add(target);
+          unresolved.add(target);
+        } else if (q.predicate.value === `${NS.prov}wasRevisionOf`) {
+          revisions.add(target);
+          unresolved.add(target);
+        }
+      }
+      links = {
+        keptRevisions: [...revisions].filter((target) => kept.has(target)),
+        revisions: [...revisions],
+        appliedKept: false,
+        appliedAll: false,
+      };
+      updateLinks.set(name, links);
+    }
+    return links;
+  };
   for (const { id } of skipped) {
-    const revisions = new Set<string>();
     const head = new RdfNode(df.namedNode(id), readGraph(id));
     const metadata = new Set([
       id,
@@ -688,17 +740,16 @@ export async function parseNanopublications(
           .map((term) => term.value),
       ),
     ]);
-    for (const name of metadata)
-      for (const q of dataset.match(null, null, null, df.namedNode(name))) {
-        if (q.object.termType !== "NamedNode") continue;
-        // Contradictions always apply, as in classifyNanopublications.
-        if (q.predicate.value === `${NS.pkg}contradicts`) targets.add(q.object.value);
-        else if (q.predicate.value === `${NS.prov}wasRevisionOf`) revisions.add(q.object.value);
-      }
+    const all = [...metadata].map(linksOf);
     // Like classifyNanopublications, an envelope-scoped revision affects only the
     // envelopes it names, not other envelopes sharing the assertion.
-    const envelopeTargets = [...revisions].filter((target) => kept.has(target));
-    for (const target of envelopeTargets.length ? envelopeTargets : revisions) targets.add(target);
+    const scoped = all.some((links) => links.keptRevisions.length > 0);
+    for (const links of all) {
+      if (scoped ? links.appliedKept : links.appliedAll) continue;
+      for (const target of scoped ? links.keptRevisions : links.revisions) targets.add(target);
+      if (scoped) links.appliedKept = true;
+      else links.appliedAll = true;
+    }
   }
   // Keep the parsed store when every graph is retained. Otherwise rebuild a compact
   // store from the retained graphs only: N3 keeps removed terms in its entity index,
@@ -715,9 +766,24 @@ export async function parseNanopublications(
   return {
     dataset: result,
     nanopubs: [...kept.values()],
-    skipped,
+    // A head whose own IRI is rejected must not be echoed back: report its position.
+    skipped: skipped.map((entry) => ({
+      ...entry,
+      id: isSafeIri(entry.id) ? entry.id : `urn:pkg:skipped:${position.get(entry.id)}`,
+    })),
     affected: [...kept.values()]
       .filter((np) => targets.has(np.id) || targets.has(np.assertionId))
       .map((np) => np.id),
+    skippedTargets: [...unresolved].filter(isSafeIri).sort(),
   };
+}
+
+/** An IRI the validators accept; others cannot name a retained nanopub, so are not reported. */
+function isSafeIri(value: string): boolean {
+  try {
+    validateTermSafety(df.namedNode(value));
+    return true;
+  } catch {
+    return false;
+  }
 }

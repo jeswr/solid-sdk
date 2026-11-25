@@ -16,6 +16,7 @@ vi.mock("node:crypto", async (importOriginal) => {
     },
   };
 });
+
 import {
   buildNanopublications,
   createFactAssertion,
