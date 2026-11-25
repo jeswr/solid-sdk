@@ -809,7 +809,7 @@ describe("startup and cancellation fences", () => {
     );
     await ready();
     await waitFor(() => expect(session.session?.displayName).toBe("Injected"));
-    expect(profileReader).toHaveBeenCalledWith(WEB_ID, seams.publicFetch);
+    expect(profileReader).toHaveBeenCalledWith(WEB_ID, seams.publicFetch, expect.any(AbortSignal));
     await act(async () => session.loginWithAddress("http://localhost/profile#me"));
     expect(resolveSpy).toHaveBeenCalledWith(
       "http://localhost/profile#me",

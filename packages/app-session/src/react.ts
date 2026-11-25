@@ -9,6 +9,7 @@ export {
 export { SessionGate, type SessionGateProps, type SignedInSession } from "./SessionGate.js";
 export {
   LOOKUP_TIMEOUT_MS,
+  PROFILE_TIMEOUT_MS,
   type SessionContextValue,
   SessionProvider,
   type SessionProviderProps,

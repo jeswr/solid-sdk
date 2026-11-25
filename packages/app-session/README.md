@@ -8,7 +8,7 @@ credential cleanup. No mirror repository is configured.
 | Entry | Exports |
 | --- | --- |
 | `@jeswr/app-session` | `createAppPodAuth`, `publicFetch`, `isLoopbackHost`, `allowInsecureLoopback`, `appUrl`, `authFlowHolder`, `lazyElementGetCode`, `getCodeThroughHolder`, `AUTH_FLOW_ELEMENT`, `IssuerChoiceRequiredError`, `readProfile`, `deriveSession`, `signInError`, `consumeAutologinAccount`, `clearLegacyCredentials`; associated option, profile, session and legacy-key types |
-| `@jeswr/app-session/react` | `SessionProvider`, `useSession`, `SessionGate`, `LoginScreen`, `signInProviders`, `issuerChoiceProviders`, `LOOKUP_TIMEOUT_MS`; associated props (including `SessionGateProps`) and `SessionContextValue` |
+| `@jeswr/app-session/react` | `SessionProvider`, `useSession`, `SessionGate`, `LoginScreen`, `signInProviders`, `issuerChoiceProviders`, `LOOKUP_TIMEOUT_MS`, `PROFILE_TIMEOUT_MS`; associated props (including `SessionGateProps`) and `SessionContextValue` |
 | `@jeswr/app-session/testing` | Vitest-only `fakePodAuth`, `deferred` and public identity fixtures (`identity`, `WEB_ID`, `ISSUER`, `POD_ROOT`) |
 
 Create the getter once at the application boundary. The package reads no bundler environment
@@ -51,7 +51,10 @@ Create the getter once at module scope and pass the same function on every rende
 also aborts any pending login.
 
 `SessionProvider` accepts an optional `auth` for tests, `lookupTimeoutMs` (default 15 seconds),
-and a `readProfile` seam. Pass `dev` to enable development HTTP address/deep-link handling.
+`profileTimeoutMs` (default 10 seconds; a stalled post-login profile read is aborted and falls back to
+the verified storages), and a `readProfile` seam `(webId, fetch, signal)`. While signed in it re-checks
+`auth.identity()` on tab visibility, window focus and `storage` events (one shared check at a time), so
+another tab's sign-out or account switch clears or replaces this tab's session. Pass `dev` to enable development HTTP address/deep-link handling.
 `useSession` preserves the apps' context contract, including fetch, restore, startup retry,
 recent accounts/providers and explicit issuer choice. Login attempts receive abort signals;
 unmount and logout abort pending work. Cancellation does not call logout.

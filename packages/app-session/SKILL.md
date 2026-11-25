@@ -22,7 +22,7 @@ Preserve the StrictMode holder, single restore promise, stale-operation fences a
 messages. Pass abort signals to login; cancellation never calls logout. Multiple WebID issuers require
 explicit choice. Deep links suggest an account and never initiate login. Public profile data does
 not grant credentials. Preserve pod-auth's automatic verified-storage boundary and pristine public
-transport; consult [pod-auth's skill](../pod-auth/SKILL.md) before changing auth policy.
+transport. The profile read has a timeout (stall falls back to verified storages) and the provider re-checks `auth.identity()` on visibility/focus/`storage` to catch another tab's sign-out; keep both. Consult [pod-auth's skill](../pod-auth/SKILL.md) before changing auth policy.
 
 This package is security-critical. Build workspace dependencies before checking it and keep every
 source file at 100% coverage. Use `/testing` only in Vitest consumers. Keep framework-free exports
