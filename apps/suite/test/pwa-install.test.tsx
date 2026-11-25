@@ -40,9 +40,36 @@ it("captures before Settings mounts and installs only after clicking", async () 
   expect(prompt).not.toHaveBeenCalled();
   await click(button as HTMLButtonElement);
   expect(prompt).toHaveBeenCalledOnce();
-  // The live region stays mounted to announce the outcome.
   expect(view.host.querySelector('[role="status"]')?.textContent).toBe("Solid Suite is installed.");
   expect(view.host.querySelector("button")).toBeNull();
+});
+
+it("keeps one live region across the outcome and moves focus off the removed button", async () => {
+  await capture("accepted");
+  const view = await mount(h(InstallApp));
+  const region = view.host.querySelector('[role="status"]');
+  expect(region?.textContent).toBe("");
+  const button = view.host.querySelector("button") as HTMLButtonElement;
+  button.focus();
+  expect(document.activeElement).toBe(button);
+  await click(button);
+  // The same node, now with text: assistive technology announces the change.
+  expect(view.host.querySelector('[role="status"]')).toBe(region);
+  expect(region?.textContent).toBe("Solid Suite is installed.");
+  expect(view.host.querySelector("button")).toBeNull();
+  expect(document.activeElement).toBe(view.host.querySelector("h2"));
+  expect(view.host.querySelector("h2")?.getAttribute("tabindex")).toBe("-1");
+});
+
+it("moves focus to the heading and announces dismissal in the same region", async () => {
+  await capture("dismissed");
+  const view = await mount(h(InstallApp));
+  const region = view.host.querySelector('[role="status"]');
+  (view.host.querySelector("button") as HTMLButtonElement).focus();
+  await click(view.host.querySelector("button") as HTMLButtonElement);
+  expect(view.host.querySelector('[role="status"]')).toBe(region);
+  expect(region?.textContent).toContain("Installation dismissed");
+  expect(document.activeElement).toBe(view.host.querySelector("h2"));
 });
 
 it("never offers installation inside the native app", async () => {
