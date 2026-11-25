@@ -27,4 +27,3 @@ it("counts access across the full demo pod including nested Docs CRDT files", as
   // family seed's public-read groups folder adds three more public entries.
   await expect.poll(() => access).toEqual({ apps: 2, people: 1, publicItems: 6 });
 });
-})
