@@ -26,9 +26,11 @@ export function DiaryPatterns() {
   const [window, setWindow] = useState({ min: 2, max: 48 });
   const [error, setError] = useState("");
   const entries = state.status === "ready" || state.status === "empty" ? state.data : [];
-  const rows = diaryPatterns(entries, window.min, window.max, clock);
+  // One time source for the table and the likely triggers, read at render so just-logged entries count.
+  const now = new Date();
+  const rows = diaryPatterns(entries, window.min, window.max, now);
   const { safetyRails, suspicions: triggers } = mode.enabled
-    ? likelyDiaryTriggers(entries)
+    ? likelyDiaryTriggers(entries, now)
     : { safetyRails: [], suspicions: [] };
   return (
     <div className="hlt-page">

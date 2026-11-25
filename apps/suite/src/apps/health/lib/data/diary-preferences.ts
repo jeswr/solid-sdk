@@ -5,6 +5,7 @@ import { NS } from "@jeswr/suite-vocab";
 import { LiteralAs, LiteralFrom, OptionalAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
 import { emptyHealthDocument } from "../model";
+import { createPrivateWriteConfirmer } from "./diary-confirm";
 import { createHealthDataStore } from "./store";
 
 export interface DiaryPreferences {
@@ -39,6 +40,7 @@ export function createDiaryPreferencesStore(
   owner: string,
 ) {
   const store = createHealthDataStore(fetch, storage, owner);
+  const confirm = createPrivateWriteConfirmer(fetch, storage, owner);
   const url = `${store.base}diary-settings.ttl`;
   async function document() {
     try {
@@ -66,11 +68,12 @@ export function createDiaryPreferencesStore(
     fields.enabled = preferences.enabled;
     fields.trigger = preferences.trigger;
     await store.initialize();
-    await store.write(
+    const written = await store.write(
       url,
       loaded.document,
       "missing" in loaded ? { create: true } : { etag: loaded.etag as string },
     );
+    await confirm(url, written);
     return preferences;
   }
   return { read, save, url };

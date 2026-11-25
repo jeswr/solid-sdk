@@ -14,6 +14,7 @@ import {
   diaryPatterns,
   matchDiaryItems,
 } from "../src/apps/health/lib/data/diary";
+import { createDiaryPreferencesStore } from "../src/apps/health/lib/data/diary-preferences";
 import { createHealthDataStore } from "../src/apps/health/lib/data/store";
 import { toTurtle } from "../src/apps/health/lib/model";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -405,6 +406,100 @@ describe("private Health diary on the demo pod", () => {
       );
       await expect(diary.save(meal, "stuck")).rejects.toMatchObject({ removed: false });
       expect(pod.has(`${diary.base}2026-11/stuck.ttl`)).toBe(true);
+    });
+    it("removes a created file when only its container is loosened after the write", async () => {
+      const pod = createDemoPod({ root: ROOT });
+      let loosened = false;
+      const { diary } = fixtureOn(pod, async (input, init, fetch) => {
+        const response = await fetch(input, init);
+        if (init?.method === "PUT" && String(input).endsWith("box.ttl") && !loosened) {
+          loosened = true;
+          await shareWithPublic(pod, `${ROOT}health/diary/2026-11/`);
+        }
+        return response;
+      });
+      await expect(diary.save(meal, "box")).rejects.toMatchObject({ removed: true });
+      expect(pod.has(`${diary.base}2026-11/box.ttl`)).toBe(false);
+    });
+    it("binds to a HEAD ETag when the write returns none, and never deletes without the write's", async () => {
+      const pod = createDemoPod({ root: ROOT });
+      const withoutEtag = async (response: Response) => {
+        const headers = new Headers(response.headers);
+        headers.delete("etag");
+        return new Response(response.body, { status: response.status, headers });
+      };
+      const ok = fixtureOn(pod, async (input, init, fetch) => {
+        const response = await fetch(input, init);
+        return init?.method === "PUT" ? withoutEtag(response) : response;
+      });
+      await expect(ok.diary.save(meal, "noetag")).resolves.toMatchObject({ kind: "meal" });
+      const loosen = loosenAfterPut(pod, "noetag-exposed.ttl");
+      const exposed = fixtureOn(pod, async (input, init, fetch) => {
+        const response = await loosen(input, init, fetch);
+        return init?.method === "PUT" ? withoutEtag(response) : response;
+      });
+      await expect(exposed.diary.save(meal, "noetag-exposed")).rejects.toMatchObject({
+        name: "DiaryPrivacyError",
+        removed: false,
+      });
+      expect(pod.has(`${exposed.diary.base}2026-11/noetag-exposed.ttl`)).toBe(true);
+    });
+    it("reports a write as unconfirmed when no strong ETag can be obtained at all", async () => {
+      const pod = createDemoPod({ root: ROOT });
+      const { diary } = fixtureOn(pod, async (input, init, fetch) => {
+        const response = await fetch(input, init);
+        if (
+          String(input).endsWith("weak.ttl") &&
+          (init?.method === "PUT" || init?.method === "HEAD")
+        ) {
+          const headers = new Headers(response.headers);
+          headers.set("etag", 'W/"weak"');
+          return new Response(null, { status: response.status, headers });
+        }
+        return response;
+      });
+      await expect(diary.save(meal, "weak")).rejects.toMatchObject({ removed: false });
+      expect(pod.has(`${diary.base}2026-11/weak.ttl`)).toBe(true);
+    });
+    it("keeps the source entry when a move's destination is refused", async () => {
+      const pod = createDemoPod({ root: ROOT });
+      const first = await fixtureOn(pod).diary.save(meal, "mover");
+      const { diary } = fixtureOn(pod, loosenAfterPut(pod, "mover.ttl"));
+      await expect(
+        diary.save({ ...meal, at: new Date("2026-12-05T12:00:00Z") }, "mover", first),
+      ).rejects.toMatchObject({ name: "DiaryPrivacyError", removed: true });
+      expect(pod.has(first.url)).toBe(true);
+      expect(pod.has(`${diary.base}2026-12/mover.ttl`)).toBe(false);
+    });
+    it("retries storage discovery on the next write after a transient failure", async () => {
+      const pod = createDemoPod({ root: ROOT });
+      let down = false;
+      const { diary } = fixtureOn(pod, async (input, init, fetch) => {
+        if (down) throw new TypeError("offline");
+        const response = await fetch(input, init);
+        // The network drops right after the entry is written, before confirmation starts.
+        if (init?.method === "PUT" && String(input).endsWith("/blip.ttl")) down = true;
+        return response;
+      });
+      await expect(diary.save(meal, "blip")).rejects.toMatchObject({ name: "DiaryPrivacyError" });
+      down = false;
+      await expect(diary.save(meal, "blip-again")).resolves.toMatchObject({ kind: "meal" });
+    });
+    it("confirms diary settings after the write and removes a created settings file that is public", async () => {
+      const pod = createDemoPod({ root: ROOT });
+      const loosen = loosenAfterPut(pod, "diary-settings.ttl");
+      const preferences = createDiaryPreferencesStore(
+        (input, init) => loosen(input, init, pod.fetch),
+        ROOT,
+        OWNER,
+      );
+      await expect(preferences.save({ enabled: true, trigger: "lactose" })).rejects.toMatchObject({
+        name: "DiaryPrivacyError",
+        removed: true,
+      });
+      expect(pod.has(preferences.url)).toBe(false);
+      const clean = createDiaryPreferencesStore(pod.fetch, ROOT, OWNER);
+      await expect(clean.save({ enabled: true, trigger: "lactose" })).resolves.toBeDefined();
     });
     it("saves normally when the file, its container and the Health root stay owner-only", async () => {
       const { diary, pod } = fixture();
