@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
@@ -7,6 +8,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   BookOpen,
+  BrainCircuit,
   Footprints,
   HeartPulse,
   LayoutDashboard,
@@ -45,6 +47,7 @@ function Sidebar() {
     { href: "/health/medications", label: "Medications", icon: Pill },
     { href: "/health/conditions", label: "Conditions", icon: ShieldCheck },
     { href: "/health/immunisations", label: "Immunisations", icon: Syringe },
+    { href: "/health/knowledge", label: "Assistant knowledge", icon: BrainCircuit },
     { href: "/health/workouts", label: "Workouts", icon: Footprints },
     { href: "/health/diary", label: "Diary", icon: BookOpen },
     { href: "/health/import", label: "Import", icon: ArrowDownToLine },
@@ -84,6 +87,7 @@ function Sidebar() {
 }
 function Chrome({ children }: { children: ReactNode }) {
   const { boot, retryBoot, saving } = useHealth();
+  const knowledge = useRoutePathname() === "/health/knowledge";
   const [measurement, setMeasurement] = useState<MetricId | null>(null);
   return (
     <MeasurementContext value={(metric = "weight") => setMeasurement(metric)}>
@@ -97,19 +101,23 @@ function Chrome({ children }: { children: ReactNode }) {
           scopeLabel: "in Health",
         }}
         actions={
-          <Button
-            size="sm"
-            aria-label="Add measurement"
-            onClick={() => setMeasurement("weight")}
-            disabled={boot.status !== "ready"}
-          >
-            <Plus size={16} aria-hidden="true" />
-            <span className="hlt-add-label">Add measurement</span>
-            <span className="hlt-add-short">Add</span>
-          </Button>
+          !knowledge && (
+            <Button
+              size="sm"
+              aria-label="Add measurement"
+              onClick={() => setMeasurement("weight")}
+              disabled={boot.status !== "ready"}
+            >
+              <Plus size={16} aria-hidden="true" />
+              <span className="hlt-add-label">Add measurement</span>
+              <span className="hlt-add-short">Add</span>
+            </Button>
+          )
         }
       >
-        {boot.status === "loading" ? (
+        {knowledge ? (
+          children
+        ) : boot.status === "loading" ? (
           <div className="hlt-page">
             <h1>Opening your Health records</h1>
             <LoadingSkeleton preset="grid" label="Preparing private Health storage" />
@@ -137,6 +145,7 @@ function Chrome({ children }: { children: ReactNode }) {
 }
 function SessionGate({ children }: { children: ReactNode }) {
   const state = usePodSessionState();
+  const knowledge = useRoutePathname() === "/health/knowledge";
   if (state.status === "loading")
     return (
       <div className="hlt-page">
@@ -162,7 +171,7 @@ function SessionGate({ children }: { children: ReactNode }) {
       </div>
     );
   return (
-    <HealthProvider session={state.session}>
+    <HealthProvider session={state.session} enabled={!knowledge}>
       <Chrome>{children}</Chrome>
     </HealthProvider>
   );

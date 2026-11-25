@@ -2496,6 +2496,12 @@ importers:
       '@jeswr/mcp-connections':
         specifier: workspace:*
         version: link:../../packages/mcp-connections
+      '@jeswr/pkg-health':
+        specifier: workspace:*
+        version: link:../../packages/pkg-health
+      '@jeswr/pkg-memory':
+        specifier: workspace:*
+        version: link:../../packages/pkg-memory
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../packages/pod-access
