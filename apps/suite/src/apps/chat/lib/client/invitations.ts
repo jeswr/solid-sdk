@@ -10,7 +10,7 @@ import {
   roomInvitation,
   withAbortSignal,
 } from "@jeswr/pod-access/notify";
-import { ChatModelError, invitationRoom, loadRooms } from "../model";
+import { ChatModelError, invitationRoom, loadRooms, roomContainer } from "../model";
 
 export interface InvitationDelivery {
   webId: string;
@@ -23,6 +23,11 @@ export interface Invitation {
   actor?: string;
   /** Own-pod rooms that loaded: the room's name. */
   name?: string;
+  /**
+   * True only for an own-pod room that loaded and names a claimed sender as a member. Foreign
+   * claims, unreachable rooms and rows from a scan that could not check rooms are false.
+   */
+  verified: boolean;
 }
 
 export async function deliverInvitations(
@@ -93,12 +98,8 @@ function missingRoom(error: unknown): boolean {
  * the scan's request bound, not a result cap. Children beyond it are reported as `truncated`.
  */
 export const INBOX_SCAN_LIMIT = 300;
-/** Most invitation rows shown. */
-const MAX_INVITATIONS = 50;
 /** Own-pod rooms whose index is loaded for verification in one scan. */
 const MAX_ROOM_CHECKS = 100;
-/** Rows foreign or unverifiable claims may occupy together; verified rooms take the rest. */
-const MAX_UNVERIFIED = 20;
 /** Bytes read from the user's own rooms listing. */
 const MAX_ROOMS_LISTING_BYTES = 1024 * 1024;
 /**
@@ -110,9 +111,15 @@ export const MAX_SCAN_REQUESTS = 1 + 1 + INBOX_SCAN_LIMIT + 1 + MAX_ROOM_CHECKS;
 
 /** What a scan found, and whether valid rows were left out. */
 export interface InvitationScan {
+  /**
+   * Every candidate the scan found, deduplicated by room URL: verified rows first, then
+   * unverified ones. The client applies no row cap; the UI decides what to show.
+   */
   invitations: Invitation[];
-  /** True when the inbox listing, an own-room check budget or a row cap left invitations out. */
+  /** True only when the scan itself was cut off: unread inbox children or the room-check budget. */
   truncated: boolean;
+  /** True when the own rooms listing failed, so own-pod claims could not be checked. */
+  ownUnchecked: boolean;
 }
 
 export async function readInvitations({
@@ -162,22 +169,39 @@ export async function readInvitations({
   // An own-pod claim can only name a room that exists in the user's own rooms container, which
   // is listed once. Claims for rooms that do not exist cost nothing, however many are posted.
   const existing = new Set<string>();
+  let ownUnchecked = false;
   if (claimed.size) {
-    const listing = await readContainerMembers(
-      withAbortSignal(joinedFetch, signal),
-      `${new URL("chat/rooms/", storage).href}`,
-      { scope: storage, signal, package: "chat", maxBytes: MAX_ROOMS_LISTING_BYTES },
-    );
-    for (const member of listing ?? []) if (claimed.has(member.url)) existing.add(member.url);
+    try {
+      const listing = await readContainerMembers(
+        withAbortSignal(joinedFetch, signal),
+        `${roomContainer(storage)}chat/rooms/`,
+        {
+          scope: roomContainer(storage),
+          signal,
+          package: "chat",
+          maxBytes: MAX_ROOMS_LISTING_BYTES,
+        },
+      );
+      for (const member of listing ?? []) if (claimed.has(member.url)) existing.add(member.url);
+    } catch {
+      signal.throwIfAborted();
+      // A listing failure (403, 5xx, non-RDF, oversized) must not fail the scan or lose foreign
+      // rows: own-pod claims stay, unverified, and the UI says they could not be checked.
+      ownUnchecked = true;
+    }
   }
   const claims = new Map<string, (string | undefined)[]>();
-  for (const item of items) {
-    if (!item.own || !existing.has(item.room)) continue;
-    if (!claims.has(item.room) && claims.size >= MAX_ROOM_CHECKS) {
-      truncated = true;
-      continue;
+  const overBudget = new Set<string>();
+  if (!ownUnchecked) {
+    for (const item of items) {
+      if (!item.own || !existing.has(item.room)) continue;
+      if (!claims.has(item.room) && claims.size >= MAX_ROOM_CHECKS) {
+        truncated = true;
+        overBudget.add(item.room);
+        continue;
+      }
+      claims.set(item.room, [...(claims.get(item.room) ?? []), item.actor]);
     }
-    claims.set(item.room, [...(claims.get(item.room) ?? []), item.actor]);
   }
   for (const room of cache.keys()) {
     if (!claims.has(room)) cache.delete(room);
@@ -196,7 +220,6 @@ export async function readInvitations({
   };
   const rooms = [...claims.keys()];
   const verified = new Map<string, Invitation | null>();
-  const names = new Set<string>();
   let cursor = 0;
   // Settle every worker before returning, so no load of this scan outlives it and touches the
   // cache a later scan owns.
@@ -211,44 +234,55 @@ export async function readInvitations({
         } catch {
           signal.throwIfAborted();
           // Unreachable or 5xx: keep the newest claim, unverified, with the fallback name.
-          verified.set(room, { room, ...(actors[0] ? { actor: actors[0] } : {}) });
+          verified.set(room, {
+            room,
+            ...(actors[0] ? { actor: actors[0] } : {}),
+            verified: false,
+          });
           continue;
         }
         signal.throwIfAborted();
         const actor = actors.find((claim) => claim && loaded?.members.includes(claim));
-        if (loaded && actor) names.add(room);
-        verified.set(room, loaded && actor ? { room, actor, name: loaded.name } : null);
+        verified.set(
+          room,
+          loaded && actor ? { room, actor, name: loaded.name, verified: true } : null,
+        );
       }
     }),
   );
   signal.throwIfAborted();
-  // Verified own-pod rooms (a loaded room naming a claimed member, whatever its name) come first
-  // and are never crowded out by unverified rows: foreign claims and verification-failed
-  // fallbacks share one global budget, deduplicated by room URL only.
-  const candidates = new Map<string, { invitation: Invitation; verified: boolean }>();
+  // Every candidate, deduplicated by room URL. Rooms the check budget did not reach, and every
+  // own-pod claim when the listing failed, stay as unverified rows; claims for rooms that do
+  // not exist, or that loaded without naming the claimed sender, are dropped.
+  const candidates = new Map<string, Invitation>();
   for (const item of items) {
-    const invitation = item.own
-      ? verified.get(item.room)
-      : { room: item.room, ...(item.actor ? { actor: item.actor } : {}) };
+    let invitation: Invitation | null | undefined;
+    if (!item.own)
+      invitation = {
+        room: item.room,
+        ...(item.actor ? { actor: item.actor } : {}),
+        verified: false,
+      };
+    else if (ownUnchecked || overBudget.has(item.room))
+      invitation = {
+        room: item.room,
+        ...(item.actor ? { actor: item.actor } : {}),
+        verified: false,
+      };
+    else invitation = verified.get(item.room);
     if (!invitation || candidates.has(invitation.room)) continue;
-    candidates.set(invitation.room, { invitation, verified: names.has(invitation.room) });
+    candidates.set(invitation.room, invitation);
   }
-  const chosen = new Set<string>();
-  for (const [room, candidate] of candidates) {
-    if (!candidate.verified) continue;
-    if (chosen.size < MAX_INVITATIONS) chosen.add(room);
-    else truncated = true;
-  }
-  let unverified = 0;
-  for (const [room, candidate] of candidates) {
-    if (candidate.verified) continue;
-    if (unverified < MAX_UNVERIFIED && chosen.size < MAX_INVITATIONS) {
-      unverified++;
-      chosen.add(room);
-    } else truncated = true;
-  }
-  const invitations = [...candidates]
-    .filter(([room]) => chosen.has(room))
-    .map(([, candidate]) => candidate.invitation);
-  return { invitations, truncated };
+  const all = [...candidates.values()];
+  const rank = (invitation: Invitation) =>
+    invitation.verified ? 0 : isWithinPodScope(storage, invitation.room) ? 1 : 2;
+  // Verified rows keep inbox order. Unverified rows are ordered by room URL, never by the
+  // poster-supplied date, so a poster cannot choose which rows are listed first.
+  const invitations = [
+    ...all.filter((invitation) => invitation.verified),
+    ...all
+      .filter((invitation) => !invitation.verified)
+      .sort((a, b) => rank(a) - rank(b) || (a.room < b.room ? -1 : a.room > b.room ? 1 : 0)),
+  ];
+  return { invitations, truncated, ownUnchecked };
 }

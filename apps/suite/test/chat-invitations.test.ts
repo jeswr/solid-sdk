@@ -70,9 +70,18 @@ const requireUi = createRequire(
 const axe = requireUi("axe-core") as {
   run(node: Element, options: object): Promise<{ violations: unknown[] }>;
 };
-const scan = (invitations: Invitation[], truncated = false): InvitationScan => ({
-  invitations,
+/** Rows with a name are verified own-pod rooms unless a test says otherwise. */
+const scan = (
+  invitations: (Omit<Invitation, "verified"> & { verified?: boolean })[],
+  truncated = false,
+  ownUnchecked = false,
+): InvitationScan => ({
+  invitations: invitations.map((invitation) => ({
+    verified: invitation.name !== undefined,
+    ...invitation,
+  })),
   truncated,
+  ownUnchecked,
 });
 beforeEach(() => {
   localStorage.clear();
@@ -108,13 +117,13 @@ it("tells the user when invitations were left out, in static text only", async (
     scan([{ room: ROOM, actor: "https://hostile.example/<b>x</b>#me", name: "Book club" }], true),
   );
   const view = await mount(content());
-  expect(view.host.textContent).toContain("Some invitations are not shown.");
+  expect(view.host.textContent).toContain("The inbox scan was cut off");
   expect(view.host.textContent).not.toContain("<b>");
   await view.unmount();
   // Nothing visible but truncated: the notice still shows.
   vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(scan([], true));
   const empty = await mount(content());
-  expect(empty.host.textContent).toContain("Some invitations are not shown.");
+  expect(empty.host.textContent).toContain("The inbox scan was cut off");
   await empty.unmount();
   vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(scan([], false));
   const none = await mount(content());
@@ -366,4 +375,81 @@ it("keeps dismissal live when storage writes are blocked", async () => {
   const view = await mount(content(ME, true));
   await click(view.host.querySelector("button") as HTMLElement);
   expect(view.host.querySelector("li")).toBeNull();
+});
+
+const forged = (count: number, prefix = "forged") =>
+  Array.from({ length: count }, (_, i) => ({
+    room: `https://foreign.example/chat/rooms/${prefix}${i}/`,
+    actor: SENDER,
+  }));
+const genuine = { room: "https://foreign.example/chat/rooms/genuine/", actor: SENDER };
+
+it("folds unverified rows beyond 20 behind a real Show all button and reveals them in a bounded list", async () => {
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(
+    scan([{ room: ROOM, actor: SENDER, name: "Book club" }, ...forged(25), genuine]),
+  );
+  const view = await mount(content());
+  const rowRooms = () =>
+    Array.from(view.host.querySelectorAll("li")).map((row) => row.dataset.room);
+  // Verified row plus the first 20 unverified rows; the genuine one sorts last and is folded.
+  expect(rowRooms()).toHaveLength(21);
+  expect(rowRooms()).toContain(ROOM);
+  expect(rowRooms()).not.toContain(genuine.room);
+  expect(view.host.textContent).toContain("6 more unverified invitations are hidden.");
+  const show = button(view.host, "Show all");
+  expect(show.tagName).toBe("BUTTON");
+  expect(show.textContent).toBe("Show all");
+  await click(show);
+  expect(rowRooms()).toContain(genuine.room);
+  expect(rowRooms()).toHaveLength(27);
+  expect(view.host.textContent).not.toContain("more unverified invitations are hidden");
+  const more = view.host.querySelector(".chat-invitations-more") as HTMLElement;
+  expect(more.style.overflowY).toBe("auto");
+  expect(more.querySelectorAll("li")).toHaveLength(6);
+  expect(
+    (
+      await axe.run(view.host, {
+        rules: { "color-contrast": { enabled: false } },
+      })
+    ).violations,
+  ).toEqual([]);
+});
+
+it("applies dismissals before the cap, so dismissing forged rows reveals the genuine one without Show all", async () => {
+  const spam = forged(25, "a");
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(
+    scan([...spam, { ...genuine, room: "https://foreign.example/chat/rooms/z-genuine/" }]),
+  );
+  localStorage.setItem(
+    key(ME),
+    JSON.stringify({ version: 1, accountId: ME, ids: spam.map((row) => row.room) }),
+  );
+  const view = await mount(content());
+  expect(Array.from(view.host.querySelectorAll("li")).map((row) => row.dataset.room)).toEqual([
+    "https://foreign.example/chat/rooms/z-genuine/",
+  ]);
+  expect(view.host.textContent).not.toContain("Show all");
+  expect(view.host.textContent).not.toContain("hidden");
+});
+
+it("never folds verified rows, and shows the scan notices with the Invitations heading", async () => {
+  const verified = Array.from({ length: 25 }, (_, i) => ({
+    room: `${ROOT}chat/rooms/v${i}/`,
+    actor: SENDER,
+    name: `V${i}`,
+  }));
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(scan(verified));
+  const view = await mount(content());
+  expect(view.host.querySelectorAll("li")).toHaveLength(25);
+  expect(view.host.textContent).not.toContain("Show all");
+  await view.unmount();
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(scan([], false, true));
+  const own = await mount(content());
+  expect(own.host.querySelector("h2")?.textContent).toBe("Invitations");
+  expect(own.host.textContent).toContain("Invitations to rooms in your pod could not be checked.");
+  await own.unmount();
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(scan([], true));
+  const cut = await mount(content());
+  expect(cut.host.querySelector("h2")?.textContent).toBe("Invitations");
+  expect(cut.host.textContent).toContain("The inbox scan was cut off");
 });

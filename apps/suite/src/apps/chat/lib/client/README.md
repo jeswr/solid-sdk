@@ -58,14 +58,22 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   pod's credential boundary. Reopened and competing DMs never re-invite; a resumed,
   interrupted DM invites its peer after its index and owner join complete.
 - `invitations({ signal? })` reads the current WebID's LDN inbox through pod-access and the
-  session fetch and returns `{ invitations, truncated }`. It reads at most 300 inbox children
-  (in listing order), keeps Offers with HTTP(S) room containers or canonical index subjects,
-  omits joined rooms and de-duplicates by room URL. At most 50 rows are returned, newest first;
-  verified own-pod rooms come first and are never crowded out, and unverified rows (foreign
-  rooms, and own rooms whose index could not be read) share one global cap of 20. No limit is
-  keyed on a claimed sender or any other poster-chosen value. `truncated` is true whenever the
-  inbox held more children than were read, or valid rows were dropped by a cap; the invitations
-  list then shows the static notice “Some invitations are not shown.” With the pod-access
+  session fetch and returns `{ invitations, truncated, ownUnchecked }`. It reads at most 300
+  inbox children (in listing order), keeps Offers with HTTP(S) room containers or canonical index
+  subjects, omits joined rooms and de-duplicates by room URL. The client applies no row cap: it
+  returns every candidate, each with an explicit `verified` flag, verified rows first. Verified
+  means an own-pod room that loaded and names a claimed sender as a member. Unverified rows
+  (foreign rooms, own rooms whose index could not be read, and own rooms the check budget did not
+  reach) follow, own-pod ones first, ordered by room URL, never by the poster-supplied
+  `as:published` date, so the poster cannot choose which rows come first. Verified rows keep
+  inbox order, which is newest first by that poster-supplied date; that order is cosmetic. No
+  limit is keyed on a claimed sender or any other poster-chosen value. `truncated` means only
+  that the scan itself was cut off: the inbox held more children than were read, or more than 100
+  existing own rooms were claimed, so the check budget ran out. The UI shows a static notice then.
+  `ownUnchecked` is true when the own rooms listing failed.
+  The invitations list applies local dismissals first, then shows every verified row and the
+  first 20 unverified rows; when more remain it shows a static notice with a “Show all” button
+  that reveals the rest in a bounded, scrollable list. With the pod-access
   reader, a missing inbox and any profile discovery failure are empty; inbox listing 5xx/network
   errors propagate. Concurrent callers (the sidebar and drawer copies) share one in-flight scan;
   each keeps its own cancellation, and the scan is aborted only when every caller has left. Scans
@@ -73,7 +81,11 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   Own-pod claims are verified only for rooms that exist: the scan lists the user's own
   `chat/rooms/` container once and checks, through `room()` (pod scope retained, at most four at
   once, at most 100 rooms), only claimed rooms that appear in it, so forged claims for missing or
-  repeated rooms cost nothing. Results are cached per room while the inbox still offers it, so
+  repeated rooms cost nothing. The listing is read through the pod-scoped fetch, capped at 1 MiB,
+  and its URL is built from the normalised storage root (trailing slash guaranteed). A listing
+  failure of any kind (403, 5xx, non-RDF, oversized) does not reject the scan: foreign rows stay,
+  own-pod claims come back unverified without any room check, `ownUnchecked` is true, and the UI
+  says “Invitations to rooms in your pod could not be checked.” Results are cached per room while the inbox still offers it, so
   neither copy nor a focus refresh re-reads an index. Own-pod claims are kept per room and
   sender before de-duplication: a room is listed with the newest claimed sender who is a loaded
   member, and dropped when no claimed sender is. An own-pod room whose index fails with a 4xx
@@ -94,7 +106,7 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   pending, and Dismiss names them by host and room slug. Own-pod and foreign lists each
   collapse behind a count above three; above three shown invitations, “Dismiss all N
   invitations” dismisses every shown row. The heading leaves with the last row once focus moves
-  off it.
+  off it, and stays whenever a notice is shown.
   Dismissals use the shared account ID set with Chat's key prefix and an identity-checked
   envelope, retaining at most 200 container URLs in guarded localStorage keyed by WebID; inbox
   resources are never deleted. Sidebar and drawer copies synchronize local dismissals.
