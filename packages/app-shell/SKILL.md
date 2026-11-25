@@ -13,13 +13,14 @@ Treat this package as the React shell for suite applications. Keep session, rout
 - Wrap the app once with `ThemeProvider`; read or change the preference through `useTheme`.
 - Add `themeScript()` to the document head when first-paint theme correctness matters. Use the same storage key and dark class as `ThemeProvider`.
 - Pass `webId`, display data, and navigation/sign-out callbacks to `AccountMenu`. Do not couple this package to an auth implementation.
+- Use `AccountControl` for extension-aware header chrome: pass `webId`, `displayName`, `avatarUrl` and `onSignOut`. It shows `AccountMenu` without the extension and an isolated ghost sign-out button with it. Optional `signOutLabel` changes the standalone button's label. Keep logout owned by the host; extension presence grants no identity.
 - Configure `FeedbackButton` with the consuming app's own `owner/repo`. A `submit` callback enables a proxy; without it, the control opens a prefilled GitHub issue.
 - Wrap routed content in `ErrorBoundary` and pass a route-derived `resetKey`. Keep raw error text and stacks in telemetry; show friendly copy through `ErrorState`.
 - Use `useSolidExtensionPresent()` only as a presence signal. It does not establish identity or authentication.
 
 ```tsx
 import {
-  AccountMenu,
+  AccountControl,
   ErrorBoundary,
   FeedbackButton,
   ThemeProvider,
@@ -30,7 +31,7 @@ import "@jeswr/app-shell/styles.css";
 <ThemeProvider>
   <header>
     <ThemeToggle />
-    <AccountMenu webId={webId} onSignOut={logout} />
+    <AccountControl webId={webId} onSignOut={logout} />
     <FeedbackButton repo="jeswr/my-app" appName="My App" />
   </header>
   <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
