@@ -538,24 +538,30 @@ function assertExpected(actual: DecisionPreview, expected: DecisionPreview | und
  * The owner's own records say this approval was withdrawn (History marks the grant and the receipt
  * when it removes access). Finishing it would apply the pinned snapshot again, so refuse.
  */
+async function isRevoked(
+  locations: { grantUrl: string; receiptUrl: string },
+  fetchFn: typeof fetch,
+  receiptToo: boolean,
+): Promise<boolean> {
+  const grant = await read(locations.grantUrl, fetchFn);
+  if (grant && values(grant.dataset, locations.grantUrl, ACCM.revokedAt).length) return true;
+  if (!receiptToo) return false;
+  const receipt = await read(locations.receiptUrl, fetchFn);
+  return Boolean(
+    receipt &&
+      (values(receipt.dataset, locations.receiptUrl, ACCM.revokedAt).length ||
+        values(receipt.dataset, locations.receiptUrl, DPV.hasConsentStatus).includes(
+          DPV.ConsentWithdrawn,
+        )),
+  );
+}
+
 async function assertNotRevoked(
   locations: { grantUrl: string; receiptUrl: string },
   fetchFn: typeof fetch,
   receiptToo: boolean,
 ): Promise<void> {
-  const grant = await read(locations.grantUrl, fetchFn);
-  if (grant && values(grant.dataset, locations.grantUrl, ACCM.revokedAt).length)
-    throw new ApprovalRevokedError();
-  if (!receiptToo) return;
-  const receipt = await read(locations.receiptUrl, fetchFn);
-  if (
-    receipt &&
-    (values(receipt.dataset, locations.receiptUrl, ACCM.revokedAt).length ||
-      values(receipt.dataset, locations.receiptUrl, DPV.hasConsentStatus).includes(
-        DPV.ConsentWithdrawn,
-      ))
-  )
-    throw new ApprovalRevokedError();
+  if (await isRevoked(locations, fetchFn, receiptToo)) throw new ApprovalRevokedError();
 }
 
 async function complete(
@@ -744,7 +750,23 @@ async function runDecision(
   // A claimed approval with no owner record was written by the requester: it can still be denied.
   const claimed = resuming && recorded === undefined;
   if (!decision.approve) {
-    if (resuming && !claimed) throw new Error("Cannot deny an approval");
+    // A half-applied approval the owner has since revoked can never be finished (see
+    // assertNotRevoked), so it may be denied to clear it from Requests. Any other approval that
+    // is being applied or is finished cannot be denied.
+    if (
+      resuming &&
+      !claimed &&
+      !(
+        parsed.status === "approving" &&
+        (recorded as DecisionRecord).outcome === "approving" &&
+        (await isRevoked(
+          urls(storage, ((recorded as DecisionRecord).snapshot as Snapshot).grantId),
+          fetchFn,
+          true,
+        ))
+      )
+    )
+      throw new Error("Cannot deny an approval");
     if (parsed.status !== "denied") {
       requireStrongEtag(request.etag);
       await turtle(request.dataset);

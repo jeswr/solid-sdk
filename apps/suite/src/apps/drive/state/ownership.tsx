@@ -2,6 +2,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { type ItemOwner, isOwnStorage, resolveItemOwner } from "../lib/client/ownership";
+import { foreignSecondaryFetch } from "../lib/preview/foreign";
 import { useDrive } from "./drive-context";
 
 export function useItemOwner(url: string | undefined): ItemOwner | undefined {
@@ -18,7 +19,13 @@ export function useItemOwner(url: string | undefined): ItemOwner | undefined {
   useEffect(() => {
     if (!url || isOwnStorage(url, storageUrl)) return;
     let live = true;
-    void resolveItemOwner(url, { storageUrl, webId, fetch: http }).then((owner) => {
+    // A foreign response picks what is read next (description link, owner WebID): keep it on
+    // the resource's own origin, public HTTPS, credential-free.
+    void resolveItemOwner(url, {
+      storageUrl,
+      webId,
+      fetch: foreignSecondaryFetch({ storageUrl }, url),
+    }).then((owner) => {
       if (live) setResult({ url, storageUrl, webId, http, owner });
     });
     return () => {

@@ -195,7 +195,7 @@ export class HistoryChangedError extends Error {
 export class HistoryUnfinishedError extends Error {
   override name = "HistoryUnfinishedError";
   constructor(
-    message = "This approval isn't finished yet. Finish or deny the request first, or change access in Permissions",
+    message = "This approval isn't finished yet. Finish approving the request first, or change access in Permissions",
   ) {
     super(message);
   }

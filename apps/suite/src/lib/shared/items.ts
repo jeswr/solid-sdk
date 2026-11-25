@@ -9,6 +9,7 @@ import {
 } from "@jeswr/suite-sdk/shared";
 import type { DrivePreferences } from "@/apps/drive/state/prefs";
 import { encodeRef } from "@/lib/refs";
+import { ANNOUNCED_QUERY } from "./announced";
 
 export { sharedApps } from "@jeswr/suite-sdk/shared";
 export const appLabel = (app: string) => app.charAt(0).toUpperCase() + app.slice(1);
@@ -24,11 +25,12 @@ export function openedSharedItems(entries: DrivePreferences["openedShared"]): Sh
     ...(entry.contentType ? { contentType: entry.contentType } : {}),
     sharedAt: entry.openedAt,
     source: "opened",
+    ...(entry.announced ? { announced: true } : {}),
   }));
 }
 /** Use the apps' existing encoded resource reference routes. */
 export function sharedItemHref(item: SharedItem, storageUrl?: string): string {
-  return resolveSuiteResource(
+  const { href } = resolveSuiteResource(
     {
       url: item.url,
       // Titles are unverified display text, never routing evidence.
@@ -46,7 +48,11 @@ export function sharedItemHref(item: SharedItem, storageUrl?: string): string {
         (item.source === "inbox" &&
           (item.fromAnotherPod === true || !storageUrl || !isWithinPodScope(storageUrl, item.url))),
     },
-  ).href;
+  );
+  // The preview records the open with this provenance, so it survives the inbox forgetting it.
+  return item.announced === true && href.startsWith("/drive/")
+    ? `${href}?${ANNOUNCED_QUERY}`
+    : href;
 }
 /** Display the sender assertion without fetching an untrusted third-party profile. */
 export function sharedSender(value: string | undefined): string {

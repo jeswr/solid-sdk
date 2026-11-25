@@ -19,7 +19,10 @@ URL.revokeObjectURL = (url) => {
   if (imageUrls.has(url)) revoked.push(url);
   revoke(url);
 };
+const STORAGE = "https://pod.example/";
+const RESOURCE = `${STORAGE}docs/private.ttl`;
 const sessions = ["first", "second"].map((id) => ({
+  storageUrl: STORAGE,
   fetch: (url: RequestInfo | URL, init?: RequestInit) => {
     if (init?.signal) requests.push(init.signal);
     return fetch(url, { ...init, headers: { "x-test-session": id } });
@@ -39,6 +42,7 @@ export const preview = {
       <StrictMode>
         <DrivePreview
           session={sessions[session] as (typeof sessions)[number]}
+          resourceUrl={RESOURCE}
           source={{ name: "Private preview", blob }}
           data={{
             types: [type],
@@ -53,7 +57,9 @@ export const preview = {
     );
   },
   close() {
-    root.render(<DrivePreview session={sessions[0] as (typeof sessions)[number]} />);
+    root.render(
+      <DrivePreview session={sessions[0] as (typeof sessions)[number]} resourceUrl={RESOURCE} />,
+    );
   },
 };
 

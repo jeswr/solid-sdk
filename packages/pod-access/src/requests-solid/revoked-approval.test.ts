@@ -79,4 +79,37 @@ describe("a revoked approval is not finished", () => {
     expect((await decide({ id: REQUEST }, decision, opts(pod))).status).toBe("approved");
     expect(aclWrites(pod).length).toBeGreaterThan(0);
   });
+
+  it("lets a revoked, half-applied approval be denied, writing no access", async () => {
+    const { pod, grant } = await halfApplied();
+    pod.seed(
+      grant,
+      `${pod.body(grant)}\n<${grant}> <${ACCM.revokedAt}> "2026-11-12T10:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .\n`,
+    );
+    const before = pod.log.length;
+    expect((await decide({ id: REQUEST }, { approve: false }, opts(pod))).status).toBe("denied");
+    expect(aclWrites(pod, before)).toEqual([]);
+    // Settled: a second denial is the same denial, and it can no longer be approved.
+    expect((await decide({ id: REQUEST }, { approve: false }, opts(pod))).status).toBe("denied");
+    await expect(
+      decide({ id: REQUEST }, { approve: true, role: "viewer" }, opts(pod)),
+    ).rejects.toThrow("Cannot approve a denial");
+  });
+
+  it("still refuses to deny an approval that was never revoked", async () => {
+    const { pod } = await halfApplied();
+    const before = pod.log.length;
+    await expect(decide({ id: REQUEST }, { approve: false }, opts(pod))).rejects.toThrow(
+      "Cannot deny an approval",
+    );
+    expect(aclWrites(pod, before)).toEqual([]);
+  });
+
+  it("still refuses to deny a finished approval", async () => {
+    const { pod, decision } = await halfApplied();
+    await decide({ id: REQUEST }, decision, opts(pod));
+    await expect(decide({ id: REQUEST }, { approve: false }, opts(pod))).rejects.toThrow(
+      "Cannot deny an approval",
+    );
+  });
 });

@@ -705,6 +705,59 @@ describe("reading the inbox Shared with me lists", () => {
     expect(session.mock.calls.some(([target]) => String(target) === pod.inbox)).toBe(true);
   });
 
+  it("reads a WebID that is not a URL as unreadable, and a transport's own abort as a network failure", async () => {
+    const pod = make("https://8.8.8.8/");
+    const timedOut: typeof fetch = async () => {
+      throw new DOMException("timed out", "AbortError");
+    };
+    expect(
+      await readSharedInbox({ webId: pod.webId, storageUrl: pod.root, fetch: timedOut }),
+    ).toEqual({ status: "failed", reason: "network" });
+    const result = await readSharedInbox({
+      webId: "not a url",
+      storageUrl: pod.root,
+      fetch: pod.fetch,
+    });
+    expect(result.status).not.toBe("ok");
+  });
+
+  it("passes the signal and an optional pinning transport through the confined reader", async () => {
+    const pod = make("https://8.8.8.8/");
+    const pinned: string[] = [];
+    const pinning: typeof fetch = async (input, init) => {
+      pinned.push(input instanceof Request ? input.url : String(input));
+      return pod.fetch(input, init);
+    };
+    const withSignal = await readSharedInbox({
+      webId: pod.webId,
+      storageUrl: pod.root,
+      fetch: pod.fetch,
+      pinningFetch: pinning,
+      signal: new AbortController().signal,
+    });
+    expect(withSignal.status).toBe("ok");
+    const withRequests: string[] = [];
+    const publicFetch: typeof fetch = async (input) => {
+      withRequests.push(input instanceof Request ? input.url : String(input));
+      return turtle(`<#me> <${ldp}inbox> <${pod.inbox}>.`);
+    };
+    const foreign = await readSharedInbox({
+      webId: "https://1.1.1.1/profile/card#me",
+      storageUrl: pod.root,
+      fetch: pod.fetch,
+      publicFetch,
+    });
+    expect(foreign.status).toBe("ok");
+    const inboxDown: typeof fetch = async (input, init) => {
+      if (String(input) === pod.inbox) throw new TypeError("offline");
+      return pod.fetch(input, init);
+    };
+    expect(
+      await readSharedInbox({ webId: pod.webId, storageUrl: pod.root, fetch: inboxDown }),
+    ).toEqual({ status: "failed", reason: "network" });
+    expect(withRequests.length).toBeGreaterThan(0);
+  });
+
   it("flags an inbox over the bound and keeps the newest", async () => {
     const pod = make("https://8.8.8.8/", { members: 7 });
     const result = await readSharedInbox({

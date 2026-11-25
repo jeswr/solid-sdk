@@ -110,6 +110,8 @@ beforeEach(() => {
     new Blob(["Readable public content"], { type: "text/plain" }),
   );
   http.mockResolvedValue(new Response(null, { status: 404 }));
+  // Foreign owner discovery is credential-free: it goes over the global fetch, not the session.
+  vi.stubGlobal("fetch", (...args: Parameters<typeof fetch>) => http(...args));
 });
 it("never attributes an undiscoverable foreign owner to Alice in Details or the listing", async () => {
   const view = await mount(

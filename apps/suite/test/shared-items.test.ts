@@ -3,6 +3,7 @@
 import { mergeSharedItems, type SharedItem } from "@jeswr/suite-sdk/shared";
 import { describe, expect, it } from "vitest";
 import { encodeRef } from "../src/lib/refs";
+import { ANNOUNCED_QUERY } from "../src/lib/shared/announced";
 import { openedSharedItems, sharedItemHref, sharedSender } from "../src/lib/shared/items";
 
 const storage = "https://bob.example/";
@@ -72,9 +73,24 @@ describe("shared item presentation", () => {
     );
     expect(merged).toMatchObject({ source: "opened", announced: true });
     // Same URL, same storage: only the announcement flag separates preview from native routing.
-    expect(sharedItemHref(merged as SharedItem, storage)).toBe(`/drive/p/${encodeRef(url)}`);
+    expect(sharedItemHref(merged as SharedItem, storage)).toBe(
+      `/drive/p/${encodeRef(url)}?${ANNOUNCED_QUERY}`,
+    );
     const { announced: _announced, ...opened } = merged as SharedItem;
     expect(sharedItemHref(opened, storage)).toBe(`/docs/d/${encodeRef(url)}`);
+  });
+  it("keeps an announced item preview-only from the persisted record alone", () => {
+    // The inbox no longer lists the notification: only the opened record is left.
+    const [persisted] = openedSharedItems([
+      { url, openedAt: "2026-01-01T00:00:00Z", name: "Plan", announced: true },
+    ]);
+    expect(persisted).toMatchObject({ source: "opened", announced: true });
+    expect(sharedItemHref(persisted as SharedItem, storage)).toBe(
+      `/drive/p/${encodeRef(url)}?${ANNOUNCED_QUERY}`,
+    );
+    // A record that never came from an announcement routes natively, as before.
+    const [native] = openedSharedItems([{ url, openedAt: "2026-01-01T00:00:00Z" }]);
+    expect(sharedItemHref(native as SharedItem, storage)).toBe(`/docs/d/${encodeRef(url)}`);
   });
   it("uses the pod boundary, not the origin, on path-based multi-pod hosts", () => {
     const alice = "https://pod.example/alice/";

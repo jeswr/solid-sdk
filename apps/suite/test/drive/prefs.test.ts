@@ -70,4 +70,13 @@ describe("Drive preferences", () => {
   ])("rejects malformed stored preferences %j", (value) => {
     expect(drivePreferencesSchema.safeParse(value).success).toBe(false);
   });
+
+  it("keeps and validates the announced flag on opened records", () => {
+    const entry = { url: "https://other.example/doc.ttl", openedAt: "2026-10-25T10:00:00Z" };
+    const parse = (extra: object) =>
+      drivePreferencesSchema.safeParse({ openedShared: [{ ...entry, ...extra }] });
+    expect(parse({ announced: true }).data?.openedShared[0]?.announced).toBe(true);
+    expect(parse({}).data?.openedShared[0]?.announced).toBeUndefined();
+    expect(parse({ announced: "yes" }).success).toBe(false);
+  });
 });

@@ -14,6 +14,8 @@ export const drivePreferencesSchema = z.object({
         contentType: z.string().optional(),
         size: z.number().int().nonnegative().optional(),
         modified: z.iso.datetime({ offset: true }).optional(),
+        /** Arrived as an unverified inbox announcement: previewed, never routed natively. */
+        announced: z.boolean().optional(),
         openedAt: z.iso.datetime({ offset: true }),
       }),
     )

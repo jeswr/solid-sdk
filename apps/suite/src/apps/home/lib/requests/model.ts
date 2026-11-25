@@ -368,6 +368,13 @@ const KNOWN_ERRORS: readonly {
     finish: true,
   },
   {
+    match: /^This approval was revoked after it was recorded/,
+    message:
+      "You removed this access after approving, so it won't be finished. Deny the request to clear it, then ask for a new one if you want to share again.",
+    retry: false,
+    deny: true,
+  },
+  {
     match: /^Cannot approve a denial/,
     message: "You already denied this request, so it can't be approved.",
     retry: false,

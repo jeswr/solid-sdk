@@ -365,7 +365,7 @@ returns the candidate inbox members that are share Announces, read through the p
 reader. It requests only the profile (skipped when `inbox` is given), the inbox container and
 the candidates; every other URL is answered locally with 404, which the reader skips. Home's
 Requests page uses it so share notifications, which `listRequests` reports as unreadable, are
-not counted as unreadable requests. An abort rejects, even one during discovery. Credentials stay
+not counted as unreadable requests. An abort through the `signal` rejects (a transport's own timeout is a network failure), even one during discovery. Credentials stay
 inside `storageUrl` (`podScopedFetch`: session fetch, redirects refused); a profile outside it is
 read through `publicFetch` (or a credential-free global fetch), and an inbox outside it is never
 read.

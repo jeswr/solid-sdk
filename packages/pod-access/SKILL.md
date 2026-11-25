@@ -251,6 +251,7 @@ Denials have no targets. Resuming previews use the persisted target set, never a
 `decide` accepts `options.expected: DecisionPreview`; compare the resolved targets, roles, modes,
 provenance, model, identity and metadata before any write, and compare again on a concurrent pin.
 Refuse mismatches with `DecisionPreviewConflictError` so the consent UI must show a fresh preview.
+Resuming an approval the owner revoked throws `ApprovalRevokedError`; deny it to clear the request (an approving request that is not revoked cannot be denied).
 Preserve JSON round trips and order-independent set comparisons. Export DecisionPreview,
 DecisionTarget and the conflict class from requests-solid/index.ts; document public API changes
 in README and this skill together. Conditional-write and transport failures can still occur later;
