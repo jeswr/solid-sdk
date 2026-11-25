@@ -31,20 +31,22 @@ export type TasksContextValue = Omit<ReturnType<typeof useTasksValue>["value"], 
 const TasksContext = createContext<TasksContextValue | null>(null);
 function useTasksValue(session: PodSession) {
   const offline = useTasksOffline(session);
-  const [cache] = useState(
-    () =>
-      new TasksCache(
-        new OfflineTaskStore(
-          {
-            storage: session.storageUrl,
-            webId: session.webId,
-            fetch: offline.fetch,
-            ensurePrivateTasksAccess: (url, owner) => ensurePrivateTasksAccess(session, url, owner),
-            ensurePrivateIndexAccess: (url, owner) => ensurePrivateIndexAccess(session, url, owner),
-          },
-          offline.online,
-          offline.together,
-        ),
+  const [cache] = useState(() => {
+    const store = new OfflineTaskStore(
+      {
+        storage: session.storageUrl,
+        webId: session.webId,
+        fetch: offline.fetch,
+        ensurePrivateTasksAccess: (url, owner) => ensurePrivateTasksAccess(session, url, owner),
+        ensurePrivateIndexAccess: (url, owner) => ensurePrivateIndexAccess(session, url, owner),
+      },
+      offline.online,
+      offline.together,
+    );
+    // Issues writes go straight to the pod: the Tasks replay cannot merge an Issues document.
+    offline.direct = (url) => store.isIssueResource(url);
+    return new TasksCache(
+        store,
         (error, retry) => {
           toast.error(
             classifyError(error) === "conflict"
@@ -57,8 +59,8 @@ function useTasksValue(session: PodSession) {
         },
         session.webId,
         (message) => toast.info(message),
-      ),
-  );
+    );
+  });
   useEffect(() => offline.subscribeReceipts(cache.confirmOfflineWrite), [cache, offline]);
   const { preferences } = useTasksPreferences();
   useLayoutEffect(() => {

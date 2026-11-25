@@ -37,6 +37,7 @@ import { encodeRef } from "@/lib/refs";
 import { useRoutePathname } from "@/lib/route-params";
 import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import { dueDate, isOverdue, localDay } from "../lib/format/due";
+import { isIssuesProject } from "../lib/issues/model";
 import { ModelError } from "../lib/model/errors";
 import type { StoredProject } from "../lib/model/store";
 import { unionLabels } from "../lib/model/tracker";
@@ -422,11 +423,14 @@ export function TasksSidebar() {
   const inboxCount = open.filter((task) => task.projectUrl === tasks.inboxUrl).length;
   const labels = unionLabels(tasks.projects.map((project) => project.tracker));
   const shared = preferences.sharedProjects.filter(
-    (project) => !tasks.cache.isOwnProject(project.url),
+    (project) =>
+      !tasks.cache.isOwnProject(project.url) &&
+      !tasks.projects.some((loaded) => loaded.url === project.url && isIssuesProject(loaded)),
   );
   const sharedUrls = new Set(shared.map((project) => project.url));
   const projects = tasks.projects.filter(
-    (project) => project.url !== tasks.inboxUrl && !sharedUrls.has(project.url),
+    (project) =>
+      project.url !== tasks.inboxUrl && !sharedUrls.has(project.url) && !isIssuesProject(project),
   );
   const tree = tasks.cache.projectTree;
   const disclosureFor = (project: StoredProject, childListId: string) => (
@@ -482,6 +486,7 @@ export function TasksSidebar() {
     const error = tasks.tasks[project.url]?.error;
     return (
       preferences.favourites.includes(project.url) &&
+      !isIssuesProject(project) &&
       !project.tracker.archivedAt &&
       !(error instanceof ModelError && error.url === project.url && error.category === "not-found")
     );
@@ -555,6 +560,25 @@ export function TasksSidebar() {
         {link("/tasks/upcoming", "Upcoming", <CalendarRange size={18} aria-hidden="true" />)}
         {link("/tasks/completed", "Completed", <Check size={18} aria-hidden="true" />)}
       </ul>
+      {tasks.projects.some(isIssuesProject) && (
+        <section aria-label="Issues">
+          <h2 className="tsk-nav-heading">
+            <Link href="/tasks/issues">Issues</Link>
+          </h2>
+          <ul className="tsk-nav-list">
+            {tasks.projects.filter(isIssuesProject).map((project) => {
+              const href = `/tasks/issues/${encodeRef(project.url)}`;
+              return (
+                <li key={project.url}>
+                  <Link href={href} aria-current={path === href ? "page" : undefined}>
+                    {project.tracker.title ?? "Issues"}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
       {labels.size > 0 && (
         <>
           <button

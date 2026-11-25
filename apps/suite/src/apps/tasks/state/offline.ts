@@ -6,7 +6,8 @@ import { z } from "zod";
 import { ModelError } from "../lib/model/errors";
 import { RdfIO, type Resource } from "../lib/model/io";
 import { DataFactory, NS, node, parse, SCHEMA, serialize } from "../lib/model/rdf";
-import { TaskStore } from "../lib/model/store";
+import { IssuesTaskStore } from "../lib/issues/store";
+import type { TaskStore } from "../lib/model/store";
 import { createTask, TaskItem, taskDetails, validateTask } from "../lib/model/task";
 import { TaskTracker } from "../lib/model/tracker";
 
@@ -19,6 +20,8 @@ const savedSchema = z.object({
   etag: z.string().nullable(),
   local: z.boolean(),
   deleted: z.boolean().optional(),
+  /** The server's last access hint, so a cached read keeps a read-only tracker read-only. */
+  wacAllow: z.string().nullable().optional(),
 });
 const intentSchema = z.object({
   url: z.url(),
@@ -87,6 +90,11 @@ export class TasksOffline {
   // prerequisites applied: one resolved by "Keep both" or discarded leaves the original
   // reference unchanged, so a dependent source delete must not run.
   private readonly applied = new Set<string>();
+  /**
+   * Resources that never queue: their writes go straight to the pod or fail. The session's
+   * store names the Issues trackers and issues it has read, whose replay Tasks cannot merge.
+   */
+  direct: (url: string) => boolean = () => false;
   private readonly changes = new Map<string, number>();
   private readonly versions = new Map<string, Saved>();
   private readonly documents = new Map<string, Saved>();
@@ -170,6 +178,7 @@ export class TasksOffline {
       headers: {
         "Content-Type": "text/turtle",
         ...(saved.etag ? { ETag: saved.etag } : {}),
+        ...(saved.wacAllow ? { "WAC-Allow": saved.wacAllow } : {}),
       },
     });
     Object.defineProperty(response, "url", { value: url });
@@ -183,9 +192,10 @@ export class TasksOffline {
     if (this.cleared) return;
     const parent = new URL(".", url).href;
     for (const key of [url, parent]) this.changes.set(key, (this.changes.get(key) ?? 0) + 1);
+    const wacAllow = this.documents.get(url)?.wacAllow;
     this.keepVersion(url, this.documents.get(url));
     if (body === null) this.documents.set(url, { body: "", etag, local, deleted: true });
-    else this.documents.set(url, { body, etag, local });
+    else this.documents.set(url, { body, etag, local, ...(wacAllow ? { wacAllow } : {}) });
     const listing = this.documents.get(parent);
     if (listing) {
       const dataset = await parse(parent, listing.body);
@@ -246,6 +256,7 @@ export class TasksOffline {
             body: await this.overlay(url, await response.clone().text()),
             etag: response.headers.get("ETag"),
             local: false,
+            wacAllow: response.headers.get("WAC-Allow"),
           };
           const latest = newer();
           if (latest) return latest;
@@ -265,7 +276,8 @@ export class TasksOffline {
         throw error;
       }
     }
-    if (!outbox || !["PUT", "DELETE"].includes(method)) return this.options.fetch(input, init);
+    if (!outbox || !["PUT", "DELETE"].includes(method) || this.direct(url))
+      return this.options.fetch(input, init);
     const after = method === "PUT" ? String(init?.body ?? "") : null;
     const dataset =
       after === null ? (cached ? await parse(url, cached.body) : null) : await parse(url, after);
@@ -603,10 +615,14 @@ export class TasksOffline {
   }
 }
 
-/** Offline startup uses the already protected Inbox; it must not provision ACLs without a connection. */
-export class OfflineTaskStore extends TaskStore {
+/**
+ * Offline startup uses the already protected Inbox; it must not provision ACLs without a connection.
+ * It is also the Issues-aware store: Issues trackers are read through the same cache, but their
+ * writes are never queued (see `TasksOffline.direct`).
+ */
+export class OfflineTaskStore extends IssuesTaskStore {
   constructor(
-    options: ConstructorParameters<typeof TaskStore>[0],
+    options: ConstructorParameters<typeof IssuesTaskStore>[0],
     private readonly online: () => boolean,
     private readonly together: <T>(run: () => Promise<T>) => Promise<T> = (run) => run(),
   ) {
