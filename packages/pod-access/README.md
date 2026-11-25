@@ -51,8 +51,20 @@ await access.revoke(resourceUrl, grant.id!);
 import { checkOwnerOnly } from '@jeswr/pod-access';
 
 const result = await checkOwnerOnly({ storage, url: containerUrl, ownerWebId,
-  acpDialect: 'css' }); // ACP dialect must come from trusted deployment knowledge.
+  accessModel: 'acp', acpDialect: 'css' }); // from trusted deployment knowledge.
 if (!result.private) throw new Error('Choose a private container');
+```
+
+Discovered capabilities usually carry no access-control model (Community Solid Server 7.2.0
+advertises none), so `checkOwnerOnly` alone returns `unsupported-model` unless the caller knows
+the model. When you do not, let the pod say:
+
+```ts
+import { checkOwnerOnlyAuto } from '@jeswr/pod-access';
+
+const r = await checkOwnerOnlyAuto({ storage, url: containerUrl, ownerWebId });
+// r.private, r.reasons?, r.detected, r.decidedBy, r.evaluated
+if (!r.private) throw new Error('Not private or not provably private');
 ```
 
 `checkOwnerOnly(options: OwnerOnlyOptions): Promise<OwnerOnlyResult>` reads raw effective
@@ -60,7 +72,7 @@ permissions, before the lossy roles projection. Its result is `{ private: true }
 `{ private: false, reasons: OwnerOnlyReason[] }`. Each reason contains `subject` (`public`,
 `authenticated`, `agent` other than the owner, `group`, `origin/client-scoped`, or `unknown`),
 `modes` (lowercase access modes), and `reason` (`non-owner`, `unknown`, `unrepresentable`,
-`unsupported-model`, or `not-storage-root`). No policy text, principal identifiers or error messages are returned.
+`unsupported-model`, `not-storage-root`, or `undecided`, which only `checkOwnerOnlyAuto` returns). No policy text, principal identifiers or error messages are returned.
 The only allowed owner is the exact supplied WebID; listing another owner is non-owner access.
 
 The function uses the same public `storage` and optional trusted `acpDialect: 'css' | 'ess'`
@@ -72,6 +84,87 @@ this covers default access to newly stored children, without traversing existing
 their overriding access documents. The walk is bounded to 64 resources, and each access
 document to 1 MiB of streamed bytes and 10,000 quads; larger documents refuse with `unknown`.
 Access documents are read with `storage.read` and parsed by `@jeswr/fetch-rdf`.
+
+### Model and dialect: options, detection and `checkOwnerOnlyAuto`
+
+```ts
+checkOwnerOnly(options: OwnerOnlyOptions): Promise<OwnerOnlyResult>
+// OwnerOnlyOptions adds `accessModel?: 'wac' | 'acp'` to storage, url, ownerWebId, acpDialect?
+detectAccessControl(o: { storage; url }): Promise<DetectedAccessControl>
+checkOwnerOnlyAuto(o: { storage; url; ownerWebId }): Promise<OwnerOnlyAutoResult>
+isOwnerOnlyConflictError(error: unknown): error is OwnerOnlyConflict
+```
+
+- **Precedence.** An explicit `accessModel` wins over `storage.features.accessControl`, which is
+  then not consulted. `acpDialect` is always explicit and is never read from features.
+- **Conflicts are errors.** `checkOwnerOnly` throws (the only thing it throws; all other
+  uncertainty is a refusal) an error for which `isOwnerOnlyConflictError` is true, with
+  `aspect` (`model` or `dialect`), `explicit` and `shown`, when an explicit `accessModel` or
+  `acpDialect` contradicts what the access document shows (WAC authorizations versus ACP terms,
+  an `acp:accessControl` link relation on an explicit WAC resource, or acl:* versus acp:* modes
+  against the stated dialect). It never silently picks a side. A merely discovered model that the
+  document contradicts stays a refusal (`unrepresentable`/`unknown`). The message holds no
+  document text. No error class is exported, so there is no mutable prototype.
+- **`detectAccessControl`** never throws and returns a closed result: `{ model: 'wac',
+  decidedBy }`, `{ model: 'acp', dialect: 'css' | 'ess', decidedBy }` or `{ model: 'undecided',
+  reason }`. It reads only what the package already trusts: the resource's `acl` /
+  `acp:accessControl` link relation and the access document it names, through the storage
+  view's revalidated, redirect-refusing HEAD/read, with the same 1 MiB, 10,000-quad, scope
+  (`scoped` plus `storage.isWithinStorage`), validator and `@jeswr/fetch-rdf` parsing as
+  `checkOwnerOnly` (the code is shared). It never uses host names or URL shapes (`.acr`,
+  `?ext=acr`). A WAC resource without its own ACL walks to the nearest ancestor ACL; an absent
+  ACP resource, or an `acp:accessControl` relation whose document is absent, is
+  `no-access-document`, never inherited. The model is the vocabulary the document shows (WAC
+  `acl:Authorization` versus ACP terms; both, or an ACP relation on a WAC document, is
+  `mixed-models`). The ACP dialect is the vocabulary of the modes in `acp:allow`/`acp:deny`:
+  `acl:Read` etc. is `css`, `acp:Read` etc. is `ess`; none, unknown or both is
+  `ambiguous-dialect`. Reasons: `unsupported-protocol`, `out-of-scope`, `no-permission`
+  (401/403 on the resource or its access document: never reported as private), `unreadable`,
+  `no-access-link`, `ambiguous-link`, `no-access-document`, `invalid-document` (wrong content
+  type, malformed, oversized, bad validator), `mixed-models`, `unrecognised-document`,
+  `ambiguous-dialect`. This is a package-level detector over the storage view; the separate
+  `accessModel({ fetch, storage })` of `./requests-solid` (raw fetch, `wac | acp | unknown`) is
+  unchanged.
+- **`checkOwnerOnlyAuto`** is a separate function, not an option, because its result carries extra
+  fields and it needs neither `features` nor `acpDialect`. It detects, then runs the same check
+  with the detected values as explicit options, and returns `OwnerOnlyResult & { detected,
+  decidedBy?, evaluated }`. An undecided detection is `{ private: false, reasons: [{ subject:
+  'unknown', modes: [], reason: 'undecided' }] }`. If the document changes between detection
+  and check it refuses (`unknown`) rather than throwing. `decidedBy` is the effective ACL for WAC
+  (the resource's own, or the inherited ancestor's), for ACP private the resource's own ACR, and
+  when exposed the document holding the first non-owner rule; `evaluated` lists every access
+  document read, nearest first.
+
+### Inheritance, as implemented
+
+A WAC resource's own ACL decides when it exists, and only a revalidated HEAD 404 means absent.
+Otherwise the nearest ancestor ACL decides and only its `acl:default` rules apply; its
+`acl:accessTo`-only rules are ignored for descendants, and an ancestor ACL with no applicable
+`acl:default` refuses (`unknown`) rather than reporting private. This was already how
+`checkOwnerOnly` behaved; this change pins it with tests and reports which document decided.
+One bug fixed: this package's own writer marks rules copied from an ancestor ACL with
+`pod-access#materializedFrom`, and the strict reader refused such an ACL as an unknown
+construct, so a pod shared through `./roles` could never be reported as exposed (only as
+unrepresentable). The marker has no access semantics and is now accepted.
+
+### What private means and does not mean
+
+`private: true` means: at the moment of the read, the access document that governs this resource
+(and, for ACP, every ancestor's member policy up to the `pim:Storage` root) was fetched, parsed
+without unknown constructs, and grants no mode to anyone but the exact `ownerWebId`: no public
+or authenticated class, no other agent, no group, no origin- or client-scoped rule; inherited
+and default rules that apply to this resource are included, and a container's own member
+defaults are included.
+
+It does not mean: that nobody else can read the bytes (server administrators, the server
+operator, backups, and any process holding a credential for the owner can); that the answer
+holds after the check (it is a read-time observation, not a lock; re-check before relying on it
+for a later write); that existing children are private (only the container's and ancestors'
+rules are inspected; a child with its own more permissive ACL is not examined); that a denial
+or exclusion protects anything (they never cancel a reported grant); or that anything unknown is
+fine: unreadable, forbidden, oversized, mixed-model, unrecognised or unrepresentable documents
+are never private. `undecided` and `private: false` therefore mean "not shown to be private",
+not "shared".
 
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 Policies above `storage.root` are never examined, and `storage.root` is caller-supplied (apps

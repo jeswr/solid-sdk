@@ -3,7 +3,16 @@
 /** Solid/LWS sharing, WAC/ACP translation and bounded access proofs. */
 export { createAccessClient } from "./access.js";
 export {
+  type DetectedAccessControl,
+  detectAccessControl,
+  isOwnerOnlyConflictError,
+  type OwnerOnlyConflict,
+  type UndecidedReason,
+} from "./access-detect.js";
+export {
   checkOwnerOnly,
+  checkOwnerOnlyAuto,
+  type OwnerOnlyAutoResult,
   type OwnerOnlyOptions,
   type OwnerOnlyReason,
   type OwnerOnlyResult,

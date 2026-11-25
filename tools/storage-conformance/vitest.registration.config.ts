@@ -8,7 +8,7 @@ export default defineConfig({
     environment: "node",
     // CSS 7 calls jest.requireActual whenever NODE_ENV is "test" (sst-75rp); Vitest sets that default.
     env: { NODE_ENV: "development" },
-    include: ["integration/registration.test.ts"],
+    include: ["integration/registration.test.ts", "integration/owner-only.test.ts"],
     fileParallelism: false,
     coverage: { enabled: false },
   },

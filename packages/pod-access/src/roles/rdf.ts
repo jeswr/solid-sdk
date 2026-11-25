@@ -7,13 +7,13 @@ import type { DatasetCore, Term } from "@rdfjs/types";
 import { DatasetWrapper, SetFrom } from "@rdfjs/wrapper";
 import { AccessControlResource, AclResource, type Matcher, Policy } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { ACL, ACP, FOAF, modeIri, RDF, RdfNode, readModes } from "../rdf.js";
+import { ACL, ACP, FOAF, MATERIALIZED_FROM, modeIri, RDF, RdfNode, readModes } from "../rdf.js";
 import { readWac } from "../systems/wac.js";
 import type { EffectivePolicy, Grant, Mode, PodImplementation, Subject } from "../types.js";
 import { roleError } from "./errors.js";
 import type { AgentRef } from "./types.js";
 
-export const MATERIALIZED_FROM = "https://jeswr.org/ns/pod-access#materializedFrom";
+export { MATERIALIZED_FROM };
 
 /** Role-local provenance; the offline policy API keeps its existing grant shape. */
 export interface RolePolicy extends EffectivePolicy {

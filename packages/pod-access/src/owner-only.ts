@@ -1,12 +1,22 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
-import { parseRdf } from "@jeswr/fetch-rdf";
-import { StorageError } from "@jeswr/storage-client";
+// AUTHORED-BY Claude Sonnet 5.5
+
 import type { DatasetCore } from "@rdfjs/types";
 import { Policy } from "@solid/object";
 import { DataFactory } from "n3";
+import {
+  type DetectedAccessControl,
+  detectAccessControl,
+  isOwnerOnlyConflictError,
+  loadAccessDocument,
+  locate,
+  ownerOnlyConflict,
+  shownDialect,
+  shownModel,
+} from "./access-detect.js";
 import { ACL, ACP, modeIri, parent, RDF, RdfNode, safeIri } from "./rdf.js";
-import { boundedBody, scoped } from "./roles/http.js";
+import { scoped } from "./roles/http.js";
 import { readAcp } from "./systems/acp.js";
 import { readWac } from "./systems/wac.js";
 import type { AccessClientOptions, AccessMode, EffectivePolicy, Subject } from "./types.js";
@@ -15,19 +25,32 @@ import type { AccessClientOptions, AccessMode, EffectivePolicy, Subject } from "
 export interface OwnerOnlyOptions extends Pick<AccessClientOptions, "storage" | "acpDialect"> {
   url: string;
   ownerWebId: string;
+  /**
+   * The access-control model, when the caller knows it. An explicit value wins over
+   * `storage.features.accessControl`; discovered capabilities are then not consulted. If it
+   * contradicts what the access document (or its link relation) shows, `checkOwnerOnly`
+   * throws {@link OwnerOnlyConflict} instead of choosing a side. Use `checkOwnerOnlyAuto`
+   * to have the model and dialect determined from the pod itself.
+   */
+  accessModel?: "wac" | "acp" | undefined;
 }
 
 /** Deliberately excludes policy text, identifiers and transport error messages. */
 export interface OwnerOnlyReason {
   subject: "public" | "authenticated" | "agent" | "group" | "origin/client-scoped" | "unknown";
   modes: AccessMode[];
-  reason: "non-owner" | "unknown" | "unrepresentable" | "unsupported-model" | "not-storage-root";
+  reason:
+    | "non-owner"
+    | "unknown"
+    | "unrepresentable"
+    | "unsupported-model"
+    | "not-storage-root"
+    | "undecided";
 }
 
 export type OwnerOnlyResult = { private: true } | { private: false; reasons: OwnerOnlyReason[] };
 
 const PIM_STORAGE = "http://www.w3.org/ns/pim/space#Storage";
-const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
 const TARGETS = [`${ACL}accessTo`, `${ACL}default`, `${ACP}resource`];
 
 function refused(reason: OwnerOnlyReason["reason"]): OwnerOnlyResult {
@@ -103,101 +126,111 @@ function subjectKind(clause: Subject[]): OwnerOnlyReason["subject"] {
   return "unknown";
 }
 
-/**
- * Inspect raw effective access, never the lossy role projection. Containers include member
- * defaults. Any discovery, transport or representation uncertainty refuses the assertion.
- * This is a read-time observation, not an atomic guarantee for a subsequent write.
- */
-export async function checkOwnerOnly(options: OwnerOnlyOptions): Promise<OwnerOnlyResult> {
-  const { storage, url, ownerWebId, acpDialect } = options;
+/** What `checkOwnerOnlyAuto` determined, plus the documents its answer rests on. */
+export type OwnerOnlyAutoResult = OwnerOnlyResult & {
+  /** The model (and, for ACP, dialect) detected from the pod itself. */
+  detected: DetectedAccessControl;
+  /**
+   * The access document that decided: the effective ACL for WAC (the resource's own, or the
+   * nearest ancestor's it inherits), the resource's own ACR for ACP private, or the document
+   * holding the first non-owner rule when exposed. Absent when nothing was read to a verdict.
+   */
+  decidedBy?: string;
+  /** Every access document read for the verdict, nearest first. */
+  evaluated: readonly string[];
+};
+
+interface Inspection {
+  result: OwnerOnlyResult;
+  decidedBy?: string;
+  evaluated: string[];
+}
+
+/** An explicit option must agree with what the access document itself shows. */
+function assertAgrees(
+  dataset: DatasetCore,
+  acpLink: boolean,
+  model: "wac" | "acp",
+  dialect: "css" | "ess" | undefined,
+  explicitModel: boolean,
+): void {
+  const shown = shownModel(dataset, acpLink);
+  if (explicitModel && (shown === "wac" || shown === "acp") && shown !== model)
+    throw ownerOnlyConflict("model", model, shown);
+  const dialectShown = model === "acp" ? shownDialect(dataset) : undefined;
+  if (dialectShown !== undefined && dialectShown !== dialect)
+    throw ownerOnlyConflict("dialect", dialect as string, dialectShown);
+}
+
+async function inspect(
+  options: Pick<OwnerOnlyOptions, "storage" | "url" | "ownerWebId">,
+  model: "wac" | "acp",
+  acpDialect: "css" | "ess" | undefined,
+  explicitModel: boolean,
+): Promise<Inspection> {
+  const { storage, url, ownerWebId } = options;
+  const evaluated: string[] = [];
+  const done = (result: OwnerOnlyResult, decidedBy?: string): Inspection => ({
+    result,
+    ...(decidedBy === undefined ? {} : { decidedBy }),
+    evaluated,
+  });
   try {
-    const model =
-      storage.features.accessControl.state === "available"
-        ? storage.features.accessControl.detail.model
-        : "none";
-    if (storage.protocol !== "solid" || (model !== "wac" && model !== "acp"))
-      return refused("unsupported-model");
-    if (model === "acp" && acpDialect !== "css" && acpDialect !== "ess")
-      return refused("unrepresentable");
     const root = storage.root;
     scoped(root, root);
     scoped(url, root);
     safeIri(ownerWebId);
     const owner = new URL(ownerWebId);
     if (!/^https?:$/.test(owner.protocol) || owner.username || owner.password)
-      return refused("unknown");
+      return done(refused("unknown"));
     const reasons: OwnerOnlyReason[] = [];
     let container = false;
     let current: string | undefined = url;
     for (let depth = 0; current !== undefined && depth < 64; depth++) {
       const head = await storage.head(current, { revalidate: true });
-      if (head.url !== current || head.status !== 200) return refused("unknown");
+      if (head.url !== current || head.status !== 200) return done(refused("unknown"));
       // storage.root is caller-supplied and may be a sub-root. ACP member policies above it
       // would never be examined, so reaching the root requires the server's pim:Storage type.
       if (
         current === root &&
         !(head.links.get("type") ?? []).some((link) => link.target === PIM_STORAGE)
       )
-        return refused("not-storage-root");
+        return done(refused("not-storage-root"));
       if (current === url) container = head.kind === "container";
-      const links = [
-        ...(head.links.get("acl") ?? []),
-        ...(head.links.get(`${ACP}accessControl`) ?? []),
-      ];
-      if (model === "wac" && head.links.has(`${ACP}accessControl`)) return refused("unknown");
-      const endpoints = [...new Set(links.map((link) => link.target))];
-      if (endpoints.length !== 1) return refused("unknown");
-      const endpoint = scoped(endpoints[0] as string, root, true);
-      if (!storage.isWithinStorage(endpoint)) return refused("unknown");
-      let accessHead: Awaited<ReturnType<typeof storage.head>>;
-      try {
-        accessHead = await storage.head(endpoint, { revalidate: true });
-      } catch (error) {
-        // Only a revalidated WAC HEAD 404 establishes absence and permits inheritance.
-        // An unreadable ACL, or any missing ACP ACR, never establishes private access.
-        if (model === "wac" && error instanceof StorageError && error.status === 404) {
-          current = parent(current, root);
-          continue;
-        }
-        throw error;
+      const found = locate(head, storage, root);
+      if ("problem" in found) return done(refused("unknown"));
+      // A resource that advertises an ACP access-control relation is not a WAC resource. With
+      // an explicit WAC model that is a conflict; with a discovered one, a refusal.
+      if (model === "wac" && found.acpLink) {
+        if (explicitModel) throw ownerOnlyConflict("model", "wac", "acp");
+        return done(refused("unknown"));
       }
-      if (
-        accessHead.url !== endpoint ||
-        accessHead.status !== 200 ||
-        accessHead.etag === null ||
-        !/^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/.test(accessHead.etag)
-      )
-        return refused("unknown");
-      // read has no cache-control option. Bind its possibly cached representation to a fresh
-      // HEAD validator. A GET failure after an existing HEAD is never absence. The body is
-      // always drained through the 1 MiB cap before any other check.
-      const read = await storage.read(endpoint, { accept: RDF_ACCEPT });
-      const text = await boundedBody(read, endpoint);
-      if (
-        read.url !== endpoint ||
-        read.status !== 200 ||
-        read.etag !== accessHead.etag ||
-        read.contentType === null
-      )
-        return refused("unknown");
-      const dataset = await parseRdf(text, read.contentType, {
-        baseIRI: endpoint,
-        maxQuads: 10_000,
-      });
-      if (!dataset.size) return refused("unknown");
+      // Only a revalidated WAC HEAD 404 establishes absence and permits inheritance.
+      // An unreadable ACL, or any missing ACP ACR, never establishes private access.
+      const document = await loadAccessDocument(storage, found.endpoint);
+      if (!document) {
+        if (model !== "wac") return done(refused("unknown"));
+        current = parent(current, root);
+        continue;
+      }
+      const { endpoint } = found;
+      evaluated.push(endpoint);
+      const dataset = document.dataset;
+      if (!dataset.size) return done(refused("unknown"));
+      assertAgrees(dataset, found.acpLink, model, acpDialect, explicitModel);
       let parsed: EffectivePolicy;
       try {
         parsed = policy(dataset, current, endpoint, model, acpDialect ?? "css");
       } catch {
-        return refused("unrepresentable");
+        return done(refused("unrepresentable"));
       }
-      if (!parsed.grants.length) return refused("unrepresentable");
+      if (!parsed.grants.length) return done(refused("unrepresentable"));
       if (
         model === "wac" &&
         current !== url &&
         !parsed.grants.some((grant) => grant.appliesTo !== "resource")
       )
-        return refused("unknown");
+        return done(refused("unknown"));
       for (const grant of parsed.grants) {
         if (
           !grant.modes.size ||
@@ -218,12 +251,66 @@ export async function checkOwnerOnly(options: OwnerOnlyOptions): Promise<OwnerOn
           });
         }
       }
-      if (reasons.length) return { private: false, reasons };
-      if (model === "wac" || current === root) return { private: true };
+      if (reasons.length) return done({ private: false, reasons }, endpoint);
+      if (model === "wac") return done({ private: true }, endpoint);
+      if (current === root) return done({ private: true }, evaluated[0]);
       current = parent(current, root);
     }
-    return refused("unknown");
+    return done(refused("unknown"));
+  } catch (error) {
+    if (isOwnerOnlyConflictError(error)) throw error;
+    return done(refused("unknown"));
+  }
+}
+
+/**
+ * Inspect raw effective access, never the lossy role projection. Containers include member
+ * defaults. Any discovery, transport or representation uncertainty refuses the assertion.
+ * This is a read-time observation, not an atomic guarantee for a subsequent write.
+ *
+ * The model is `options.accessModel` when given, otherwise the discovered
+ * `features.accessControl`; ACP additionally needs `options.acpDialect`. An explicit option
+ * must agree with the access document or an `OwnerOnlyConflict` error is thrown (the only error
+ * this function throws). Without a model to hand, use {@link checkOwnerOnlyAuto}.
+ *
+ * WAC inheritance: a resource's own ACL decides when it exists (a revalidated 404 means
+ * absent); otherwise the nearest ancestor ACL decides and only its `acl:default` rules apply,
+ * its `acl:accessTo`-only rules being ignored. ACP evaluates the resource's own ACR and then
+ * every ancestor's member policies up to a `pim:Storage` root.
+ */
+export async function checkOwnerOnly(options: OwnerOnlyOptions): Promise<OwnerOnlyResult> {
+  const { storage, acpDialect } = options;
+  const discovered =
+    storage.features.accessControl.state === "available"
+      ? storage.features.accessControl.detail.model
+      : "none";
+  const model = options.accessModel ?? discovered;
+  if (storage.protocol !== "solid" || (model !== "wac" && model !== "acp"))
+    return refused("unsupported-model");
+  if (model === "acp" && acpDialect !== "css" && acpDialect !== "ess")
+    return refused("unrepresentable");
+  return (await inspect(options, model, acpDialect, options.accessModel !== undefined)).result;
+}
+
+/**
+ * Detect the model and ACP dialect with {@link detectAccessControl}, then run the same check
+ * with them as explicit options, returning that result plus what was detected and which
+ * documents decided. A separate function rather than an option on `checkOwnerOnly`, because its
+ * result carries extra fields and it needs no `features` or `acpDialect` from the caller.
+ * Anything undecided is a refusal with reason `"undecided"`, never private. It does not throw
+ * for a document that changed between detection and the check: that is a refusal too.
+ */
+export async function checkOwnerOnlyAuto(
+  options: Pick<OwnerOnlyOptions, "storage" | "url" | "ownerWebId">,
+): Promise<OwnerOnlyAutoResult> {
+  const detected = await detectAccessControl(options);
+  if (detected.model === "undecided") return { ...refused("undecided"), detected, evaluated: [] };
+  const dialect = detected.model === "acp" ? detected.dialect : undefined;
+  try {
+    const { result, decidedBy, evaluated } = await inspect(options, detected.model, dialect, true);
+    return { ...result, detected, ...(decidedBy === undefined ? {} : { decidedBy }), evaluated };
   } catch {
-    return refused("unknown");
+    // inspect throws only OwnerOnlyConflictError: the document changed after detection.
+    return { ...refused("unknown"), detected, evaluated: [] };
   }
 }

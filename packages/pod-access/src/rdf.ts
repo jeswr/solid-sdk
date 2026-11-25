@@ -78,3 +78,10 @@ export function parent(url: string, root: string): string | undefined {
   if (url === root) return undefined;
   return new URL(".", url.endsWith("/") ? url.slice(0, -1) : url).href;
 }
+
+/**
+ * This package's own provenance marker on an authorization it copied from an ancestor ACL. It
+ * carries no access semantics, so strict target reads accept it rather than refusing the
+ * package's own writer output.
+ */
+export const MATERIALIZED_FROM = "https://jeswr.org/ns/pod-access#materializedFrom";
