@@ -33,7 +33,9 @@ export class EventsController {
   };
   constructor(
     readonly repository: Repository,
-    readonly onFailure: () => void,
+    /** Receives the failure, so a `PublicationError` can be explained rather than hidden. */
+    readonly onFailure: (error: unknown) => void,
+    readonly onWarning: (message: string) => void = () => {},
   ) {}
   snapshot = () => this.state;
   subscribe = (listener: () => void) => {
@@ -74,10 +76,12 @@ export class EventsController {
         result = await this.repository.create(data, invitees, id);
       }
       this.confirmed.set(result.url, result);
+      if ("registrationWarning" in result && typeof result.registrationWarning === "string")
+        this.onWarning(result.registrationWarning);
     });
     this.queue = task
-      .catch(() => {
-        this.onFailure();
+      .catch((error: unknown) => {
+        this.onFailure(error);
       })
       .finally(() => {
         this.edits.delete(token);

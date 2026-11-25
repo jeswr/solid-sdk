@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
-import { createTypeIndex } from "@jeswr/pod-type-index";
+import { createTypeIndex, type TypeIndex } from "@jeswr/pod-type-index";
 import { displayNameOf, type StorageClient, StorageError } from "@jeswr/storage-client";
 import type { TemplateApp } from "./builtins.js";
 import { copyTemplateImages } from "./images.js";
@@ -45,11 +45,31 @@ export class TemplateAccessError extends Error {
 function missing(error: unknown): boolean {
   return error instanceof StorageError && error.code === "not-found";
 }
+/** Definite "no usable index" outcomes. Anything else (network, timeout, 5xx, unknown) is
+ * transient: it must surface, never lead to creating or registering a second collection. */
+function indexUnusable(error: unknown): boolean {
+  return (
+    error instanceof StorageError &&
+    ["not-found", "scope", "forbidden", "unsupported", "invalid-response", "not-rdf"].includes(
+      error.code,
+    )
+  );
+}
 function validator(etag: string | null): string {
   if (!etag || !/^"[\x21\x23-\x7e\x80-\xff]*"$/.test(etag))
     throw new Error("Templates require a strong ETag");
   return etag;
 }
+/**
+ * Type Index registration is discovery metadata, never a precondition for saving or listing.
+ * `unavailable`: no profile, or a Solid WebID outside this storage (the Type Index SDK throws a
+ * `scope` error at construction). `failed` keeps only the error code and can be retried.
+ */
+export type TemplateRegistration =
+  | { state: "pending" }
+  | { state: "registered" }
+  | { state: "unavailable" }
+  | { state: "failed"; reason: string };
 /** One account-scoped store; all I/O uses the public, credential-bounded StorageClient. */
 export function createTemplateStore(options: {
   storage: StorageClient;
@@ -59,16 +79,37 @@ export function createTemplateStore(options: {
   /** Provision (only when `created`) or verify owner-only access before any content write. */
   ensurePrivateAccess: (url: string, context: { created: boolean }) => Promise<boolean>;
   onEntryError?: (url: string, error: unknown) => void;
+  /** Called with the error code each time a registration attempt fails; the store keeps working. */
+  onRegistrationError?: (reason: string) => void;
 }) {
   const { storage } = options;
-  const index = options.profile
-    ? createTypeIndex({
+  let index: TypeIndex | undefined;
+  if (options.profile) {
+    try {
+      index = createTypeIndex({
         storage,
         features: storage.features,
         profile: options.profile,
         ...(options.fetch ? { fetch: options.fetch } : {}),
-      })
-    : undefined;
+      });
+    } catch (error) {
+      if (!(error instanceof StorageError) || error.code !== "scope") throw error;
+    }
+  }
+  let registration: TemplateRegistration = index ? { state: "pending" } : { state: "unavailable" };
+  /** Best effort and never throws. Registers the collection in the private index only. */
+  async function register(url: string): Promise<TemplateRegistration> {
+    if (!index) return registration;
+    try {
+      await index.register(TEMPLATE_CLASS, { container: url });
+      registration = { state: "registered" };
+    } catch (error) {
+      const reason = error instanceof StorageError ? error.code : "unknown";
+      registration = { state: "failed", reason };
+      options.onRegistrationError?.(reason);
+    }
+    return registration;
+  }
   let container: Promise<string> | undefined;
   let containerUrl: string | undefined;
   // A collection this store created; kept until access is established so a retry provisions.
@@ -77,21 +118,25 @@ export function createTemplateStore(options: {
     containerUrl = url;
     return url;
   }
+  /** Adopts an existing folder only when it is verifiably owner-only; never changes its sharing. */
+  async function adopt(url: string): Promise<string> {
+    if (!(await options.ensurePrivateAccess(url, { created: false })))
+      throw new TemplateAccessError(false);
+    return remember(url);
+  }
   async function locate(create: boolean): Promise<string | undefined> {
     if (containerUrl) return containerUrl;
     const conventional = new URL("templates/", storage.root).href;
     let registered: string[] = [];
+    let untyped: string | undefined;
     try {
       registered = (await index?.find(TEMPLATE_CLASS)) ?? [];
     } catch (error) {
-      if (
-        !(
-          storage.protocol === "lws" &&
-          error instanceof StorageError &&
-          error.code === "unsupported"
-        )
-      )
-        throw error;
+      // An absent, out-of-scope, forbidden or malformed index only means there is no usable
+      // entry: the conventional folder is still adopted (after verification). A transient
+      // failure surfaces so a registered collection is never missed and duplicated.
+      if (!indexUnusable(error)) throw error;
+      registered = [];
     }
     for (const url of registered) {
       // A stale or foreign registration must not block the collection for good.
@@ -114,6 +159,7 @@ export function createTemplateStore(options: {
       if (found.kind !== "container") throw new Error("The templates location is not a container");
       if (found.links.get("type")?.some((link) => link.target === TEMPLATE_CLASS))
         return remember(found.url);
+      if (storage.protocol === "solid") untyped = found.url;
     } catch (error) {
       if (!missing(error)) throw error;
     }
@@ -124,6 +170,9 @@ export function createTemplateStore(options: {
           return remember(entry.url);
       }
     }
+    // Solid drops the creation type link (LWS keeps it, and names there are only hints), so a collection created while registration failed or
+    // was unavailable has no marker: the conventional folder is adopted once verified.
+    if (untyped) return adopt(untyped);
     if (!create) return undefined;
     try {
       createdUrl = (
@@ -137,11 +186,11 @@ export function createTemplateStore(options: {
     } catch (error) {
       if (error instanceof StorageError && error.code === "conflict") {
         const found = await storage.head(conventional);
-        if (
-          found.kind === "container" &&
-          found.links.get("type")?.some((link) => link.target === TEMPLATE_CLASS)
-        )
-          return remember(found.url);
+        if (found.kind === "container") {
+          if (found.links.get("type")?.some((link) => link.target === TEMPLATE_CLASS))
+            return remember(found.url);
+          if (storage.protocol === "solid") return adopt(found.url);
+        }
       }
       throw error;
     }
@@ -152,8 +201,9 @@ export function createTemplateStore(options: {
         if (!url) throw new Error("Missing templates container");
         containerUrl = url;
         // Register first: Solid drops the type link, so the index is the only adoption path
-        // back to a created collection. Access is still verified before every first write.
-        await index?.register(TEMPLATE_CLASS, { container: url });
+        // back to a created collection. A failure is reported, not fatal; access is still
+        // verified before every first write.
+        await register(url);
         const created = url === createdUrl;
         if (!(await options.ensurePrivateAccess(url, { created })))
           throw new TemplateAccessError(created);
@@ -224,6 +274,14 @@ export function createTemplateStore(options: {
     }
   }
   return {
+    get registration(): TemplateRegistration {
+      return registration;
+    },
+    /** Tries again to register the located collection; never throws. */
+    async retryRegistration(): Promise<TemplateRegistration> {
+      const url = await locate(false);
+      return url ? register(url) : registration;
+    },
     read: (url: string) => readCurrent(url),
     container: () => locate(false),
     async assertContains(url: string): Promise<void> {

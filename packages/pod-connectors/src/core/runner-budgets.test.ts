@@ -14,6 +14,7 @@ import { createFetchPodWriter } from "./pod-writer.js";
 import {
   createMemoryPod,
   fixtureFetch,
+  ownerOnlyFixtureChecks,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
   TEST_WEBID,
@@ -288,6 +289,7 @@ it("preserves caller cancellation if it lands during duration-failure cleanup", 
       profileDocumentUrl: TEST_PROFILE_DOC,
       podRoot: TEST_POD_ROOT,
       fetch: pod.fetch,
+      ...ownerOnlyFixtureChecks,
     }),
   });
   const outcome = pending.catch((error: unknown) => error);
@@ -306,6 +308,7 @@ describe("deadline after the adapter resolves", () => {
       profileDocumentUrl: TEST_PROFILE_DOC,
       podRoot: TEST_POD_ROOT,
       fetch: pod.fetch,
+      ...ownerOnlyFixtureChecks,
     });
 
   it("still reports success, then runs commit after onState", async () => {

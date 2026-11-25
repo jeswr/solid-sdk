@@ -4,7 +4,7 @@ import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { describe, expect, it } from "vitest";
 import { openPublishRepository, parsePage, publishRepository } from "../src/index.js";
-import { at, owner, pageData, podFixture, root, siteData } from "./fixtures.js";
+import { at, editSourceDirectly, owner, pageData, podFixture, root, siteData } from "./fixtures.js";
 
 async function prepared() {
   const pod = await podFixture();
@@ -311,7 +311,7 @@ describe("pod source, Type Index and public artifacts", () => {
   it("requires current site/page versions before publication side effects", async () => {
     const { repo, storage, site, page } = await prepared();
     const result = await repo.publish(site, page, pageData, true);
-    const next = await repo.savePage(result.site, result.page, {
+    const next = await editSourceDirectly(storage, result.page, {
       ...result.page.data,
       body: "newer",
     });

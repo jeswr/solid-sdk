@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 "use client";
-import { createEventsRepository } from "@jeswr/solid-events";
+import { createEventsRepository, PublicationError } from "@jeswr/solid-events";
 import { Button, toast } from "@jeswr/suite-ui";
 import {
   createContext,
@@ -36,8 +36,13 @@ export function EventsProvider({
               "Some invitations could not be loaded. The available invitations are shown.",
             ),
         }),
-        () =>
-          toast.error("Couldn't save your invitation. Please reconnect or refresh and try again."),
+        (error) =>
+          toast.error(
+            error instanceof PublicationError
+              ? error.message
+              : "Couldn't save your invitation. Please reconnect or refresh and try again.",
+          ),
+        (message) => toast.warning(message),
       ),
     [session],
   );
