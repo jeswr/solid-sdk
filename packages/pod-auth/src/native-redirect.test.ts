@@ -146,6 +146,8 @@ test.each(["test", "production"])("native mode forbids insecure loopback in %s",
 test.each([
   "null", // capacitor://localhost is an opaque origin in the URL implementation.
   "capacitor://localhost",
+  "tauri://localhost",
+  "http://tauri.localhost",
   "https://localhost",
   "https://foreign.example",
 ])("only native callbacks bypass the application origin check: %s", (origin) => {

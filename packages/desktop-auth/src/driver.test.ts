@@ -1,9 +1,19 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Claude Sonnet 5.5
 import { createPodAuth, type PodAuthOptions } from "@jeswr/pod-auth";
 import { createMemoryStore, createMockOp } from "@jeswr/pod-auth/testing";
-import { AuthorizationRequestError, BusyError } from "@jeswr/suite-native";
+import {
+  AuthorizationRequestError,
+  type AuthSessionPlugin,
+  BusyError,
+  NativeAuthError,
+  SuiteNativeError,
+  USER_CANCELLED,
+  UserCancelledError,
+} from "@jeswr/suite-native";
 import { afterEach, assert, describe, expect, test, vi } from "vitest";
-import { createDesktopCodeDriver } from "./driver.js";
+import { createDesktopCodeDriver, withDesktopAuthErrors } from "./driver.js";
+import { DesktopAuthError } from "./errors.js";
 import type { DesktopHost } from "./session.js";
 
 const redirectUri = "ai.artcraft.app:/oauth/callback";
@@ -133,8 +143,39 @@ describe("createDesktopCodeDriver with pod-auth", () => {
       };
     });
     const auth = createPodAuth(options);
-    await expect(auth.login({ issuer: op.issuer })).rejects.toThrow();
+    await expect(auth.login({ issuer: op.issuer })).rejects.toMatchObject({
+      name: "OperationProcessingError",
+      message: expect.stringContaining("iss"),
+    });
     expect(op.stats.tokens).toBe(0);
+    expect((await auth.fetch(`${op.root}private`)).status).toBe(401);
+  });
+
+  test("an error callback is refused end to end and no token request happens", async () => {
+    const { op, options, requests } = fixture((op) => {
+      let listener: ((urls: string[]) => void) | null = null;
+      return {
+        async onOpenUrl(handler) {
+          listener = handler;
+          return () => undefined;
+        },
+        async openUrl(url) {
+          const callback = new URL(await op.getCode(new URL(url), new AbortController().signal));
+          callback.searchParams.delete("code");
+          callback.searchParams.set("error", "access_denied");
+          queueMicrotask(() => listener?.([callback.href]));
+        },
+      };
+    });
+    const auth = createPodAuth(options);
+    const failure = await auth.login({ issuer: op.issuer }).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    // pod-auth rejects the error response, after its own issuer check.
+    expect(failure).toMatchObject({ name: "AuthorizationResponseError" });
+    expect(op.stats.tokens).toBe(0);
+    expect(requests.some((request) => new URL(request.url).pathname === "/token")).toBe(false);
     expect((await auth.fetch(`${op.root}private`)).status).toBe(401);
   });
 
@@ -153,7 +194,7 @@ describe("createDesktopCodeDriver with pod-auth", () => {
     const login = auth.login({ issuer: op.issuer }, { signal: controller.signal });
     await vi.waitFor(() => expect(opened).toHaveLength(1));
     controller.abort();
-    await expect(login).rejects.toThrow();
+    await expect(login).rejects.toMatchObject({ name: "AbortError" });
     expect(op.stats.tokens).toBe(0);
     expect(await auth.remembered()).toEqual([]);
   });
@@ -218,5 +259,186 @@ describe("createDesktopCodeDriver on its own", () => {
     await vi.waitFor(() => expect(opened).toHaveLength(2));
     second.abort();
     await expect(again).rejects.not.toBeInstanceOf(BusyError);
+  });
+
+  const request = (overrides: Record<string, string> = {}) => {
+    const url = new URL("https://idp.example/authorize");
+    for (const [key, value] of Object.entries({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      code_challenge: "abc",
+      code_challenge_method: "S256",
+      state: "s",
+      ...overrides,
+    }))
+      url.searchParams.set(key, value);
+    return url;
+  };
+
+  test("refuses an http://localhost authorization URL before opening anything", async () => {
+    const openUrl = vi.fn(async () => undefined);
+    const getCode = createDesktopCodeDriver({ host: { ...host, openUrl }, redirectUri });
+    const url = request();
+    const local = new URL(`http://localhost:3000/authorize${url.search}`);
+    await expect(getCode(local, new AbortController().signal)).rejects.toBeInstanceOf(
+      AuthorizationRequestError,
+    );
+    expect(openUrl).not.toHaveBeenCalled();
+  });
+
+  test("a timeout rejects with DesktopAuthError timed-out and nothing from the host", async () => {
+    let fire: () => void = () => undefined;
+    const getCode = createDesktopCodeDriver({
+      host,
+      redirectUri,
+      setTimeout: (callback) => {
+        fire = callback;
+        return 1;
+      },
+      clearTimeout: () => undefined,
+    });
+    const pending = getCode(request(), new AbortController().signal);
+    await vi.waitFor(() => expect(fire).not.toBe(undefined));
+    await Promise.resolve();
+    fire();
+    const error = await pending.then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(DesktopAuthError);
+    expect(error).toBeInstanceOf(SuiteNativeError);
+    expect(error).toMatchObject({
+      name: "DesktopAuthError",
+      code: "timed-out",
+      message: "timed-out",
+    });
+  });
+
+  test("a host failure rejects with DesktopAuthError host-failed and never carries the host's error", async () => {
+    const failure = new Error("secret path /home/me/.config");
+    const getCode = createDesktopCodeDriver({
+      host: {
+        ...host,
+        openUrl: async () => {
+          throw failure;
+        },
+      },
+      redirectUri,
+    });
+    const error = (await getCode(request(), new AbortController().signal).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    )) as DesktopAuthError;
+    expect(error).toBeInstanceOf(DesktopAuthError);
+    expect(error).toMatchObject({ code: "host-failed", message: "host-failed" });
+    expect(error.cause).toBeUndefined();
+    expect(JSON.stringify(error)).not.toContain("secret");
+    expect(String(error.stack)).not.toContain("secret");
+  });
+
+  test("a host that cannot listen is also host-failed, and the next call starts afresh", async () => {
+    const listen = vi.fn<DesktopHost["onOpenUrl"]>();
+    listen.mockRejectedValueOnce(new Error("no deep links"));
+    listen.mockImplementation(async () => () => undefined);
+    const opened: string[] = [];
+    const getCode = createDesktopCodeDriver({
+      host: { onOpenUrl: listen, openUrl: async (url) => void opened.push(url) },
+      redirectUri,
+    });
+    await expect(getCode(request(), new AbortController().signal)).rejects.toMatchObject({
+      name: "DesktopAuthError",
+      code: "host-failed",
+    });
+    const controller = new AbortController();
+    const again = getCode(request(), controller.signal);
+    await vi.waitFor(() => expect(opened).toHaveLength(1));
+    controller.abort();
+    await expect(again).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  test("an abort still rejects with the AbortError, not a DesktopAuthError", async () => {
+    const getCode = createDesktopCodeDriver({ host, redirectUri });
+    const controller = new AbortController();
+    const pending = getCode(request(), controller.signal);
+    await Promise.resolve();
+    controller.abort();
+    const error = await pending.then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+    expect(error).not.toBeInstanceOf(DesktopAuthError);
+    expect(error).toMatchObject({ name: "AbortError" });
+  });
+
+  test("a second call while one is pending is refused as busy and does not disturb the first", async () => {
+    let fire: () => void = () => undefined;
+    const getCode = createDesktopCodeDriver({
+      host,
+      redirectUri,
+      setTimeout: (callback) => {
+        fire = callback;
+        return 1;
+      },
+      clearTimeout: () => undefined,
+    });
+    const first = getCode(request(), new AbortController().signal);
+    await vi.waitFor(() => expect(fire).not.toBe(undefined));
+    await expect(getCode(request(), new AbortController().signal)).rejects.toBeInstanceOf(
+      BusyError,
+    );
+    fire();
+    await expect(first).rejects.toMatchObject({ name: "DesktopAuthError", code: "timed-out" });
+  });
+});
+
+describe("withDesktopAuthErrors", () => {
+  const url = new URL(
+    `https://idp.example/authorize?response_type=code&client_id=c&redirect_uri=${encodeURIComponent(redirectUri)}&code_challenge=abc&code_challenge_method=S256&state=s`,
+  );
+  const plugin = (reject: () => unknown): AuthSessionPlugin => ({
+    authenticate: async () => {
+      throw reject();
+    },
+    cancel: async () => undefined,
+  });
+  const signal = () => new AbortController().signal;
+
+  test("a cancelled session is still a UserCancelledError", async () => {
+    const getCode = withDesktopAuthErrors(
+      plugin(() => Object.assign(new Error("x"), { code: USER_CANCELLED })),
+      redirectUri,
+    );
+    await expect(getCode(url, signal())).rejects.toBeInstanceOf(UserCancelledError);
+  });
+
+  test.each([
+    ["an error with another code", () => Object.assign(new Error("x"), { code: "OTHER" })],
+    ["an error with no code", () => new Error("x")],
+    ["a thrown null", () => null],
+  ])("%s stays the driver's NativeAuthError", async (_name, reject) => {
+    const getCode = withDesktopAuthErrors(plugin(reject), redirectUri);
+    const error = await getCode(url, signal()).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(NativeAuthError);
+    expect(error).not.toBeInstanceOf(DesktopAuthError);
+  });
+
+  test("the record of an earlier failure never leaks into a later call", async () => {
+    let next: () => unknown = () => Object.assign(new Error("x"), { code: "TIMED_OUT" });
+    const getCode = withDesktopAuthErrors(
+      { authenticate: async () => Promise.reject(next()), cancel: async () => undefined },
+      redirectUri,
+    );
+    await expect(getCode(url, signal())).rejects.toMatchObject({ code: "timed-out" });
+    next = () => new Error("x");
+    const error = await getCode(url, signal()).then(
+      () => undefined,
+      (caught: unknown) => caught,
+    );
+    expect(error).toBeInstanceOf(NativeAuthError);
+    expect(error).not.toBeInstanceOf(DesktopAuthError);
   });
 });

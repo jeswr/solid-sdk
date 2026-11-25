@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
-import { type ClientIdDocument, parseRedirect } from "@jeswr/suite-native";
+// AUTHORED-BY Claude Sonnet 5.5
+import { type ClientIdDocument, nativeClientIdDocument, parseRedirect } from "@jeswr/suite-native";
 
 export interface DesktopClientIdOptions {
   /**
@@ -29,45 +30,87 @@ function https(value: string, name: string): URL {
   if (url.username !== "" || url.password !== "") {
     throw new TypeError(`${name} must not carry credentials`);
   }
-  if (url.hash !== "") throw new TypeError(`${name} must not carry a fragment`);
+  // An empty fragment (`#`) leaves `hash` empty but stays in `href`.
+  if (url.hash !== "" || value.includes("#")) {
+    throw new TypeError(`${name} must not carry a fragment`);
+  }
+  // Exact string equality with what is published: refuse anything URL parsing would rewrite.
+  if (url.href !== value) throw new TypeError(`${name} must be in normal form`);
   return url;
+}
+
+/** C0 and C1 controls and the Unicode bidi controls, none of which belong in a consent screen. */
+function hasControlCharacter(value: string): boolean {
+  for (const character of value) {
+    const code = character.codePointAt(0) as number;
+    if (
+      code <= 0x1f ||
+      (code >= 0x7f && code <= 0x9f) ||
+      code === 0x61c ||
+      code === 0x200e ||
+      code === 0x200f ||
+      (code >= 0x202a && code <= 0x202e) ||
+      (code >= 0x2066 && code <= 0x2069)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** No identity provider can fetch a document from the local machine or a bare IP address. */
+function isUnfetchableHost(hostname: string): boolean {
+  const host = hostname.endsWith(".") ? hostname.slice(0, -1) : hostname;
+  return (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.startsWith("[") ||
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(host)
+  );
 }
 
 /**
  * The Solid-OIDC Client Identifier Document for a desktop app that signs in through the system
  * browser and a private-use scheme. `application_type: native` lets identity providers accept the
  * scheme redirect; pod-auth refuses dynamic registration and insecure loopback in this mode.
- * Serve the result at `clientId` as `application/ld+json`.
+ * Serve the result at `clientId` as `application/ld+json`. Inputs are refused, not normalised:
+ * what is published must be exactly what was written.
  */
 export function desktopClientIdDocument(options: DesktopClientIdOptions): ClientIdDocument {
   const clientId = https(options.clientId, "clientId");
-  // Exact string equality with the served URL: refuse anything URL parsing would rewrite.
-  if (clientId.href !== options.clientId) throw new TypeError("clientId must be in normal form");
   if (clientId.search !== "") throw new TypeError("clientId must not carry a query");
+  if (isUnfetchableHost(clientId.hostname)) {
+    throw new TypeError("clientId must be a public host name, not localhost or an IP address");
+  }
   const clientUri = https(options.clientUri, "clientUri");
-  const name = typeof options.clientName === "string" ? options.clientName.trim() : "";
+  if (typeof options.clientName !== "string" || hasControlCharacter(options.clientName)) {
+    throw new TypeError("clientName must not contain control characters");
+  }
+  const name = options.clientName.trim();
   if (name === "" || name.length > 100) {
     throw new TypeError("clientName must be 1 to 100 characters");
   }
-  const document: ClientIdDocument = {
-    "@context": ["https://www.w3.org/ns/solid/oidc-context.jsonld"],
-    client_id: clientId.href,
-    client_name: name,
-    client_uri: clientUri.href,
-    application_type: "native",
-    redirect_uris: [parseRedirect(options.redirectUri).href],
-    scope: "openid webid offline_access",
-    grant_types: ["authorization_code", "refresh_token"],
-    response_types: ["code"],
-    token_endpoint_auth_method: "none",
-    dpop_bound_access_tokens: true,
-  };
+  const redirect = parseRedirect(options.redirectUri);
+  if (
+    redirect.href !== options.redirectUri ||
+    options.redirectUri.includes("#") ||
+    options.redirectUri.slice(redirect.protocol.length).includes("//")
+  ) {
+    throw new TypeError("redirectUri must be in normal form, as <scheme>:/<path>");
+  }
+  let logoUri: string | undefined;
   if (options.logoUri !== undefined) {
     const logo = https(options.logoUri, "logoUri");
     if (logo.origin !== clientId.origin) {
       throw new TypeError("logoUri must be on the clientId origin");
     }
-    document.logo_uri = logo.href;
+    logoUri = logo.href;
   }
-  return document;
+  return nativeClientIdDocument({
+    clientId: clientId.href,
+    clientName: name,
+    clientUri: clientUri.href,
+    redirectUri: redirect.href,
+    logoUri,
+  });
 }

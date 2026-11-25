@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Claude Sonnet 5.5
 
 import { parseRedirect } from "./auth-session.js";
 
@@ -35,6 +36,41 @@ export interface ClientIdDocument {
 
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
+export interface NativeClientIdOptions {
+  /** The URL the document is served at. The caller has already validated it. */
+  clientId: string;
+  clientName: string;
+  clientUri: string;
+  /** A private-use scheme redirect; checked here with `parseRedirect`. */
+  redirectUri: string;
+  /** An already validated logo URL. */
+  logoUri?: string;
+}
+
+/**
+ * The one place that owns the fixed security metadata of a native Client Identifier Document
+ * (`application_type: native`, DPoP-bound tokens, public client, code flow with refresh). It
+ * trusts its string inputs, which callers validate, except the redirect, which must be a
+ * private-use scheme redirect the native driver would also accept.
+ */
+export function nativeClientIdDocument(options: NativeClientIdOptions): ClientIdDocument {
+  const document: ClientIdDocument = {
+    "@context": ["https://www.w3.org/ns/solid/oidc-context.jsonld"],
+    client_id: options.clientId,
+    client_name: options.clientName,
+    client_uri: options.clientUri,
+    application_type: "native",
+    redirect_uris: [parseRedirect(options.redirectUri).href],
+    scope: "openid webid offline_access",
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    token_endpoint_auth_method: "none",
+    dpop_bound_access_tokens: true,
+  };
+  if (options.logoUri !== undefined) document.logo_uri = options.logoUri;
+  return document;
+}
+
 /**
  * The Solid-OIDC Client Identifier Document for the native apps: `application_type: native` so
  * identity providers accept the private-use scheme redirect. `client_id` equals the URL it is
@@ -46,26 +82,20 @@ export function mobileClientIdDocument(options: MobileClientIdOptions): ClientId
   if (origin.protocol !== "https:" && !local) throw new TypeError("origin must be https");
   if (origin.href !== `${origin.origin}/`) throw new TypeError("origin must be a bare origin");
   const base = origin.origin;
-  const document: ClientIdDocument = {
-    "@context": ["https://www.w3.org/ns/solid/oidc-context.jsonld"],
-    client_id: `${base}${MOBILE_CLIENT_ID_PATH}`,
-    client_name: options.clientName ?? "Solid Suite",
-    client_uri: `${base}/`,
-    application_type: "native",
-    // Only a private-use scheme redirect the native driver would also accept.
-    redirect_uris: [parseRedirect(options.redirectUri ?? MOBILE_REDIRECT_URI).href],
-    scope: "openid webid offline_access",
-    grant_types: ["authorization_code", "refresh_token"],
-    response_types: ["code"],
-    token_endpoint_auth_method: "none",
-    dpop_bound_access_tokens: true,
-  };
+  let logoUri: string | undefined;
   if (options.logoPath !== undefined) {
     if (!options.logoPath.startsWith("/")) throw new TypeError("logoPath must start with /");
     const logo = new URL(options.logoPath, base);
     // `//host/x` and `/\host/x` are network-path references to another origin.
     if (logo.origin !== base) throw new TypeError("logoPath must stay on the suite origin");
-    document.logo_uri = logo.href;
+    logoUri = logo.href;
   }
-  return document;
+  return nativeClientIdDocument({
+    clientId: `${base}${MOBILE_CLIENT_ID_PATH}`,
+    clientName: options.clientName ?? "Solid Suite",
+    clientUri: `${base}/`,
+    // Only a private-use scheme redirect the native driver would also accept.
+    redirectUri: options.redirectUri ?? MOBILE_REDIRECT_URI,
+    logoUri,
+  });
 }

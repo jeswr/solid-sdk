@@ -14,6 +14,8 @@ export {
   MOBILE_REDIRECT_URI,
   type MobileClientIdOptions,
   mobileClientIdDocument,
+  type NativeClientIdOptions,
+  nativeClientIdDocument,
 } from "./client-id.js";
 export {
   AuthorizationError,
