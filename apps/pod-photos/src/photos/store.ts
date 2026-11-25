@@ -17,7 +17,8 @@
 import type { DatasetCore } from '@rdfjs/types';
 import type { Store } from 'n3';
 import { listContainer } from '../pod/container.js';
-import { OutOfScopeError } from '../pod/errors.js';
+import { RdfFetchError } from '@jeswr/fetch-rdf';
+import { ForeignDocumentError, OutOfScopeError } from '../pod/errors.js';
 import {
   deleteResource,
   ensureContainer,
@@ -53,6 +54,13 @@ export interface StoreConfig<T> {
   parse(itemUrl: string, dataset: DatasetCore): T | undefined;
   /** Serialise a payload into a fresh dataset rooted at `${itemUrl}#it`. */
   build(itemUrl: string, data: T): Store;
+  /**
+   * Optional ownership guard for `update` and `remove`: given the EXISTING document,
+   * return `false` when it is not an item this app wrote (another app's document,
+   * or no item node at all). The operation then throws {@link ForeignDocumentError}
+   * before any write. A missing document (404) is not guarded.
+   */
+  owns?(itemUrl: string, existing: DatasetCore): boolean;
 }
 
 /**
@@ -177,12 +185,13 @@ export class PodStore<T> {
   }
 
   /**
-   * Overwrite an existing item. Sends `If-Match` when an `etag` is supplied so
+   * Overwrite an existing item (refused for a document the config's `owns` rejects). Sends `If-Match` when an `etag` is supplied so
    * a concurrent edit fails with 412 instead of clobbering (the caller re-reads
    * and retries).
    */
   async update(url: string, data: T, etag?: string | null): Promise<{ etag: string | null }> {
     this.assertInContainer(url);
+    await this.assertOwned(url);
     const dataset = this.cfg.build(url, data);
     return writeResource(url, dataset, {
       ...(etag !== undefined ? { etag } : {}),
@@ -191,9 +200,26 @@ export class PodStore<T> {
     });
   }
 
+  /**
+   * When the config has an ownership guard, read the existing document and refuse
+   * (before any write) if it is not one of ours. A 404 means there is nothing to
+   * protect; any other read failure propagates and nothing is written.
+   */
+  private async assertOwned(url: string): Promise<void> {
+    if (!this.cfg.owns) return;
+    try {
+      const { dataset } = await readResource(url, this.fetchImpl);
+      if (!this.cfg.owns(url, dataset)) throw new ForeignDocumentError(url);
+    } catch (e) {
+      if (e instanceof RdfFetchError && e.status === 404) return;
+      throw e;
+    }
+  }
+
   /** Delete an item (idempotent — a missing resource resolves to success). */
   async remove(url: string): Promise<void> {
     this.assertInContainer(url);
+    await this.assertOwned(url);
     await deleteResource(url, this.fetchImpl);
   }
 

@@ -24,6 +24,9 @@ export {
   type ListGalleryOptions,
   listGallery,
   type PhotoEntry,
+  SHARD_MAX_CONTAINERS,
+  SHARD_MAX_DEPTH,
+  SHARD_MAX_DOCUMENTS,
 } from './gallery.js';
 export { PhotoGallery, type PhotoGalleryProps } from './PhotoGallery.js';
 export {

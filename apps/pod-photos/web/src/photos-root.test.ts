@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// Tests for resolvePhotosRoot — the host's Type-Index discovery of the
+// Tests for resolvePhotosRoots — the host's Type-Index discovery of the
 // schema:Photograph gallery container, with the conventional ${podRoot}photos/
 // fallback. Covers the discovery gap roborev flagged (Medium): a profile may
 // advertise a PRIVATE index that lacks the registration while the PUBLIC index
@@ -11,7 +11,7 @@
 // the stub fetch returns Turtle Responses keyed by URL — no live server.
 
 import { describe, expect, it } from "vitest";
-import { resolvePhotosRoot } from "./photos-root";
+import { resolvePhotosRoots } from "./photos-root";
 
 const WEBID = "https://alice.example/profile/card#me";
 const POD = "https://alice.example/";
@@ -59,6 +59,11 @@ function emptyIndexTtl(): string {
   ].join("\n");
 }
 
+/** A Type Index registering schema:ImageObject at the given instanceContainer. */
+function imageObjectIndexTtl(container: string): string {
+  return photographIndexTtl(container).replace("schema:Photograph", "schema:ImageObject");
+}
+
 function turtle(body: string): Response {
   return new Response(body, { status: 200, headers: { "content-type": "text/turtle" } });
 }
@@ -73,70 +78,129 @@ function stubFetch(routes: Record<string, string>): typeof fetch {
   }) as unknown as typeof fetch;
 }
 
-describe("resolvePhotosRoot", () => {
+const root = (rootUrl: string, aggregateShards = false) => ({
+  rootUrl,
+  isFallback: false,
+  aggregateShards,
+});
+const FALLBACK = [{ rootUrl: `${POD}photos/`, isFallback: true, aggregateShards: false }];
+
+/** A stub fetch that also counts GETs per URL. */
+function countingFetch(routes: Record<string, string>) {
+  const calls: string[] = [];
+  const inner = stubFetch(routes);
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push(typeof input === "string" ? input : input.toString());
+    return inner(input, init);
+  }) as typeof fetch;
+  return { fetchImpl, calls };
+}
+
+describe("resolvePhotosRoots", () => {
   it("discovers the schema:Photograph container from the private Type Index", async () => {
     const container = `${POD}my-photos/`;
     const fetchImpl = stubFetch({
       [WEBID]: profileTtl({ privateIndex: PRIVATE_INDEX }),
       [PRIVATE_INDEX]: photographIndexTtl(container),
     });
-    const root = await resolvePhotosRoot({ webId: WEBID, podRoot: POD, fetchImpl });
-    expect(root).toEqual({ rootUrl: container, isFallback: false });
+    expect(await resolvePhotosRoots({ webId: WEBID, podRoot: POD, fetchImpl })).toEqual([
+      root(container),
+    ]);
+  });
+
+  it("returns a schema:ImageObject container, flagged for shard aggregation", async () => {
+    const container = `${POD}creative/assets/`;
+    const fetchImpl = stubFetch({
+      [WEBID]: profileTtl({ privateIndex: PRIVATE_INDEX }),
+      [PRIVATE_INDEX]: imageObjectIndexTtl(container),
+    });
+    expect(await resolvePhotosRoots({ webId: WEBID, podRoot: POD, fetchImpl })).toEqual([
+      root(container, true),
+    ]);
+  });
+
+  it("returns Photograph and ImageObject containers together, de-duplicated, each index fetched once", async () => {
+    const photos = `${POD}photos/`;
+    const library = `${POD}creative/assets/`;
+    const { fetchImpl, calls } = countingFetch({
+      [WEBID]: profileTtl({ privateIndex: PRIVATE_INDEX, publicIndex: PUBLIC_INDEX }),
+      [PRIVATE_INDEX]: `${photographIndexTtl(photos)}\n${imageObjectIndexTtl(library).replace("<#reg>", "<#reg2>")}`,
+      [PUBLIC_INDEX]: photographIndexTtl(photos),
+    });
+    const roots = await resolvePhotosRoots({ webId: WEBID, podRoot: POD, fetchImpl });
+    expect(roots).toEqual([root(photos), root(library, true)]);
+    expect(calls.filter((u) => u === PRIVATE_INDEX)).toHaveLength(1);
+    expect(calls.filter((u) => u === PUBLIC_INDEX)).toHaveLength(1);
+  });
+
+  it("flags a container registered for both classes for shard aggregation", async () => {
+    const both = `${POD}both/`;
+    const fetchImpl = stubFetch({
+      [WEBID]: profileTtl({ privateIndex: PRIVATE_INDEX }),
+      [PRIVATE_INDEX]: `${photographIndexTtl(both)}\n${imageObjectIndexTtl(both).replace("<#reg>", "<#reg2>")}`,
+    });
+    expect(await resolvePhotosRoots({ webId: WEBID, podRoot: POD, fetchImpl })).toEqual([
+      root(both, true),
+    ]);
+  });
+
+  it("ignores a registration outside the session's storage", async () => {
+    const fetchImpl = stubFetch({
+      [WEBID]: profileTtl({ privateIndex: PRIVATE_INDEX }),
+      [PRIVATE_INDEX]: imageObjectIndexTtl("https://evil.example/photos/"),
+    });
+    expect(await resolvePhotosRoots({ webId: WEBID, podRoot: POD, fetchImpl })).toEqual(FALLBACK);
   });
 
   it("falls back to the public Type Index when the private one lacks the registration (roborev Medium)", async () => {
     const container = `${POD}public-photos/`;
     const fetchImpl = stubFetch({
-      // Both indexes advertised; private one exists but has NO schema:Photograph.
       [WEBID]: profileTtl({ privateIndex: PRIVATE_INDEX, publicIndex: PUBLIC_INDEX }),
       [PRIVATE_INDEX]: emptyIndexTtl(),
       [PUBLIC_INDEX]: photographIndexTtl(container),
     });
-    const root = await resolvePhotosRoot({ webId: WEBID, podRoot: POD, fetchImpl });
-    // Must NOT fall straight back to ${podRoot}photos/ — the public index wins.
-    expect(root).toEqual({ rootUrl: container, isFallback: false });
+    expect(await resolvePhotosRoots({ webId: WEBID, podRoot: POD, fetchImpl })).toEqual([
+      root(container),
+    ]);
   });
 
   it("consults the public index when the private index is unreadable", async () => {
     const container = `${POD}public-photos/`;
     const fetchImpl = stubFetch({
       [WEBID]: profileTtl({ privateIndex: PRIVATE_INDEX, publicIndex: PUBLIC_INDEX }),
-      // PRIVATE_INDEX intentionally absent (404 → unreadable) — must not abort.
       [PUBLIC_INDEX]: photographIndexTtl(container),
     });
-    const root = await resolvePhotosRoot({ webId: WEBID, podRoot: POD, fetchImpl });
-    expect(root).toEqual({ rootUrl: container, isFallback: false });
+    expect(await resolvePhotosRoots({ webId: WEBID, podRoot: POD, fetchImpl })).toEqual([
+      root(container),
+    ]);
   });
 
   it("normalises a non-slash instanceContainer to a trailing slash", async () => {
     const fetchImpl = stubFetch({
       [WEBID]: profileTtl({ privateIndex: PRIVATE_INDEX }),
-      [PRIVATE_INDEX]: photographIndexTtl(`${POD}gallery`), // no trailing slash
+      [PRIVATE_INDEX]: photographIndexTtl(`${POD}gallery`),
     });
-    const root = await resolvePhotosRoot({ webId: WEBID, podRoot: POD, fetchImpl });
-    expect(root.rootUrl).toBe(`${POD}gallery/`);
-    expect(root.isFallback).toBe(false);
+    expect(await resolvePhotosRoots({ webId: WEBID, podRoot: POD, fetchImpl })).toEqual([
+      root(`${POD}gallery/`),
+    ]);
   });
 
   it("falls back to the conventional <podRoot>photos/ when no index is advertised", async () => {
     const fetchImpl = stubFetch({ [WEBID]: profileTtl({}) });
-    const root = await resolvePhotosRoot({ webId: WEBID, podRoot: POD, fetchImpl });
-    expect(root).toEqual({ rootUrl: `${POD}photos/`, isFallback: true });
+    expect(await resolvePhotosRoots({ webId: WEBID, podRoot: POD, fetchImpl })).toEqual(FALLBACK);
   });
 
-  it("falls back when neither advertised index registers schema:Photograph", async () => {
+  it("falls back when neither advertised index registers a photo class", async () => {
     const fetchImpl = stubFetch({
       [WEBID]: profileTtl({ privateIndex: PRIVATE_INDEX, publicIndex: PUBLIC_INDEX }),
       [PRIVATE_INDEX]: emptyIndexTtl(),
       [PUBLIC_INDEX]: emptyIndexTtl(),
     });
-    const root = await resolvePhotosRoot({ webId: WEBID, podRoot: POD, fetchImpl });
-    expect(root).toEqual({ rootUrl: `${POD}photos/`, isFallback: true });
+    expect(await resolvePhotosRoots({ webId: WEBID, podRoot: POD, fetchImpl })).toEqual(FALLBACK);
   });
 
   it("falls back when the profile itself is unreadable", async () => {
-    const fetchImpl = stubFetch({}); // WebID 404s
-    const root = await resolvePhotosRoot({ webId: WEBID, podRoot: POD, fetchImpl });
-    expect(root).toEqual({ rootUrl: `${POD}photos/`, isFallback: true });
+    const fetchImpl = stubFetch({});
+    expect(await resolvePhotosRoots({ webId: WEBID, podRoot: POD, fetchImpl })).toEqual(FALLBACK);
   });
 });

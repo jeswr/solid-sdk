@@ -29,7 +29,7 @@
 import { RdfFetchError } from '@jeswr/fetch-rdf';
 import { ContainerDataset } from '@solid/object';
 import { DataFactory } from 'n3';
-import { type Photo, parsePhoto } from '../photos/photograph.js';
+import { type Photo, parsePhoto, thumbnailDocuments } from '../photos/photograph.js';
 import { freshRdf } from '../pod/rdf.js';
 
 /** A sub-folder to navigate into (an LDP sub-container of the current view). */
@@ -61,7 +61,23 @@ export interface GalleryListing {
 }
 
 /** Options for {@link listGallery}. */
+/**
+ * Bounds for {@link ListGalleryOptions.aggregateShards}: `@jeswr/pod-media-store` writes
+ * `<library>/<yyyy>/<mm>/<document>`, so a library root holds year containers that hold
+ * month containers. Two levels, a bounded number of containers and of documents read.
+ */
+export const SHARD_MAX_DEPTH = 2;
+export const SHARD_MAX_CONTAINERS = 120;
+export const SHARD_MAX_DOCUMENTS = 1000;
+const SHARD_NAME = [/\/\d{4}\/$/, /\/\d{2}\/$/] as const;
+
 export interface ListGalleryOptions {
+  /**
+   * List a media-store library root: follow `ldp:contains` from the listing into
+   * `<yyyy>/` then `<yyyy>/<mm>/` containers (no URL is constructed) and show their
+   * photos in one grid. Those shard containers are not shown as folders.
+   */
+  aggregateShards?: boolean;
   /**
    * The authenticated fetch (e.g. the one @solid/reactive-authentication patches
    * onto globalThis.fetch). Omit to use the ambient global fetch. The injectable
@@ -102,6 +118,40 @@ export class GalleryAccessError extends Error {
 }
 
 /** Stable order: alphabetical by name, locale-aware. */
+interface Members {
+  folders: FolderEntry[];
+  documents: string[];
+}
+
+/** Split a container listing into sub-containers and documents (containment only). */
+function readMembers(dataset: import('@rdfjs/types').DatasetCore, url: string): Members {
+  const container = new ContainerDataset(dataset, DataFactory).container;
+  const members: Members = { folders: [], documents: [] };
+  for (const child of container?.contains ?? []) {
+    if (child.id === url) continue; // the container's self-description
+    if (!child.id.startsWith(url)) continue; // never leave the container we listed
+    if (child.isContainer) members.folders.push({ url: child.id, name: child.name });
+    else members.documents.push(child.id);
+  }
+  return members;
+}
+
+/** One shard container's listing; an unreadable shard is skipped, a cancel is not. */
+async function readShard(
+  shardUrl: string,
+  authedFetch: typeof fetch | undefined,
+  signal: AbortSignal | undefined,
+): Promise<Members | undefined> {
+  try {
+    const { dataset } = await freshRdf(shardUrl, authedFetch);
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    return readMembers(dataset, shardUrl);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    return undefined;
+  }
+}
+
 function byName(a: { name: string }, b: { name: string }): number {
   return a.name.localeCompare(b.name);
 }
@@ -145,15 +195,29 @@ export async function listGallery(
     throw error;
   }
 
-  const container = new ContainerDataset(containerDataset, DataFactory).container;
+  const root = readMembers(containerDataset, url);
   const folders: FolderEntry[] = [];
   const photoUrls: string[] = [];
-  for (const child of container?.contains ?? []) {
-    if (child.id === url) continue; // the container's self-description
-    if (child.isContainer) {
-      folders.push({ url: child.id, name: child.name });
-    } else {
-      photoUrls.push(child.id);
+  // Containers still to read, with their depth below the root.
+  const pending: { url: string; depth: number; members: Members }[] = [
+    { url, depth: 0, members: root },
+  ];
+  let visited = 0;
+  for (const next of pending) {
+    photoUrls.push(...next.members.documents);
+    for (const folder of next.members.folders) {
+      const isShard =
+        options.aggregateShards === true &&
+        next.depth < SHARD_MAX_DEPTH &&
+        SHARD_NAME[next.depth]?.test(folder.url) === true;
+      if (!isShard) {
+        if (next.depth === 0) folders.push(folder);
+        continue;
+      }
+      if (visited >= SHARD_MAX_CONTAINERS) continue;
+      visited++;
+      const members = await readShard(folder.url, authedFetch, signal);
+      if (members) pending.push({ url: folder.url, depth: next.depth + 1, members });
     }
   }
 
@@ -162,7 +226,8 @@ export async function listGallery(
   // single bad resource never blanks the whole gallery — the same resilience
   // the data layer's PodStore.list() applies.
   const photos: PhotoEntry[] = [];
-  for (const photoUrl of photoUrls) {
+  const thumbnails = new Set<string>();
+  for (const photoUrl of photoUrls.slice(0, options.aggregateShards ? SHARD_MAX_DOCUMENTS : undefined)) {
     try {
       const { dataset, etag } = await freshRdf(photoUrl, authedFetch);
       // Abort cooperatively between reads (freshRdf doesn't take a signal; this
@@ -170,6 +235,7 @@ export async function listGallery(
       if (signal?.aborted) {
         throw new DOMException('Aborted', 'AbortError');
       }
+      for (const thumb of thumbnailDocuments(photoUrl, dataset)) thumbnails.add(thumb);
       const photo = parsePhoto(photoUrl, dataset);
       if (photo !== undefined) {
         photos.push({ url: photoUrl, etag, photo });
@@ -181,8 +247,10 @@ export async function listGallery(
       // otherwise skip this one photo and keep loading the rest
     }
   }
+  // A thumbnail kept in its own document is the same asset as the image naming it.
+  const shown = photos.filter((entry) => !thumbnails.has(entry.url));
 
   folders.sort(byName);
-  photos.sort((a, b) => byName({ name: a.photo.name }, { name: b.photo.name }));
-  return { url, folders, photos };
+  shown.sort((a, b) => byName({ name: a.photo.name }, { name: b.photo.name }));
+  return { url, folders, photos: shown };
 }

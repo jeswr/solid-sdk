@@ -26,6 +26,29 @@ album under `albums/`, with each container registered in the user's Type Index
 (`schema:Photograph` → `photos/`, `schema:ImageGallery` → `albums/`) so the data
 surfaces in any Type-Index-aware Solid app.
 
+**Images from other apps.** Documents typed [`schema:ImageObject`](https://schema.org/ImageObject)
+(e.g. `@jeswr/solid-creative-assets`, `@jeswr/pod-media-store`) are shown as photos too. The web app
+reads the Type Index once per index and shows every container registered for `schema:Photograph` or
+`schema:ImageObject` inside your storage (de-duplicated, one gallery each). For an ImageObject
+container the listing follows `ldp:contains` into the `<yyyy>/<mm>/` shard containers (two levels, at
+most 120 containers and 1000 documents) and shows their photos in one grid. Only the `<doc#it>` node is
+a photo, so `#thumbnail`, `#run`, `#prompt`, `#model` and `#setting-n` are ignored, and a thumbnail kept
+in its own document that another document names with `schema:thumbnail` is dropped from the same
+listing. A document that does not parse as an image (a literal `contentUrl`, a video) is skipped.
+The legacy `http://schema.org/` scheme is not read.
+
+**Read-only for other apps' documents.** Pod Photos still writes and registers only `schema:Photograph`.
+`PodStore.update` and `remove` first read the existing document and throw `ForeignDocumentError`, before
+any write, unless its `#it` is typed `schema:Photograph` (a missing document is not guarded). The gallery
+has no edit or delete control.
+
+**Known limitation: private images.** The grid loads each image with a plain `<img src>`, which carries
+no DPoP token. A binary in a private container (the usual place `@jeswr/pod-media-store` writes) is
+refused by the pod, so its tile shows a placeholder instead of the picture, while its title and caption
+load. Loading binaries through the authenticated fetch needs the suite's media loader primitive, which
+is being built separately.
+
+
 ## How the RDF is handled (house rules)
 
 - **Read** with [`@jeswr/fetch-rdf`](https://www.npmjs.com/package/@jeswr/fetch-rdf)

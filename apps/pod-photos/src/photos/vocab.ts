@@ -38,6 +38,14 @@ export const XSD = 'http://www.w3.org/2001/XMLSchema#';
 
 /** The RDF class a single photo is stamped + Type-Index-registered with. */
 export const PHOTOGRAPH_CLASS = `${SCHEMA}Photograph`;
+/**
+ * `schema:ImageObject` — written by other apps (e.g. creative-assets documents).
+ * Pod Photos READS it as a photo (and discovers containers registered for it) but
+ * never writes or registers it: new photos stay `schema:Photograph`.
+ */
+export const IMAGE_OBJECT_CLASS = `${SCHEMA}ImageObject`;
+/** `schema:thumbnail` — links an image to its thumbnail node (which is not a library item). */
+export const THUMBNAIL_PREDICATE = `${SCHEMA}thumbnail`;
 /** The RDF class an album/gallery is stamped + registered with. */
 export const IMAGE_GALLERY_CLASS = `${SCHEMA}ImageGallery`;
 

@@ -42,3 +42,15 @@ export class OutOfScopeError extends Error {
     this.name = 'OutOfScopeError';
   }
 }
+
+/**
+ * The existing document is not one this app wrote as its own item (for photos: its
+ * `#it` is not a `schema:Photograph`), so `update`/`remove` refuse before any write.
+ * Documents written by other apps (e.g. `schema:ImageObject`) are read-only here.
+ */
+export class ForeignDocumentError extends Error {
+  constructor(readonly url: string) {
+    super(`Refusing to modify a document this app does not own: ${url}`);
+    this.name = 'ForeignDocumentError';
+  }
+}

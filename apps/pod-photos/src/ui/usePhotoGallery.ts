@@ -63,6 +63,8 @@ export interface UsePhotoGalleryOptions {
    * auth seam — see the file header.
    */
   fetch?: typeof fetch;
+  /** List a media-store library root by following its `<yyyy>/<mm>/` shard containers. */
+  aggregateShards?: boolean;
 }
 
 /**
@@ -79,7 +81,7 @@ export function usePhotoGallery(
   rootUrl: string,
   options: UsePhotoGalleryOptions = {},
 ): PhotoGalleryState {
-  const { fetch: authedFetch } = options;
+  const { fetch: authedFetch, aggregateShards } = options;
   // Normalise the root to a single trailing slash BEFORE it seeds any state, so
   // a slashless `rootUrl` (e.g. ".../photos") still drives a slash-terminated
   // container GET and a correct breadcrumb. The raw prop is never used directly.
@@ -138,6 +140,7 @@ export function usePhotoGallery(
 
     listGallery(currentUrl, {
       ...(authedFetch ? { fetch: authedFetch } : {}),
+      ...(aggregateShards ? { aggregateShards } : {}),
       signal: controller.signal,
     })
       .then((result) => {
@@ -173,7 +176,7 @@ export function usePhotoGallery(
       requestIdRef.current++;
       controller.abort();
     };
-  }, [currentUrl, authedFetch, reloadToken]);
+  }, [currentUrl, authedFetch, aggregateShards, reloadToken]);
 
   const navigate = useCallback((url: string) => {
     // Just set the target; the load effect (re-run only on an actual change)

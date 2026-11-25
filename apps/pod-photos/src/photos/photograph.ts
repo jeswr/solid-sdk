@@ -35,7 +35,15 @@ import {
 import { DataFactory, Store } from 'n3';
 import type { ExifMetadata, GeoPoint } from './exif.js';
 import { isExifEmpty, normaliseExif } from './exif.js';
-import { EXIF, GEO, PHOTOGRAPH_CLASS, RDF_TYPE, SCHEMA } from './vocab.js';
+import {
+  EXIF,
+  GEO,
+  IMAGE_OBJECT_CLASS,
+  PHOTOGRAPH_CLASS,
+  RDF_TYPE,
+  SCHEMA,
+  THUMBNAIL_PREDICATE,
+} from './vocab.js';
 
 /** A photo as the UI works with it (plain, serialisable). */
 export interface Photo {
@@ -243,10 +251,32 @@ function readExif(doc: PhotographDoc, dataset: DatasetCore): ExifMetadata {
   return normaliseExif(raw);
 }
 
-/** Parse a photo document into a {@link Photo}, or `undefined` if not one. */
+/**
+ * Whether the document's `#it` node is a library photo: a `schema:Photograph`, or a
+ * `schema:ImageObject` (written by another app) that is not itself the object of a
+ * `schema:thumbnail` (a creative-assets document's `#thumbnail` is a second ImageObject,
+ * so each asset must appear once).
+ */
+function isPhotoNode(doc: PhotographDoc, dataset: DatasetCore): boolean {
+  const types = doc.types;
+  if (types.has(PHOTOGRAPH_CLASS)) return true;
+  if (!types.has(IMAGE_OBJECT_CLASS)) return false;
+  const asThumbnail = dataset.match(
+    null,
+    DataFactory.namedNode(THUMBNAIL_PREDICATE),
+    DataFactory.namedNode(doc.value),
+  );
+  return asThumbnail.size === 0;
+}
+
+/**
+ * Parse a photo document into a {@link Photo}, or `undefined` if not one. Reads
+ * `schema:Photograph` and (read-only alias) `schema:ImageObject`; the legacy
+ * `http://schema.org/` scheme is not accepted.
+ */
 export function parsePhoto(itemUrl: string, dataset: DatasetCore): Photo | undefined {
   const doc = new PhotographDoc(`${itemUrl}#it`, dataset, DataFactory);
-  if (!doc.types.has(PHOTOGRAPH_CLASS)) return undefined;
+  if (!isPhotoNode(doc, dataset)) return undefined;
   return {
     name: doc.name ?? '',
     ...(doc.description !== undefined ? { description: doc.description } : {}),
@@ -291,4 +321,33 @@ export function buildPhoto(itemUrl: string, photo: Photo): Store {
     if (exif.location) writeGeo(itemUrl, doc, store, exif.location);
   }
   return store;
+}
+
+/**
+ * Whether `<itemUrl>#it` is typed `schema:Photograph`, i.e. an item Pod Photos itself
+ * writes. Only such documents may be updated or deleted through the store.
+ */
+export function isPhotographDocument(itemUrl: string, dataset: DatasetCore): boolean {
+  return new PhotographDoc(`${itemUrl}#it`, dataset, DataFactory).types.has(PHOTOGRAPH_CLASS);
+}
+
+/**
+ * The document URLs (fragment stripped) that this document's `#it` names as its
+ * `schema:thumbnail`. A listing pass uses them to drop a thumbnail that lives in its own
+ * document, so the asset is shown once.
+ */
+export function thumbnailDocuments(itemUrl: string, dataset: DatasetCore): string[] {
+  const targets = dataset.match(
+    DataFactory.namedNode(`${itemUrl}#it`),
+    DataFactory.namedNode(THUMBNAIL_PREDICATE),
+    null,
+  );
+  const urls: string[] = [];
+  for (const quad of targets) {
+    if (quad.object.termType !== 'NamedNode') continue;
+    const target = new URL(quad.object.value);
+    target.hash = '';
+    if (target.href !== itemUrl) urls.push(target.href);
+  }
+  return urls;
 }

@@ -12,7 +12,7 @@
 // The gallery's `rootUrl` is the PHOTOS container. The host derives the pod root
 // from the session (deriveSession — storages[0], else WebID origin) and then
 // resolves the photos container under it via the library's read-only Type-Index
-// discovery (resolvePhotosRoot — schema:Photograph instanceContainer, else
+// discovery (resolvePhotosRoots — schema:Photograph instanceContainer, else
 // ${podRoot}photos/). Discovery is async, so we show a brief "finding your
 // photos…" state and surface a banner when either fallback is used.
 import {
@@ -37,11 +37,11 @@ import { Loading } from "@jeswr/solid-elements/react";
 import { useEffect, useState } from "react";
 import { useSession } from "./auth/SessionProvider";
 import { LoginScreen } from "./LoginScreen";
-import { type PhotosRoot, resolvePhotosRoot } from "./photos-root";
+import { type PhotosRoot, resolvePhotosRoots } from "./photos-root";
 
 export function App() {
   const { webId, session, logout, autologinPending, restoring } = useSession();
-  const [photosRoot, setPhotosRoot] = useState<PhotosRoot | null>(null);
+  const [photosRoot, setPhotosRoot] = useState<PhotosRoot[] | null>(null);
   // Cross-app parity (bead suite-tracker-lpo): when the Solid browser extension is
   // present it owns the account surface, so the app's <AccountMenu/> would duplicate it.
   const extensionPresent = useSolidExtensionPresent();
@@ -56,15 +56,17 @@ export function App() {
     }
     let cancelled = false;
     setPhotosRoot(null);
-    resolvePhotosRoot({ webId: session.webId, podRoot: session.podRoot })
+    resolvePhotosRoots({ webId: session.webId, podRoot: session.podRoot })
       .then((root) => {
         if (!cancelled) setPhotosRoot(root);
       })
       .catch(() => {
-        // resolvePhotosRoot already falls back internally; this catch is purely
+        // resolvePhotosRoots already falls back internally; this catch is purely
         // defensive — never strand the gallery on a discovery error.
         if (!cancelled) {
-          setPhotosRoot({ rootUrl: `${session.podRoot}photos/`, isFallback: true });
+          setPhotosRoot([
+            { rootUrl: `${session.podRoot}photos/`, isFallback: true, aggregateShards: false },
+          ]);
         }
       });
     return () => {
@@ -155,17 +157,26 @@ export function App() {
           <code>{session.podRoot}</code>) as the pod root.
         </p>
       ) : null}
-      {photosRoot?.isFallback ? (
+      {photosRoot?.[0]?.isFallback ? (
         <p className="app-note" role="note">
-          No <code>schema:Photograph</code> container is registered in your Type Index; browsing the
-          conventional <code>{photosRoot.rootUrl}</code> container.
+          No <code>schema:Photograph</code> or <code>schema:ImageObject</code> container is
+          registered in your Type Index; browsing the conventional{" "}
+          <code>{photosRoot[0].rootUrl}</code> container.
         </p>
       ) : null}
       <main className="app-main">
         {photosRoot ? (
           // rootUrl only — no fetch prop: the global fetch is auth-patched, so the
           // gallery's `fetch?:` seam reads the pod with the DPoP token.
-          <PhotoGallery rootUrl={photosRoot.rootUrl} title="Your photos" />
+          // One gallery per discovered container, so every registered library is shown.
+          photosRoot.map((root) => (
+            <PhotoGallery
+              key={root.rootUrl}
+              rootUrl={root.rootUrl}
+              aggregateShards={root.aggregateShards}
+              title={photosRoot.length > 1 ? root.rootUrl : "Your photos"}
+            />
+          ))
         ) : (
           // SOLID-ELEMENTS: the host-level "finding your photos" wait, now the themed
           // <jeswr-loading> spinner (via @lit/react) instead of a bare <output>. It
