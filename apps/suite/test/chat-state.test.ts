@@ -12,7 +12,7 @@ import {
   useRooms,
   useSend,
 } from "../src/apps/chat/state/chat-context";
-import { CHAT_OUTBOX_NAMESPACE } from "../src/apps/chat/state/outbox";
+import { chatOutboxNamespace } from "../src/apps/chat/state/outbox";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { act, deferred, h, mount } from "./drive-ui-dom";
 
@@ -144,7 +144,7 @@ it("queues Chat's pending sends in Chat's own outbox, never the shell's", async 
   const view = await mount(h(ChatProvider, { session: session(pod), children: h(Probe) }));
   await act(() => sender.send("Not a Drive write"));
   const shell = createOutbox({ webId: ME });
-  const chat = createOutbox({ webId: ME, namespace: CHAT_OUTBOX_NAMESPACE });
+  const chat = createOutbox({ webId: ME, namespace: chatOutboxNamespace(ROOT) });
   try {
     await Promise.all([shell.ready, chat.ready]);
     expect(shell.pending()).toEqual([]);

@@ -8,8 +8,26 @@ import { ChatModelError, messageSubject, roomContainer } from "../lib/model";
 import { ChatLocalState } from "./local-state";
 
 const TAG = "chat.message.v1";
-/** Chat's own solid-offline queue: the shell's queue and sync sheet never see its records. */
-export const CHAT_OUTBOX_NAMESPACE = "chat";
+/**
+ * Chat's own solid-offline queue for one account: the shell's queue and sync sheet never see its
+ * records, and each (WebID, storage) pair gets its own database, channel and replay lock (the
+ * SDK adds the WebID), so a session on another storage never sees or fails this one's rows. The
+ * storage is hashed (53-bit cyrb53) to fit the SDK's namespace alphabet; a collision could only
+ * share a database, and every intent also carries its exact storage URL, which `decode` checks.
+ */
+export function chatOutboxNamespace(storageUrl: string): string {
+  let a = 0xdeadbeef;
+  let b = 0x41c6ce57;
+  for (let i = 0; i < storageUrl.length; i++) {
+    const code = storageUrl.charCodeAt(i);
+    a = Math.imul(a ^ code, 2654435761);
+    b = Math.imul(b ^ code, 1597334677);
+  }
+  a = Math.imul(a ^ (a >>> 16), 2246822507) ^ Math.imul(b ^ (b >>> 13), 3266489909);
+  b = Math.imul(b ^ (b >>> 16), 2246822507) ^ Math.imul(a ^ (a >>> 13), 3266489909);
+  const hash = (4294967296 * (2097151 & b) + (a >>> 0)).toString(16).padStart(14, "0");
+  return `chat-${hash}`;
+}
 const DAY_DOCUMENT = /\/\d{4}\/\d{2}\/\d{2}\.ttl$/;
 export interface Outgoing extends Message {
   status?: "sending" | "failed" | undefined;
@@ -113,6 +131,7 @@ export class ChatOutbox {
     const value = JSON.parse(new TextDecoder().decode(body ?? new Uint8Array()));
     if (
       value?.webId !== this.client.webId ||
+      value.storageUrl !== this.client.storageUrl ||
       typeof value.room !== "string" ||
       typeof value.draft !== "string" ||
       typeof value.localId !== "string" ||
@@ -200,6 +219,7 @@ export class ChatOutbox {
       url: documentOf(item),
       body: JSON.stringify({
         webId: this.client.webId,
+        storageUrl: this.client.storageUrl,
         room: item.room,
         draft: item.draft,
         localId: item.localId,
@@ -223,7 +243,12 @@ export class ChatOutbox {
           try {
             item = this.decode(
               new TextEncoder().encode(
-                JSON.stringify({ ...value, webId: this.client.webId, room }),
+                JSON.stringify({
+                  ...value,
+                  webId: this.client.webId,
+                  storageUrl: this.client.storageUrl,
+                  room,
+                }),
               ),
               messageSubject(room, new Date(value.at), value.localId).split("#")[0]!,
             );

@@ -21,7 +21,7 @@ import type { PodSession } from "@/lib/session/pod-session";
 import { ChatClient, classifyChatError, type JoinedRoom, type Message } from "../lib/client";
 import type { ReadPreferences } from "../lib/model";
 import { ChatLocalState, INVITATIONS_JOINED } from "./local-state";
-import { CHAT_OUTBOX_NAMESPACE, ChatOutbox, type Outgoing } from "./outbox";
+import { ChatOutbox, chatOutboxNamespace, type Outgoing } from "./outbox";
 
 export type { Outgoing } from "./outbox";
 
@@ -104,7 +104,7 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
       () => navigator.onLine !== false,
       () => ({
         // Chat's own queue: the shell's replay and sync sheet never handle chat intents.
-        outbox: createOutbox({ webId, namespace: CHAT_OUTBOX_NAMESPACE }),
+        outbox: createOutbox({ webId, namespace: chatOutboxNamespace(storageUrl) }),
         storage: async () =>
           mode === "demo"
             ? createMemoryStorage({ root: storageUrl, protocol: "solid" })

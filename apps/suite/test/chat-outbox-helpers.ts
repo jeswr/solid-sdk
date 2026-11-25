@@ -7,9 +7,9 @@ import { afterEach, beforeEach, vi } from "vitest";
 import type { Message } from "../src/apps/chat/lib/client";
 import { messageSubject } from "../src/apps/chat/lib/model";
 import {
-  CHAT_OUTBOX_NAMESPACE,
   ChatOutbox,
   type ChatOutboxConnection,
+  chatOutboxNamespace,
 } from "../src/apps/chat/state/outbox";
 
 const { IDBFactory } = createRequire(
@@ -55,6 +55,8 @@ export interface BoxOptions {
   storage?: () => Promise<StorageClient>;
   /** Called with each SDK instance before Chat registers on it. */
   onOpen?: (sdk: Outbox) => void;
+  /** The storage root this session works in (default: Alice's). */
+  storageUrl?: string;
   /** The saved-message hook (Chat's notification chip). */
   onSaved?: (message: Message) => void;
 }
@@ -65,18 +67,22 @@ export function box(
   options: BoxOptions = {},
 ) {
   let sdk!: Outbox;
-  const queue = new ChatOutbox({ webId: identity, send, storageUrl }, online, () => {
-    if (options.open) return options.open(identity);
-    sdk = createOutbox({ webId: identity, idb, namespace: CHAT_OUTBOX_NAMESPACE });
-    boxes.push(sdk);
-    options.onOpen?.(sdk);
-    return {
-      outbox: sdk,
-      storage:
-        options.storage ??
-        (async () => createMemoryStorage({ root: storageUrl, protocol: "solid" })),
-    };
-  }, options.onSaved);
+  const root = options.storageUrl ?? storageUrl;
+  const queue = new ChatOutbox(
+    { webId: identity, send, storageUrl: root },
+    online,
+    () => {
+      if (options.open) return options.open(identity);
+      sdk = createOutbox({ webId: identity, idb, namespace: chatOutboxNamespace(root) });
+      boxes.push(sdk);
+      options.onOpen?.(sdk);
+      return {
+        outbox: sdk,
+        storage: options.storage ?? (async () => createMemoryStorage({ root, protocol: "solid" })),
+      };
+    },
+    options.onSaved,
+  );
   const close = queue.connect();
   stops.push(close);
   return {
@@ -102,8 +108,8 @@ export function stubLocalStorage() {
   });
   return data;
 }
-export async function reopen(identity = webId) {
-  const sdk = createOutbox({ webId: identity, idb, namespace: CHAT_OUTBOX_NAMESPACE });
+export async function reopen(identity = webId, root = storageUrl) {
+  const sdk = createOutbox({ webId: identity, idb, namespace: chatOutboxNamespace(root) });
   boxes.push(sdk);
   await sdk.ready;
   return sdk;
