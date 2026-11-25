@@ -36,14 +36,20 @@ if (put.ok) console.log(put.value.descriptionUrl, put.value.binaryUrl, put.value
 
 Every operation returns `Result<T>`: `{ ok: true, value }` or `{ ok: false, error: { kind, reason, orphans? } }`.
 `kind` is the closed union `not-found | conflict | offline | forbidden | too-large | unsupported |
-exposed | failed`. `reason` is a fixed vocabulary; no server message, URL query or credential is ever
+exposed | failed`. `reason` is a fixed vocabulary (a storage 413 is `payload-too-large`, a 507
+`insufficient-storage`, any other storage failure `storage`); no server message, URL query or credential is ever
 included. An abort is `failed` / `aborted`. No operation throws, whatever it is given.
 
 ## Layout and discovery
 
 - The library container is found through the Type Index for the first of `classes` that has a container.
-  The Type Index API merges the public and private indexes, so discovery cannot tell them apart. The
-  store compensates in three ways: it registers only in the **private** index (`index: "private"`); when
+  The Type Index API merges the public and private indexes, so **discovery cannot tell a public-index
+  registration from a private one** (a follow-up in `@jeswr/pod-type-index`). Any app that can write the
+  public index can therefore register a container that wins the preference below and silently takes over
+  as the library (new items go there, and the old library disappears from `list`). The **exposure check on
+  the discovered container is the control**: nothing is written into it unless the probe says private, so
+  the effect is a library switch or a refused `put`, not a leak. Callers that must pin the library should
+  check `store.library` against their expected URL after open. The store compensates in three ways: it registers only in the **private** index (`index: "private"`); when
   several containers are registered it prefers the one called `defaultContainerName`, then the first in
   URL order; and it never writes into a container (the library or a shard) before the exposure probe has
   said it is private (below). A planted registration therefore cannot receive media silently; at worst it
@@ -63,12 +69,12 @@ included. An abort is `failed` / `aborted`. No operation throws, whatever it is 
 
 `put({ bytes, contentType, extension, createdAt, description, thumbnail?, signal? })`:
 
-1. The size is checked first (`maxBytes`, `too-large`; a `Blob` is not read at all for this), then the
-   leading bytes are sniffed. The declared type and extension are not trusted: the injected `sniff` (default
+1. The size is checked first (`maxBytes`, `too-large`, from `Blob.size` before any read), then the body is
+   read once (see "Large bodies") and its leading bytes are sniffed. The declared type and extension are not trusted: the injected `sniff` (default
    `defaultSniff`) decides; an `undefined` answer is `unsupported`, and a declared type that disagrees with the
    sniffed one is `unsupported` too. A thumbnail is sniffed and validated the same way and must be an image.
    A sniffer receives at most the first `SNIFF_BYTES` (4096) bytes, never the whole body, and the declared
-   extension as `hints.extension` (only to narrow, as SPZ does below).
+   extension as `hints.extension` (it selects one additional candidate, SPZ below; it never changes a type that has its own signature).
 2. SHA-256 (WebCrypto). Names: `<hex><ext>` for the binary, `<hex>-thumb<ext>` for the thumbnail and
    `<hex>` for the description.
 3. The probe is asked about the library and the shard (see Exposure) before anything is written into them.
@@ -103,34 +109,36 @@ bytes with `createdAt` in two different months are stored twice (one shard per m
 
 ## Large bodies: memory and size limits
 
-`put` and `attachThumbnail` give storage-client the caller's **original** `Blob` (`File` included), not a
-copy, so the injected authenticated fetch can send it without buffering. `@jeswr/pod-auth`'s `auth.fetch`
-replays a `Blob`/`File` body as it is and rejects only the other body kinds above `maxReplayBodyBytes` (16 MiB
-default), so a `Blob` upload is not subject to that limit; a `Uint8Array` is already in memory and is passed as
-it is (still subject to the replay limit above 16 MiB, so pass large uploads as a `Blob` or `File`).
-storage-client forwards the body to `fetch` unchanged on both backends (`create` and `write`; the memory pod
-used in tests copies it, as a server would).
+`put` and `attachThumbnail` read the caller's body **exactly once** into one buffer (a `File` is a handle to a
+file on disk and may answer a second read differently, which would break content addressing; no engine
+guarantee is assumed). The size check, the sniffed head, the SHA-256 and the length used for `build` all come
+from that buffer, and what is uploaded is a **fresh `Blob` constructed from that same buffer**, so the bytes
+that are hashed are the bytes that are sent. Nothing in the store reads the caller's `Blob` again, and a
+caller's `Blob` that answers differently on a later read has no effect. A `Uint8Array` body is hashed in place
+and wrapped in a fresh `Blob` the same way.
 
-What is actually held in memory for a `Blob` of `n` bytes:
+`@jeswr/pod-auth`'s `auth.fetch` replays a `Blob` body as it is and rejects other body kinds above
+`maxReplayBodyBytes` (16 MiB default); because the store always uploads a `Blob`, uploads above 16 MiB work.
+storage-client forwards a `Blob` body to `fetch` unchanged on both backends (`create` and `write`).
 
-- Sizing reads nothing (`blob.size`). Sniffing reads only the first 4096 bytes (`blob.slice(0, 4096)`).
-- The SHA-256 needs the whole content: WebCrypto has no streaming digest and this package adds no hashing
-  dependency. The store reads the `Blob` into **one** transient buffer of `n` bytes, hashes it, and drops it
-  before anything is written. The store keeps no other full copy; the upload itself streams from the `Blob`
-  (a browser `Blob` or `File` is typically disk-backed, so it does not count against the heap). The engine may
-  copy once more inside `digest`, which this package cannot avoid, so peak transient use is about one to two
-  times `n`, once per `put`, for the duration of the hash only.
-- A `Uint8Array` body is hashed in place and uploaded as it is: no copy is made.
+Real memory behaviour for a body of `n` bytes: one buffer of `n` bytes (the body as read), plus the `Blob`
+built from it (the engine may copy rather than share, so count another `n`), plus whatever `crypto.subtle.digest`
+copies internally (WebCrypto has no streaming digest and this package adds no hashing dependency). Plan for
+about two to three times `n` during a `put`; the buffer is released when the digest is done, and the `Blob`
+lives until the upload finishes. A `Uint8Array` input is not copied for the digest but is copied into the `Blob`.
+Sizing is checked before reading (`Blob.size`) and again on the length actually read, so a body that lies about
+its size is refused after at most one read.
+
 - "Already exists" checks keep their bounded read: an existing binary is read through `maxBytes` (a thumbnail
   through `maxThumbnailBytes`), buffered in chunks and joined, so while that check runs it holds up to the size
-  of the existing file, briefly twice (chunks and joined copy). It happens only when a name is taken.
+  of the existing file, briefly twice. It happens only when a name is taken.
 
 Effective limits: `maxBytes` (default 50 MiB; raise it for larger uploads) and `maxThumbnailBytes` (5 MiB) bound
-what is accepted. Above that, the practical ceiling is the largest `ArrayBuffer` the runtime can allocate for the
-digest (about 2 GiB in some browsers, larger in Node) and the server's own upload limit. A body whose hash
-cannot be computed fails the put; it is never uploaded unhashed. `Blob` content is immutable, so the bytes that
-were hashed are the bytes that are sent. A `Uint8Array` the caller mutates during a `put` is the caller's bug
-(as before).
+what is accepted. Above that, the practical ceiling is the largest `ArrayBuffer` the runtime can allocate
+(about 2 GiB in some browsers, larger in Node), the memory above, and the server's own upload limit. A server
+refusal is reported as `too-large` with reason `payload-too-large` (HTTP 413, will not succeed for this body) or
+`insufficient-storage` (HTTP 507, quota; may succeed after space is freed). A `Uint8Array` the caller mutates
+during a `put` is the caller's bug.
 
 ## list, get, update, remove, attachThumbnail, sweepOrphans
 
@@ -163,8 +171,11 @@ were hashed are the bytes that are sent. A `Uint8Array` the caller mutates durin
   is dropped as `rejected`), then the media.
 - `sweepOrphans({ minAgeMs = 24 h, signal? })`: in every shard, deletes media no description references and
   empty descriptions, only if older than `minAgeMs` (the grace period that protects a concurrent put), and
-  leaves a shard alone if any description in it cannot be read or understood (`shardsSkipped`). On Solid only
-  names this store creates are candidates; on LWS only resources with an `image|audio|video|model` type.
+  leaves a shard alone if any description in it cannot be read or understood (`shardsSkipped`). A candidate is selected by
+  the store's hash name (64 hex characters, optionally `-thumb`, then an extension), whatever its content type, so
+  PLY and SPZ orphans (`application/octet-stream`) are collected; on LWS, where the server picks names, a
+  resource whose name or display name matches, or one with an `image|audio|video|model` type, is a candidate
+  (an LWS orphan with a server-chosen name and an `application/octet-stream` type is not collected).
   Returns `{ deleted, retained, shardsSkipped }`.
 
 ## Exposure
@@ -176,7 +187,9 @@ before writing into the library and before writing into a shard (`put`, `attachT
 any other value, or no `exposure` option at all) refuses with `exposed` / `exposure-unknown`, unless the one
 exception below applies. A `private` answer is cached per container for `exposureTtlMs` (default 60 s); an
 inconclusive answer is never cached. `checkExposure()` runs the probe on demand (on the library, or the storage
-root before it exists; a failed probe reads as `unknown`). The package never writes `.acl` or `.acr`. On LWS the
+root before it exists; a failed probe reads as `unknown`). `exposureFromOwnerOnly` returns `unknown` only for a
+check that completed and could not tell; a check that throws or rejects is rethrown, which the store treats
+as a failed probe that `allowUnknownExposureFor` can never lift. The package never writes `.acl` or `.acr`. On LWS the
 adapter answers `unknown`, so LWS needs `allowUnknownExposureFor` or a probe of the caller's own.
 
 `allowUnknownExposureFor?: (containerUrl: string) => boolean | Promise<boolean>` is the per-container override.
@@ -210,7 +223,10 @@ first 64) are refused, with NULs ignored so UTF-16 markup is seen. glTF JSON, OB
   `application/octet-stream` with extensions `.ply` and `.spz`, so a declared type of `application/octet-stream` is
   what `put` expects. Neither is ever a renderable type.
 - **Why a gzip that inflates to markup is acceptable.** The sniffer sees only the compressed bytes, so a
-  `.spz` gzip whose inflated head is markup is accepted as opaque bytes. That is harmless for a type that is never
+  `.spz` gzip whose inflated head is markup is accepted as opaque bytes. Likewise `.spz` accepts **any**
+  gzip member or any bytes with an `NGSP` version 4 prefix as opaque data, not only valid splats: the store
+  never inflates, decodes or renders it, and a consumer that does inflate it must bound the output (a small
+  gzip can inflate to far more than `maxBytes`) and validate the inner header. That is harmless for a type that is never
   rendered as a document: it is stored and served as `application/octet-stream` (a browser does not sniff
   that into HTML, especially with `X-Content-Type-Options: nosniff`), and its only consumer decodes it as
   gaussian-splat data, not markup. The markup guard still refuses compressed bytes that carry markup in their

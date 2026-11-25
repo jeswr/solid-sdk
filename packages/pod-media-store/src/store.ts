@@ -23,7 +23,6 @@ import {
   readBounded,
   type Source,
   sha256Hex,
-  sha256Source,
 } from "./io.js";
 import { createMemoryJournal, type DeleteJournalEntry } from "./journal.js";
 import {
@@ -504,7 +503,7 @@ export async function openMediaStore<T, I>(
   async function loadThumbnail(
     body: Blob | Uint8Array,
   ): Promise<{ source: Source; sniffed: Sniffed }> {
-    const source = await loadSource(body, maxThumbnailBytes, SNIFF_BYTES);
+    const source = await loadSource(body, maxThumbnailBytes, SNIFF_BYTES, false);
     const sniffed = sniff(source.head);
     if (!usable(sniffed) || !sniffed.contentType.startsWith("image/")) {
       throw fail("unsupported", "unsniffable");
@@ -513,7 +512,7 @@ export async function openMediaStore<T, I>(
   }
 
   async function prepare(input: PutInput<I>): Promise<Prepared> {
-    const source = await loadSource(input.bytes, maxBytes, SNIFF_BYTES);
+    const source = await loadSource(input.bytes, maxBytes, SNIFF_BYTES, true);
     throwIfAborted(input.signal);
     const sniffed = sniff(source.head, { extension: input.extension });
     if (!usable(sniffed)) throw fail("unsupported", "unsniffable");
@@ -527,7 +526,7 @@ export async function openMediaStore<T, I>(
     if (key === undefined) throw fail("failed", "invalid-input");
     const thumbnail =
       input.thumbnail === undefined ? undefined : await loadThumbnail(input.thumbnail.bytes);
-    const sha256 = await sha256Source(source);
+    const sha256 = source.sha256 as string;
     throwIfAborted(input.signal);
     return { source, sniffed, sha256, key, thumbnail };
   }
@@ -551,7 +550,7 @@ export async function openMediaStore<T, I>(
   async function createMedia(
     shardUrl: string,
     fileName: string,
-    body: Blob | Uint8Array,
+    body: Blob,
     contentType: string,
     verify: (existing: string) => Promise<void>,
     signal: AbortSignal | undefined,
@@ -1355,9 +1354,13 @@ export async function openMediaStore<T, I>(
       for await (const entry of storage.listAll(shard.url, { signal })) {
         if (!isMember(shard.url, entry.url) || entry.kind !== "resource") continue;
         if (!isCandidateEntry(entry)) {
+          // The hash-name pattern selects candidates on Solid whatever the content type (PLY and
+          // SPZ are application/octet-stream). LWS names are the server's, so there the name
+          // pattern (when the server kept ours) or a media content type selects.
           if (
-            MEDIA_TYPE.test(entry.contentType ?? "") &&
-            (lws || OWN_MEDIA.test(segmentOf(entry.url)))
+            OWN_MEDIA.test(segmentOf(entry.url)) ||
+            (lws &&
+              (MEDIA_TYPE.test(entry.contentType ?? "") || OWN_MEDIA.test(entry.displayName ?? "")))
           ) {
             media.push(entry);
           }

@@ -785,6 +785,60 @@ describe("sweepOrphans", () => {
     expect(left).toHaveLength(5);
   });
 
+  it("collects orphaned PLY and SPZ files: the hash name selects, not the content type", async () => {
+    const h = await harness("solid");
+    must(await h.store.put(putInput({ seed: 1 })));
+    const shard = shardOf(h.store);
+    const hash = "a".repeat(64);
+    const names = [`${hash}.ply`, `${hash}.spz`, `${"b".repeat(64)}-thumb.png`];
+    for (const name of names) {
+      await h.storage.create(shard, new Uint8Array([1, 2, 3]), {
+        name,
+        contentType: "application/octet-stream",
+      });
+    }
+    // Not this store's names, whatever their type: never candidates.
+    await h.storage.create(shard, new Uint8Array([1]), {
+      name: "model.ply",
+      contentType: "application/octet-stream",
+    });
+    await h.storage.create(shard, new Uint8Array([1]), {
+      name: `${hash}.toolongextension`,
+      contentType: "application/octet-stream",
+    });
+    expect(must(await h.store.sweepOrphans({ minAgeMs: 0 }))).toEqual({
+      deleted: 3,
+      retained: 0,
+      shardsSkipped: 0,
+    });
+    const left = await allResources(h.storage);
+    expect(left.some((url) => url.endsWith(`${hash}.ply`))).toBe(false);
+    expect(left.some((url) => url.endsWith("model.ply"))).toBe(true);
+    expect(left.some((url) => url.endsWith(`${hash}.toolongextension`))).toBe(true);
+  });
+
+  it("collects an LWS orphan by its name or display name, or by a media content type", async () => {
+    const h = await harness("lws");
+    must(await h.store.put(putInput({ seed: 1 })));
+    const shard = shardOf(h.store);
+    await h.storage.create(shard, new Uint8Array([1, 2, 3]), {
+      name: `${"c".repeat(64)}.ply`,
+      contentType: "application/octet-stream",
+    });
+    await h.storage.create(shard, new Uint8Array([1, 2, 3]), {
+      name: "other.bin",
+      contentType: "application/octet-stream",
+    });
+    await h.storage.create(shard, new Uint8Array([1, 2, 3]), {
+      name: "stray.png",
+      contentType: "image/png",
+    });
+    const result = must(await h.store.sweepOrphans({ minAgeMs: 0 }));
+    expect(result.deleted).toBeGreaterThanOrEqual(2);
+    const left = await allResources(h.storage);
+    expect(left.some((url) => url.endsWith("other.bin"))).toBe(true);
+  });
+
   it("leaves a shard alone when one of its descriptions cannot be understood", async () => {
     const h = await harness("solid");
     must(await h.store.put(putInput({ seed: 1 })));

@@ -7,7 +7,10 @@ export interface Sniffed {
   readonly extension: string;
 }
 
-/** What the caller declared about the bytes. Untrusted: a sniffer may use it only to narrow. */
+/**
+ * What the caller declared about the bytes. Untrusted. The default sniffer uses the extension to
+ * select one additional candidate (SPZ); it never changes a type that has its own signature.
+ */
 export interface SniffHints {
   /** The declared extension as given (any case, with or without the dot). */
   readonly extension?: string;

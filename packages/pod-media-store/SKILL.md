@@ -37,10 +37,15 @@ Rules that must survive any change:
   `exposed`, a missing probe, a throwing probe and a nonsense answer always refuse (the override is not even
   asked); a throwing or non-boolean override is `false`; the override is asked per refusal and never cached;
   only `private` is cached. Registration is private-index only.
-- A `Blob` body is handed to storage-client as the caller's own instance, never converted to bytes. Hashing
-  reads it into one transient buffer (WebCrypto has no streaming digest); sniffing gets only the first
-  `SNIFF_BYTES` (4096) bytes plus the declared extension as `hints.extension`. Keep it that way: a copy would
-  hit `auth.fetch`'s 16 MiB replay limit.
+- The caller's body is read EXACTLY ONCE (a `File` may answer later reads differently). Size, sniff head
+  (`SNIFF_BYTES` = 4096, plus the declared extension as `hints.extension`) and SHA-256 come from that one buffer,
+  and storage-client is given a fresh `Blob` built from it (also for a `Uint8Array`), so hashed bytes are sent
+  bytes and `auth.fetch` replays it above 16 MiB. Never read the caller's `Blob` again, and never claim a
+  `Blob` is immutable. A storage 413 is `too-large` / `payload-too-large`, a 507 `insufficient-storage`.
+- `exposureFromOwnerOnly` rethrows a throwing or rejecting check (a failed probe, never overridable); only a
+  completed "cannot tell" is `unknown`. Discovery cannot tell public-index from private-index registrations:
+  the exposure probe of the discovered container is the control. `sweepOrphans` selects by hash name, not type.
+- `.spz` accepts any gzip or `NGSP`-prefixed bytes as opaque data; the store never inflates it, a consumer must.
 - The default sniffer never returns SVG, HTML or XML types and refuses bytes carrying markup in the first 512
   bytes; MP3 needs an ID3v2 header or two consecutive valid frames. PLY needs `ply` + newline and a `format`
   header line; SPZ (gzip or `NGSP` v4) only when the declared extension is `.spz`; both are reported as

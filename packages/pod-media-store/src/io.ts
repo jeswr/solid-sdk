@@ -29,45 +29,46 @@ export async function sha256Hex(bytes: Uint8Array | ArrayBuffer): Promise<string
 }
 
 /**
- * Caller bytes as the store holds them: the ORIGINAL body (a `Blob` is never converted, so the
- * transport can stream it), its size, and only the leading bytes the sniffer needs.
+ * What the store keeps of a caller's body: a fresh, immutable `Blob` built from the one buffer
+ * that was read (this is what storage-client uploads), its size, the leading bytes for the
+ * sniffer and, when asked for, the SHA-256 of exactly those bytes.
  */
 export interface Source {
-  readonly body: Blob | Uint8Array;
+  readonly body: Blob;
   readonly size: number;
   readonly head: Uint8Array;
+  readonly sha256: string | undefined;
 }
 
 /**
- * Check the size cap before reading anything, then read just the first `headBytes` bytes. A
- * `Blob` is sliced, not copied whole; a `Uint8Array` is already in memory and is only viewed.
+ * Read the caller's body EXACTLY ONCE (a `File` may answer a second read differently, which would
+ * break content addressing). Size, sniffing and the digest all come from that one buffer, and
+ * the body to upload is a new `Blob` constructed from it, so what is hashed is what is sent and
+ * the authenticated fetch can replay it. `Blob.size` is checked before reading; the length of
+ * what was actually read is checked again. A `Uint8Array` is not copied for the digest.
  */
 export async function loadSource(
   body: Blob | Uint8Array,
   max: number,
   headBytes: number,
+  hash: boolean,
 ): Promise<Source> {
+  let buffer: Uint8Array;
   if (body instanceof Uint8Array) {
-    if (body.byteLength > max) throw fail("too-large", "bytes-too-large");
-    return { body, size: body.byteLength, head: body.subarray(0, headBytes) };
+    buffer = body;
+  } else {
+    if (!(body instanceof Blob)) throw fail("failed", "invalid-input");
+    if (body.size > max) throw fail("too-large", "bytes-too-large");
+    buffer = new Uint8Array(await body.arrayBuffer());
   }
-  if (!(body instanceof Blob)) throw fail("failed", "invalid-input");
-  if (body.size > max) throw fail("too-large", "bytes-too-large");
+  if (buffer.byteLength > max) throw fail("too-large", "bytes-too-large");
+  const snapshot = new Blob([buffer as Uint8Array<ArrayBuffer>]);
   return {
-    body,
-    size: body.size,
-    head: new Uint8Array(await body.slice(0, headBytes).arrayBuffer()),
+    body: snapshot,
+    size: buffer.byteLength,
+    head: buffer.slice(0, headBytes),
+    sha256: hash ? await sha256Hex(buffer) : undefined,
   };
-}
-
-/**
- * SHA-256 of the whole body. WebCrypto has no streaming digest, so a `Blob` is read into ONE
- * transient buffer that is released as soon as the digest resolves; nothing else is retained.
- */
-export async function sha256Source(source: Source): Promise<string> {
-  return sha256Hex(
-    source.body instanceof Uint8Array ? source.body : await source.body.arrayBuffer(),
-  );
 }
 
 /** Read a response body fully, refusing (and cancelling) as soon as it exceeds `max` bytes. */

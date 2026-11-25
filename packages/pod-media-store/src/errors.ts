@@ -36,6 +36,8 @@ export type MediaStoreReason =
   | "not-a-document"
   | "journal"
   | "shard-title"
+  | "payload-too-large"
+  | "insufficient-storage"
   | "storage"
   | "unexpected";
 
@@ -96,7 +98,13 @@ export function toError(cause: unknown, signal: AbortSignal | undefined): MediaS
   if (cause instanceof MediaFailure) return cause.error;
   if (cause instanceof StorageError) {
     if (cause.code === "scope") return Object.freeze({ kind: "failed", reason: "out-of-scope" });
-    return Object.freeze({ kind: KIND_BY_CODE[cause.code] ?? "failed", reason: "storage" });
+    // Over the server's size limit (HTTP 413) and out of quota (HTTP 507) are told apart: the
+    // first will never succeed for this body, the second may after space is freed.
+    const reason =
+      cause.code === "payload-too-large" || cause.code === "insufficient-storage"
+        ? cause.code
+        : "storage";
+    return Object.freeze({ kind: KIND_BY_CODE[cause.code] ?? "failed", reason });
   }
   return Object.freeze({ kind: "failed", reason: "unexpected" });
 }

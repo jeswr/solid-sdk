@@ -54,34 +54,83 @@ describe.each(["solid", "lws"] as const)("put (%s)", (protocol) => {
   });
 
   describe("Blob bodies", () => {
-    /** Every body that reached `storage.create`, in order, with the options it came with. */
+    /** Every body that reached `storage.create`, in order. */
     const spyCreates = (bodies: unknown[]) => (storage: Parameters<typeof intercept>[0]) =>
       intercept(storage, ({ method, args }) => {
         if (method === "create") bodies.push(args[1]);
       });
+    const blobs = (bodies: unknown[]) => bodies.filter((body) => body instanceof Blob) as Blob[];
 
-    it("hands the caller's own Blob (not a copy) to the transport, once, and reads it once", async () => {
+    it("reads the caller's Blob exactly once and sends a Blob, not a typed array", async () => {
       const bytes = png(7, 4096);
       const blob = new Blob([bytes as Uint8Array<ArrayBuffer>]);
       const thumb = new Blob([jpeg(3) as Uint8Array<ArrayBuffer>]);
       const read = vi.spyOn(blob, "arrayBuffer");
       const sliced = vi.spyOn(blob, "slice");
+      const stream = vi.spyOn(blob, "stream");
+      const thumbRead = vi.spyOn(thumb, "arrayBuffer");
       const bodies: unknown[] = [];
       const h = await harness(protocol, {}, spyCreates(bodies));
       const out = must(await h.store.put(putInput({ bytes: blob, thumbnail: { bytes: thumb } })));
-      expect(bodies.filter((body) => body === blob)).toHaveLength(1);
-      expect(bodies.filter((body) => body === thumb)).toHaveLength(1);
-      expect(bodies.some((body) => body instanceof Uint8Array && body.byteLength === 4096)).toBe(
-        false,
-      );
-      // One whole read for the digest, and the sniffer was given only the leading bytes.
       expect(read).toHaveBeenCalledTimes(1);
-      expect(sliced).toHaveBeenCalledTimes(1);
-      expect(sliced.mock.calls[0]?.[0]).toBe(0);
-      expect(sliced.mock.calls[0]?.[1]).toBeLessThanOrEqual(4096);
+      expect(thumbRead).toHaveBeenCalledTimes(1);
+      expect(sliced).not.toHaveBeenCalled();
+      expect(stream).not.toHaveBeenCalled();
+      // The transport got a Blob for each media create (plus the description document).
+      expect(bodies.some((body) => body instanceof Uint8Array)).toBe(false);
+      expect(blobs(bodies).filter((body) => body.size === 4096)).toHaveLength(1);
+      expect(bodies).not.toContain(blob);
       expect(out.sha256).toBe(await sha256Of(bytes));
       const stored = await h.storage.read(out.binaryUrl);
       expect(new Uint8Array(await new Response(stored.body).arrayBuffer())).toEqual(bytes);
+    });
+
+    it("uploads the bytes it hashed even when the caller's Blob answers a second read differently", async () => {
+      const first = png(1, 512);
+      const second = png(2, 512);
+      let reads = 0;
+      const unstable = new Blob([first as Uint8Array<ArrayBuffer>]);
+      unstable.arrayBuffer = async () => {
+        reads += 1;
+        const source = reads === 1 ? first : second;
+        return source.buffer.slice(
+          source.byteOffset,
+          source.byteOffset + source.byteLength,
+        ) as ArrayBuffer;
+      };
+      unstable.slice = () => new Blob([second as Uint8Array<ArrayBuffer>]);
+      unstable.stream = () => new Blob([second as Uint8Array<ArrayBuffer>]).stream();
+      const h = await harness(protocol, {}, spyCreates([]));
+      const out = must(await h.store.put(putInput({ bytes: unstable })));
+      expect(out.sha256).toBe(await sha256Of(first));
+      const stored = await h.storage.read(out.binaryUrl);
+      const body = new Uint8Array(await new Response(stored.body).arrayBuffer());
+      expect(body).toEqual(first);
+      expect(await sha256Of(body)).toBe(out.sha256);
+      expect(reads).toBe(1);
+      // The description states the real size and hash.
+      const description = JSON.parse(await text(h.storage, out.descriptionUrl));
+      expect(description.sha256).toBe(out.sha256);
+    });
+
+    it("hands build the true size, content type and hash", async () => {
+      const seen: Array<{ sha256: string; contentType: string; byteLength: number }> = [];
+      const h = await harness(protocol, {
+        build: async (url, binaryUrl, input, context) => {
+          seen.push({
+            sha256: context.sha256,
+            contentType: context.contentType,
+            byteLength: context.byteLength,
+          });
+          const { buildModel } = await import("../test/support.js");
+          return buildModel(url, binaryUrl, input, context);
+        },
+      });
+      const bytes = png(3, 777);
+      const out = must(
+        await h.store.put(putInput({ bytes: new Blob([bytes as Uint8Array<ArrayBuffer>]) })),
+      );
+      expect(seen).toEqual([{ sha256: out.sha256, contentType: "image/png", byteLength: 777 }]);
     });
 
     it("stores a body larger than the 16 MiB replay limit when maxBytes allows it", async () => {
@@ -90,7 +139,7 @@ describe.each(["solid", "lws"] as const)("put (%s)", (protocol) => {
       const bodies: unknown[] = [];
       const h = await harness(protocol, { maxBytes: 20 * 1024 * 1024 }, spyCreates(bodies));
       const out = must(await h.store.put(putInput({ bytes: blob })));
-      expect(bodies).toContain(blob);
+      expect(blobs(bodies).some((body) => body.size === 17 * 1024 * 1024)).toBe(true);
       expect(out.sha256).toBe(await sha256Of(big));
       const stored = await h.storage.read(out.binaryUrl);
       expect((await new Response(stored.body).arrayBuffer()).byteLength).toBe(17 * 1024 * 1024);
@@ -99,25 +148,24 @@ describe.each(["solid", "lws"] as const)("put (%s)", (protocol) => {
     it("still refuses a Blob over maxBytes before reading any of it", async () => {
       const blob = new Blob([png(1, 2048) as Uint8Array<ArrayBuffer>]);
       const read = vi.spyOn(blob, "arrayBuffer");
-      const sliced = vi.spyOn(blob, "slice");
       const h = await harness(protocol, { maxBytes: 1024 });
       expect(await h.store.put(putInput({ bytes: blob }))).toEqual({
         ok: false,
         error: { kind: "too-large", reason: "bytes-too-large" },
       });
       expect(read).not.toHaveBeenCalled();
-      expect(sliced).not.toHaveBeenCalled();
     });
 
-    it("keeps a Uint8Array body as it is too", async () => {
+    it("sends a Uint8Array body as a Blob too", async () => {
       const bytes = png(5, 256);
       const bodies: unknown[] = [];
       const h = await harness(protocol, {}, spyCreates(bodies));
       must(await h.store.put(putInput({ bytes })));
-      expect(bodies).toContain(bytes);
+      expect(bodies.some((body) => body instanceof Uint8Array)).toBe(false);
+      expect(blobs(bodies).some((body) => body.size === 256)).toBe(true);
     });
 
-    it("passes an attached thumbnail Blob through unchanged", async () => {
+    it("reads an attached thumbnail Blob once and sends a Blob", async () => {
       const bodies: unknown[] = [];
       const h = await harness(protocol, {}, spyCreates(bodies));
       const first = must(await h.store.put(putInput()));
@@ -132,8 +180,32 @@ describe.each(["solid", "lws"] as const)("put (%s)", (protocol) => {
           body: JSON.stringify({ ...JSON.parse(current.body), thumbnailUrl }),
         }),
       });
-      expect(bodies).toEqual([thumb]);
-      expect(read).not.toHaveBeenCalled();
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(bodies).toHaveLength(1);
+      expect(bodies[0]).toBeInstanceOf(Blob);
+      expect(bodies[0]).not.toBe(thumb);
+    });
+  });
+
+  describe("size and quota failures", () => {
+    const failWith =
+      (code: "payload-too-large" | "insufficient-storage" | "unsupported-media-type") =>
+      (storage: Parameters<typeof intercept>[0]) =>
+        intercept(storage, ({ method, args }) => {
+          if (method === "create" && args[1] instanceof Blob && args[1].size === 64) {
+            throw new StorageError(code, { url: ROOT, method: "POST" });
+          }
+        });
+
+    it.each([
+      ["payload-too-large", "too-large", "payload-too-large"],
+      ["insufficient-storage", "too-large", "insufficient-storage"],
+      ["unsupported-media-type", "unsupported", "storage"],
+    ] as const)("reports a storage %s as %s / %s", async (code, kind, reason) => {
+      const h = await harness(protocol, {}, failWith(code));
+      const result = await h.store.put(putInput({ bytes: png(1, 64) }));
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect([result.error.kind, result.error.reason]).toEqual([kind, reason]);
     });
   });
 

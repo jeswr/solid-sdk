@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { decodeCursor, encodeCursor } from "./cursor.js";
 import { fail, MediaFailure, run, toError } from "./errors.js";
 import { exposureFromOwnerOnly } from "./exposure.js";
-import { loadSource, normaliseDescription, readBounded, sha256Source } from "./io.js";
+import { loadSource, normaliseDescription, readBounded, sha256Hex } from "./io.js";
 import { createMemoryJournal } from "./journal.js";
 import {
   isInsideLibrary,
@@ -386,40 +386,48 @@ describe("io helpers", () => {
     expect(cancelled).toBe(true);
   });
 
-  it("loadSource enforces the cap before reading, keeps the original body and reads only a head", async () => {
+  it("loadSource reads a Blob exactly once and returns a fresh Blob of those bytes", async () => {
     const bytes = new Uint8Array([1, 2, 3, 4, 5]);
-    const fromBytes = await loadSource(bytes, 5, 2);
-    expect(fromBytes.body).toBe(bytes);
-    expect(fromBytes.size).toBe(5);
-    expect([...fromBytes.head]).toEqual([1, 2]);
     const blob = new Blob([bytes]);
+    const read = vi.spyOn(blob, "arrayBuffer");
     const sliced = vi.spyOn(blob, "slice");
-    const arrayBuffer = vi.spyOn(blob, "arrayBuffer");
-    const fromBlob = await loadSource(blob, 5, 2);
-    expect(fromBlob.body).toBe(blob);
-    expect(fromBlob.size).toBe(5);
-    expect([...fromBlob.head]).toEqual([1, 2]);
-    expect(sliced).toHaveBeenCalledWith(0, 2);
-    expect(arrayBuffer).not.toHaveBeenCalled();
-    await expect(loadSource(new Uint8Array(4), 3, 2)).rejects.toMatchObject({
+    const source = await loadSource(blob, 5, 2, true);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(sliced).not.toHaveBeenCalled();
+    expect(source.body).toBeInstanceOf(Blob);
+    expect(source.body).not.toBe(blob);
+    expect(new Uint8Array(await source.body.arrayBuffer())).toEqual(bytes);
+    expect(source.size).toBe(5);
+    expect([...source.head]).toEqual([1, 2]);
+    expect(source.sha256).toBe(await sha256Hex(bytes));
+  });
+
+  it("loadSource turns a Uint8Array into a Blob too and hashes only when asked", async () => {
+    const bytes = new TextEncoder().encode("abc");
+    const source = await loadSource(bytes, 3, 1, true);
+    expect(source.body).toBeInstanceOf(Blob);
+    expect(source.sha256).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    expect((await loadSource(bytes, 3, 1, false)).sha256).toBeUndefined();
+  });
+
+  it("loadSource enforces the cap before reading and rejects other inputs", async () => {
+    await expect(loadSource(new Uint8Array(4), 3, 2, true)).rejects.toMatchObject({
       error: { kind: "too-large" },
     });
     const big = new Blob(["abcd"]);
     const bigRead = vi.spyOn(big, "arrayBuffer");
-    await expect(loadSource(big, 3, 2)).rejects.toMatchObject({
+    await expect(loadSource(big, 3, 2, true)).rejects.toMatchObject({
       error: { kind: "too-large" },
     });
     expect(bigRead).not.toHaveBeenCalled();
-    await expect(loadSource("abc" as never, 3, 2)).rejects.toMatchObject({
+    // A Blob that lies about its size is caught by the length actually read.
+    const liar = Object.defineProperty(new Blob(["abcd"]), "size", { value: 1 });
+    await expect(loadSource(liar, 3, 2, true)).rejects.toMatchObject({
+      error: { kind: "too-large" },
+    });
+    await expect(loadSource("abc" as never, 3, 2, true)).rejects.toMatchObject({
       error: { reason: "invalid-input" },
     });
-  });
-
-  it("sha256Source hashes a Uint8Array or a whole Blob identically", async () => {
-    const bytes = new TextEncoder().encode("abc");
-    const expected = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
-    expect(await sha256Source(await loadSource(bytes, 3, 1))).toBe(expected);
-    expect(await sha256Source(await loadSource(new Blob(["abc"]), 3, 1))).toBe(expected);
   });
 
   it("normaliseDescription accepts RDF types only and caps the size", () => {
@@ -456,7 +464,7 @@ describe("journal and exposure adapters", () => {
     expect(await journal.list()).toHaveLength(1);
   });
 
-  it("exposureFromOwnerOnly: only an explicit non-owner grant is exposed, failures are unknown", async () => {
+  it("exposureFromOwnerOnly: only an explicit non-owner grant is exposed, a completed unknown is unknown", async () => {
     const probe = (result: unknown) =>
       exposureFromOwnerOnly(async () => result as never)("https://pod.example/alice/");
     expect(await probe({ private: true })).toBe("private");
@@ -470,12 +478,20 @@ describe("journal and exposure adapters", () => {
     expect(await probe({ private: false, reasons: [{ reason: "unsupported-model" }] })).toBe(
       "unknown",
     );
-    const failing = exposureFromOwnerOnly(async () => {
+  });
+
+  it("exposureFromOwnerOnly: a throwing or rejecting check is a failure, never unknown", async () => {
+    const url = "https://pod.example/alice/";
+    const throwing = exposureFromOwnerOnly(() => {
       throw new Error("boom");
     });
-    expect(await failing("https://pod.example/alice/")).toBe("unknown");
+    await expect(throwing(url)).rejects.toThrow("boom");
+    const rejecting = exposureFromOwnerOnly(async () => {
+      throw new Error("network down");
+    });
+    await expect(rejecting(url)).rejects.toThrow("network down");
     const controller = new AbortController();
     controller.abort();
-    await expect(failing("https://pod.example/alice/", controller.signal)).rejects.toThrow("boom");
+    await expect(rejecting(url, controller.signal)).rejects.toThrow("network down");
   });
 });

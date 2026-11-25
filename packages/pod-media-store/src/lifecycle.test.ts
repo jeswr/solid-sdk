@@ -15,7 +15,7 @@ import {
   shardOf,
   text,
 } from "../test/support.js";
-import { openMediaStore } from "./index.js";
+import { exposureFromOwnerOnly, openMediaStore } from "./index.js";
 
 const OTHER_CLASS = "https://example.org/ns#Other";
 const taken = () => new StorageError("conflict", { url: "x:", method: "PUT", status: 412 });
@@ -389,6 +389,51 @@ describe("exposure", () => {
         expect(JSON.stringify(result)).not.toContain("secret");
         expect(await allResources(h.storage)).toEqual([]);
       }
+    });
+
+    it("the shipped adapter: a throwing or rejecting check is not overridable, a completed unknown is", async () => {
+      const asked: string[] = [];
+      const allow = (url: string) => {
+        asked.push(url);
+        return true;
+      };
+      for (const check of [
+        () => {
+          throw new Error("sync failure");
+        },
+        async () => {
+          throw new Error("network down");
+        },
+      ]) {
+        const h = await harness(protocol, {
+          exposure: exposureFromOwnerOnly(check),
+          allowUnknownExposureFor: allow,
+        });
+        expect(await h.store.put(putInput())).toEqual(refused("exposure-unknown"));
+        expect(asked).toEqual([]);
+        expect(await allResources(h.storage)).toEqual([]);
+        // The on-demand check reports the failure as unknown, never private.
+        expect(must(await h.store.checkExposure())).toBe("unknown");
+      }
+      const completed = await harness(protocol, {
+        exposure: exposureFromOwnerOnly(async () => ({
+          private: false,
+          reasons: [{ reason: "unknown" }],
+        })),
+        allowUnknownExposureFor: allow,
+      });
+      expect((await completed.store.put(putInput())).ok).toBe(true);
+      expect(asked.length).toBeGreaterThan(0);
+      const exposedByAdapter = await harness(protocol, {
+        exposure: exposureFromOwnerOnly(async () => ({
+          private: false,
+          reasons: [{ reason: "non-owner" }],
+        })),
+        allowUnknownExposureFor: allow,
+      });
+      asked.length = 0;
+      expect(await exposedByAdapter.store.put(putInput())).toEqual(refused("library-exposed"));
+      expect(asked).toEqual([]);
     });
 
     it("is decided per container and never carried from one to the next", async () => {

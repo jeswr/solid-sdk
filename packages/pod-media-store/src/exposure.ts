@@ -24,21 +24,17 @@ export type OwnerOnlyLike =
  *   checkOwnerOnly({ storage, url, ownerWebId, acpDialect }))
  * ```
  *
- * An explicit non-owner grant is "exposed"; every inconclusive outcome (unknown policy,
- * unrepresentable rule, LWS, root not provable) and every failure of the check is "unknown",
- * never "private".
+ * An explicit non-owner grant is "exposed"; every inconclusive outcome of a check that
+ * COMPLETED (unknown policy, unrepresentable rule, LWS, root not provable) is "unknown", never
+ * "private". A check that throws or rejects (network down, 5xx, a token refresh) is NOT
+ * "unknown": the error is rethrown so the store treats the probe as failed, which no
+ * `allowUnknownExposureFor` override can lift. Only "cannot tell" may be overridden.
  */
 export function exposureFromOwnerOnly(
   check: (containerUrl: string, signal?: AbortSignal) => Promise<OwnerOnlyLike>,
 ): ExposureCheck {
   return async (containerUrl, signal) => {
-    let result: OwnerOnlyLike;
-    try {
-      result = await check(containerUrl, signal);
-    } catch (cause) {
-      if (signal?.aborted) throw cause;
-      return "unknown";
-    }
+    const result = await check(containerUrl, signal);
     if (result.private) return "private";
     return result.reasons.some((entry) => entry.reason === "non-owner") ? "exposed" : "unknown";
   };
