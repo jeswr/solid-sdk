@@ -61,6 +61,12 @@ export interface ReadResult {
   etag: string | null;
   contentType: string | null;
   lastModified: Date | null;
+  /**
+   * The response's declared `Content-Length` (a non-negative safe integer), or null when it is
+   * absent or malformed. Advisory only: the stream may deliver more or fewer bytes (compression,
+   * a lying server), so never use it as a bound. Optional so existing ReadResult fakes stay valid.
+   */
+  contentLength?: number | null;
   /** Memento-Datetime on an immutable version, when supplied by the server. */
   mementoDatetime?: Date | null;
   /** null on 304 / HEAD. */

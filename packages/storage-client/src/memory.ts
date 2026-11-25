@@ -501,6 +501,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       etag: node.etag,
       contentType,
       lastModified: new Date(node.modified),
+      contentLength: bytes === null ? null : data.length,
       mementoDatetime: node.versionAt === undefined ? null : new Date(node.versionAt),
       body: bytes === null ? null : new Blob([data.slice()]).stream(),
       bytes: async () => data.slice(),

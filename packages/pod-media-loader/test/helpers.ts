@@ -277,6 +277,8 @@ export interface FakeRead {
   etag?: string | null;
   contentType?: string | null;
   body?: ReadableStream<Uint8Array> | null;
+  /** The declared Content-Length; omitted by default (absent). */
+  contentLength?: number | null | string;
 }
 
 export interface ReadCall {
@@ -304,6 +306,7 @@ export function fakeStorage(
         // Always a lie: the loader must never use it.
         contentType: result.contentType === undefined ? "text/html" : result.contentType,
         body: result.body === undefined ? null : result.body,
+        ...(result.contentLength === undefined ? {} : { contentLength: result.contentLength }),
       };
     }),
   };
@@ -329,4 +332,35 @@ export async function memoryPod() {
 
 export async function flush(times = 10): Promise<void> {
   for (let i = 0; i < times; i++) await Promise.resolve();
+}
+
+/** `bytes` followed by zero padding up to exactly `length` bytes (still sniffs as the same type). */
+export function padded(bytes: Uint8Array, length: number): Uint8Array {
+  const out = new Uint8Array(Math.max(length, bytes.length));
+  out.set(bytes);
+  return out;
+}
+
+/** A stream of `bytes` in `chunkSize` pieces that calls `onPull(chunkIndex)` as each is requested. */
+export function probedStream(
+  bytes: Uint8Array,
+  chunkSize: number,
+  onPull: (index: number) => void,
+): ReadableStream<Uint8Array> {
+  let at = 0;
+  let index = 0;
+  return new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        onPull(index++);
+        if (at >= bytes.length) {
+          controller.close();
+          return;
+        }
+        controller.enqueue(bytes.slice(at, at + chunkSize));
+        at += chunkSize;
+      },
+    },
+    { highWaterMark: 0 },
+  );
 }

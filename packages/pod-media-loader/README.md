@@ -48,7 +48,8 @@ const loader = createMediaLoader({
   getSessionKey: () => auth.webId, // purge everything when the account changes
   maxBytes: 25 * 1024 * 1024,
   maxTotalBytes: 128 * 1024 * 1024, // hard: cached + held + in flight
-  maxEntries: 200,
+  maxEntries: 200, // counts HELD entries: unreferenced cached ones are evicted to make room
+  assumedBytes: 256 * 1024, // reserved when a response declares no length; keep it small for grids
   // maxPixels defaults to 64_000_000; raise it explicitly if you need more.
 });
 
@@ -71,8 +72,12 @@ React (optional peer, tested with React 18; the core imports nothing from it):
 import { useMedia } from "@jeswr/pod-media-loader/react";
 
 function Thumb({ loader, url }: { loader: MediaLoader; url: string }) {
-  const { status, url: src, error } = useMedia(loader, url);
-  return status === "ready" ? <img src={src} alt="" /> : <span>{status}</span>;
+  const { status, url: src, retry } = useMedia(loader, url);
+  if (status === "ready") return <img src={src} alt="" />;
+  // "over-budget": the loader had no room right now. The hook retries by itself when room is
+  // freed; the button is the manual way out once its automatic retries are used up.
+  if (status === "over-budget") return <button onClick={retry}>Load</button>;
+  return <span>{status}</span>;
 }
 ```
 
@@ -84,19 +89,41 @@ again. It subscribes to the loader: `purge()` (or a session change) moves a moun
 In development StrictMode requests each image twice (the first read is aborted); with a very tight
 `maxEntries` that can show up as a transient `over-budget`.
 
+**`over-budget` is retryable.** The hook reports it as its own `status: "over-budget"` (with the
+error), not as a generic `"error"`. While in that state it listens for the loader's `"capacity"`
+event and, after `RETRY_DELAY_MS` (250 ms, so a burst of releases is one retry), acquires again. A
+hook retries automatically at most `MAX_AUTO_RETRIES` (3) times in a row; a success, a new
+loader/URL/`inert`, or a call to `retry()` restores the allowance. `retry()` (stable identity) works
+from any `"error"` or `"over-budget"` state and is harmless otherwise. A purge ends the wait.
+
+## Grids and galleries
+
+A grid of N tiles must not try to hold N full-size images. In short:
+
+- Show **thumbnails first**: point the tile at a thumbnail resource (or a small derivative) and open
+  the full-size image only on demand, through the same loader.
+- **Virtualise rows**: mount only the tiles that are on or near the screen. Unmounting releases the
+  hold, which makes the entry evictable. Mounting 500 tiles pins 500 entries; that is what
+  `maxEntries` and `over-budget` are there to refuse.
+- Set a **small `assumedBytes`** (for example 256 KiB) when the pod does not send `Content-Length`;
+  each read then reserves that, not `maxBytes`, until real bytes say otherwise.
+- Keep `maxTotalBytes` comfortably above the *held* working set (visible tiles times their size),
+  and keep `maxBytes` for the largest single image you accept.
+- Treat `over-budget` as "not yet", not as failure: `useMedia` does this for you.
+
 ## API
 
 | Export | Meaning |
 | --- | --- |
-| `createMediaLoader(options)` | `{ storage, scope, maxBytes, maxTotalBytes, maxEntries, maxPixels?, maxConcurrent?, readTimeoutMs?, getSessionKey?, sniff?, allow?, objectUrls? }`. Invalid limits throw `RangeError`; invalid `allow` entries or container URLs throw a fixed-message `TypeError`, at creation only. |
+| `createMediaLoader(options)` | `{ storage, scope, maxBytes, maxTotalBytes, maxEntries, assumedBytes?, budgetWaitMs?, maxPixels?, maxConcurrent?, readTimeoutMs?, getSessionKey?, sniff?, allow?, objectUrls? }`. Invalid limits throw `RangeError`; invalid `allow` entries or container URLs throw a fixed-message `TypeError`, at creation only. |
 | `loader.acquire(url, { signal?, inert? })` | `Promise<Result<{ url, contentType, bytes, release() }>>`. Never throws. |
 | `loader.revalidate(url, { signal? })` | Conditional re-read (`If-None-Match` with the remembered ETag, cache bypassed). `{ changed }`. |
 | `loader.invalidate(url)` | Notification hook: drop the entry, stop sharing any read in flight, and make the next read bypass the HTTP cache. |
 | `loader.purge()` / `loader.resume()` | Revoke everything and abort reads; refuse (`purged`) until resumed. |
-| `loader.subscribe(listener)` | Called synchronously when everything has been revoked. Returns an unsubscribe. |
-| `loader.stats()` | `{ entries, bytes, inFlight, purged }`. |
-| `DEFAULT_ALLOWED_TYPES`, `DEFAULT_MAX_PIXELS`, `INERT_TYPE`, `defaultSniff`, `imageDimensions` | Policy constants and pure helpers. |
-| `useMedia(loader, url, { inert? })` (`/react`) | `{ status: idle \| loading \| ready \| error, url, error }`. |
+| `loader.subscribe(listener)` | `listener(event)`: `"purge"` synchronously when everything has been revoked; `"capacity"` (coalesced into one microtask) after an entry was released or retired, or a read returned its reservation without making an entry. A hint to retry `over-budget`, not a guarantee. Returns an unsubscribe. |
+| `loader.stats()` | `{ entries, bytes, inFlight, reservedBytes, waiting, purged }`. `bytes + reservedBytes <= maxTotalBytes` always. |
+| `DEFAULT_ALLOWED_TYPES`, `DEFAULT_MAX_PIXELS`, `DEFAULT_ASSUMED_BYTES`, `DEFAULT_BUDGET_WAIT_MS`, `HEAD_BYPASS_LIMIT`, `INERT_TYPE`, `defaultSniff`, `imageDimensions` | Policy constants and pure helpers. |
+| `useMedia(loader, url, { inert? })` (`/react`) | `{ status: idle \| loading \| ready \| error \| over-budget, url, error, retry() }`. |
 
 Errors are a closed set (`out-of-scope`, `not-found`, `forbidden`, `too-large`, `over-budget`,
 `unsupported-type`, `offline`, `aborted`, `purged`, `failed`) with a fixed message per code. No message
@@ -150,20 +177,53 @@ branch; a tracker bead for the shared module is a follow-up for the maintainer.
 
 ## Memory
 
-- `maxTotalBytes` and `maxEntries` are **hard**: they bound cached + held + in-flight. Every read
-  reserves `maxBytes` and one entry before it starts, evicting unreferenced entries (LRU) to make
-  room. A read that cannot fit is refused with `over-budget`; a held entry is never revoked to make
-  space. Size `maxTotalBytes` as a multiple of `maxBytes` (at least `maxConcurrent` times).
-- At most `maxConcurrent` (default 6) reads run at once; the rest wait in a FIFO queue. An aborted
-  or purged waiter leaves the queue without ever starting.
-- A read that takes longer than `readTimeoutMs` (default 120 000) is abandoned as `offline`.
+- **The bound is hard.** At every instant, cached + held + in-flight *reserved* bytes are at most
+  `maxTotalBytes` (`stats()`: `bytes + reservedBytes`), and live object URLs plus reads in flight
+  are at most `maxEntries`. `maxEntries` counts **held** entries in the sense that matters:
+  unreferenced cached entries are evicted (LRU) to make room, a held one never is. Nothing is
+  revoked under a holder to make space.
+- **What a read reserves, and when.** A read reserves nothing until its response headers arrive.
+  Then it reserves the response's declared `Content-Length` when that is a sane integer, otherwise
+  `assumedBytes` (default 1 MiB, capped at `maxBytes`), plus one entry. A declared length above
+  `maxBytes` is refused as `too-large` before the body is read. (The declared length is `ReadResult.contentLength`, a new optional field of
+  `@jeswr/storage-client`; a storage client that does not set it behaves as "absent".) Content-Length is advisory, never
+  trusted: while the body streams, the reservation is grown before each chunk is kept (to double
+  the reservation, or to the exact total when doubling does not fit, capped at `maxBytes`), evicting
+  unreferenced entries to fit. Growth never waits: if it cannot fit, that read is aborted with
+  `over-budget` and gives its reservation back. This holds for lying, absent and chunked lengths
+  and is tested by sampling the accounting at every chunk.
+- **What bounds reads that are still waiting on headers.** Only `maxConcurrent` (default 6): a read
+  holds one of those slots from before the request until it ends, and the rest of the reads queue
+  FIFO for a slot, honouring abort and purge. A read waiting on headers has no body in memory, so
+  it costs no budget.
+- **Waiting for room.** A read whose headers are in but whose reservation does not fit yet waits in
+  a FIFO budget queue, holding its slot and its (unread) response, and honouring abort, `purge()`
+  and a session change. It is admitted as soon as room appears (a read finishes or fails, an entry is
+  released or invalidated). It fails `over-budget` immediately when the *holders alone* leave no
+  room (its size exceeds `maxTotalBytes` minus the bytes of held entries, or the held entries
+  already fill `maxEntries`): evicting and finishing reads cannot cure that, only an app releasing
+  a hold can, and `useMedia` retries on the `"capacity"` event when that happens. Otherwise it fails
+  `over-budget` after `budgetWaitMs` (default 30 000) in the queue.
+- **Head-of-line policy.** The queue is FIFO, but a read that does not fit is skipped so smaller
+  ones behind it are not held up by one large item. Each skip counts against the skipped read; after
+  `HEAD_BYPASS_LIMIT` (8) later reads were admitted ahead of it, nothing may pass it any more, so
+  room freed by finishing reads accrues to it. A large item therefore waits for at most 8 smaller
+  admissions plus the time for enough room to appear, bounded by `budgetWaitMs`; and a blocked head
+  never blocks forever, because it either gets room, becomes hopeless (refused), times out or is
+  aborted, and each of those lets the queue move on.
+- A read that takes longer than `readTimeoutMs` (default 120 000, covering slot and budget waits) is
+  abandoned as `offline`.
 - **True peak (reasoned, not measured).** The body is kept as the received chunks and never joined;
   only the first 64 KiB is copied for sniffing, and dimension readers read through a chunk view. The
-  one full-size copy is the `Blob` the browser builds from the chunks. So a finishing read briefly
-  holds about 2 x its size (chunks plus Blob), after which the chunks are freed. Retained memory is
-  at most `maxTotalBytes`; the transient extra is at most `maxConcurrent x maxBytes`. The worst case is
-  therefore about `maxTotalBytes + maxConcurrent x maxBytes`. The browser may keep a Blob's bytes
-  off the JS heap; that is not observable from here.
+  one full-size copy is the `Blob` the browser builds from the chunks, so a finishing read briefly
+  holds about 2 x its size (chunks plus Blob) before the chunks are freed. Accounted memory is at
+  most `maxTotalBytes`. Beyond it, at worst: the chunks of reads that finished and have not been
+  garbage collected yet (at most the sum of their reservations, so under `maxTotalBytes`, and in
+  practice a few reads), plus one network chunk in hand per running read, which the accounting
+  cannot see before it arrives (`maxConcurrent` x the stream's chunk size, typically tens of KiB).
+  So the worst case is about `2 x maxTotalBytes + maxConcurrent x chunk size`, not the earlier
+  `maxTotalBytes + maxConcurrent x maxBytes` (a read no longer reserves `maxBytes` up front). The
+  browser may keep a Blob's bytes off the JS heap; that is not observable from here.
 
 ## Lifetime
 

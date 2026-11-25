@@ -22,7 +22,8 @@ const loader = createMediaLoader({
   scope: [`${storageRoot}media/`], // container URLs or (canonicalUrl) => boolean
   maxBytes: 25 * 1024 * 1024,
   maxTotalBytes: 128 * 1024 * 1024,
-  maxEntries: 200,
+  maxEntries: 200, // counts held entries; unreferenced ones are evicted
+  assumedBytes: 256 * 1024, // reserved when a response has no Content-Length (grids: keep small)
   // maxPixels defaults to 64_000_000 (raise it deliberately)
 });
 const result = await loader.acquire(url, { signal });
@@ -30,7 +31,10 @@ if (result.ok) { img.src = result.value.url; /* ... */ result.value.release(); }
 ```
 
 React: `useMedia(loader, url)` from `@jeswr/pod-media-loader/react` returns
-`{ status, url, error }`; it acquires on mount and releases on unmount or change.
+`{ status, url, error, retry }`; it acquires on mount and releases on unmount or change. Status
+`"over-budget"` means "no room right now": the hook retries by itself on the loader's `"capacity"`
+event (debounced, at most 3 times in a row), and `retry()` is the manual way. Render it as a
+placeholder with a retry affordance, not as a hard error.
 
 ## GLB / glTF: external URIs
 
@@ -43,8 +47,14 @@ and `data:`). Do not skip this because "the blob is safe".
 ## Rules to keep
 
 - One loader per signed-in session, with `getSessionKey` set to the WebID.
-- Memory is a hard budget: a read that does not fit is `over-budget`; size `maxTotalBytes` as a
-  multiple of `maxBytes` and release handles promptly. Reads run `maxConcurrent` at a time.
+- Memory is a hard budget (cached + held + reserved never exceeds `maxTotalBytes`). A read reserves
+  its declared `Content-Length` (or `assumedBytes`) once headers arrive and grows it as bytes
+  arrive; one that does not fit waits in a FIFO queue (up to `budgetWaitMs`), and fails
+  `over-budget` at once only when holders alone leave no room. Reads run `maxConcurrent` at a time.
+  Release handles promptly: held entries are what block the budget.
+- Grids: thumbnails first, virtualise rows (unmount off-screen tiles so their holds release), small
+  `assumedBytes`, and treat `over-budget` as retryable (`subscribe` fires `"capacity"`; `useMedia`
+  handles it).
 - `useMedia` follows `purge()` on its own (status `error`, code `purged`); other holders of handles
   must not use a URL after purge.
 

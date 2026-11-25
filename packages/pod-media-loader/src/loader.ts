@@ -37,6 +37,15 @@ export const INERT_TYPE = "application/octet-stream";
 export const DEFAULT_MAX_PIXELS = 64_000_000;
 export const DEFAULT_MAX_CONCURRENT = 6;
 export const DEFAULT_READ_TIMEOUT_MS = 120_000;
+/** Default `assumedBytes`: what a read reserves when the response declares no usable length. */
+export const DEFAULT_ASSUMED_BYTES = 1024 * 1024;
+/** Default `budgetWaitMs`: how long a read may wait in the budget queue before `over-budget`. */
+export const DEFAULT_BUDGET_WAIT_MS = 30_000;
+/**
+ * Anti-starvation bound. While the oldest waiting read does not fit, smaller later reads may be
+ * admitted ahead of it, but at most this many times; after that nothing passes it.
+ */
+export const HEAD_BYPASS_LIMIT = 8;
 /** The sniffer is handed at most this many leading bytes (plus the full size). */
 export const SNIFF_WINDOW = 64 * 1024;
 
@@ -57,12 +66,30 @@ export interface MediaLoaderOptions {
   /** Largest single resource, counted while streaming. */
   maxBytes: number;
   /**
-   * Hard budget for cached + held + in-flight bytes. Each read reserves `maxBytes` up front; an
-   * acquire that cannot fit after evicting unreferenced entries fails with `over-budget`.
+   * Hard budget for cached + held + in-flight reserved bytes: the sum never exceeds it at any
+   * instant. A read reserves its declared `Content-Length` (or `assumedBytes`) once the headers
+   * arrive, and grows the reservation as bytes actually arrive. A read that does not fit yet
+   * waits (see `budgetWaitMs`); one that can never fit, or whose growth does not fit, fails with
+   * `over-budget`.
    */
   maxTotalBytes: number;
-  /** Hard budget for live object URLs plus reads in flight. */
+  /**
+   * Hard budget for live object URLs (cached, held, and being read). Only HELD entries are
+   * pinned: unreferenced cached entries are evicted to make room, so in practice this bounds
+   * what apps hold at once. An acquire beyond it waits under the same policy as bytes.
+   */
   maxEntries: number;
+  /**
+   * What a read reserves when the response declares no usable `Content-Length`, capped at
+   * `maxBytes`. The reservation then grows in doubling steps as bytes arrive. Default 1 MiB; use
+   * a small value for thumbnail grids.
+   */
+  assumedBytes?: number;
+  /**
+   * How long a read that fits the budget only after other reads finish or holders release may
+   * wait for room, in milliseconds, before failing `over-budget`. Default 30 000.
+   */
+  budgetWaitMs?: number;
   /** Refuse images whose header declares more pixels than this. Default 64 megapixels. */
   maxPixels?: number;
   /** Reads running at once; the rest wait in a FIFO queue that honours abort. Default 6. */
@@ -102,11 +129,17 @@ export interface MediaHandle {
   release(): void;
 }
 
+export type MediaLoaderEvent = "purge" | "capacity";
+
 export interface MediaLoaderStats {
   /** Live (not revoked) object URLs, held or not. */
   readonly entries: number;
   readonly bytes: number;
   readonly inFlight: number;
+  /** Bytes reserved by reads in progress. `bytes + reservedBytes <= maxTotalBytes` always. */
+  readonly reservedBytes: number;
+  /** Reads waiting in the budget queue. */
+  readonly waiting: number;
   readonly purged: boolean;
 }
 
@@ -126,10 +159,13 @@ export interface MediaLoader {
   purge(): void;
   resume(): void;
   /**
-   * Called synchronously whenever every object URL has been revoked (`purge()` or a session
-   * change). Returns the unsubscribe function.
+   * `"purge"`: called synchronously whenever every object URL has been revoked (`purge()` or a
+   * session change). `"capacity"`: called (coalesced, in a microtask) after something that frees
+   * budget happened: an entry was released or retired, or a read gave its reservation back
+   * without making an entry. It is a hint to retry `over-budget` reads, not a guarantee.
+   * Returns the unsubscribe function.
    */
-  subscribe(listener: () => void): () => void;
+  subscribe(listener: (event: MediaLoaderEvent) => void): () => void;
   stats(): MediaLoaderStats;
 }
 
@@ -163,9 +199,22 @@ interface Downloaded extends ReadBody {
   readonly etag: string | null;
 }
 
-/** A read's slot in the concurrency queue plus its byte and entry reservation. */
-interface Permit {
-  release(): void;
+/** A read's concurrency slot plus, once its headers arrive, its byte and entry reservation. */
+interface Lease {
+  slot: boolean;
+  held: boolean;
+  bytes: number;
+  /** Give everything back. Idempotent. `keep` means the bytes became an entry, not freed room. */
+  release(keep?: boolean): void;
+}
+
+/** A read waiting in the budget queue (FIFO). */
+interface Waiter {
+  readonly bytes: number;
+  /** Later reads admitted ahead of this one while it did not fit. */
+  bypassed: number;
+  grant(): void;
+  refuse(code: MediaErrorCode): void;
 }
 
 const ABORTED = Symbol("aborted");
@@ -212,6 +261,14 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
     "readTimeoutMs",
     options.readTimeoutMs ?? DEFAULT_READ_TIMEOUT_MS,
   );
+  const assumedBytes = Math.min(
+    positiveInteger("assumedBytes", options.assumedBytes ?? DEFAULT_ASSUMED_BYTES),
+    maxBytes,
+  );
+  const budgetWaitMs = positiveInteger(
+    "budgetWaitMs",
+    options.budgetWaitMs ?? DEFAULT_BUDGET_WAIT_MS,
+  );
   const getSessionKey = options.getSessionKey ?? ((): string => "");
   const allowed = allowSet(options.allow ?? DEFAULT_ALLOWED_TYPES);
   const sniff = options.sniff ?? defaultSniff;
@@ -224,11 +281,15 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
   const live = new Set<CacheEntry>();
   const inflight = new Map<string, Flight>();
   const active = new Set<AbortController>();
-  const listeners = new Set<() => void>();
+  const listeners = new Set<(event: MediaLoaderEvent) => void>();
   /** URLs whose next read must bypass the HTTP cache (after `invalidate`). */
   const stale = new Set<string>();
   const queue: { grant(): void }[] = [];
+  /** Reads whose headers arrived but whose reservation does not fit yet, oldest first. */
+  const waiting: Waiter[] = [];
   let running = 0;
+  let pumpScheduled = false;
+  let freedRoom = false;
   let reservedBytes = 0;
   let reservedCount = 0;
   let totalBytes = 0;
@@ -251,13 +312,10 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
   /** Stop sharing `entry`; revoke it now unless someone still holds it. */
   function retire(entry: CacheEntry): void {
     if (entries.get(entry.key) === entry) entries.delete(entry.key);
-    if (entry.refs === 0) revoke(entry);
-  }
-
-  /** The least recently used entry nobody holds. */
-  function unreferenced(): CacheEntry | undefined {
-    for (const candidate of entries.values()) if (candidate.refs === 0) return candidate;
-    return undefined;
+    if (entry.refs === 0) {
+      revoke(entry);
+      pumpSoon(true);
+    }
   }
 
   function releaseEntry(entry: CacheEntry): void {
@@ -265,6 +323,7 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
     if (entry.revoked || entry.refs > 0) return;
     // A current entry stays cached (and evictable); a superseded one has no further use.
     if (entries.get(entry.key) !== entry) revoke(entry);
+    pumpSoon(true);
   }
 
   function handleFor(entry: CacheEntry): MediaHandle {
@@ -335,32 +394,174 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
     });
   }
 
-  /** A slot and a reservation of `maxBytes` and one entry, evicting unreferenced entries to fit. */
-  async function admit(signal: AbortSignal): Promise<Permit> {
-    await acquireSlot(signal);
-    const fits = (): boolean =>
-      totalBytes + reservedBytes + maxBytes <= maxTotalBytes &&
-      live.size + reservedCount + 1 <= maxEntries;
-    while (!fits()) {
-      const victim = unreferenced();
-      if (victim === undefined) {
-        releaseSlot();
-        throw new MediaFailure("over-budget");
-      }
-      revoke(victim);
-    }
-    reservedBytes += maxBytes;
-    reservedCount++;
-    let released = false;
-    return {
-      release(): void {
-        if (released) return;
-        released = true;
-        reservedBytes -= maxBytes;
-        reservedCount--;
-        releaseSlot();
+  function newLease(): Lease {
+    const lease: Lease = {
+      slot: false,
+      held: false,
+      bytes: 0,
+      release(keep = false): void {
+        if (lease.held) {
+          reservedBytes -= lease.bytes;
+          reservedCount--;
+          if (!keep) freedRoom = true;
+          lease.held = false;
+          lease.bytes = 0;
+        }
+        if (lease.slot) {
+          lease.slot = false;
+          releaseSlot();
+        }
       },
     };
+    return lease;
+  }
+
+  async function takeSlot(lease: Lease, signal: AbortSignal): Promise<void> {
+    await acquireSlot(signal);
+    lease.slot = true;
+  }
+
+  /** Bytes and entries pinned by holders: they cannot be evicted, whatever else happens. */
+  function pinned(): { bytes: number; count: number } {
+    let bytes = 0;
+    let count = 0;
+    for (const entry of live) {
+      if (entry.refs > 0) {
+        bytes += entry.size;
+        count++;
+      }
+    }
+    return { bytes, count };
+  }
+
+  /** True when holders alone leave no room: neither eviction nor finishing reads can cure it. */
+  function hopeless(bytes: number): boolean {
+    const held = pinned();
+    return bytes > maxTotalBytes - held.bytes || held.count + 1 > maxEntries;
+  }
+
+  /**
+   * Take `extraBytes` (and `extraCount` entries) if they fit once every unreferenced entry is
+   * evicted; evict least recently used first, and only as many as needed. Never takes partially.
+   */
+  function tryTake(extraBytes: number, extraCount: number): boolean {
+    // Least recently used first: `entries` is in LRU order.
+    const victims = [...entries.values()].filter((entry) => entry.refs === 0);
+    const freeBytes = victims.reduce((sum, entry) => sum + entry.size, 0);
+    const fits = (bytes: number, count: number): boolean =>
+      totalBytes - bytes + reservedBytes + extraBytes <= maxTotalBytes &&
+      live.size - count + reservedCount + extraCount <= maxEntries;
+    if (!fits(freeBytes, victims.length)) return false;
+    for (const victim of victims) {
+      if (fits(0, 0)) break;
+      revoke(victim);
+    }
+    reservedBytes += extraBytes;
+    reservedCount += extraCount;
+    return true;
+  }
+
+  /**
+   * Admit waiting reads in FIFO order. A read that does not fit is skipped so smaller ones behind
+   * it can proceed, but each skip counts against it; at HEAD_BYPASS_LIMIT nothing passes it any
+   * more, so room freed by finishing reads accrues to it (a large item is never starved).
+   */
+  function pump(): void {
+    let i = 0;
+    while (i < waiting.length) {
+      const waiter = waiting[i] as Waiter;
+      if (tryTake(waiter.bytes, 1)) {
+        for (let j = 0; j < i; j++) (waiting[j] as Waiter).bypassed++;
+        waiting.splice(i, 1);
+        waiter.grant();
+      } else if (hopeless(waiter.bytes)) {
+        waiting.splice(i, 1);
+        waiter.refuse("over-budget");
+      } else if (waiter.bypassed >= HEAD_BYPASS_LIMIT) {
+        return;
+      } else {
+        i++;
+      }
+    }
+  }
+
+  /** Pump in a microtask (never re-entrantly); tell subscribers when room was really freed. */
+  function pumpSoon(freed = false): void {
+    if (freed) freedRoom = true;
+    if (pumpScheduled) return;
+    pumpScheduled = true;
+    queueMicrotask(() => {
+      pumpScheduled = false;
+      pump();
+      if (freedRoom) {
+        freedRoom = false;
+        emit("capacity");
+      }
+    });
+  }
+
+  /**
+   * Reserve `bytes` and one entry for a read whose headers arrived. Fails `over-budget` at once
+   * when the holders alone leave no room (evicting and finishing reads cannot cure it);
+   * otherwise waits in the FIFO queue, honouring abort, purge and session change (they abort
+   * `signal`), and gives up with `over-budget` after `budgetWaitMs`.
+   */
+  function reserve(lease: Lease, bytes: number, signal: AbortSignal): Promise<void> {
+    if (signal.aborted) return Promise.reject(new MediaFailure("aborted"));
+    if (hopeless(bytes)) return Promise.reject(new MediaFailure("over-budget"));
+    return new Promise<void>((resolve, reject) => {
+      const stop = (): void => {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", onAbort);
+      };
+      const leave = (code: MediaErrorCode): void => {
+        waiting.splice(waiting.indexOf(waiter), 1);
+        // The read that was refused ends its flight, which pumps the queue for the others.
+        waiter.refuse(code);
+      };
+      const onAbort = (): void => leave("aborted");
+      const timer = setTimeout(() => leave("over-budget"), budgetWaitMs);
+      const waiter: Waiter = {
+        bytes,
+        bypassed: 0,
+        grant(): void {
+          stop();
+          lease.held = true;
+          lease.bytes = bytes;
+          resolve();
+        },
+        refuse(code: MediaErrorCode): void {
+          stop();
+          reject(new MediaFailure(code));
+        },
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      waiting.push(waiter);
+      pump();
+    });
+  }
+
+  /** Make the reservation at least `total` bytes, in doubling steps; never waits (no deadlock). */
+  function ensure(lease: Lease, total: number): void {
+    if (total <= lease.bytes) return;
+    const step = Math.min(maxBytes, Math.max(total, lease.bytes * 2));
+    for (const target of step > total ? [step, total] : [total]) {
+      if (tryTake(target - lease.bytes, 0)) {
+        lease.bytes = target;
+        return;
+      }
+    }
+    throw new MediaFailure("over-budget");
+  }
+
+  function emit(event: MediaLoaderEvent): void {
+    for (const listener of [...listeners]) {
+      try {
+        listener(event);
+      } catch {
+        // One failing listener must not stop the others.
+      }
+    }
   }
 
   // ---- reading ----
@@ -396,6 +597,7 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
     ifNoneMatch: string | undefined,
     inert: () => boolean,
     fresh: boolean,
+    lease: Lease,
   ): Promise<Downloaded | undefined> {
     const result = await raceAbort(
       storage.read(key, {
@@ -415,7 +617,21 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
       return undefined;
     }
     if (result.status !== 200) throw new MediaFailure("failed");
-    const body = await readBounded(result.body, maxBytes, signal);
+    // Headers are in: size the reservation from the declared length (advisory, never trusted).
+    const declared = result.contentLength;
+    const hasLength =
+      typeof declared === "number" && Number.isSafeInteger(declared) && declared >= 0;
+    if (hasLength && declared > maxBytes) {
+      result.body?.cancel().catch(() => undefined);
+      throw new MediaFailure("too-large");
+    }
+    try {
+      await reserve(lease, hasLength ? Math.max(declared, 1) : assumedBytes, signal);
+    } catch (error) {
+      result.body?.cancel().catch(() => undefined);
+      throw error;
+    }
+    const body = await readBounded(result.body, maxBytes, signal, (total) => ensure(lease, total));
     const decided = classify(body, inert());
     if (typeof decided === "string") throw new MediaFailure(decided);
     return { ...body, ...decided, etag: result.etag };
@@ -440,16 +656,17 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
       flight.timedOut = true;
       flight.controller.abort();
     }, readTimeoutMs);
-    let permit: Permit | undefined;
+    const lease = newLease();
     let outcome: Result<CacheEntry>;
     try {
-      permit = await admit(signal);
+      await takeSlot(lease, signal);
       const downloaded = (await download(
         key,
         signal,
         undefined,
         () => flight.inert,
         stale.has(key),
+        lease,
       )) as Downloaded;
       // From here to the object URL nothing awaits: the purge guard cannot be overtaken.
       if (purged || epoch !== flight.epoch) throw new MediaFailure("purged");
@@ -457,7 +674,7 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
       if (signal.aborted) throw new MediaFailure("aborted");
       // Waiter aborts after this point cannot change the count that `refs` takes.
       flight.done = true;
-      permit.release();
+      lease.release(true);
       const entry = createEntry(key, downloaded, flight.waiters);
       if (!flight.detached) place(entry);
       outcome = ok(entry);
@@ -465,7 +682,8 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
       outcome = fail(codeOfFailure(error, signal, flight.epoch, flight.timedOut));
     } finally {
       clearTimeout(timer);
-      permit?.release();
+      lease.release();
+      pumpSoon();
     }
     flight.done = true;
     active.delete(flight.controller);
@@ -535,13 +753,7 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
     stale.clear();
     for (const entry of [...live]) revoke(entry);
     entries.clear();
-    for (const listener of [...listeners]) {
-      try {
-        listener();
-      } catch {
-        // One failing listener must not stop the others or the purge.
-      }
-    }
+    emit("purge");
   }
 
   /** A changed session key purges everything before anything can be served. */
@@ -630,14 +842,21 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
       controller.abort();
     }, readTimeoutMs);
     const readEpoch = epoch;
-    let permit: Permit | undefined;
+    const lease = newLease();
     try {
-      permit = await admit(controller.signal);
-      const downloaded = await download(key, controller.signal, base.etag, () => base.opaque, true);
+      await takeSlot(lease, controller.signal);
+      const downloaded = await download(
+        key,
+        controller.signal,
+        base.etag,
+        () => base.opaque,
+        true,
+        lease,
+      );
       if (purged || epoch !== readEpoch) return fail("purged");
       if (downloaded === undefined || downloaded.etag === base.etag) return ok({ changed: false });
       if (entries.get(key) !== base) return ok({ changed: true });
-      permit.release();
+      lease.release(true);
       place(createEntry(key, downloaded, 0));
       return ok({ changed: true });
     } catch (error) {
@@ -653,7 +872,8 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
       return fail(code);
     } finally {
       clearTimeout(timer);
-      permit?.release();
+      lease.release();
+      pumpSoon();
       active.delete(controller);
       opts.signal?.removeEventListener("abort", forward);
     }
@@ -699,7 +919,7 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
       purged = false;
     },
 
-    subscribe(listener) {
+    subscribe(listener: (event: MediaLoaderEvent) => void) {
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
@@ -707,7 +927,14 @@ export function createMediaLoader(options: MediaLoaderOptions): MediaLoader {
     },
 
     stats() {
-      return { entries: live.size, bytes: totalBytes, inFlight: inflight.size, purged };
+      return {
+        entries: live.size,
+        bytes: totalBytes,
+        inFlight: inflight.size,
+        reservedBytes,
+        waiting: waiting.length,
+        purged,
+      };
     },
   };
 }

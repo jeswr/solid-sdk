@@ -50,6 +50,7 @@ export interface ReadBody {
 /**
  * Read a body stream into its chunks, refusing the moment the running total passes `limit`.
  * Nothing about the response (Content-Length included) is trusted: only counted bytes matter.
+ * `onBytes` is told the running total before each chunk is kept and may throw to refuse it.
  * The chunks are not joined, so the only full-size copy later is the Blob's own.
  * The stream is cancelled on every exit so a refused or aborted download stops pulling, and an
  * abort that lands together with the last chunk still counts as an abort.
@@ -58,6 +59,7 @@ export async function readBounded(
   body: ReadableStream<Uint8Array> | null,
   limit: number,
   signal: AbortSignal,
+  onBytes: (total: number) => void = noop,
 ): Promise<ReadBody> {
   if (body === null) return { chunks: [], size: 0 };
   const reader = body.getReader();
@@ -71,6 +73,8 @@ export async function readBounded(
       if (!isBytes(next.value)) throw new MediaFailure("failed");
       total += next.value.byteLength;
       if (total > limit) throw new MediaFailure("too-large");
+      // The caller accounts for the bytes (and may refuse them) before the chunk is kept.
+      onBytes(total);
       chunks.push(next.value);
     }
     if (signal.aborted) throw new MediaFailure("aborted");

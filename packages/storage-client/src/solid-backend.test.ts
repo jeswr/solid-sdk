@@ -202,6 +202,26 @@ describe("head / read / readRdf", () => {
     );
   });
 
+  test.each([
+    ["1234", 1234],
+    ["0", 0],
+    [undefined, null],
+    ["12 34", null],
+    ["-5", null],
+    ["1.5", null],
+    ["1234, 1234", null],
+    ["9999999999999999", null],
+    ["99999999999999999999", null],
+  ])("declared Content-Length %j reads as %j", async (header, expected) => {
+    const { storage } = backend({
+      [`GET ${NOTES}a`]: {
+        status: 200,
+        headers: header === undefined ? {} : { "content-length": header },
+      },
+    });
+    expect((await storage.read(`${NOTES}a`)).contentLength).toBe(expected);
+  });
+
   test("link parameters, anchored links, bad dates and untyped blobs", async () => {
     const { storage } = backend({
       [`GET ${NOTES}a`]: {

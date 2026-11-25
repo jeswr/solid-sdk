@@ -2,10 +2,10 @@
 // AUTHORED-BY Claude Sonnet 5.5
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode, StrictMode } from "react";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import type { MediaError } from "../src/errors.js";
 import { createMediaLoader, type MediaHandle, type MediaLoader } from "../src/loader.js";
-import { type UseMediaResult, useMedia } from "../src/react.js";
+import { MAX_AUTO_RETRIES, RETRY_DELAY_MS, type UseMediaResult, useMedia } from "../src/react.js";
 import { deferred, type FakeRead, fakeStorage, fakeUrls, MEDIA, png, served } from "./helpers.js";
 
 afterEach(cleanup);
@@ -59,7 +59,12 @@ describe("useMedia", () => {
     const { loader, acquires } = tracked();
     for (const url of [undefined, null, ""]) {
       const { result } = renderHook(() => useMedia(loader, url));
-      expect(result.current).toEqual({ status: "idle", url: undefined, error: undefined });
+      expect(result.current).toEqual({
+        status: "idle",
+        url: undefined,
+        error: undefined,
+        retry: expect.any(Function),
+      });
     }
     expect(acquires()).toBe(0);
   });
@@ -67,7 +72,12 @@ describe("useMedia", () => {
   test("loads, then exposes the blob URL", async () => {
     const { loader, urls } = tracked();
     const { result } = renderHook(() => useMedia(loader, at("a")));
-    expect(result.current).toEqual({ status: "loading", url: undefined, error: undefined });
+    expect(result.current).toEqual({
+      status: "loading",
+      url: undefined,
+      error: undefined,
+      retry: expect.any(Function),
+    });
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(result.current.url).toMatch(/^blob:/);
     expect(urls.blobOf(result.current.url as string).type).toBe("image/png");
@@ -101,7 +111,12 @@ describe("useMedia", () => {
     const first = result.current.url;
     rerender({ url: at("bbbb") });
     // Never the previous URL's blob under the new URL.
-    expect(result.current).toEqual({ status: "loading", url: undefined, error: undefined });
+    expect(result.current).toEqual({
+      status: "loading",
+      url: undefined,
+      error: undefined,
+      retry: expect.any(Function),
+    });
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(result.current.url).not.toBe(first);
     expect(holds.size).toBe(1);
@@ -367,5 +382,174 @@ describe("purge reaches mounted hooks", () => {
     } as unknown as MediaLoader;
     renderHook(() => useMedia(fake, at("a"))).unmount();
     expect(unsubscribed).toBe(1);
+  });
+});
+
+describe("useMedia over-budget", () => {
+  /** A scripted loader: `acquire` answers from a queue, and tests fire loader events by hand. */
+  function scripted(outcomes: ("over-budget" | "ok" | "not-found")[]) {
+    const listeners = new Set<(event: "purge" | "capacity") => void>();
+    let acquires = 0;
+    let released = 0;
+    const loader = {
+      subscribe(listener: (event: "purge" | "capacity") => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      async acquire() {
+        const next = outcomes[Math.min(acquires++, outcomes.length - 1)];
+        if (next === "ok") {
+          return {
+            ok: true,
+            value: { url: "blob:x", contentType: "image/png", bytes: 1, release: () => released++ },
+          };
+        }
+        return { ok: false, error: { code: next, message: next } };
+      },
+    } as unknown as MediaLoader;
+    return {
+      loader,
+      emit: (event: "purge" | "capacity") => {
+        for (const listener of [...listeners]) listener(event);
+      },
+      acquires: () => acquires,
+      released: () => released,
+      listeners: () => listeners.size,
+    };
+  }
+
+  const settle = async (ms = 0): Promise<void> => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  };
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("over-budget is its own status, and retry() tries again", async () => {
+    const { loader, acquires } = scripted(["over-budget", "ok"]);
+    const { result } = renderHook(() => useMedia(loader, at("a")));
+    await waitFor(() => expect(result.current.status).toBe("over-budget"));
+    expect(result.current.error?.code).toBe("over-budget");
+    expect(result.current.url).toBeUndefined();
+    const retry = result.current.retry;
+    act(() => retry());
+    expect(result.current.status).toBe("loading");
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    expect(acquires()).toBe(2);
+    expect(result.current.retry).toBe(retry);
+  });
+
+  test("other errors stay generic errors and can be retried by hand", async () => {
+    vi.useFakeTimers();
+    const { loader, acquires, emit } = scripted(["not-found", "ok"]);
+    const { result } = renderHook(() => useMedia(loader, at("a")));
+    await settle();
+    expect(result.current.status).toBe("error");
+    // A capacity signal does not retry something that is not over-budget.
+    act(() => emit("capacity"));
+    await settle(RETRY_DELAY_MS * 2);
+    expect(acquires()).toBe(1);
+    act(() => result.current.retry());
+    await settle();
+    expect(result.current.status).toBe("ready");
+  });
+
+  test("a capacity signal retries an over-budget hook once, after a delay, however many arrive", async () => {
+    vi.useFakeTimers();
+    const { loader, acquires, emit } = scripted(["over-budget", "ok"]);
+    const { result } = renderHook(() => useMedia(loader, at("a")));
+    await settle();
+    expect(result.current.status).toBe("over-budget");
+    act(() => {
+      for (let i = 0; i < 20; i++) emit("capacity");
+    });
+    expect(acquires()).toBe(1);
+    await settle(RETRY_DELAY_MS);
+    expect(result.current.status).toBe("ready");
+    expect(acquires()).toBe(2);
+  });
+
+  test("automatic retries stop after MAX_AUTO_RETRIES; retry() restarts the allowance", async () => {
+    vi.useFakeTimers();
+    const { loader, acquires, emit } = scripted(["over-budget"]);
+    const { result } = renderHook(() => useMedia(loader, at("a")));
+    await settle();
+    for (let round = 0; round < MAX_AUTO_RETRIES + 3; round++) {
+      act(() => emit("capacity"));
+      await settle(RETRY_DELAY_MS);
+    }
+    expect(acquires()).toBe(1 + MAX_AUTO_RETRIES);
+    expect(result.current.status).toBe("over-budget");
+    act(() => result.current.retry());
+    await settle();
+    expect(acquires()).toBe(2 + MAX_AUTO_RETRIES);
+    act(() => emit("capacity"));
+    await settle(RETRY_DELAY_MS);
+    expect(acquires()).toBe(3 + MAX_AUTO_RETRIES);
+  });
+
+  test("unmounting cancels a pending automatic retry and unsubscribes", async () => {
+    vi.useFakeTimers();
+    const { loader, acquires, emit, listeners } = scripted(["over-budget", "ok"]);
+    const { result, unmount } = renderHook(() => useMedia(loader, at("a")));
+    await settle();
+    expect(result.current.status).toBe("over-budget");
+    act(() => emit("capacity"));
+    unmount();
+    await vi.advanceTimersByTimeAsync(RETRY_DELAY_MS * 2);
+    expect(acquires()).toBe(1);
+    expect(listeners()).toBe(0);
+  });
+
+  test("a purge ends the wait for capacity and shows the purged error", async () => {
+    vi.useFakeTimers();
+    const { loader, acquires, emit } = scripted(["over-budget", "ok"]);
+    const { result } = renderHook(() => useMedia(loader, at("a")));
+    await settle();
+    act(() => emit("purge"));
+    expect(result.current.error?.code).toBe("purged");
+    act(() => emit("capacity"));
+    await settle(RETRY_DELAY_MS * 2);
+    expect(acquires()).toBe(1);
+  });
+
+  test("a new URL starts with a fresh retry allowance", async () => {
+    vi.useFakeTimers();
+    const { loader, acquires, emit } = scripted(["over-budget"]);
+    const { result, rerender } = renderHook(({ url }) => useMedia(loader, url), {
+      initialProps: { url: at("a") },
+    });
+    await settle();
+    for (let round = 0; round < MAX_AUTO_RETRIES + 1; round++) {
+      act(() => emit("capacity"));
+      await settle(RETRY_DELAY_MS);
+    }
+    const before = acquires();
+    rerender({ url: at("b") });
+    await settle();
+    act(() => emit("capacity"));
+    await settle(RETRY_DELAY_MS);
+    expect(acquires()).toBe(before + 2);
+    expect(result.current.status).toBe("over-budget");
+  });
+
+  test("a stale result after unmount is released, not shown", async () => {
+    const { loader, released } = scripted(["ok"]);
+    const { unmount } = renderHook(() => useMedia(loader, at("a")));
+    unmount();
+    await waitFor(() => expect(released()).toBe(1));
+  });
+
+  test("with a real loader, a tile that found no room loads when another is released", async () => {
+    const { loader } = tracked({ maxEntries: 1 });
+    const first = renderHook(() => useMedia(loader, at("a")));
+    await waitFor(() => expect(first.result.current.status).toBe("ready"));
+    const second = renderHook(() => useMedia(loader, at("bb")));
+    await waitFor(() => expect(second.result.current.status).toBe("over-budget"));
+    first.unmount();
+    await waitFor(() => expect(second.result.current.status).toBe("ready"), { timeout: 3000 });
   });
 });
