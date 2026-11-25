@@ -1,0 +1,471 @@
+# AUTHORED-BY Claude Sonnet 5.5
+#
+# SHACL profile for @jeswr/solid-creative-assets: AI-generated creative assets saved to a
+# Solid pod (ArtCraft and similar apps). It is the input to @jeswr/federation-codegen; the
+# generator derives src/generated/ from it, creative-assets.ttl and codegen.config.json.
+#
+# Vocabularies (nothing is minted): schema.org written as https://schema.org/ (`schema:`),
+# with the legacy http://schema.org/ scheme (`hschema:`) accepted as a READ alias of every
+# class, and PROV-O (`prov:`, http://www.w3.org/ns/prov#).
+#
+# One NodeShape per class. A description document has the asset (`<doc#it>`) plus hash-IRI
+# nodes for its generation run (`#run`), prompt (`#prompt`), model (`#model`), thumbnail
+# (`#thumbnail`) and settings (`#setting-<n>`); the facade composes them, each node being
+# one flat generated entity.
+#
+# COVERS: Image (schema:ImageObject), Video (schema:VideoObject), 3D model
+#   (schema:3DModel), CreativeWork (the project-document AND the prompt node: see below),
+#   Collection, generation run (prov:Activity), model (schema:SoftwareApplication) and
+#   setting (schema:PropertyValue).
+#
+# OMITS (each is a generator limit, listed in the README "Generator gaps"):
+#   - http://schema.org/ read aliases for PREDICATES. The generator accepts an
+#     alias for a predicate only when exactly one shape in the profile uses it, and
+#     schema:name, schema:contentUrl and so on are shared by several shapes.
+#   - The second rdf:type of a prompt (prov:Entity) and of a model (prov:SoftwareAgent):
+#     a node has exactly one written type.
+#   - sh:class on IRI links (prov:wasGeneratedBy, prov:used, schema:thumbnail ...): class
+#     conformance of a link needs a composite link, which must be single-valued and cannot
+#     reuse a class across nodes. Links are plain http(s) IRIs here; the facade follows
+#     only IRIs inside the same document.
+#   - One shape per class: the project document and the prompt are both
+#     schema:CreativeWork, so they share ONE shape whose properties are all optional.
+#     The facade requires schema:text for a prompt.
+#   - schema:duration is an xsd:string (the supported datatypes have no xsd:duration check).
+
+@prefix sh:      <http://www.w3.org/ns/shacl#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix schema:  <https://schema.org/> .
+@prefix hschema: <http://schema.org/> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+
+[] a sh:NodeShape ;
+  sh:targetClass schema:ImageObject, hschema:ImageObject ;
+  sh:property [
+    sh:path schema:name ;
+    sh:name "name" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:description ;
+    sh:name "description" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:contentUrl ;
+    sh:name "contentUrl" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:encodingFormat ;
+    sh:name "encodingFormat" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:width ;
+    sh:name "width" ;
+    sh:datatype xsd:integer ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:height ;
+    sh:name "height" ;
+    sh:datatype xsd:integer ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:contentSize ;
+    sh:name "contentSize" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:dateCreated ;
+    sh:name "dateCreated" ;
+    sh:datatype xsd:dateTime ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:keywords ;
+    sh:name "keywords" ;
+    sh:datatype xsd:string ;
+  ] ;
+  sh:property [
+    sh:path schema:thumbnail ;
+    sh:name "thumbnail" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:creator ;
+    sh:name "creator" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path prov:wasGeneratedBy ;
+    sh:name "wasGeneratedBy" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path prov:wasDerivedFrom ;
+    sh:name "wasDerivedFrom" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+  ] ;
+  sh:property [
+    sh:path schema:isBasedOn ;
+    sh:name "isBasedOn" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+  ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass schema:VideoObject, hschema:VideoObject ;
+  sh:property [
+    sh:path schema:name ;
+    sh:name "name" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:description ;
+    sh:name "description" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:contentUrl ;
+    sh:name "contentUrl" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:encodingFormat ;
+    sh:name "encodingFormat" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:width ;
+    sh:name "width" ;
+    sh:datatype xsd:integer ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:height ;
+    sh:name "height" ;
+    sh:datatype xsd:integer ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:contentSize ;
+    sh:name "contentSize" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:dateCreated ;
+    sh:name "dateCreated" ;
+    sh:datatype xsd:dateTime ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:keywords ;
+    sh:name "keywords" ;
+    sh:datatype xsd:string ;
+  ] ;
+  sh:property [
+    sh:path schema:thumbnail ;
+    sh:name "thumbnail" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:creator ;
+    sh:name "creator" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path prov:wasGeneratedBy ;
+    sh:name "wasGeneratedBy" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path prov:wasDerivedFrom ;
+    sh:name "wasDerivedFrom" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+  ] ;
+  sh:property [
+    sh:path schema:isBasedOn ;
+    sh:name "isBasedOn" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+  ] ;
+  sh:property [
+    sh:path schema:duration ;
+    sh:name "duration" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass schema:3DModel, hschema:3DModel ;
+  sh:property [
+    sh:path schema:name ;
+    sh:name "name" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:description ;
+    sh:name "description" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:contentUrl ;
+    sh:name "contentUrl" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:encodingFormat ;
+    sh:name "encodingFormat" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:contentSize ;
+    sh:name "contentSize" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:dateCreated ;
+    sh:name "dateCreated" ;
+    sh:datatype xsd:dateTime ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:keywords ;
+    sh:name "keywords" ;
+    sh:datatype xsd:string ;
+  ] ;
+  sh:property [
+    sh:path schema:thumbnail ;
+    sh:name "thumbnail" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:creator ;
+    sh:name "creator" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path prov:wasGeneratedBy ;
+    sh:name "wasGeneratedBy" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path prov:wasDerivedFrom ;
+    sh:name "wasDerivedFrom" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+  ] ;
+  sh:property [
+    sh:path schema:isBasedOn ;
+    sh:name "isBasedOn" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+  ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass schema:CreativeWork, hschema:CreativeWork ;
+  sh:property [
+    sh:path schema:name ;
+    sh:name "name" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:text ;
+    sh:name "text" ;
+    sh:datatype xsd:string ;
+    sh:minLength 1 ;
+    sh:pattern "\\S" ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:contentUrl ;
+    sh:name "contentUrl" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:encodingFormat ;
+    sh:name "encodingFormat" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:schemaVersion ;
+    sh:name "schemaVersion" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:additionalType ;
+    sh:name "additionalType" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:hasPart ;
+    sh:name "hasPart" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+  ] ;
+  sh:property [
+    sh:path schema:dateCreated ;
+    sh:name "dateCreated" ;
+    sh:datatype xsd:dateTime ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:dateModified ;
+    sh:name "dateModified" ;
+    sh:datatype xsd:dateTime ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:creator ;
+    sh:name "creator" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:maxCount 1 ;
+  ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass schema:Collection, hschema:Collection ;
+  sh:property [
+    sh:path schema:name ;
+    sh:name "name" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:hasPart ;
+    sh:name "hasPart" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+  ] ;
+  sh:property [
+    sh:path schema:dateCreated ;
+    sh:name "dateCreated" ;
+    sh:datatype xsd:dateTime ;
+    sh:maxCount 1 ;
+  ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass schema:SoftwareApplication, hschema:SoftwareApplication ;
+  sh:property [
+    sh:path schema:name ;
+    sh:name "name" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:identifier ;
+    sh:name "identifier" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:softwareVersion ;
+    sh:name "softwareVersion" ;
+    sh:datatype xsd:string ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:provider ;
+    sh:name "provider" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+    sh:maxCount 1 ;
+  ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass schema:PropertyValue, hschema:PropertyValue ;
+  sh:property [
+    sh:path schema:propertyID ;
+    sh:name "propertyID" ;
+    sh:datatype xsd:string ;
+    sh:minLength 1 ;
+    sh:pattern "\\S" ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path schema:value ;
+    sh:name "settingValue" ;
+    sh:datatype xsd:string ;
+    sh:minLength 1 ;
+    sh:pattern "\\S" ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+  ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass prov:Activity ;
+  sh:property [
+    sh:path prov:startedAtTime ;
+    sh:name "startedAtTime" ;
+    sh:datatype xsd:dateTime ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path prov:endedAtTime ;
+    sh:name "endedAtTime" ;
+    sh:datatype xsd:dateTime ;
+    sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path prov:used ;
+    sh:name "used" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+  ] ;
+  sh:property [
+    sh:path prov:wasAssociatedWith ;
+    sh:name "wasAssociatedWith" ;
+    sh:nodeKind sh:IRI ;
+    sh:pattern "^https?://" ;
+  ] .

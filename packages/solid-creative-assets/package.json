@@ -1,0 +1,74 @@
+{
+  "name": "@jeswr/solid-creative-assets",
+  "version": "0.1.0",
+  "description": "Generated typed model for AI-generated creative assets (images, video, 3D, projects) saved to a Solid pod: schema.org descriptions with PROV-O generation provenance, compiled from a SHACL profile by @jeswr/federation-codegen.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jesse Wright",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/solid-sdk.git",
+    "directory": "packages/solid-creative-assets"
+  },
+  "keywords": [
+    "solid",
+    "rdf",
+    "schema.org",
+    "prov-o",
+    "creative-assets",
+    "shacl"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./vocab": {
+      "types": "./dist/vocab.d.ts",
+      "import": "./dist/vocab.js"
+    },
+    "./creative-assets.ttl": "./creative-assets.ttl",
+    "./creative-assets.shacl.ttl": "./creative-assets.shacl.ttl"
+  },
+  "files": [
+    "dist",
+    "creative-assets.ttl",
+    "creative-assets.shacl.ttl",
+    "README.md",
+    "SKILL.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology creative-assets.ttl --shapes creative-assets.shacl.ttl --config codegen.config.json --out src/generated",
+    "lint": "biome check src scripts test codegen.config.json package.json",
+    "lint:fix": "biome check --write src scripts test codegen.config.json package.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/model-runtime": "workspace:*",
+    "n3": "^2.0.3"
+  },
+  "peerDependencies": {
+    "@rdfjs/types": "^2.0.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@jeswr/federation-codegen": "workspace:*",
+    "@jeswr/rdf-engine": "workspace:*",
+    "@rdfjs/types": "^2.0.1",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4.1.8"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
