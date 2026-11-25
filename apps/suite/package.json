@@ -19,6 +19,7 @@
     "test:mime": "vitest run test/mime.test.ts --coverage",
     "test:coverage": "vitest run --coverage",
     "coverage:music": "vitest run --coverage",
+    "generate:icons": "node scripts/generate-pwa-icons.mjs",
     "build:native": "node scripts/build-native.mjs",
     "check:native": "node scripts/check-native.mjs www",
     "test:native-browser": "node test/native-browser/run.mjs"

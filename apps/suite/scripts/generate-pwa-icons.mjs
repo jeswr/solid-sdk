@@ -1,17 +1,26 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// Run from any directory: node apps/suite/scripts/generate-pwa-icons.mjs
+// Run: pnpm --filter @jeswr/app-suite run generate:icons [--out <dir>]
+// The drift test (test/pwa-icons-drift.test.ts) renders into a temp dir and compares bytes.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import { chromium } from "@playwright/test";
 
 const publicDir = new URL("../public/", import.meta.url);
-const destination = new URL("icons/", publicDir);
+const outFlag = process.argv.indexOf("--out");
+const destination =
+  outFlag > 0
+    ? pathToFileURL(`${process.argv[outFlag + 1]?.replace(/\/?$/, "/")}`)
+    : new URL("icons/", publicDir);
 const source = await readFile(new URL("icon.svg", publicDir), "utf8");
 const css = await readFile(
   new URL("../../../packages/suite-ui/src/styles/tokens.css", import.meta.url),
   "utf8",
 );
 await mkdir(destination, { recursive: true });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: true,
+  executablePath: process.env.PWICONS_CHROMIUM || undefined,
+});
 try {
   const page = await browser.newPage();
   await page.setContent(`<style>${css}</style>${source}`);
