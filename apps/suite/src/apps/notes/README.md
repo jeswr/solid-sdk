@@ -68,3 +68,17 @@ Archived notes are searchable; Trash is excluded. Images use the approved image 
 lists require checklist items, and links match HTTP(S) destinations or plain text URLs.
 Start with the entry tiles or use Add filters while searching. Each chip removes one field;
 Clear all also clears the text query. Filter links support bookmarks and browser history.
+
+Version history (NOT-13) is in the editor's More note actions menu. It uses the
+same history panel as Docs and previews an independent read-only editor with the
+Notes schema, link rules and image boundary. Trashed notes cannot open history;
+view-only collaborators can browse but cannot restore.
+
+A confirmed restore flushes pending drafts, then saves the selected title and body
+through the normal conditional draft writer. It preserves labels and reminders.
+The same PUT records a named “Before restore” revision, including edits made inside
+the ten-minute automatic snapshot interval. Histories retain at most twenty entries.
+Conflicts, permission failures and retries use the normal editor recovery controls;
+restore intent survives draft recovery so a retried restore also preserves the
+replaced content. New revision snapshots store titles. Older revisions that have no
+title keep the current note title when restored.
