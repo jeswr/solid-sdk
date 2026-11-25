@@ -4258,6 +4258,31 @@ importers:
         specifier: ^4.1.9
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
 
+  packages/pod-media-store:
+    dependencies:
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/pod-type-index':
+        specifier: workspace:*
+        version: link:../pod-type-index
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../storage-capabilities
+      '@jeswr/storage-client':
+        specifier: workspace:*
+        version: link:../storage-client
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.1.4(@types/node@26.6.6)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+
   packages/pod-notifications:
     dependencies:
       '@jeswr/storage-client':
@@ -6529,9 +6554,15 @@ importers:
       '@jeswr/pod-auth':
         specifier: workspace:*
         version: link:../../packages/pod-auth
+      '@jeswr/pod-media-store':
+        specifier: workspace:*
+        version: link:../../packages/pod-media-store
       '@jeswr/pod-type-index':
         specifier: workspace:*
         version: link:../../packages/pod-type-index
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../../packages/rdf-serialize
       '@jeswr/storage-capabilities':
         specifier: workspace:*
         version: link:../../packages/storage-capabilities
@@ -6544,10 +6575,16 @@ importers:
       '@sparq-org/solid-server':
         specifier: 0.1.6
         version: 0.1.6
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
       '@types/node':
         specifier: ^25.9.2
         version: 25.9.5

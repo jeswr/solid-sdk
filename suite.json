@@ -103,7 +103,8 @@
     "@jeswr/solid-scheduling",
     "@jeswr/solid-sheets",
     "@jeswr/solid-environment",
-    "@jeswr/agent-consent"
+    "@jeswr/agent-consent",
+    "@jeswr/pod-media-store"
   ],
   "applications": [
     {

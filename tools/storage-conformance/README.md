@@ -53,6 +53,9 @@ Each `start()` seeds one account through the account API, obtains a session thro
 `pod-auth/node`'s `forClientCredentials`, and makes the root owner-only using a conditional
 SDK ACL write. An anonymous request must then get 401/403. Credentials stay in memory.
 The single `conformance.test.ts` starts one account per file; scenarios use separate containers.
+`pnpm --filter @jeswr/storage-conformance run test:media-store` (opt-in, like `test:registration`) runs
+`integration/pod-media-store.test.ts`: `@jeswr/pod-media-store` against this same CSS target. Set
+`MEDIA_STORE_FACTS_OUT=<file>` to also write the observed HTTP facts as JSON.
 CSS remains an explicit manual target. Its full 1,500-member suite takes about three minutes
 here on Node 24; Vitest allows ten minutes. Independent fixture creates overlap in batches of 16.
 
