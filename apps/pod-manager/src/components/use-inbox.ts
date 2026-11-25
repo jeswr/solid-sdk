@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
 "use client";
 
@@ -9,12 +10,13 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "@/components/session-provider";
-import { Inbox, inboxFor, type InboxNotification } from "@/lib/inbox";
 import type { AsyncState } from "@/components/use-pod-data";
+import { type Inbox, type InboxNotification, inboxFor } from "@/lib/inbox";
 
 export interface UseInbox extends AsyncState<InboxNotification[]> {
   /** The discovered inbox container URL (for live-update subscription). */
   inboxUrl?: string;
+  truncated: boolean;
   reload: () => void;
   markRead: (url: string) => Promise<void>;
   dismiss: (url: string) => Promise<void>;
@@ -26,6 +28,7 @@ export function useInbox(): UseInbox {
   const [inbox, setInbox] = useState<Inbox | undefined>(undefined);
   const [inboxUrl, setInboxUrl] = useState<string | undefined>(undefined);
   /** Has discovery settled? Distinguishes "still discovering" from "no inbox". */
+  const [truncated, setTruncated] = useState(false);
   const [discovered, setDiscovered] = useState(false);
   const [nonce, setNonce] = useState(0);
   const reload = useCallback(() => setNonce((n) => n + 1), []);
@@ -33,6 +36,7 @@ export function useInbox(): UseInbox {
   // Discovery: derive the inbox only when the session changes — NOT on reload,
   // so a mark-read / dismiss / live-notification does not re-fetch the profile.
   useEffect(() => {
+    setTruncated(false);
     if (status !== "logged-in" || !webId || !activeStorage) {
       setInbox(undefined);
       setInboxUrl(undefined);
@@ -63,6 +67,7 @@ export function useInbox(): UseInbox {
 
   // Listing: re-list whenever the discovered inbox changes or `reload` fires.
   useEffect(() => {
+    void nonce; // Reload requests rerun this effect.
     if (status !== "logged-in" || !webId || !activeStorage) return;
     if (!discovered) return; // wait for discovery to settle before deciding
     if (!inbox) {
@@ -72,10 +77,14 @@ export function useInbox(): UseInbox {
     }
     let cancelled = false;
     setState({ loading: true });
+    setTruncated(false);
     inbox
-      .list()
-      .then((items) => {
-        if (!cancelled) setState({ loading: false, data: items });
+      .listPage()
+      .then((page) => {
+        if (!cancelled) {
+          setState({ loading: false, data: page.notifications });
+          setTruncated(page.truncated);
+        }
       })
       .catch((e: unknown) => {
         if (!cancelled) {
@@ -107,5 +116,5 @@ export function useInbox(): UseInbox {
     [inbox, reload],
   );
 
-  return { ...state, inboxUrl, reload, markRead, dismiss };
+  return { ...state, truncated, inboxUrl, reload, markRead, dismiss };
 }

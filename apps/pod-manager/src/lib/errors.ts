@@ -112,6 +112,20 @@ export class ItemReadError extends PodDataError {
   }
 }
 
+/** The recipient profile could not be read or parsed; absence of an inbox is unknown. */
+export class ProfileUnreadableError extends PodDataError {
+  readonly webId: string;
+  readonly status: number | undefined;
+  constructor(webId: string, status?: number) {
+    super(
+      `Could not read the recipient profile${status === undefined ? "" : ` (HTTP ${status})`} at ${webId}.`,
+    );
+    this.name = "ProfileUnreadableError";
+    this.webId = webId;
+    this.status = status;
+  }
+}
+
 /**
  * A recipient's WebID profile advertises no `ldp:inbox`, so there is nowhere to
  * deliver a cross-pod notification. A clean, recoverable condition (the UI shows
