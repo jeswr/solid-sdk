@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import { type Nanopublications, parseNanopublicationsTolerant } from "@jeswr/pkg-memory";
+import { assertWithinLimits } from "./limits.js";
 import { HealthGraphError } from "./types.js";
 
 /** Read locally, retaining whole valid nanopubs. Apply purpose policy before projection. */
@@ -13,12 +14,20 @@ export async function importHealthExport(
 }> {
   if (!isSafeAbsoluteIri(options.owner) || !/^https?:/.test(options.owner))
     throw new HealthGraphError("invalid-input");
+  let parsed: Awaited<ReturnType<typeof parseNanopublicationsTolerant>>;
   try {
-    const { dataset, nanopubs, skipped, affected } = await parseNanopublicationsTolerant(text);
-    const reasons: Record<string, number> = {};
-    for (const { errorClass } of skipped) reasons[errorClass] = (reasons[errorClass] ?? 0) + 1;
-    return { value: { dataset, nanopubs, affected }, skipped: { count: skipped.length, reasons } };
+    parsed = await parseNanopublicationsTolerant(text);
   } catch {
     throw new HealthGraphError("read-failed");
   }
+  // Too many nanopubs, or too many sharing one assertion, would make classification
+  // and projection superlinear: refuse the whole import, with no value in the error.
+  assertWithinLimits(parsed.nanopubs);
+  const { dataset, nanopubs, skipped, affected, skippedTargets } = parsed;
+  const reasons: Record<string, number> = {};
+  for (const { errorClass } of skipped) reasons[errorClass] = (reasons[errorClass] ?? 0) + 1;
+  return {
+    value: { dataset, nanopubs, affected, skippedTargets },
+    skipped: { count: skipped.length, reasons },
+  };
 }

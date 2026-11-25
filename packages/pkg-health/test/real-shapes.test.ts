@@ -16,7 +16,7 @@ import {
 } from "../src/index.js";
 import { LABEL, RDF_TYPE, S, TIME, XSD } from "../src/read.js";
 import { exampleHealthKnowledge } from "../src/testing.js";
-import { batch, claim, FixtureNode, H, observation, other, owner } from "./helpers.js";
+import { batch, claim, condition, FixtureNode, H, observation, other, owner } from "./helpers.js";
 
 function required<T>(value: T | undefined): T {
   if (value === undefined) throw new Error("Missing fictional fixture");
@@ -62,8 +62,8 @@ it.each([
 });
 it.each([
   ["normal", "normal"],
-  ["Marked normal", undefined],
-  ["normal (numeric value not transcribed)", undefined],
+  ["Zorbly normal", undefined],
+  ["normal (invented zorb note)", undefined],
   ["abnormal", "abnormal"],
   ["positive", "abnormal"],
   ["HIGH", "high"],
@@ -81,9 +81,9 @@ it.each([
   ["borderline", undefined],
   ["normality", undefined],
   ["abnormal high", undefined],
-  ["Negative for high-risk HPV", undefined],
-  ["Low risk", undefined],
-  ["High normal", undefined],
+  ["Negative for high-risk Zorbvirus", undefined],
+  ["Low zorb", undefined],
+  ["Elevated normal", undefined],
   ["within normal limits, slightly low", undefined],
   ["constructor", undefined],
 ] as const)("interprets only exact qualitative phrases: %s -> %s", async (value, interpretation) => {
@@ -334,21 +334,32 @@ it("builds a deterministic fictional story through the public testing export", a
   });
 }, 30_000);
 it("scales graph reads with nanopubs, indexes shared assertions once, and copies batch provenance once", async () => {
-  const value = await batch([claim("base")]);
-  const original = required(value.nanopubs[0]);
-  value.nanopubs = Array.from({ length: 4500 }, (_, i) => ({
-    ...original,
-    id: `https://example.org/nanopub/${i}`,
-  }));
+  // Corroborating envelopes per assertion are capped (MAX_ENVELOPES_PER_IMPORTED_ASSERTION),
+  // so the 4500 nanopubs are spread over 75 assertions of 60 envelopes each.
+  const groups = 75,
+    copies = 60;
+  const value = await batch(
+    Array.from({ length: groups }, (_, i) =>
+      claim(`base-${i}`, condition(`Fictional ${i}`, `c${i}`)),
+    ),
+  );
+  const originals = [...value.nanopubs];
+  value.nanopubs = originals.flatMap((original, g) =>
+    Array.from({ length: copies }, (_, i) => ({
+      ...original,
+      id: `https://example.org/nanopub/${g}/${i}`,
+    })),
+  );
   const match = vi.spyOn(value.dataset, "match");
   const iterator = vi.spyOn(value.dataset, Symbol.iterator);
   const view = projectHealthFacts(value, { owner });
-  expect(view.facts).toHaveLength(4500);
+  expect(view.facts).toHaveLength(groups * copies);
   expect(iterator).not.toHaveBeenCalled();
-  expect(match.mock.calls.filter((args) => args[3]?.value === original.assertionId)).toHaveLength(
-    1,
-  );
-  expect(match.mock.calls.length).toBeLessThan(4510);
+  for (const original of originals)
+    expect(match.mock.calls.filter((args) => args[3]?.value === original.assertionId)).toHaveLength(
+      1,
+    );
+  expect(match.mock.calls.length).toBeLessThan(groups * copies + 10);
 }, 30_000);
 
 it("reads external blank-node notes/documents and retains incomplete owned notes as unrecognised", async () => {

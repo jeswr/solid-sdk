@@ -127,9 +127,10 @@ Series grouping prefers code IRI, then code system/value, then normalised label.
 
 Observations retain qualitative string results. `interpretation` is optional and
 matches only an entire phrase from this fixed table after trimming and lower-casing.
-Compound text, negation and parenthetical additions remain uninterpreted: “Negative
-for high-risk HPV”, “Low risk”, “High normal”, “within normal limits, slightly low”
-and “normal (numeric value not transcribed)” all have no interpretation.
+Compound text, negation and parenthetical additions remain uninterpreted: the
+invented phrases “Negative for high-risk Zorbvirus”, “Low zorb”, “Elevated normal”,
+“within normal limits, slightly low” and “normal (invented zorb note)” all have no
+interpretation.
 
 | Interpretation | Keywords |
 | --- | --- |
@@ -156,7 +157,12 @@ The importer delegates to pkg-memory `parseNanopublicationsTolerant(text, { base
 whose result also has `skipped: [{ id, errorClass }]` and `affected: string[]`.
 Existing parser calls stay atomic, including the string baseIRI overload. Tolerance
 covers literal/term validation only; invalid TriG or malformed nanopub metadata still
-fails, exposed here as a fixed `HealthGraphError`. Each head/assertion/provenance/pubinfo
+fails, exposed here as a fixed `HealthGraphError`. Work is bounded: an import or
+projection of more than `MAX_IMPORT_NANOPUBLICATIONS` (20,000) nanopubs, or more than
+`MAX_ENVELOPES_PER_IMPORTED_ASSERTION` (64) envelopes sharing one assertion graph,
+throws `HealthGraphError` with `code: "too-large"` (no values), as does a projection
+that would build more than `MAX_PROJECTED_FACTS` (20,000) facts, however the subjects
+are shared. These caps match pkg-memory's classifier limits. Each head/assertion/provenance/pubinfo
 envelope is kept or dropped together. A bad shared assertion drops every referencing
 nanopub; a bad batch source/entity graph, including declared `pkg:correspondenceBatch`
 context on retraction envelopes, drops its users. Batch graphs survive
@@ -212,7 +218,9 @@ happen to share a label. The helper unions the two datasets, keeps one copy of a
 graph present in both only when the copies are identical, and refuses (one fixed error,
 no values) when a shared graph differs or when one input supplies a batch source/entity
 or envelope graph that the other input's nanopubs read but do not hold. Blank nodes are
-relabelled per input, and `affected` is the union of both inputs' lists.
+relabelled per input, and `affected` is the union of both inputs' lists plus every
+merged nanopub that either input's `skippedTargets` names. A retraction that one export
+could not read therefore still lowers the matching fact from another export.
 
 Use distinct batch IDs for independent exports and the same explicit owner; the merge
 refuses an export that reuses another's batch ID with different batch records. Stable claim

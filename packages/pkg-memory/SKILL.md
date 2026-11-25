@@ -16,14 +16,16 @@ refuses (fixed error, no values) shared graphs whose copies differ, graphs one i
 nanopubs read but only the other supplies (a reused batch ID), and private envelope
 graphs claimed by two nanopubs; it drops graphs no nanopub reads, compares shared blank
 graphs by bounded neighbourhood refinement (no canonical labelling; tied blanks, over
-1024 blanks or long chains are refused), relabels blanks per input and unions `affected`.
+1024 blanks or long chains are refused), relabels blanks per input and unions `affected`, adding
+nanopubs named by either input's `skippedTargets` (unreadable updates).
 Validate untrusted parser output with `validateAssertionTerms(quads)` (linear); never
 canonicalize untrusted records to validate them. `readNamedGraph` indexes subjects and
 objects.
 For imported exports, use `parseNanopublicationsTolerant(text, { baseIRI? })` for an
 explicit `Promise<TolerantNanopublications>` return type. The existing
 `parseNanopublications(text, { invalid: "skip", baseIRI? })` overload stays compatible.
-Both add a value-free `skipped: [{ id, errorClass }]` report and `affected: string[]`,
+Both add a value-free `skipped: [{ id, errorClass }]` report (an unsafe head IRI is
+shown as `urn:pkg:skipped:<n>`), `affected: string[]` and `skippedTargets: string[]`,
 and retain only whole valid envelopes and batch graphs needed by kept nanopubs,
 including typed `pkg:correspondenceBatch` context on retractions. Envelopes whose
 graph names include skipped IDs are dropped transitively (`SharedGraphWithSkipped`)
