@@ -12,7 +12,12 @@ import { ConversationProvenanceDoc } from "./conversation-provenance.js";
 import { entities } from "./generated/model.js";
 import { safeHttpIri } from "./iri.js";
 import { storeToTurtle } from "./reconcile.js";
-import { redactConversation, redactSecretFields, redactSecrets } from "./redact.js";
+import {
+  hasUnprovenTies,
+  redactConversation,
+  redactSecretFields,
+  redactSecrets,
+} from "./redact.js";
 import { PROV_ACTIVITY, PROV_AGENT, RDF_TYPE } from "./vocab.js";
 
 /** Structural subset of DESIGN §3 PodPort; implementations enforce pod scope. */
@@ -99,6 +104,10 @@ export interface ChatRedactionReport {
   /** Conversations or messages that could not be checked or fixed (unreadable, malformed,
    * no ETag, or a failed request). The run carries on past them; fix and run again. */
   failed: number;
+  /** Conversations with a run of equal-timestamp messages too large to redact as under any
+   * stored order (also counted in `failed`, so a run is never clean). Their PEM blocks and
+   * stored neighbours are checked, other cross-message secrets may remain: check by hand. */
+  unverified: number;
 }
 
 export function chatPortStatus(error: unknown): number | undefined {
@@ -459,6 +468,7 @@ export class ChatWriter {
       messagesReplaced: 0,
       conflicts: 0,
       failed: 0,
+      unverified: 0,
     };
     const count = (fixed: boolean, key: "titles" | "messagesRewritten" | "messagesReplaced") => {
       if (fixed) report[key]++;
@@ -513,7 +523,9 @@ export class ChatWriter {
         : safeWriteOrder(before, after, redact);
       // No proven order: the run still repairs (last field first) but cannot promise that an
       // interruption is recoverable, so it never reports clean; the next run verifies.
-      if (!plan.proven) report.failed++;
+      const unproven = hasUnprovenTies([-1, ...labels]);
+      if (unproven) report.unverified++;
+      if (!plan.proven || unproven) report.failed++;
       const steps = plan.order.includes(0) ? plan.order : [...plan.order, 0];
       for (const [position, index] of steps.entries()) {
         let fixed = true;

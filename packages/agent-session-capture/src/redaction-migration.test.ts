@@ -8,7 +8,11 @@ import { tmpdir } from "os";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { REDACTION_INCOMPLETE_MESSAGE, runRedactionMigration } from "./redaction-migration.js";
+import {
+  REDACTION_INCOMPLETE_MESSAGE,
+  REDACTION_UNVERIFIED_MESSAGE,
+  runRedactionMigration,
+} from "./redaction-migration.js";
 import { createCaptureTestTransport } from "./testing.js";
 
 const env = {
@@ -63,6 +67,7 @@ describe("solid-capture redact-archive (sst-5ax.39)", () => {
         messagesReplaced: 0,
         conflicts: 0,
         failed: 0,
+        unverified: 0,
       },
       expect.objectContaining({ dryRun: true, conversations: 0 }),
     ]);
@@ -123,6 +128,7 @@ describe("solid-capture redact-archive (sst-5ax.39)", () => {
       messagesReplaced: 1,
       conflicts: 0,
       failed: 0,
+      unverified: 0,
     };
     const migrate = vi.spyOn(ChatWriter.prototype, "migrateRedaction");
     const exec = () =>
@@ -143,9 +149,13 @@ describe("solid-capture redact-archive (sst-5ax.39)", () => {
     migrate.mockResolvedValueOnce({ ...base, failed: 1 });
     expect(await exec()).toBe(1);
     expect(warnings).toHaveLength(2);
+    // An oversized tied run is also failed; the owner is told to check it by hand.
+    migrate.mockResolvedValueOnce({ ...base, failed: 1, unverified: 1 });
+    expect(await exec()).toBe(1);
+    expect(warnings.slice(2)).toEqual([REDACTION_INCOMPLETE_MESSAGE, REDACTION_UNVERIFIED_MESSAGE]);
     migrate.mockResolvedValueOnce(base);
     expect(await exec()).toBe(0);
-    expect(warnings).toHaveLength(2);
+    expect(warnings).toHaveLength(4);
   });
 
   it("writes the incomplete-archive warning to stderr by default, without content", async () => {
@@ -158,6 +168,7 @@ describe("solid-capture redact-archive (sst-5ax.39)", () => {
       messagesReplaced: 0,
       conflicts: 1,
       failed: 0,
+      unverified: 0,
     });
     expect(await run(["redact-archive"])).toBe(1);
     expect(stderr).toHaveBeenCalledWith(`${REDACTION_INCOMPLETE_MESSAGE}\n`);

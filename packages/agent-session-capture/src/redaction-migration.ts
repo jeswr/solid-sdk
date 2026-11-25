@@ -18,6 +18,11 @@ export interface RedactionMigrationOptions extends Pick<CaptureOptions, "home" |
 export const REDACTION_INCOMPLETE_MESSAGE =
   "redact-archive: the archive is NOT fully redacted. Resources counted in failed or conflicts still hold their original text; run it again.";
 
+/** Printed as well when a conversation has too many equal-timestamp messages to be proven
+ * redacted; it stays failed on every run until it is checked by hand. */
+export const REDACTION_UNVERIFIED_MESSAGE =
+  "redact-archive: a conversation has too many messages with one timestamp to be checked in full. Review it by hand; it is reported as failed on every run.";
+
 /**
  * Owner-run `solid-capture redact-archive [--dry-run]` (sst-5ax.39): re-redact titles and
  * messages stored before every chat save path redacted, and remove the duplicates that
@@ -63,7 +68,9 @@ export async function runRedactionMigration(
     // The counts are printed either way. A conflict left its resource unredacted, so it is
     // a failure just like an unreadable one: a script must not read exit 0 as a clean archive.
     if (report.failed === 0 && report.conflicts === 0) return 0;
-    (options.warn ?? ((text) => process.stderr.write(`${text}\n`)))(REDACTION_INCOMPLETE_MESSAGE);
+    const warn = options.warn ?? ((text) => process.stderr.write(`${text}\n`));
+    warn(REDACTION_INCOMPLETE_MESSAGE);
+    if (report.unverified > 0) warn(REDACTION_UNVERIFIED_MESSAGE);
     return 1;
   } catch {
     return 1;

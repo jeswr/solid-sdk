@@ -223,6 +223,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
       messagesReplaced: 1,
       conflicts: 0,
       failed: 0,
+      unverified: 0,
     });
     expect(pod.writes).toEqual([]);
     expect(pod.deletes).toEqual([]);
@@ -241,6 +242,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
       messagesReplaced: 1,
       conflicts: 0,
       failed: 0,
+      unverified: 0,
     });
     expect(pod.everything()).not.toContain(TOKEN);
     expect([...pod.resources.keys()].join("\n")).not.toContain(TOKEN);
@@ -303,6 +305,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
       messagesReplaced: 1,
       messagesRewritten: 1,
       failed: 0,
+      unverified: 0,
     });
     expect(pod.resources.has(legacy)).toBe(false);
     // The replay's copy is kept as it was, not rewritten.
@@ -375,6 +378,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
       messagesRewritten: 2,
       messagesReplaced: 0,
       failed: 0,
+      unverified: 0,
     });
     expect(pod.deletes).toEqual([]);
     for (const url of [hook, legacyCapture]) expect(pod.text(url)).toContain("[REDACTED TOKEN]");
@@ -441,6 +445,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
       messagesReplaced: 0,
       conflicts: 2,
       failed: 2,
+      unverified: 0,
     });
     expect(pod.resources.has(legacy)).toBe(true);
     pod.fail.clear();
@@ -450,6 +455,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
       messagesReplaced: 1,
       conflicts: 0,
       failed: 1,
+      unverified: 0,
     });
     expect(pod.everything()).not.toContain(TOKEN);
   });
@@ -587,6 +593,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
         titles: 1,
         messagesReplaced: 1,
         failed: 0,
+        unverified: 0,
       });
       await expectSaveEquivalent(pod, sourceOf(title, messages), [
         "fixtureTitleHalf",
@@ -622,6 +629,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
         messagesRewritten: 1,
         messagesReplaced: 1,
         failed: 1,
+        unverified: 0,
       });
       expect(pod.resources.has(legacy)).toBe(false);
     });
@@ -637,6 +645,7 @@ describe("ChatWriter.migrateRedaction (sst-5ax.39)", () => {
         messagesRewritten: 1,
         messagesReplaced: 1,
         failed: 0,
+        unverified: 0,
       });
       expect(pod.resources.has(legacy)).toBe(false);
       expect(pod.everything()).not.toContain(TOKEN);

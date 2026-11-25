@@ -1,7 +1,7 @@
 // AUTHORED-BY Claude Sonnet 5.5
 // Fields whose stored order is unknown: redacted as if under any ordering of each run.
 import { describe, expect, it } from "vitest";
-import { redactSecretFields } from "./redact.js";
+import { hasUnprovenTies, redactSecretFields } from "./redact.js";
 
 const KEY = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7VJTUt9Us8cKj";
 const BEGIN = `-----BEGIN PRIVATE KEY-----\n${KEY}`;
@@ -87,21 +87,75 @@ describe("redactSecretFields with interchangeable runs", () => {
     }
   });
 
-  it("covers a run, and its neighbour, whole when the run is too large to examine pair by pair", () => {
+  it("never blanket-redacts a run too large for pair checks: members alone, PEM and stored neighbours", () => {
     const run = Array.from({ length: 65 }, (_, i) => `note ${i}`);
-    const result = redactSecretFields(["T", "before", ...run], [-1, 0, ...run.map(() => 1)]);
-    expect(result[1]).toBe("[REDACTED]");
-    expect(result.slice(2).every((text) => text === "[REDACTED]")).toBe(true);
+    const fields = ["T", "before", ...run];
+    const groups = [-1, 0, ...run.map(() => 1)];
+    expect(hasUnprovenTies(groups)).toBe(true);
+    expect(redactSecretFields(fields, groups)).toEqual(fields);
   });
 
-  it("does the same when two neighbouring runs have too many pairs between them", () => {
+  it("covers a PEM block split over three members of an oversized run, and no other member", () => {
+    const run = Array.from({ length: 70 }, (_, i) => `note ${i}`);
+    run[10] = `x\n${BEGIN}`;
+    run[40] = "BODYBODYBODY";
+    run[60] = END;
+    const result = redactSecretFields(["T", ...run], [-1, ...run.map(() => 0)]);
+    const changed = result.flatMap((text, at) => (text === ["T", ...run][at] ? [] : [at - 1]));
+    // Followed in stored order: the delimiters and everything between them, nothing else.
+    expect(changed).toEqual(Array.from({ length: 51 }, (_, i) => i + 10));
+    expect(result.join("|")).not.toContain("BODYBODYBODY");
+    expect(result[11]).toBe("x\n[REDACTED PRIVATE KEY]");
+    expect(result[61]).toBe("[REDACTED PRIVATE KEY]\nafter");
+    expect(result[1]).toBe("note 0");
+    expect(result[70]).toBe("note 69");
+  });
+
+  it("checks each member of an oversized run against its stored neighbours, and the previous run", () => {
+    const run = Array.from({ length: 70 }, (_, i) => `note ${i}`);
+    run[0] = 'fixtureTail"; y';
+    run[30] = 'config password="sk-fixtureLeft';
+    run[31] = 'fixtureRight"; y = 2';
+    const result = redactSecretFields(
+      ["T", 'config password="sk-fixtureHead', ...run],
+      [-1, 0, ...run.map(() => 1)],
+    );
+    expect(result.join("|")).not.toContain("fixtureLeft");
+    expect(result.join("|")).not.toContain("fixtureRight");
+    expect(result.join("|")).not.toContain("fixtureHead");
+    expect(result[2]).not.toContain("fixtureTail");
+    expect(result[30]).toBe("note 28");
+  });
+
+  it("recognises a header split over stored neighbours of an oversized run", () => {
+    const run = Array.from({ length: 70 }, (_, i) => `note ${i}`);
+    run[5] = "see -----BEGIN PRIV";
+    run[6] = "ATE KEY-----\nBODY";
+    const result = redactSecretFields(["T", ...run], [-1, ...run.map(() => 0)]).join("|");
+    expect(result).not.toContain("BODY");
+  });
+
+  it("recognises a header split over the join with the previous run of an oversized run", () => {
+    const run = Array.from({ length: 70 }, (_, i) => `note ${i}`);
+    run[0] = "ATE KEY-----\nBODY";
+    const result = redactSecretFields(
+      ["T", "see -----BEGIN PRIV", ...run],
+      [-1, 0, ...run.map(() => 1)],
+    ).join("|");
+    expect(result).not.toContain("BODY");
+  });
+
+  it("flags two neighbouring runs with too many pairs between them", () => {
     const left = Array.from({ length: 60 }, (_, i) => `left ${i}`);
     const right = Array.from({ length: 60 }, (_, i) => `right ${i}`);
-    const result = redactSecretFields(
-      ["T", ...left, ...right, "after"],
-      [-1, ...left.map(() => 0), ...right.map(() => 1), 2],
-    );
-    expect(result.slice(1, -1).every((text) => text === "[REDACTED]")).toBe(true);
-    expect(result.at(-1)).toBe("after");
+    const fields = ["T", ...left, ...right, "after"];
+    const groups = [-1, ...left.map(() => 0), ...right.map(() => 1), 2];
+    expect(hasUnprovenTies(groups)).toBe(true);
+    expect(redactSecretFields(fields, groups)).toEqual(fields);
+  });
+
+  it("does not flag runs within the budget", () => {
+    expect(hasUnprovenTies([-1, 0, 0, 1, 2, 2])).toBe(false);
+    expect(hasUnprovenTies([])).toBe(false);
   });
 });

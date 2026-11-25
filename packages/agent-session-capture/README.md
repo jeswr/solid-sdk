@@ -158,7 +158,9 @@ redacted, when `failed` or `conflicts` is above 0, or **1** with a fixed "Check 
 configuration" line when the run could not start; run it again. A failed write stops its own
 chat (the rest of it is counted in `conflicts`) so the next run can finish it. The chat
 interop README states what the repair does and does not guarantee, including equal
-timestamps and replay IDs.
+timestamps and replay IDs. A chat with more than 64 messages sharing one timestamp cannot be
+proven repaired: it is counted in `failed` and `unverified` on every run, and a second line
+asks you to review it by hand.
 
 ## Content and opt-out
 

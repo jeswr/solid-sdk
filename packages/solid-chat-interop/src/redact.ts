@@ -553,13 +553,43 @@ const MAX_TIED_FIELDS = 64;
 const MAX_TIED_PAIRS = 4096;
 const PEM_END = /-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----/;
 
+function tiedRuns(groups: readonly number[]): number[][] {
+  const runs: number[][] = [];
+  for (let i = 0; i < groups.length; i++) {
+    if (i > 0 && groups[i] === groups[i - 1]) (runs[runs.length - 1] as number[]).push(i);
+    else runs.push([i]);
+  }
+  return runs;
+}
+
+/** Whether a run, or a run with its predecessor, is too large for the pair budget. */
+function overBudget(run: readonly number[], previous: readonly number[]): boolean {
+  return (
+    run.length > MAX_TIED_FIELDS ||
+    run.length * (run.length - 1) + run.length * previous.length > MAX_TIED_PAIRS
+  );
+}
+
+/**
+ * True when some run of interchangeable fields exceeds the pair budget, so redacting it
+ * as under any ordering is not proven: cross-field secrets other than PEM blocks are only
+ * checked against stored neighbours. Deterministic in the labels alone.
+ */
+export function hasUnprovenTies(groups: readonly number[]): boolean {
+  const runs = tiedRuns(groups);
+  return runs.some((run, at) => overBudget(run, runs[at - 1] ?? []));
+}
+
 /**
  * Source spans for fields whose order within a run is unknown (`groups`: consecutive
  * equal labels are interchangeable). A field is covered when it would be covered under
  * ANY ordering of its run, which errs toward redacting more:
  * - Every adjacency an ordering can produce is examined: each ordered pair inside a
- *   run, and each pair across two neighbouring runs. A run or a run pair too large for
- *   the pair budget is covered whole, together with its neighbour (blanket rule).
+ *   run, and each pair across two neighbouring runs. A run, or a run with its predecessor,
+ *   too large for the pair budget is never blanket-redacted: it keeps the checks that are
+ *   linear in its size (each member alone, PEM below, each member against its stored
+ *   neighbours, PEM followed in stored order). Its any-ordering guarantee is then unproven,
+ *   see {@link hasUnprovenTies}.
  * - PEM: a block open on entry to a run, or opened by a member (alone or across a join
  *   with another member or the previous run), puts every other member inside the block
  *   in some ordering, so each is covered from its start to its first END (or whole). A
@@ -569,11 +599,7 @@ const PEM_END = /-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----/;
  */
 function unorderedSpans(fields: readonly string[], groups: readonly number[]): Span[][] {
   const spans: Span[][] = fields.map(() => []);
-  const runs: number[][] = [];
-  for (let i = 0; i < fields.length; i++) {
-    if (i > 0 && groups[i] === groups[i - 1]) (runs[runs.length - 1] as number[]).push(i);
-    else runs.push([i]);
-  }
+  const runs = tiedRuns(groups);
   /** Scan fields in the given order for PEM; map the spans back and report an open block. */
   const scan = (order: readonly number[], open = false): boolean => {
     const scratch: Span[][] = order.map(() => []);
@@ -599,29 +625,35 @@ function unorderedSpans(fields: readonly string[], groups: readonly number[]): S
   let open: boolean = false;
   let previous: readonly number[] = [];
   for (const run of runs) {
-    const pairs = run.length * (run.length - 1) + run.length * previous.length;
+    if (overBudget(run, previous)) {
+      // Linear in the run: join stored neighbours, and follow PEM in stored order, so only
+      // the members between a BEGIN and its END (and those delimiters) are covered.
+      const last = previous.at(-1);
+      for (const [at, y] of run.entries()) {
+        const x = run[at - 1] ?? last;
+        if (x !== undefined) join(x, y);
+      }
+      open = scan(open || last === undefined ? run : [last, ...run], open);
+      previous = run;
+      continue;
+    }
     // Members that open a block, alone or across a join with another member.
     const openers = new Set(run.filter(alone));
     let crossOpen = false;
-    if (run.length > MAX_TIED_FIELDS || pairs > MAX_TIED_PAIRS) {
-      for (const i of [...previous, ...run])
-        spans[i]?.push({ start: 0, end: (fields[i] as string).length });
-    } else {
-      for (const x of run)
-        for (const y of run)
-          if (x !== y) {
-            join(x, y);
-            if (scan([x, y]) && !alone(x) && !alone(y)) {
-              openers.add(x);
-              openers.add(y);
-            }
-          }
-      for (const x of previous)
-        for (const y of run) {
+    for (const x of run)
+      for (const y of run)
+        if (x !== y) {
           join(x, y);
-          if (scan([x, y]) && !alone(x) && !alone(y)) crossOpen = true;
+          if (scan([x, y]) && !alone(x) && !alone(y)) {
+            openers.add(x);
+            openers.add(y);
+          }
         }
-    }
+    for (const x of previous)
+      for (const y of run) {
+        join(x, y);
+        if (scan([x, y]) && !alone(x) && !alone(y)) crossOpen = true;
+      }
     const entered: boolean = open || crossOpen;
     for (const i of run) if (entered || openers.size > (openers.has(i) ? 1 : 0)) scan([i], true);
     open = openers.size > 0 || (entered && !run.some((i) => PEM_END.test(fields[i] as string)));

@@ -402,21 +402,63 @@ describe("messages whose stored order differs from the order they were submitted
     expect(pod.text(`${CHAT}m-c.ttl`)).toContain("noted [REDACTED] thanks");
   });
 
-  it("covers a very large run of equal timestamps whole when its pairs cannot be examined", async () => {
+  it.each([
+    70, 500,
+  ])("leaves %i tied messages with no secret byte-identical, but reports them unverified", async (count) => {
+    const pod = new FaultPod();
+    const names = Array.from({ length: count }, (_, i) => `m${String(i).padStart(4, "0")}`);
+    await new ChatWriter(pod).save({
+      provider: "claude",
+      conversationId: "thread-1",
+      title: "Plain title",
+      channel: "mcp",
+      messages: names.map((id, i) => ({
+        id,
+        role: i % 2 ? "assistant" : "user",
+        text: `plain note ${i}`,
+        createdAt: DAY1,
+      })),
+    });
+    const before = pod.snapshot();
+    pod.operations = 0;
+    const report = await new ChatWriter(pod).migrateRedaction();
+    expect(pod.operations).toBe(0);
+    expect(pod.snapshot()).toEqual(before);
+    // Not proven for every stored order: never clean, on every run, until checked by hand.
+    expect(report).toMatchObject({ failed: 1, unverified: 1, conflicts: 0, titles: 0 });
+    expect(await new ChatWriter(pod).migrateRedaction()).toEqual(report);
+    expect(await new ChatWriter(pod).migrateRedaction({ dryRun: true })).toMatchObject({
+      failed: 1,
+      unverified: 1,
+    });
+  });
+
+  it("redacts a key block split over three of 70 tied messages and touches only what lies between", async () => {
     const messages: Message[] = Array.from({ length: 70 }, (_, i) => ({
       role: "user",
-      text: i === 35 ? `-----BEGIN PRIVATE KEY-----\n${PEM_HEAD}` : `note ${i} ${PEM_BODY}${i}`,
+      text: `plain note ${i}`,
       createdAt: DAY1,
     }));
-    const pod = await seed(
-      "Plain title",
-      messages,
-      messages.map((_, i) => `m${String(i).padStart(3, "0")}`),
-    );
-    // Past the budget for proving a write order the run repairs but never reports clean.
-    expect(await new ChatWriter(pod).migrateRedaction()).toMatchObject({ failed: 1, conflicts: 0 });
-    expect(pod.everything()).not.toContain(PEM_HEAD.slice(0, 20));
+    (messages[10] as Message).text = `Key:\n-----BEGIN PRIVATE KEY-----\n${PEM_HEAD}`;
+    (messages[40] as Message).text = PEM_BODY;
+    (messages[60] as Message).text = "-----END PRIVATE KEY-----\nthanks";
+    const ids = messages.map((_, i) => `m${String(i).padStart(3, "0")}`);
+    const pod = await seed("Plain title", messages, ids);
+    const before = new Map(pod.snapshot());
+    const report = await new ChatWriter(pod).migrateRedaction();
+    expect(report).toMatchObject({ failed: 1, unverified: 1, conflicts: 0 });
     expect(pod.everything()).not.toContain(PEM_BODY);
-    expect(await new ChatWriter(pod).migrateRedaction()).toMatchObject(CLEAN);
+    expect(pod.everything()).not.toContain(PEM_HEAD.slice(0, 20));
+    const after = new Map(pod.snapshot());
+    const changed = ids.flatMap((id, i) =>
+      before.get(`${CHAT}m-${id}.ttl`) === after.get(`${CHAT}m-${id}.ttl`) ? [] : [i],
+    );
+    expect(changed).toEqual(Array.from({ length: 51 }, (_, i) => i + 10));
+    for (const i of [0, 9, 61, 69])
+      expect(pod.text(`${CHAT}m-${ids[i]}.ttl`)).toContain(`plain note ${i}`);
+    expect(await new ChatWriter(pod).migrateRedaction()).toMatchObject({
+      failed: 1,
+      unverified: 1,
+    });
   });
 });

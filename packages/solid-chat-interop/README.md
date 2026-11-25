@@ -388,7 +388,7 @@ have grown since. `migrateRedaction()` is an owner-run repair (bead sst-5ax.39):
 ```ts
 const report = await chats.migrateRedaction({ dryRun: true }); // counts only, no writes
 await chats.migrateRedaction();
-// { conversations, titles, messagesRewritten, messagesReplaced, conflicts, failed }
+// { conversations, titles, messagesRewritten, messagesReplaced, conflicts, failed, unverified }
 ```
 
 It walks every provider's conversations and redacts each one as a whole, like `save`: the
@@ -408,11 +408,18 @@ What the repair guarantees, and what it does not:
   be under some ordering, which can redact more than `save` would have (for example a
   message beside a key block, a word after a token at the end of a sibling). Every adjacent
   pair a run can produce is examined, and a PEM block that any member opens covers the rest
-  of the run up to its first END. A run of more than 64 messages, or two neighbouring runs
-  with more than 4096 ordered pairs between them, are blanket-redacted to `[REDACTED]`
-  instead: that bound exists only to keep the work finite, and it errs toward redacting.
-  Over-redaction is the price; a surviving fragment is not, within the detectors' own limits
-  (adjacent pairs and PEM continuation, see above).
+  of the run up to its first END. Over-redaction is the price; a surviving fragment is not,
+  within the detectors' own limits (adjacent pairs and PEM continuation, see above).
+  A run of more than 64 messages, or two neighbouring runs with more than 4096 ordered pairs
+  between them, is too large for that and is NEVER blanket-redacted: each member is redacted
+  as it would be alone, each against its stored neighbours, and a PEM block is followed in
+  stored order (the BEGIN and END members and those stored between them are covered, other
+  members are untouched; a run in which nothing changes is left byte-identical). The
+  any-ordering guarantee is then unproven (a key body stored before its BEGIN, or a secret
+  split over two members that are not stored neighbours, can survive), so the conversation
+  counts in `failed` and in `unverified` on EVERY run, deterministically, even when nothing
+  needs writing, and `solid-capture redact-archive` tells the owner to review it by hand. A
+  run that reports it is never clean (exit 1) until the conversation is fixed by hand.
 - **Replay IDs.** The text stored for a message, and so the ID a replay derives, equals what
   `save` of the original conversation would store only when the conversation has no equal
   timestamps (or none that redact differently). Otherwise a replay of the original through
