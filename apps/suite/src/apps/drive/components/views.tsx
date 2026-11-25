@@ -25,7 +25,7 @@ import {
 import { listTrash, recentFiles, searchByName, trashFolderOf } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
 import { formatSize } from "../lib/view/view";
-import { useDrive, useFolder } from "../state/drive-context";
+import { ForeignPreviewScope, useDrive, useFolder } from "../state/drive-context";
 import { useDriveListingFocus } from "../state/listing-focus";
 import { pruneDeleted } from "../state/prefs";
 import { withHydratedMetadata } from "../state/resource";
@@ -117,7 +117,11 @@ export function FolderRefView() {
       </div>
     );
   if (!url.endsWith("/")) notFound();
-  return <FolderView url={url} />;
+  return (
+    <ForeignPreviewScope url={url}>
+      <FolderView url={url} />
+    </ForeignPreviewScope>
+  );
 }
 
 /** A cancellable tree scan; results are tied to the root, query and request generation. */
@@ -322,7 +326,11 @@ export function SharedView() {
       }),
     [client, prefs.openedShared],
   );
-  const urls = JSON.stringify(saved.map(({ url }) => url));
+  // An announced URL is the sender's choice: it is requested only when the user opens it.
+  const announced = new Set(
+    prefs.openedShared.filter((entry) => entry.announced).map((entry) => entry.url),
+  );
+  const urls = JSON.stringify(saved.map(({ url }) => url).filter((url) => !announced.has(url)));
   const [snapshot, setSnapshot] = useState<{
     client: DriveClient;
     urls: string;
@@ -417,7 +425,11 @@ export function PreviewRouteView() {
         Loading…
       </div>
     );
-  return <ResolvedPreviewRouteView url={url} />;
+  return (
+    <ForeignPreviewScope url={url}>
+      <ResolvedPreviewRouteView url={url} />
+    </ForeignPreviewScope>
+  );
 }
 
 function ResolvedPreviewRouteView({ url }: { url: string }) {

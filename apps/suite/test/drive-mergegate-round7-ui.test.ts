@@ -51,6 +51,8 @@ beforeEach(() => {
 
 async function setup(hiddenLink: boolean, own = false) {
   const pod = await wacPod();
+  // Resources outside the signed-in storage are read credential-free over the global fetch.
+  vi.stubGlobal("fetch", pod.fetch);
   if (hiddenLink)
     pod.after(async (_url, _method, response) => {
       const headers = new Headers(response.headers);

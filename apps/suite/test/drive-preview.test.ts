@@ -39,11 +39,19 @@ const data: TypedViewData = {
   rawData: "Technical serialization",
 };
 
+const STORAGE = "https://pod.example/";
+const RESOURCE = `${STORAGE}docs/private.ttl`;
+
 test("passes a session-backed image resolver through the typed preview slot", async () => {
   const create = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:private-image");
   const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
-  const session = { fetch: vi.fn<typeof fetch>(async () => new Response("private image")) };
-  const html = renderToStaticMarkup(createElement(DrivePreview, { session, source, data }));
+  const session = {
+    storageUrl: STORAGE,
+    fetch: vi.fn<typeof fetch>(async () => new Response("private image")),
+  };
+  const html = renderToStaticMarkup(
+    createElement(DrivePreview, { session, resourceUrl: RESOURCE, source, data }),
+  );
   const props = probes.typed.mock.lastCall?.[0];
   expect(props?.data).toBe(data);
   expect(props?.resolveImage).toBeTypeOf("function");
@@ -66,12 +74,13 @@ test("passes a session-backed image resolver through the typed preview slot", as
 
 test("forwards preview metadata, recovery and the explicit advanced setting", () => {
   const onAction = vi.fn();
-  const session = { fetch: vi.fn<typeof fetch>() };
+  const session = { storageUrl: STORAGE, fetch: vi.fn<typeof fetch>() };
   const state = { status: "ready" } as const;
   const input = { ...source, details: { Owner: "Alex" } };
   const html = renderToStaticMarkup(
     createElement(DrivePreview, {
       session,
+      resourceUrl: RESOURCE,
       source: input,
       data,
       state,
@@ -86,11 +95,11 @@ test("forwards preview metadata, recovery and the explicit advanced setting", ()
 });
 
 test("leaves untyped and closed previews without a typed image read", () => {
-  const session = { fetch: vi.fn<typeof fetch>() };
-  renderToStaticMarkup(createElement(DrivePreview, { session, source }));
+  const session = { storageUrl: STORAGE, fetch: vi.fn<typeof fetch>() };
+  renderToStaticMarkup(createElement(DrivePreview, { session, resourceUrl: RESOURCE, source }));
   expect(probes.pane.mock.lastCall?.[0]?.source).toMatchObject(source);
   expect(probes.typed).not.toHaveBeenCalled();
-  renderToStaticMarkup(createElement(DrivePreview, { session, data }));
+  renderToStaticMarkup(createElement(DrivePreview, { session, resourceUrl: RESOURCE, data }));
   expect(probes.pane.mock.lastCall?.[0]?.source).toBeUndefined();
   expect(probes.typed).not.toHaveBeenCalled();
   expect(session.fetch).not.toHaveBeenCalled();

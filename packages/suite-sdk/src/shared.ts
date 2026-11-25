@@ -164,7 +164,7 @@ function confineTransport(transport: typeof fetch, options: InboxTransportOption
   const publicFetch = options.publicFetch;
   if (!publicFetch) return own;
   return (input, init) =>
-    isOwnPodIri(input instanceof Request ? input.url : String(input), options.storageUrl)
+    isOwnPodIri(new Request(input).url, options.storageUrl)
       ? own(input, init)
       : publicFetch(input, { ...init, credentials: "omit" });
 }
@@ -244,7 +244,8 @@ export interface ReadSharedInboxOptions extends InboxTransportOptions {
  * Read the inbox Shared with me lists. Credentials only reach `storageUrl`: the profile is read
  * credential-free when the WebID lives elsewhere, and an inbox outside the storage is refused.
  * A failed read is told apart from an empty inbox, and an inbox larger than the bound is flagged
- * (one extra document is requested to know). Aborts reject.
+ * (one extra document is requested to know). An abort through `signal` rejects; any other failure
+ * (including a transport's own timeout) is a network failure.
  */
 export async function readSharedInbox(options: ReadSharedInboxOptions): Promise<SharedInboxRead> {
   const limit = options.maxItems ?? SHARED_INBOX_LIMIT;
@@ -315,9 +316,8 @@ export async function readSharedInbox(options: ReadSharedInboxOptions): Promise<
       truncated: members.size > limit,
       limit,
     };
-  } catch (error) {
+  } catch {
     options.signal?.throwIfAborted();
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
     return { status: "failed", reason: "network" };
   }
 }
