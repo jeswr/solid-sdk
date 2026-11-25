@@ -45,6 +45,16 @@ export class TemplateAccessError extends Error {
 function missing(error: unknown): boolean {
   return error instanceof StorageError && error.code === "not-found";
 }
+/** Definite "no usable index" outcomes. Anything else (network, timeout, 5xx, unknown) is
+ * transient: it must surface, never lead to creating or registering a second collection. */
+function indexUnusable(error: unknown): boolean {
+  return (
+    error instanceof StorageError &&
+    ["not-found", "scope", "forbidden", "unsupported", "invalid-response", "not-rdf"].includes(
+      error.code,
+    )
+  );
+}
 function validator(etag: string | null): string {
   if (!etag || !/^"[\x21\x23-\x7e\x80-\xff]*"$/.test(etag))
     throw new Error("Templates require a strong ETag");
@@ -121,9 +131,11 @@ export function createTemplateStore(options: {
     let untyped: string | undefined;
     try {
       registered = (await index?.find(TEMPLATE_CLASS)) ?? [];
-    } catch {
-      // An unreadable or malformed index only means there is no usable entry: the conventional
-      // folder is still adopted (after verification) rather than blocking Templates.
+    } catch (error) {
+      // An absent, out-of-scope, forbidden or malformed index only means there is no usable
+      // entry: the conventional folder is still adopted (after verification). A transient
+      // failure surfaces so a registered collection is never missed and duplicated.
+      if (!indexUnusable(error)) throw error;
       registered = [];
     }
     for (const url of registered) {

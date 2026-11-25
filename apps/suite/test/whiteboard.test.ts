@@ -139,6 +139,45 @@ describe("whiteboard pod orchestration", () => {
     });
   });
   it.each([
+    "network",
+    "server",
+    "rate-limited",
+  ] as const)("surfaces a transient index failure (%s) and never creates or registers a folder", async (code) => {
+    const storage = createMemoryStorage({ protocol: "solid", root });
+    const flaky = index();
+    vi.mocked(flaky.find).mockRejectedValue(new StorageError(code, { method: "GET", url: root }));
+    const create = vi.spyOn(storage, "create");
+    await expect(prepareWhiteboards(storage, flaky)).rejects.toMatchObject({ code });
+    await expect(prepareWhiteboards(storage, flaky)).rejects.toBeInstanceOf(StorageError);
+    await expect(
+      prepareWhiteboards(
+        storage,
+        (() => {
+          const odd = index();
+          vi.mocked(odd.find).mockRejectedValue(new TypeError("unknown"));
+          return odd;
+        })(),
+      ),
+    ).rejects.toBeInstanceOf(TypeError);
+    expect(create).not.toHaveBeenCalled();
+    expect(flaky.register).not.toHaveBeenCalled();
+  });
+  it.each([
+    "not-found",
+    "scope",
+    "unsupported",
+    "invalid-response",
+    "not-rdf",
+  ] as const)("treats a definitive index failure (%s) as no usable index", async (code) => {
+    const storage = createMemoryStorage({ protocol: "solid", root });
+    const unusable = index();
+    vi.mocked(unusable.find).mockRejectedValue(
+      new StorageError(code, { method: "GET", url: root }),
+    );
+    const repo = await prepareWhiteboards(storage, unusable);
+    expect(repo.container).toBe(`${root}whiteboards/`);
+  });
+  it.each([
     "solid",
     "lws",
   ] as const)("treats a failed index lookup as no usable index, and a second session reuses the boards on %s", async (protocol) => {
