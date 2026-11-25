@@ -158,7 +158,7 @@ it("persists bounded local dismissals per WebID without deleting inbox items", a
   await click(view.host.querySelector("button") as HTMLElement);
   expect(view.host.querySelector("li")).toBeNull();
   expect(document.activeElement).toBe(view.host.querySelector("h2"));
-  expect(JSON.parse(localStorage.getItem(key(ME)) ?? "null").ids).toHaveLength(200);
+  expect(JSON.parse(localStorage.getItem(key(ME)) ?? "null").ids).toHaveLength(206);
   await view.unmount();
   const reopened = await mount(content());
   expect(reopened.host.querySelector("section")).toBeNull();
@@ -452,4 +452,45 @@ it("never folds verified rows, and shows the scan notices with the Invitations h
   const cut = await mount(content());
   expect(cut.host.querySelector("h2")?.textContent).toBe("Invitations");
   expect(cut.host.textContent).toContain("The inbox scan was cut off");
+});
+
+it("Dismiss all over more than 200 rows evicts no room the scan still returns, and trims only stale ones", async () => {
+  const verifiedRow = { room: ROOM, actor: SENDER, name: "Book club" };
+  const rows = forged(250);
+  const early = rows.slice(0, 10).map((row) => row.room);
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(scan([verifiedRow, ...rows]));
+  // 10 earlier dismissals of rooms still in the scan, behind 595 stale ones (oldest first).
+  const stale = Array.from({ length: 595 }, (_, i) => `https://stale.example/chat/rooms/s${i}/`);
+  localStorage.setItem(
+    key(ME),
+    JSON.stringify({ version: 1, accountId: ME, ids: [...stale, ...early] }),
+  );
+  const view = await mount(content());
+  await click(button(view.host, "Show all"));
+  await click(button(view.host, "Dismiss all 241 invitations"));
+  expect(view.host.querySelector("li")).toBeNull();
+  const ids: string[] = JSON.parse(localStorage.getItem(key(ME)) as string).ids;
+  expect(ids.length).toBeLessThanOrEqual(600);
+  for (const room of [ROOM, ...rows.map((row) => row.room)]) expect(ids).toContain(room);
+  // The oldest stale rooms were the ones trimmed.
+  expect(ids).not.toContain(stale[0]);
+  expect(ids).toContain(stale.at(-1));
+  await view.unmount();
+  // The next scan returns the same rows: none reappears.
+  const next = await mount(content());
+  expect(next.host.querySelector("li")).toBeNull();
+  expect(next.host.querySelector("section")).toBeNull();
+});
+
+it("moves focus to the first revealed row after Show all, with the button outside the status", async () => {
+  vi.mocked(ChatClient.prototype.invitations).mockResolvedValue(scan(forged(25)));
+  const view = await mount(content());
+  const show = button(view.host, "Show all");
+  expect(show.closest('[role="status"]')).toBeNull();
+  expect(view.host.querySelector('[role="status"]')?.textContent).toContain("5 more unverified");
+  show.focus();
+  await click(show);
+  const first = view.host.querySelector(".chat-invitations-more li button") as HTMLElement;
+  expect(document.activeElement).toBe(first);
+  expect(document.activeElement).not.toBe(document.body);
 });
