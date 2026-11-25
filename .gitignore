@@ -19,3 +19,6 @@ coverage/
 
 # AUTHORED-BY Codex GPT-6.1-Sol — local MCPB preparation artifacts
 /packages/solid-mcp/packaging/out/
+
+# AUTHORED-BY Claude Opus 5.5 — local evaluator reference, never a TS dependency
+/.webarena-verified-ref/

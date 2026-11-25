@@ -263,12 +263,21 @@ export class CredentialStore {
     if (!isAbsolute(dir)) throw new HelperError("invalid", "--dir must be an absolute path");
     this.dir = dir;
     ensureDir(dir);
-    for (const sub of ["clients", "profiles", "grants", "providers", "locks", "ledger", "matrix"])
+    for (const sub of [
+      "clients",
+      "profiles",
+      "grants",
+      "providers",
+      "locks",
+      "ledger",
+      "matrix",
+      "vault",
+    ])
       ensureDir(join(dir, sub));
   }
 
   private path(
-    sub: "clients" | "profiles" | "grants" | "providers" | "matrix",
+    sub: "clients" | "profiles" | "grants" | "providers" | "matrix" | "vault",
     name: string,
   ): string {
     if (!NAME.test(name)) throw new HelperError("invalid", `invalid name “${name}”`);
@@ -362,6 +371,17 @@ export class CredentialStore {
     } catch {
       // directory fsync is best effort (not supported everywhere)
     }
+  }
+
+  /** Generic host-private records, reusing the same validated atomic store discipline. */
+  privateRecord<T>(name: string, schema: z.ZodType<T>): T | undefined {
+    return this.read(this.path("vault", name), schema);
+  }
+  putPrivateRecord<T>(name: string, schema: z.ZodType<T>, value: T): void {
+    validFor(schema, value);
+    if (Buffer.byteLength(`${JSON.stringify(value, null, 2)}\n`) > MAX_FILE)
+      throw new HelperError("invalid", "private record is too large");
+    this.write(this.path("vault", name), value);
   }
 
   googleClient(): GoogleClient | undefined {

@@ -1,0 +1,565 @@
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+# @jeswr/site-profiler
+
+Part of the semantic agent browser. The profiler learns a website once and returns a
+`SiteModel` (the contract in `@jeswr/site-model`): the actions the site offers as schema.org
+action types, each mapped to the site's own HTTP calls, plus flows learned from demonstrations.
+The planner then asks for actions in RDF and never reads the page.
+
+```ts
+import { profileSite } from "@jeswr/site-profiler";
+
+const { model, writeResponses, trace, warnings } = await profileSite({
+  startUrl: "https://shop.test/",
+  login: { username: "alex@example.test", password: "..." }, // optional, user-authorised
+  demonstrations: [{ name: "buy-product", run: async (page) => { /* Playwright steps */ } }],
+});
+```
+
+Options: `startUrl`, `maxPages` (default 40 attempted pages, including failures),
+`maxProfileMs` (hard deadline, default 180000), `navigationTimeoutMs` (15000),
+`networkIdleTimeoutMs` (5000), `login`, `demonstrations`, `labeller` (default
+`heuristicLabeller`), `browser` (else headless Chromium is launched; `SAB_CHROMIUM_PATH`
+overrides the executable), `now`, `modelId` (default `urn:sab:model:<host>`), `verify`
+(default true), `version`, `verificationGate` (optional gate for additional evidence GETs).
+
+## Steps (one module each)
+
+| Step | Module | What it does |
+| --- | --- | --- |
+| Login | `login.ts` | Uses a password form on the redirected start page first, then a sign-in link, then a path-relative login fallback. Signs in through the password form, records every cookie the login set or changed and finds a probe URL that is 200 signed in and refused signed out. Bearer token endpoints in scripts give `refresh` info. |
+| Crawl | `crawl.ts` | Navigation menu anchors first, then other same-origin links and GET forms (free text gets a word seen on the site). Skips logout/delete-like links and static files. |
+| Guard and trace | `recorder.ts` | Records same-origin requests without cookies, authorization or credential-like body fields. Aborts every non-GET request outside the login and demonstrations. |
+| Scripts | `scripts.ts` | acorn analysis of same-origin JS: `fetch`, fetch wrappers, `XMLHttpRequest`, axios, jQuery; URL patterns from literals and concatenation; CSRF headers read from `document.cookie` or a meta tag. |
+| Templates | `templates.ts` | Clusters requests into RFC 6570 templates (numeric, uuid, sku-like and known-id path variables; query and body parameters) and merges crawl, form and script evidence. |
+| Forms | `forms.ts` | Fields, select options, hidden fields; hidden csrf/token/authenticity fields become html CsrfRules. |
+| Extraction | `extraction.ts` | JSON arrays (including administrative row envelopes; Product, Person or Order where evidenced) or one product-like object and repeated HTML cards (link plus price) or product detail pages, mapped to schema.org by key name. Descriptions and reviews are `untrusted`. |
+| Labelling | `labeller.ts` | `Labeller` seam with deterministic heuristics; unknown writes are `irreversible-write`. |
+| Operations | `operations.ts` | Parameters mapped onto property paths of the action node, request template, CSRF, session. |
+| Demonstrations | `demonstrations.ts` | Runs scripted sessions, turns their writes into operations and the session into a Flow with inferred bindings. |
+| Verify | `verify.ts` | Replays each read (signed out, then signed in), preferring a successful recorded request to that operation's examples. Retries a failure once with recorded successful values before dropping the read. Sets `session` and provenance counters; never replays a write. |
+
+## The learning rule
+
+Writes enter the model only from demonstrations (`provenance.method: "demonstration"`). Write
+endpoints found in forms or scripts are reported in `warnings` and left out. The one exception is
+the login operation: the password form the profiler submitted with the user's credentials
+(`method: "form"`), and a token endpoint found in a script (`method: "js-analysis"`, lower
+confidence), each referenced from a `LoginRoute`. Their username and password parameters have an
+empty path, so only the credential vault can supply them.
+
+Request examples stay with their endpoint; failed probes supply no parameter examples. Script
+probes use the crawl word only for search fields and skip required query values they cannot infer.
+Verification prefers successful demonstration requests, then crawl requests, keeping each request's
+values together rather than mixing independent examples or defaults. Matching includes the method,
+origin, path template and any fixed query values.
+
+## Flow bindings
+
+Every write of a demonstration is kept. For each value a kept step sent, the profiler looks for
+the value on an earlier step's first extracted item (exact match first, then an IRI whose last
+segment equals it). A write binds to the latest such step (the page the person acted on); a read
+binds to the earliest (the shortest chain back to the inputs). Reads that supply a kept step are
+kept too. Order/Invoice/totalPaymentDue reads demonstrated after the last write before payment
+are also retained as money evidence, even when checkout sends no price. JSON totalPaymentDue
+objects become Order extractions before considering nested product lines. Other values become flow inputs; a search query becomes `schema:object/schema:name`.
+When a total read and payment share a delivery input, both bind to that input, which inherits the
+payment form's default and options even when the read introduces it first.
+Trivial values (`1`, `true`, ...) are never matched.
+
+## Extraction selectors
+
+Generated CSS selectors stay inside a small subset (type, `#id`, `.class`, `[attr]`,
+`[attr="v"]`, `:scope`, descendant and child combinators) so any CSS engine reads them the same
+way. `:scope` selects the item element itself (for `data-*` attributes on the card).
+
+## Known limits
+
+- Nested arrays in JSON (reviews of a product) are expressed as one field rule per index (up to
+  five) because `FieldRule.path` is a single pointer.
+- HTML prices without a numeric attribute are extracted as text.
+- Path variables are only inferred for id-like segments; slugs need an id seen in a response.
+
+## JSON list applications
+
+Rendered administrative grids commonly GET their rows after the document loads. The crawler waits
+for network idle (bounded), visits hidden submenu anchors without clicking action buttons, and
+stops after 120 seconds of crawling or the page budget. The whole profile has a separate hard
+`maxProfileMs` deadline, including probes, demonstrations and verification; timeout rejects and
+closes the profiling context. A supplied browser stays open. Script probes are capped at 30.
+Only the chosen same-origin password form may POST during login. Other writes are blocked outside
+demonstrations, including background requests; known destructive GET routes are also blocked.
+
+Observed `namespace`, `resource`, `collection` and `dataset` query selectors distinguish resources
+sharing a dispatcher URL. They become fixed URL fields. Observed paging, sorting, search and filter
+values stay separate inputs, preserving percent-encoded bracket names under RFC 6570. A JSON list
+with a search input produces both SearchAction and ViewAction. Lists retain observed non-search
+defaults, with page sizes capped at 25 for execution. Native forms containing only hidden fields
+are not treated as search controls. Empty/config-only JSON with no extraction is omitted.
+
+A witnessed nested `filter[...]` or `filters[...]` parameter also allows named controls outside
+native forms on that request's referring page to propose individual filter members. This is an
+inference: verification checks the recorded endpoint tuple, not every possible filter. Use the
+site's actual filter semantics and page through large results explicitly; no automatic pagination.
+
+Known JSON keys map to schema.org (including identifiers, names, email, order numbers, totals,
+statuses and creation dates). Unknown scalar keys map to `sab:` plus the percent-encoded original
+key; unknown text is untrusted. Nested objects, nulls and credential-like fields are not flattened.
+Formatted monetary strings keep their text unless a row currency code supports conservative display conversion by the executor.
+
+Opaque URL values (16–256 characters) repeated in at least two requests and supplied by a hidden
+HTML input, meta tag or cookie become session/CSRF sources, never planner inputs or constants.
+Cookie sources take precedence. Query tokens are decorated at replay time; path tokens use the
+executor's documented whole-segment convention. Before any trace or sample returns, register every learned hidden/meta credential value from
+both crawl and demonstration pages (including standalone inputs outside forms), alongside
+cookies and passwords, and redact all occurrences in returned samples and warnings.
+Route-specific tokens computed only by script are not inferred by this rule.
+
+Analysis tries classic script syntax before module syntax. Scripts above 512 KiB, recorder-truncated
+scripts (256 KiB body bound), and parse failures are skipped with one summarized warning per run.
+Verification retains observed XHR headers and resolves session tokens afresh. HTTP 200 password
+pages and JSON error/redirect envelopes are refused as data; a password page can establish a
+signed-out probe even when the server uses HTTP 200.
+
+The opt-in live acceptance test lives in `tools/webarena-bench/test/live.test.ts`, where the profiler,
+executor and host login dependencies already exist. See that tool's README for the command and
+artifact option. It performs only GETs and sign-in, without a planner or mutation demonstration.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Demonstrated composite forms and list quality
+
+A JSON row envelope proposes `totalPath` only for a sibling safe integer whose key contains
+`total` or `count` and whose value covers the observed items. Endpoint-owned nouns override
+coarser field-based item typing. Query text never chooses a type. Currency-code suffix keys
+map to priceCurrency; the executor conservatively types formatted row prices and ISO-like dates.
+
+Successful demonstrated composite form payloads become semantic name, sku, price and quantity
+inputs, with form templates mapping them to original bracketed wire fields. Presence/nonempty
+values across the demonstration determine requiredness. Other stable, witnessed fields remain
+fixed template values; missing, redacted, opaque session-like and undemonstrated values do not.
+Routing configuration numbers stay fixed; item IDs remain inputs and matching body identity
+fields bind to that ID. Ordinary flat forms keep their existing defaults/options.
+
+Text multipart bodies are decoded under a 256 KiB request-body bound and a 2000-field limit.
+Oversized/malformed/upload payloads are marked and excluded from write learning. CSRF fields
+are redacted structurally; a witnessed matching cookie is preferred to a hidden input. Hidden
+sources come from observed pages, including JS-page responses. Script-only token sources are
+unsupported by the current CsrfSource union and are never baked into templates.
+
+Tokens are rediscovered after demonstrations. Demonstrated redirects may propose later flow bindings even when the destination form is
+rendered by JavaScript. Execution still requires the executor's declared created-location policy
+and redirect/success checks; undeclared redirects remain Uncertain without identity bindings. Demonstrated POST
+save-with-ID and delete/remove routes are labelled UpdateAction/DeleteAction conservatively;
+unknown writes, including creates, remain irreversible-write. Failed/aborted demonstration
+requests never teach a write. The opt-in harness demonstration and acceptance create and clean
+up their own disposable products, block background preference writes, and run no model CLI.
+
+For product administration, a quantity input describes inventoryLevel, not purchase quantity.
+A demonstrated destructive grid search remains a required dynamic input, including when the
+site submits no explicit selected IDs. Never drop or fix that selector to a demonstration SKU.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Such a filter-selected write gets a dedicated two-step Flow: the matching grid read, then
+the write. Dispatch selectors (`namespace`, `resource`, `collection`, `dataset`) or the
+endpoint family must agree. Search and nested filter inputs share their original Flow
+bindings. A required empty-path identity Parameter, omitted from the write's explicit
+body template, binds to a trusted resolver identity (`identifier`, `sku`, `productID` or
+`orderNumber`). This marks the selection structurally without changing the contract or
+adding a wire field. Direct execution of the write has no path. If no unique identity read
+is available, the write stays flow-only and a warning explains the missing resolver.
+Demonstration flows retain the matching read and identity binding too. Explicit selected
+IDs keep their ordinary identity inputs. The executor re-resolves these filter selections
+for approval and refuses ambiguous, empty, partial or changed selections; an all-items
+request requires `sab:all true` with no `schema:object`.
+
+A saved search returning no rows can teach its row shape through at most eight deduplicated,
+read-only probes with the ordinary search cleared and size capped at 25, preserving its observed paging position.
+Dispatch/session values and observed XHR headers are preserved; preferences are never saved.
+A fresh password login retains its page CSRF source so the host can bootstrap its cookie jar;
+the cookie preference applies to demonstrated writes after sign-in.
+
+Model headers omit executor-owned content negotiation, credential and framing headers, including
+Accept. Verification derives Accept from extraction format, as the executor does; JSON grid reads
+therefore retain their JSON negotiation without storing Accept in the learned model. Vendor-specific
+Accept media types require a future first-class, inventoried field.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+`discoverCredentialSources(pages, cookies, responses?)` returns explicit first-use credential secrets and
+supported CSRF sources independently of repetition. Meta/hidden token fields and cookies can
+supply session slots; recognised script credential literals are secrets only, since script
+variables are outside CsrfSource. The fallback uses this stricter credential boundary alongside
+`discoverSessionTokens`; ordinary opaque-value repetition discovery is unchanged.
+The optional same-origin response inventory scans HTML from any method/status, nested JSON
+credential keys and external scripts (including scripts with nonstandard media types). Script
+credential analysis shares the profiler's parser, AST traversal and constant evaluation; variable
+and global-object assignments supply secrets, never invented executable CSRF sources.
+Numeric credential literals also register their runtime string and source spellings (including
+hexadecimal, exponent and separated forms), so snapshots and learning cannot retain them as
+ordinary constants. Parse/size failure recovery recognizes direct numeric assignments too.
+
+Round-9 `test/review-r9.test.ts` profiles fictional standalone hidden `form_key` and meta
+credentials on demonstration-only pages and verifies learning plus redaction before traces return.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## HTML discussions and demonstrated form identities
+
+Repeated semantic HTML articles can teach DiscussionForumPosting, Comment and CreativeWork
+collections without a demonstration. Headings, author links, machine dates, comment-count
+attributes and permalinks supply the evidence; a profile's own heading link teaches Person.
+Headlines, bodies, author labels and profile/collection names are untrusted. Child selector
+chains keep nested comments separate; visible parent links become parentItem. Different record
+classes on one document get separate read operations using the same HTTP request. Counts are
+not inferred from the number of visible cards. Explicit sort menus supply path options and
+next links supply optional cursor inputs; a cursor is never a starting-page default.
+
+Demonstrated bracketed text forms expose title, body, forum and comment text inputs. A forum
+selector's witnessed labels can identify a path context input (forumName); its numeric option
+values remain the create form's forum input. Item IDs embedded in field names and CSRF selectors
+become numeric slots. Tokens are scoped to the actually demonstrated form, including repeated
+row tokens. Witnessed redirect aliases let a CSRF page use an identity route rather than a
+particular title slug. Delete variants still target explicit path identities. Votes and unknown
+writes stay irreversible-write; a displayed retract button alone does not establish reversibility.
+Only trusted extracted fields can teach flow bindings.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Cookie intake and learning use the executor's shared classifier/registration and redactor.
+HttpOnly, login-set/changed, model/vault-declared and common session-named cookies are credentials
+from four characters, using the shared `MIN_REDACTION_LENGTH` floor. Other cookies need a logical payload of at least eight characters;
+a preference `1` does not mask item IDs. Register wire, unquoted, percent-decoded and
+decoded-unquoted payloads together. Traces, warnings and snapshots share HTML-entity and mixed
+plus/percent form normalization with executor observations. Sub-four-character values are
+guessable, provide no confidentiality, and never register for redaction or suppress samples;
+the origin guard still confines them to their own site. Registered values of four to seven
+characters keep token boundaries; eight or more receive full redaction in every supported form.
+
+Pagination defaults preserve demonstrated/crawled positions. To prove a filter selection complete
+without a total, the profiler must witness both a starting request (page 0/1 or offset 0) and its
+continuation with the same scope. It stores the executor's strict `sab:pagination` declaration
+in the existing Parameter.description, which survives RDF round trips. Offset continuation must
+match the observed row span, including server caps. Missing semantics leave completeness unknown
+and execution refuses. Empty JSON collection roots prove exhaustion only on successful responses;
+missing/invalid roots and error envelopes cannot. HTML lists currently need a total for this proof.
+`test/review-r10.test.ts` exercises learned round-tripped zero-based/offset models; encoded trace
+and warning echoes are in `test/review-r9.test.ts`.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Learned write responses
+
+`profileSite` also returns `writeResponses`, keyed by operation ID in the executor's
+`ExecutorOptions.writeResponses` shape. Pass it beside the model to `createExecutor` or
+`createTaskExecutor({ model, writeResponses, sessions })`. The host owns both trusted artifacts;
+policies never enter the planner catalogue.
+
+Created-identity policies are learned only from demonstration writes with a complete, witnessed redirect chain.
+The recorder links each redirect request to its actual parent; a later GET of the same URL is
+insufficient. Every hop must stay on origin and on the first Location's resource, and no hop
+may be blocked, incomplete or a password page. Creation also rejects alert/validation regions;
+existing-item writes use runtime effect verification. Conflicting witnesses
+produce no policy. The path pattern replaces only the response identity and whole path inputs
+declared by a matching learned read; other segments remain literal. The observed redirect
+count and final successful HTTP status are retained. A learned single-item extraction or
+identity read-back, plus matching submitted-value evidence, is mandatory for a created identity. A collection landing never teaches a creation policy; non-creating writes
+carry a witnessed `verification` read without promoting a landing URL.
+No pattern means the executor still returns Uncertain and retains its repeat guard.
+
+**Known persistence gap:** `sab:` model RDF cannot store these policies. A generated-contract
+change across site-model's ontology, shapes, codegen profile and types is needed before that
+can be supported. Until then, store `writeResponses` separately alongside the model; a model-only
+RDF round trip loses them. The benchmark host stores them in its profile JSON sidecar.
+`test/write-responses.test.ts` covers fictional recorded chains, rejected evidence, and executor
+completion/Uncertain behavior with one approved POST and repeat refusal.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+The recorder checks the complete witnessed HTML/JSON response for error/validation evidence
+before bounding its returned sample. It retains `responsePageError` and `responsePageFailure`
+(including error-classed alerts while excluding neutral notices) and opaque `responseFlash` hashes alongside
+that sample. Flash hashes are trace metadata and never success evidence.
+Existing-item verification requires a complete recorded target read; truncated samples cannot teach it. Reads/extractions retain their
+ordinary sample bounds. In particular, large administrative form pages can teach their witnessed
+identity redirect without storing their entire HTML in the trace.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Round-11 success evidence
+
+Exhaustion requires a 2xx probe with an explicitly empty JSON collection and the same
+keys on every envelope ancestor as the resolve read's first page. Collection contents
+and declared paging fields are excluded from shape comparison. The shared executor
+`jsonFailure` predicate rejects `ok:false`, `success:false`, error/errors, exception,
+validationErrors and error/fail status envelopes on every ancestor. A changed shape,
+failure marker, missing root or non-success response leaves completeness unknown.
+
+A created-location policy needs a learned single main item of the operation's object
+type, with an identifier matching the route identity, or the learned read-back below. Arrays and repeated-item selectors
+remain collections even when they contain one matching row. The policy's `inputEvidence`
+records a submitted input name and main-item property. Learning and execution require
+an exact field match to the concrete value sent. Untrusted title/name text may satisfy
+only this equality check; it remains untrusted in observations and flow bindings.
+Missing or changed evidence yields Uncertain and retains the repeat guard. No route/status
+fallback creates an identity. Updates, deletes and votes instead require a learned `verification` read;
+these never promote a landing URL to a created identity.
+
+Neutral alerts (`role=alert`) and assertive live regions block created-identity promotion.
+Learned flashes never establish success. The profiler does not learn `successFlash`, and
+legacy sidecars carrying it confer no completion evidence.
+
+Existing-item writes (delete, update, vote and similar) need `verification` in the trusted
+`writeResponses` sidecar. It names a learned GET, its concrete input bindings, the target
+identity input and a witnessed resource pattern with aliases. Whole path context inputs
+can occupy slots, so parent IDs and tenant/store inputs stay bound to the write. Literal
+namespace segments stay literal. A numeric detail route may witness a following display
+slug; this affects only that single presentation segment. A related parent item cannot
+stand in for the operation's object. Filter-selected writes can bind their structurally
+validated resolver identity to an ordinary identity-filtered read.
+
+After approval, immediately before sending the write, the executor runs that read through
+the read gate. A complete matching target establishes the baseline. An unverified baseline stops before
+the write and returns Uncertain without a committed write fingerprint. The same compiled GET,
+headers, session and origin are used after the write. A deletion needs a 404/410 matching its learned not-found signature and without
+authentication/failure evidence, or a successful explicitly empty identity-filtered JSON
+collection with the baseline's envelope keys and, when declared, total zero. The collection
+must bind the written identifier as an equality filter or an equal from/to range; broader
+filters never prove absence. Learning requires the same template and context to show exactly
+the target before the demonstrated deletion and zero items afterward. Complete bounded
+collection-envelope evidence survives sample truncation; the profiler may fetch the witnessed
+GET through the read gate. A fresh singleton baseline is still required at execution. Updates need every submitted
+state field value; votes may use a witnessed numeric count delta. Neither read can be redirected,
+partial, a login/password page, 401/403, a changed credential-cookie context or a shared
+failure envelope. Any missing verification leaves a sent write Uncertain, with its
+fingerprint retained and no automatic retry. A denial before approval sends nothing.
+Typed numeric inputs may carry a bounded presentation template learned from that submitted
+value on a later target read. Verification compares its exact prefix, suffix and decimal
+scale without rounding. This private comparison never converts RDF observations or money
+evidence; all payment and display-money checks remain in force.
+
+Login-discovered session cookie names and model declarations feed every profiler cookie
+context. Re-register all retained cookie values as soon as their classification is known,
+before returning traces or warnings. Round-11 regressions live in the profiler's
+`test/review-r11.test.ts`, `test/write-responses.test.ts` and `test/generic-browser.test.ts`.
+
+HTML main-item learning requires one record under `main` whose permalink identifies the
+landing resource. A witnessed `-` permalink can replace only the display slug immediately
+after the same numeric parent ID; every other path segment must agree. Parent collections,
+different parents and multiple matching records remain collections. Order detail pages retain
+their Order type and can expose heading identity and deliveryMethod as submitted-value evidence.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+When a script-rendered landing has no main-item extraction, `readBack` in the same
+`writeResponses` artifact names an already learned GET operation and its input bindings.
+A `{ identity: true }` binding sends the newly assigned identity; `{ input: "name" }`
+binds a concrete submitted input, and `{ value: "1" }` retains a witnessed read control.
+The demonstration or its follow-up crawl must witness the read returning exactly one
+item of the created type, with a trusted identity IRI and an `inputEvidence` field equal
+to a submitted value. `readBack.identityPattern` retains the witnessed origin and resource,
+tenant/store prefixes, replacing only the whole identity segment with `{id}`. Optional
+`identityAliases` come from that item's trusted URL claims or recorder-linked GET redirects.
+Execution requires every identity IRI to match one of those templates with the new identity;
+numeric equality alone never proves a match. Old sidecars need reprofiling to learn this evidence. A collection landing cannot use a row match to promote its URL.
+
+After the approved write, the executor authorizes this read through the read gate and
+runs it with the current session, origin guard, budgets, extraction and redaction. Only
+exactly one matching identity and the recorded input-to-field equality promote the
+created URL. Missing/unlearned reads, denied reads, duplicates, partial results or changed
+fields yield Uncertain and retain the write fingerprint; the write is never retried.
+Untrusted prose participates only in the bounded equality check. The shared SiteModel
+contract stays unchanged; persist the policy artifact alongside the RDF model.
+`site-profiler/test/write-readback.test.ts` covers matching/different delete flashes,
+script-rendered creation, duplicate results, name/identity mismatch, a denied gate and
+unlearned reads. The live product demonstration witnesses an ordinary ID-range grid read
+before editing or cleaning up its own product.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Identity-filtered demonstration reads do not turn their item filters into defaults on
+ordinary list/search reads. Nested filter defaults retain the first successful request's
+scope, including absent filters. The read-back policy carries its explicit identity
+bindings separately. This preserves subsequent broad searches and two-match refusals.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Nonstandard JSON row link fields can learn `schema:url` only from a recorder-linked
+successful creation landing and a subsequent singleton identity read.
+The link must match the whole witnessed resource prefix through its explicitly labelled
+identity (or the complete landing URL); tenant/store segments remain literal. The original
+field stays untrusted, and the learned URL pattern still controls runtime read-back.
+No equal-ID route inference or site-specific field mapping is used.
+
+Cleanup can make a demonstrated detail fail later read replay. The profiler retains a
+witnessed existing-item verification read when cleanup removed its example; runtime still
+requires a fresh baseline. Creation read-backs require a retained, learned read. Fictional regressions for both
+learning paths live in `test/learning-evidence.test.ts`.
+
+Resource-pattern learning keeps that witnessed namespace even when an unclassified failed
+background POST precedes the read. Its item identity and submitted-value checks still apply.
+Runtime verification still requires the exact target resource and request context.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Verification learning compares shared query/header selectors, excluding declared paging/sorting,
+executor-owned headers and CSRF slots. Scope fields also include request-level controls in the write's form/JSON body; words
+buried in domain property paths such as `product[stock_data][website_id]` are not controls.
+Names compare across surfaces after lower-casing and stripping one leading `x-`, with no
+synonyms. Matching scope fields must carry the same constant or the same bound input;
+constant/input mixtures, conflicting values across surfaces, and different bindings refuse. A read-only scope
+constant is permitted only after a read with the same method, origin, path template and
+constant, in the same session, isolated exactly the written identity and reflected all
+submitted values after the demonstrated write. Search/filter parameters may differ; other
+request context must agree and no write may intervene.
+The sidecar pins it; substitutions, input bindings and write-only scopes remain refused.
+Execution repeats scope comparison after compilation and token decoration. Coverage includes
+all bound action inputs and literal form fields changed from the pre-edit form; unchanged
+carried form values are excluded. Partial coverage teaches no verification.
+
+Submitted inputs pair with read fields by witnessed equality under the input datatype,
+without changing either semantic label. The field must either have changed from a
+pre-write read at that identity, or share the input's normalized wire leaf key (for
+example `qty` and `product[quantity_and_stock_status][qty]`). Change evidence outranks
+a leaf-key match; equal-strength candidates are ambiguous and unused. An equal value
+with a different leaf and no change witness supplies no pairing. Runtime compares the
+paired field with the concrete submitted value, retaining exact numeric presentation
+checks. Untrusted values participate only in this private equality comparison.
+
+Stored samples retain BODY_LIMIT (256 KiB). Verification alone uses a separate 8 MiB cap.
+After demonstrations, the profiler fetches witnessed candidate GETs through the read gate in
+the profiling session and stores only bounded extraction and field/value evidence. The
+executor uses the same cap for both verification reads. Oversized, prematurely ended or
+failed streams are Uncertain; partial evidence never proves completion.
+
+A private `verification.notFound` sidecar entry records the status, content type and opaque
+JSON-envelope or HTML-document structure of a read fetched for the demonstrated deleted
+identity, in the same context. Per-profile keyed credential-context tags must agree across
+the witnessed read, write and not-found probe; missing context evidence learns no signature.
+Missing signatures never authorize 404/410 absence. Authentication
+status envelopes, login/SSO documents and redirects cannot prove absence. Verification and its
+CSRF sources pass the read gate before transmission. Reads use Fetch `cache: "no-store"`,
+`Cache-Control: no-cache` and `Pragma: no-cache`; positive Age and cache-hit metadata invalidate
+both baseline and post-write evidence. These private artifacts leave the shared contract unchanged.
+`site-profiler/test/runtime-effects.test.ts` includes the round-14 adversarial reproductions.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+All evidence fetches and deleted-resource probes finish before the final credential union
+is collected. The profiling context closes and recorder callbacks settle before one redaction
+pass covers the model, policies, trace, field evidence and warnings. A policy changed by
+redaction is discarded. Deleted-resource probes and their CSRF preparation use
+`verificationGate` before transmission; an approval request or denial sends no probe.
+
+Changed literal form fields use the same witnessed-change or normalized-wire-leaf pairing
+as bound inputs, including submitted-value equality and ambiguity refusal. Semantic label
+equality supplies no pairing evidence. Missing coverage leaves verification unavailable.
+Not-found signatures retain exact discriminator scalar values at every depth and HTML
+titles/headings. Authentication-shaped discriminators and headings cannot teach absence.
+Credential-selector declarations remain configuration only when their selector locates a
+witnessed credential input/meta source; that source's value is registered separately.
+Unproven selectors and explicit credential values retain ordinary registration.
+Round-15 regressions are in `test/runtime-effects.test.ts` and `test/generic-browser.test.ts`.
+
+Every received body passes through `Recorder.responseBody` before sample truncation or
+evidence extraction, including browser traffic, replays, CSRF preparation, evidence fetches
+and deleted-resource probes. Credential discovery scans the complete body up to 8 MiB and
+retains only discovered secrets in the recorder's private union. Larger bodies are discarded
+and supply no evidence; their bounded prefix is still scanned, including on failed streams.
+Rendered crawl/login documents use the same boundary. Stored samples remain capped at
+256 KiB. Round-16 regressions cover hidden sources beyond that sample limit, every returned
+output surface, compound authentication codes and oversized/incomplete responses.
+Possible credential-selector values from external scripts/JSON remain protected until the
+final page witnesses distinguish configuration from credentials. Only these candidate values
+are retained; their source bodies are discarded. Explicit credentials stay registered even
+when their values also spell a witnessed selector.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Input types come only from the executor's shared HTML classifier: `type="HIDDEN"`,
+`type="HiDdEn"` and `type="Password"` are hidden and password controls in credential
+discovery, selector witnessing, form parsing and standalone CSRF learning, and an invalid
+type is text. The profiler's selector engine matches `[type=...]` values
+ASCII-case-insensitively, as browsers do. Scalar JSON-root 404s keep their exact value in a
+learned signature, and authentication scalars are never learned.
+
+Change evidence for pairing comes only from the immediate baseline: the latest read of that
+field at the written identity after the previous sent write of the session (or from its
+start) and before this write. Older history never counts, and without such a read there is
+no change evidence; leaf-key pairing still applies. Vote count deltas start from the same
+baseline. Round-17 regressions are in `test/review-r17.test.ts`,
+`test/runtime-effects.test.ts` and `test/generic-browser.test.ts`.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+A not-found deletion policy also carries one session liveness read (`write-liveness.ts`),
+learned from the demonstration: a signed-in, read-gated GET witnessed in the deletion's
+authentication context that returned 2xx with at least one item-level field and no failure or
+authentication marker. Collection reads are preferred, then reads with fewer inputs, then the
+earliest witness. Its inputs are the witnessed constants, the compiled request must reproduce
+the witnessed URL, and it never addresses an identity deleted in the demonstration. Without
+one, a not-found deletion stays Uncertain.
+
+The recorder records response-completion order: `completedAt` is the request sequence counter
+when a response (or failure) arrived, so a request with `seq >= completedAt` started after it
+completed. Immediate-baseline change evidence uses only reads that started after the previous
+write completed; without that write's recorded completion there is no change evidence.
+Round-18 regressions are in `test/runtime-effects.test.ts` and `test/browser-steps.test.ts`.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Round 19: a liveness candidate is learned only when the trace holds an anonymous replay
+(`resourceType: "replay-anonymous"`) of its exact compiled URL, and every such replay is an
+authentication refusal (the executor's `authenticationRefusal`) that fails the liveness
+signature. Login routes come from the sign-in session (`learnedLoginRoutes`: the login
+operation's endpoint, the sign-in form's post target and every sign-in page with a password
+control). A replay that timed out or failed records nothing, so it is no evidence, and neither
+is a plain 403/5xx, a non-login redirect, a page rendered for anonymous visitors, or a read
+restored as signed-in without anonymous evidence. After the deleted-resource probe,
+`probeLivenessReads` replays the best three candidates of each verified deletion once as a
+credentials-only control (round 20), each URL authorized through the read gate first; a URL already replayed
+anonymously is not sent again. Reads with CSRF rules are never candidates. Replays record
+`authenticationChallenge` when the answer carried WWW-Authenticate.
+
+Immediate-baseline change evidence now needs every earlier sent write of the session to have
+completed before the read started; if any earlier write has no recorded completion there is no
+change evidence. Round-19 regressions are in `test/review-r19.test.ts` and
+`test/runtime-effects.test.ts`.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Round 20: liveness evidence comes only from **credentials-only control** replays
+(`credentialsOnlyControl: true` on a `replay-anonymous` entry): `playwrightReplayer` sends the
+browser context's cookies minus those with positive login evidence (round 21: the profile
+passes its login evidence, and `isLoginCredentialCookie` drops only cookies the sign-in set or
+changed; the redaction classifier `isSessionCredentialCookie` is not used, so HttpOnly or
+credential-named gate cookies are kept), and no session headers. When no context cookie has
+login evidence the control is not sent, so no liveness read is learned (Uncertain). Residual
+(accepted, round 22): login evidence is every cookie whose value differs between the sign-in
+page before the submit and the post-login landing page after it loads, so it includes the
+session cookie itself and cookies the landing page or its sub-requests set, not only cookies
+the login response sets. A gate kept in such a cookie is dropped from the control with it, and
+gate state stored inside a credential cookie (an age or cookie-check flag in a server-side
+session that survives an idle sign-out) cannot be separated from the credential. Verification's plain cookieless replays are never liveness evidence, so a
+site gating on a consent, age or cookie-check cookie cannot pass its gate off as an
+authentication refusal. Every control replay of the exact URL must give one refusal kind and,
+for a redirect or login envelope, one login route; both are pinned in the policy
+(`anonymous.refusal`, `anonymous.route`). `learnedLoginRoutes` is narrow: the login
+operation's endpoint, sign-in pages that are login documents (`isLoginDocument`: the password
+form is the page's content, never a quick-login box beside item rows or a main listing), and
+the action targets of those pages' password forms when the sign-in posted to them; other
+sign-in-phase POSTs are not routes. `probeLivenessReads` and `learnWriteResponses` now cover
+every verified deletion, so collection absence learns (and needs) a liveness read too.
+Decision 5: after a candidate's control, `probeLivenessReads` fetches each refusal's
+redirect target that is not yet a login route (`refusalTarget`: a same-origin Location or
+flagged envelope redirect) once as a credentials-only control, read gate first, with no
+redirect followed except one same-origin hop to an already-learned login route (recorded as
+`loginRouteProbe` / `loginRouteHopOf`). `verifiedLoginRoutes` accepts the target only when
+every such fetch answered a complete 2xx login document (or every hop did); the policy records
+the route and its evidence in `anonymous.verifiedRoutes`. A target serving anything else,
+another origin or a target never fetched (for example because the gate denied it) stays
+rejected.
+Round 21 (decision 2): the site root is never probed or verified. A target that could still
+verify is also fetched once signed in (read gate first, no redirect followed, recorded as a
+`replay` with `loginRouteProbe`). `verifiedLoginRoutes` then also needs every login document
+served there to post (each password form) to the learned login operation's target
+(`loginPostTargets`: the login operation's endpoint and the sign-in form target the sign-in
+posted to). Owner decision: a form at the target itself also qualifies when it posts to its own
+URL (empty, missing or self-referencing action), its credential field names are exactly the
+learned login's (username field, password fields and the form-key slots: the login operation's
+form CSRF targets, or without one the sign-in form's hidden anti-forgery fields), and every
+signed-in fetch of that URL redirected to another route (never 200). A hop's login page must
+post to a learned target. Round 22: the signed-in fetch is sent only after the control
+answered a login document at the target or hopped to a learned login route, and
+`isDangerousLink` also reads the decoded query names and values for session-ending words
+(`?route=account/logout`, `?action=logout`, `?logout=1`, `?signout`), so such a target is never
+probed, signed in or not; a search for "delete" stays a search. The signed-in fetch must redirect or
+answer a login document, and no signed-in GET of that route in the trace (after the sign-in POST) may
+have answered an ordinary page.
+Round-20 regressions are in `test/review-r20.test.ts`; round 21 in `test/review-r21.test.ts`.

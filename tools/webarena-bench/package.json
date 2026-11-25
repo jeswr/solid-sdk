@@ -1,0 +1,39 @@
+{
+  "x-authored-by": "Claude Opus 5.5",
+  "name": "@jeswr/webarena-bench",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline-tested semantic agent browser benchmark for WebArena-Verified 1.2.3.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "webarena-bench": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "pnpm -w exec tsc -p tools/webarena-bench/tsconfig.json",
+    "typecheck": "pnpm -w exec tsc -p tools/webarena-bench/tsconfig.json --noEmit && pnpm -w exec tsc -p tools/webarena-bench/tsconfig.test.json",
+    "lint": "pnpm -w exec biome check tools/webarena-bench",
+    "test": "pnpm -w exec vitest run --root tools/webarena-bench",
+    "webarena-bench": "node dist/cli.js"
+  },
+  "dependencies": {
+    "@jeswr/agent-browser": "workspace:*",
+    "@jeswr/site-executor": "workspace:*",
+    "@jeswr/site-model": "workspace:*",
+    "@jeswr/site-profiler": "workspace:*",
+    "n3": "^2.1.1"
+  },
+  "devDependencies": {
+    "@jeswr/test-shop": "workspace:*",
+    "@types/n3": "^1.26.1"
+  }
+}

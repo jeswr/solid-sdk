@@ -167,7 +167,14 @@ function installChrome(): void {
       lastError: undefined as { message?: string } | undefined,
       onMessage: { addListener: (fn: MessageListener) => messageListeners.push(fn) },
       onInstalled: { addListener: (_fn: () => void) => {} },
+      onStartup: { addListener: () => {} },
+      onConnect: { addListener: () => {} },
       sendMessage: () => Promise.resolve(),
+    },
+    permissions: {
+      remove: async () => true,
+      onAdded: { addListener: () => {} },
+      onRemoved: { addListener: () => {} },
     },
     storage: {
       local: {
@@ -185,9 +192,12 @@ function installChrome(): void {
       },
     },
     tabs: {
+      onActivated: { addListener: () => {} },
+      onUpdated: { addListener: () => {} },
       query: async () => [] as Array<{ id?: number; url?: string }>,
       sendMessage: async () => {},
     },
+    windows: { onFocusChanged: { addListener: () => {} } },
     action: {
       setIcon: async () => {},
       setBadgeText: async () => {},

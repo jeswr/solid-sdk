@@ -1,0 +1,12 @@
+{
+  "x-authored-by": "Codex GPT-6.1-Sol",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src/**/*.ts"]
+}

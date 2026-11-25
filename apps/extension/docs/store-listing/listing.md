@@ -30,6 +30,12 @@ supported websites to those accounts after you approve access.
   Nothing is filled or submitted without your choice, and password and payment fields are
   never touched.
 - Use the toolbar menu for quick account controls, or keep the side panel open while browsing.
+- With a local agent vault installed, explicitly review and confirm sharing this site's
+  sign-in with your agent. Cookie access is temporary and removed after the snapshot.
+  If access is left behind, sharing is blocked; **Remove cookie access** verifies removal
+  before you can retry. The warning remains visible even on unavailable sites. Failed removal
+  directs you to Chrome's extension settings. Unexpected cookie access at confirmation
+  refuses sharing and triggers cleanup.
 - Remove an account from the extension when you no longer want to use it here.
 
 Signing in does not automatically share your account with every website. A site receives

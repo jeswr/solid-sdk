@@ -13,6 +13,57 @@ consent, independently checked by the worker, controls which pages can use that 
 | `contextMenus` | The toolbar's “Open Solid side panel” menu entry and the “Fill from pod” entry on editable controls. Form-fill clicks are routed only to the clicked tab and frame. |
 | `scripting` | Register the MAIN-world fetch-patch entry only for explicitly granted origins, with one exact `scheme://host:port/*` match per origin (including explicit default ports), no wildcard hosts or schemes, top frame only. Reconcile on worker wake, install/update, grant changes, and expiry. Remove the legacy `solid-main-world-inject` all-origins registration. |
 | `alarms` | Wake the worker at the earliest origin-grant expiry to unregister scripts and clear page capabilities. Alarms are a cleanup mechanism: every request independently checks expiry, even if the alarm is late. |
+| `nativeMessaging` | One worker-owned port to `org.jeswr.agent_vault`, whose registration pins this extension ID. Only the popup can call the worker seam; content-script/page senders refuse. Display metadata and capture acknowledgements return; credentials never do. |
+
+`optional_permissions: ["cookies"]` enables the optional sign-in sharing feature only
+on demand. Every popup load checks cookie access before tab/site validation. A surviving
+grant or failed check blocks review, permission requests and native messages. Its warning
+remains visible on load failures, including withheld sites. The warning's **Remove cookie
+access** button calls `permissions.remove({ permissions: ["cookies"] })` and verifies absence
+with `contains` before enabling sharing. Failed removal or verification keeps sharing blocked
+and directs the person to remove it from Chrome's extension settings. Review rechecks absence:
+a capture must start without cookie permission, and cleanup must return to that state.
+Before contacting the native host, and again on Review, the worker checks
+`chrome.permissions.contains({ origins: [origin] })` using the selected site's exact
+scheme/hostname/port pattern. Withheld site access (Chrome's "On click" or "On specific sites")
+refuses capture without a permission request or native message. The person must allow the
+extension on this site through Chrome's own extension menu first, then try again.
+Capture never requests or removes an origin, including the manifest's declared optional
+host patterns. Required `<all_urls>` remains unchanged; requesting a withheld required host
+could promote it to persistent access that Chrome would refuse to remove.
+The worker owns one exclusive capture lease across all popups, with one async mutex for
+acquisition, validation, native requests and cleanup. A competing popup gets "Another sharing
+is in progress" without a permission request or native message. Review validates the CURRENT
+active tab against the lease's tab/origin and checks existing host access before arming the
+popup's **Allow cookies and review** button. Its click requests only
+`{ permissions: ["cookies"] }` synchronously inside the user gesture. After the prompt the
+worker rechecks tab/origin and host access before `beginLogin` or cookie reads. It renders
+only site/count/persona metadata in the popup. Confirmation verifies the lease requested
+cookies, the grant is present, and tab/origin and host access still match, then reads a fresh
+exact-origin snapshot and sends it only when its count still matches the review.
+
+Cookie access lasts only for that exclusive review/confirmation lease, which expires after
+two minutes. Success, native-host failure, denial, cancellation, timeout and popup port
+disconnect enter worker-owned cleanup: remove only `cookies`, then verify absence with
+`permissions.contains` before returning to idle. Host grants remain unchanged. Cancel
+invalidates pending work immediately and terminal views never move backwards. Unresolved
+prompts fence new captures after the lease ends until their result or late grant is cleaned,
+so an old grant cannot become a new lease's authority. If Chrome never reports a closed
+prompt's outcome, sharing stays blocked for that worker lifetime.
+Removal rejection or unconfirmed absence produces a visible warning alongside the actual
+outcome and blocks further sharing until removal is verified; worker cleanup failure sets a
+toolbar `!` badge. A surviving cookie grant blocks sharing on every popup load.
+
+Optional `cookies` is extension-wide while held because of existing host access. The worker's
+exact-origin cookie query and filtering, review and separate confirmation remain mandatory.
+Parent-domain cookies require explicit vault configuration and public/private suffix checks.
+
+The native host checks a public extension-ID argument and rejects TTY stdin/stdout;
+neither authenticates a hostile same-OS-user process. Such processes are explicitly outside
+the threat model because they can read the vault store/key directly. There are no
+code-signature checks, matching other local credential tools without them. Every accepted
+capture has vault origin `browser-capture` and a pending "New sign-in from browser" entry
+that the host can list for a later agent approval UI.
 
 No `tabs` permission is requested. Existing host access permits tab-URL visibility for
 scoped state broadcasts. Each tab receives only its bound profile's WebID; other tabs

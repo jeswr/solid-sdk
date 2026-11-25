@@ -375,6 +375,141 @@ The E2E fixture is [`test-site/address-form.html`](test-site/address-form.html);
 seed includes a private address record. `e2e/tests/formfill.spec.ts` covers approval, denial,
 and cross-origin iframe refusal.
 
+## Share a site's sign-in with your agent
+
+Sign in to the site in your normal browser, using its passkey, SSO or 2FA flow. Open the
+extension popup on that site's signed-in page, choose a **Vault profile** and **Persona for
+this site**, and click **Review sign-in sharing**. The popup checks existing Chrome site access
+before contacting the native host and again on review. If Chrome withholds this site's access
+("On click" or "On specific sites"), sharing refuses without requesting permission or sending
+a native message. Allow the extension on this site from Chrome's own extension menu first,
+then try again. Capture never requests or removes a host origin.
+The extension uses optional `cookies` access only during an active capture. Whenever no
+lease is acquiring cookies, confirming or sending, a present grant is removed and its absence
+verified. This runs at every worker start (including after a browser restart), on
+`runtime.onStartup`, `runtime.onInstalled` and idle `permissions.onAdded` events. Cleanup does
+not depend on a marker or on who acquired the permission. Popup loads and Review also check
+for unexpected access before sharing, independently of site validation.
+During removal the popup shows **Cleaning up a previous sharing**. If automatic removal or
+verification fails, the warning and **Remove cookie access** button stay visible, including
+on invalid pages and withheld sites. Sharing stays blocked until a retry verifies absence;
+Chrome's extension settings can also remove the permission. The button is a retry for failed
+automatic cleanup. Each capture starts without cookie permission.
+The service worker owns one capture lease across all popups, from Review until cleanup.
+A second popup receives **Another sharing is in progress** and cannot start another capture.
+Review checks the current active tab and existing host access before
+enabling **Allow cookies and review**. Click that button to request only optional `cookies`
+inside the popup's click gesture. The worker checks the tab and host access again after the
+prompt before contacting `beginLogin`, then shows the site, cookie count and persona.
+Every popup posts `requesting` with its lease ID before calling Chrome. A `requesting`
+from an expired, invalidated, unknown or second acquisition contests the admitted lease:
+the worker immediately revokes cookies, fails sharing with **Another sharing started. Try again.**,
+and runs cleanup with the sixty-second abandoned-prompt fence. A foreign request received
+while idle also starts this fence. Every foreign request gets sixty seconds from when the
+worker observes it, including requests received near the end of an existing fence. Admission
+waits for every deadline and verified cookie absence, so a later request cannot inherit an
+older prompt's nearly expired fence. It never reads cookies or
+dispatches to the native host while contested. A grant is accepted only after one quiet second
+following the latest cookie `onAdded` event or request settlement, without foreign `requesting`.
+The contest latch is checked again immediately before cookie reads and native dispatch.
+Tab activation, navigation of the lease tab, window focus changes and permission changes
+invalidate the armed button; Review must validate the site again before another request.
+The permission click uses the latest worker-pushed authorization synchronously to preserve
+Chrome's gesture requirement. A positive armed acknowledgement for the current lease must arrive
+within ten seconds of Review; otherwise the popup disarms locally and refuses late armed pushes.
+Once armed, the worker-issued two-minute lease deadline also applies locally.
+In a sub-second race Chrome may still show the cookies prompt after authorization changes,
+but nothing is read or sent and the grant is removed.
+Click **Share this sign-in with my agent** to confirm. The worker verifies this lease's cookie
+grant and the current tab and host access again, reads a fresh exact-origin snapshot, and
+sends it only if its count still matches the review. From confirmation through native dispatch,
+any tab activation, lease-tab URL change, window focus change or permission change latches the
+lease invalid, even if the original tab or access is restored. Every pending step checks that
+latch when it resumes, and dispatch checks it immediately before sending. Nothing is sent to the page.
+
+Cookie access lasts only for this exclusive review/confirmation lease, which expires after
+two minutes. The popup checks the worker-issued deadline locally, even if a disarm push is
+delayed. An expired click is refused. Only one acquisition is admitted; a delayed foreign click
+may still open Chrome's prompt, but its `requesting` contests sharing instead of lending its grant
+to the admitted popup.
+Success, failure, Cancel, timeout and popup port disconnect all enter worker-owned
+cleanup: remove only `cookies`, verify absence, then release the lease. Host grants never
+change. Cancel marks the lease cancelled immediately; permission removal, absence verification
+and marker writes retain the lease and mutex through a bounded cleanup attempt. Other
+popups show **Finishing the previous sharing** meanwhile. Cancellation is final even if an
+older async step completes afterward. A cancelled permission prompt waits for its result only
+until disconnect or lease timeout. If the popup disconnects or the lease expires while the
+prompt is unsettled, the worker takes over in an orphaned cleanup state: it immediately removes
+`cookies` and verifies absence, then keeps the lease fence for sixty seconds from that event.
+Every cookie grant arriving during this window is removed immediately, bypassing the queue;
+these idempotent removals cannot read cookies, send native messages or request host access.
+The same independent revocation path handles grants outside an admitted, uncontested lease,
+startup recovery, contests and explicit removal retries. Storage marker writes never delay
+the removal itself. No capture is admitted and no cookies are read or native messages sent
+while revocation is in flight.
+A second popup shows **Finishing the previous sharing**, with the warning and enabled
+**Remove cookie access** retry button if removal fails. Cleanup is tracked in one collection
+keyed by lease ID. Every removal or verification wait is bounded to ten seconds; joining
+pending revocations and the final removal-and-verification share one ten-second deadline after
+the fence. Every cleanup or fence completion drains all expired fences. A timeout or failure
+enters recovery with the warning and enabled **Remove cookie access** button instead of
+**Finishing the previous sharing**. Late settlements of timed-out operations are ignored.
+A successful button retry or automatic retry clears the warning and releases expired admission
+fences; an unexpired sixty-second fence still runs to its deadline.
+The failed entry blocks admission until cleanup succeeds. New captures require an empty
+cleanup collection and verified absence. Settlement reports after abandonment are ignored. Grants
+arriving after the window are removed by the global startup/onAdded rule.
+Cleanup results belong to each lease: a failed earlier removal never skips a newer lease's
+cleanup. Cancellation can interrupt non-mutating checks; failed or timed-out cleanup keeps
+admission fenced until a successful bounded retry verifies absence.
+Every browser API wait in the queue uses the same ten-second timeout helper, including tab
+and focused-window lookups, permission checks, storage and native host setup/replies. A hung
+operation fails closed and releases the queue with an error or actionable recovery warning.
+Disconnecting a popup cancels its pending queue work. Late results cannot resume a timed-out
+or disconnected operation.
+Only a small display marker (`agentCaptureCleanup: true`) is stored in `chrome.storage.local`
+while removal is in progress or has failed; it is cleared after verified absence. No ownership
+metadata or session-storage fallback is needed. The marker contains no cookie values and never
+controls whether cleanup runs. An already dispatched Chrome prompt can still grant access
+after its lease expires; its grant is removed because there is no current acquiring lease.
+A replacement worker removes any surviving grant at start, even if session storage was cleared
+or no marker exists.
+
+Residual: messages on different popup ports can be delayed by more than the one-second quiet
+period. Such a foreign `requesting` may arrive after grant acceptance. The global stateless
+startup/onAdded removal rule and confirmation authorization latch remain the backstops;
+this design does not eliminate that cross-port delay window.
+
+Profiles/personas come from `@jeswr/agent-vault`, separately from the extension's Solid
+accounts. Configure an account for the exact site in the agent's store first. Install the
+pinned Chrome native host using the [vault setup instructions](../../packages/agent-vault/README.md#real-browser-sign-in-through-chrome-native-messaging).
+The worker accepts this channel only from the actual popup, and retains the native port
+for the vault's existing keep-alive scheduler after the popup closes. Review and explicit
+confirmation are always required. No site cookie is stored in
+extension storage, content scripts or the page bridge. Values are never rendered or logged.
+Required Solid host permissions remain unchanged; optional cookie access is extension-wide
+while held, so the exact-origin query and filtering remain necessary.
+If cookie removal rejects or its absence cannot be confirmed, the popup shows a warning
+alongside the review or sharing outcome and blocks further sharing until removal is verified.
+Worker cleanup failure leaves a toolbar `!` badge and stays visible alongside the actual sharing
+outcome. A surviving idle grant is automatically removed when the popup reopens; failed cleanup
+keeps sharing blocked and the removal button available.
+
+Hostile same-OS-user processes are outside the vault's threat model: they can read its
+store/key or forge the public extension-ID caller argument. No code-signature checks or
+independent browser-process authentication are performed, matching other local credential
+tools without such checks. The native host refuses TTY stdin/stdout as launch hardening.
+Every accepted capture marks its vault session `origin: "browser-capture"` and appends a
+pending "New sign-in from browser" entry that the host can list for a later approval UI.
+
+Exact-host cookies are supported by default; parent-domain cookies require a vetted vault
+configuration and must pass public/private suffix checks. Sibling host-only cookies and
+other sites never qualify. Cookie flags and expiry are preserved. Partitioned cookies,
+incognito sessions, localStorage tokens and passkey keys are not exported. Cookies only
+for another URL path are excluded; open the signed-in application page before sharing.
+The site's SSO session can expire or require fresh authentication despite keep-alive.
+When the vault reports it stale, sign in on the site and explicitly share again.
+
 ## Build & load the unpacked extension
 
 ```bash

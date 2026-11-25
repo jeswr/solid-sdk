@@ -1,0 +1,2558 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
+// The executor: match an ActionRequest to a flow or operation, ask the gate, then
+// run the site's own HTTP calls with the user's session and lift the responses
+// back into RDF observations.
+//
+// Security invariants (see README):
+// - every request URL, CSRF page and redirect target is on the model's origin;
+// - nothing is sent before the gate allows it; an approval is single-use and bound
+//   to a digest of the exact resolved inputs;
+// - results and errors never carry cookies, session headers or CSRF tokens.
+
+import type {
+  ActionOutcome,
+  ActionRequest,
+  EffectClass,
+  Flow,
+  Observation,
+  Operation,
+  SiteModel,
+} from "@jeswr/site-model";
+import {
+  actionRequestTerms,
+  endpointItemType,
+  responseIdentity,
+  SCHEMA,
+  selectionWitnesses,
+} from "@jeswr/site-model";
+import {
+  applyCsrfToken,
+  bodyInit,
+  bodyText,
+  type CompiledRequest,
+  checkModelHeaders,
+  compileOperation,
+  endpointUrl,
+  isForbiddenHeader,
+  requestFingerprint,
+} from "./compile.js";
+import {
+  type CookieSecretContext,
+  isLoginCredentialCookie,
+  isSessionCredentialCookie,
+  registerCookieSecrets,
+} from "./cookie-secrets.js";
+import {
+  applySetCookies,
+  type Cookie,
+  cookieHeader,
+  cookiesFor,
+  parseSetCookie,
+  type SessionBundle,
+  type SessionProvider,
+} from "./cookies.js";
+import {
+  attribute,
+  jsonPointer,
+  metaContent,
+  parseHtml,
+  selectElement,
+  selectElements,
+} from "./dom.js";
+import {
+  effectChangesMatch,
+  effectSnapshot,
+  emptyEffectCollection,
+} from "./effect-verification.js";
+import {
+  type ExtractedItem,
+  ExtractionError,
+  type ExtractOutput,
+  emptyTurtle,
+  extract,
+} from "./extract.js";
+import {
+  type ApprovalRequest,
+  approvalDigest,
+  createApprovalGate,
+  type Gate,
+  type GateRequest,
+  moneyFields,
+  summarise,
+} from "./gate.js";
+import { isHtmlInputType } from "./html-controls.js";
+import {
+  type LivenessRead,
+  matchesLivenessSignature,
+  refusalEvidence,
+  sameRefusal,
+} from "./liveness.js";
+import { effectiveEffect, matchRequest, maxEffect, normaliseEffect, type Target } from "./match.js";
+import {
+  addAmounts,
+  assertFactsCap,
+  factsMoney,
+  type ItemIdentity,
+  inputIdentities,
+  type MoneyEvidence,
+  MoneyRefusal,
+  type MoneyWrite,
+  resolvedMoney,
+} from "./money.js";
+import { describeUrl, guardUrl, OriginError, siteOrigin } from "./origin.js";
+import { outcomeTurtle } from "./outcome.js";
+import {
+  createdObjectType,
+  notFoundSignature,
+  responsePageError,
+  sentInputValue,
+  staleVerificationResponse,
+} from "./response-evidence.js";
+import { registerSecret, secretRedactor } from "./secrets.js";
+import {
+  assertSelectionFilters,
+  itemName,
+  nextSelectionPage,
+  pagingKind,
+  requestsAll,
+  resolveSelection,
+  type SelectionEvidence,
+  SelectionRefusal,
+  selectionSources,
+} from "./selection.js";
+import { UriTemplateError } from "./uri-template.js";
+import { BindingError, expandIri, idFromIri, isClassRange } from "./values.js";
+import { readVerificationBody } from "./verification-body.js";
+import { submittedStateInputs, verificationScopeMatches } from "./verification-context.js";
+import { exactIdentityFilter } from "./verification-filter.js";
+import { csrfFieldName, effectiveWireFields, transmittedCsrfSecrets } from "./wire.js";
+import {
+  type EffectVerification,
+  matchesCreatedIdentity,
+  requiresEffectVerification,
+  validateWriteResponsePolicy,
+  verifiedCreatedLocation,
+  verifiedReadBackItem,
+  type WriteResponsePolicy,
+} from "./write-response.js";
+
+export type ExecutionStatus =
+  | "done"
+  | "needs-approval"
+  | "denied"
+  | "refused"
+  | "no-path"
+  | "ambiguous"
+  | "error";
+
+export type ErrorKind =
+  | "origin"
+  | "binding"
+  | "csrf"
+  | "http"
+  | "network"
+  | "extraction"
+  | "limit"
+  | "no-session"
+  | "gate"
+  | "repeat"
+  | "ambiguous-target";
+
+/** Local extension of the shared receipt contract for possible effects with an incomplete result. */
+export type ExecutionOutcome = Omit<ActionOutcome, "status"> & {
+  status: ActionOutcome["status"] | "uncertain";
+};
+export interface CommittedWrite {
+  target: Target;
+  fingerprint: string;
+}
+export interface ExecuteOptions {
+  approvalId?: string;
+  /** Host repeat guard, checked again when response-bound inputs become concrete. */
+  excludeFingerprints?: readonly string[];
+}
+export interface ExecutionResult {
+  status: ExecutionStatus;
+  target?: Target;
+  /** Executor-authored receipt; also the first observation for terminal writes. */
+  outcome?: ExecutionOutcome;
+  /** Successful or uncertain write attempts; only HTTP 4xx rejects a sent write without commitment. */
+  committed: CommittedWrite[];
+  /** Safe unresolved required names for the closest no-path candidate. */
+  missing?: string[];
+  observations: Observation[];
+  approval?: ApprovalRequest;
+  error?: string;
+  errorKind?: ErrorKind;
+  /** Labels of the tied candidates when status is 'ambiguous'. */
+  candidates?: string[];
+  /** HTTP requests sent (operations, CSRF pages and redirects). */
+  requests: number;
+}
+
+export interface ExecutorOptions {
+  model: SiteModel;
+  sessions: SessionProvider;
+  /** Host-owned credential context, shared with profiling/browser learning and model rebuilds. */
+  credentialContext?: CookieSecretContext & { secrets?: Set<string> };
+  /** Default: reads allowed, everything else asks (createApprovalGate()). */
+  gate?: Gate;
+  fetch?: typeof fetch;
+  now?: () => Date;
+  persona?: string;
+  /** Upper bound on HTTP requests per execute() call. Default 25. */
+  maxRequests?: number;
+  /** Upper bound on redirects followed per request. Default 5. */
+  maxRedirects?: number;
+  /** Upper bound on a response body. Default 5 MiB. */
+  maxResponseBytes?: number;
+  /** Absolute deadline per execute() call, including body reads. Default 30 seconds. */
+  maxExecutionMs?: number;
+  /** Trusted per-operation response declarations, stored separately from the unchanged SiteModel contract. */
+  writeResponses?: Record<string, WriteResponsePolicy>;
+}
+
+export interface PlannedRequest {
+  operation: string;
+  label: string;
+  /** Present on concrete effectful requests; response-bound placeholders have none yet. */
+  fingerprint?: string;
+  method: string;
+  url: string;
+  /** Static headers only; credentials are never part of a plan. */
+  headers: Record<string, string>;
+  body?: string;
+  /** True when the user's session (cookies, vault headers) would be attached. */
+  session: boolean;
+  /** CSRF rules that would apply, described (tokens are fetched only when executing). */
+  csrf: string[];
+}
+
+export interface Plan {
+  status: "planned" | "no-path" | "ambiguous" | "error";
+  target?: Target;
+  effect?: EffectClass;
+  summary?: string;
+  requests: PlannedRequest[];
+  candidates?: string[];
+  missing?: string[];
+  error?: string;
+}
+
+export interface Executor {
+  readonly model: SiteModel;
+  execute(request: ActionRequest, opts?: ExecuteOptions): Promise<ExecutionResult>;
+  /** Dry run: the compiled requests without sending anything, credentials redacted. */
+  planToRequests(request: ActionRequest): Plan;
+}
+
+class CsrfError extends Error {
+  override name = "CsrfError";
+}
+class HttpError extends Error {
+  override name = "HttpError";
+}
+class NetworkError extends Error {
+  override name = "NetworkError";
+}
+class LimitError extends Error {
+  override name = "LimitError";
+}
+class SessionError extends Error {
+  override name = "SessionError";
+}
+
+function errorKind(error: unknown): ErrorKind {
+  if (error instanceof SelectionRefusal) return "ambiguous-target";
+  if (error instanceof OriginError) return "origin";
+  if (error instanceof BindingError || error instanceof UriTemplateError) return "binding";
+  if (error instanceof CsrfError) return "csrf";
+  if (error instanceof HttpError) return "http";
+  if (error instanceof ExtractionError) return "extraction";
+  if (error instanceof LimitError) return "limit";
+  if (error instanceof SessionError) return "no-session";
+  return "network";
+}
+
+/** A flow's step references `$input.x`, `$stepN.<property>` or a literal. */
+const STEP_INDEX_KEY = "$step";
+const STEP_REF = /^\$step(\d+)\.(.+)$/;
+
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+interface RunContext {
+  jar: Cookie[];
+  credentialCookies?: string[];
+  /** Session headers sent with each request (Cookie/Host-like entries removed). */
+  headers: Record<string, string>;
+  /** The vault's headers exactly as stored, written back unchanged with cookie updates. */
+  storedHeaders?: Record<string, string>;
+  revision?: string;
+  persistRejected?: boolean;
+  sessionEpoch?: number;
+  baselineUnverified?: boolean;
+  requests: number;
+  secrets: Set<string>;
+  controller: AbortController;
+  deadline: number;
+}
+
+type VerificationRead = {
+  authorize: (url: URL) => Promise<boolean>;
+  preparation?: boolean;
+  /**
+   * The credentials-only liveness control: the same request without the session credentials.
+   * No session headers and none of the cookies with positive login evidence
+   * (`isLoginCredentialCookie` over `controlContext`: declared credential cookies, login-set
+   * or the login routes' session cookies, never CSRF cookie sources) are sent; every other
+   * cookie is kept. Nothing the response sets reaches the
+   * session, and an authentication challenge is reported rather than thrown, because a
+   * refusal is the expected answer.
+   */
+  anonymous?: boolean;
+};
+
+interface Response0 {
+  stale: boolean;
+  status: number;
+  /** Private wire context, including every transmitted header and applicable cookie. */
+  requestContext: string;
+  contentType?: string;
+  url: URL;
+  body: string;
+  redirectLocations: string[];
+  requestBody?: CompiledRequest["body"];
+  /** WWW-Authenticate or Proxy-Authenticate on the answer (anonymous control only). */
+  challenge?: boolean;
+}
+
+function describeRule(rule: NonNullable<Operation["csrf"]>[number]): string {
+  const src = rule.source;
+  const from =
+    src.kind === "cookie"
+      ? `cookie ${src.name}`
+      : src.kind === "html"
+        ? `html ${src.selector}@${src.attribute} of ${src.urlTemplate}`
+        : src.kind === "meta"
+          ? `meta ${src.name} of ${src.urlTemplate}`
+          : `json ${src.pointer} of ${src.urlTemplate}`;
+  return `${rule.target.kind} ${rule.target.name} <- ${from}`;
+}
+
+function validatedModel(source: SiteModel): SiteModel {
+  const model = structuredClone(source);
+  const ids = new Set<string>();
+  for (const target of [...model.operations, ...model.flows]) {
+    if (!target.id || ids.has(target.id)) throw new BindingError("duplicate or empty model id");
+    ids.add(target.id);
+    const names = new Set<string>();
+    for (const input of target.inputs) {
+      if (
+        !input.name ||
+        names.has(input.name) ||
+        ["__proto__", "constructor", "prototype"].includes(input.name)
+      )
+        throw new BindingError("duplicate or unsafe parameter name");
+      names.add(input.name);
+    }
+  }
+  for (const operation of model.operations) checkModelHeaders(operation);
+  const operations = new Set(model.operations.map((op) => op.id));
+  for (const flow of model.flows) {
+    if (!flow.steps.length) throw new BindingError("empty flow");
+    const steps = flow.steps.map((step) => model.operations.find((op) => op.id === step.operation));
+    if (
+      normaliseEffect(flow.effect) === "payment" &&
+      !steps.some((op) => op && normaliseEffect(op.effect) === "payment")
+    )
+      throw new BindingError("payment flow needs a payment operation");
+    for (const [index, step] of flow.steps.entries()) {
+      if (!operations.has(step.operation))
+        throw new BindingError("flow references unknown operation");
+      for (const spec of Object.values(step.bind)) {
+        const ref = STEP_REF.exec(spec);
+        if (ref && Number(ref[1]) >= index)
+          throw new BindingError("flow binds a step which has not run yet");
+      }
+      selectionSources(flow, index, steps as Operation[]);
+    }
+  }
+  const freeze = (value: unknown): void => {
+    if (value && typeof value === "object") {
+      Object.freeze(value);
+      for (const child of Object.values(value)) freeze(child);
+    }
+  };
+  freeze(model);
+  return model;
+}
+interface ObservationRecord {
+  operation: string;
+  status: number;
+  url: string;
+  output?: ExtractOutput;
+  createdLocation?: string;
+  inputs?: Record<string, string>;
+  compiled?: CompiledRequest;
+  selectionComplete?: boolean;
+}
+interface Progress {
+  index: number;
+  observations: ObservationRecord[];
+  stepItems: ExtractedItem[][];
+  secrets: Set<string>;
+  requests: number;
+  spent: string;
+  committed: CommittedWrite[];
+  currency?: string;
+  authorizedMoney?: { amount?: string; currency?: string };
+}
+interface Pending {
+  key: string;
+  digest: string;
+  progress: Progress;
+  evidence?: MoneyEvidence;
+  selection?: SelectionEvidence;
+  session?: { state: string; credentials: string; binding: string };
+}
+
+export function createExecutor(options: ExecutorOptions): Executor {
+  const model = validatedModel(options.model);
+  const { sessions } = options;
+  const origin = siteOrigin(model.site);
+  const writeResponses = structuredClone(options.writeResponses ?? {});
+  for (const [id, policy] of Object.entries(writeResponses)) {
+    if (!model.operations.some((op) => op.id === id && op.effect !== "read"))
+      throw new BindingError("write response policy needs a known write operation");
+    validateWriteResponsePolicy(policy, origin);
+  }
+  const gate = options.gate ?? createApprovalGate();
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  const now = options.now ?? (() => new Date());
+  const persona = options.persona;
+  const maxRequests = options.maxRequests ?? 25;
+  const maxRedirects = options.maxRedirects ?? 5;
+  const maxBytes = options.maxResponseBytes ?? 5 * 1024 * 1024;
+  const maxExecutionMs = options.maxExecutionMs ?? 30_000;
+  for (const limit of [maxRequests, maxRedirects, maxBytes]) {
+    if (!Number.isSafeInteger(limit) || limit < 0) throw new BindingError("invalid executor limit");
+  }
+  if (!Number.isSafeInteger(maxExecutionMs) || maxExecutionMs < 1 || maxExecutionMs > 2_147_483_647)
+    throw new BindingError("invalid execution deadline");
+  const issued = new Map<string, Pending>();
+  const operations = new Map(model.operations.map((op) => [op.id, op]));
+
+  // Keep host login/CSRF declarations even when execution uses a reduced model.
+  const credentialContext: CookieSecretContext = {
+    ...options.credentialContext,
+    model: {
+      login: [...(options.credentialContext?.model?.login ?? []), ...(model.login ?? [])],
+      operations: [...(options.credentialContext?.model?.operations ?? []), ...model.operations],
+    },
+  };
+
+  function addSecrets(ctx: RunContext): void {
+    for (const c of ctx.jar)
+      registerCookieSecrets(ctx.secrets, c, {
+        ...credentialContext,
+        declaredNames: [
+          ...(credentialContext.declaredNames ?? []),
+          ...(ctx.credentialCookies ?? []),
+        ],
+      });
+    for (const v of Object.values(ctx.headers)) {
+      if (v.length > 0) registerSecret(ctx.secrets, v);
+      const token = v.trim().split(/\s+/).at(-1);
+      if (token) registerSecret(ctx.secrets, token);
+    }
+  }
+
+  function redactWith(ctx: RunContext): (text: string) => string {
+    return secretRedactor(ctx.secrets);
+  }
+
+  function checkDeadline(ctx: RunContext): void {
+    if (performance.now() >= ctx.deadline) ctx.controller.abort();
+    if (ctx.controller.signal.aborted) throw new LimitError("execution deadline exceeded");
+  }
+  async function budget<T>(ctx: RunContext, promise: Promise<T>): Promise<T> {
+    checkDeadline(ctx);
+    const signal = ctx.controller.signal;
+    let abort: () => void = () => {};
+    const expired = new Promise<never>((_resolve, reject) => {
+      abort = () => reject(new LimitError("execution deadline exceeded"));
+      signal.addEventListener("abort", abort, { once: true });
+    });
+    try {
+      return await Promise.race([promise, expired]);
+    } finally {
+      signal.removeEventListener("abort", abort);
+    }
+  }
+  async function readBody(ctx: RunContext, res: Response): Promise<string> {
+    if (!res.body) return "";
+    const reader = res.body.getReader();
+    const cancel = (): void => {
+      void reader.cancel().catch(() => {});
+    };
+    ctx.controller.signal.addEventListener("abort", cancel, { once: true });
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      for (;;) {
+        const { done, value } = await budget(ctx, reader.read());
+        checkDeadline(ctx);
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) throw new LimitError("response byte limit exceeded");
+        chunks.push(value);
+      }
+      return Buffer.concat(chunks).toString("utf8");
+    } catch (error) {
+      cancel();
+      throw error;
+    } finally {
+      ctx.controller.signal.removeEventListener("abort", cancel);
+      reader.releaseLock();
+    }
+  }
+
+  /** The shared cookie classification with this run's declared credential cookies. */
+  function cookieContext(ctx: RunContext): CookieSecretContext {
+    return {
+      ...credentialContext,
+      declaredNames: [...(credentialContext.declaredNames ?? []), ...(ctx.credentialCookies ?? [])],
+    };
+  }
+
+  /**
+   * The cookies the credentials-only control drops (round 22): only declared credential cookies
+   * (the host's `credentialCookieNames`, the vault's `credentialCookies` and the cookies this
+   * run's login set), the demonstrated login's cookies and the login routes' `sessionCookies`.
+   * Never `declaredNames`, which a host widens for redaction (agent-browser adds CSRF cookie
+   * sources): a CSRF cookie stays in the control, as it does in the profiler's.
+   */
+  function controlContext(ctx: RunContext): CookieSecretContext {
+    return {
+      ...(credentialContext.model ? { model: credentialContext.model } : {}),
+      ...(credentialContext.loginCookieNames
+        ? { loginCookieNames: credentialContext.loginCookieNames }
+        : {}),
+      credentialCookieNames: [
+        ...(credentialContext.credentialCookieNames ?? []),
+        ...(ctx.credentialCookies ?? []),
+      ],
+    };
+  }
+
+  function authenticationContext(ctx: RunContext): string {
+    return JSON.stringify([
+      ctx.jar
+        .filter(
+          (cookie) =>
+            isSessionCredentialCookie(cookie, cookieContext(ctx)) &&
+            (cookie.expires === undefined ||
+              cookie.expires < 0 ||
+              cookie.expires > now().getTime() / 1000),
+        )
+        .map((cookie) => [cookie.name, cookie.domain, cookie.path, cookie.value])
+        .sort(),
+      Object.entries(ctx.headers).sort(),
+    ]);
+  }
+
+  async function storeCookies(
+    ctx: RunContext,
+    res: Response,
+    url: URL,
+    loginResponse = false,
+  ): Promise<void> {
+    const setCookies =
+      typeof res.headers.getSetCookie === "function" ? res.headers.getSetCookie() : [];
+    if (setCookies.length === 0) return;
+    for (const line of setCookies) {
+      const cookie = parseSetCookie(line, url, now());
+      if (!cookie) continue;
+      if (loginResponse)
+        ctx.credentialCookies = [...new Set([...(ctx.credentialCookies ?? []), cookie.name])];
+      registerCookieSecrets(ctx.secrets, cookie, {
+        ...credentialContext,
+        declaredNames: [
+          ...(credentialContext.declaredNames ?? []),
+          ...(ctx.credentialCookies ?? []),
+        ],
+      });
+    }
+    const authenticationBefore = authenticationContext(ctx);
+    const { jar, changed } = applySetCookies(ctx.jar, setCookies, url, now());
+    if (!changed && !loginResponse) return;
+    ctx.jar = jar;
+    if (authenticationContext(ctx) !== authenticationBefore)
+      ctx.sessionEpoch = (ctx.sessionEpoch ?? 0) + 1;
+    addSecrets(ctx);
+    if (ctx.persistRejected) return;
+    const bundle: SessionBundle = {
+      cookies: jar,
+      ...(ctx.credentialCookies ? { credentialCookies: [...ctx.credentialCookies] } : {}),
+      ...(ctx.revision !== undefined ? { revision: ctx.revision } : {}),
+      ...(ctx.storedHeaders ? { headers: { ...ctx.storedHeaders } } : {}),
+    };
+    const update = await budget(ctx, sessions.update(origin, persona, bundle));
+    if (update?.accepted === false) ctx.persistRejected = true;
+    else if (update?.revision !== undefined) ctx.revision = update.revision;
+  }
+
+  async function send(
+    ctx: RunContext,
+    method: string,
+    startUrl: URL,
+    headers: Record<string, string>,
+    body: CompiledRequest["body"],
+    accept: string | undefined,
+    committed?: () => void,
+    loginResponse = false,
+    verification?: VerificationRead,
+  ): Promise<Response0> {
+    let url = guardUrl(startUrl.href, origin);
+    let currentMethod = method;
+    let currentBody = body;
+    const currentHeaders = { ...headers };
+    const redirectLocations: string[] = [];
+    let stale = false;
+    for (let redirects = 0; ; redirects++) {
+      checkDeadline(ctx);
+      if (verification && !(await verification.authorize(url)))
+        throw new HttpError("verification read was not authorized");
+      if (ctx.requests >= maxRequests)
+        throw new LimitError(`request limit of ${maxRequests} reached`);
+      ctx.requests++;
+      const anonymous = verification?.anonymous === true;
+      const h = new Headers();
+      for (const [k, v] of Object.entries(currentHeaders)) h.set(k, v);
+      for (const [k, v] of anonymous ? [] : Object.entries(ctx.headers)) {
+        const lower = k.toLowerCase();
+        if (lower === "cookie" || lower === "host" || lower === "content-length") continue;
+        h.set(k, v);
+      }
+      h.set("accept", accept ?? "*/*");
+      if (verification) {
+        h.set("cache-control", "no-cache");
+        h.set("pragma", "no-cache");
+      }
+      const applicable = cookiesFor(ctx.jar, url, now());
+      // The control differs from the credentialed read only by its credentials, and drops only
+      // cookies with positive login evidence: an unclassified credential is kept, so the control
+      // renders, which fails safe; a gate cookie the redaction heuristic would class as a
+      // credential is kept too, so an expired session that still carries it cannot pass.
+      const cookies = anonymous
+        ? applicable.filter((cookie) => !isLoginCredentialCookie(cookie, controlContext(ctx)))
+        : applicable;
+      if (cookies.length > 0) h.set("cookie", cookieHeader(cookies));
+      // Fetch's Headers object is authoritative for trimming and header names.
+      // Capture session values after the final header decoration on every hop.
+      for (const name of anonymous ? [] : Object.keys(ctx.headers)) {
+        const value = h.get(name);
+        if (value) registerSecret(ctx.secrets, value);
+      }
+      let res: Response;
+      try {
+        res = await budget(
+          ctx,
+          fetchImpl(url.href, {
+            signal: ctx.controller.signal,
+            method: currentMethod,
+            headers: h,
+            redirect: "manual",
+            ...(verification ? { cache: "no-store" as const } : {}),
+            ...(currentBody !== undefined ? { body: bodyInit(currentBody) } : {}),
+          }),
+        );
+      } catch {
+        committed?.();
+        committed = undefined;
+        checkDeadline(ctx);
+        throw new NetworkError(`${currentMethod} ${describeUrl(url)} failed (network error)`);
+      }
+      if (committed && !(res.status >= 400 && res.status < 500)) {
+        committed();
+        committed = undefined;
+      }
+      // The anonymous control never changes the session, whatever its answer sets.
+      if (!anonymous)
+        await storeCookies(
+          ctx,
+          res,
+          url,
+          loginResponse && currentMethod !== "GET" && currentMethod !== "HEAD",
+        );
+      const challenge =
+        res.headers.has("www-authenticate") || res.headers.has("proxy-authenticate");
+      if (verification && challenge && !anonymous) {
+        if (res.body) await budget(ctx, res.body.cancel());
+        throw new HttpError("verification requires authentication");
+      }
+      stale ||= staleVerificationResponse(res.headers);
+      if (verification && stale) {
+        if (res.body) await budget(ctx, res.body.cancel());
+        throw new HttpError("verification response is cached");
+      }
+      const location = res.headers.get("location");
+      if (
+        verification &&
+        !verification.preparation &&
+        REDIRECT_STATUSES.has(res.status) &&
+        location !== null
+      )
+        redirectLocations.push(guardUrl(new URL(location, url).href, origin).href);
+      if (
+        (!verification || verification.preparation) &&
+        REDIRECT_STATUSES.has(res.status) &&
+        location !== null
+      ) {
+        if (res.body) await budget(ctx, res.body.cancel());
+        let next: URL;
+        try {
+          next = new URL(location, url);
+        } catch {
+          throw new OriginError("redirect Location is not a valid URL");
+        }
+        next = guardUrl(next.href, origin);
+        redirectLocations.push(next.href);
+        if (currentMethod !== "GET" && (res.status === 307 || res.status === 308)) {
+          throw new HttpError(
+            `${currentMethod} ${describeUrl(url)} answered ${res.status}; a redirect that re-sends the body is not followed`,
+          );
+        }
+        if (redirects + 1 > maxRedirects)
+          throw new LimitError(`more than ${maxRedirects} redirects`);
+        if (currentMethod !== "GET") {
+          currentMethod = "GET";
+          currentBody = undefined;
+          delete currentHeaders["content-type"];
+        }
+        url = next;
+        continue;
+      }
+      return {
+        status: res.status,
+        stale,
+        requestContext: JSON.stringify([...h].sort(([a], [b]) => a.localeCompare(b))),
+        contentType: res.headers.get("content-type") ?? undefined,
+        url,
+        body:
+          verification && !verification.preparation
+            ? await budget(ctx, readVerificationBody(res, ctx.controller.signal))
+            : await readBody(ctx, res),
+        requestBody: currentBody,
+        redirectLocations,
+        ...(anonymous ? { challenge } : {}),
+      };
+    }
+  }
+
+  async function csrfToken(
+    ctx: RunContext,
+    compiled: CompiledRequest,
+    rule: NonNullable<Operation["csrf"]>[number],
+    values: Record<string, string>,
+    verification?: VerificationRead,
+  ): Promise<string> {
+    const { source } = rule;
+    let token: string | undefined;
+    if (source.kind === "cookie") {
+      token = cookiesFor(ctx.jar, compiled.url, now()).find((c) => c.name === source.name)?.value;
+      if (token === undefined)
+        throw new CsrfError(`CSRF cookie "${source.name}" is not in the session`);
+    } else {
+      let pageUrl: URL;
+      try {
+        pageUrl = endpointUrl(source.urlTemplate, values, origin);
+      } catch (e) {
+        if (e instanceof UriTemplateError)
+          throw new BindingError(`invalid CSRF URL template: ${e.message}`);
+        throw e;
+      }
+      const accept = source.kind === "json" ? "application/json" : "text/html";
+      const res = await send(
+        ctx,
+        "GET",
+        pageUrl,
+        {},
+        undefined,
+        accept,
+        undefined,
+        false,
+        verification ? { ...verification, preparation: true } : undefined,
+      );
+      if (verification && (res.stale || responsePageError(res.body, res.contentType, false)))
+        throw new CsrfError("verification token source is not verified");
+      if (res.status >= 400)
+        throw new CsrfError(`CSRF page ${describeUrl(res.url)} answered ${res.status}`);
+      if (source.kind === "json") {
+        let doc: unknown;
+        try {
+          doc = JSON.parse(res.body);
+        } catch {
+          throw new CsrfError(`CSRF source ${describeUrl(res.url)} is not JSON`);
+        }
+        const v = jsonPointer(doc, source.pointer);
+        token = typeof v === "string" || typeof v === "number" ? String(v) : undefined;
+      } else if (source.kind === "meta") {
+        token = metaContent(parseHtml(res.body), source.name);
+      } else {
+        const el = selectElement(source.selector, parseHtml(res.body));
+        token = el ? attribute(el, source.attribute) : undefined;
+      }
+      if (token === undefined || token === "") {
+        throw new CsrfError(`CSRF token not found on ${describeUrl(res.url)}`);
+      }
+      if (source.kind === "html") {
+        const referrer = new URL(res.url);
+        referrer.hash = "";
+        compiled.csrfReferer = referrer.href;
+        const policy = writeResponses[compiled.operation];
+        if (policy?.extraction) {
+          // A guarded form alias may serve the resource without redirecting. Its
+          // learned item read supplies the canonical permalink witnessed by the write.
+          try {
+            const out = await extract(policy.extraction, res.body, {
+              baseUrl: res.url.href,
+              redact: redactWith(ctx),
+            });
+            const candidates = new Set(out.items.flatMap((item) => (item.iri ? [item.iri] : [])));
+            const canonical = [...candidates].filter(
+              (url) =>
+                matchesCreatedIdentity(policy.createdLocationPattern, url, url, origin) &&
+                matchesCreatedIdentity(policy.createdLocationPattern, url, referrer.href, origin),
+            );
+            const canonicalUrl = canonical[0];
+            if (canonical.length === 1 && canonicalUrl) {
+              const page = new URL(canonicalUrl);
+              page.hash = "";
+              compiled.csrfReferer = page.href;
+            }
+          } catch {
+            /* Retain the actual guarded form URL when its item read cannot resolve an alias. */
+          }
+        }
+      }
+    }
+    registerSecret(ctx.secrets, token);
+    return token;
+  }
+
+  async function prepareCsrf(
+    ctx: RunContext,
+    compiled: CompiledRequest,
+    values: Record<string, string>,
+    payment = false,
+    verification?: VerificationRead,
+  ): Promise<void> {
+    for (const rule of compiled.csrf) {
+      // A token must never replace an already approved effectful value.
+      const name = rule.target.name;
+      const collision =
+        rule.target.kind === "header"
+          ? Object.hasOwn(compiled.headers, name.toLowerCase())
+          : rule.target.kind === "query"
+            ? compiled.url.searchParams.has(name)
+            : compiled.body?.kind === "json"
+              ? compiled.body.value !== null &&
+                typeof compiled.body.value === "object" &&
+                Object.hasOwn(compiled.body.value, name)
+              : compiled.body?.fields.some(([key]) => key === name);
+      const duplicate =
+        payment &&
+        effectiveWireFields(compiled).some((field) => field.name === csrfFieldName(compiled, rule));
+      if (collision || duplicate) {
+        if (payment) throw new MoneyRefusal("CSRF target would overwrite an approved input");
+        throw new BindingError("CSRF target would overwrite an approved input");
+      }
+      applyCsrfToken(compiled, rule, await csrfToken(ctx, compiled, rule, values, verification));
+      // The compiled inventory already reflects multipart CRLF/USVString,
+      // form/query Unicode conversion, JSON values and Fetch header trimming.
+      // Register each decoration immediately, even if a later token fails.
+      for (const value of transmittedCsrfSecrets(compiled)) registerSecret(ctx.secrets, value);
+    }
+  }
+
+  async function prepareEffectRead(
+    ctx: RunContext,
+    operation: Operation,
+    values: Record<string, string>,
+    compiledWrite: CompiledRequest,
+  ) {
+    ctx.baselineUnverified = false;
+    const declaration = writeResponses[operation.id]?.verification;
+    const read = declaration && operations.get(declaration.operation);
+    if (
+      !declaration ||
+      read?.effect !== "read" ||
+      read.request.method !== "GET" ||
+      !read.extraction
+    )
+      return;
+    ctx.baselineUnverified = true;
+    const materialize = (pattern: string) =>
+      pattern.replace(/\{([A-Za-z][\w]*)\}/g, (slot, name: string) => {
+        if (name === "id") return slot;
+        const value = sentInputValue(
+          operation,
+          values,
+          name.startsWith("context_") ? name.slice(8) : name,
+          origin,
+        );
+        if (value === undefined) throw new BindingError("unbound verification resource context");
+        return encodeURIComponent(value);
+      });
+    const resource = {
+      ...declaration,
+      identityPattern: materialize(declaration.identityPattern),
+      ...(declaration.identityAliases
+        ? { identityAliases: declaration.identityAliases.map(materialize) }
+        : {}),
+    };
+    const identity = selectionWitnesses(operation).some((p) => p.name === declaration.identityInput)
+      ? values[declaration.identityInput]
+      : sentInputValue(operation, values, declaration.identityInput, origin);
+    if (!identity || redactWith(ctx)(identity) !== identity) return;
+    const bindings: Record<string, string> = {};
+    for (const [name, binding] of Object.entries(declaration.bind)) {
+      if (!read.inputs.some((p) => p.name === name)) return;
+      const value = "input" in binding ? values[binding.input] : binding.value;
+      if (value === undefined) return;
+      bindings[name] = value;
+    }
+    const resolved = operationValues(read, bindings);
+    if (
+      !Object.entries(declaration.bind).some(
+        ([name, binding]) =>
+          "input" in binding &&
+          binding.input === declaration.identityInput &&
+          sentInputValue(read, resolved, name, origin) === identity,
+      ) ||
+      Object.values(resolved).some((v) => redactWith(ctx)(v) !== v)
+    )
+      return;
+    const compiledRead = compileOperation(read, resolved, origin);
+    if (
+      !verificationScopeMatches(
+        compiledWrite,
+        operation,
+        compiledRead,
+        read,
+        declaration.scopeConstants,
+        declaration.bind,
+      ) ||
+      (operation.actionType !== `${SCHEMA}DeleteAction` &&
+        submittedStateInputs(operation, values, origin, declaration.identityInput).some(
+          (name) => !declaration.changes.some((change) => change.input === name),
+        ))
+    )
+      return;
+    const target: Target = {
+      kind: "operation",
+      id: read.id,
+      label: redactWith(ctx)(read.label),
+      actionType: read.actionType,
+    };
+    const authorize = async (url: URL) => {
+      const decision = await budget(
+        ctx,
+        gate.authorize({
+          site: origin,
+          target,
+          effect: "read",
+          inputs: resolved,
+          summary: `Verify existing item on ${new URL(origin).host}`,
+          digest: approvalDigest({
+            site: origin,
+            modelVersion: model.version,
+            target,
+            effect: "read",
+            inputs: resolved,
+            binding: { operation: read, url: url.href, verificationOf: operation.id },
+          }),
+        }),
+      );
+      return decision.kind === "allow";
+    };
+    const verification = { authorize };
+    // Authorize the verification operation before even acquiring its token. Each
+    // preparatory URL is separately authorized by send before transmission.
+    if (!(await authorize(compiledRead.url))) return;
+    await prepareCsrf(ctx, compiledRead, resolved, false, verification);
+    if (
+      !verificationScopeMatches(
+        compiledWrite,
+        operation,
+        compiledRead,
+        read,
+        declaration.scopeConstants,
+        declaration.bind,
+      )
+    )
+      return;
+    const run = () =>
+      send(
+        ctx,
+        "GET",
+        compiledRead.url,
+        compiledRead.headers,
+        undefined,
+        read.extraction?.format === "json" ? "application/json" : "text/html",
+        undefined,
+        false,
+        verification,
+      );
+    const context = authenticationContext(ctx);
+    const epoch = ctx.sessionEpoch ?? 0;
+    const before = await run();
+    const stable = () =>
+      context === authenticationContext(ctx) && epoch === (ctx.sessionEpoch ?? 0);
+    // Verification never treats a redirect as absence or a changed request context.
+    if (
+      !before ||
+      before.stale ||
+      !stable() ||
+      before.status < 200 ||
+      before.status >= 300 ||
+      before.redirectLocations.length
+    )
+      return;
+    const baseline = await effectSnapshot(
+      read.extraction,
+      before.body,
+      before.url.href,
+      identity,
+      resource,
+      redactWith(ctx),
+    );
+    if (
+      !baseline ||
+      (operation.actionType === `${SCHEMA}DeleteAction` &&
+        baseline.collection &&
+        !exactIdentityFilter(
+          read,
+          compiledRead,
+          declaration.bind,
+          declaration.identityInput,
+          identity,
+        ))
+    )
+      return;
+    ctx.baselineUnverified = false;
+    return async () => {
+      if (!stable()) return false;
+      const after = await run();
+      if (
+        !after ||
+        after.stale ||
+        !stable() ||
+        after.redirectLocations.length ||
+        after.requestContext !== before.requestContext ||
+        [401, 403].includes(after.status)
+      )
+        return false;
+      if (operation.actionType === `${SCHEMA}DeleteAction`) {
+        if ([404, 410].includes(after.status)) {
+          const signature = notFoundSignature(after.status, after.contentType, after.body);
+          return (
+            !!declaration.notFound &&
+            !!signature &&
+            signature.status === declaration.notFound.status &&
+            signature.contentType === declaration.notFound.contentType &&
+            signature.structure === declaration.notFound.structure &&
+            // Structural: absence counts only while the same session still reads data.
+            (await sessionLive(ctx, operation, declaration, stable))
+          );
+        }
+        return (
+          after.status >= 200 &&
+          after.status < 300 &&
+          !!read.extraction &&
+          emptyEffectCollection(read.extraction, after.body, baseline) &&
+          // An empty identity-filtered collection is the 200-status twin of a privacy 404:
+          // it counts only with the same session liveness proof.
+          (await sessionLive(ctx, operation, declaration, stable))
+        );
+      }
+      if (after.status < 200 || after.status >= 300 || !read.extraction) return false;
+      const snapshot = await effectSnapshot(
+        read.extraction,
+        after.body,
+        after.url.href,
+        identity,
+        resource,
+        redactWith(ctx),
+      );
+      return (
+        !!snapshot &&
+        (declaration.constantChanges ?? []).every(
+          (change) =>
+            compiledWrite.body &&
+            effectiveWireFields(compiledWrite).some(
+              (field) =>
+                field.location === "body" &&
+                field.name === change.name &&
+                field.value === change.value,
+            ) &&
+            snapshot.values.get(change.property)?.length === 1 &&
+            snapshot.values.get(change.property)?.[0] === change.value,
+        ) &&
+        effectChangesMatch(
+          declaration,
+          baseline,
+          snapshot,
+          (input) => sentInputValue(operation, values, input, origin),
+          (input) => operation.inputs.find((p) => p.name === input)?.range,
+        )
+      );
+    };
+  }
+
+  /**
+   * Run the learned liveness read through the read gate, with the verification cache bypass
+   * and freshness rules, and require its learned success signature. Then send the same read
+   * once as a credentials-only control (no session headers and no cookie with positive login
+   * evidence, every other cookie kept; nothing to drop means no proof; read gate first, same cache bypass, no redirect followed): it must
+   * be refused with the pinned refusal kind and route and not reproduce the signature, so the
+   * proof depends on the credentials alone. A missing, unusable, denied, redirected, stale or
+   * different response, or an anonymous answer that is not a refusal, proves nothing.
+   */
+  async function sessionLive(
+    ctx: RunContext,
+    write: Operation,
+    declaration: EffectVerification,
+    stable: () => boolean,
+  ): Promise<boolean> {
+    const liveness = declaration.liveness;
+    const read = liveness && operations.get(liveness.operation);
+    const anonymous = (liveness as Partial<LivenessRead> | undefined)?.anonymous;
+    if (
+      !liveness ||
+      !anonymous ||
+      !read ||
+      read.effect !== "read" ||
+      read.request.method !== "GET" ||
+      !read.extraction ||
+      !stable()
+    )
+      return false;
+    const extraction = read.extraction;
+    const bindings: Record<string, string> = {};
+    for (const [name, binding] of Object.entries(liveness.bind)) {
+      if (!read.inputs.some((p) => p.name === name) || typeof binding?.value !== "string")
+        return false;
+      bindings[name] = binding.value;
+    }
+    const resolved = operationValues(read, bindings);
+    if (
+      read.inputs.some((p) => p.required && resolved[p.name] === undefined) ||
+      Object.values(resolved).some((v) => redactWith(ctx)(v) !== v)
+    )
+      return false;
+    let compiled: CompiledRequest;
+    try {
+      compiled = compileOperation(read, resolved, origin);
+    } catch (error) {
+      if (error instanceof BindingError) return false;
+      throw error;
+    }
+    // A session token cannot be sent anonymously, and without it the anonymous control would
+    // not be the same read: a token-decorated read is no liveness proof.
+    if (compiled.csrf.length) return false;
+    const target: Target = {
+      kind: "operation",
+      id: read.id,
+      label: redactWith(ctx)(read.label),
+      actionType: read.actionType,
+    };
+    const authorizer =
+      (control: boolean) =>
+      async (url: URL): Promise<boolean> => {
+        const decision = await budget(
+          ctx,
+          gate.authorize({
+            site: origin,
+            target,
+            effect: "read",
+            inputs: resolved,
+            summary: control
+              ? `Confirm ${new URL(origin).host} refuses the same read without the session`
+              : `Confirm the session on ${new URL(origin).host}`,
+            digest: approvalDigest({
+              site: origin,
+              modelVersion: model.version,
+              target,
+              effect: "read",
+              inputs: resolved,
+              binding: {
+                operation: read,
+                url: url.href,
+                livenessOf: write.id,
+                ...(control ? { anonymous: true } : {}),
+              },
+            }),
+          }),
+        );
+        return decision.kind === "allow";
+      };
+    const accept = extraction.format === "json" ? "application/json" : "text/html";
+    const signed = { authorize: authorizer(false) };
+    if (!(await signed.authorize(compiled.url))) return false;
+    const res = await send(
+      ctx,
+      "GET",
+      compiled.url,
+      compiled.headers,
+      undefined,
+      accept,
+      undefined,
+      false,
+      signed,
+    );
+    if (
+      res.stale ||
+      !stable() ||
+      res.redirectLocations.length ||
+      !matchesLivenessSignature(
+        liveness.signature,
+        res.status,
+        res.contentType,
+        res.body,
+        extraction,
+      )
+    )
+      return false;
+    // The credentials-only control: the same read without the session credentials must be
+    // refused with the pinned kind (and, for a redirect or login envelope, the pinned route).
+    const control = { authorize: authorizer(true), anonymous: true };
+    // Without positive login evidence the control would drop nothing and be the credentialed
+    // read again: no credentials-only control, so no liveness proof (Uncertain).
+    if (
+      !Object.keys(ctx.headers).some(
+        (name) => !["cookie", "host", "content-length"].includes(name.toLowerCase()),
+      ) &&
+      !cookiesFor(ctx.jar, compiled.url, now()).some((cookie) =>
+        isLoginCredentialCookie(cookie, controlContext(ctx)),
+      )
+    )
+      return false;
+    if (!(await control.authorize(compiled.url))) return false;
+    const anon = await send(
+      ctx,
+      "GET",
+      compiled.url,
+      compiled.headers,
+      undefined,
+      accept,
+      undefined,
+      false,
+      control,
+    );
+    if (anon.stale || !stable() || anon.redirectLocations.length > 1) return false;
+    return (
+      sameRefusal(
+        anonymous,
+        refusalEvidence(
+          {
+            url: compiled.url.href,
+            status: anon.status,
+            ...(anon.contentType !== undefined ? { contentType: anon.contentType } : {}),
+            body: anon.body,
+            ...(anon.redirectLocations[0] !== undefined
+              ? { location: anon.redirectLocations[0] }
+              : {}),
+            challenge: anon.challenge === true,
+          },
+          anonymous.loginRoutes,
+          origin,
+        ),
+      ) &&
+      !matchesLivenessSignature(
+        liveness.signature,
+        anon.status,
+        anon.contentType,
+        anon.body,
+        extraction,
+      )
+    );
+  }
+
+  async function runOperation(
+    ctx: RunContext,
+    operation: Operation,
+    values: Record<string, string>,
+    compiled: CompiledRequest,
+    committed?: () => void,
+    csrfPrepared = false,
+    verification?: VerificationRead,
+  ): Promise<{ observation: ObservationRecord; items: ExtractedItem[]; responseBody: string }> {
+    if (!csrfPrepared) await prepareCsrf(ctx, compiled, values, false, verification);
+    const accept =
+      operation.extraction?.format === "json"
+        ? "application/json"
+        : operation.extraction?.format === "html"
+          ? "text/html"
+          : undefined;
+    const verifiesEffect = requiresEffectVerification(operation);
+    const verifyEffect = verifiesEffect
+      ? await prepareEffectRead(ctx, operation, values, compiled)
+      : undefined;
+    if (ctx.baselineUnverified) throw new HttpError("baseline is not verified; write was not sent");
+    const res = await send(
+      ctx,
+      compiled.method,
+      compiled.url,
+      {
+        ...compiled.headers,
+        ...(operation.effect !== "read" && compiled.csrfReferer
+          ? { referer: compiled.csrfReferer }
+          : {}),
+      },
+      compiled.body,
+      accept,
+      committed,
+      operation.actionType === "https://jeswr.org/ns/site-action#LoginAction" ||
+        !!model.login?.some((route) => route.operation === operation.id),
+      verification,
+    );
+    if (
+      verification &&
+      (res.stale ||
+        res.redirectLocations.length ||
+        responsePageError(res.body, res.contentType, false))
+    )
+      throw new HttpError("verification response is not verified");
+    if (res.status >= 400) {
+      throw new HttpError(`${operation.label}: ${describeUrl(res.url)} answered ${res.status}`);
+    }
+    if (
+      operation.session === "signed-in" &&
+      /^\s*</.test(res.body) &&
+      selectElements("form input", parseHtml(res.body)).some((el) =>
+        isHtmlInputType(el, "password"),
+      )
+    )
+      throw new SessionError("The site requires sign-in again");
+    if (operation.session === "signed-in" && /^\s*\{/.test(res.body)) {
+      let response: unknown;
+      try {
+        response = JSON.parse(res.body);
+      } catch {
+        /* extraction reports invalid JSON */
+      }
+      if (
+        response &&
+        typeof response === "object" &&
+        Object.entries(response).some(
+          ([key, value]) =>
+            /^(redirect|ajaxRedirect)$/i.test(key) && typeof value === "string" && value.length > 0,
+        )
+      )
+        throw new SessionError("The site requires sign-in again");
+    }
+    const redirectedWrite = operation.effect !== "read" && res.redirectLocations.length > 0;
+    if (verifiesEffect && (!verifyEffect || !(await verifyEffect())))
+      throw new HttpError("write effect is not verified; outcome is uncertain");
+    const createdLocation =
+      redirectedWrite && !verifiesEffect
+        ? await verifiedCreatedLocation(
+            writeResponses[operation.id],
+            res.redirectLocations,
+            res.url,
+            res.body,
+            origin,
+            res.status,
+            operation,
+            values,
+            async (identity) => {
+              const policy = writeResponses[operation.id];
+              const declaration = policy?.readBack;
+              const read = declaration && operations.get(declaration.operation);
+              const evidence = policy?.inputEvidence;
+              if (
+                !declaration ||
+                read?.effect !== "read" ||
+                read.request.method !== "GET" ||
+                !read.extraction ||
+                read.extraction.itemType !== createdObjectType(operation) ||
+                !evidence
+              )
+                return false;
+              if (
+                read.session === "signed-in" &&
+                !ctx.jar.length &&
+                !Object.keys(ctx.headers).length
+              )
+                return false;
+              const bindings: Record<string, string> = {};
+              for (const [name, binding] of Object.entries(declaration.bind)) {
+                if (!read.inputs.some((p) => p.name === name)) return false;
+                const value =
+                  "identity" in binding
+                    ? identity
+                    : "input" in binding
+                      ? values[binding.input]
+                      : binding.value;
+                if (value === undefined) return false;
+                bindings[name] = value;
+              }
+              const resolved = operationValues(read, bindings);
+              // Verify identity transmission after every required input has been supplied.
+              const identityBound = Object.entries(declaration.bind).some(
+                ([name, binding]) =>
+                  "identity" in binding &&
+                  sentInputValue(read, resolved, name, origin) === identity,
+              );
+              const submitted = sentInputValue(operation, values, evidence.input, origin);
+              if (
+                !identityBound ||
+                !submitted ||
+                Object.values(resolved).some((value) => redactWith(ctx)(value) !== value)
+              )
+                return false;
+              const compiledRead = compileOperation(read, resolved, origin);
+              const target: Target = {
+                kind: "operation",
+                id: read.id,
+                label: redactWith(ctx)(read.label),
+                actionType: read.actionType,
+              };
+              const decision = await budget(
+                ctx,
+                gate.authorize({
+                  site: origin,
+                  target,
+                  effect: "read",
+                  inputs: resolved,
+                  summary: `Verify created item on ${new URL(origin).host}`,
+                  digest: approvalDigest({
+                    site: origin,
+                    modelVersion: model.version,
+                    target,
+                    effect: "read",
+                    inputs: resolved,
+                    binding: {
+                      operation: read,
+                      url: compiledRead.url.href,
+                      readBackOf: operation.id,
+                    },
+                  }),
+                }),
+              );
+              if (decision.kind !== "allow") return false;
+              const result = await runOperation(
+                ctx,
+                read,
+                resolved,
+                compiledRead,
+                undefined,
+                false,
+                {
+                  authorize: async (url) =>
+                    (
+                      await budget(
+                        ctx,
+                        gate.authorize({
+                          site: origin,
+                          target,
+                          effect: "read",
+                          inputs: resolved,
+                          summary: `Verify created item on ${new URL(origin).host}`,
+                          digest: approvalDigest({
+                            site: origin,
+                            modelVersion: model.version,
+                            target,
+                            effect: "read",
+                            inputs: resolved,
+                            binding: { operation: read, url: url.href, readBackOf: operation.id },
+                          }),
+                        }),
+                      )
+                    ).kind === "allow",
+                },
+              );
+              return (
+                result.observation.status >= 200 &&
+                result.observation.status < 300 &&
+                (await verifiedReadBackItem(
+                  read.extraction,
+                  result.responseBody,
+                  result.observation.url,
+                  identity,
+                  evidence.property,
+                  submitted,
+                  redactWith(ctx),
+                  declaration,
+                ))
+              );
+            },
+          )
+        : undefined;
+    if (redirectedWrite && !verifiesEffect && !createdLocation)
+      throw new HttpError("write redirect lacks required success evidence; outcome is uncertain");
+    const identity =
+      createdLocation && !writeResponses[operation.id]?.completionOnly
+        ? responseIdentity(createdLocation)
+        : undefined;
+    const safeIdentity =
+      identity &&
+      redactWith(ctx)(identity.url) === identity.url &&
+      redactWith(ctx)(identity.identifier) === identity.identifier
+        ? identity
+        : undefined;
+    // Only the verified single-item policy can turn a redirect into result facts.
+    const extraction =
+      operation.extraction ??
+      (safeIdentity
+        ? {
+            format: "json" as const,
+            itemType:
+              writeResponses[operation.id]?.extraction?.itemType ??
+              operations.get(writeResponses[operation.id]?.readBack?.operation ?? "")?.extraction
+                ?.itemType ??
+              endpointItemType(createdLocation ?? compiled.url.href)?.itemType ??
+              `${SCHEMA}Thing`,
+            idField: `${SCHEMA}url`,
+            fields: [
+              { property: `${SCHEMA}url`, path: "/url", datatype: "iri" },
+              { property: `${SCHEMA}identifier`, path: "/identifier" },
+            ],
+          }
+        : undefined);
+    if (!extraction) {
+      return {
+        responseBody: res.body,
+        observation: {
+          operation: operation.id,
+          status: res.status,
+          url: res.url.href,
+          ...(safeIdentity ? { createdLocation } : {}),
+        },
+        items: [],
+      };
+    }
+    const out = await extract(
+      extraction,
+      operation.extraction ? res.body : JSON.stringify(safeIdentity),
+      {
+        baseUrl: res.url.href,
+        redact: redactWith(ctx),
+      },
+    );
+    if (
+      safeIdentity &&
+      out.items.some(
+        (item) =>
+          (item.iri !== undefined && item.iri !== safeIdentity.url) ||
+          (item.values.get(`${SCHEMA}identifier`) ?? []).some(
+            (value) => value !== safeIdentity.identifier,
+          ),
+      )
+    )
+      throw new HttpError(
+        "created redirect identity conflicts with the final response; outcome is uncertain",
+      );
+    return {
+      responseBody: res.body,
+      observation: {
+        operation: operation.id,
+        status: res.status,
+        url: res.url.href,
+        ...(safeIdentity ? { createdLocation } : {}),
+        output: out,
+        inputs: { ...values },
+        compiled: {
+          ...compiled,
+          url: new URL(res.url.href),
+          body: res.requestBody,
+          // A redirected path has no template variables from the original route.
+          pathFields: res.url.pathname === compiled.url.pathname ? compiled.pathFields : [],
+        },
+      },
+      items: out.items,
+    };
+  }
+
+  function stepValues(
+    flow: Flow,
+    index: number,
+    operation: Operation,
+    inputs: Record<string, string>,
+    stepItems: ExtractedItem[][],
+    placeholders?: Set<string>,
+  ): Record<string, string> {
+    const step = flow.steps[index] as Flow["steps"][number];
+    const values: Record<string, string> = {};
+    for (const [name, spec] of Object.entries(step.bind)) {
+      const param = operation.inputs.find((p) => p.name === name);
+      if (!param) continue;
+      if (spec.startsWith("$input.")) {
+        const v = inputs[spec.slice("$input.".length)];
+        if (v !== undefined) values[name] = v;
+        continue;
+      }
+      const m = STEP_REF.exec(spec);
+      if (!m) {
+        values[name] = spec;
+        continue;
+      }
+      const n = Number(m[1]);
+      if (n >= index)
+        throw new BindingError(
+          `step ${index} binds "${name}" from step ${n}, which has not run yet`,
+        );
+      if (placeholders) {
+        values[name] = spec;
+        placeholders.add(name);
+        continue;
+      }
+      const prop = m[2] === "@id" ? "@id" : expandIri(m[2] as string);
+      const first = stepItems[n]?.[0];
+      const term = prop === "@id" ? undefined : first?.terms?.get(prop)?.[0];
+      const v = prop === "@id" ? first?.iri : (term?.value ?? first?.values.get(prop)?.[0]);
+      if (v === undefined) {
+        if (param.required) {
+          throw new BindingError(`step ${index} needs ${prop} from step ${n}, which returned none`);
+        }
+        continue;
+      }
+      // A class-ranged parameter bound to an item IRI takes the id from it, as for request values.
+      values[name] = isClassRange(param.range) && /^https?:\/\//.test(v) ? idFromIri(v) : v;
+    }
+    return values;
+  }
+
+  function flowOperations(flow: Flow): Operation[] {
+    return flow.steps.map((step, i) => {
+      const op = operations.get(step.operation);
+      if (!op)
+        throw new BindingError(`flow step ${i} references unknown operation ${step.operation}`);
+      return op;
+    });
+  }
+
+  function stepSources(flow: Flow | undefined, index: number): Record<string, string[]> {
+    const sources: Record<string, string[]> = {};
+    if (flow)
+      for (const [name, spec] of Object.entries(flow.steps[index]?.bind ?? {})) {
+        if (spec.startsWith("$input."))
+          sources[name] = flow.inputs.find((p) => p.name === spec.slice(7))?.path ?? [];
+        else {
+          const ref = STEP_REF.exec(spec);
+          if (ref) sources[name] = [expandIri(ref[2] ?? "")];
+        }
+      }
+    return sources;
+  }
+
+  function writeIdentities(
+    flow: Flow | undefined,
+    index: number,
+    op: Operation,
+    values: Record<string, string>,
+    items: ExtractedItem[][],
+    request: ActionRequest,
+  ): ItemIdentity[] {
+    return op.inputs.flatMap((p) => {
+      const v = values[p.name] ?? p.default;
+      if (v === undefined) return [];
+      const spec = flow?.steps[index]?.bind[p.name];
+      const fromInput = spec?.startsWith("$input.")
+        ? flow?.inputs.find((input) => input.name === spec.slice(7))
+        : undefined;
+      const ref = spec ? STEP_REF.exec(spec) : undefined;
+      let original: ItemIdentity[] = [];
+      if (fromInput) original = inputIdentities(fromInput.path, v, request);
+      else if (ref) {
+        const property = ref[2] === "@id" ? "@id" : expandIri(ref[2] ?? "");
+        const item = items[Number(ref[1])]?.[0];
+        const raw = property === "@id" ? item?.iri : item?.values.get(property)?.[0];
+        original = inputIdentities([property], raw);
+      } else if (!flow) original = inputIdentities(p.path, v, request);
+      const mapped = inputIdentities(p.path, v);
+      const concrete = mapped.filter((id) => id.type !== "fallback");
+      return original.length ? [...concrete, ...original] : mapped;
+    });
+  }
+
+  function operationValues(op: Operation, values: Record<string, string>): Record<string, string> {
+    return Object.fromEntries(
+      op.inputs.flatMap((p) => {
+        const v = values[p.name] ?? p.default;
+        return v === undefined ? [] : [[p.name, v]];
+      }),
+    );
+  }
+
+  function authorizationInputs(
+    inputs: Record<string, string>,
+    resolved: Record<string, string>,
+    index: number,
+    flow?: Flow,
+  ): Record<string, string> {
+    return flow
+      ? {
+          ...inputs,
+          ...Object.fromEntries(
+            Object.entries(inputs).map(([name, value]) => [`$input.${name}`, value]),
+          ),
+          ...resolved,
+          [STEP_INDEX_KEY]: String(index),
+        }
+      : { ...resolved };
+  }
+
+  async function execute(
+    request: ActionRequest,
+    opts: ExecuteOptions = {},
+  ): Promise<ExecutionResult> {
+    // A planner implementation may return mutable arrays: snapshot each lookup.
+    const original = request;
+    const lookups = new Map<string, string[]>();
+    const termLookups = new Map<string, ReturnType<typeof actionRequestTerms>>();
+    request = {
+      node: original.node,
+      types: [...original.types],
+      ...{
+        terms: (path: string[]) => {
+          const key = JSON.stringify(path);
+          if (!termLookups.has(key)) {
+            const terms = actionRequestTerms(original, path);
+            termLookups.set(key, terms ? [...terms] : undefined);
+          }
+          return termLookups.get(key);
+        },
+      },
+      values(path) {
+        const key = JSON.stringify(path);
+        if (!lookups.has(key)) lookups.set(key, [...original.values(path)]);
+        return [...(lookups.get(key) ?? [])];
+      },
+    };
+    const ctx: RunContext = {
+      jar: [],
+      headers: {},
+      requests: 0,
+      secrets: options.credentialContext?.secrets ?? new Set(),
+      controller: new AbortController(),
+      deadline: performance.now() + maxExecutionMs,
+    };
+    let target: Target | undefined;
+    let effect: EffectClass = "read";
+    let progress: Progress = {
+      index: 0,
+      observations: [],
+      stepItems: [],
+      secrets: ctx.secrets,
+      requests: 0,
+      spent: "0",
+      committed: [],
+    };
+    const observations = async (): Promise<Observation[]> =>
+      Promise.all(
+        progress.observations.map(async (record) => ({
+          operation: record.operation,
+          status: record.status,
+          turtle: record.output ? await record.output.render(redactWith(ctx)) : await emptyTurtle(),
+          itemCount: record.output?.items.length ?? 0,
+        })),
+      );
+    const safeTarget = (value: Target): Target => ({
+      ...value,
+      id: redactWith(ctx)(value.id),
+      label: redactWith(ctx)(value.label),
+      actionType: redactWith(ctx)(value.actionType),
+    });
+    const committed = (): CommittedWrite[] =>
+      progress.committed.map((entry) => ({ ...entry, target: safeTarget(entry.target) }));
+    const finish = async (
+      result: Omit<ExecutionResult, "observations" | "requests" | "committed">,
+    ): Promise<ExecutionResult> => {
+      const redact = redactWith(ctx);
+      const receipt = (status: ExecutionOutcome["status"]): ExecutionOutcome | undefined => {
+        if (!target || effect === "read") return undefined;
+        const money =
+          status === "completed" && progress.currency !== undefined
+            ? { amount: progress.spent, currency: progress.currency }
+            : progress.authorizedMoney;
+        const last = progress.observations.at(-1);
+        const candidate = last?.output?.items[0]?.iri ?? last?.createdLocation;
+        let resultIri: string | undefined;
+        if (status === "completed" && candidate && redact(candidate) === candidate) {
+          const url = new URL(candidate);
+          // Never promote an off-origin identity, query string or secret to a receipt.
+          if (url.origin === origin && !url.search && !url.hash && !url.username && !url.password)
+            resultIri = url.href;
+        }
+        return {
+          status,
+          target: redact(target.label),
+          effect,
+          ...(money?.amount !== undefined && redact(money.amount) === money.amount
+            ? { amount: money.amount }
+            : {}),
+          ...(money?.currency !== undefined && redact(money.currency) === money.currency
+            ? { currency: money.currency }
+            : {}),
+          ...(resultIri ? { result: resultIri } : {}),
+        };
+      };
+      const outcome = ["done", "error", "refused", "denied"].includes(result.status)
+        ? receipt(
+            result.status === "done"
+              ? "completed"
+              : progress.committed.length || ctx.baselineUnverified
+                ? "uncertain"
+                : "failed",
+          )
+        : undefined;
+      const withOutcome = (
+        observations: Observation[],
+        outcome?: ExecutionOutcome,
+      ): Observation[] =>
+        outcome && target
+          ? [
+              {
+                operation: target.id,
+                status: progress.observations.at(-1)?.status ?? 0,
+                turtle: outcomeTurtle(outcome, observations.at(-1)?.turtle),
+                itemCount: outcome.result ? 1 : 0,
+              },
+              ...observations,
+            ]
+          : observations;
+      try {
+        return {
+          ...result,
+          ...(target ? { target: safeTarget(target) } : {}),
+          ...(outcome ? { outcome } : {}),
+          observations: withOutcome(await observations(), outcome),
+          requests: ctx.requests,
+          committed: committed(),
+          ...(result.error ? { error: redactWith(ctx)(result.error) } : {}),
+        };
+      } catch {
+        const failed = receipt(
+          progress.committed.length || ctx.baselineUnverified ? "uncertain" : "failed",
+        );
+        return {
+          status: "error",
+          ...(target ? { target: safeTarget(target) } : {}),
+          ...(failed ? { outcome: failed } : {}),
+          observations: withOutcome([], failed),
+          requests: ctx.requests,
+          committed: committed(),
+          error: "observation output limit exceeded",
+          errorKind: "extraction",
+        };
+      }
+    };
+    const fail = (error: unknown, prefix = ""): Promise<ExecutionResult> =>
+      finish({
+        status:
+          error instanceof MoneyRefusal || error instanceof SelectionRefusal ? "refused" : "error",
+        error: prefix + (error instanceof Error ? error.message : "unexpected failure"),
+        errorKind: errorKind(error),
+      });
+    const timer = setTimeout(() => ctx.controller.abort(), maxExecutionMs);
+    let claimed: string | undefined;
+    let pending: Pending | undefined;
+    try {
+      const match = matchRequest(model, request);
+      if (match.kind === "no-path")
+        return await finish({ status: "no-path", missing: match.missing });
+      if (match.kind === "ambiguous")
+        return await finish({ status: "ambiguous", candidates: match.candidates });
+      const { flow, operation, inputs } = match;
+      target = match.target;
+      const steps = flow ? flowOperations(flow) : [operation as Operation];
+      effect = effectiveEffect(model, flow, operation, steps);
+      const claims = moneyFields(request);
+      const key = approvalDigest({
+        site: origin,
+        modelVersion: model.version,
+        target,
+        effect: effectiveEffect(model, flow, operation, steps),
+        inputs,
+        binding: {
+          all: requestsAll(request),
+          objectNames: request.values([`${SCHEMA}object`, `${SCHEMA}name`]),
+        },
+        ...claims,
+        ...(persona !== undefined ? { persona } : {}),
+      });
+      // Claim before the first await; a continuation can never run concurrently.
+      if (opts.approvalId !== undefined && issued.get(opts.approvalId)?.key === key) {
+        claimed = opts.approvalId;
+        pending = issued.get(claimed);
+        issued.delete(claimed);
+        progress = pending?.progress ?? progress;
+        ctx.secrets = progress.secrets;
+        ctx.requests = progress.requests;
+      }
+      let bundle: SessionBundle | undefined;
+      try {
+        bundle = await budget(ctx, sessions.get(origin, persona));
+      } catch (error) {
+        if (error instanceof LimitError) throw error;
+        throw new SessionError("session store unavailable");
+      }
+      ctx.revision = bundle?.revision;
+      ctx.jar = bundle?.cookies.map((c) => ({ ...c })) ?? [];
+      ctx.credentialCookies = [
+        ...new Set([
+          ...(bundle?.credentialCookies ?? []),
+          ...(model.login?.flatMap((route) => route.sessionCookies ?? []) ?? []),
+        ]),
+      ];
+      ctx.headers = { ...(bundle?.headers ?? {}) };
+      if (bundle?.headers) ctx.storedHeaders = { ...bundle.headers };
+      addSecrets(ctx);
+      for (const k of Object.keys(ctx.headers))
+        if (isForbiddenHeader(k) && k.toLowerCase() !== "authorization") delete ctx.headers[k];
+      for (const operation of model.operations)
+        checkModelHeaders(operation, Object.keys(ctx.headers));
+      const signedIn = ctx.jar.length > 0 || Object.keys(ctx.headers).length > 0;
+      if (!signedIn && steps.some((op) => op.session === "signed-in"))
+        throw new SessionError(`not signed in to ${new URL(origin).host}`);
+      const sessionTarget = target;
+      const sessionFingerprint = (metadata = true) =>
+        approvalDigest({
+          site: origin,
+          modelVersion: model.version,
+          target: sessionTarget,
+          effect: "read",
+          inputs: {},
+          binding: {
+            cookies: metadata
+              ? ctx.jar
+              : ctx.jar
+                  .map(({ expires: _expires, ...cookie }) => cookie)
+                  .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+            headers: ctx.headers,
+            ...(metadata ? { revision: ctx.revision } : {}),
+          },
+        });
+      // Check the exact stored session before any revalidation. Executor-owned reads
+      // may renew expiry metadata/revisions without changing any cookie credentials.
+      // A different vault revision at entry, or any credential/attribute change during
+      // those reads, still requires a fresh approval.
+      const resumingSession = pending?.session?.state === sessionFingerprint();
+      const selectionReads = new Set(
+        flow ? steps.flatMap((_op, i) => selectionSources(flow, i, steps).map((s) => s.step)) : [],
+      );
+      const proveSelection = async (
+        index: number,
+        read: Operation,
+        values: Record<string, string>,
+        record: ObservationRecord,
+      ): Promise<void> => {
+        if (!selectionReads.has(index) || !record.output || record.output.total !== undefined)
+          return;
+        const next = nextSelectionPage(read, values, record.output.items.length);
+        if (!next) return; // resolveSelection reports unknown completeness.
+        const compiled = compileOperation(read, operationValues(read, next), origin);
+        const probeRequest: GateRequest = {
+          site: origin,
+          target: sessionTarget,
+          effect: "read",
+          inputs: next,
+          summary: summarise(request, sessionTarget, origin, {}, redactWith(ctx)),
+          digest: approvalDigest({
+            site: origin,
+            modelVersion: model.version,
+            target: sessionTarget,
+            effect: "read",
+            inputs: next,
+            binding: {
+              operation: read,
+              url: compiled.url.href,
+              session: sessionFingerprint(),
+              selectionProbe: true,
+            },
+          }),
+        };
+        const decision = await budget(ctx, gate.authorize(structuredClone(probeRequest)));
+        if (decision.kind !== "allow")
+          throw new SelectionRefusal(
+            "selection completeness unknown: next-page probe was not authorized",
+          );
+        const before = sessionFingerprint(false);
+        let probe: Awaited<ReturnType<typeof runOperation>>;
+        try {
+          probe = await runOperation(ctx, read, next, compiled);
+        } catch {
+          throw new SelectionRefusal("selection completeness unknown: next-page probe failed");
+        }
+        record.selectionComplete =
+          before === sessionFingerprint(false) &&
+          probe.observation.status >= 200 &&
+          probe.observation.status < 300 &&
+          probe.observation.output?.collectionState === "empty" &&
+          record.output.envelopeKeys !== undefined &&
+          probe.observation.output.envelopeKeys !== undefined &&
+          JSON.stringify(
+            record.output.envelopeKeys.map((keys) =>
+              keys.filter(
+                (key) =>
+                  !read.inputs.some(
+                    (p) => pagingKind(p.name) && decodeURIComponent(p.name) === key,
+                  ),
+              ),
+            ),
+          ) ===
+            JSON.stringify(
+              probe.observation.output.envelopeKeys.map((keys) =>
+                keys.filter(
+                  (key) =>
+                    !read.inputs.some(
+                      (p) => pagingKind(p.name) && decodeURIComponent(p.name) === key,
+                    ),
+                ),
+              ),
+            ) &&
+          probe.items.length === 0 &&
+          !!probe.observation.output &&
+          !probe.observation.output.truncation.items &&
+          !probe.observation.output.truncation.values;
+      };
+      // Revalidate the fact source, never replay a completed write. Recompiling
+      // below binds any changed money, item identity or concrete inputs anew.
+      if (flow && pending) {
+        const revalidate = [
+          ...new Set([
+            ...(pending.evidence?.revalidate ?? []),
+            ...(pending.selection?.revalidate ?? []),
+          ]),
+        ].sort((a, b) => a - b);
+        for (const n of revalidate) {
+          const read = steps[n] as Operation;
+          const values = operationValues(
+            read,
+            stepValues(flow, n, read, inputs, progress.stepItems),
+          );
+          const compiled = compileOperation(read, values, origin);
+          const gateInputs = authorizationInputs(inputs, values, n, flow);
+          const readRequest: GateRequest = {
+            site: origin,
+            target,
+            effect: "read",
+            inputs: gateInputs,
+            summary: summarise(request, target, origin, {}, redactWith(ctx)),
+            digest: approvalDigest({
+              site: origin,
+              modelVersion: model.version,
+              target,
+              effect: "read",
+              inputs: gateInputs,
+              ...(persona !== undefined ? { persona } : {}),
+              binding: {
+                key,
+                index: n,
+                operation: read,
+                url: compiled.url.href,
+                headers: compiled.headers,
+                body: compiled.body,
+                session: approvalDigest({
+                  site: origin,
+                  modelVersion: model.version,
+                  target,
+                  effect: "read",
+                  inputs: {},
+                  binding: { cookies: ctx.jar, headers: ctx.headers, revision: ctx.revision },
+                }),
+              },
+            }),
+          };
+          let decision: Awaited<ReturnType<Gate["authorize"]>>;
+          try {
+            decision = await budget(ctx, gate.authorize(structuredClone(readRequest)));
+          } catch (error) {
+            if (claimed) issued.set(claimed, pending);
+            if (error instanceof LimitError) throw error;
+            return await finish({
+              status: "error",
+              error: "the approval gate failed",
+              errorKind: "gate",
+            });
+          }
+          if (decision.kind !== "allow")
+            return await finish({
+              status: "denied",
+              error: "evidence revalidation read was not authorized",
+            });
+          const out = await runOperation(ctx, read, values, compiled);
+          await proveSelection(n, read, values, out.observation);
+          progress.stepItems[n] = out.items;
+          progress.observations[n] = out.observation;
+          progress.requests = ctx.requests;
+        }
+      }
+      for (let i = progress.index; i < steps.length; i++) {
+        const op = steps[i] as Operation;
+        try {
+          checkDeadline(ctx);
+          const selection = flow
+            ? resolveSelection(
+                selectionSources(flow, i, steps),
+                progress.observations,
+                progress.stepItems,
+                request,
+              )
+            : undefined;
+          if (
+            pending?.selection &&
+            selection &&
+            JSON.stringify(pending.selection.identities) !== JSON.stringify(selection.identities)
+          )
+            throw new SelectionRefusal("selection changed since approval; request a new action");
+          const values = flow ? stepValues(flow, i, op, inputs, progress.stepItems) : inputs;
+          const resolved = operationValues(op, values);
+          if (flow && selection)
+            for (const source of selectionSources(flow, i, steps))
+              for (const [writeName, readName] of Object.entries(source.filters))
+                if (resolved[writeName] !== progress.observations[source.step]?.inputs?.[readName])
+                  throw new SelectionRefusal("selection read and write filter values differ");
+          const compiled = compileOperation(op, resolved, origin);
+          if (flow && selection)
+            for (const source of selectionSources(flow, i, steps))
+              assertSelectionFilters(
+                progress.observations[source.step]?.compiled,
+                compiled,
+                steps[source.step] as Operation,
+                op,
+              );
+          const sources = stepSources(flow, i);
+          // Only strongest-effect steps inherit a stronger declared flow effect.
+          // Preparatory writes keep their own class; every payment gate requires evidence.
+          const ownEffect = normaliseEffect(op.effect);
+          const strongest = steps.reduce<EffectClass>(
+            (effect, step) => maxEffect(effect, step.effect),
+            "read",
+          );
+          const effect =
+            ownEffect === "read"
+              ? "read"
+              : flow && ownEffect === strongest
+                ? maxEffect(ownEffect, effectiveEffect(model, flow, undefined, steps))
+                : ownEffect;
+          const fingerprint =
+            normaliseEffect(op.effect) !== "read" ? requestFingerprint(compiled) : undefined;
+          if (fingerprint && opts.excludeFingerprints?.includes(fingerprint))
+            return await finish({
+              status: "refused",
+              errorKind: "repeat",
+              error: "already done in this task; ask the person if they really want another",
+            });
+          let evidence: MoneyEvidence | undefined;
+          const payment = effect === "payment";
+          // Rule W checks the final request, including tokens. Fingerprints retain
+          // their established pre-decoration semantics for repeat protection.
+          if (payment) {
+            if (compiled.csrf.some((rule) => rule.source.kind !== "cookie")) {
+              // These preparatory reads now precede payment consent, so authorize
+              // them as reads before acquiring any token from the site.
+              const tokenRead: GateRequest = {
+                site: origin,
+                target,
+                effect: "read",
+                inputs: {},
+                summary: `Read payment token on ${new URL(origin).host}`,
+                digest: approvalDigest({
+                  site: origin,
+                  modelVersion: model.version,
+                  target,
+                  effect: "read",
+                  inputs: resolved,
+                  binding: { csrf: compiled.csrf, index: i },
+                }),
+              };
+              let decision: Awaited<ReturnType<Gate["authorize"]>>;
+              try {
+                decision = await budget(ctx, gate.authorize(structuredClone(tokenRead)));
+              } catch (error) {
+                if (error instanceof LimitError) throw error;
+                return await finish({
+                  status: "error",
+                  error: "the approval gate failed",
+                  errorKind: "gate",
+                });
+              }
+              if (decision.kind !== "allow")
+                return await finish({
+                  status: "denied",
+                  error: "payment token read was not authorized",
+                });
+            }
+            await prepareCsrf(ctx, compiled, resolved, true);
+          }
+          if (flow && normaliseEffect(op.effect) !== "read") {
+            const lastWrite = steps
+              .slice(0, i)
+              .findLastIndex((step) => normaliseEffect(step.effect) !== "read");
+            // Earlier write approvals can show a product quote. Only payment requires
+            // evidence; after any preceding write that evidence must be a fresh total.
+            const current: MoneyWrite = {
+              step: i,
+              operation: op,
+              values: resolved,
+              sources,
+              compiled,
+              identities: writeIdentities(flow, i, op, resolved, progress.stepItems, request),
+            };
+            if (
+              payment ||
+              (steps.slice(i + 1).some((step) => normaliseEffect(step.effect) === "payment") &&
+                lastWrite < 0 &&
+                current.identities?.length)
+            )
+              evidence = factsMoney(
+                origin,
+                progress.observations.flatMap((record, n) => {
+                  const read = steps[n] as Operation;
+                  return normaliseEffect(read.effect) === "read"
+                    ? [
+                        {
+                          step: n,
+                          operation: read,
+                          url: record.url,
+                          items: progress.stepItems[n] ?? [],
+                          values: record.inputs,
+                          sources: stepSources(flow, n),
+                          truncation: record.output?.truncation,
+                          compiled: record.compiled,
+                        },
+                      ]
+                    : [];
+                }),
+                [current],
+                lastWrite,
+                request,
+              );
+          }
+          const money = resolvedMoney(request, op, resolved, sources, compiled, evidence);
+          if (payment && (!evidence || money.amount === undefined || money.currency === undefined))
+            throw new MoneyRefusal("payment needs trusted site price evidence");
+          // The host's spending limit sees the cumulative charge in this flow.
+          if (
+            money.currency !== undefined &&
+            progress.currency !== undefined &&
+            progress.currency !== money.currency
+          )
+            throw new BindingError("flow payments use different currencies");
+          const total =
+            money.amount !== undefined && payment
+              ? addAmounts(progress.spent, money.amount)
+              : undefined;
+          const authorizedMoney = total !== undefined ? { ...money, amount: total } : money;
+          if (evidence && authorizedMoney.amount !== undefined)
+            assertFactsCap(claims, { amount: authorizedMoney.amount, currency: evidence.currency });
+          const gateInputs = authorizationInputs(inputs, resolved, i, flow);
+          // A witness is evidence rather than a wire field. Bind its canonical first
+          // identity as well as the full set, independent of grid response ordering.
+          if (flow && selection)
+            selectionWitnesses(op).forEach((witness, n) => {
+              const source = selectionSources(flow, i, steps)[n];
+              if (source)
+                gateInputs[witness.name] =
+                  progress.stepItems[source.step]
+                    ?.flatMap((item) => item.values.get(source.property) ?? [])
+                    .sort()[0] ?? "";
+            });
+          const state = sessionFingerprint();
+          const credentials = sessionFingerprint(false);
+          const session = {
+            state,
+            credentials,
+            binding:
+              resumingSession &&
+              pending?.session?.credentials === credentials &&
+              !ctx.persistRejected
+                ? pending.session.binding
+                : state,
+          };
+          const digest = approvalDigest({
+            site: origin,
+            modelVersion: model.version,
+            target,
+            effect,
+            inputs: gateInputs,
+            ...authorizedMoney,
+            ...(persona !== undefined ? { persona } : {}),
+            binding: {
+              key,
+              index: i,
+              operation: op,
+              url: compiled.url.href,
+              headers: compiled.headers,
+              body: compiled.body,
+              responsePolicy: writeResponses[op.id],
+              ...(evidence ? { evidence } : {}),
+              ...(selection ? { selection } : {}),
+              session: session.binding,
+            },
+          });
+          const approvalId =
+            claimed !== undefined && pending?.digest === digest ? claimed : undefined;
+          const boundItems = flow
+            ? Object.values(flow.steps[i]?.bind ?? {}).flatMap((spec) => {
+                const ref = STEP_REF.exec(spec);
+                if (!ref) return [];
+                const items = progress.stepItems[Number(ref[1])] ?? [];
+                return selection ? items : items.slice(0, 1);
+              })
+            : [];
+          const objectNames = request.values([`${SCHEMA}object`, `${SCHEMA}name`]);
+          if (
+            effect !== "read" &&
+            objectNames.length &&
+            boundItems.some((item) =>
+              (item.values.get(`${SCHEMA}name`) ?? []).some((name) =>
+                objectNames.some((supplied) => supplied !== name),
+              ),
+            )
+          )
+            throw new SelectionRefusal(
+              "planner-supplied name conflicts with trusted resolved identity name",
+            );
+          const identifiers = effectiveWireFields(compiled)
+            .filter(
+              (field) =>
+                !field.sessionToken &&
+                (field.location === "path" ||
+                  /(?:^|[/_[])(?:ids?|sku|identifier|productID|orderNumber)(?:\]|$)/i.test(
+                    field.name,
+                  ) ||
+                  op.inputs.some(
+                    (p) =>
+                      resolved[p.name] === field.value &&
+                      (p.path.some((iri) =>
+                        /(?:identifier|sku|productID|orderNumber)$/.test(iri),
+                      ) ||
+                        (p.path.at(-1) === `${SCHEMA}object` && isClassRange(p.range))),
+                  )) &&
+                !compiled.csrf.some((rule) => field.name === csrfFieldName(compiled, rule)),
+            )
+            .map((field): [string, string] => [field.name.replace(/^\//, ""), field.value]);
+          const gateRequest: GateRequest = {
+            site: origin,
+            target,
+            effect,
+            inputs: gateInputs,
+            ...authorizedMoney,
+            summary: summarise(request, target, origin, authorizedMoney, redactWith(ctx), {
+              inputs: resolved,
+              operation: op,
+              identifiers,
+              selection: Boolean(selection),
+              ...(selection ? { targets: selection.targets } : {}),
+              names:
+                selection?.names ??
+                (flow
+                  ? Object.values(flow.steps[i]?.bind ?? {}).flatMap((spec) => {
+                      const ref = STEP_REF.exec(spec);
+                      const item = ref ? progress.stepItems[Number(ref[1])]?.[0] : undefined;
+                      const name = item ? itemName(item) : undefined;
+                      return name ? [name] : [];
+                    })
+                  : []),
+            }),
+            digest,
+            ...(approvalId !== undefined ? { approvalId } : {}),
+          };
+          let decision: Awaited<ReturnType<Gate["authorize"]>>;
+          try {
+            decision = await budget(ctx, gate.authorize(structuredClone(gateRequest)));
+          } catch (error) {
+            if (claimed && pending) issued.set(claimed, pending);
+            if (error instanceof LimitError) throw error;
+            return await finish({
+              status: "error",
+              error: "the approval gate failed",
+              errorKind: "gate",
+            });
+          }
+          checkDeadline(ctx);
+          if (decision.kind === "deny")
+            return await finish({ status: "denied", error: decision.reason });
+          if (decision.kind === "ask") {
+            const prior = issued.get(decision.approval.id);
+            if (prior && prior.digest !== digest)
+              return await finish({
+                status: "error",
+                error: "the gate reused an approval id for a different request",
+                errorKind: "gate",
+              });
+            // No credentials may appear in a gate's returned display or fields.
+            if (
+              [
+                ...Object.values(gateInputs),
+                decision.approval.id,
+                authorizedMoney.amount ?? "",
+                authorizedMoney.currency ?? "",
+              ].some((value) => redactWith(ctx)(value) !== value)
+            )
+              throw new BindingError("secret value cannot be exposed for approval");
+            progress.index = i;
+            progress.requests = ctx.requests;
+            issued.set(decision.approval.id, {
+              key,
+              digest,
+              progress,
+              session,
+              ...(evidence ? { evidence } : {}),
+              ...(selection ? { selection } : {}),
+            });
+            const approval: ApprovalRequest = {
+              id: decision.approval.id,
+              effect,
+              site: origin,
+              target: safeTarget(target),
+              inputs: { ...gateInputs },
+              digest,
+              summary: redactWith(ctx)(gateRequest.summary),
+              ...authorizedMoney,
+            };
+            return await finish({ status: "needs-approval", approval });
+          }
+          if (decision.kind !== "allow")
+            return await finish({
+              status: "error",
+              error: "invalid approval gate decision",
+              errorKind: "gate",
+            });
+          claimed = undefined;
+          pending = undefined;
+          if (normaliseEffect(op.effect) !== "read")
+            progress.authorizedMoney = {
+              ...progress.authorizedMoney,
+              ...(authorizedMoney.amount !== undefined ? { amount: authorizedMoney.amount } : {}),
+              ...(authorizedMoney.currency !== undefined
+                ? { currency: authorizedMoney.currency }
+                : {}),
+            };
+          const out = await runOperation(
+            ctx,
+            op,
+            resolved,
+            compiled,
+            fingerprint
+              ? () => {
+                  progress.committed.push({
+                    target: {
+                      kind: "operation",
+                      id: op.id,
+                      label: op.label,
+                      actionType: op.actionType,
+                    },
+                    fingerprint,
+                  });
+                }
+              : undefined,
+            payment,
+          );
+          checkDeadline(ctx);
+          await proveSelection(i, op, resolved, out.observation);
+          progress.observations.push(out.observation);
+          progress.stepItems.push(out.items);
+          progress.index = i + 1;
+          if (payment) {
+            progress.spent = total as string;
+            progress.currency = money.currency;
+          }
+        } catch (error) {
+          return await fail(error, flow ? `step ${i} (${op.label}) failed: ` : "");
+        }
+      }
+      return await finish({ status: "done" });
+    } catch (error) {
+      return await fail(error);
+    } finally {
+      clearTimeout(timer);
+      ctx.controller.abort();
+    }
+  }
+
+  function planToRequests(request: ActionRequest): Plan {
+    let match: ReturnType<typeof matchRequest>;
+    try {
+      match = matchRequest(model, request);
+    } catch (error) {
+      return {
+        status: "error",
+        requests: [],
+        error: error instanceof Error ? error.message : "invalid request",
+      };
+    }
+    if (match.kind === "no-path")
+      return { status: "no-path", requests: [], missing: match.missing };
+    if (match.kind === "ambiguous")
+      return { status: "ambiguous", requests: [], candidates: match.candidates };
+    const { target, flow, operation, inputs } = match;
+    const requests: PlannedRequest[] = [];
+    const plan = (
+      op: Operation,
+      values: Record<string, string>,
+      placeholders?: Set<string>,
+    ): void => {
+      const compiled = compileOperation(op, values, origin, placeholders ? { placeholders } : {});
+      const body = bodyText(compiled.body);
+      requests.push({
+        operation: op.id,
+        label: op.label,
+        ...(normaliseEffect(op.effect) !== "read" && !placeholders?.size
+          ? { fingerprint: requestFingerprint(compiled) }
+          : {}),
+        method: compiled.method,
+        url: compiled.url.href,
+        headers: { ...compiled.headers },
+        ...(body !== undefined ? { body } : {}),
+        session: op.session === "signed-in",
+        csrf: compiled.csrf.map(describeRule),
+      });
+    };
+    try {
+      const effect = effectiveEffect(model, flow, operation);
+      const money = moneyFields(request);
+      if (operation) {
+        plan(operation, inputs);
+      } else {
+        const f = flow as Flow;
+        flowOperations(f).forEach((op, i) => {
+          const placeholders = new Set<string>();
+          plan(op, stepValues(f, i, op, inputs, [], placeholders), placeholders);
+        });
+      }
+      return {
+        status: "planned",
+        target,
+        effect,
+        summary: summarise(request, target, origin, money),
+        requests,
+      };
+    } catch (e) {
+      return {
+        status: "error",
+        target,
+        requests,
+        error: e instanceof Error ? e.message : "unexpected failure",
+      };
+    }
+  }
+
+  return { model, execute, planToRequests };
+}
+
+/** Standalone dry run over a model (no session, no gate, nothing sent). */
+export function planToRequests(model: SiteModel, request: ActionRequest): Plan {
+  return createExecutor({
+    model,
+    sessions: { get: async () => undefined, update: async () => {} },
+  }).planToRequests(request);
+}

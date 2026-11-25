@@ -166,6 +166,10 @@ function installChrome(): void {
   fetchCalls = [];
   createdWindows = [];
   registrations = new Map();
+  const tabUpdateListeners: (typeof updatedTab)[] = [];
+  updatedTab = (tabId, change) => {
+    for (const listener of tabUpdateListeners) listener(tabId, change);
+  };
 
   const chromeStub = {
     scripting: {
@@ -192,7 +196,14 @@ function installChrome(): void {
       getURL: (p: string) => `chrome-extension://${EXTENSION_ID}/${p}`,
       onMessage: { addListener: (fn: MessageListener) => messageListeners.push(fn) },
       onInstalled: { addListener: (_fn: () => void) => {} },
+      onStartup: { addListener: () => {} },
+      onConnect: { addListener: () => {} },
       sendMessage: (_m: unknown, _cb?: (r: unknown) => void) => Promise.resolve(),
+    },
+    permissions: {
+      remove: async () => true,
+      onAdded: { addListener: () => {} },
+      onRemoved: { addListener: () => {} },
     },
     storage: {
       local: {
@@ -210,6 +221,7 @@ function installChrome(): void {
       },
     },
     tabs: {
+      onActivated: { addListener: () => {} },
       query: async () => [],
       sendMessage: async () => {},
       onRemoved: {
@@ -220,7 +232,7 @@ function installChrome(): void {
       },
       onUpdated: {
         addListener: (fn: typeof updatedTab) => {
-          updatedTab = fn;
+          tabUpdateListeners.push(fn);
         },
         removeListener: () => {},
       },
@@ -239,6 +251,7 @@ function installChrome(): void {
     sidePanel: { setPanelBehavior: async () => {}, open: async () => {} },
     identity: { launchWebAuthFlow: async () => '' },
     windows: {
+      onFocusChanged: { addListener: () => {} },
       create: (opts: { url: string }, cb?: (w: unknown) => void) => {
         createdWindows.push(opts.url);
         cb?.({ id: createdWindows.length });
