@@ -79,6 +79,8 @@ export function putTransaction(document: MoneyDocument, value: Transaction): voi
   const node = document.node(value.id);
   if (node.types.has(V.transferClass))
     throw new TypeError("Transfer legs must be changed together");
+  // Links that could not be read are not in the snapshot; refuse rather than erase them.
+  document.assertLinksReadable(node, node);
   writeCore(document, value.id, "Transaction", entities.Transaction.build(value.id, value));
   node.postingTime = value.postingTime;
   node.amountNode = putMoney(document, value.id, value);

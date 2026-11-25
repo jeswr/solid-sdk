@@ -7,11 +7,19 @@ import { DataFactory, Store } from "n3";
 import { entities } from "./generated/model.js";
 import { categoryTree } from "./helpers.js";
 import { migrateMoney } from "./migration.js";
-import { MoneyNode, rdfAmount } from "./node.js";
+import { MoneyNode, rdfAmount, singleValue } from "./node.js";
 import { optionalLinks, required } from "./records.js";
 import type { Account, Balance, Category, Money, Transaction } from "./types.js";
 import { instant, validateMoney, validateTransaction } from "./validation.js";
 import { V } from "./vocab.js";
+
+const OPTIONAL_LINKS = [
+  "category",
+  "payee",
+  "derivedFrom",
+  "debitAccount",
+  "creditAccount",
+] as const;
 
 export class MoneyDocument {
   readonly dataset: DatasetCore;
@@ -68,9 +76,7 @@ export class MoneyDocument {
     const amount = this.node(required(node.amountNode));
     // Pod Money's previous fin:amount/fin:currency remain readable.
     const value = {
-      amount: required(
-        amount.amount ?? OptionalFrom.subjectPredicate(amount, `${NS.FINANCE}amount`, rdfAmount),
-      ),
+      amount: required(amount.amount ?? singleValue(amount, `${NS.FINANCE}amount`, rdfAmount)),
       currency: required(
         this.dataset.match(TermAs.term(amount), DataFactory.namedNode(V.currency)).size
           ? amount.currency
@@ -110,6 +116,7 @@ export class MoneyDocument {
         entities.CardPayment,
       ].find((entity) => node.types.has(entity.typeIri));
       const core = required(required(entity).parse(node.value, this.dataset));
+      this.assertLinksReadable(node, core);
       const result: Transaction = {
         id: node.value,
         account: core.account,
@@ -121,6 +128,15 @@ export class MoneyDocument {
       validateTransaction(result);
       return result;
     });
+  }
+  /** A present optional link that does not project would be erased by the next save. */
+  assertLinksReadable(node: MoneyNode, core: Partial<Transaction>): void {
+    for (const key of OPTIONAL_LINKS)
+      if (
+        core[key] === undefined &&
+        this.dataset.match(TermAs.term(node), DataFactory.namedNode(V[key])).size
+      )
+        throw new TypeError("Invalid transaction link");
   }
   categories(): Category[] {
     const categories = this.nodes(V.categoryClass).map((node) => {

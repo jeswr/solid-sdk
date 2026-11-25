@@ -12,7 +12,7 @@ import {
   serialiseMoney,
   V,
 } from "../src/index.js";
-import { account, balance, base, row } from "./money-model-fixtures.js";
+import { account, base, row } from "./money-model-fixtures.js";
 
 it.each([
   '"Current"@en',
@@ -41,15 +41,73 @@ it.each([
   expect(document.transactions()[0]?.description).toBe("Transaction");
 });
 
-it("drops malformed optional transaction IRI fields instead of selecting the first", async () => {
+it.each([
+  [V.category, '"not an IRI"'],
+  [V.payee, "<#one>, <#two>"],
+  [V.derivedFrom, "<#one>, <#two>"],
+  [V.debitAccount, '"x"'],
+  [V.creditAccount, "<#one>, <#two>"],
+])("rejects an unprojectable optional transaction link %s instead of dropping it", async (predicate, value) => {
+  const document = new MoneyDocument();
+  putTransaction(document, row);
+  const extra = await parseMoney(`<${row.id}> <${predicate}> ${value} .`, base);
+  for (const quad of extra.dataset) document.dataset.add(quad);
+  expect(() => document.transactions()).toThrow("Invalid transaction link");
+});
+
+it("keeps every statement of an ambiguous link through a load-edit-save cycle", async () => {
   const document = new MoneyDocument();
   putTransaction(document, row);
   const extra = await parseMoney(
-    `<${row.id}> <${V.category}> "not an IRI"; <${V.payee}> <#one>, <#two> .`,
+    `<${row.id}> <${V.derivedFrom}> <#one>, <#two>; <${V.category}> "not an IRI" .`,
     base,
   );
   for (const quad of extra.dataset) document.dataset.add(quad);
-  expect(document.transactions()).toEqual([row]);
+  const loaded = await parseMoney(await serialiseMoney(document), base);
+  // The record cannot be read, so the app has no snapshot to edit and save.
+  expect(() => loaded.transactions()).toThrow("Invalid transaction link");
+  // A save from a snapshot built elsewhere must refuse rather than erase what could not be read.
+  expect(() => putTransaction(loaded, { ...row, description: "Edited" })).toThrow(
+    "Invalid transaction link",
+  );
+  const saved = await serialiseMoney(loaded);
+  expect(saved).toContain("#one");
+  expect(saved).toContain("#two");
+  expect(saved).toContain("not an IRI");
+  expect(saved).toContain(row.description);
+});
+
+it.each([
+  ["amount", `<${V.amount}> "10.00", "1000.00"; <${V.currency}> "GBP"`, '"2026-10-24"'],
+  [
+    "legacy amount",
+    `<${NS.FINANCE}amount> "10.00", "1000.00"; <${NS.FINANCE}currency> "GBP"`,
+    '"2026-10-24"',
+  ],
+  ["posting time", `<${V.amount}> "10.00"; <${V.currency}> "GBP"`, '"2026-10-24", "2026-11-24"'],
+])("rejects a multi-valued %s instead of selecting the first", async (_name, amount, time) => {
+  const document = await parseMoney(
+    `<#t> a <${V.transactionClass}>; <${V.account}> <${account}>;
+    <${V.postingTime}> ${time}; <${V.amountNode}> [ ${amount} ] .`,
+    base,
+  );
+  expect(() => document.transactions()).toThrow("Incomplete money RDF record");
+});
+
+it("rejects two amount links and a multi-valued balance date", async () => {
+  const two = await parseMoney(
+    `<#t> a <${V.transactionClass}>; <${V.account}> <${account}>; <${V.postingTime}> "2026-10-24";
+    <${V.amountNode}> [ <${V.amount}> "1"; <${V.currency}> "GBP" ],
+    [ <${V.amount}> "2"; <${V.currency}> "GBP" ] .`,
+    base,
+  );
+  expect(() => two.transactions()).toThrow("Incomplete money RDF record");
+  const dated = await parseMoney(
+    `<#b> a <${V.balanceClass}>; <${V.balanceAccount}> <${account}>;
+    <${V.asOf}> "2026-10-24", "2026-10-25"; <${V.amountNode}> [ <${V.amount}> "1"; <${V.currency}> "GBP" ] .`,
+    base,
+  );
+  expect(() => dated.balances()).toThrow("Incomplete money RDF record");
 });
 
 it.each([
@@ -141,11 +199,12 @@ it("still reads control-only text that older clients stored", async () => {
 
 it("rejects a blank-node balance root that previously projected", async () => {
   const document = await parseMoney(
-    `_:b a <${V.balanceClass}>; <${V.balanceAccount}> <${account}> .`,
+    `_:b a <${V.balanceClass}>; <${V.balanceAccount}> <${account}>;
+    <${V.amountNode}> [ <${V.amount}> "1"; <${V.currency}> "GBP" ] .`,
     base,
   );
-  expect(() => document.balances()).toThrow();
-  expect(balance.id.startsWith("http")).toBe(true);
+  // The oracle projected this blank balance with its amount; the generated core refuses it.
+  expect(() => document.balances()).toThrow("Incomplete money RDF record");
 });
 
 it("rejects unsafe public rdf:type additions before mutation", () => {

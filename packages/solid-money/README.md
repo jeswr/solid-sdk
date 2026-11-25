@@ -80,8 +80,22 @@ apart from import paths. The app oracle remains untouched.
 - Generated required labels accept exactly one `xsd:string`; language-tagged, numeric or
   ambiguous labels now reject the snapshot instead of projecting the first literal's text.
 - Malformed or ambiguous optional descriptions drop, using the existing `Transaction`
-  default. Malformed optional transaction IRIs drop. A present category parent that cannot
-  be projected rejects the category snapshot. Ambiguous required account links reject the record.
+  default. A present category parent that cannot be projected rejects the category snapshot.
+  Ambiguous required account links reject the record.
+- A present optional transaction link (`pm:category`, `fin:hasCounterparty`,
+  `prov:wasDerivedFrom`, `fin:debitAccount`, `fin:creditAccount`) that does not project
+  (a literal, an unsafe IRI or several values) rejects the record with "Invalid transaction
+  link" instead of dropping it, because the next save would have erased every value.
+  `putTransaction` refuses with the same error when the stored record holds such a link, so
+  a save never deletes data the read could not show. The oracle kept the first value.
+- The amount link (`fin:hasMonetaryAmount`), the amount (`schema:value`, or the legacy
+  `fin:amount` when the canonical predicate is absent), `fin:postingTime` and `pm:asOf`
+  must each hold exactly one value. Several values reject the record with "Incomplete money
+  RDF record" instead of returning whichever quad the store yields first. Writing a record
+  whose stored node carries such duplicates also fails, since the write path reads the
+  amount link first.
+- A blank-node balance or account root that the oracle projected is rejected even when its
+  amount node is valid (pinned with a complete fixture).
 - Canonical `schema:currency` must be one `xsd:string`; language-tagged currencies no longer
   project. When the canonical predicate is absent, `fin:currency` retains its historical
   literal reads.
