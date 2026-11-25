@@ -12,7 +12,7 @@ import { createCaptureTestTransport } from "./testing.js";
 
 const guarded = vi.hoisted(() => ({
   create: vi.fn(),
-  fetch: undefined as typeof fetch | undefined,
+  fetch: undefined as ReturnType<typeof createCaptureTestTransport>["fetch"] | undefined,
 }));
 vi.mock("@jeswr/guarded-fetch/node", () => ({
   createNodeGuardedFetch: (options: unknown) => {
