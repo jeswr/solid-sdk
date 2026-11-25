@@ -94,13 +94,18 @@ prompt, model, each setting) is missing, so a build never returns a disconnected
 
 ## Compatibility with pod-photos
 
-`apps/pod-photos` reads `schema:Photograph` documents with `https://schema.org/` predicates.
-An image written here, with its `rdf:type` replaced by `schema:Photograph`, is read in full:
-name, description, contentUrl as an IRI, keywords, integer width and height, and a dateTime
-dateCreated (`test/photograph.test.ts`). The compatibility is property-level; the type is the
-only difference. That test mirrors the reader's accessors and can drift from it: calling the real
-`parsePhoto` needs a test inside `apps/pod-photos` with this package as a devDependency, which
-is still to be added.
+`apps/pod-photos` reads `schema:ImageObject` documents as photos (and finds containers
+registered for `schema:ImageObject` in the Type Index), in addition to `schema:Photograph`,
+which it still writes. It reads the `<doc#it>` node and skips a node that is the object of
+`schema:thumbnail`, so each asset appears once; the `#run`, `#prompt`, `#model` and
+`#setting-n` nodes are ignored, and editing such a photo in Pod Photos replaces only the
+properties it models and keeps those nodes. The app's own tests (`apps/pod-photos/test/image-object.test.ts`)
+cover this against Turtle fixtures in this package's layout.
+
+`test/photograph.test.ts` in this package is a mirror of the reader's accessors (a package cannot
+import an app) and can drift from the real `parsePhoto`. The real check, building the image with
+`serializeAssetDocument` inside `apps/pod-photos` with this package as a `workspace:*`
+devDependency, is still to be added; `check:sdk-layers` does not forbid that edge.
 
 ## Generated, not hand-written
 

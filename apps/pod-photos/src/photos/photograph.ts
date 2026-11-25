@@ -35,7 +35,15 @@ import {
 import { DataFactory, Store } from 'n3';
 import type { ExifMetadata, GeoPoint } from './exif.js';
 import { isExifEmpty, normaliseExif } from './exif.js';
-import { EXIF, GEO, PHOTOGRAPH_CLASS, RDF_TYPE, SCHEMA } from './vocab.js';
+import {
+  EXIF,
+  GEO,
+  IMAGE_OBJECT_CLASS,
+  PHOTOGRAPH_CLASS,
+  RDF_TYPE,
+  SCHEMA,
+  THUMBNAIL_PREDICATE,
+} from './vocab.js';
 
 /** A photo as the UI works with it (plain, serialisable). */
 export interface Photo {
@@ -243,10 +251,32 @@ function readExif(doc: PhotographDoc, dataset: DatasetCore): ExifMetadata {
   return normaliseExif(raw);
 }
 
-/** Parse a photo document into a {@link Photo}, or `undefined` if not one. */
+/**
+ * Whether the document's `#it` node is a library photo: a `schema:Photograph`, or a
+ * `schema:ImageObject` (written by another app) that is not itself the object of a
+ * `schema:thumbnail` (a creative-assets document's `#thumbnail` is a second ImageObject,
+ * so each asset must appear once).
+ */
+function isPhotoNode(doc: PhotographDoc, dataset: DatasetCore): boolean {
+  const types = doc.types;
+  if (types.has(PHOTOGRAPH_CLASS)) return true;
+  if (!types.has(IMAGE_OBJECT_CLASS)) return false;
+  const asThumbnail = dataset.match(
+    null,
+    DataFactory.namedNode(THUMBNAIL_PREDICATE),
+    DataFactory.namedNode(doc.value),
+  );
+  return asThumbnail.size === 0;
+}
+
+/**
+ * Parse a photo document into a {@link Photo}, or `undefined` if not one. Reads
+ * `schema:Photograph` and (read-only alias) `schema:ImageObject`; the legacy
+ * `http://schema.org/` scheme is not accepted.
+ */
 export function parsePhoto(itemUrl: string, dataset: DatasetCore): Photo | undefined {
   const doc = new PhotographDoc(`${itemUrl}#it`, dataset, DataFactory);
-  if (!doc.types.has(PHOTOGRAPH_CLASS)) return undefined;
+  if (!isPhotoNode(doc, dataset)) return undefined;
   return {
     name: doc.name ?? '',
     ...(doc.description !== undefined ? { description: doc.description } : {}),
@@ -289,6 +319,55 @@ export function buildPhoto(itemUrl: string, photo: Photo): Store {
     doc.height = exif.pixelHeight;
     if (exif.dateTimeOriginal) doc.dateCreated = new Date(exif.dateTimeOriginal);
     if (exif.location) writeGeo(itemUrl, doc, store, exif.location);
+  }
+  return store;
+}
+
+/** Predicates of `#it` that the Photo model owns; everything else is another app's data. */
+const MODELLED_PREDICATES = [
+  ...['name', 'description', 'contentUrl', 'keywords', 'width', 'height', 'dateCreated', 'geo'].map(
+    (p) => `${SCHEMA}${p}`,
+  ),
+  ...[
+    'make',
+    'model',
+    'lensModel',
+    'focalLength',
+    'fNumber',
+    'exposureTime',
+    'isoSpeedRatings',
+    'orientation',
+  ].map((p) => `${EXIF}${p}`),
+];
+
+/**
+ * Serialise an edited {@link Photo} over the document's EXISTING dataset, replacing only
+ * the triples the model owns (and the in-document `schema:geo` node) and keeping every
+ * other triple: the `rdf:type` (a `schema:ImageObject` stays one), the other app's
+ * `#run`, `#prompt`, `#model`, `#thumbnail` and `#setting-n` nodes, and `#it`'s other
+ * properties. Falls back to {@link buildPhoto} when the document holds no photo node.
+ */
+export function mergePhoto(itemUrl: string, existing: DatasetCore, photo: Photo): Store {
+  const subject = DataFactory.namedNode(`${itemUrl}#it`);
+  const store = new Store([...existing]);
+  if (!isPhotoNode(new PhotographDoc(subject.value, store, DataFactory), store)) {
+    return buildPhoto(itemUrl, photo);
+  }
+  for (const predicate of MODELLED_PREDICATES) {
+    for (const quad of store.match(subject, DataFactory.namedNode(predicate), null)) {
+      const object = quad.object;
+      const ownedGeo =
+        predicate === `${SCHEMA}geo` &&
+        (object.termType === 'BlankNode' ||
+          (object.termType === 'NamedNode' && object.value.startsWith(`${itemUrl}#`)));
+      if (ownedGeo) store.removeQuads(store.getQuads(object, null, null, null));
+      store.removeQuad(quad);
+    }
+  }
+  const rdfType = DataFactory.namedNode(RDF_TYPE);
+  for (const quad of buildPhoto(itemUrl, photo)) {
+    // The document already carries its own type; never re-stamp it.
+    if (!(quad.subject.equals(subject) && quad.predicate.equals(rdfType))) store.addQuad(quad);
   }
   return store;
 }

@@ -18,6 +18,7 @@ export {
   EXIF,
   GEO,
   IMAGE_GALLERY_CLASS,
+  IMAGE_OBJECT_CLASS,
   PHOTOGRAPH_CLASS,
   PHOTOS_SLUG,
   PREFIXES,
@@ -40,6 +41,7 @@ export {
 export type { Photo } from './photos/photograph.js';
 export {
   buildPhoto,
+  mergePhoto,
   normaliseKeywords,
   parseKeywordsInput,
   parsePhoto,

@@ -59,6 +59,11 @@ function emptyIndexTtl(): string {
   ].join("\n");
 }
 
+/** A Type Index registering schema:ImageObject at the given instanceContainer. */
+function imageObjectIndexTtl(container: string): string {
+  return photographIndexTtl(container).replace("schema:Photograph", "schema:ImageObject");
+}
+
 function turtle(body: string): Response {
   return new Response(body, { status: 200, headers: { "content-type": "text/turtle" } });
 }
@@ -82,6 +87,27 @@ describe("resolvePhotosRoot", () => {
     });
     const root = await resolvePhotosRoot({ webId: WEBID, podRoot: POD, fetchImpl });
     expect(root).toEqual({ rootUrl: container, isFallback: false });
+  });
+
+  it("discovers a schema:ImageObject container registered by another app", async () => {
+    const container = `${POD}creative/assets/`;
+    const fetchImpl = stubFetch({
+      [WEBID]: profileTtl({ privateIndex: PRIVATE_INDEX }),
+      [PRIVATE_INDEX]: imageObjectIndexTtl(container),
+    });
+    const root = await resolvePhotosRoot({ webId: WEBID, podRoot: POD, fetchImpl });
+    expect(root).toEqual({ rootUrl: container, isFallback: false });
+  });
+
+  it("prefers a schema:Photograph registration (in any index) over schema:ImageObject", async () => {
+    const photos = `${POD}public-photos/`;
+    const fetchImpl = stubFetch({
+      [WEBID]: profileTtl({ privateIndex: PRIVATE_INDEX, publicIndex: PUBLIC_INDEX }),
+      [PRIVATE_INDEX]: imageObjectIndexTtl(`${POD}creative/assets/`),
+      [PUBLIC_INDEX]: photographIndexTtl(photos),
+    });
+    const root = await resolvePhotosRoot({ webId: WEBID, podRoot: POD, fetchImpl });
+    expect(root).toEqual({ rootUrl: photos, isFallback: false });
   });
 
   it("falls back to the public Type Index when the private one lacks the registration (roborev Medium)", async () => {

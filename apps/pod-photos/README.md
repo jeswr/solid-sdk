@@ -26,6 +26,14 @@ album under `albums/`, with each container registered in the user's Type Index
 (`schema:Photograph` → `photos/`, `schema:ImageGallery` → `albums/`) so the data
 surfaces in any Type-Index-aware Solid app.
 
+**Images from other apps.** Documents typed [`schema:ImageObject`](https://schema.org/ImageObject)
+(e.g. `@jeswr/solid-creative-assets`) are read as photos too, and a container registered in the
+Type Index for `schema:ImageObject` is discovered when none is registered for `schema:Photograph`.
+Pod Photos still writes only `schema:Photograph` and never registers `ImageObject`. A node that is
+the object of `schema:thumbnail` is not a photo; other nodes in the document are ignored, and
+edits through `PodStore.update` replace only the triples the model owns, so they keep the other
+app's type and provenance nodes. The legacy `http://schema.org/` scheme is not read.
+
 ## How the RDF is handled (house rules)
 
 - **Read** with [`@jeswr/fetch-rdf`](https://www.npmjs.com/package/@jeswr/fetch-rdf)

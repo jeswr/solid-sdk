@@ -53,6 +53,12 @@ export interface StoreConfig<T> {
   parse(itemUrl: string, dataset: DatasetCore): T | undefined;
   /** Serialise a payload into a fresh dataset rooted at `${itemUrl}#it`. */
   build(itemUrl: string, data: T): Store;
+  /**
+   * Optional: serialise an edit over the item's existing dataset so triples the
+   * model does not own (written by other apps) survive. When absent, `update`
+   * rewrites the document from `build`.
+   */
+  merge?(itemUrl: string, existing: DatasetCore, data: T): Store;
 }
 
 /**
@@ -183,7 +189,9 @@ export class PodStore<T> {
    */
   async update(url: string, data: T, etag?: string | null): Promise<{ etag: string | null }> {
     this.assertInContainer(url);
-    const dataset = this.cfg.build(url, data);
+    const dataset = this.cfg.merge
+      ? this.cfg.merge(url, (await readResource(url, this.fetchImpl)).dataset, data)
+      : this.cfg.build(url, data);
     return writeResource(url, dataset, {
       ...(etag !== undefined ? { etag } : {}),
       fetchImpl: this.fetchImpl,

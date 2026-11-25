@@ -32,6 +32,8 @@ declare module "@jeswr/pod-photos" {
 
   /** The RDF class a single photo is stamped + Type-Index-registered with. */
   export const PHOTOGRAPH_CLASS: string;
+  /** `schema:ImageObject`: written by other apps; read (and discovered) as a photo. */
+  export const IMAGE_OBJECT_CLASS: string;
   /** Container slug (under the pod root) where photo descriptions live. */
   export const PHOTOS_SLUG: string;
 

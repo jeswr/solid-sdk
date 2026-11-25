@@ -15,7 +15,10 @@
 //      (`typeIndexLinks`), fetch the index, and `locate(schema:Photograph)` for a
 //      registered `solid:instanceContainer` — the canonical cross-app discovery
 //      signal, so photos registered by Pod Photos (or any other app) are found
-//      wherever the owner chose to store them.
+//      wherever the owner chose to store them. A `schema:Photograph` registration
+//      wins; when no index has one, a `schema:ImageObject` registration (images
+//      written by other apps) is used. This only reads the index: Pod Photos never
+//      registers ImageObject itself, and nothing crawls the pod.
 //   2. fallback: the conventional `${podRoot}photos/` slug (PHOTOS_SLUG). The view
 //      surfaces a small banner when this fallback is used (see App.tsx).
 //
@@ -25,6 +28,7 @@
 
 import {
   freshRdf,
+  IMAGE_OBJECT_CLASS,
   PHOTOGRAPH_CLASS,
   PHOTOS_SLUG,
   TypeIndexDataset,
@@ -79,9 +83,12 @@ export async function resolvePhotosRoot(opts: {
     const indexUrls = [links.privateIndex, links.publicIndex].filter(
       (u): u is string => typeof u === "string" && u.length > 0,
     );
-    for (const indexUrl of indexUrls) {
-      const located = await locatePhotographContainer(indexUrl, fetchImpl);
-      if (located) return { rootUrl: asContainer(located), isFallback: false };
+    // A Photograph registration in ANY index beats an ImageObject one.
+    for (const forClass of [PHOTOGRAPH_CLASS, IMAGE_OBJECT_CLASS]) {
+      for (const indexUrl of indexUrls) {
+        const located = await locateContainer(indexUrl, forClass, fetchImpl);
+        if (located) return { rootUrl: asContainer(located), isFallback: false };
+      }
     }
     return fallback;
   } catch {
@@ -92,22 +99,23 @@ export async function resolvePhotosRoot(opts: {
 }
 
 /**
- * Locate the first registered `schema:Photograph` `solid:instanceContainer` in one
+ * Locate the first registered `solid:instanceContainer` for `forClass` in one
  * Type Index document. Returns `undefined` when the index is unreadable /
  * unparseable / has no usable registration — so the caller can try the NEXT
  * advertised index (rather than aborting discovery on one bad index). Per-index
  * read failures are swallowed deliberately: an unreadable private index must not
  * stop the public index from being consulted.
  */
-async function locatePhotographContainer(
+async function locateContainer(
   indexUrl: string,
+  forClass: string,
   fetchImpl?: typeof fetch,
 ): Promise<string | undefined> {
   try {
     const { dataset: indexDs } = await freshRdf(indexUrl, fetchImpl);
     const index = new TypeIndexDataset(indexDs, DataFactory);
     return index
-      .locate(PHOTOGRAPH_CLASS)
+      .locate(forClass)
       .map((l) => l.container)
       .find((c): c is string => typeof c === "string" && c.length > 0);
   } catch {
