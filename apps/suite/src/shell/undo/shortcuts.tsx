@@ -2,7 +2,7 @@
 "use client";
 import { UNDO_SHORTCUTS } from "../lib/shortcut-settings";
 import { useShortcut } from "../shortcuts/provider";
-import { useUndo } from "./provider";
+import { type UndoActions, useOptionalUndo } from "./provider";
 
 /** Surfaces with their own undo (whiteboard, spreadsheet grid) opt out with this ancestor attribute. */
 export const NATIVE_UNDO_SELECTOR = '[data-undo-scope="native"]';
@@ -10,7 +10,11 @@ const ownsUndo = () => !!document.activeElement?.closest(NATIVE_UNDO_SELECTOR);
 
 /** Register inside ShortcutsProvider, alongside the shell's other global commands. */
 export function UndoShortcuts() {
-  const { undo, redo, canUndo, canRedo } = useUndo();
+  const actions = useOptionalUndo();
+  return actions ? <RegisteredUndoShortcuts actions={actions} /> : null;
+}
+function RegisteredUndoShortcuts({ actions }: { actions: UndoActions }) {
+  const { undo, redo, canUndo, canRedo } = actions;
   useShortcut({
     ...UNDO_SHORTCUTS.undo,
     run: () => {

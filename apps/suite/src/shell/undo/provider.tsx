@@ -10,7 +10,7 @@ import { useAccounts } from "../session/accounts-provider";
 export type ScopedUndoEntry = Omit<UndoEntry, "scope">;
 /** Shell-level actions (the notification tray) are undoable from any app. */
 export const SHELL_UNDO_SCOPE = "shell";
-interface UndoActions {
+export interface UndoActions {
   push(entry: ScopedUndoEntry): string;
   /** File an entry under the shell scope, which every route's shortcut also consults. */
   pushShell(entry: ScopedUndoEntry): string;
@@ -90,7 +90,12 @@ export function UndoProvider({ children }: { children: ReactNode }) {
         entryToasts.delete(result.id);
         show("success", `${redo ? "Redone" : "Undone"}: ${result.label}`);
       } else if (result.status === "failed")
-        show("error", redo ? "Couldn't redo this change." : "Couldn't undo this change.");
+        show(
+          "error",
+          `${redo ? "Couldn't redo this change." : "Couldn't undo this change."}${
+            isRetryableUndoError(result.error) ? " Try again." : ""
+          }`,
+        );
       else if (result.status === "expired") show("message", "This change can no longer be undone.");
       return result;
     };

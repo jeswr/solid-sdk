@@ -371,6 +371,15 @@ it("F3: a retryable failure keeps the entry so the next press can try again", as
   });
   actions.push({ label: "Retry me", undo });
   expect((await actions.undo()).status).toBe("failed");
+  expect(state.notify.error).toHaveBeenCalledWith(
+    "Couldn't undo this change. Try again.",
+    expect.any(Object),
+  );
   expect((await actions.undo()).status).toBe("done");
   expect(undo).toHaveBeenCalledTimes(2);
+});
+it("B1: UndoShortcuts renders nothing without an UndoProvider", () => {
+  expect(() =>
+    render(h(ShortcutsProvider, { platform: "Linux", children: h(UndoShortcuts) })),
+  ).not.toThrow();
 });
