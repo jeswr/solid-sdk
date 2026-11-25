@@ -528,3 +528,30 @@ it("closing a task replaces a malformed stored completion time", () => {
   expect(stored).toHaveLength(1);
   expect(Date.parse(stored[0]?.object.value ?? "")).toBeGreaterThanOrEqual(before - 1000);
 });
+
+it("reads a zoneless xsd:dateTime as UTC, whatever the process time zone", () => {
+  const previous = process.env.TZ;
+  process.env.TZ = "Australia/Sydney";
+  try {
+    const dataset = store(
+      `<#it> a wf:Task ; dct:title "T" ; wf:dateDue "2026-03-01T10:00:00"^^xsd:dateTime .`,
+    );
+    const iso = "2026-03-01T10:00:00.000Z";
+    expect(parseTask(RES, dataset)?.dueDate?.toISOString()).toBe(iso);
+    expect(new Task(taskSubject(RES), dataset, DataFactory).dueDate?.toISOString()).toBe(iso);
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
+});
+
+it("a blank-node task subject is rejected by the wrapper but does not disturb parsing of a sibling task", () => {
+  const dataset = store(`[] a wf:Task ; dct:title "anon" . <#it> a wf:Task ; dct:title "T" .`);
+  expect(parseTask(RES, dataset)).toEqual({ title: "T", state: "open" });
+  const blank = dataset
+    .getQuads(null, RDF_TYPE, TASK_CLASS, null)
+    .map((q) => q.subject)
+    .find((s) => s.termType === "BlankNode");
+  expect(blank).toBeDefined();
+  expect(() => new Task(blank as never, dataset, DataFactory)).toThrow(TypeError);
+});

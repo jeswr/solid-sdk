@@ -84,7 +84,7 @@ Task, tracker and contacts. A build copies the generated JS and declarations to
 From the workspace root:
 
 ```sh
-export PATH=/opt/node24/bin:$PATH
+export PATH=/path/to/node24/bin:$PATH
 pnpm --filter @jeswr/federation-codegen... run build
 pnpm --filter @jeswr/solid-task-model run codegen
 # After reviewing an intentional input change:
@@ -122,6 +122,12 @@ in `test/compatibility.test.ts`:
   or unsafe IRIs; parse returns `undefined`, and document parsing checks the base before
   parsing. Direct wrapper construction also rejects blank nodes and other non-NamedNode
   terms. Safe absolute subjects keep their spelling and need not use http(s).
+- **Zoneless `xsd:dateTime`:** a literal with no `Z` or offset (`2026-03-01T10:00:00`)
+  now reads as UTC on every direct date accessor and in `parseTask`. The hand-written
+  wrapper used `new Date(lexical)`, which read it as local time, so the instant differed
+  by the reader's UTC offset. Writes always emit `Z`; a consumer that takes a zoneless
+  value from a local-time source (`<jeswr-task-form>`'s datetime input) must convert it
+  to an instant before calling the setter. Pinned in `test/compatibility.test.ts`.
 - **Writes:** generated text setters/build strip C0/C1 control characters while retaining
   tab, newline and carriage return. Invalid dates drop instead of throwing; a closed
   task still receives a completion timestamp. Expanded and negative years use valid XSD
