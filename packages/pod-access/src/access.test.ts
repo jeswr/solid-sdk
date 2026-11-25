@@ -537,8 +537,8 @@ describe("conditional writes and discovery", () => {
     "share",
     "revoke",
   ] as const)("%s ignores a WAC-Allow without Control: the server authorises the conditional write", async (operation) => {
-    // CSS reports user="read" once a public rule exists although the owner keeps Control.
-    const { client, target, storage, head } = await setup();
+    // Under reactive auth `allow` can describe the anonymous caller of a publicly readable resource.
+    const { client, target, storage, head, accessUrl } = await setup();
     head.mockResolvedValue({
       ...(await head(target)),
       allow: { read: true, write: false, append: false, control: false },
@@ -549,6 +549,9 @@ describe("conditional writes and discovery", () => {
       ? client.share(target, { agent: BOB, modes: ["write"] }, {})
       : client.revoke(target, grant.id as string));
     expect(storage.writeRdf).toHaveBeenCalledTimes(1);
+    expect(storage.writeRdf).toHaveBeenCalledWith(accessUrl, expect.anything(), {
+      ifMatch: expect.stringMatching(/^"/),
+    });
   });
   test.each([
     "share",

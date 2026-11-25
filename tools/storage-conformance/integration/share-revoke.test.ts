@@ -5,9 +5,10 @@ import { expect, test } from "vitest";
 import { container, text } from "../src/case-helpers.js";
 import { cssTarget } from "../src/targets/css.js";
 
-// Opt-in, socket-based. Community Solid Server 7.2.0 reports WAC-Allow user="read" once a public
-// rule exists even though the owner keeps Control; revoke() must still work, because the server
-// (not that header) is the authority on whether the conditional write is allowed.
+// Opt-in, socket-based. Authentication is reactive (anonymous first, upgraded on a 401), so once
+// a public rule exists the HEAD succeeds anonymously and `allow` describes the anonymous caller,
+// not the owner. revoke() must still work, because the server (not that header) is the authority
+// on whether the conditional write is allowed.
 test("revoke() after the package's own share() succeeds on CSS, for a public read grant", async () => {
   const running = await cssTarget.start();
   try {
@@ -37,9 +38,6 @@ test("revoke() after the package's own share() succeeds on CSS, for a public rea
 
     const grant = await client.share(note.url, { agent: { public: true }, modes: ["read"] }, {});
     expect(grant.id).toBeDefined();
-    const head = await running.storage.head(note.url, { revalidate: true });
-    // The unreliable signal this test is about: CSS says the owner may only read.
-    expect(head.allow?.control).toBe(false);
     const anonymous = await fetch(note.url);
     await anonymous.body?.cancel();
     expect(anonymous.status).toBe(200);
@@ -49,6 +47,13 @@ test("revoke() after the package's own share() succeeds on CSS, for a public rea
     await after.body?.cancel();
     expect([401, 403]).toContain(after.status);
     expect((await client.grants(note.url)).some((g) => g.id === grant.id)).toBe(false);
+
+    // The owner keeps read access and still edits the ACL: a further share/revoke round trip.
+    const owner = await running.storage.head(note.url, { revalidate: true });
+    expect(owner.status).toBe(200);
+    const again = await client.share(note.url, { agent: { public: true }, modes: ["read"] }, {});
+    await client.revoke(note.url, { public: true });
+    expect((await client.grants(note.url)).some((g) => g.id === again.id)).toBe(false);
   } finally {
     await running.stop();
   }

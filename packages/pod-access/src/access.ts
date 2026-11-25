@@ -54,9 +54,11 @@ export function createAccessClient(options: AccessClientOptions): AccessClient {
     if (storage.protocol !== "solid" || (selected !== "wac" && selected !== "acp")) unsupported();
     if (selected === "acp") dialect();
     const head = await storage.head(url);
-    // WAC-Allow is advisory: CSS reports the owner as user="read" once a public rule exists
-    // although Control is kept. The ACL read and the If-Match write below are authorised by the
-    // server, and a real 401/403 propagates as the storage client's `forbidden` error.
+    // `head.allow` is not trusted here. Authentication is reactive (anonymous first, upgraded
+    // only on a 401), so on a publicly readable resource the HEAD succeeds anonymously and
+    // `allow` describes the anonymous caller, however much Control the signed-in user holds.
+    // The ACL read and the If-Match write below are authorised by the server, and a real
+    // 401/403 propagates as the storage client's `forbidden` error.
     const rels = selected === "wac" ? ["acl"] : ["acl", `${ACP}accessControl`];
     const links = rels.flatMap((rel) => head.links.get(rel) ?? []);
     if (links.length === 0) return unsupported();
