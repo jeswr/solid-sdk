@@ -10,6 +10,7 @@ import {
   HistoryChangedError,
   type HistoryEntry,
   HistoryRevokeError,
+  HistoryUnfinishedError,
   historyFrom,
   isActiveGrant,
   placesText,
@@ -279,6 +280,39 @@ describe("access history", () => {
   });
 });
 
+describe("an approval that is still being applied", () => {
+  const Decision = `${RECORDS}decision-1.ttl`;
+  const decisionBody = (outcome: string) =>
+    `${PREFIXES} <${Decision}> accm:requestRef <${ROOT}inbox/request-1.ttl>; accm:outcome "${outcome}"; accm:grantId "1"; accm:snapshot "{}".`;
+
+  it("is listed as not finished and cannot be revoked, until the decision is settled", async () => {
+    const memory = pod();
+    memory.put(Decision, decisionBody("approving"));
+    memory.put(
+      RECORDS,
+      `${PREFIXES} <> a ldp:Container; ldp:contains <grant-1.ttl>, <receipt-1.ttl>, <decision-1.ttl>.`,
+    );
+    const [entry] = await readAccessHistory(memory.fetch, ROOT);
+    expect(entry).toMatchObject({ receipt: RECEIPT, status: "approving" });
+    expect(isActiveGrant(entry as HistoryEntry)).toBe(false);
+    expect(statusText("approving")).toBe("Not finished");
+    // A stale "active" entry handed to revoke is refused before any access is changed.
+    const stale = { ...entry, status: "granted" } as ActiveHistoryEntry;
+    await expect(revokeHistoryGrant(stale, options(memory))).rejects.toBeInstanceOf(
+      HistoryUnfinishedError,
+    );
+    expect(memory.writes()).toEqual([]);
+    expect(await agentsOn(memory, FOLDER)).toContain(BOB);
+    // Once the approval has been finished, it is an ordinary active grant again.
+    memory.put(Decision, decisionBody("approved"));
+    const [settled] = await readAccessHistory(memory.fetch, ROOT);
+    expect(settled).toMatchObject({ status: "granted" });
+    expect(isActiveGrant(settled as HistoryEntry)).toBe(true);
+    await revokeHistoryGrant(settled as ActiveHistoryEntry, options(memory));
+    expect(await agentsOn(memory, FOLDER)).toEqual([OWNER]);
+  });
+});
+
 describe("revoking from the history", () => {
   it("removes the recipient's role from every recorded place, then marks the records", async () => {
     const memory = pod();
@@ -319,6 +353,47 @@ describe("revoking from the history", () => {
     await revokeHistoryGrant(entry, options(memory));
     expect(await agentsOn(memory, FILE)).not.toContain(BOB);
     expect(memory.writes().filter((url) => url === `${FOLDER}.acl`)).toHaveLength(1);
+  });
+
+  it("treats a deleted place as already revoked and still removes the others", async () => {
+    for (const status of [404, 410]) {
+      const memory = pod();
+      const entry = await active(memory);
+      memory.fail("HEAD", FILE, status);
+      const outcome = await revokeHistoryGrant(entry, options(memory));
+      expect(outcome).toEqual({ removed: [FOLDER], alreadyGone: [FILE] });
+      expect(await agentsOn(memory, FOLDER)).toEqual([OWNER]);
+      expect(await terms(memory, GRANT, "https://jeswr.org/ns/accm#revokedAt")).toEqual([
+        NOW.toISOString(),
+      ]);
+      expect(await terms(memory, RECEIPT, "https://w3id.org/dpv#hasConsentStatus")).toEqual([
+        "https://w3id.org/dpv#ConsentWithdrawn",
+      ]);
+    }
+  });
+
+  it("reports an unreadable place as not removed, removes the rest, and can be retried", async () => {
+    for (const status of [403, 500, 503]) {
+      const memory = pod();
+      const entry = await active(memory);
+      memory.fail("HEAD", FOLDER, status);
+      const error = await revokeHistoryGrant(entry, options(memory)).catch((caught) => caught);
+      expect(error).toBeInstanceOf(HistoryRevokeError);
+      expect((error as HistoryRevokeError).failed.map((failure) => failure.url)).toEqual([FOLDER]);
+      expect((error as HistoryRevokeError).removed).toEqual([FILE]);
+      // Never "Access removed": the grant stays active and the unreadable place keeps its role.
+      expect(memory.writes()).not.toContain(GRANT);
+      expect(memory.writes()).not.toContain(RECEIPT);
+      expect(await agentsOn(memory, FOLDER)).toContain(BOB);
+      expect(await agentsOn(memory, FILE)).not.toContain(BOB);
+      expect(isActiveGrant(await active(memory))).toBe(true);
+      const outcome = await revokeHistoryGrant(entry, options(memory));
+      expect(outcome.removed).toEqual([FOLDER]);
+      expect(await agentsOn(memory, FOLDER)).toEqual([OWNER]);
+      expect(await terms(memory, GRANT, "https://jeswr.org/ns/accm#revokedAt")).toEqual([
+        NOW.toISOString(),
+      ]);
+    }
   });
 
   it("refuses when the recipient's role on a place changed after the approval", async () => {

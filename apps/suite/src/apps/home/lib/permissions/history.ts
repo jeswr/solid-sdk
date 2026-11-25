@@ -13,13 +13,14 @@ import { grantsWithRoles, removeGrant } from "@jeswr/pod-access/roles";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { LiteralFrom, NamedNodeFrom, RequiredAs } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { encodeRef } from "../../../../lib/refs";
 import { httpUrl, inStorage, readResource, serializeTurtle, subjectOf } from "../model/rdf";
 import { podScoped, readRecordsDataset, recordsFrom } from "./records";
 import type { GrantRecord } from "./types";
 import { ACL, ODRL, UnsupportedAccessError } from "./vocab";
 import { loadPermissions } from "./walk";
 
-export type HistoryStatus = "granted" | "denied" | "revoked" | "unknown";
+export type HistoryStatus = "granted" | "approving" | "denied" | "revoked" | "unknown";
 
 /** The ODRL grant an approval recorded: the exact places it shared and the role they got. */
 export interface HistoryGrant {
@@ -56,6 +57,8 @@ const STATUS: Readonly<Record<string, HistoryStatus>> = {
   [DPV_TERMS.ConsentRefused]: "denied",
   [DPV_TERMS.ConsentWithdrawn]: "revoked",
 };
+/** The owner's decision records (written by pod-access) that name an approval still being applied. */
+const OUTCOME = `${ACCM.ns}outcome`;
 const EDIT_ACTIONS = new Set([`${ODRL}write`, `${ODRL}modify`, `${ACL}Write`]);
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
@@ -98,9 +101,23 @@ function grantOf(dataset: DatasetCore, url: string): HistoryGrant | undefined {
   };
 }
 
+/** Ids of the grants whose approval is recorded as pinned but not yet applied everywhere. */
+function approvingGrantIds(dataset: DatasetCore): Set<string> {
+  const ids = new Set<string>();
+  for (const quad of dataset.match(
+    null,
+    DataFactory.namedNode(OUTCOME),
+    DataFactory.literal("approving"),
+  ))
+    if (quad.subject.termType === "NamedNode")
+      for (const id of subjectOf(dataset, quad.subject).texts(ACCM.grantId)) ids.add(id);
+  return ids;
+}
+
 /** One entry per consent receipt, most recently decided first. */
 export function historyFrom(dataset: DatasetCore): HistoryEntry[] {
   const records = recordsFrom(dataset);
+  const approving = approvingGrantIds(dataset);
   const receipts = new Map<string, Term>();
   for (const quad of dataset.match(
     null,
@@ -121,6 +138,16 @@ export function historyFrom(dataset: DatasetCore): HistoryEntry[] {
     let status = STATUS[node.iris(DPV_TERMS.hasConsentStatus)[0] ?? ""] ?? "unknown";
     // A grant marked revoked whose receipt wasn't flipped yet has still ended.
     if (status === "granted" && grant?.revokedAt) status = "revoked";
+    // The receipt is written before access is applied. While the approval is unfinished it is
+    // not a settled "Shared" state, and finishing it later would re-grant anything removed now.
+    else if (
+      status === "granted" &&
+      grantUrl !== undefined &&
+      subjectOf(dataset, grantUrl)
+        .texts(ACCM.grantId)
+        .some((id) => approving.has(id))
+    )
+      status = "approving";
     entries.push({
       receipt: url,
       status,
@@ -164,15 +191,35 @@ export class HistoryChangedError extends Error {
   }
 }
 
+/** The approval is still being applied: removing access now could be undone by finishing it. */
+export class HistoryUnfinishedError extends Error {
+  override name = "HistoryUnfinishedError";
+  constructor(
+    message = "This approval isn't finished yet. Finish or deny the request first, or change access in Permissions",
+  ) {
+    super(message);
+  }
+}
+
 /** Some places kept their access. The grant stays active, so revoking can be tried again. */
 export class HistoryRevokeError extends Error {
   override name = "HistoryRevokeError";
   constructor(
     readonly removed: readonly string[],
     readonly failed: readonly { url: string; error: unknown }[],
+    /** Places that no longer exist: nothing is left to remove there. */
+    readonly gone: readonly string[] = [],
   ) {
     super("Some of this access couldn't be removed");
   }
+}
+
+/** What a completed revoke did to each recorded place. */
+export interface RevokeOutcome {
+  /** Places where the recipient's direct role was taken off. */
+  removed: readonly string[];
+  /** Places that no longer exist (deleted), so there was nothing to remove. */
+  alreadyGone: readonly string[];
 }
 
 export interface RevokeHistoryOptions {
@@ -210,6 +257,27 @@ async function updateRecord(
   }
 }
 
+/** The place couldn't be read well enough to say whether the recipient still has access. */
+class TargetUnreadableError extends Error {
+  override name = "TargetUnreadableError";
+}
+
+/** A place that was deleted has no access left to remove; anything else unreadable is unknown. */
+async function probe(
+  fetch: typeof globalThis.fetch,
+  url: string,
+): Promise<"present" | "gone" | { error: unknown }> {
+  try {
+    const status = (await fetch(url, { method: "HEAD" })).status;
+    if (status === 404 || status === 410) return "gone";
+    return status >= 200 && status < 300
+      ? "present"
+      : { error: new TargetUnreadableError(`HTTP ${status}`) };
+  } catch (error) {
+    return { error };
+  }
+}
+
 /** Whether `place`'s own policy gives `agent` any access, whatever its modes. Fails closed. */
 async function holdsDirectAccess(
   fetch: typeof globalThis.fetch,
@@ -219,7 +287,7 @@ async function holdsDirectAccess(
   agent: string,
 ): Promise<boolean> {
   const snapshot = await loadPermissions({ fetch, storage, webId, resource: place });
-  if (snapshot.failures.length || snapshot.truncated) throw new HistoryChangedError();
+  if (snapshot.failures.length || snapshot.truncated) throw new TargetUnreadableError();
   return snapshot.rows.some(
     (row) =>
       row.id === agent &&
@@ -234,14 +302,17 @@ async function holdsDirectAccess(
  * recipient and places. Each place's current direct role for the recipient must still be exactly
  * the role the approval set; if it was changed since (someone edited it in Permissions), revoking
  * refuses rather than take away access the approval never gave. A place where the recipient has
- * no direct role any more has nothing to remove. Then `removeGrant` takes the recipient's direct
+ * no direct role any more has nothing to remove, and one that was deleted (404/410) counts as
+ * already revoked. A place that can't be read is reported and left, while the others are still
+ * removed. Then `removeGrant` takes the recipient's direct
  * role off the remaining places, and only once every place succeeded are the grant and receipt
- * marked. A partial failure leaves the grant active.
+ * marked. A partial failure (some place unreadable or not removable) leaves the grant active so
+ * revoking can be tried again; the error names which places were removed, gone and not removed.
  */
 export async function revokeHistoryGrant(
   entry: ActiveHistoryEntry,
   options: RevokeHistoryOptions,
-): Promise<void> {
+): Promise<RevokeOutcome> {
   const { grant, recipient } = entry;
   const storage = options.storage;
   const scoped = podScoped(options.fetch, storage);
@@ -258,23 +329,51 @@ export async function revokeHistoryGrant(
     throw new HistoryChangedError();
   if (recipient === options.webId || !current.targets.every((url) => revocable(url, storage)))
     throw new UnsupportedAccessError();
+  const removed: string[] = [];
+  const gone: string[] = [];
   if (current.revokedAt === undefined) {
-    const removed: string[] = [];
+    const records = await readRecordsDataset(options.fetch, storage);
+    const unfinished = approvingGrantIds(records);
+    if (
+      subjectOf(fresh.dataset, grant.url)
+        .texts(ACCM.grantId)
+        .some((id) => unfinished.has(id))
+    )
+      throw new HistoryUnfinishedError();
     const failed: { url: string; error: unknown }[] = [];
     const holding: string[] = [];
     for (const url of current.targets) {
-      const kind = url.endsWith("/") ? "folder" : "resource";
-      const direct = (await grantsWithRoles(url, { fetch: scoped, root: storage, kind })).filter(
-        ({ agent, inherited }) => !inherited && agent.type === "webid" && agent.id === recipient,
-      );
-      // The role projection hides access that fits no role (Read and Append, say), so the raw
-      // policy decides whether anything of theirs is left on the place.
-      const held = await holdsDirectAccess(scoped, storage, options.webId, url, recipient);
-      if (direct.some(({ role }) => role !== current.targetRoles[url]) || (held && !direct.length))
-        throw new HistoryChangedError(
-          "Their access was changed after this approval; change it in Permissions instead",
+      // A place that was deleted has nothing to remove; one that can't be read stays listed as
+      // not removed, and never blocks the places that can be.
+      const state = await probe(scoped, url);
+      if (state === "gone") {
+        gone.push(url);
+        continue;
+      }
+      if (state !== "present") {
+        failed.push({ url, error: state.error });
+        continue;
+      }
+      try {
+        const kind = url.endsWith("/") ? "folder" : "resource";
+        const direct = (await grantsWithRoles(url, { fetch: scoped, root: storage, kind })).filter(
+          ({ agent, inherited }) => !inherited && agent.type === "webid" && agent.id === recipient,
         );
-      if (held || direct.length) holding.push(url);
+        // The role projection hides access that fits no role (Read and Append, say), so the raw
+        // policy decides whether anything of theirs is left on the place.
+        const held = await holdsDirectAccess(scoped, storage, options.webId, url, recipient);
+        if (
+          direct.some(({ role }) => role !== current.targetRoles[url]) ||
+          (held && !direct.length)
+        )
+          throw new HistoryChangedError(
+            "Their access was changed after this approval; change it in Permissions instead",
+          );
+        if (held || direct.length) holding.push(url);
+      } catch (error) {
+        if (error instanceof HistoryChangedError) throw error;
+        failed.push({ url, error });
+      }
     }
     for (const kind of ["folder", "resource"] as const) {
       const urls = holding.filter((url) => url.endsWith("/") === (kind === "folder"));
@@ -287,7 +386,7 @@ export async function revokeHistoryGrant(
       removed.push(...result.applied);
       failed.push(...result.failed);
     }
-    if (failed.length) throw new HistoryRevokeError(removed, failed);
+    if (failed.length) throw new HistoryRevokeError(removed, failed, gone);
     await updateRecord(scoped, grant.url, (dataset) => {
       const node = subjectOf(dataset, grant.url);
       if (node.texts(ACCM.revokedAt).length) return false;
@@ -307,10 +406,12 @@ export async function revokeHistoryGrant(
     RequiredAs.object(node, ACCM.revokedAt, when, LiteralFrom.dateTime);
     return true;
   });
+  return { removed, alreadyGone: gone };
 }
 
 const STATUS_TEXT: Readonly<Record<HistoryStatus, string>> = {
   granted: "Shared",
+  approving: "Not finished",
   denied: "Denied",
   revoked: "Access removed",
   unknown: "Status unknown",
@@ -320,9 +421,22 @@ export function statusText(status: HistoryStatus): string {
   return STATUS_TEXT[status];
 }
 
-/** The recipient's host: the record holds only a WebID, and a host is all it proves. */
-export function recipientLabel(entry: Pick<HistoryEntry, "recipient">): string {
-  return (entry.recipient && httpUrl(entry.recipient)?.host) || "Someone";
+/**
+ * What to call the recipient: the name their own profile gives (self-asserted, so the full WebID is
+ * always shown beside it), else the WebID's host.
+ */
+export function recipientLabel(entry: Pick<HistoryEntry, "recipient">, name?: string): string {
+  const named = name?.replace(/\s+/g, " ").trim().slice(0, 80);
+  return named || (entry.recipient && httpUrl(entry.recipient)?.host) || "Someone";
+}
+
+/** Everything this person or app can reach, in Permissions: the closest "who can see" view. */
+export function recipientHref(entry: Pick<HistoryEntry, "recipient">): string | undefined {
+  try {
+    return entry.recipient ? `/permissions/a/${encodeRef(entry.recipient)}` : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function placesText(count: number): string {
