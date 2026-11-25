@@ -46,6 +46,17 @@ import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 
 const saveNatively = vi.hoisted(() => vi.fn(async () => true));
 vi.mock("@/lib/native/save-file", () => ({ saveNatively }));
+const typeIndexFactory = vi.hoisted(() => ({ failure: undefined as unknown }));
+vi.mock("@jeswr/pod-type-index", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@jeswr/pod-type-index")>();
+  return {
+    ...actual,
+    createTypeIndex: (...args: Parameters<typeof actual.createTypeIndex>) => {
+      if (typeIndexFactory.failure) throw typeIndexFactory.failure;
+      return actual.createTypeIndex(...args);
+    },
+  };
+});
 const root = "https://fictional.example/pod/";
 const scene = () => addElement(emptyScene(), rectangle(10, 20, 100, 80, { id: "one" }));
 const index = () =>
@@ -99,6 +110,64 @@ describe("whiteboard pod orchestration", () => {
       { index: "private" },
     );
     expect(repo.container).toBe(root + "whiteboards/");
+  });
+  it.each([
+    "solid",
+    "lws",
+  ] as const)("keeps boards readable and writable when Type Index registration fails on %s", async (protocol) => {
+    const storage = createMemoryStorage({ protocol, root });
+    const types = index();
+    vi.mocked(types.register)
+      .mockRejectedValueOnce(new StorageError("forbidden", { method: "PUT", url: root }))
+      .mockRejectedValueOnce(new Error("secret detail"));
+    const repo = await prepareWhiteboards(storage, types);
+    expect(repo.registration).toEqual({ state: "failed", reason: "forbidden" });
+    const board = await repo.create("Still works", scene());
+    expect((await repo.list()).map((b) => b.title)).toEqual(["Still works"]);
+    await repo.save(board, emptyScene());
+    // Only the private index is ever targeted, and only the error code is kept.
+    expect(types.register).toHaveBeenCalledWith(
+      DRAW_SCENE_IRI,
+      { container: repo.container },
+      { index: "private" },
+    );
+    const other = await prepareWhiteboards(storage, types);
+    expect(other.registration).toEqual({ state: "failed", reason: "unknown" });
+    expect(JSON.stringify(other.registration)).not.toContain("secret");
+    expect((await prepareWhiteboards(storage, types)).registration).toEqual({
+      state: "registered",
+    });
+  });
+  it.each([
+    "solid",
+    "lws",
+  ] as const)("opens without a Type Index when there is none to use on %s", async (protocol) => {
+    const storage = createMemoryStorage({ protocol, root });
+    const repo = await prepareWhiteboards(storage, undefined);
+    expect(repo.registration).toEqual({ state: "unavailable" });
+    expect(repo.container).toBe(`${root}whiteboards/`);
+    await repo.create("No index", scene());
+    expect((await repo.list()).map((b) => b.title)).toEqual(["No index"]);
+  });
+  it("opens a session whose WebID is outside the storage, and surfaces other index errors", async () => {
+    const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()) });
+    const session = {
+      mode: "solid" as const,
+      storageUrl: DEMO_ROOT,
+      webId: "https://id.example/card#me",
+      displayName: "Fictional",
+      fetch: pod.fetch,
+      subscribe: pod.subscribe,
+      reset: async () => {},
+    };
+    const repo = await openWhiteboards(session);
+    expect(repo.registration).toEqual({ state: "unavailable" });
+    expect((await repo.create("Outside", scene())).title).toBe("Outside");
+    typeIndexFactory.failure = new StorageError("forbidden", { method: "GET", url: DEMO_ROOT });
+    await expect(openWhiteboards(session)).rejects.toBeInstanceOf(StorageError);
+    typeIndexFactory.failure = new TypeError("broken");
+    await expect(openWhiteboards(session)).rejects.toThrow("broken");
+    typeIndexFactory.failure = undefined;
   });
   it("requires ETags and rejects overwrites on 412", async () => {
     const { repository } = await fixture();
