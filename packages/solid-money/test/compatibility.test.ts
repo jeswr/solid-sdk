@@ -47,12 +47,14 @@ it.each([
   [V.derivedFrom, "<#one>, <#two>"],
   [V.debitAccount, '"x"'],
   [V.creditAccount, "<#one>, <#two>"],
-])("rejects an unprojectable optional transaction link %s instead of dropping it", async (predicate, value) => {
+])("lists a record with an unprojectable optional link %s but refuses to save over it", async (predicate, value) => {
   const document = new MoneyDocument();
   putTransaction(document, row);
   const extra = await parseMoney(`<${row.id}> <${predicate}> ${value} .`, base);
   for (const quad of extra.dataset) document.dataset.add(quad);
-  expect(() => document.transactions()).toThrow("Invalid transaction link");
+  // One bad link must not hide the ledger: the record still lists, without the link.
+  expect(document.transactions().map((t) => t.id)).toEqual([row.id]);
+  expect(() => putTransaction(document, row)).toThrow("Invalid transaction link");
 });
 
 it("keeps every statement of an ambiguous link through a load-edit-save cycle", async () => {
@@ -64,9 +66,9 @@ it("keeps every statement of an ambiguous link through a load-edit-save cycle", 
   );
   for (const quad of extra.dataset) document.dataset.add(quad);
   const loaded = await parseMoney(await serialiseMoney(document), base);
-  // The record cannot be read, so the app has no snapshot to edit and save.
-  expect(() => loaded.transactions()).toThrow("Invalid transaction link");
-  // A save from a snapshot built elsewhere must refuse rather than erase what could not be read.
+  // The record still lists, without the links that could not be read.
+  expect(loaded.transactions()).toHaveLength(1);
+  // A save from that snapshot must refuse rather than erase what could not be read.
   expect(() => putTransaction(loaded, { ...row, description: "Edited" })).toThrow(
     "Invalid transaction link",
   );

@@ -116,7 +116,6 @@ export class MoneyDocument {
         entities.CardPayment,
       ].find((entity) => node.types.has(entity.typeIri));
       const core = required(required(entity).parse(node.value, this.dataset));
-      this.assertLinksReadable(node, core);
       const result: Transaction = {
         id: node.value,
         account: core.account,
@@ -129,7 +128,11 @@ export class MoneyDocument {
       return result;
     });
   }
-  /** A present optional link that does not project would be erased by the next save. */
+  /**
+   * A present optional link that does not project would be erased by the next save, so a
+   * save of that record is refused. Reads still list the record without the link: one bad
+   * link must not make the rest of the ledger unreadable.
+   */
   assertLinksReadable(node: MoneyNode, core: Partial<Transaction>): void {
     for (const key of OPTIONAL_LINKS)
       if (

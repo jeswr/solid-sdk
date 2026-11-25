@@ -84,10 +84,10 @@ apart from import paths. The app oracle remains untouched.
   Ambiguous required account links reject the record.
 - A present optional transaction link (`pm:category`, `fin:hasCounterparty`,
   `prov:wasDerivedFrom`, `fin:debitAccount`, `fin:creditAccount`) that does not project
-  (a literal, an unsafe IRI or several values) rejects the record with "Invalid transaction
-  link" instead of dropping it, because the next save would have erased every value.
-  `putTransaction` refuses with the same error when the stored record holds such a link, so
-  a save never deletes data the read could not show. The oracle kept the first value.
+  (a literal, an unsafe IRI or several values) is left out of the listed record, which still
+  reads so that one bad link cannot hide the rest of the ledger. `putTransaction` refuses
+  with "Invalid transaction link" when the stored record holds such a link, so a save never
+  deletes data the read could not show. The oracle kept the first value.
 - The amount link (`fin:hasMonetaryAmount`), the amount (`schema:value`, or the legacy
   `fin:amount` when the canonical predicate is absent), `fin:postingTime` and `pm:asOf`
   must each hold exactly one value. Several values reject the record with "Incomplete money
