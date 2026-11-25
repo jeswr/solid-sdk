@@ -180,7 +180,9 @@ test("a required track document fails visibly and Retry reads the repaired docum
   const saved = await breakDocument(page, "music/tracks/catalog.ttl");
   await page.reload();
   await settled(page);
-  await expect(page.locator('[role="alert"]:not(#__next-route-announcer__)')).toContainText("Couldn’t read your music library");
+  await expect(page.locator('[role="alert"]:not(#__next-route-announcer__)')).toContainText(
+    "Couldn’t read your music library",
+  );
   await expect(page.getByRole("button", { name: "Retry", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "No tracks yet", exact: true })).toHaveCount(0);
   await accessible(page);
