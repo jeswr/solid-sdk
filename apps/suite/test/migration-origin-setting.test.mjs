@@ -12,6 +12,7 @@ it("bakes the public remote origin by default without changing production URLs",
     publicSuiteUrl: "https://solid-suite.vercel.app",
     clientIdUrl: "https://solid-suite.vercel.app/.well-known/solid-client-id-mobile.jsonld",
     predecessorOrigins: ["https://solid-suite.vercel.app"],
+    pushRelayUrl: null,
   });
   expect(
     nativeSettings({ PUBLIC_SUITE_URL: "https://suite.example/base" }).predecessorOrigins,
