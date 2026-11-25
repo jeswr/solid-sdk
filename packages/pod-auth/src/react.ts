@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 // Ported from solid-auth-core/src/react/index.tsx (AUTHORED-BY Claude Fable 5).
 // React mirrors public identity/events. All credential handling remains in the core.
 import {
@@ -14,6 +15,7 @@ import {
 import {
   createPodAuth,
   type Identity,
+  InjectedFetchError,
   type LoginHint,
   type PodAuth,
   type PodAuthOptions,
@@ -67,7 +69,11 @@ export function PodAuthProvider(props: PodAuthProviderProps): ReactNode {
     // One promise across StrictMode effect replay. A later lifecycle event supersedes its result.
     restoreRef.current ??= auth.restore();
     void restoreRef.current
-      .catch(() => auth.identity())
+      .catch((failure: unknown) => {
+        // A refusal by the host's own transport is worth telling the user about; the session is kept.
+        if (failure instanceof InjectedFetchError) setError(failure.message);
+        return auth.identity();
+      })
       .catch(() => null)
       .then((restored) => {
         if (!disposed && !changed) mirror(restored);

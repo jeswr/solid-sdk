@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 import { createBrowserCaches, nonReactiveFetch, withLock } from "@jeswr/reactive-authentication";
 import { createPodAuth } from "./index.js";
+import { type InjectedFetchError, injectedFetchFailure } from "./injected-fetch.js";
 import { protectStore, scopedStore } from "./kv.js";
 import { validateOptions } from "./options.js";
 import { memoryStore } from "./sessions.js";
@@ -30,6 +32,11 @@ interface Entry extends Pointer {
 interface Events {
   change: undefined;
   expired: string;
+  /**
+   * `restoreAll()` could not restore a remembered account because `PodAuthOptions.fetch` refused one of
+   * pod-auth's own requests. The account stays remembered; allow the origin and call `restoreAll()` again.
+   */
+  refused: { webId: string; error: InjectedFetchError };
 }
 
 /** Independent account sessions with public snapshots and no credential transfer on switching. */
@@ -289,7 +296,9 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
               if (identity === null || identity.webId !== pointer.webId) return null;
               accepted = true;
               return existing ?? attach(pointer, auth, identity);
-            } catch {
+            } catch (error) {
+              const refusal = injectedFetchFailure(error);
+              if (refusal !== undefined) emit("refused", { webId: pointer.webId, error: refusal });
               return null;
             } finally {
               stop();

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Sonnet 5.5
 /** Structural key-value seam; values must support structured cloning, including CryptoKeys. */
 export interface KvStore<T extends {} = {}> {
   getItem(key: string): Promise<T | null>;
@@ -51,6 +52,21 @@ export interface PodAuthOptions {
    * (default 16 MiB). Raise it for apps that upload large files; larger bodies reject.
    */
   maxReplayBodyBytes?: number;
+  /**
+   * Transport for pod-auth's OWN unauthenticated reads on the browser path, e.g. so a host that
+   * allow-lists origins (a desktop webview's CSP) can gate them. Called with a single `Request`, which it
+   * must forward unchanged, and only for body-less GET/HEAD requests with no Authorization, DPoP,
+   * Proxy-Authorization or Cookie header, handed over with `credentials: "omit"`: authorization-server and
+   * challenge-driven metadata discovery, the Client Identifier Document, the WebID profile (including the
+   * engine's issuer verification), storage descriptions and their confirming HEADs. It never sees token,
+   * registration or revocation requests (POSTs), refresh or DPoP-proof traffic, the PKCE verifier, or any
+   * request made through `auth.fetch`, and it is not an enforcement point for those origins. Pod-auth's
+   * HTTPS/loopback check runs first; the result must be a `Response`, must not have followed a redirect the
+   * request did not ask for, and is read under a 1 MiB cap (`InvalidInjectedResponseError`). The engine's 8 s
+   * WebID-read deadline includes this function's time. A rejection surfaces as `InjectedFetchError` whose
+   * `cause` is the rejection itself. Not accepted together with a CID agent subject (`lws.subject.cid`).
+   */
+  fetch?: typeof fetch;
 }
 
 /** Existing CID identity and its caller-owned signing key; no key is generated implicitly. */

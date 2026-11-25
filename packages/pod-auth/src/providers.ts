@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Sonnet 5.5
 import {
   CachingAuthorizationServerProvider,
   CachingClientProvider,
@@ -28,6 +29,7 @@ import {
   XASProvider,
 } from "@jeswr/reactive-authentication";
 import { createBoundary } from "./boundary.js";
+import { isPublicRequest, viaSupplied } from "./injected-fetch.js";
 import { protectStore, scopedStore } from "./kv.js";
 import { createLwsProvider } from "./lws-provider.js";
 import { secureUrl } from "./options.js";
@@ -274,12 +276,15 @@ export function createProviders(
   const transport = nonReactiveFetch();
   const insecure = options.allowInsecureLoopback === true;
   // Enforce loopback on EVERY protocol hop, even after discovery. Never broaden the engine's HTTP flag.
+  const supplied = options.fetch;
   const http: HttpOptions = {
     allowInsecureRequests: insecure,
     fetch: (input, init) => {
       const request = new Request(input, init);
+      // The guard runs before, and independently of, whichever transport is chosen.
       secureUrl(request.url, insecure, "protocol endpoint");
-      return transport(request);
+      if (supplied === undefined || !isPublicRequest(request)) return transport(request);
+      return viaSupplied(supplied, request);
     },
   };
   const boundary = createBoundary(options, http);

@@ -3,6 +3,7 @@ name: pod-auth
 description: Use when integrating @jeswr/pod-auth login, multi-account managers, bounded auth.fetch, restore, React sessions, Node agents, CSS self-registration or Client Identifier Documents, or migrating deprecated suite client authentication.
 ---
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Sonnet 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # Work with `@jeswr/pod-auth`
@@ -159,6 +160,29 @@ first; storage failures are harmless. Providers use monograms by default; host-s
   gain resource access, and the first inherits the bootstrap session as in browser login.
 - Fence login, refresh, restore, persistence and logout against stale work after each awaited boundary.
   Do not expose identity until credentials and refresh rotation are durable.
+
+## Gate pod-auth's own requests (`fetch`)
+
+`PodAuthOptions.fetch` (browser path; rejected with a CID subject) is called with one `Request` and must
+forward it unchanged. It receives only body-less GET/HEAD requests with no Authorization, DPoP,
+Proxy-Authorization or Cookie header, handed over with `credentials: "omit"` (classification never reads
+`Request.body`): discovery metadata, the Client Identifier Document, the WebID profile (engine `verifyWebId`
+and boundary learning), storage descriptions and their confirming HEADs. There is no JWKS read. Token
+exchange, refresh, registration, revocation and every `auth.fetch` request stay on the global non-reactive
+transport; never route them through it, and do not call the gate an enforcement point for token endpoints,
+pod origins or browser redirect hops.
+Guards around it: HTTPS/loopback first; the result must be a `Response`, must not have redirected unless
+the request asked to follow, and is read under a 1 MiB cap (`InvalidInjectedResponseError`). Only the
+engine's WebID read has its own 256 KiB cap and 8 s deadline, which includes your function's time, so refuse
+promptly and prompt the user out of band. A rejection becomes `InjectedFetchError` (URL-free message, your
+error as `cause`; only the attempt's own abort reason passes through). It can surface from `login()`,
+`restore()` and `auth.fetch`; `restoreAll()` emits `refused` and `PodAuthProvider` sets `error`. A refused
+description GET or confirming HEAD fails login typed and does not mark the WebID learned. A refusal never
+drops a stored session (restore again after approving); a session dropped for a dead grant is still `null`;
+a real issuer-verification failure behaves as before. WebID-hinted login lets the host approve the WebID
+origin before authentication; issuer-only login needs approve-then-retry. Remote servers can steer which
+origins the host is asked about, so show origin and reason and never auto-approve. Deferring WebID
+verification in the engine is an unimplemented follow-up needing maintainer sign-off. See the README.
 
 ## Session lifecycle
 

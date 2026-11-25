@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Sonnet 5.5 -->
 
 # @jeswr/pod-auth
 
@@ -111,6 +112,94 @@ policies still apply. The scheme URI is preserved in authorization and token req
 known storage roots uses an unfetched synthetic HTTPS URL on the client document's origin as its
 session context; neither that URL nor the callback grants resource access. `ui.getCode` still returns
 the complete callback URL with `code`, `state` and `iss` and honors cancellation.
+
+## Gating pod-auth's own requests (`fetch`) for desktop webviews
+
+A host that allow-lists origins (a Tauri/Electron webview with a strict Content-Security-Policy whose
+`connect-src` grows only through a native approval dialog) can pass `fetch`. Pod-auth then sends its own
+**unauthenticated reads** through it. Always call it with a single `Request`; `(request) => gate(request)`
+is the whole contract, and it MUST forward that request unchanged (method, `redirect`, `credentials`,
+`signal`). Pod-auth hands over `credentials: "omit"` itself, so no ambient cookies or HTTP auth are part of
+these reads.
+
+**Exactly which requests reach it.** Body-less `GET`/`HEAD` requests with no `Authorization`, `DPoP`,
+`Proxy-Authorization` or `Cookie` header (a `GET`/`HEAD` cannot carry a body, so classification never reads
+`Request.body`; anything that is not `GET`/`HEAD` takes the default transport, which is the safe direction):
+
+- issuer discovery: the WebID profile read to list `solid:oidcIssuer`, OIDC/OAuth authorization-server
+  metadata, and UMA/LWS/RFC 9728 metadata discovered from a challenge;
+- the Client Identifier Document;
+- the WebID profile read by the engine's `verifyWebId` issuer check, and by the credential boundary's storage
+  discovery (storage descriptions and their confirming `HEAD`s).
+
+No JWKS is read on this path. **It never receives** the code exchange (`POST`: authorization code, PKCE
+verifier, DPoP proof), refresh grants, dynamic registration or revocation (`POST`s), anything made through
+`auth.fetch` (access tokens, DPoP proofs, 401 retries, resource reads), or the authorization request, which
+goes through `ui.getCode`. Those keep the global non-reactive transport as before, so a supplied fetch
+observes nothing it could not observe before. Without the option nothing changes. The option is rejected
+with a CID agent subject; Node agents (`forCid`, `forClientCredentials`) keep their own `fetch` policy.
+
+**The gate is not an enforcement point for everything pod-auth contacts.** Token, registration and
+revocation endpoints named by issuer metadata, pod origins used by `auth.fetch` (a container storage is
+never offered to the gate), and the browser's own redirect hops are not routed through it. Under a strict
+CSP those fail with an untyped `TypeError` and the host is never asked. In a browser a manual redirect is
+re-issued by pod-auth with `redirect: "follow"` through the gate, which sees only the first URL.
+
+**What pod-auth still guards around the function.** The HTTPS/loopback check runs before the function is
+chosen and on every hop. Whatever the function returns must be a `Response`
+(`InvalidInjectedResponseError` otherwise), must not be the product of a redirect when the request did not
+ask to follow (`redirected: true`, or a `url` other than the request's, is rejected with
+`InvalidInjectedResponseError`), and is read under a 1 MiB cap (`MAX_SUPPLIED_BYTES`; larger documents are
+rejected the same way). The cap applies only on this path. The 256 KiB cap and 8 s deadline on the WebID
+profile read are the engine's own and apply to both transports; no other read has a deadline. The
+engine's 8 s deadline includes time spent inside your function, so refuse promptly and prompt the user out
+of band: a late approval is cut off by the engine's `TimeoutError`, and a late refusal is still reported as
+`InjectedFetchError` (only the attempt's own abort reason passes through unwrapped).
+
+**Errors.** When the function rejects, the call rejects with `InjectedFetchError`: a fixed, URL-free
+message whose `cause` is your function's own error, unchanged (`error.cause instanceof OriginNotApproved`).
+A refused storage description or confirming `HEAD` during login fails the login the same way and the WebID
+is not marked learned, so the next `login()`/`restore()` on the same instance retries discovery. The typed
+refusal can surface from `login()`, `restore()` and `auth.fetch` (LWS/UMA discovery during a challenge, or a
+refresh whose response carries an ID token and so re-reads the WebID). `createAccountManager().restoreAll()`
+emits `on("refused", ({ webId, error }) => ...)` and leaves the account remembered; `PodAuthProvider`
+reports it through `usePodAuth().error` and stays unauthenticated.
+
+**`restore()`.** A refusal is never the reason a session is dropped: the call rejects, the pointer and
+refresh grant stay, and approving the origin then calling `restore()` again completes with no second trip to
+the identity provider. If the session is dropped for another reason (a dead grant, `invalid_grant`), that
+outcome is reported as before: `null`, even if a later step was also refused. A genuine verification failure
+(the profile was fetched and does not list the issuer) behaves exactly as without the option. The engine
+re-verifies the WebID on refresh only when the refresh response contains an ID token; otherwise the one
+WebID read on restore is the boundary's storage discovery (none with `boundary.automatic: false`).
+
+```ts
+const auth = createPodAuth({
+  /* ... */
+  fetch: (request) => originGate.fetch(request as Request), // throws OriginNotApproved when unapproved
+});
+```
+
+**Desktop pattern.** A window rebuild after approving an origin loses in-memory state, so approve before the
+user authenticates when you can:
+
+- **WebID-hinted login.** `login({ webId })` reads the WebID profile before the authorization request, so a
+  refusal arrives before the user visits the identity provider. Approve the WebID origin, rebuild, and call
+  `login({ webId })` again: no authorization has been spent.
+- **Issuer-only login.** The WebID is known only from the ID token, and the engine verifies it before the
+  session is stored. A refusal there fails the login after the user authenticated, with nothing persisted;
+  approve the origin and retry, which costs a second trip to the identity provider. A refusal during storage
+  discovery comes after the engine stored the grant but before a pointer exists: log in again.
+
+**Remote servers can drive your prompt.** Redirects, WebID profiles (storage descriptions) and resource
+challenges name origins of their server's choosing, and each one can become an `InjectedFetchError` and so
+an "approve this origin?" dialog. No credential is involved, but it is a prompt-fatigue and social-
+engineering vector: show the origin and why it was requested, rate-limit prompts per attempt, and never
+auto-approve on retry.
+
+Possible follow-up (not implemented; needs maintainer sign-off): deferring the engine's WebID verification
+so the session could be stored first and verified on `restore()` would remove the issuer-only second trip. It
+would change a security-critical check in `@jeswr/reactive-authentication`.
 
 ## Provider directory and sign-in addresses
 

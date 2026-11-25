@@ -1,7 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Sonnet 5.5
 import { type Identity as Claims, sameIssuer } from "@jeswr/reactive-authentication";
 import { createAgentAuth } from "./agent.js";
+import {
+  InjectedFetchError,
+  InvalidInjectedResponseError,
+  injectedFetchFailure,
+} from "./injected-fetch.js";
 import { StorageFailure } from "./kv.js";
 import { secureUrl, validateOptions } from "./options.js";
 import { AmbiguousIssuerError, createProviders } from "./providers.js";
@@ -27,7 +33,7 @@ export type {
   PodAuth,
   PodAuthOptions,
 } from "./types.js";
-export { AmbiguousIssuerError };
+export { AmbiguousIssuerError, InjectedFetchError, InvalidInjectedResponseError };
 
 export function createPodAuth(options: PodAuthOptions): PodAuth {
   validateOptions(options);
@@ -278,8 +284,9 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         if (decision.outcome === "restored") return snapshot();
         current = null;
         // A missing credential (invalid_grant or unusable key) drops its pointer. Transient failures keep it.
+        let present = true;
         if (account !== null) {
-          const present = await providers.persistence.present(account);
+          present = await providers.persistence.present(account);
           signal.throwIfAborted();
           if (!present) {
             await providers.persistence.forgetPointer();
@@ -288,6 +295,11 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
           }
         }
         if (failure instanceof StorageFailure) throw failure.cause;
+        // A refusal by the supplied transport is not a verdict on the session, which stays stored so
+        // the host can allow the origin and restore again. When the session was dropped for another
+        // reason (a dead grant), that outcome is reported as it always was: null, never a refusal.
+        const refusal = injectedFetchFailure(failure);
+        if (refusal !== undefined && present) throw refusal;
         return null;
       })().finally(() => {
         if (restoring === shared) {
@@ -370,7 +382,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         } catch (error) {
           // A grant obtained before the abort was observed must not outlive the abandoned attempt.
           if (abort?.aborted && granted) await discard(started);
-          throw error;
+          throw injectedFetchFailure(error) ?? error;
         }
         if (abort?.aborted) {
           await discard(started);
