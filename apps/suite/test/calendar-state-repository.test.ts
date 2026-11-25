@@ -354,7 +354,7 @@ describe("Calendar creation privacy", () => {
     const url = await createCalendar(
       { ...recorded.account, privateDestination },
       "Owner",
-      "#123456",
+      PALETTE[0] as string,
     );
     expect(url).toBe(`${root}calendar/owner.ttl`);
     expect((await io.loadCalendar(url))?.data.title).toBe("Owner");
@@ -366,7 +366,11 @@ describe("Calendar creation privacy", () => {
     const { account, io } = await setup();
     const recorded = recording(account);
     const privateDestination = { verify: vi.fn(async () => false), confirm: vi.fn() };
-    const refused = createCalendar({ ...recorded.account, privateDestination }, "Loose", "#123456");
+    const refused = createCalendar(
+      { ...recorded.account, privateDestination },
+      "Loose",
+      PALETTE[0] as string,
+    );
     await expect(refused).rejects.toBeInstanceOf(CalendarPrivacyError);
     await expect(refused).rejects.not.toThrow(/https?:|acl|public/i);
     expect(recorded.writes).toEqual([]);
@@ -388,7 +392,7 @@ describe("Calendar creation privacy", () => {
           },
         },
         "Unreadable",
-        "#123456",
+        PALETTE[0] as string,
       ),
     ).rejects.toThrow(/could not confirm/);
     expect(unreadable.writes).toEqual([]);
@@ -400,7 +404,7 @@ describe("Calendar creation privacy", () => {
           privateDestination: { verify: async () => true, confirm: async () => false },
         },
         "Changed",
-        "#123456",
+        PALETTE[0] as string,
       ),
     ).rejects.toBeInstanceOf(CalendarPrivacyError);
     expect(changed.writes).toEqual([
@@ -416,7 +420,7 @@ describe("Calendar creation privacy", () => {
       createCalendar(
         { ...account, privateDestination: { verify, confirm: async () => true } },
         "Shared Folder",
-        "#123456",
+        PALETTE[0] as string,
       ),
     ).rejects.toBeInstanceOf(CalendarPrivacyError);
     expect((await discoverCalendars({ ...account })).calendars.map((c) => c.title)).not.toContain(
@@ -432,9 +436,9 @@ describe("Calendar creation privacy", () => {
       ),
       mode: "solid",
     });
-    await expect(createCalendar(recorded.account, "Real", "#123456")).rejects.toBeInstanceOf(
-      CalendarPrivacyError,
-    );
+    await expect(
+      createCalendar(recorded.account, "Real", PALETTE[0] as string),
+    ).rejects.toBeInstanceOf(CalendarPrivacyError);
     expect(recorded.writes).toEqual([]);
   });
 });
