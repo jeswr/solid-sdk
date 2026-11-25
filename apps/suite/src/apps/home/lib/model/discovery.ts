@@ -38,11 +38,18 @@ export function domainItemKey(item: DomainItem): string {
 export const MAX_RECORDS_PER_DOCUMENT = 200;
 export const MAX_RECORDS_PER_REFRESH = 1_000;
 
+/** A document with more records than Home shows: the newest `shown` of `total` are cards. */
+export interface RecordLimit {
+  shown: number;
+  total: number;
+}
+
 interface ClassifiedDocument {
   dataset: DatasetCore;
   etag: string | null;
   items: DomainItem[];
-  truncated: boolean;
+  /** Set when the document holds more records than its per-document cap. */
+  limit?: RecordLimit;
 }
 
 export interface DiscoveryOptions extends DiscoveryBudgetOptions {
@@ -60,8 +67,10 @@ export interface DiscoveryOptions extends DiscoveryBudgetOptions {
 export interface DomainItems {
   items: DomainItem[];
   failures: DiscoveryFailure[];
-  /** True when discovery reached its request, record or time budget. Failures also imply partial data. */
+  /** True when discovery reached its request or time budget. Failures also imply partial data. */
   truncated: boolean;
+  /** Documents whose records were cut to the per-document cap, by document URL. */
+  limited: Map<string, RecordLimit>;
   etags: ReadonlyMap<string, string | null>;
   /** Listing membership is independent of whether child contents were visited. */
   listings: ReadonlyMap<string, ReadonlySet<string>>;
@@ -76,6 +85,62 @@ export function nameFromUrl(value: string): string {
   } catch {
     return value;
   }
+}
+
+/** Date (newest first) then card identity: independent of dataset or response order. */
+function newestFirst(items: readonly DomainItem[]): DomainItem[] {
+  return [...items].sort(
+    (a, b) =>
+      (Date.parse(b.modified ?? "") || 0) - (Date.parse(a.modified ?? "") || 0) ||
+      domainItemKey(a).localeCompare(domainItemKey(b)),
+  );
+}
+
+/**
+ * Applies the per-refresh record budget after every domain has been scanned, so it never
+ * depends on which request answered first. Documents share it fairly: the largest equal
+ * allowance that fits, with the remainder going to documents in URL order. A document
+ * keeps its newest records. Returns the cut documents (their previous cards are not
+ * evidence of deletion) alongside the kept items.
+ */
+export function capRecords(
+  items: readonly DomainItem[],
+  limited: ReadonlyMap<string, RecordLimit> = new Map(),
+  budget = MAX_RECORDS_PER_REFRESH,
+): { items: DomainItem[]; limited: Map<string, RecordLimit>; cut: Set<string> } {
+  const byDocument = new Map<string, DomainItem[]>();
+  const rest: DomainItem[] = [];
+  for (const item of items) {
+    if (item.dataType?.id === "files") rest.push(item);
+    else byDocument.set(item.url, [...(byDocument.get(item.url) ?? []), item]);
+  }
+  const urls = [...byDocument.keys()].sort();
+  const total = [...byDocument.values()].reduce((sum, group) => sum + group.length, 0);
+  const out = new Map(limited);
+  const cut = new Set<string>();
+  if (total <= budget)
+    return { items: [...rest, ...byDocument.values()].flat(), limited: out, cut };
+  const sizes = urls.map((url) => (byDocument.get(url) as DomainItem[]).length);
+  const fits = (allowance: number) =>
+    sizes.reduce((sum, size) => sum + Math.min(size, allowance), 0);
+  let allowance = 0;
+  while (fits(allowance + 1) <= budget) allowance++;
+  let spare = budget - fits(allowance);
+  const kept = [...rest];
+  for (const url of urls) {
+    const group = newestFirst(byDocument.get(url) as DomainItem[]);
+    let take = Math.min(group.length, allowance);
+    if (group.length > take && spare > 0) {
+      take++;
+      spare--;
+    }
+    kept.push(...group.slice(0, take));
+    if (take < group.length) {
+      cut.add(url);
+      out.set(url, { shown: take, total: out.get(url)?.total ?? group.length });
+    }
+  }
+  return { items: kept, limited: out, cut };
 }
 
 export function sortItems(items: readonly DomainItem[]): DomainItem[] {
@@ -174,6 +239,7 @@ export async function discoverDomainItems(
     items: [],
     failures: [],
     truncated: false,
+    limited: new Map(),
     etags: new Map(),
     listings,
   };
@@ -186,17 +252,8 @@ export async function discoverDomainItems(
   const addDataset = (dataset: DatasetCore, url: string, parent: string, etag: string | null) => {
     let document = documents.get(url);
     if (!document) {
-      const remaining =
-        MAX_RECORDS_PER_REFRESH -
-        [...documents.values()].reduce((count, entry) => count + entry.items.length, 0);
-      const limit = Math.min(MAX_RECORDS_PER_DOCUMENT, remaining);
       const items: DomainItem[] = [];
-      let truncated = false;
       const add = (node: ReturnType<typeof subjectOf>, classified: Classification) => {
-        if (items.length >= limit) {
-          truncated = true;
-          return;
-        }
         const modifiedAt = node.modified;
         const item: DomainItem = {
           ...classified,
@@ -209,24 +266,24 @@ export async function discoverDomainItems(
           ...(modifiedAt ? { modified: modifiedAt } : {}),
         };
         items.push(item);
-        if (hasProfileContactDetails(node, webId)) {
-          if (items.length >= limit) truncated = true;
-          else
-            items.push({
-              ...item,
-              ...classificationForType("contact-details"),
-              title: "Contact details",
-            });
-        }
+        if (hasProfileContactDetails(node, webId))
+          items.push({
+            ...item,
+            ...classificationForType("contact-details"),
+            title: "Contact details",
+          });
       };
-      for (const { node, classification } of documentRecords(dataset, url, webId, limit)) {
+      for (const { node, classification } of documentRecords(dataset, url, webId))
         add(node, classification);
-        if (truncated) break;
+      document = { dataset, etag, items };
+      if (items.length > MAX_RECORDS_PER_DOCUMENT) {
+        // Newest first, then a stable order, so the same records are kept on every refresh.
+        document.items = newestFirst(items).slice(0, MAX_RECORDS_PER_DOCUMENT);
+        document.limit = { shown: MAX_RECORDS_PER_DOCUMENT, total: items.length };
       }
-      document = { dataset, etag, items, truncated };
       documents.set(url, document);
     }
-    result.truncated ||= document.truncated;
+    if (document.limit) result.limited.set(url, document.limit);
     // Listing dates and parents belong to the current scan, not the shared cache.
     result.items.push(...document.items.map((item) => ({ ...item, containerUrl: parent })));
   };
@@ -358,7 +415,7 @@ export async function discoverDomainItems(
         result.failures.push({ url, error });
     }
   }
-  result.truncated = budget.truncated || result.truncated;
+  result.truncated = budget.truncated;
   const unique = new Map<string, DomainItem>();
   for (const item of result.items) {
     // A direct registration may have been read before its container listing.
