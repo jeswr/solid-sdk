@@ -282,7 +282,9 @@ it.each([
   );
   const editor = await mount(h(SheetEditor, { container: book.container }));
   const forbidden = status === 401 || status === 403;
-  expect(editor.host.textContent).toContain(forbidden ? "Couldn't open" : "Can't open");
+  expect(editor.host.textContent).toContain(
+    forbidden ? "Couldn't open this spreadsheet" : "This item isn't here any more",
+  );
   const closing = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(closing);
   expect(closing.defaultPrevented).toBe(forbidden);

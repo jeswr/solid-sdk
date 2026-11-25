@@ -57,9 +57,16 @@ truncates long titles and save messages to leave room for Share.
 
 The list and editor chrome use native links, labelled controls and suite dialogs. The grid
 is engine-rendered: canvas cell contents and cell navigation are not fully exposed to screen
-readers. Its labelled region includes a hidden explanation. The browser accessibility tests
-cover the list and editor chrome, excluding the Univer container; they do not certify grid
-accessibility. CSV export provides a text representation of the active sheet's values.
+readers. Its labelled region includes a hidden explanation. The browser accessibility specs
+audit the rendered list, editor and dialog DOM at 375, 768 and 1280 px in light and dark
+themes, failing on serious or critical axe violations. Automated DOM audits do not certify
+canvas cell navigation. CSV export provides a text representation of the active sheet's values.
+
+The list searches spreadsheet names without changing stored data. First-run, empty search,
+load-error and missing-workbook views use the suite's shared state components. Retry repeats
+the failed read; clearing search restores the list. Offline and view-only notices explain
+when a connection or Write access is needed. The Playwright flows live in `e2e/sheets/`,
+use the remembered demo session and persistent demo pod, and import `e2e/fixtures/sheets-import.csv`.
 
 Autosave serializes all writes, debounces edits for one second, holds edits offline, retries
 on reconnection, and stops on conflicts until a version is chosen. Visibility/pagehide and

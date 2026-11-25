@@ -118,7 +118,8 @@ export const mountUniver: MountEngine = async (container, options) => {
     presets: [
       UniverSheetsCorePreset({
         container,
-        header: !options.compact,
+        // Univer 1.2 renders the formula bar inside the header; compact hides only the ribbon.
+        header: true,
         toolbar: !options.compact,
         formulaBar: true,
         footer: {

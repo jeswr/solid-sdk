@@ -346,8 +346,9 @@ describe("Univer engine adapter", () => {
     engine.dispose();
     await mount(true);
     expect(mock.preset.mock.calls[1]?.[0]).toMatchObject({
-      header: false,
+      header: true,
       toolbar: false,
+      formulaBar: true,
       footer: { statisticBar: false, menus: false, zoomSlider: false },
     });
   });

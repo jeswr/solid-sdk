@@ -37,6 +37,21 @@
   font-size: var(--text-2xl);
   font-weight: 600;
 }
+.sht-list-search {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  max-width: 28rem;
+  font-size: var(--text-sm);
+}
+.sht-access-notice {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--foreground);
+  font-size: var(--text-sm);
+}
 .sht-icon {
   color: var(--app-sheets);
   flex-shrink: 0;
@@ -273,8 +288,17 @@
   .ish-frame[data-app="sheets"] .ish-spacer {
     display: none;
   }
+  /* Keep the back link, title and save status readable; File, Data, Edit, Share and
+     feedback scroll horizontally instead of overlapping the title. */
   .ish-frame[data-app="sheets"] .ish-context {
-    flex: 1;
+    flex: 1 0 7rem;
+    min-width: 7rem;
+  }
+  .ish-frame[data-app="sheets"] .ish-actions {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
 }
 
@@ -309,16 +333,24 @@
   display: flex;
   flex-direction: column;
 }
+.sht-editor-content {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
 .sht-comment-tools {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
 }
-.sht-editor > .sht-grid-region {
+.sht-editor-content > .sht-grid-region {
   flex: 1;
 }
-.sht-editor:has(.sht-comments) > .sht-grid-region {
+.sht-editor-content:has(.sht-comments) > .sht-grid-region {
   width: calc(100% - min(360px, 85%));
 }
 .sht-comments {
