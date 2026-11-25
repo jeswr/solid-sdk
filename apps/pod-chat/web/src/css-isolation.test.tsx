@@ -27,7 +27,7 @@
 // does not run the cascade; the contract is what the unlayered reset keys off, and
 // app-shell's own suite tests the cascade math. The real-browser render is verified
 // at runtime in the rollout.)
-import { AccountMenu, FeedbackButton, ThemeProvider, ThemeToggle } from "@jeswr/app-shell";
+import { AccountControl, FeedbackButton, ThemeProvider, ThemeToggle } from "@jeswr/app-shell";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -59,7 +59,7 @@ describe("app-shell CSS isolation survives pod-chat's bare button {} (#80)", () 
 
   it("every header control App renders is isolation-tagged", () => {
     // Render the SAME app-shell header trio App.tsx mounts (FeedbackButton +
-    // ThemeToggle + AccountMenu), so the guard covers ALL the chrome the bare
+    // ThemeToggle + AccountControl), so the guard covers ALL the chrome the bare
     // `button {}` could leak onto — not just the FeedbackButton. A future app-shell
     // bump that dropped `data-app-shell-control` from ANY of these would fail here.
     const { container } = render(
@@ -68,7 +68,7 @@ describe("app-shell CSS isolation survives pod-chat's bare button {} (#80)", () 
       <ThemeProvider>
         <FeedbackButton repo="jeswr/pod-chat" appName="Pod Chat" appVersion="testsha" />
         <ThemeToggle />
-        <AccountMenu
+        <AccountControl
           webId="https://alice.example/profile/card#me"
           displayName="Alice"
           onSignOut={() => {}}
