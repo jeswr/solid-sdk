@@ -58,6 +58,19 @@ test("scenario 7: keyboard-only file share and revoke keep visible focus and res
   const alice = await accountAuth("alice", root);
   const bob = await accountAuth("bob", root);
   const original = `Private keyboard sharing fixture ${randomUUID()}`;
+  // Over-share control: a private sibling and the container itself must never follow the grant.
+  const container = new URL("drive/", root).href;
+  const siblingUrl = new URL(`drive/keyboard-private-${randomUUID()}.txt`, root).href;
+  const outsideStaysPrivate = async () => {
+    for (const target of [siblingUrl, container]) {
+      const anonymous = await fetch(target, { redirect: "error" });
+      expect(anonymous.status, `anonymous must stay denied on ${target}`).toBe(401);
+      await anonymous.body?.cancel();
+      const other = await bob.fetch(target);
+      expect(other.status, `Bob must stay denied on ${target}`).toBe(403);
+      await other.body?.cancel();
+    }
+  };
   const denied = async () => {
     const response = await bob.fetch(url);
     expect(response.status).toBe(403);
@@ -70,6 +83,13 @@ test("scenario 7: keyboard-only file share and revoke keep visible focus and res
       body: original,
     });
     expect(created.status).toBe(201);
+    const sibling = await alice.fetch(siblingUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "text/plain", "If-None-Match": "*" },
+      body: "Alice's private sibling",
+    });
+    expect(sibling.status).toBe(201);
+    await outsideStaysPrivate();
     const anonymous = await fetch(url, { redirect: "error" });
     expect(anonymous.status).toBe(401);
     await anonymous.body?.cancel();
@@ -147,6 +167,7 @@ test("scenario 7: keyboard-only file share and revoke keep visible focus and res
       body: edited,
     });
     expect(write.ok).toBe(true);
+    await outsideStaysPrivate();
     await activate(page, done);
     await expect(dialog).toBeHidden();
     await expect(trigger).toBeFocused();
@@ -163,6 +184,7 @@ test("scenario 7: keyboard-only file share and revoke keep visible focus and res
     const publicRead = await fetch(url, { redirect: "error" });
     expect(publicRead.status).toBe(200);
     expect(await publicRead.text()).toBe(edited);
+    await outsideStaysPrivate();
     await accessible(page);
     // Remove the public grant first, so Bob's final 403 proves his own grant was revoked.
     await reach(page, general);
