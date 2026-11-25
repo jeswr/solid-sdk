@@ -21,7 +21,7 @@ import {
   roleFor,
   UnsupportedAccessModelError,
 } from "./acl.js";
-import { DecisionPreviewConflictError } from "./errors.js";
+import { ApprovalRevokedError, DecisionPreviewConflictError } from "./errors.js";
 import {
   agentUrl,
   httpUrl,
@@ -534,6 +534,30 @@ function assertExpected(actual: DecisionPreview, expected: DecisionPreview | und
     throw new DecisionPreviewConflictError();
 }
 
+/**
+ * The owner's own records say this approval was withdrawn (History marks the grant and the receipt
+ * when it removes access). Finishing it would apply the pinned snapshot again, so refuse.
+ */
+async function assertNotRevoked(
+  locations: { grantUrl: string; receiptUrl: string },
+  fetchFn: typeof fetch,
+  receiptToo: boolean,
+): Promise<void> {
+  const grant = await read(locations.grantUrl, fetchFn);
+  if (grant && values(grant.dataset, locations.grantUrl, ACCM.revokedAt).length)
+    throw new ApprovalRevokedError();
+  if (!receiptToo) return;
+  const receipt = await read(locations.receiptUrl, fetchFn);
+  if (
+    receipt &&
+    (values(receipt.dataset, locations.receiptUrl, ACCM.revokedAt).length ||
+      values(receipt.dataset, locations.receiptUrl, DPV.hasConsentStatus).includes(
+        DPV.ConsentWithdrawn,
+      ))
+  )
+    throw new ApprovalRevokedError();
+}
+
 async function complete(
   request: ParsedRequest,
   snapshot: Snapshot,
@@ -581,7 +605,10 @@ async function complete(
     null,
     true,
   );
+  await assertNotRevoked(locations, fetchFn, true);
   for (const target of snapshot.targets) {
+    // Re-checked per target: a revoke can land while an earlier target is being written.
+    await assertNotRevoked(locations, fetchFn, false);
     try {
       await applyGrant(
         target,

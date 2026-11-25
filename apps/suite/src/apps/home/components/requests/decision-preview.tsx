@@ -15,6 +15,9 @@ import { PREVIEW_CHANGED, targetRoleText } from "../../lib/requests/model";
 
 export const PREVIEW_LOADING = "Checking exactly what will be shared…";
 export const PREVIEW_SCOPE = "Only the places listed are shared.";
+/** A folder role is written for the folder and everything inside it, including later additions. */
+export const PREVIEW_FOLDER_SCOPE =
+  "A folder includes everything inside it, including items added later. Only the places listed are shared.";
 
 export function PreviewTargets({ preview, label }: { preview: DecisionPreview; label: string }) {
   return (
@@ -56,7 +59,11 @@ export function PreviewPanel({ title, preview, error, onRetry, previous }: Previ
       {preview ? (
         <>
           <PreviewTargets preview={preview} label={previous ? "Now" : title} />
-          <p className="hm-request-muted">{PREVIEW_SCOPE}</p>
+          <p className="hm-request-muted">
+            {preview.targets.some((target) => target.url.endsWith("/"))
+              ? PREVIEW_FOLDER_SCOPE
+              : PREVIEW_SCOPE}
+          </p>
         </>
       ) : error ? (
         <div className="hm-request-note">

@@ -55,6 +55,7 @@ import {
   HistoryPage,
   PARTIAL_REVOKE,
   REVOKE_FAILED,
+  REVOKE_SCOPE,
 } from "../src/apps/home/components/permissions/history-page";
 import { HistoryRoute } from "../src/apps/home/components/permissions/history-route";
 import { PermissionsPage } from "../src/apps/home/components/permissions/permissions-page";
@@ -103,7 +104,7 @@ beforeEach(() => {
     reset: async () => {},
   };
   mocks.read.mockResolvedValue([active, denied, removed]);
-  mocks.revoke.mockResolvedValue(undefined);
+  mocks.revoke.mockResolvedValue({ removed: [], alreadyGone: [] });
 });
 
 function button(root: ParentNode, name: string): HTMLButtonElement {
@@ -153,9 +154,46 @@ it("asks before removing access, then revokes that approval and reads the histor
     webId: `${ROOT}profile#me`,
     storage: ROOT,
   });
-  expect(mocks.toast.success).toHaveBeenCalledWith("maracoach.example no longer has this access.");
+  expect(mocks.toast.success).toHaveBeenCalledWith(
+    "Removed the access this approval gave maracoach.example. maracoach.example may still have access another way; check Permissions.",
+  );
   expect(mocks.read).toHaveBeenCalledTimes(2);
   expect(view.host.textContent).toContain(EMPTY_ACTIVE);
+});
+
+it("says exactly what removing does, and names the recipient by full WebID", async () => {
+  const twin: HistoryEntry = {
+    ...active,
+    receipt: `${ROOT}settings/access-records/receipt-4.ttl`,
+    recipient: "https://maracoach.example/mallory/profile/card#me",
+    grant: { ...(active.grant as NonNullable<HistoryEntry["grant"]>), url: `${ROOT}grant-4.ttl` },
+  };
+  mocks.read.mockResolvedValue([active, twin]);
+  const view = await mount(h(HistoryPage));
+  const rows = [
+    ...view.host.querySelectorAll('[aria-label="Access shared with maracoach.example"]'),
+  ];
+  // Two WebIDs on one host stay distinguishable in the list and the confirmation.
+  expect(rows).toHaveLength(2);
+  expect(rows[0]?.textContent).toContain("https://maracoach.example/profile/card#me");
+  expect(rows[1]?.textContent).toContain("https://maracoach.example/mallory/profile/card#me");
+  expect(rows[1]?.querySelector("a")?.getAttribute("href")).toMatch(/^\/permissions\/a\//);
+  await click(button(rows[1] as Element, "Remove access"));
+  const dialog = confirmDialog().textContent ?? "";
+  expect(dialog).toContain("https://maracoach.example/mallory/profile/card#me");
+  expect(dialog).not.toContain("will no longer be able to use");
+  expect(dialog).toContain(REVOKE_SCOPE);
+  expect(dialog).toContain("parent folder");
+});
+
+it("shows an unfinished approval as not finished, with no Remove access", async () => {
+  mocks.read.mockResolvedValue([{ ...active, status: "approving" }]);
+  const view = await mount(h(HistoryPage));
+  expect(view.host.querySelectorAll('[aria-label^="Access shared with"]')).toHaveLength(0);
+  const row = view.host.querySelector('[aria-label="Not finished: maracoach.example"]');
+  expect(row?.textContent).toContain("Only some of this access may be in place");
+  expect(row?.querySelector('a[href="/permissions/requests"]')).not.toBeNull();
+  expect(row?.querySelector("button")).toBeNull();
 });
 
 it("keeps a partly revoked approval listed with a plain explanation", async () => {
@@ -166,7 +204,11 @@ it("keeps a partly revoked approval listed with a plain explanation", async () =
   const row = () => view.host.querySelector('[aria-label="Access shared with maracoach.example"]');
   await click(button(row() as Element, "Remove access"));
   await click(button(confirmDialog(), "Remove access"));
-  expect(row()?.querySelector('[role="alert"]')?.textContent).toBe(PARTIAL_REVOKE);
+  expect(row()?.querySelector('[role="alert"]')?.textContent).toContain(PARTIAL_REVOKE);
+  // It names what was and wasn't removed.
+  expect(row()?.querySelector('[role="alert"]')?.textContent).toContain(
+    "Not removed: health/sleep/. Removed: activity/.",
+  );
   expect(mocks.toast.success).not.toHaveBeenCalled();
   // Any other failure has fixed copy; the raw error only goes to the console.
   const log = vi.spyOn(console, "error").mockImplementation(() => {});
