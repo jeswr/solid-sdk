@@ -141,6 +141,28 @@ describe("whiteboard pod orchestration", () => {
   it.each([
     "solid",
     "lws",
+  ] as const)("treats a failed index lookup as no usable index, and a second session reuses the boards on %s", async (protocol) => {
+    const storage = createMemoryStorage({ protocol, root });
+    const broken = index();
+    vi.mocked(broken.find).mockRejectedValue(
+      new StorageError("forbidden", { method: "GET", url: root }),
+    );
+    vi.mocked(broken.register).mockRejectedValue(
+      new StorageError("forbidden", { method: "PUT", url: root }),
+    );
+    const first = await prepareWhiteboards(storage, broken);
+    expect(first.registration).toEqual({ state: "failed", reason: "forbidden" });
+    const board = await first.create("Kept", scene());
+    // Nothing is registered, so the next session finds the folder by its conventional name.
+    const second = await prepareWhiteboards(storage, broken);
+    expect(second.container).toBe(first.container);
+    expect((await second.list()).map((b) => b.title)).toEqual(["Kept"]);
+    expect((await second.create("Also", scene())).blob).not.toBe(board.blob);
+    expect((await second.list()).map((b) => b.title)).toEqual(["Also", "Kept"]);
+  });
+  it.each([
+    "solid",
+    "lws",
   ] as const)("opens without a Type Index when there is none to use on %s", async (protocol) => {
     const storage = createMemoryStorage({ protocol, root });
     const repo = await prepareWhiteboards(storage, undefined);

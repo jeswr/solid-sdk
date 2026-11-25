@@ -53,8 +53,10 @@ reply**: link invitations accept anonymous Append only, so a guest list is not a
 guest list is offered only for invitation-only events, as inherited Read for the named invited WebIDs.
 (A host-written summary document would let link visitors see names or counts without exposing raw replies;
 that is not built yet.) Publishing verifies the reply container afterwards and fails closed if it is
-readable beyond that audience. Editing a published link invitation withdraws any public guest-list Read an
-earlier version granted. Append is never inherited to individual replies. Replies are immutable, so
+readable beyond that audience. Editing a published link invitation withdraws any public (or signed-in) guest-list Read an
+earlier version granted, and only that: the organiser's and every named agent's access is kept, a rule that
+also covers another agent is refused rather than revoked whole, and nothing is written when there is nothing
+to withdraw. Append is never inherited to individual replies. Replies are immutable, so
 changing a response writes a fresh resource. Hidden lists are readable only by the organiser. There is no
 guest Write grant.
 The first cut supports Solid WAC. Unsupported discovery/access models fail closed; ACP and LWS are
@@ -68,7 +70,9 @@ Publishing is a multi-resource operation and commits state before it widens acce
 state is written first, then the audience's grants. On any failure after widening the grants are revoked,
 re-read to confirm, and the invitation is restored to a private draft; the call throws `PublicationError`
 (`sharingWithdrawn` is false only if that confirmation itself failed, which the message tells the organiser
-to check). A failed creation may leave a recoverable private draft in the organiser's pod. It never grants a
+to check; `draftRestored` is false when the draft state could not be written back, and the message then says
+the invitation is still marked published with nobody able to open it). `reshare(invitation)` explicitly
+shares such a published invitation again; an edit never widens access by itself. A failed creation may leave a recoverable private draft in the organiser's pod. It never grants a
 wider audience.
 
 Documents are created at the location the server assigns: if a pod names a document differently from the

@@ -4,7 +4,7 @@ import { ensurePrivateContainerAccess } from "@jeswr/pod-access/roles";
 import { createMemoryCache } from "@jeswr/storage-capabilities/cache";
 import { createPodClient } from "@jeswr/storage-client";
 import { createTemplateStore } from "@jeswr/suite-templates";
-import { toast } from "@jeswr/suite-ui";
+import { warnRegistrationFailed } from "../registration-notice";
 import type { PodSession } from "../session/pod-session";
 
 const stores = new WeakMap<PodSession, Promise<ReturnType<typeof createTemplateStore>>>();
@@ -22,10 +22,7 @@ export function templatesForSession(session: PodSession) {
           profile: session.webId,
           fetch: session.fetch,
           // Registration only helps other apps find the folder; templates stay usable without it.
-          onRegistrationError: () =>
-            toast.warning(
-              "Templates couldn't be registered in your Type Index, so other apps may not find them. They're still saved in your pod.",
-            ),
+          onRegistrationError: () => warnRegistrationFailed("Templates"),
           // Provisions only a collection the store just created; an adopted one is verified.
           ensurePrivateAccess: async (url, { created }) =>
             (await ensurePrivateContainerAccess(session, url, { created, storage })).private,

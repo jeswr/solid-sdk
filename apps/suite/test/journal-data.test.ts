@@ -393,7 +393,16 @@ it.each([
   const bounded = await openJournalData({ ...session, fetch });
   await expect(
     kind === "photo" ? bounded.photo(photo) : bounded.read(entry.url),
-  ).rejects.toMatchObject({ code: "payload-too-large" });
+  ).rejects.toMatchObject(
+    // The shared owner-only verifier caps the access document and fails closed: an oversized
+    // ACL is never accepted as private, and it is refused as a privacy failure.
+    kind === "acl"
+      ? {
+          message: "Couldn't verify private journal entry access",
+          canMakePrivate: false,
+        }
+      : { code: "payload-too-large" },
+  );
   expect(cancel).toHaveBeenCalledOnce();
   expect(chunks).toBeGreaterThan(megabytes);
 });
