@@ -66,7 +66,10 @@ import {
   UnsupportedAccessModelError,
 } from "@jeswr/pod-access/requests-solid";
 import { PermissionsPage } from "../src/apps/home/components/permissions/permissions-page";
-import { PREVIEW_LOADING } from "../src/apps/home/components/requests/decision-preview";
+import {
+  PREVIEW_FOLDER_SCOPE,
+  PREVIEW_LOADING,
+} from "../src/apps/home/components/requests/decision-preview";
 import {
   EXPIRY_UNAVAILABLE,
   FINISH_PREVIEW_TITLE,
@@ -1083,6 +1086,28 @@ it("turns a preview refusal of a pinned approval into Finish approving with its 
   );
   await click(button(sheet, "Finish approving"));
   expect(mocks.decide.mock.calls[0]?.[1]).toEqual({ approve: true });
+});
+
+it("keeps the reason visible and announced when a preview refusal leaves only Deny", async () => {
+  mocks.preview.mockRejectedValueOnce(
+    new Error("This request claims an approval that was never recorded"),
+  );
+  await review();
+  const sheet = dialog();
+  const alert = sheet.querySelector('[role="alert"]');
+  expect(alert?.textContent).toContain("your pod has no record of that");
+  expect(alert?.textContent).toContain("You can still deny it");
+  // The preview panel is gone with the actions it offered; the reason is not.
+  expect(sheet.querySelector(`[aria-label="${SHARE_PREVIEW_TITLE}"]`)).toBeNull();
+  expect(button(sheet, "Share").disabled).toBe(true);
+  expect(button(sheet, "Cancel")).toBeTruthy();
+});
+
+it("says a folder includes everything inside it, later items too", async () => {
+  await review();
+  const sheet = dialog();
+  expect(sheet.textContent).toContain(PREVIEW_FOLDER_SCOPE);
+  expect(sheet.textContent).toContain("including items added later");
 });
 
 it("closes when the preview finds the request was already decided", async () => {

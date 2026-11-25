@@ -329,7 +329,12 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
         }
         // The same refusals decide() would hit: the actions left change the same way.
         if (failure.finish) setPinned((value) => value ?? "recorded");
-        if (failure.deny) setDenyOnly(true);
+        if (failure.deny) {
+          // Deny-only unmounts the preview panel that holds this message, so the reason stays
+          // in the sheet's own announced error region instead.
+          setDenyOnly(true);
+          setError({ ...failure, attempt: "share" });
+        }
         setChecked({ ...base, error: failure.message, retry: failure.retry });
       },
     );
