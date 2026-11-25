@@ -142,31 +142,38 @@ it("reads the issue number recorded in the repository first, ignoring unrelated 
   ).toHaveLength(1);
 });
 
-// M1/L3: GitHub search is eventually consistent. A retry right after a lost POST response
-// must find the issue through the consistent list endpoint, not open a second one.
-it("recovers a lost issue response while search lags, without searching or duplicating", async () => {
+// M1/L3: a retry right after a lost POST response must find the issue through the consistent
+// list endpoint (the fake throws if search is ever used), not open a second one.
+const listCalls = (api: ReturnType<typeof github>) =>
+  api.calls.filter(
+    ({ url, method }) => new URL(url).pathname.endsWith("/issues") && method === "GET",
+  );
+async function lostIssue() {
   const api = github();
-  api.lagSearch();
   const h = await client();
   api.loseIssueResponse();
   expect((await h.submit()).status).toBe(502);
   expect(api.issues).toHaveLength(1);
+  return { api, h };
+}
+const recent = () => new Date(Date.now() + 1000).toISOString();
+
+it("recovers a lost issue response from the list, never searching, and records the number", async () => {
+  const { api, h } = await lostIssue();
   const retry = await h.submit();
   expect(retry.status).toBe(200);
   expect(await retry.json()).toEqual({ reference: 123 });
   expect(api.issues).toHaveLength(1);
   expect(api.calls.some(({ url }) => new URL(url).pathname === "/search/issues")).toBe(false);
-  const listings = api.calls.filter(
-    ({ url, method }) => new URL(url).pathname.endsWith("/issues") && method === "GET",
-  );
+  const listings = listCalls(api);
   expect(listings).toHaveLength(1);
   const query = new URL(listings[0]?.url ?? "").searchParams;
   expect(query.get("state")).toBe("all");
   expect(query.get("sort")).toBe("created");
-  expect(query.get("direction")).toBe("asc");
+  expect(query.get("direction")).toBe("desc");
   expect(query.get("per_page")).toBe("100");
-  expect(Date.parse(query.get("since") ?? "")).not.toBeNaN();
-  // The reference is then recorded, so a third attempt needs no listing.
+  // `since` filters on update time, so it must not be sent.
+  expect(query.has("since")).toBe(false);
   const calls = api.calls.length;
   expect(await (await h.submit()).json()).toEqual({ reference: 123 });
   expect(api.calls.slice(calls).some(({ url }) => new URL(url).pathname.endsWith("/issues"))).toBe(
@@ -174,23 +181,47 @@ it("recovers a lost issue response while search lags, without searching or dupli
   );
 });
 
-it("does not let unrelated issues that quote the marker block recovery", async () => {
+it("finds the issue on page 1 of a big repository whose older issues were recently updated", async () => {
+  const { api, h } = await lostIssue();
+  // 1,500 issues created long ago but touched just now (bulk relabel): update-time filtering
+  // would fill every page with them.
+  for (let i = 0; i < 1_500; i++)
+    api.issues.push({
+      number: 2_000 + i,
+      body: "Old feedback",
+      created_at: "2020-01-01T00:00:00Z",
+      updated_at: new Date().toISOString(),
+    });
+  const retry = await h.submit();
+  expect(retry.status).toBe(200);
+  expect(await retry.json()).toEqual({ reference: 123 });
+  expect(listCalls(api)).toHaveLength(1);
+  expect(api.issues).toHaveLength(1_501);
+});
+
+it("stops listing at the first issue older than the submission", async () => {
   const api = github();
-  api.lagSearch();
   const h = await client();
-  api.loseIssueResponse();
+  api.holdIssue(async () => {
+    throw new Error("Issue creation failed");
+  });
   expect((await h.submit()).status).toBe(502);
+  api.holdIssue(async () => {});
+  for (let i = 0; i < 250; i++)
+    api.issues.push({ number: 5_000 + i, body: "Old", created_at: "2020-01-01T00:00:00Z" });
+  // The list proves no issue exists (the old ones are never read past), so one is opened.
+  expect((await h.submit()).status).toBe(200);
+  expect(listCalls(api)).toHaveLength(1);
+  expect(api.issues).toHaveLength(251);
+});
+
+it("does not let unrelated issues that quote the marker block recovery", async () => {
+  const { api, h } = await lostIssue();
   const marker = `<!-- feedback-submission:${submissionId} -->`;
-  // A pull request, a triage issue quoting the marker mid-body, and an unrelated issue.
   api.issues.push(
-    {
-      number: 500,
-      body: `quote ${marker} and more text`,
-      created_at: "2999-01-01T00:00:00Z",
-      updated_at: "2999-01-01T00:00:00Z",
-    },
-    { number: 501, body: `pr ${marker}`, pull_request: {}, updated_at: "2999-01-01T00:00:00Z" },
-    { number: 502, body: "Unrelated", updated_at: "2999-01-01T00:00:00Z" },
+    { number: 500, body: `quote ${marker} and more text`, created_at: recent() },
+    { number: 501, body: `pr ${marker}`, pull_request: {}, created_at: recent() },
+    { number: 502, body: "Unrelated", created_at: recent() },
   );
   const retry = await h.submit();
   expect(retry.status).toBe(200);
@@ -198,12 +229,18 @@ it("does not let unrelated issues that quote the marker block recovery", async (
   expect(api.issues).toHaveLength(4); // Nothing new was opened.
 });
 
+it("prefers the exact match even when a quoting issue sits on an earlier page", async () => {
+  const { api, h } = await lostIssue();
+  const marker = `<!-- feedback-submission:${submissionId} -->`;
+  for (let i = 0; i < 100; i++)
+    api.issues.push({ number: 1_000 + i, body: `quote ${marker} mid`, created_at: recent() });
+  const retry = await h.submit();
+  expect(await retry.json()).toEqual({ reference: 123 });
+  expect(listCalls(api).length).toBeGreaterThan(1);
+});
+
 it("recovers when only a quoting issue still holds the marker after a maintainer edit", async () => {
-  const api = github();
-  api.lagSearch();
-  const h = await client();
-  api.loseIssueResponse();
-  expect((await h.submit()).status).toBe(502);
+  const { api, h } = await lostIssue();
   const original = api.issues[0];
   if (!original) throw new Error("Missing saved issue");
   original.body = `${original.body}\n\nTriaged by a maintainer.`;
@@ -213,65 +250,45 @@ it("recovers when only a quoting issue still holds the marker after a maintainer
   expect(api.issues).toHaveLength(1);
 });
 
-it("pages through the list and refuses to guess when it cannot finish", async () => {
-  const api = github();
-  api.lagSearch();
-  const h = await client();
-  api.loseIssueResponse();
-  expect((await h.submit()).status).toBe(502);
-  const original = api.issues[0];
-  if (!original) throw new Error("Missing saved issue");
-  // 250 unrelated issues were created earlier than ours: the match is on the third page.
-  const later = api.issues.splice(0);
+it("pages through newer issues to find ours", async () => {
+  const { api, h } = await lostIssue();
   for (let i = 0; i < 250; i++)
-    api.issues.push({ number: 1 + i, body: "Unrelated", updated_at: new Date().toISOString() });
-  api.issues.push(...later.map((issue) => ({ ...issue, number: 1_000 })));
+    api.issues.push({ number: 1_000 + i, body: "Unrelated", created_at: recent() });
   const retry = await h.submit();
   expect(retry.status).toBe(200);
-  expect(await retry.json()).toEqual({ reference: 1_000 });
-  const pages = api.calls
-    .filter(
-      ({ url }) =>
-        new URL(url).pathname.endsWith("/issues") && new URL(url).searchParams.has("page"),
-    )
-    .map(({ url }) => new URL(url).searchParams.get("page"));
-  expect(pages).toEqual(["1", "2", "3"]);
+  expect(await retry.json()).toEqual({ reference: 123 });
+  expect(listCalls(api).map(({ url }) => new URL(url).searchParams.get("page"))).toEqual([
+    "1",
+    "2",
+    "3",
+  ]);
 });
 
-it("returns a retry-later answer instead of opening a duplicate when the list is too long", async () => {
-  const api = github();
-  api.lagSearch();
-  const h = await client();
-  api.loseIssueResponse();
-  expect((await h.submit()).status).toBe(502);
-  const original = api.issues[0];
-  if (!original) throw new Error("Missing saved issue");
-  const later = api.issues.splice(0);
-  for (let i = 0; i < 600; i++)
-    api.issues.push({ number: 1 + i, body: "Unrelated", updated_at: new Date().toISOString() });
-  api.issues.push(...later.map((issue) => ({ ...issue, number: 10_000 })));
+it("returns a retry-later answer instead of opening a duplicate when the scan is bounded", async () => {
+  const { api, h } = await lostIssue();
+  for (let i = 0; i < 2_100; i++)
+    api.issues.push({ number: 10_000 + i, body: "Unrelated", created_at: recent() });
   const retry = await h.submit();
   expect(retry.status).toBe(503);
   expect(retry.headers.get("retry-after")).toBe("60");
   expect(await retry.json()).toMatchObject({ code: "storage_busy" });
-  expect(
-    api.issues.filter((issue) => issue.body.endsWith(`feedback-submission:${submissionId} -->`)),
-  ).toHaveLength(1);
+  expect(listCalls(api)).toHaveLength(20);
+  expect(api.issues).toHaveLength(2_101);
 });
 
-it("opens one issue when the list proves none exists, even with search lagging", async () => {
+it("opens one issue when the list proves none exists", async () => {
   const api = github();
-  api.lagSearch();
   const h = await client();
   api.holdIssue(async () => {
     throw new Error("Issue creation failed");
   });
   expect((await h.submit()).status).toBe(502);
   api.holdIssue(async () => {});
-  api.issues.push({ number: 7, body: "Unrelated", updated_at: new Date().toISOString() });
+  api.issues.push({ number: 7, body: "Unrelated", created_at: recent() });
   const retry = await h.submit();
   expect(retry.status).toBe(200);
   expect(api.issues).toHaveLength(2);
+  expect(api.calls.some(({ url }) => new URL(url).pathname === "/search/issues")).toBe(false);
 });
 
 it("ignores a malformed or unreadable recorded issue number and falls back to the list", async () => {

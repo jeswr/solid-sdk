@@ -94,7 +94,7 @@ export function failureMessage(
     case "rate-limited":
       return `You've reached the feedback allowance for now. Please try again later. ${kept} ${keep}`;
     case "unavailable":
-      return `Feedback storage isn't switched on, so this can't be submitted. ${kept} ${keep}`;
+      return `Feedback storage isn't available, so this can't be submitted. ${kept} ${keep}`;
     case "receipts":
       return recordingsHere
         ? "Your saved recordings are no longer valid. Press Submit to upload them again."

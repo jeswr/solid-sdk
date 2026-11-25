@@ -413,7 +413,7 @@ describe("classified failures (M5, L6)", () => {
       "allowance",
       false,
     ],
-    ["storage not switched on", failure(503, "unavailable"), "isn't switched on", false],
+    ["storage not switched on", failure(503, "unavailable"), "isn't available", false],
     [
       "a lost connection",
       () => Promise.reject(new TypeError("network")) as never,

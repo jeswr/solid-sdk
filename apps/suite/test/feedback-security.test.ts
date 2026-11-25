@@ -147,33 +147,6 @@ it("records a low-budget cooldown without discarding a successful response", asy
   expect(() => backoff.check()).not.toThrow();
 });
 it.each([
-  29, 6, 5, 0,
-])("isolates the search budget (%i of 30 remaining) from core requests", async (remaining) => {
-  let now = 1_800_000_000_000;
-  const backoff = createGithubBackoff(() => now);
-  await backoff.observe(
-    Response.json(
-      {},
-      {
-        headers: {
-          "x-ratelimit-resource": "search",
-          "x-ratelimit-limit": "30",
-          "x-ratelimit-remaining": String(remaining),
-          "x-ratelimit-reset": String(now / 1000 + 60),
-        },
-      },
-    ),
-  );
-  expect(() => backoff.check()).not.toThrow();
-  if (remaining <= 5)
-    expect(() => backoff.check("search")).toThrow(
-      expect.objectContaining({ status: 503, retryAfter: 60 }),
-    );
-  else expect(() => backoff.check("search")).not.toThrow();
-  now += 60_000;
-  expect(() => backoff.check("search")).not.toThrow();
-});
-it.each([
   { reset: 180, retry: 90 },
   { reset: 90, retry: 180 },
 ])("honours the later primary reset ($reset) and retry HTTP date ($retry)", async ({
@@ -202,7 +175,7 @@ it.each([
   now += 90_000;
   expect(() => backoff.check()).not.toThrow();
 });
-it("pauses core requests too when a search response hits a secondary limit", async () => {
+it("a secondary limit pauses uploads and new submissions alike", async () => {
   let now = 1_800_000_000_000;
   const backoff = createGithubBackoff(() => now);
   await expect(
@@ -212,8 +185,6 @@ it("pauses core requests too when a search response hits a secondary limit", asy
         {
           status: 403,
           headers: {
-            "x-ratelimit-resource": "search",
-            "x-ratelimit-limit": "30",
             "x-ratelimit-remaining": "20",
             "retry-after": "90",
           },
@@ -223,8 +194,6 @@ it("pauses core requests too when a search response hits a secondary limit", asy
   ).rejects.toMatchObject({ status: 503, retryAfter: 90 });
   // Secondary limits can span endpoints, so uploads and submissions wait as well.
   expect(() => backoff.check()).toThrow(expect.objectContaining({ status: 503, retryAfter: 90 }));
-  expect(() => backoff.check("search")).toThrow();
   now += 90_000;
   expect(() => backoff.check()).not.toThrow();
-  expect(() => backoff.check("search")).not.toThrow();
 });

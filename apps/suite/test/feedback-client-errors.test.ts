@@ -103,7 +103,7 @@ describe("messages", () => {
     const messages = kinds.map((kind) => failureMessage(kind, here));
     expect(new Set(messages).size).toBe(kinds.length);
     expect(failureMessage("rate-limited", here)).toContain("allowance");
-    expect(failureMessage("unavailable", here)).toContain("isn't switched on");
+    expect(failureMessage("unavailable", here)).toContain("isn't available");
     expect(failureMessage("conflict", here)).toContain("Start a new submission");
     // A permanent failure must never be presented as "try again".
     for (const kind of ["conflict", "too-large", "unsupported", "unavailable"] as const)

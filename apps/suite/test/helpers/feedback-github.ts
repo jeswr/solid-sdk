@@ -16,13 +16,10 @@ export function feedbackGithub() {
     created_at?: string;
     updated_at?: string;
   }[] = [];
-  // GitHub search is eventually consistent: while lagging, new issues never reach the index.
-  let searchLags = false;
-  const unindexed = new Set<object>();
+
   let beforeIssue = async () => {};
   let issueHeaders = {};
   let refHeaders = {};
-  let searchRemaining = 29;
   let loseIssueResponse = false;
   let loseRefResponse = false;
   let conflicts = 0;
@@ -84,7 +81,6 @@ export function feedbackGithub() {
         updated_at: at,
       };
       issues.push(issue);
-      if (searchLags) unindexed.add(issue);
       if (loseIssueResponse) throw new Error("Connection lost after GitHub accepted the issue");
       return Response.json(issue, { status: 201, headers: issueHeaders });
     }
@@ -101,35 +97,16 @@ export function feedbackGithub() {
             (state === "all" || (issue.state ?? "open") === state) &&
             (!since || Date.parse(issue.updated_at ?? "") >= Date.parse(since)),
         )
-        .sort((a, b) => (a.number - b.number) * direction);
+        .sort((a, b) =>
+          (Date.parse(a.created_at ?? "") || 0) === (Date.parse(b.created_at ?? "") || 0)
+            ? (a.number - b.number) * direction
+            : ((Date.parse(a.created_at ?? "") || 0) - (Date.parse(b.created_at ?? "") || 0)) *
+              direction,
+        );
       return Response.json(matching.slice((page - 1) * perPage, page * perPage));
     }
-    if (path === "/search/issues") {
-      const q = url.searchParams.get("q") ?? "";
-      const id = q.match(/[a-f0-9-]{36}/)?.[0];
-      const perPage = Number(url.searchParams.get("per_page") ?? 30);
-      return Response.json(
-        {
-          incomplete_results: false,
-          items: issues
-            .filter(
-              (issue) =>
-                !unindexed.has(issue) &&
-                !issue.pull_request &&
-                issue.body.includes(`feedback-submission:${id}`),
-            )
-            .slice(0, perPage),
-        },
-        {
-          headers: {
-            "x-ratelimit-resource": "search",
-            "x-ratelimit-limit": "30",
-            "x-ratelimit-remaining": String(searchRemaining),
-            "x-ratelimit-reset": String(Date.now() / 1000 + 60),
-          },
-        },
-      );
-    }
+    // Recovery must never use eventually consistent search.
+    if (path === "/search/issues") throw new Error("Search must not be used");
     throw new Error(`Unexpected GitHub request: ${method} ${url}`);
   };
   return {
@@ -150,7 +127,6 @@ export function feedbackGithub() {
     holdIssue(callback: () => Promise<void>) {
       beforeIssue = callback;
     },
-    /** New issues stay out of the search index (the list endpoint still returns them). */
     failIssueRecord(fail = true) {
       failIssueRecord = fail;
     },
@@ -162,12 +138,6 @@ export function feedbackGithub() {
       const sha = hash(`corrupt:${content}`);
       blobs.set(sha, Buffer.from(content).toString("base64"));
       tree.set(path, sha);
-    },
-    lagSearch() {
-      searchLags = true;
-    },
-    searchBudget(remaining: number) {
-      searchRemaining = remaining;
     },
     lowBudget(at: "issue" | "ref" = "issue") {
       const headers = {

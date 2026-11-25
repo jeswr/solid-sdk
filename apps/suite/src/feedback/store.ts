@@ -87,7 +87,15 @@ export function createGithubStore(
       );
     repository ??= (async () => {
       const response = await call("", "GET");
-      const data = response.ok ? await response.json() : {};
+      // A failed read is an outage, not a missing configuration: it is worth retrying.
+      if (!response.ok)
+        throw new FeedbackError(
+          503,
+          "Feedback storage is busy. Please try again later, or download your feedback to keep a copy.",
+          60,
+          "storage_busy",
+        );
+      const data = await response.json().catch(() => ({}));
       if (data.private !== true || typeof data.default_branch !== "string" || !data.default_branch)
         throw new FeedbackError(
           503,
@@ -196,18 +204,23 @@ export function createGithubStore(
           return undefined;
         }
       };
-      // The list endpoint reads the database, unlike search. Oldest first from the commit time
-      // finds this submission's issue within the first page of a dedicated repository.
-      const listedIssue = async (since: string, signal: AbortSignal) => {
+      // The list endpoint reads the database, unlike search. Newest first, no `since` (that
+      // filters on update time, so old issues touched later would crowd the pages): scan only
+      // issues created after the submission, stopping at the first older one. New arrivals can
+      // push items to a later page but never hide one, and the scan is bounded by what was
+      // created since this submission, not by the repository's history.
+      const listedIssue = async (notBefore: string, signal: AbortSignal) => {
+        const floor = Date.parse(notBefore);
         const perPage = 100;
-        const maxPages = 5;
-        for (let page = 1; page <= maxPages; page++) {
+        const maxPages = 20;
+        const found: { number: number; body: string }[] = [];
+        let finished = false;
+        for (let page = 1; page <= maxPages && !finished; page++) {
           githubBackoff.check();
           const query = new URLSearchParams({
             state: "all",
             sort: "created",
-            direction: "asc",
-            since,
+            direction: "desc",
             per_page: String(perPage),
             page: String(page),
           });
@@ -217,22 +230,35 @@ export function createGithubStore(
             throw failure();
           });
           if (!Array.isArray(items)) throw failure();
-          const matches = items.filter(
-            (candidate: { pull_request?: unknown; body?: unknown; number?: unknown }) =>
+          for (const candidate of items as {
+            pull_request?: unknown;
+            body?: unknown;
+            number?: unknown;
+            created_at?: unknown;
+          }[]) {
+            if (
+              typeof candidate?.created_at === "string" &&
+              Date.parse(candidate.created_at) < floor
+            ) {
+              finished = true;
+              break;
+            }
+            if (
               !candidate?.pull_request &&
               typeof candidate?.body === "string" &&
               candidate.body.includes(marker) &&
-              validNumber(candidate.number),
-          );
-          // An unrelated issue that merely quotes the marker loses to one that ends with it;
-          // among equals the oldest is the original.
-          const exact = matches.filter((candidate) => String(candidate.body).endsWith(marker));
-          const best = (exact.length ? exact : matches).sort(
-            (a, b) => Number(a.number) - Number(b.number),
-          )[0];
-          if (best) return Number(best.number);
-          if (items.length < perPage) return undefined;
+              validNumber(candidate.number)
+            )
+              found.push({ number: candidate.number, body: candidate.body });
+          }
+          if (items.length < perPage) finished = true;
         }
+        // An unrelated issue that merely quotes the marker loses to one that ends with it;
+        // among equals the oldest is the original.
+        const exact = found.filter((candidate) => candidate.body.endsWith(marker));
+        const best = (exact.length ? exact : found).sort((a, b) => a.number - b.number)[0];
+        if (best) return best.number;
+        if (finished) return undefined;
         // Not exhausted: refuse to guess, since opening another issue would duplicate it.
         throw new FeedbackError(
           503,

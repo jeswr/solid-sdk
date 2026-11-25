@@ -177,7 +177,7 @@ export const rateLimiter = createLimiter();
 
 // Shared by uploads and submissions, even though each request creates a fresh store.
 export function createGithubBackoff(now = () => Date.now()) {
-  const until = { core: 0, search: 0, secondary: 0 };
+  const until = { core: 0, secondary: 0 };
   // "secondary" is checked before every GitHub call, admitted submissions included.
   function check(resource: keyof typeof until = "core") {
     if (until[resource] > now())
@@ -191,13 +191,9 @@ export function createGithubBackoff(now = () => Date.now()) {
   return {
     check,
     async observe(response: Response) {
-      const resource =
-        response.headers.get("x-ratelimit-resource") === "search" ? "search" : "core";
+      const resource = "core";
       const remaining = response.headers.get("x-ratelimit-remaining");
-      const low =
-        remaining !== null &&
-        /^\d+$/.test(remaining) &&
-        (resource === "search" ? Number(remaining) <= 5 : Number(remaining) < 50);
+      const low = remaining !== null && /^\d+$/.test(remaining) && Number(remaining) < 50;
       const retry = response.headers.get("retry-after");
       let secondary = response.status === 429;
       if (response.status === 403) {
@@ -220,9 +216,7 @@ export function createGithubBackoff(now = () => Date.now()) {
       const deadline = Math.max(...(deadlines.length ? deadlines : [t + 60_000]));
       // A primary low budget is per resource; secondary limits can span endpoints,
       // so they pause both buckets.
-      const buckets: (keyof typeof until)[] = secondary
-        ? ["core", "search", "secondary"]
-        : [resource];
+      const buckets: (keyof typeof until)[] = secondary ? ["core", "secondary"] : [resource];
       for (const bucket of buckets) until[bucket] = Math.max(until[bucket], deadline);
       // Only an actual rate-limit failure interrupts an admitted submission;
       // ordinary responses (including the label fallback) can still finish.

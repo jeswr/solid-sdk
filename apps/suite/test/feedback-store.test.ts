@@ -240,6 +240,19 @@ it("fails closed before any GitHub call when the receipt secret is missing", asy
   ).rejects.toMatchObject({ status: 503 });
   expect(transport).not.toHaveBeenCalled();
 });
+it("treats a failed repository metadata read as a retryable outage, not a missing setup", async () => {
+  const transport = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(new Response("down", { status: 503 }));
+  await expect(
+    createGithubStore(env, transport).save(submission, [], submissionId),
+  ).rejects.toMatchObject({ status: 503, code: "storage_busy", retryAfter: 60 });
+  // Later calls try again instead of caching the failure.
+  transport.mockResolvedValueOnce(Response.json({ private: false }));
+  await expect(
+    createGithubStore(env, transport).save(submission, [], submissionId),
+  ).rejects.toMatchObject({ status: 503, code: "unavailable" });
+});
 it("bounds long issue answers and transcript before closing details and appending the record link", () => {
   const large = {
     ...submission,
