@@ -317,12 +317,11 @@ export async function buildNanopublications(
     // These clinical classes always require explicit special-category authorization,
     // even when the caller omits categories or supplies a less sensitive category.
     if (
-      [...assertion.dataset].some(
+      assertion.quads.some(
         (q) =>
           q.predicate.value === type &&
-          [...new RdfNode(q.subject, assertion.dataset).terms(type)].some(
-            (term) => term.termType === "NamedNode" && CLINICAL_TYPES.includes(term.value),
-          ),
+          q.object.termType === "NamedNode" &&
+          CLINICAL_TYPES.includes(q.object.value),
       )
     )
       a.link(`${NS.dpv}hasPersonalData`, `${NS.pd}MedicalHealth`);

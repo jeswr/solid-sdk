@@ -32,23 +32,23 @@ export async function loadHistory(
   );
   const readOwn = async () =>
     report
-    ? (
-        await Promise.all(
-          dates.map(async (date) => {
-            try {
-              return await readMonths(fetch, musicRoot(storage), [date]);
-            } catch (error) {
-              report({
-                url: new URL(`history/${monthKey(date)}.ttl`, musicRoot(storage)).href,
-                error,
-                area: "history",
-              });
-              return [];
-            }
-          }),
-        )
-      ).flat()
-    : await readMonths(fetch, musicRoot(storage), dates);
+      ? (
+          await Promise.all(
+            dates.map(async (date) => {
+              try {
+                return await readMonths(fetch, musicRoot(storage), [date]);
+              } catch (error) {
+                report({
+                  url: new URL(`history/${monthKey(date)}.ttl`, musicRoot(storage)).href,
+                  error,
+                  area: "history",
+                });
+                return [];
+              }
+            }),
+          )
+        ).flat()
+      : await readMonths(fetch, musicRoot(storage), dates);
   // Imported file history is best effort: it never rejects the user's own history.
   const [history, imported] = await Promise.all([
     readOwn(),

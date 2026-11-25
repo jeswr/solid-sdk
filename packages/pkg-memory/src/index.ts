@@ -60,10 +60,10 @@ export {
   MEMORY_PURPOSES,
   purposeFilter,
 } from "./purpose.js";
-export { DEFAULT_MEMORY_SCOPE, type MemoryMandate, memoryCategory, scopeAdmits } from "./scope.js";
 /** Suite RDF parser without nanopub-envelope or literal validation; validate before building. */
 export { parseReferenceRdf } from "./rdf.js";
 export { readNamedGraph } from "./read-graph.js";
+export { DEFAULT_MEMORY_SCOPE, type MemoryMandate, memoryCategory, scopeAdmits } from "./scope.js";
 export type { RetractionOptions } from "./store.js";
 export { NanopubStore } from "./store.js";
 export type {
