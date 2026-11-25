@@ -20,8 +20,19 @@ Read this repository's `AGENTS.md` and the package README before edits.
 ## Sharing client
 
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
-Use root `checkOwnerOnly({ storage, url, ownerWebId, acpDialect? })` before storing sensitive
-data. It returns the discriminated `OwnerOnlyResult`: `{ private: true }` or
+Use root `checkOwnerOnly({ storage, url, ownerWebId, accessModel?, acpDialect? })` before storing
+sensitive data. Discovered features often carry no access model (CSS 7.2.0): when the caller does
+not know the model, call `checkOwnerOnlyAuto({ storage, url, ownerWebId })`, which runs
+`detectAccessControl` (closed result `wac` | `acp` + dialect `css`|`ess` | `undecided` + reason;
+link relation and access document only, never host names or URL shapes, and WAC only when the
+resource's HEAD carried `WAC-Allow` (else `no-wac-evidence`; an ACP server accepts WAC-shaped
+RDF in its ACR); 401/403 is `no-permission`, never private) and returns the same result plus `detected`, `decidedBy`
+(the effective ACL, which may be an ancestor's; `detected.accessDocument` is the model's) and
+`evaluated`. An explicit `accessModel` beats only unknown features; one that discovered features
+or the document contradict makes `checkOwnerOnly` throw an error for which
+`isOwnerOnlyConflictError` is true (never a silent choice). `private: true` is a read-time
+observation of the governing access documents, not a guarantee about operators, children with
+their own ACLs, or later writes (README: "What private means and does not mean"). `checkOwnerOnly` returns the discriminated `OwnerOnlyResult`: `{ private: true }` or
 `{ private: false, reasons: OwnerOnlyReason[] }`, with subject kind, modes and refusal code,
 never raw policies, identifiers or error text. Never build a privacy assertion on `readGrants`,
 `grantsWithRoles`, or caller-only `effective()`: roles omit odd/partial grants.

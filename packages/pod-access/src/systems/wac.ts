@@ -1,9 +1,20 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Sonnet 5.5
 import type { DatasetCore } from "@rdfjs/types";
 import { AclResource } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { ACL, copyDataset, FOAF, modeIri, RDF, RdfNode, readModes, serialize } from "../rdf.js";
+import {
+  ACL,
+  copyDataset,
+  FOAF,
+  MATERIALIZED_FROM,
+  modeIri,
+  RDF,
+  RdfNode,
+  readModes,
+  serialize,
+} from "../rdf.js";
 import type { EffectivePolicy, Grant, Subject } from "../types.js";
 
 /** Read WAC rules for one resource; target reads refuse unknown semantic constructs. */
@@ -19,6 +30,7 @@ export function readWac(
   if (target) {
     const known = new Set([
       `${RDF}type`,
+      MATERIALIZED_FROM,
       ...[
         "accessTo",
         "default",
