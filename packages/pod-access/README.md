@@ -104,7 +104,7 @@ isOwnerOnlyConflictError(error: unknown): error is OwnerOnlyConflict
   WAC-shaped owner-only document can sit beside a public ACP member policy. WAC (discovered,
   explicit `accessModel: 'wac'`, and `checkOwnerOnlyAuto`) is therefore only decided when the
   resource's HEAD carried a well-formed `WAC-Allow` header (presence only; its contents are never
-  trusted, since CSS reports the owner as `user="read"` once a public rule exists). Without it,
+  trusted: under reactive authentication it can describe the anonymous caller). Without it,
   `detectAccessControl` returns `undecided` / `no-wac-evidence`, `checkOwnerOnlyAuto` refuses
   (`undecided`), and `checkOwnerOnly` refuses with `no-wac-evidence`. A server that enforces WAC
   but sends no `WAC-Allow` therefore cannot be shown private.
