@@ -29,12 +29,10 @@
       "types": "./dist/vocab.d.ts",
       "import": "./dist/vocab.js"
     },
-    "./creative-assets.ttl": "./creative-assets.ttl",
     "./creative-assets.shacl.ttl": "./creative-assets.shacl.ttl"
   },
   "files": [
     "dist",
-    "creative-assets.ttl",
     "creative-assets.shacl.ttl",
     "README.md",
     "SKILL.md",
@@ -42,7 +40,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
-    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology creative-assets.ttl --shapes creative-assets.shacl.ttl --config codegen.config.json --out src/generated",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/creative-assets.ontology.ttl --shapes creative-assets.shacl.ttl --config codegen.config.json --out src/generated",
     "lint": "biome check src scripts test codegen.config.json package.json",
     "lint:fix": "biome check --write src scripts test codegen.config.json package.json",
     "typecheck": "tsc --noEmit",
@@ -52,6 +50,7 @@
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/model-runtime": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
     "n3": "^2.0.3"
   },
   "peerDependencies": {

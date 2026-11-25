@@ -1,26 +1,18 @@
 # AUTHORED-BY Claude Sonnet 5.5
 #
-# Generation INPUT (ontology) for @jeswr/solid-creative-assets.
+# Generation INPUT for @jeswr/solid-creative-assets; not published and not an ontology.
 #
 # Mints nothing. Every IRI below is a schema.org (https://schema.org/) or PROV-O
-# (http://www.w3.org/ns/prov#) term; the labels and definitions paraphrase theirs so the
-# generator's admission (label, definition, domain/range or waiver) passes. The schema.org
-# classes are declared owl:Class because the generator needs exactly one declared class to
-# pick the canonical type when a shape also lists the legacy http://schema.org/ alias.
+# (http://www.w3.org/ns/prov#) term. The labels and comments only satisfy the generator's
+# admission, and every property states rdfs:domain and rdfs:range rdfs:Resource, which
+# asserts nothing about the real terms. The schema.org classes are declared owl:Class
+# because the generator needs exactly one declared class to pick the canonical type when
+# a shape also lists the legacy http://schema.org/ alias.
 
 @prefix owl:    <http://www.w3.org/2002/07/owl#> .
 @prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
-@prefix vann:   <http://purl.org/vocab/vann/> .
-@prefix fedgen: <https://w3id.org/jeswr/fedgen#> .
 @prefix schema: <https://schema.org/> .
 @prefix prov:   <http://www.w3.org/ns/prov#> .
-
-<https://schema.org/> a owl:Ontology ;
-    vann:preferredNamespacePrefix "schema" ;
-    vann:preferredNamespaceUri "https://schema.org/" .
-
-fedgen:deliberatelyUnconstrained a owl:AnnotationProperty .
 
 # --- Classes ---
 
@@ -49,91 +41,92 @@ prov:Activity a owl:Class ;
     rdfs:label "Activity"@en ;
     rdfs:comment "Something that occurs over time and acts on entities; here a generation run."@en .
 
-# --- Properties (waiver where the property serves several classes) ---
+# --- Properties ---
 
 schema:name a owl:DatatypeProperty ; rdfs:label "name"@en ;
-    rdfs:comment "The name of the item."@en ; rdfs:range xsd:string ;
-    fedgen:deliberatelyUnconstrained "Shared by every class in the profile." .
+    rdfs:comment "The name of the item."@en ;
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:description a owl:DatatypeProperty ; rdfs:label "description"@en ;
-    rdfs:comment "A short description of the item."@en ; rdfs:range xsd:string ;
-    fedgen:deliberatelyUnconstrained "Used by the image, video and 3D model classes." .
+    rdfs:comment "A short description of the item."@en ;
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:contentUrl a owl:ObjectProperty ; rdfs:label "contentUrl"@en ;
     rdfs:comment "The actual bytes of the media or document object, as a URL."@en ;
-    fedgen:deliberatelyUnconstrained "An IRI link shared by several classes; its target is not typed." .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:encodingFormat a owl:DatatypeProperty ; rdfs:label "encodingFormat"@en ;
-    rdfs:comment "The media type of the content, such as image/png."@en ; rdfs:range xsd:string ;
-    fedgen:deliberatelyUnconstrained "Shared by every file-bearing class." .
+    rdfs:comment "The media type of the content, such as image/png."@en ;
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:width a owl:DatatypeProperty ; rdfs:label "width"@en ;
-    rdfs:comment "The width in pixels."@en ; rdfs:range xsd:integer ;
-    fedgen:deliberatelyUnconstrained "Shared by the image and video classes." .
+    rdfs:comment "The width in pixels."@en ;
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:height a owl:DatatypeProperty ; rdfs:label "height"@en ;
-    rdfs:comment "The height in pixels."@en ; rdfs:range xsd:integer ;
-    fedgen:deliberatelyUnconstrained "Shared by the image and video classes." .
+    rdfs:comment "The height in pixels."@en ;
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:contentSize a owl:DatatypeProperty ; rdfs:label "contentSize"@en ;
-    rdfs:comment "The size of the content as text, such as 1.2 MB."@en ; rdfs:range xsd:string ;
-    fedgen:deliberatelyUnconstrained "Shared by the image, video and 3D model classes." .
+    rdfs:comment "The size of the content as text, such as 1.2 MB."@en ;
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:dateCreated a owl:DatatypeProperty ; rdfs:label "dateCreated"@en ;
-    rdfs:comment "When the item was created."@en ; rdfs:range xsd:dateTime ;
-    fedgen:deliberatelyUnconstrained "Shared by every asset class." .
+    rdfs:comment "When the item was created."@en ;
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:dateModified a owl:DatatypeProperty ; rdfs:label "dateModified"@en ;
     rdfs:comment "When the item was last modified."@en ;
-    rdfs:domain schema:CreativeWork ; rdfs:range xsd:dateTime .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:keywords a owl:DatatypeProperty ; rdfs:label "keywords"@en ;
-    rdfs:comment "A tag or keyword; one literal per keyword."@en ; rdfs:range xsd:string ;
-    fedgen:deliberatelyUnconstrained "Shared by the image, video and 3D model classes." .
+    rdfs:comment "A tag or keyword; one literal per keyword."@en ;
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:thumbnail a owl:ObjectProperty ; rdfs:label "thumbnail"@en ;
     rdfs:comment "A smaller image that represents the item."@en ;
-    fedgen:deliberatelyUnconstrained "An IRI link shared by the asset classes." .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:creator a owl:ObjectProperty ; rdfs:label "creator"@en ;
     rdfs:comment "The person who made the item, as a WebID."@en ;
-    fedgen:deliberatelyUnconstrained "An IRI link shared by several classes." .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:isBasedOn a owl:ObjectProperty ; rdfs:label "isBasedOn"@en ;
     rdfs:comment "A resource the item was made from."@en ;
-    fedgen:deliberatelyUnconstrained "An IRI link shared by the asset classes." .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:duration a owl:DatatypeProperty ; rdfs:label "duration"@en ;
     rdfs:comment "The length of the video as an ISO 8601 duration."@en ;
-    rdfs:domain schema:VideoObject ; rdfs:range xsd:string .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:text a owl:DatatypeProperty ; rdfs:label "text"@en ;
     rdfs:comment "The textual content of a creative work, here the prompt."@en ;
-    rdfs:domain schema:CreativeWork ; rdfs:range xsd:string .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:schemaVersion a owl:DatatypeProperty ; rdfs:label "schemaVersion"@en ;
     rdfs:comment "The version of the document format."@en ;
-    rdfs:domain schema:CreativeWork ; rdfs:range xsd:string .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:additionalType a owl:DatatypeProperty ; rdfs:label "additionalType"@en ;
     rdfs:comment "A further type of the item; here the project kind, such as scene_3d."@en ;
-    rdfs:domain schema:CreativeWork ; rdfs:range xsd:string .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:hasPart a owl:ObjectProperty ; rdfs:label "hasPart"@en ;
     rdfs:comment "A part of the item."@en ;
-    fedgen:deliberatelyUnconstrained "An IRI link shared by the project and collection classes." .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:identifier a owl:DatatypeProperty ; rdfs:label "identifier"@en ;
     rdfs:comment "An identifier; here the provider's model id."@en ;
-    rdfs:domain schema:SoftwareApplication ; rdfs:range xsd:string .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:softwareVersion a owl:DatatypeProperty ; rdfs:label "softwareVersion"@en ;
     rdfs:comment "The version of the software."@en ;
-    rdfs:domain schema:SoftwareApplication ; rdfs:range xsd:string .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:provider a owl:ObjectProperty ; rdfs:label "provider"@en ;
     rdfs:comment "The organisation that provides the software, as an IRI."@en ;
-    rdfs:domain schema:SoftwareApplication ;
-    fedgen:deliberatelyUnconstrained "The provider is an IRI whose target is not typed." .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:propertyID a owl:DatatypeProperty ; rdfs:label "propertyID"@en ;
     rdfs:comment "The name of the property, such as seed."@en ;
-    rdfs:domain schema:PropertyValue ; rdfs:range xsd:string .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 schema:value a owl:DatatypeProperty ; rdfs:label "value"@en ;
     rdfs:comment "The value, kept as text because a 64-bit seed does not fit a JavaScript number."@en ;
-    rdfs:domain schema:PropertyValue ; rdfs:range xsd:string .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 prov:wasGeneratedBy a owl:ObjectProperty ; rdfs:label "wasGeneratedBy"@en ;
     rdfs:comment "The run that generated the asset."@en ;
-    fedgen:deliberatelyUnconstrained "An IRI link shared by the asset classes." .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 prov:wasDerivedFrom a owl:ObjectProperty ; rdfs:label "wasDerivedFrom"@en ;
     rdfs:comment "A source asset the asset was derived from."@en ;
-    fedgen:deliberatelyUnconstrained "An IRI link shared by the asset classes." .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 prov:startedAtTime a owl:DatatypeProperty ; rdfs:label "startedAtTime"@en ;
-    rdfs:comment "When the run started."@en ; rdfs:domain prov:Activity ; rdfs:range xsd:dateTime .
+    rdfs:comment "When the run started."@en ;
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 prov:endedAtTime a owl:DatatypeProperty ; rdfs:label "endedAtTime"@en ;
-    rdfs:comment "When the run ended."@en ; rdfs:domain prov:Activity ; rdfs:range xsd:dateTime .
+    rdfs:comment "When the run ended."@en ;
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 prov:used a owl:ObjectProperty ; rdfs:label "used"@en ;
     rdfs:comment "An input of the run: the prompt, a source asset or a setting."@en ;
-    rdfs:domain prov:Activity .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .
 prov:wasAssociatedWith a owl:ObjectProperty ; rdfs:label "wasAssociatedWith"@en ;
     rdfs:comment "An agent responsible for the run: the model or the user."@en ;
-    rdfs:domain prov:Activity .
+    rdfs:domain rdfs:Resource ; rdfs:range rdfs:Resource .

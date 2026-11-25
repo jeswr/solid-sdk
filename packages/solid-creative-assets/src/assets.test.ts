@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Sonnet 5.5
+import { readFileSync } from "node:fs";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
@@ -73,25 +74,33 @@ describe("asset description documents round trip", () => {
     expect(parseAssetDocument(DOC, store)?.asset).toMatchObject({ keywords: ["a", "b"] });
   });
 
-  it("writes one typed node per concept at hash IRIs, never blank nodes", () => {
+  it("writes typed nodes at hash IRIs, never blank nodes, with the two PROV second types", () => {
     const store = buildAssetDocument(DOC, fullImage);
-    const types = new Map(
-      [...store.match(null, namedNode(RDF_TYPE), null)].map((q) => [
-        q.subject.value,
-        q.object.value,
-      ]),
-    );
+    const types = new Map<string, string[]>();
+    for (const q of store.match(null, namedNode(RDF_TYPE), null)) {
+      types.set(q.subject.value, [...(types.get(q.subject.value) ?? []), q.object.value].sort());
+    }
     expect(Object.fromEntries(types)).toEqual({
-      [`${DOC}#it`]: CLASSES.image,
-      [`${DOC}#thumbnail`]: CLASSES.image,
-      [`${DOC}#prompt`]: CLASSES.creativeWork,
-      [`${DOC}#model`]: CLASSES.aiModel,
-      [`${DOC}#setting-1`]: CLASSES.setting,
-      [`${DOC}#setting-2`]: CLASSES.setting,
-      [`${DOC}#run`]: CLASSES.run,
+      [`${DOC}#it`]: [CLASSES.image],
+      [`${DOC}#thumbnail`]: [CLASSES.image],
+      [`${DOC}#prompt`]: [CLASSES.promptEntity, CLASSES.creativeWork].sort(),
+      [`${DOC}#model`]: [CLASSES.modelAgent, CLASSES.aiModel].sort(),
+      [`${DOC}#setting-1`]: [CLASSES.setting],
+      [`${DOC}#setting-2`]: [CLASSES.setting],
+      [`${DOC}#run`]: [CLASSES.run],
     });
     expect([...store].some((q) => q.subject.termType === "BlankNode")).toBe(false);
     expect([...store].some((q) => q.object.termType === "BlankNode")).toBe(false);
+  });
+
+  it("keeps the second types through Turtle and through a round trip", async () => {
+    const text = await serializeAssetDocument(DOC, fullImage);
+    expect(text).toMatch(/prov:Entity/);
+    expect(text).toMatch(/prov:SoftwareAgent/);
+    const again = await parseRdf(text, "text/turtle", { baseIRI: DOC });
+    expect(parseAssetDocument(DOC, again)).toEqual(fullImage);
+    const rebuilt = buildAssetDocument(DOC, parseAssetDocument(DOC, again) as AssetDescription);
+    expect(graphOf(rebuilt)).toEqual(graphOf(again));
   });
 
   it("keeps a 64-bit seed exact because settings are strings", () => {
@@ -337,17 +346,15 @@ describe("malformed pod data is rejected or skipped", () => {
 
 describe("legacy http://schema.org/ read aliases", () => {
   it("reads every class written in the legacy scheme to the same description", async () => {
-    const canonical = await serializeAssetDocument(DOC, fullImage);
-    const legacy = canonical
-      .replaceAll("schema:ImageObject", "hschema:ImageObject")
-      .replaceAll("schema:CreativeWork", "hschema:CreativeWork")
-      .replaceAll("schema:SoftwareApplication", "hschema:SoftwareApplication")
-      .replaceAll("schema:PropertyValue", "hschema:PropertyValue")
-      .replace("@prefix rdf:", "@prefix hschema: <http://schema.org/>.\n@prefix rdf:");
-    const data = await parseRdf(legacy, "text/turtle", { baseIRI: DOC });
-    expect(graphOf(data)).not.toEqual(
-      graphOf(await parseRdf(canonical, "text/turtle", { baseIRI: DOC })),
+    const fixture = readFileSync(
+      new URL("../test/fixtures/legacy-classes.ttl", import.meta.url),
+      "utf8",
     );
+    const data = await parseRdf(fixture, "text/turtle", { baseIRI: DOC });
+    const canonical = await parseRdf(await serializeAssetDocument(DOC, fullImage), "text/turtle", {
+      baseIRI: DOC,
+    });
+    expect(graphOf(data)).not.toEqual(graphOf(canonical));
     expect(parseAssetDocument(DOC, data)).toEqual(fullImage);
   });
 

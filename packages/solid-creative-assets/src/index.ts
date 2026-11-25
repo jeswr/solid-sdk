@@ -16,7 +16,6 @@ export {
   type GenerationData,
   type ImageAssetData,
   type Model3DAssetData,
-  nodeIri,
   type ProjectDocumentData,
   parseAssetDocument,
   type SettingData,

@@ -1,0 +1,52 @@
+# Test fixture: the fully described image of test/fixtures.ts, with every class written in
+# the legacy http://schema.org/ scheme (hschema:) and every predicate in the canonical
+# https scheme. Legacy predicates are deliberately absent: they are not read.
+@prefix schema:  <https://schema.org/> .
+@prefix hschema: <http://schema.org/> .
+@prefix prov:    <http://www.w3.org/ns/prov#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+
+<#it> a hschema:ImageObject ;
+    schema:name "Sunset fox" ;
+    schema:description "A red fox at sunset." ;
+    schema:contentUrl <https://pod.example/creative/files/sunset.png> ;
+    schema:encodingFormat "image/png" ;
+    schema:width 1024 ;
+    schema:height 768 ;
+    schema:contentSize "1.2 MB" ;
+    schema:dateCreated "2026-06-15T09:41:07.000Z"^^xsd:dateTime ;
+    schema:keywords "sunset", "ai" ;
+    schema:creator <https://alice.example/profile/card#me> ;
+    schema:thumbnail <#thumbnail> ;
+    prov:wasGeneratedBy <#run> ;
+    prov:wasDerivedFrom <https://pod.example/creative/assets/sketch#it> ;
+    schema:isBasedOn <https://pod.example/creative/assets/sketch#it> .
+
+<#thumbnail> a hschema:ImageObject ;
+    schema:contentUrl <https://pod.example/creative/files/sunset-thumb.webp> ;
+    schema:width 128 ;
+    schema:height 96 ;
+    schema:encodingFormat "image/webp" .
+
+<#run> a prov:Activity ;
+    prov:startedAtTime "2026-06-15T09:40:00.000Z"^^xsd:dateTime ;
+    prov:endedAtTime "2026-06-15T09:41:00.000Z"^^xsd:dateTime ;
+    prov:used <#prompt>, <#setting-2>, <#setting-1>, <https://pod.example/creative/assets/sketch#it> ;
+    prov:wasAssociatedWith <#model>, <https://alice.example/profile/card#me> .
+
+<#prompt> a hschema:CreativeWork ;
+    schema:text "a red fox at sunset, oil painting" .
+
+<#model> a hschema:SoftwareApplication ;
+    schema:name "Flux Pro" ;
+    schema:identifier "flux-pro-1.1" ;
+    schema:softwareVersion "1.1" ;
+    schema:provider <https://bfl.ai/> .
+
+<#setting-1> a hschema:PropertyValue ;
+    schema:propertyID "seed" ;
+    schema:value "18446744073709551615" .
+
+<#setting-2> a hschema:PropertyValue ;
+    schema:propertyID "steps" ;
+    schema:value "30" .

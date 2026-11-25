@@ -2,7 +2,7 @@
 #
 # SHACL profile for @jeswr/solid-creative-assets: AI-generated creative assets saved to a
 # Solid pod (ArtCraft and similar apps). It is the input to @jeswr/federation-codegen; the
-# generator derives src/generated/ from it, creative-assets.ttl and codegen.config.json.
+# generator derives src/generated/ from it, codegen/creative-assets.ontology.ttl and codegen.config.json.
 #
 # Vocabularies (nothing is minted): schema.org written as https://schema.org/ (`schema:`),
 # with the legacy http://schema.org/ scheme (`hschema:`) accepted as a READ alias of every
@@ -18,12 +18,13 @@
 #   Collection, generation run (prov:Activity), model (schema:SoftwareApplication) and
 #   setting (schema:PropertyValue).
 #
-# OMITS (each is a generator limit, listed in the README "Generator gaps"):
+# OMITS (generator limits are listed in the README "Generator gaps"):
 #   - http://schema.org/ read aliases for PREDICATES. The generator accepts an
 #     alias for a predicate only when exactly one shape in the profile uses it, and
 #     schema:name, schema:contentUrl and so on are shared by several shapes.
 #   - The second rdf:type of a prompt (prov:Entity) and of a model (prov:SoftwareAgent):
-#     a node has exactly one written type.
+#     a generated entity has one canonical type. The facade adds the second type through
+#     the generated wrapper, so it is written but not stated or checked by this profile.
 #   - sh:class on IRI links (prov:wasGeneratedBy, prov:used, schema:thumbnail ...): class
 #     conformance of a link needs a composite link, which must be single-valued and cannot
 #     reuse a class across nodes. Links are plain http(s) IRIs here; the facade follows
@@ -31,7 +32,9 @@
 #   - One shape per class: the project document and the prompt are both
 #     schema:CreativeWork, so they share ONE shape whose properties are all optional.
 #     The facade requires schema:text for a prompt.
-#   - schema:duration is an xsd:string (the supported datatypes have no xsd:duration check).
+#   - schema:duration is an xsd:duration (XSD lexical form, such as PT5.5S). ISO 8601 week
+#     forms such as P1W are not valid xsd:duration and are dropped on read.
+#   - Width and height are integers of at least 1 (schema.org's range is wider).
 
 @prefix sh:      <http://www.w3.org/ns/shacl#> .
 @prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
@@ -71,12 +74,14 @@
     sh:path schema:width ;
     sh:name "width" ;
     sh:datatype xsd:integer ;
+    sh:minInclusive 1 ;
     sh:maxCount 1 ;
   ] ;
   sh:property [
     sh:path schema:height ;
     sh:name "height" ;
     sh:datatype xsd:integer ;
+    sh:minInclusive 1 ;
     sh:maxCount 1 ;
   ] ;
   sh:property [
@@ -162,12 +167,14 @@
     sh:path schema:width ;
     sh:name "width" ;
     sh:datatype xsd:integer ;
+    sh:minInclusive 1 ;
     sh:maxCount 1 ;
   ] ;
   sh:property [
     sh:path schema:height ;
     sh:name "height" ;
     sh:datatype xsd:integer ;
+    sh:minInclusive 1 ;
     sh:maxCount 1 ;
   ] ;
   sh:property [
@@ -223,7 +230,7 @@
   sh:property [
     sh:path schema:duration ;
     sh:name "duration" ;
-    sh:datatype xsd:string ;
+    sh:datatype xsd:duration ;
     sh:maxCount 1 ;
   ] .
 

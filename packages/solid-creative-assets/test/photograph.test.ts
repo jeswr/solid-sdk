@@ -1,9 +1,11 @@
 // AUTHORED-BY Claude Sonnet 5.5
 /**
- * Property-level compatibility with the pod-photos reader. The accessors below mirror
- * apps/pod-photos/src/photos/photograph.ts (PhotographDoc: name, description, contentUrl,
- * keywords, width, height, dateCreated); a package cannot import from an app, so the
- * reading shape is repeated here and a change to it should be mirrored.
+ * Property-level compatibility with the pod-photos reader. WARNING: the accessors below are a
+ * MIRROR of apps/pod-photos/src/photos/photograph.ts (PhotographDoc: name, description,
+ * contentUrl, keywords, width, height, dateCreated), because a package cannot import from an
+ * app. It does not run the real `parsePhoto`, so it can drift from it (the exact-type gate,
+ * `name ?? ''`, keyword and EXIF normalisation). The real check belongs in apps/pod-photos
+ * with this package as a devDependency; see the README.
  */
 import {
   LiteralAs,

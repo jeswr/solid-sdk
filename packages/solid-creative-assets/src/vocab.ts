@@ -1,27 +1,22 @@
 // AUTHORED-BY Claude Sonnet 5.5
+import { NS } from "@jeswr/suite-vocab";
+
 /**
  * Vocabulary IRIs for the creative-asset model. Nothing here is minted: every term is a
  * schema.org or PROV-O term. Writers use the https schema.org scheme; the http scheme is a
  * read-only alias of the classes (see the README "Generator gaps" for why not predicates).
  */
 
-/** schema.org, written form. */
-export const SCHEMA = "https://schema.org/";
+export const { SCHEMA, PROV, RDF, XSD } = NS;
 /** schema.org, legacy http scheme: accepted on read for classes only. */
 export const SCHEMA_LEGACY = "http://schema.org/";
-/** PROV-O. */
-export const PROV = "http://www.w3.org/ns/prov#";
-/** RDF. */
-export const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-/** XSD datatypes. */
-export const XSD = "http://www.w3.org/2001/XMLSchema#";
 
 /** Build a `schema:` term IRI. */
 export const schema = (local: string): string => `${SCHEMA}${local}`;
 /** Build a `prov:` term IRI. */
 export const prov = (local: string): string => `${PROV}${local}`;
 
-/** Classes the model writes (one `rdf:type` per node). */
+/** Classes the model writes: the canonical type of each node, plus two second types below. */
 export const CLASSES = {
   image: schema("ImageObject"),
   video: schema("VideoObject"),
@@ -31,6 +26,10 @@ export const CLASSES = {
   aiModel: schema("SoftwareApplication"),
   setting: schema("PropertyValue"),
   run: prov("Activity"),
+  /** Second written type of the prompt node, added through the generated wrapper. */
+  promptEntity: prov("Entity"),
+  /** Second written type of the model node, added through the generated wrapper. */
+  modelAgent: prov("SoftwareAgent"),
 } as const;
 
 /** The same schema.org classes in the legacy http scheme (read aliases). */

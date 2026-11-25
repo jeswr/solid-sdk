@@ -421,7 +421,9 @@
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "maxCount": 1,
-          "guards": {}
+          "guards": {
+            "minInclusive": 1
+          }
         },
         {
           "name": "isBasedOn",
@@ -469,7 +471,9 @@
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "maxCount": 1,
-          "guards": {}
+          "guards": {
+            "minInclusive": 1
+          }
         }
       ]
     },
@@ -643,7 +647,7 @@
           "name": "duration",
           "predicate": "https://schema.org/duration",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "datatype": "http://www.w3.org/2001/XMLSchema#duration",
           "maxCount": 1,
           "guards": {}
         },
@@ -661,7 +665,9 @@
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "maxCount": 1,
-          "guards": {}
+          "guards": {
+            "minInclusive": 1
+          }
         },
         {
           "name": "isBasedOn",
@@ -709,7 +715,9 @@
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "maxCount": 1,
-          "guards": {}
+          "guards": {
+            "minInclusive": 1
+          }
         }
       ]
     }

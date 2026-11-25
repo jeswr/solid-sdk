@@ -82,6 +82,13 @@ describe("the profile rejects what the model would not write", () => {
       await conforms(`${good} schema:dateCreated "2026-06-15T09:41:07Z"^^xsd:dateTime .`),
     ).toBe(true);
   });
+  it("rejects zero and negative dimensions and a duration that is not xsd:duration", async () => {
+    expect(await conforms(`${good} schema:width 0 .`)).toBe(false);
+    expect(await conforms(`${good} schema:height -5 .`)).toBe(false);
+    const video = `<${DOC}#it> a schema:VideoObject ; schema:contentUrl <https://pod.example/v.mp4> ;`;
+    expect(await conforms(`${video} schema:duration "PT5S"^^xsd:duration .`)).toBe(true);
+    expect(await conforms(`${video} schema:duration "PT5S" .`)).toBe(false);
+  });
   it("rejects two names, a non-string keyword and an IRI creator written as a literal", async () => {
     expect(await conforms(`${good} schema:name "a", "b" .`)).toBe(false);
     expect(await conforms(`${good} schema:keywords 7 .`)).toBe(false);

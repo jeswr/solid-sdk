@@ -55,16 +55,26 @@ the same document, never blank nodes. A node exists only when its data was given
 
 | Node | IRI | rdf:type | Properties |
 |---|---|---|---|
-| Image | `#it` | `schema:ImageObject` | name, description, contentUrl (required IRI), encodingFormat, width, height (integer), contentSize, dateCreated (dateTime), keywords (set), thumbnail, creator, prov:wasGeneratedBy, prov:wasDerivedFrom (set), schema:isBasedOn (set) |
-| Video | `#it` | `schema:VideoObject` | the Image set plus duration (ISO 8601 string) |
+| Image | `#it` | `schema:ImageObject` | name, description, contentUrl (required IRI), encodingFormat, width, height (integer, at least 1), contentSize, dateCreated (dateTime), keywords (set), thumbnail, creator, prov:wasGeneratedBy, prov:wasDerivedFrom (set), schema:isBasedOn (set) |
+| Video | `#it` | `schema:VideoObject` | the Image set plus duration (`xsd:duration`, such as `PT5.5S`) |
 | 3D model | `#it` | `schema:3DModel` | the Image set without width and height; mesh and splat differ by encodingFormat |
 | Thumbnail | `#thumbnail` | `schema:ImageObject` | contentUrl, width, height, encodingFormat |
 | Run | `#run` | `prov:Activity` | startedAtTime, endedAtTime, prov:used (set: prompt, source assets, settings), prov:wasAssociatedWith (set: model, user WebID) |
-| Prompt | `#prompt` | `schema:CreativeWork` | text |
-| Model | `#model` | `schema:SoftwareApplication` | name, identifier, softwareVersion, provider (IRI) |
+| Prompt | `#prompt` | `schema:CreativeWork` and `prov:Entity` | text |
+| Model | `#model` | `schema:SoftwareApplication` and `prov:SoftwareAgent` | name, identifier, softwareVersion, provider (IRI) |
 | Setting | `#setting-<n>` | `schema:PropertyValue` | propertyID, value (a string, because a 64-bit seed does not fit a JS number) |
 | Project document | `#it` | `schema:CreativeWork` | name, contentUrl, encodingFormat, schemaVersion, additionalType, hasPart (set), dateCreated, dateModified, creator |
 | Collection | `#it` | `schema:Collection` | name, hasPart (set), dateCreated |
+
+The two second types (`prov:Entity`, `prov:SoftwareAgent`) are added through the generated
+wrapper's `types`, as `solid-sheets` does; they are written and survive a round trip, but the
+SHACL profile does not state or check them. Width and height must be integers of at least 1.
+
+**The library asset is always `<doc#it>`.** `#thumbnail` is a second `schema:ImageObject` in the
+same document (the object of `schema:thumbnail`); it is not a library item. A reader that lists
+by type must skip nodes that are the object of `schema:thumbnail`, or it counts each asset twice.
+The type of a node is also not a trust boundary: the runtime follows `rdfs:subClassOf` asserted
+in pod data, so a document can make a node read as a video by declaring a subclass.
 
 The generated field for `schema:value` is `settingValue` because `value` is a reserved
 accessor name in the runtime; the facade exposes it as `value`.
@@ -73,17 +83,30 @@ The facade follows a link (`schema:thumbnail`, `prov:wasGeneratedBy`, `prov:used
 `prov:wasAssociatedWith`) only to the conventional hash node of the same document. A link to
 another document is never fetched, and is not carried through a parse.
 
+## Document URLs
+
+`documentUrl` accepts only an `http(s)` URL in normalised form (`new URL(x).href === x`) with no
+userinfo and no fragment: a non-ASCII path must be percent-encoded, the host lower-case, and
+default ports and dot segments absent. The generated writer normalises link values, so the node
+subjects must already share that spelling or the links would not meet their nodes. Builds also
+re-read the finished document and throw if any node the caller supplied (thumbnail, run,
+prompt, model, each setting) is missing, so a build never returns a disconnected graph.
+
 ## Compatibility with pod-photos
 
 `apps/pod-photos` reads `schema:Photograph` documents with `https://schema.org/` predicates.
 An image written here, with its `rdf:type` replaced by `schema:Photograph`, is read in full:
 name, description, contentUrl as an IRI, keywords, integer width and height, and a dateTime
 dateCreated (`test/photograph.test.ts`). The compatibility is property-level; the type is the
-only difference.
+only difference. That test mirrors the reader's accessors and can drift from it: calling the real
+`parsePhoto` needs a test inside `apps/pod-photos` with this package as a devDependency, which
+is still to be added.
 
 ## Generated, not hand-written
 
-`creative-assets.ttl` (ontology input), `creative-assets.shacl.ttl` (the SHACL profile; its
+`codegen/creative-assets.ontology.ttl` (generator input only, not published; its properties
+state `rdfs:Resource` domains and ranges so it asserts nothing about schema.org),
+`creative-assets.shacl.ttl` (the SHACL profile; its
 header states what it covers and omits) and `codegen.config.json` drive
 `@jeswr/federation-codegen`, which writes `src/generated/`. Never edit `src/generated/`.
 `src/assets.ts` and `src/documents.ts` are the facade: they choose fragments, link nodes,
@@ -108,12 +131,44 @@ Reads are fail-closed per the runtime. A document with no `contentUrl`, a litera
 is expected, or a non-http(s) IRI parses to `undefined`. An optional field with the wrong
 datatype (`schema:width "wide"`, a decimal height, an `xsd:date` for `dateCreated`) is skipped
 and the asset still parses. A singleton with two values is dropped. Set members of the wrong
-kind are filtered. Writes throw a `TypeError` when `contentUrl`, a setting's `propertyID` or
-`value`, a prompt's text, or a project's `contentUrl` is missing or invalid, instead of
-writing a typed shell. The document URL must be absolute with no fragment.
+kind are filtered. A document with more than 256 settings, or one whose parse budget runs out,
+parses to `undefined` rather than a partial description. Setting nodes are only the fragments
+`#setting-0` to `#setting-999` with no leading zeros; any other IRI in `prov:used` is an
+ordinary used IRI. Links are followed only to the conventional hash node of the same document.
+
+Writes are fail-closed for every supplied value, not only required ones. A value the generated
+writer drops (a non-integer or zero width, an invalid date, a non-http(s) IRI, a bad set member)
+throws a `TypeError` naming the field, as does a missing required value (`contentUrl`, a
+setting's `propertyID` or `value`, a prompt's text, a project's `contentUrl`, a collection's
+`name`), an unknown `kind`, more than 256 settings, and a caller IRI in `usedAssets`,
+`associatedWith`, `wasDerivedFrom` or `isBasedOn` that names this document's own `#it`, `#run`,
+`#prompt`, `#model`, `#thumbnail` or `#setting-<n>`. Only the keys of the declared types are
+copied; anything else on the input object is ignored.
+
+### What `parse(build(x))` normalises, and what a rebuild loses
+
+`parse(build(x))` equals `x` except for these normalisations, each pinned in
+`src/hardening.test.ts`:
+
+- `contentUrl` and every other IRI come back in URL form (`HTTPS://Pod.Example/a b` becomes
+  `https://pod.example/a%20b`).
+- `keywords` are trimmed, de-duplicated and sorted; blank keywords and an empty list vanish.
+- The other sets (`wasDerivedFrom`, `isBasedOn`, `usedAssets`, `associatedWith`, `hasPart`) are
+  de-duplicated.
+- Control characters are stripped from text, including a prompt.
+- `xsd:duration` is validated: week forms such as `P1W` are rejected.
+
+Parse-then-rebuild also loses what the facade does not follow: a `schema:thumbnail` or
+`prov:wasGeneratedBy` that points outside the document is not returned and so not rewritten, a
+second `prov:wasGeneratedBy` value makes the whole generation disappear, and a `prov:used` or
+`prov:wasAssociatedWith` link to a missing node is dropped. An app that edits and rewrites a
+document written by another tool will delete that tool's links.
 
 Reading with legacy `http://schema.org/` class IRIs works; serialising writes the canonical
-`https://schema.org/` class.
+`https://schema.org/` class. Legacy `http://schema.org/` **predicates** are not read, only
+classes: this is a known generator gap (gap 1) to be fixed in the generator, not a choice of
+this package. `documentToTurtle` throws rather than write a document that still holds legacy
+predicates, so a canonically typed but unreadable document is never produced.
 
 ## Generator gaps
 
@@ -126,11 +181,13 @@ around with hand-written accessors. Paths are under `packages/federation-codegen
    enforced at `admission.ts:94` and `compile.ts:501`, rejects a canonical predicate shared by
    two shapes when either carries an alias). `schema:name`, `contentUrl` and the rest are
    shared by several shapes, so only the class aliases (multiple `sh:targetClass`) are
-   declared. A document with legacy predicates parses to `undefined` (pinned in a test).
-2. **One written `rdf:type` per node.** `compile.ts:301` and `:486` emit
+   declared. A document with legacy predicates parses to `undefined` (pinned in a test). The
+   fix belongs in the generator and runtime: allow a shared canonical predicate when every
+   owner declares the identical alias list.
+2. **One canonical `rdf:type` per generated entity.** `compile.ts:301` and `:486` emit
    `typeIris: [targetClass]`; extra `sh:targetClass` values become read-only aliases. The
-   prompt is therefore only `schema:CreativeWork` (no `prov:Entity`) and the model only
-   `schema:SoftwareApplication` (no `prov:SoftwareAgent`).
+   prompt's `prov:Entity` and the model's `prov:SoftwareAgent` are therefore added by the facade
+   through the generated wrapper's `types`, not stated or checked by the profile.
 3. **One NodeShape per class.** `shapes.ts:411` rejects two shapes for one canonical class.
    The project document and the prompt are both `schema:CreativeWork`, so they share one shape
    with every property optional. The facade requires `contentUrl` for a project and `text`
@@ -149,15 +206,9 @@ around with hand-written accessors. Paths are under `packages/federation-codegen
    the generated guards.
 6. **`schema:value` as a field name.** `value` is reserved by the runtime
    (`model-runtime/src/manifest.ts:190-212`), so the SHACL `sh:name` is `settingValue`.
-7. **`schema:duration` is a string.** The validated datatypes do not check an ISO 8601
-   duration; it is an `xsd:string` with no pattern.
-8. **Provider is an IRI only.** A nested `schema:Organization` node would be one more
+7. **Provider is an IRI only.** A nested `schema:Organization` node would be one more
    flat entity and fragment; the model's `name` and `identifier` identify the model and
    `provider` takes an IRI.
-
-A possible way past 1 without generator changes is one profile and generated directory per
-asset kind; that departs from the one-`src/generated` layout `check:codegen` assumes, so it is
-not done here.
 
 ## Licence
 

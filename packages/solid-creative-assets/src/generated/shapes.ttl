@@ -2,7 +2,7 @@
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
 @prefix schema: <https://schema.org/>.
 @prefix sh: <http://www.w3.org/ns/shacl#>.
-@prefix shapes: <https://github.com/jeswr/solid-sdk/blob/main/packages/solid-creative-assets/creative-assets.shacl.ttl#>.
+@prefix shapes: <https://jeswr.org/ns/creative-assets/shapes#>.
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
 
 shapes:04bce0a9120240a5acce268763cf8155a1bc9ae4c890c45458b69da3de739e1f-VideoObject-dateCreated sh:datatype xsd:dateTime;
@@ -161,6 +161,7 @@ shapes:83383046381df0c2847b53238ce2bbcc9b6f8d0b0942dfd4750a2f026d5ff280-3DModelS
     sh:targetClass <http://schema.org/3DModel>, schema:3DModel.
 shapes:8574bb1181323712f78ce8e3a2fa695b7e6b0bba0876cd866f0ff8c054b327b8-VideoObject-width sh:datatype xsd:integer;
     sh:maxCount 1;
+    sh:minInclusive 1;
     sh:name "width";
     sh:path schema:width.
 shapes:87af430b0faab1bdddcdfb17e75b3ded945e813fb66e7c023e28d3a41430557f-Activity-used sh:name "used";
@@ -243,6 +244,7 @@ shapes:c5a4640e8cf912c5f2aed488650d8ac4926e78d07a4dfb00460a410d1b56bc46-Collecti
     sh:pattern "^https?://".
 shapes:c602d11f4b69cc01e30910162d08a202f68a04ff8438b33b56919812d671d8f6-ImageObject-width sh:datatype xsd:integer;
     sh:maxCount 1;
+    sh:minInclusive 1;
     sh:name "width";
     sh:path schema:width.
 shapes:cd75695e1face9f192eea09bc650b69f430fb0b3b6f96111c36bf8ad8ac4ae1e-Activity-startedAtTime sh:datatype xsd:dateTime;
@@ -254,12 +256,13 @@ shapes:d571ae007e20c24d4397b4e938847081e1287e25f7d6d7efb459c01d40b18b76-Software
     sh:nodeKind sh:IRI;
     sh:path schema:provider;
     sh:pattern "^https?://".
-shapes:d914a8cb9cc8686b877e099aed684154d10967eea119142c3332a7f2eb4de39b-VideoObject-duration sh:datatype xsd:string;
+shapes:d914a8cb9cc8686b877e099aed684154d10967eea119142c3332a7f2eb4de39b-VideoObject-duration sh:datatype xsd:duration;
     sh:maxCount 1;
     sh:name "duration";
     sh:path schema:duration.
 shapes:d948a84afd9d477e38fafc0e718a79752cd8a47efac52f69e44b53cf266d6310-ImageObject-height sh:datatype xsd:integer;
     sh:maxCount 1;
+    sh:minInclusive 1;
     sh:name "height";
     sh:path schema:height.
 shapes:e6594b16839181111e2cc3bd0faa33a19755c06251c6da81fec08f0c904048a6-CreativeWork-text sh:datatype xsd:string;
@@ -279,6 +282,7 @@ shapes:e93a42015ae3a1a2f29c8eb1fae869063ed9798d74208d1a21f95b9e04c78176-VideoObj
     sh:pattern "^https?://".
 shapes:ea611d54d54e5ee4ce76657343e7376ae03b07564e7b3decd886ebddb30f9c01-VideoObject-height sh:datatype xsd:integer;
     sh:maxCount 1;
+    sh:minInclusive 1;
     sh:name "height";
     sh:path schema:height.
 shapes:ec2c72856ecf6d03e0ecf8aae2c34e675652eddc6f796046921e15dcc873bfa7-3DModel-contentUrl sh:maxCount 1;

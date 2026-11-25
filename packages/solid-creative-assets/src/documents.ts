@@ -4,24 +4,25 @@ import type { DatasetCore } from "@rdfjs/types";
 import type { Store } from "n3";
 import {
   type AssetDescription,
+  build,
   buildAssetDocument,
   type CollectionData,
   documentUrl,
+  fieldsOf,
   nodeIri,
+  only,
   type ProjectDocumentData,
   parseAssetDocument,
 } from "./assets.js";
-import { entities } from "./generated/model.js";
-import { FRAGMENTS } from "./vocab.js";
+import { type CreativeWorkData, entities } from "./generated/model.js";
+import { FRAGMENTS, SCHEMA_LEGACY } from "./vocab.js";
 
 /** Build a project document (a JSON scene, timeline or board file) description. */
 export function buildProjectDocument(url: string, data: ProjectDocumentData): Store {
-  const iri = nodeIri(url, FRAGMENTS.asset);
-  const store = entities.CreativeWork.build(iri, data);
-  if (entities.CreativeWork.parse(iri, store)?.contentUrl === undefined) {
-    throw new TypeError("a project document needs an http(s) contentUrl");
-  }
-  return store;
+  const keys = fieldsOf("CreativeWork").filter((k) => k !== "text");
+  const picked = only<CreativeWorkData>(data, keys);
+  if (picked.contentUrl === undefined) throw new TypeError("a project document needs a contentUrl");
+  return build(entities.CreativeWork, nodeIri(url, FRAGMENTS.asset), picked, "project document");
 }
 
 /** Parse a project document; `undefined` without a valid `contentUrl`. */
@@ -35,9 +36,11 @@ export function parseProjectDocument(
   return project;
 }
 
-/** Build a collection (folder) description. */
+/** Build a collection (folder) description; it needs a name. */
 export function buildCollection(url: string, data: CollectionData): Store {
-  return entities.Collection.build(nodeIri(url, FRAGMENTS.asset), data);
+  const picked = only<CollectionData>(data, fieldsOf("Collection"));
+  if (picked.name === undefined) throw new TypeError("a collection needs a name");
+  return build(entities.Collection, nodeIri(url, FRAGMENTS.asset), picked, "collection");
 }
 
 /** Parse a collection description. */
@@ -47,6 +50,11 @@ export function parseCollection(url: string, dataset: DatasetCore): CollectionDa
 
 /** Serialise any document store built here to Turtle (legacy alias types become canonical). */
 export function documentToTurtle(store: Store): Promise<string> {
+  // Legacy predicates are not read (README "Generator gaps"); a document that still holds
+  // them would be typed canonically but unreadable, so it is refused rather than mixed.
+  if ([...store].some((q) => q.predicate.value.startsWith(SCHEMA_LEGACY))) {
+    throw new TypeError("refusing to write legacy http://schema.org/ predicates");
+  }
   return entities.Image.storeToTurtle(store);
 }
 

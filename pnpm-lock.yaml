@@ -4940,6 +4940,9 @@ importers:
       '@jeswr/model-runtime':
         specifier: workspace:*
         version: link:../model-runtime
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../suite-vocab
       n3:
         specifier: ^2.0.3
         version: 2.1.1

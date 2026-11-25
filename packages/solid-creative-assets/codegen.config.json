@@ -1,5 +1,5 @@
 {
-  "shapesBase": "https://github.com/jeswr/solid-sdk/blob/main/packages/solid-creative-assets/creative-assets.shacl.ttl#",
+  "shapesBase": "https://jeswr.org/ns/creative-assets/shapes#",
   "prefixes": {
     "schema": "https://schema.org/",
     "prov": "http://www.w3.org/ns/prov#",
@@ -10,45 +10,79 @@
     {
       "targetClass": "https://schema.org/ImageObject",
       "name": "Image",
-      "subject": { "convention": "self" },
-      "fields": { "keywords": { "trim": true, "dropBlank": true, "sortOnRead": true } }
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "keywords": {
+          "trim": true,
+          "dropBlank": true,
+          "sortOnRead": true
+        }
+      }
     },
     {
       "targetClass": "https://schema.org/VideoObject",
       "name": "Video",
-      "subject": { "convention": "self" },
-      "fields": { "keywords": { "trim": true, "dropBlank": true, "sortOnRead": true } }
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "keywords": {
+          "trim": true,
+          "dropBlank": true,
+          "sortOnRead": true
+        }
+      }
     },
     {
       "targetClass": "https://schema.org/3DModel",
       "name": "Model3D",
-      "subject": { "convention": "self" },
-      "fields": { "keywords": { "trim": true, "dropBlank": true, "sortOnRead": true } }
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "keywords": {
+          "trim": true,
+          "dropBlank": true,
+          "sortOnRead": true
+        }
+      }
     },
     {
       "targetClass": "https://schema.org/CreativeWork",
       "name": "CreativeWork",
-      "subject": { "convention": "self" }
+      "subject": {
+        "convention": "self"
+      }
     },
     {
       "targetClass": "https://schema.org/Collection",
       "name": "Collection",
-      "subject": { "convention": "self" }
+      "subject": {
+        "convention": "self"
+      }
     },
     {
       "targetClass": "https://schema.org/SoftwareApplication",
       "name": "AiModel",
-      "subject": { "convention": "self" }
+      "subject": {
+        "convention": "self"
+      }
     },
     {
       "targetClass": "https://schema.org/PropertyValue",
       "name": "Setting",
-      "subject": { "convention": "self" }
+      "subject": {
+        "convention": "self"
+      }
     },
     {
       "targetClass": "http://www.w3.org/ns/prov#Activity",
       "name": "Run",
-      "subject": { "convention": "self" }
+      "subject": {
+        "convention": "self"
+      }
     }
   ]
 }

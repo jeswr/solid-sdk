@@ -426,7 +426,9 @@ const manifest = {
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "maxCount": 1,
-          "guards": {}
+          "guards": {
+            "minInclusive": 1
+          }
         },
         {
           "name": "isBasedOn",
@@ -474,7 +476,9 @@ const manifest = {
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "maxCount": 1,
-          "guards": {}
+          "guards": {
+            "minInclusive": 1
+          }
         }
       ]
     },
@@ -648,7 +652,7 @@ const manifest = {
           "name": "duration",
           "predicate": "https://schema.org/duration",
           "kind": "literal",
-          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "datatype": "http://www.w3.org/2001/XMLSchema#duration",
           "maxCount": 1,
           "guards": {}
         },
@@ -666,7 +670,9 @@ const manifest = {
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "maxCount": 1,
-          "guards": {}
+          "guards": {
+            "minInclusive": 1
+          }
         },
         {
           "name": "isBasedOn",
@@ -714,7 +720,9 @@ const manifest = {
           "kind": "literal",
           "datatype": "http://www.w3.org/2001/XMLSchema#integer",
           "maxCount": 1,
-          "guards": {}
+          "guards": {
+            "minInclusive": 1
+          }
         }
       ]
     }
