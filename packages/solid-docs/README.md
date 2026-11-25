@@ -63,10 +63,19 @@ There is no mirror repository configured for this new package.
 
 Pinned in `test/compatibility.test.ts` under `Exact divergences`:
 
-- `drops ambiguous, mistyped and language-tagged scalar fields...`: generated scalar
-  getters drop multiple values, wrong term kinds/datatypes and language-tagged strings,
-  rather than taking the first lexical value or throwing. Negative/non-integer word
-  counts and date-only stamps drop. Document defaults still apply.
+- `reads the first literal of a language-tagged, duplicated or differently-typed scalar...`:
+  the generated getters drop such values, and the Suite rebuilds a whole resource on save,
+  so the drop would erase body, revision bodies and the creation date written by another
+  tool (review F3). `DocumentDoc` and `RevisionDoc` therefore read the first literal's
+  lexical value, as the hand-written model did, when the strict value is absent but a
+  literal is present: document `title`, `body`, `format`, `created`, `modified`, and
+  revision `body`, `format`, `generatedAt`. Non-literal objects, an `xsd:dateTime` that is
+  malformed, and unparseable dates still drop (defaults apply); a canonical body that is
+  present but unreadable never falls back to stale legacy text. Other generated scalars
+  (creator, word count, IRIs, `updateLog`) still drop multiple values, wrong term kinds
+  and negative or non-integer counts; a dropped `updateLog` falls back to the default
+  `updates/` container and is rewritten on the next save. Round trip (parse then
+  `buildDocument` with the parsed data) is pinned by `keeps content a metadata-only save...`.
 - `drops malformed dateTimes...`: invalid optional dateTimes drop; a malformed revision
   timestamp now uses the existing epoch default instead of failing ISO conversion.
   `drops an invalid supplied creation date...` also pins dropped invalid write dates.

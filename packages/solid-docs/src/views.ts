@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
+
 import type { EntityWrapper } from "@jeswr/model-runtime";
 import { LEGACY_NAMESPACES } from "@jeswr/suite-vocab";
+import type { Literal } from "@rdfjs/types";
 import {
   LiteralAs,
   OptionalFrom,
@@ -11,7 +13,7 @@ import {
   type TermWrapper,
 } from "@rdfjs/wrapper";
 import { type DocumentWrapper, entities, type RevisionWrapper } from "./generated/model.js";
-import { PD } from "./vocab.js";
+import { DCT, PD, PROV } from "./vocab.js";
 
 // Generator gap: the same canonical predicate cannot have aliases on two owners.
 // Only body/format need this bridge; every other field is wholly generated.
@@ -24,6 +26,37 @@ function aliases(predicate: string): string[] {
     ),
   ];
 }
+const XSD_DATE_TIME = "http://www.w3.org/2001/XMLSchema#dateTime";
+function firstLiteral(view: TermWrapper, predicate: string): Literal | undefined {
+  for (const term of SetFrom.subjectPredicate(view, predicate, TermAs.term, TermFrom.itself))
+    if (term.termType === "Literal") return term;
+  return undefined;
+}
+/**
+ * Tolerant read (review F3): the generated getters drop a language-tagged, duplicated or
+ * differently-typed scalar, and the app rebuilds the whole resource on save, so the drop
+ * would become permanent data loss. When the strict value is absent but a literal is
+ * present, return the first literal's lexical form, as the hand-written model did.
+ */
+function tolerantText(
+  view: TermWrapper,
+  predicate: string,
+  value: string | undefined,
+): string | undefined {
+  return value ?? firstLiteral(view, predicate)?.value;
+}
+/** As {@link tolerantText}; a malformed `xsd:dateTime` stays dropped, as the generated model pins. */
+function tolerantDate(
+  view: TermWrapper,
+  predicate: string,
+  value: Date | undefined,
+): Date | undefined {
+  if (value !== undefined) return value;
+  const literal = firstLiteral(view, predicate);
+  if (!literal || literal.datatype.value === XSD_DATE_TIME) return undefined;
+  const parsed = new Date(literal.value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
 function legacyText(view: TermWrapper, predicate: string): string | undefined {
   for (const alias of aliases(predicate)) {
     const value = OptionalFrom.subjectPredicate(view, alias, LiteralAs.string);
@@ -33,7 +66,8 @@ function legacyText(view: TermWrapper, predicate: string): string | undefined {
 }
 /**
  * Legacy aliases are read only when the canonical predicate is absent: an ambiguous or
- * malformed canonical value stays dropped rather than falling back to stale legacy text.
+ * differently-typed canonical literal is read tolerantly (first lexical value) rather than
+ * falling back to stale legacy text.
  */
 function canonicalOrLegacy(
   view: TermWrapper,
@@ -42,7 +76,7 @@ function canonicalOrLegacy(
 ): string | undefined {
   if (value !== undefined) return value;
   if (SetFrom.subjectPredicate(view, predicate, TermAs.term, TermFrom.itself).size > 0)
-    return undefined;
+    return tolerantText(view, predicate, undefined);
   return legacyText(view, predicate);
 }
 function clearLegacy(view: TermWrapper, predicate: string): void {
@@ -91,6 +125,24 @@ export class DocumentDoc extends DocumentBase {
     clearLegacy(this, PD.format);
     super.format = value;
   }
+  override get title(): string | undefined {
+    return tolerantText(this, DCT.title, super.title);
+  }
+  override set title(value: string | undefined) {
+    super.title = value;
+  }
+  override get created(): Date | undefined {
+    return tolerantDate(this, DCT.created, super.created);
+  }
+  override set created(value: Date | undefined) {
+    super.created = value;
+  }
+  override get modified(): Date | undefined {
+    return tolerantDate(this, DCT.modified, super.modified);
+  }
+  override set modified(value: Date | undefined) {
+    super.modified = value;
+  }
   override get wordCount(): number | undefined {
     return super.wordCount;
   }
@@ -118,5 +170,11 @@ export class RevisionDoc extends RevisionBase {
   override set format(value: string | undefined) {
     clearLegacy(this, PD.format);
     super.format = value;
+  }
+  override get generatedAt(): Date | undefined {
+    return tolerantDate(this, PROV.generatedAtTime, super.generatedAt);
+  }
+  override set generatedAt(value: Date | undefined) {
+    super.generatedAt = value;
   }
 }

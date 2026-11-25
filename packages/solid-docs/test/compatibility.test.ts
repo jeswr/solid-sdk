@@ -33,24 +33,58 @@ function graph(body: string) {
 }
 
 describe("Exact divergences", () => {
-  it("drops ambiguous, mistyped and language-tagged scalar fields instead of reading the first or throwing", () => {
+  it("reads the first literal of a language-tagged, duplicated or differently-typed scalar, and still drops non-literals and non-dates", () => {
     const data = parseDocument(
       url,
       graph(`<#it> a pd:Document ; dct:title "one", "two" ;
       pd:body "bonjour"@fr ; pd:format 7 ; dct:creator "not an IRI" ;
-      <https://schema.org/wordCount> -1 ; dct:created "2026-01-01"^^xsd:date .`),
+      <https://schema.org/wordCount> -1 ; dct:created "2026-01-01"^^xsd:date ;
+      dct:modified "not a date" .`),
     );
-    expect(data).toMatchObject({ title: "", body: "", format: "text/html" });
+    expect(data?.title).toMatch(/^(one|two)$/);
+    expect(data).toMatchObject({ body: "bonjour", format: "7" });
     expect(data?.creator).toBeUndefined();
     expect(data?.wordCount).toBeUndefined();
-    expect(data?.created).toBeUndefined();
+    expect(data?.created).toBe("2026-01-01T00:00:00.000Z");
+    expect(data?.modified).toBeUndefined();
+    const nonLiteral = parseDocument(
+      url,
+      graph(`<#it> a pd:Document ; dct:title <#x> ; pd:body <#y> .`),
+    );
+    expect(nonLiteral).toMatchObject({ title: "", body: "" });
   });
-  it("does not fall back to legacy content when the canonical value is ambiguous", () => {
+  it("keeps content a metadata-only save would otherwise erase when read from another tool's literals", () => {
     const data = parseDocument(
       url,
-      graph(`<#it> a pd:Document ; pd:body "a", "b" ; <${legacy}body> "stale" .`),
+      graph(`<#it> a pd:Document ; dct:title "Trip"@en ; pd:body "<p>précieux</p>"@fr ;
+      dct:created "2024-01-01"^^xsd:date ; pd:currentRevision <#rev-0> .
+      <#rev-0> a prov:Entity ; pd:body "<p>v0</p>"@fr ; pd:format "text/html"@en ;
+      prov:generatedAtTime "2024-01-01T00:00:00Z"^^xsd:dateTime .`),
     );
-    expect(data?.body).toBe("");
+    expect(data).toMatchObject({
+      title: "Trip",
+      body: "<p>précieux</p>",
+      created: "2024-01-01T00:00:00.000Z",
+    });
+    expect(data?.revisions[0]).toMatchObject({ body: "<p>v0</p>", format: "text/html" });
+    if (!data) throw new Error("unreachable");
+    const saved = parseDocument(
+      url,
+      buildDocument(url, { ...data, priorRevisions: data.revisions, title: "Renamed" }),
+    );
+    expect(saved).toMatchObject({
+      title: "Renamed",
+      body: "<p>précieux</p>",
+      created: "2024-01-01T00:00:00.000Z",
+    });
+    expect(saved?.revisions.map((revision) => revision.body)).toContain("<p>v0</p>");
+  });
+  it("does not fall back to legacy content when the canonical value is present but not a plain string", () => {
+    const data = parseDocument(
+      url,
+      graph(`<#it> a pd:Document ; pd:body "a"@en ; <${legacy}body> "stale" .`),
+    );
+    expect(data?.body).toBe("a");
     const legacyOnly = parseDocument(url, graph(`<#it> a pd:Document ; <${legacy}body> "kept" .`));
     expect(legacyOnly?.body).toBe("kept");
   });
