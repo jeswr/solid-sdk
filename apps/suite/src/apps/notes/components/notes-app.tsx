@@ -10,6 +10,7 @@ import { TemplateLauncher } from "@/components/templates/template-picker";
 import { decodeRef } from "@/lib/refs";
 import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
+import { ShortcutsProvider } from "@/shell/shortcuts/provider";
 import type { NoteFailure, StoredNote } from "../lib/model/store";
 import { noteLink } from "../lib/shared-note";
 import { NotesProvider, useNotesContext } from "../state/notes-context";
@@ -207,7 +208,9 @@ function SessionGate({ children }: { children: ReactNode }) {
 export function NotesApp({ children }: { children: ReactNode }) {
   return (
     <PodSessionProvider>
-      <SessionGate>{children}</SessionGate>
+      <ShortcutsProvider>
+        <SessionGate>{children}</SessionGate>
+      </ShortcutsProvider>
       <Toaster position="bottom-center" />
     </PodSessionProvider>
   );
