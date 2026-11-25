@@ -4,7 +4,7 @@ import { readGrants } from "@jeswr/pod-access/roles";
 import type { TypeIndex } from "@jeswr/pod-type-index";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
 import { expect, it, vi } from "vitest";
-import { JournalPrivacyError, protectJournal } from "../src/privacy.js";
+import { protectJournal } from "../src/privacy.js";
 import { createJournalStore } from "../src/store.js";
 
 const root = "https://pod.example/";
@@ -107,20 +107,22 @@ it("makes an existing shared own ACL private using the real conditional ownOnly 
   await protectJournal(storage, container, owner, fetch);
   expect(writes).toHaveLength(1);
 });
-it("never reports a sealed folder as private unless the shared verifier agrees", async () => {
-  // Separate owner and other authorisations: the role writer detaches the other rule's
-  // targets but can leave an inert principal-less rule that the strict verifier refuses.
-  // Either outcome is acceptable; claiming privacy that checkOwnerOnly disputes is not.
-  const { store, storage } = await fixture();
-  const outcome = await store.makePrivate().then(
-    () => "sealed" as const,
-    (error: unknown) => error,
-  );
-  if (outcome === "sealed")
-    expect(await checkOwnerOnly({ storage, url: container, ownerWebId: owner })).toEqual({
-      private: true,
-    });
-  else expect(outcome).toBeInstanceOf(JournalPrivacyError);
+it("seals separate owner and other-agent authorisations to a document the shared verifier accepts", async () => {
+  // The two-rule shape pod-access share writes: sealing detaches the other agent's rule, and
+  // must also drop what it leaves behind so the strict verifier accepts the result.
+  const { store, storage, writes } = await fixture();
+  expect(await checkOwnerOnly({ storage, url: container, ownerWebId: owner })).toMatchObject({
+    private: false,
+  });
+  await store.makePrivate();
+  expect(writes).toHaveLength(1);
+  expect(await checkOwnerOnly({ storage, url: container, ownerWebId: owner })).toEqual({
+    private: true,
+  });
+  const read = await storage.readRdf(acl);
+  const policy = readWac(read.dataset, container, acl, "css", true);
+  expect(policy.grants.length).toBeGreaterThan(0);
+  for (const grant of policy.grants) expect(grant.who).toEqual([[{ kind: "agent", webId: owner }]]);
 });
 it("explains partial folder/member scopes and leaves the ACL unchanged", async () => {
   const { store, writes, body, initial } = await fixture(true);
