@@ -9,6 +9,7 @@ import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { describe, expect, it, vi } from "vitest";
 import {
   createTripsStore,
+  isTrusted,
   TripsPrivacyError,
   TypeIndexSetupError,
   verifiedOwnerOnly,
@@ -293,6 +294,107 @@ describe("solid pod", () => {
     await store.initialise();
     outage = true;
     await expect(store.retryRegistration()).rejects.toThrow("offline");
+  });
+});
+
+describe("manual bookings are trusted only from verified owner-only storage", () => {
+  const Manual = `${POD}trips/reservations/`;
+  async function plantedBooking() {
+    const { memory, storage, aclWrites } = await server("solid");
+    const sealed: string[] = [];
+    const { store } = open(storage, sealer(memory, sealed));
+    await store.initialise();
+    const booking = await store.addReservation({
+      kind: "TrainReservation",
+      title: "Planted",
+      trust: "verified",
+    });
+    return { memory, storage, store, booking, aclWrites, sealed };
+  }
+
+  it("trusts a verified owner-only folder's bookings as the user's own", async () => {
+    const { store, booking } = await plantedBooking();
+    const loaded = (await store.load()).reservations.find((item) => item.id === booking.id);
+    expect(loaded).toMatchObject({ origin: "manual", trust: "verified" });
+  });
+
+  it("re-verifies at load: a folder shared after opening downgrades its bookings, without rewriting it", async () => {
+    const { memory, store, booking, aclWrites } = await plantedBooking();
+    await rewriteAcl(
+      memory,
+      Manual,
+      `${ownerOnly(Manual)}\n${rule(Manual, BOB, "acl:Read, acl:Write", true)}`,
+    );
+    const before = await aclBody(memory, Manual);
+    aclWrites.length = 0;
+    const loaded = (await store.load()).reservations.find((item) => item.id === booking.id);
+    // A shared folder lets anyone with Write plant a "verified" booking: nothing here is trusted.
+    expect(loaded).toMatchObject({ trust: "unverified" });
+    expect(loaded?.origin).toBeUndefined();
+    expect(isTrusted(loaded as never)).toBe(false);
+    expect(store.sharedFolders).toContain(Manual);
+    expect(aclWrites).toEqual([]);
+    expect(await aclBody(memory, Manual)).toBe(before);
+  });
+
+  it("trusts a planted booking again once the folder is verified private", async () => {
+    const { memory, store, booking } = await plantedBooking();
+    const shared = `${ownerOnly(Manual)}\n${rule(Manual, BOB, "acl:Append", true)}`;
+    await rewriteAcl(memory, Manual, shared);
+    expect((await store.load()).reservations.find((item) => item.id === booking.id)?.trust).toBe(
+      "unverified",
+    );
+    await rewriteAcl(memory, Manual, ownerOnly(Manual));
+    const loaded = (await store.load()).reservations.find((item) => item.id === booking.id);
+    expect(loaded).toMatchObject({ origin: "manual", trust: "verified" });
+    expect(store.sharedFolders).toEqual([]);
+  });
+
+  it("distrusts a document that is shared individually inside a private folder", async () => {
+    const { memory, store, booking } = await plantedBooking();
+    const doc = booking.id.split("#")[0] as string;
+    await rewriteAcl(
+      memory,
+      doc,
+      `${ownerOnly(doc, false)}\n${rule(doc, BOB, "acl:Write", false)}`,
+    );
+    const loaded = (await store.load()).reservations.find((item) => item.id === booking.id);
+    expect(loaded).toMatchObject({ trust: "unverified" });
+    expect(loaded?.origin).toBeUndefined();
+    expect(store.sharedFolders).toEqual([]);
+  });
+
+  it("clears a folder from sharedFolders once a later write verifies it private", async () => {
+    const { memory, storage } = await server("solid");
+    await memory.create(POD, null, { name: "trips", kind: "container" });
+    await memory.create(`${POD}trips/`, sharedWithBob(`${POD}trips/`), {
+      name: ".acl",
+      contentType: "text/turtle",
+    });
+    const { store, register } = open(storage, sealer(memory, []));
+    await store.initialise();
+    expect(store.sharedFolders).toEqual([`${POD}trips/`]);
+    await rewriteAcl(memory, `${POD}trips/`, ownerOnly(`${POD}trips/`));
+    await store.saveTrip(newTrip);
+    expect(store.sharedFolders).toEqual([]);
+    // Registration was skipped while shared; the next retry no longer needs to re-verify.
+    expect(await store.retryRegistration()).toEqual({ status: "registered" });
+    expect(register).toHaveBeenCalledOnce();
+  });
+
+  it("verifies an existing trip's own document before editing it", async () => {
+    const { memory, storage } = await server("solid");
+    const { store } = open(storage, sealer(memory, []));
+    await store.initialise();
+    const saved = await store.saveTrip(newTrip);
+    const doc = saved.id.split("#")[0] as string;
+    // The user later shares this one trip document; its folder is still private.
+    await rewriteAcl(memory, doc, `${ownerOnly(doc, false)}\n${rule(doc, BOB, "acl:Read", false)}`);
+    await expect(store.saveTrip({ ...saved, name: "Renamed" })).rejects.toMatchObject({
+      reason: "shared",
+    });
+    const unchanged = (await store.load()).trips.find((trip) => trip.id === saved.id);
+    expect(unchanged?.name).toBe(newTrip.name);
   });
 });
 

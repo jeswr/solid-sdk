@@ -9,6 +9,7 @@ import {
   createMemoryPod,
   fileImport,
   memoryFile,
+  ownerOnlyFixtureChecks,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
   TEST_WEBID,
@@ -50,6 +51,7 @@ function writer(pod = createMemoryPod()) {
     profileDocumentUrl: TEST_PROFILE_DOC,
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
+    ...ownerOnlyFixtureChecks,
   });
 }
 const plays = (pod: ReturnType<typeof createMemoryPod>, url = DOC) =>

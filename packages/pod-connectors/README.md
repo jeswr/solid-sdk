@@ -117,14 +117,28 @@ Type Index registration retains the existing public-index fallback, which is tra
 `requiresPrivateDestination(id)` is true for `private` ids; they follow the contract above
 (owner-only verification before any write, after-write confirmation, clean-up, cancellation and
 refusal precedence). A registry test fails when an adapter is registered without a classification.
-An id outside the table (a test or host adapter) is not private, so classify new adapters when you add them.
+An id outside the table (a host's own adapter, or one not yet classified) is private too:
+`requiresPrivateDestination` fails closed, so its imports are refused until the host supplies the
+owner-only checks, and a new adapter should be classified when you add it. The package's own unit
+tests give a few fixture ids (`accounting`, `incremental`, `legacy`, `takeout`, `toy`) a test-only
+exemption in `test/fixture-connectors.setup.ts`; nothing in the shipped package has one.
+
+An import of a person's own account data is private unless the data is unquestionably public by
+nature. No registered connector qualifies: `github` requests the `repo` scope and lists
+`/user/repos`, which includes private repositories, so it is private as well. `public-ok` remains
+available for a future connector that imports only such data.
 
 | Class | Connector ids | Why |
 | --- | --- | --- |
 | `private` | `activity-files`, `apple-health`, `fitbit`, `garmin`, `strava`, `whoop` | Health metrics, heart rate, GPS tracks, original FIT/GPX/TCX files |
 | `private` | `bank-statements`, `amazon-orders`, `uber` | Transactions, purchases, trips and fares |
 | `private` | `gmail`, `whatsapp`, `google-contacts`, `google-calendar`, `google-drive`, `google-takeout`, `chatgpt` | Mail, chats, contacts, appointments, file copies, conversations |
-| `public-ok` | `discord`, `dropbox`, `facebook`, `github`, `goodreads`, `google-photos`, `instagram`, `linkedin`, `netflix`, `notion`, `pinterest`, `reddit`, `slack`, `spotify`, `steam`, `tiktok`, `twitch`, `vesync`, `x-twitter`, `youtube` | Public-profile, catalogue or metadata-only data (no message, health, location, finance or contact content) |
+| `private` | `discord`, `dropbox`, `facebook`, `github`, `goodreads`, `google-photos`, `instagram`, `linkedin`, `netflix`, `notion`, `pinterest`, `reddit`, `slack`, `spotify`, `steam`, `tiktok`, `twitch`, `vesync`, `x-twitter`, `youtube` | Account data of the person: file and page names, photo libraries, posts, listening and viewing history, messages, home sensor readings, repositories (including private ones) |
+
+**ACP pods currently fail closed for private writes.** No `acpDialect` is passed to the owner-only
+checks, so on an ACP pod `checkOwnerOnly` cannot represent the policy and every `private` import is
+refused (Gmail, Strava, Calendar, Contacts, Drive and the rest of the table alike). Supplying a
+trusted dialect belongs to later ACP storage integration; nothing falls back to an unverified write.
 
 The Garmin note that sends nested FIT archives to `activity-files` therefore lands in an
 equally protected adapter.
