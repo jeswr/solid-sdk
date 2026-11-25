@@ -46,19 +46,19 @@ function useTasksValue(session: PodSession) {
     // Issues writes go straight to the pod: the Tasks replay cannot merge an Issues document.
     offline.direct = (url) => store.isIssueResource(url);
     return new TasksCache(
-        store,
-        (error, retry) => {
-          toast.error(
-            classifyError(error) === "conflict"
-              ? "Changed elsewhere — refreshed"
-              : error instanceof Error
-                ? error.message
-                : "Couldn't save your changes",
-            { action: { label: "Retry", onClick: retry } },
-          );
-        },
-        session.webId,
-        (message) => toast.info(message),
+      store,
+      (error, retry) => {
+        toast.error(
+          classifyError(error) === "conflict"
+            ? "Changed elsewhere — refreshed"
+            : error instanceof Error
+              ? error.message
+              : "Couldn't save your changes",
+          { action: { label: "Retry", onClick: retry } },
+        );
+      },
+      session.webId,
+      (message) => toast.info(message),
     );
   });
   useEffect(() => offline.subscribeReceipts(cache.confirmOfflineWrite), [cache, offline]);
