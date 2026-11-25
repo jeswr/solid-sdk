@@ -12,6 +12,17 @@ export interface WalletRecord extends WalletItemData {
   url: string;
   etag: string | null;
 }
+/**
+ * Type Index registration is discovery metadata, never a precondition for using the wallet.
+ * `unavailable`: the WebID profile is outside this storage. `failed` keeps only a reason code
+ * (`shared` when `settings/` or the index is not verifiably owner-only, `unsupported` when its
+ * access model cannot be checked, else the storage error code); `retryRegistration()` tries again.
+ */
+export type WalletRegistration =
+  | { state: "pending" }
+  | { state: "registered" }
+  | { state: "unavailable" }
+  | { state: "failed"; reason: string };
 export class WalletPrivacyError extends Error {
   constructor() {
     super(
@@ -51,6 +62,11 @@ function unsupported(result: Refused): boolean {
     result.reasons.length > 0 &&
     result.reasons.every((reason) => UNSUPPORTED_REASONS.includes(reason.reason))
   );
+}
+function registrationFailure(error: unknown): string {
+  if (error instanceof WalletPrivacyError) return "shared";
+  if (error instanceof WalletUnsupportedError) return "unsupported";
+  return error instanceof StorageError ? error.code : "unknown";
 }
 export async function limitedText(
   body: ReadableStream<Uint8Array> | null,
@@ -135,8 +151,9 @@ export function createWalletRepository(options: {
       if (!(error instanceof StorageError) || error.code !== "scope") throw error;
     }
   }
-  /** `unavailable`: the WebID profile is outside this storage, so Wallet is not registered. */
-  let registration: "pending" | "registered" | "unavailable" = index ? "pending" : "unavailable";
+  let registration: WalletRegistration = index ? { state: "pending" } : { state: "unavailable" };
+  /** Set once the wallet folders are provisioned and verified owner-only. */
+  let provisioned = false;
   function ownerOnly(url: string) {
     return checkOwnerOnly({
       storage,
@@ -222,12 +239,25 @@ export function createWalletRepository(options: {
         throw new Error("The pod assigned an unsupported wallet folder");
       await privateAccess(actualChild);
     }
-    if (!index) return;
-    // The index library requires the private destination to be provisioned by its caller.
-    const settings = await container(storage.root, "settings");
-    await privateIndexAccess(settings);
-    await index.register(WALLET_CLASS, { container: base }, { index: "private" });
-    registration = "registered";
+    provisioned = true;
+    await register();
+  }
+  /**
+   * Best effort and never throws. Nothing is registered into `settings/` or an index that is not
+   * verified owner-only; the wallet folders were already verified and are never touched here.
+   */
+  async function register(): Promise<WalletRegistration> {
+    if (!index || !provisioned) return registration;
+    try {
+      // The index library requires the private destination to be provisioned by its caller.
+      const settings = await container(storage.root, "settings");
+      await privateIndexAccess(settings);
+      await index.register(WALLET_CLASS, { container: base }, { index: "private" });
+      registration = { state: "registered" };
+    } catch (error) {
+      registration = { state: "failed", reason: registrationFailure(error) };
+    }
+    return registration;
   }
   async function list(onInvalidRecord?: (url: string) => void): Promise<WalletRecord[]> {
     await assertPrivate();
@@ -394,10 +424,11 @@ export function createWalletRepository(options: {
   }
   return {
     ...paths,
-    get registration() {
+    get registration(): WalletRegistration {
       return registration;
     },
     initialise,
+    retryRegistration: register,
     assertPrivate,
     list,
     read,

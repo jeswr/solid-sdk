@@ -51,7 +51,12 @@ export async function prepareWhiteboards(
   index: TypeIndex | undefined,
 ): Promise<WhiteboardRepository> {
   let container = new URL("whiteboards/", storage.root).href;
-  const locations = (await index?.find(DRAW_SCENE_IRI)) ?? [];
+  // A failed lookup (malformed preferences, a 403 on the index) only means there is no usable
+  // index: the conventional folder, which a later session finds again by name, is used instead.
+  let locations: string[] = [];
+  try {
+    locations = (await index?.find(DRAW_SCENE_IRI)) ?? [];
+  } catch {}
   for (const url of locations.slice(0, 100)) {
     if (storage.isWithinStorage(url) && (await storage.head(url)).kind === "container") {
       container = url;

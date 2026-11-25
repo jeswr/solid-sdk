@@ -36,6 +36,7 @@ function fixture() {
     invitees: vi.fn(),
     notify: vi.fn(),
     registerInTypeIndex: vi.fn(),
+    reshare: vi.fn(),
   };
   const failure = vi.fn();
   return { repository, failure, controller: new EventsController(repository, failure) };
@@ -97,8 +98,11 @@ it("a failed earlier edit never erases a newer queued edit", async () => {
   controller.save({ ...event, name: "First" }, [], event);
   await Promise.resolve();
   controller.save({ ...event, name: "Second" }, [], event);
-  first.reject(new Error("failure"));
+  const cause = new Error("failure");
+  first.reject(cause);
   await vi.waitFor(() => expect(failure).toHaveBeenCalledOnce());
+  // The failure itself is passed on, so the app can explain a publication failure.
+  expect(failure).toHaveBeenCalledWith(cause);
   expect(controller.snapshot().events[0]?.name).toBe("Second");
   const final = { ...event, name: "Second", etag: '"two"' };
   repository.list.mockResolvedValue([final]);

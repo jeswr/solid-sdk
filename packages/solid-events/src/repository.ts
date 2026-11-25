@@ -51,19 +51,26 @@ export interface CreatedInvitation extends Invitation {
   registrationWarning?: string;
 }
 /** A failed publication. Access was widened only after the state was committed, and has been
- * revoked and re-read; `sharingWithdrawn` is false only when that confirmation itself failed. */
+ * revoked and re-read; `sharingWithdrawn` is false only when that confirmation itself failed.
+ * `draftRestored` is false when the private draft state could not be written back: the stored
+ * state is then still `published` with no audience, and `reshare` (or a fresh publish after a
+ * fix) shares it again. */
 export class PublicationError extends Error {
   readonly sharingWithdrawn: boolean;
-  constructor(sharingWithdrawn: boolean, cause: unknown) {
-    super(
-      sharingWithdrawn
-        ? "Couldn't publish the invitation. Sharing was withdrawn and it is a private draft."
-        : "Couldn't publish the invitation, and couldn't confirm that sharing was withdrawn. Check its sharing settings.",
-      { cause },
-    );
+  readonly draftRestored: boolean;
+  constructor(sharingWithdrawn: boolean, cause: unknown, draftRestored = true) {
+    super(publicationMessage(sharingWithdrawn, draftRestored), { cause });
     this.name = "PublicationError";
     this.sharingWithdrawn = sharingWithdrawn;
+    this.draftRestored = draftRestored;
   }
+}
+function publicationMessage(withdrawn: boolean, restored: boolean): string {
+  if (withdrawn && restored)
+    return "Couldn't publish the invitation. Sharing was withdrawn and it is a private draft.";
+  if (withdrawn)
+    return "Couldn't publish the invitation. Sharing was withdrawn, but it couldn't be set back to a private draft, so it is still marked published although nobody can open it. Share it again, or try later.";
+  return `Couldn't publish the invitation, and couldn't confirm that sharing was withdrawn.${restored ? "" : " It also couldn't be set back to a private draft."} Check its sharing settings.`;
 }
 export interface EventsRepositoryOptions {
   fetch: typeof globalThis.fetch;
@@ -379,18 +386,19 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
       } catch {
         withdrawn = false;
       }
+      let restored = true;
       try {
         const head = await storage.head(url);
-        if (head.etag)
-          await storage.write(
-            url,
-            await entities.Event.serialize(url, { ...data, publication: "draft" }),
-            { contentType: "text/turtle", ifMatch: head.etag },
-          );
+        if (!head.etag) throw new Error("No version to restore");
+        await storage.write(
+          url,
+          await entities.Event.serialize(url, { ...data, publication: "draft" }),
+          { contentType: "text/turtle", ifMatch: head.etag },
+        );
       } catch {
-        // Nothing is shared, so a published label with no audience is still private.
+        restored = false;
       }
-      throw new PublicationError(withdrawn, cause);
+      throw new PublicationError(withdrawn, cause, restored);
     }
   }
   return {
@@ -508,6 +516,22 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
       // The published state is committed; widen access only now and revoke on any failure.
       let result: Invitation | undefined;
       await widen(storage, existing.url, data, invitees, async () => {
+        result = await readInvitation(fetch, existing.url);
+      });
+      return result as Invitation;
+    },
+    /** Share a published invitation again, e.g. after a failed publication could not restore its
+     * private draft state. Explicit and organiser-only: an edit never widens a published invitation. */
+    async reshare(existing: Invitation): Promise<Invitation> {
+      assertWithinPodScope(base, existing.url);
+      if (existing.organizer !== owner)
+        throw new TypeError("Only the organiser can share this invitation");
+      if (existing.publication !== "published")
+        throw new Error("Only a published invitation can be shared again");
+      const { storage } = await getClient();
+      const invitees = await this.invitees(existing);
+      let result: Invitation | undefined;
+      await widen(storage, existing.url, existing, invitees, async () => {
         result = await readInvitation(fetch, existing.url);
       });
       return result as Invitation;
