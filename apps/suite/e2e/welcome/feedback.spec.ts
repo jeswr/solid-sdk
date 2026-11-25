@@ -4,6 +4,9 @@ import { createFeedbackHandlers } from "../../src/feedback/server";
 import { createGithubStore } from "../../src/feedback/store";
 import { feedbackGithub } from "../../test/helpers/feedback-github";
 
+// The draft is private to its owner; these specs are signed out.
+const draftKey = "suite.feedback.draft.v2:signed-out";
+
 test("guided feedback includes Agent and its debrief", async ({ page }) => {
   await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
   await page.goto("/feedback");
@@ -186,7 +189,7 @@ for (const outcome of ["success", "failure", "cooldown"] as const)
           json: { error: "RAW_AUDIO_ERROR" },
         });
       } else if (uploads === 1 || fails) {
-        await route.fulfill({ status: 413, contentType: "text/plain", body: "RAW_AUDIO_ERROR" });
+        await route.fulfill({ status: 502, contentType: "text/plain", body: "RAW_AUDIO_ERROR" });
       } else {
         await route.fulfill({
           json: {
@@ -313,7 +316,11 @@ test("a GitHub cooldown asks the participant to try later and preserves their do
 for (const recovery of ["retry", "reload", "start new"] as const)
   test(`partial save freezes answers and contact details: ${recovery}`, async ({ page }) => {
     const github = feedbackGithub();
-    const env = { FEEDBACK_GITHUB_TOKEN: "secret", FEEDBACK_GITHUB_REPO: "private/feedback" };
+    const env = {
+      FEEDBACK_GITHUB_TOKEN: "secret",
+      FEEDBACK_GITHUB_REPO: "private/feedback",
+      FEEDBACK_RECEIPT_SECRET: "receipt-secret",
+    };
     github.holdIssue(async () => {
       throw new Error("Issue creation failed after the record was committed");
     });
@@ -371,8 +378,9 @@ for (const recovery of ["retry", "reload", "start new"] as const)
       page.getByRole("button", { name: "Speak your answer", exact: true }),
     ).toBeDisabled();
     const original = JSON.parse(bodies[0] ?? "");
-    const draft = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem("suite.feedback.draft.v1") ?? "null"),
+    const draft = await page.evaluate(
+      (key) => JSON.parse(localStorage.getItem(key) ?? "null"),
+      draftKey,
     );
     expect(draft.submissionId).toBe(original.submissionId);
     expect(draft.record).toBe(JSON.stringify(original.record));
@@ -383,14 +391,20 @@ for (const recovery of ["retry", "reload", "start new"] as const)
         localStorage.setItem("suite.walkthrough.v1", JSON.stringify({ done: ["drive"] })),
       );
       await page.reload();
+      // A saved draft is offered, never restored silently.
+      await page.getByRole("button", { name: "Restore it", exact: true }).click();
       await expect(name).toHaveValue("Alice");
       await expect(email).not.toBeEditable();
     } else if (recovery === "start new") {
       await page.getByRole("button", { name: "Start a new submission", exact: true }).click();
+      await page
+        .getByRole("alertdialog", { name: "Discard this submission?" })
+        .getByRole("button", { name: "Discard and start a new submission", exact: true })
+        .click();
       await expect(answer).toBeEditable();
       await expect(name).toHaveValue("");
       await expect(email).toHaveValue("");
-      expect(await page.evaluate(() => localStorage.getItem("suite.feedback.draft.v1"))).toBeNull();
+      expect(await page.evaluate((key) => localStorage.getItem(key), draftKey)).toBeNull();
       await answer.fill("Bob liked the demo.");
     }
     await page
@@ -409,13 +423,17 @@ for (const recovery of ["retry", "reload", "start new"] as const)
       expect(github.records).toHaveLength(1);
     }
     expect(github.issues).toHaveLength(1);
-    expect(await page.evaluate(() => localStorage.getItem("suite.feedback.draft.v1"))).toBeNull();
+    expect(await page.evaluate((key) => localStorage.getItem(key), draftKey)).toBeNull();
   });
 
 // A rejected email used to freeze the record, so every retry resent the invalid payload.
 test("a rejected email stays editable and the corrected feedback submits", async ({ page }) => {
   const github = feedbackGithub();
-  const env = { FEEDBACK_GITHUB_TOKEN: "secret", FEEDBACK_GITHUB_REPO: "private/feedback" };
+  const env = {
+    FEEDBACK_GITHUB_TOKEN: "secret",
+    FEEDBACK_GITHUB_REPO: "private/feedback",
+    FEEDBACK_RECEIPT_SECRET: "receipt-secret",
+  };
   const statuses: number[] = [];
   await page.route("**/api/feedback/turn", (route) => route.fulfill({ json: { hosted: false } }));
   await page.route("**/api/feedback/submit", async (route) => {
@@ -467,7 +485,11 @@ for (const outcome of [
 ] as const)
   test(`GitHub ${outcome} preserves one submission and its reference`, async ({ page }) => {
     const github = feedbackGithub();
-    const env = { FEEDBACK_GITHUB_TOKEN: "secret", FEEDBACK_GITHUB_REPO: "private/feedback" };
+    const env = {
+      FEEDBACK_GITHUB_TOKEN: "secret",
+      FEEDBACK_GITHUB_REPO: "private/feedback",
+      FEEDBACK_RECEIPT_SECRET: "receipt-secret",
+    };
     let submits = 0;
     let submissionId = "";
     let firstCalls = 0;
@@ -505,7 +527,11 @@ for (const outcome of [
           for (let i = 0; i < 10_000; i++)
             github.issues.push({ number: 124 + i, body: "Unrelated demo feedback" });
       } else {
-        expect(github.calls.length - firstCalls).toBe(outcome === "lost response" ? 4 : 5);
+        // The retry reads the stored issue number, else scans at most 20 pages of the issue list, so
+        // its GitHub traffic stays bounded however many unrelated issues exist.
+        expect(github.calls.length - firstCalls).toBeLessThanOrEqual(
+          outcome === "lost response" ? 30 : 12,
+        );
       }
       await route.fulfill({
         status: response.status,
