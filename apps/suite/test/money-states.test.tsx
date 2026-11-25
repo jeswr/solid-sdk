@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { ReactNode } from "react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, click, deferred, h, mount } from "./drive-ui-dom";
 import { must } from "./money/helpers";
 
@@ -25,6 +25,7 @@ import { createAccount } from "../src/apps/money/lib/data/accounts";
 import { saveBudgetAssignments } from "../src/apps/money/lib/data/budget";
 import { provision, storeOf } from "../src/apps/money/lib/data/container";
 import { addTransaction } from "../src/apps/money/lib/data/ledger";
+import { loadRules, RulesFileError } from "../src/apps/money/lib/data/rules";
 import { MoneyDocument, putBalance } from "../src/apps/money/lib/model";
 import { MoneyProvider, useMoney } from "../src/apps/money/state/money-context";
 import { readMoneySnapshot } from "../src/apps/money/state/read-snapshot";
@@ -234,13 +235,98 @@ it("keeps healthy items and last readable copies, dismisses partial problems, an
   expect(money.transactions).toEqual(expect.arrayContaining(before));
   expect(app.host.textContent).toContain("1 item couldn't be read");
   expect(app.host.textContent).toContain("Purchase 10");
-  await click(must(app.host.querySelector('[aria-label="Dismiss read problems"]')));
-  expect(app.host.querySelector('[aria-label="Money read problems"]')).toBeNull();
-  await act(() => money.refresh());
+  // Figures from a partial transaction read cannot be dismissed into silence (F1).
+  expect(app.host.querySelector('[aria-label="Dismiss read problems"]')).toBeNull();
   broken = false;
   await click(button(app.host, "Retry"));
   expect(money.problems).toEqual([]);
   expect(app.host.querySelector('[aria-label="Money read problems"]')).toBeNull();
+});
+
+it("lets a problem that leaves every figure whole be dismissed", async () => {
+  const f = fixture();
+  await seed(f);
+  await storeOf(f.session).put("rules.json", JSON.stringify({ rules: [] }), "application/json", {
+    create: true,
+  });
+  f.intercept(
+    vi.fn(async (input, init) =>
+      String(input).endsWith("rules.json")
+        ? new Response(null, { status: 500 })
+        : f.pod.fetch(input, init),
+    ),
+  );
+  const app = await render(f.session, h(SearchScreen));
+  await settled();
+  expect(app.host.textContent).toContain("1 item couldn't be read");
+  await click(must(app.host.querySelector('[aria-label="Dismiss read problems"]')));
+  expect(app.host.querySelector('[aria-label="Money read problems"]')).toBeNull();
+});
+
+describe("partial transaction reads (F1)", () => {
+  async function open(screen: (accountId: string) => ReactNode) {
+    const f = fixture();
+    const account = await seed(f);
+    const app = await render(f.session, screen(account.id));
+    await settled();
+    let broken = false;
+    f.intercept(
+      vi.fn(async (input, init) =>
+        broken && String(input).endsWith("transactions/2026-10.ttl")
+          ? new Response(null, { status: 500 })
+          : f.pod.fetch(input, init),
+      ),
+    );
+    return {
+      f,
+      app,
+      account,
+      fail: async () => {
+        broken = true;
+        await act(() => money.refresh());
+      },
+      repair: async () => {
+        broken = false;
+        await click(button(app.host, "Retry"));
+      },
+    };
+  }
+
+  it("withholds overview balances and keeps the notice until the read is repaired", async () => {
+    const { app, fail, repair } = await open(() => h(AccountsScreen, { overviewPage: true }));
+    expect(app.host.textContent).not.toContain("Incomplete");
+    expect(app.host.textContent).toContain("£90.00");
+    await fail();
+    expect(money.incomplete?.transactions).toBe(true);
+    expect(app.host.textContent).not.toContain("£90.00");
+    expect(app.host.textContent).not.toContain("£95.00");
+    expect(app.host.textContent).toContain("Unavailable (incomplete data)");
+    expect(app.host.textContent).toContain("Incomplete: some of your Money data couldn't be read");
+    expect(app.host.querySelector('[aria-label="Dismiss read problems"]')).toBeNull();
+    await repair();
+    expect(app.host.textContent).toContain("£90.00");
+    expect(app.host.textContent).not.toContain("Incomplete");
+  });
+
+  it("withholds the ledger's current balance, as the overview does", async () => {
+    const { app, fail, repair } = await open((id) => h(LedgerScreen, { accountId: id }));
+    expect(app.host.textContent).toContain("Current balance £90.00");
+    await fail();
+    expect(app.host.textContent).not.toContain("£90.00");
+    expect(app.host.textContent).toContain("Current balance Unavailable (incomplete data)");
+    expect(app.host.textContent).toContain("Incomplete: some of your Money data couldn't be read");
+    await repair();
+    expect(app.host.textContent).toContain("Current balance £90.00");
+  });
+
+  it("marks reports and budget figures incomplete", async () => {
+    const reports = await open(() => h(ReportsScreen));
+    await reports.fail();
+    expect(reports.app.host.textContent).toContain("report figures may be wrong");
+    const budget = await open(() => h(BudgetScreen));
+    await budget.fail();
+    expect(budget.app.host.textContent).toContain("budget figures may be wrong");
+  });
 });
 
 it("a listed document's 404 is a read problem, while an absent app is empty", async () => {
@@ -461,4 +547,82 @@ it.each([
   f.intercept(vi.fn(f.pod.fetch));
   await click(button(app.host, "Retry"));
   expect(app.host.querySelector("h1")?.textContent).toBe(kind === "rules" ? "Rules" : "Categories");
+});
+
+it("skips an out-of-scope budgets/ member without fetching it (F5)", async () => {
+  const f = fixture();
+  await seed(f);
+  await saveBudgetAssignments(
+    f.session,
+    "2026-10",
+    [
+      {
+        categoryId: `${storeOf(f.session).resolve("categories.ttl")}#food`,
+        amount: { currency: "GBP", minor: 100 },
+      },
+    ],
+    [],
+  );
+  const foreign = "https://elsewhere.example/budgets/2026-09.ttl";
+  const requested: string[] = [];
+  f.intercept(
+    vi.fn(async (input, init) => {
+      const url = String(input);
+      requested.push(url);
+      const response = await f.pod.fetch(input, init);
+      if (!url.endsWith("money/budgets/")) return response;
+      const text = await response.text();
+      return new Response(
+        `${text}\n<${url}> <http://www.w3.org/ns/ldp#contains> <${foreign}> .\n`,
+        { status: 200, headers: { "content-type": "text/turtle" } },
+      );
+    }),
+  );
+  const snapshot = await readMoneySnapshot(f.session, today);
+  expect(snapshot.budgetProblem).toBeUndefined();
+  expect(snapshot.budgets.map((file) => file.month)).toEqual(["2026-10"]);
+  expect(requested.some((url) => url.startsWith("https://elsewhere.example/"))).toBe(false);
+});
+
+it("never applies in-memory rules while the rules file is unreadable (F6)", async () => {
+  const f = fixture();
+  await seed(f);
+  await storeOf(f.session).put(
+    "rules.json",
+    JSON.stringify({ rules: [{ id: "r1", match: "contains", value: "Purchase", category: "x" }] }),
+    "application/json",
+    { create: true },
+  );
+  await render(f.session, h(SearchScreen));
+  await settled();
+  expect(money.rules).toHaveLength(1);
+  f.intercept(
+    vi.fn(async (input, init) =>
+      String(input).endsWith("rules.json")
+        ? new Response(null, { status: 500 })
+        : f.pod.fetch(input, init),
+    ),
+  );
+  await act(() => money.refresh());
+  expect(money.rulesProblem).toBe("unavailable");
+  expect(money.rules).toEqual([]);
+});
+
+it("reads rules.json through a streaming byte cap (F7)", async () => {
+  const f = fixture();
+  await provision(f.session);
+  let pulled = 0;
+  const chunk = new Uint8Array(64 * 1024).fill(32);
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (++pulled > 1000) controller.close();
+      else controller.enqueue(chunk);
+    },
+  });
+  const client = {
+    storageUrl: f.session.storageUrl,
+    fetch: vi.fn(async () => new Response(body, { status: 200 })),
+  };
+  await expect(loadRules(client)).rejects.toBeInstanceOf(RulesFileError);
+  expect(pulled).toBeLessThan(50);
 });

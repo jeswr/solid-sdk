@@ -23,6 +23,8 @@ import type { SavedRule } from "../lib/data/rules";
 import { type ReadProblem, readMoneySnapshot } from "./read-snapshot";
 export interface Snapshot {
   problems?: ReadProblem[];
+  /** True per area when figures were derived from a partial read. */
+  incomplete?: { transactions: boolean; accounts: boolean; budgets: boolean };
   accounts: AccountSummary[];
   transactions: Transaction[];
   categories: Category[];
@@ -224,6 +226,18 @@ function retainUnread(next: Snapshot, previous: Snapshot): Snapshot {
     categories: next.problems?.some((problem) => problem.kind === "categories")
       ? previous.categories
       : next.categories,
-    rules: next.rulesProblem ? previous.rules : next.rules,
+    // Rules that could not be read must never be applied to transactions.
+    rules: next.rules,
+  };
+}
+
+/** Which figure families are derived from a partial or stale read right now. */
+export function useIncompleteFigures() {
+  const { incomplete, status } = useMoney();
+  const stale = status === "error";
+  return {
+    balances: stale || !!(incomplete?.transactions || incomplete?.accounts),
+    reports: stale || !!(incomplete?.transactions || incomplete?.accounts),
+    budgets: stale || !!(incomplete?.transactions || incomplete?.budgets),
   };
 }

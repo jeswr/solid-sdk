@@ -18,7 +18,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { renameAccount } from "../lib/data/accounts";
 import { bulkCategorise, categorised, deleteTransaction } from "../lib/data/ledger";
-import { useMoney, useTransactions } from "../state/money-context";
+import { useIncompleteFigures, useMoney, useTransactions } from "../state/money-context";
 import {
   Amount,
   CategorySelect,
@@ -27,7 +27,7 @@ import {
   TransactionDialog,
   TransferDialog,
 } from "./money-forms";
-import { focusMoneyHeading } from "./money-states";
+import { focusMoneyHeading, IncompleteNotice, WithheldBalance } from "./money-states";
 
 function rangeFor(preset: string, today: string): Range {
   const now = new Date(`${today}T00:00:00Z`);
@@ -47,6 +47,7 @@ function rangeFor(preset: string, today: string): Range {
 }
 export function LedgerScreen({ accountId }: { accountId: string }) {
   const money = useMoney();
+  const incomplete = useIncompleteFigures();
   const account = money.accounts.find((a) => a.id === accountId);
   const [presets, setPresets] = useState(["month"]);
   const [custom, setCustom] = useState<Range>(rangeFor("90", money.today));
@@ -148,8 +149,13 @@ export function LedgerScreen({ accountId }: { accountId: string }) {
           </div>
           <p className="mon-subtitle">
             {account.type} · {account.currency} · Current balance{" "}
-            <Amount amount={account.currentBalance} currency={account.currency} />
+            {incomplete.balances ? (
+              <WithheldBalance />
+            ) : (
+              <Amount amount={account.currentBalance} currency={account.currency} />
+            )}
           </p>
+          <IncompleteNotice figures="balances" />
         </div>
         <div className="mon-actions">
           <Button variant="outline" asChild>
@@ -358,7 +364,12 @@ export function LedgerScreen({ accountId }: { accountId: string }) {
                     accessor: (row) => Number(row.runningBalance),
                     size: 130,
                     minSize: 120,
-                    render: (row) => <Amount amount={row.runningBalance} currency={row.currency} />,
+                    render: (row) =>
+                      incomplete.balances ? (
+                        <WithheldBalance />
+                      ) : (
+                        <Amount amount={row.runningBalance} currency={row.currency} />
+                      ),
                   },
                 ]}
               />
@@ -399,7 +410,12 @@ export function LedgerScreen({ accountId }: { accountId: string }) {
                     )}
                   </div>
                   <p className="mon-card-balance">
-                    Balance <Amount amount={row.runningBalance} currency={row.currency} />
+                    Balance{" "}
+                    {incomplete.balances ? (
+                      <WithheldBalance />
+                    ) : (
+                      <Amount amount={row.runningBalance} currency={row.currency} />
+                    )}
                   </p>
                 </article>
               ))}

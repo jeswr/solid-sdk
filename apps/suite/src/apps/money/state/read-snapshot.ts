@@ -51,11 +51,19 @@ export async function readMoneySnapshot(client: MoneyClient, today: string) {
     if (!loaded.exists) throw new MoneyIoError(404);
     return loaded;
   };
-  const listing = async (path: string) => {
+  const listing = async (path: string, skipForeign = false) => {
     const loaded = await store.read(path);
     if (!loaded.exists && members.has(loaded.url)) throw new MoneyIoError(404);
-    return [...new Container(loaded.url, loaded.document.dataset, DataFactory).contains].map((n) =>
-      store.resolve(n.value),
+    return [...new Container(loaded.url, loaded.document.dataset, DataFactory).contains].flatMap(
+      (n) => {
+        try {
+          return [store.resolve(n.value)];
+        } catch (error) {
+          // Budget history skips members outside the money container; nothing is fetched for them.
+          if (skipForeign) return [];
+          throw error;
+        }
+      },
     );
   };
   // Read the main indexes before item reads: a failed index cannot masquerade as an empty list.
@@ -133,7 +141,7 @@ export async function readMoneySnapshot(client: MoneyClient, today: string) {
   await collect("budgets", store.resolve("budgets/"), async () => {
     let urls: string[];
     try {
-      urls = await listing("budgets/");
+      urls = await listing("budgets/", true);
     } catch (error) {
       budgetProblem = error;
       throw error;
@@ -149,9 +157,16 @@ export async function readMoneySnapshot(client: MoneyClient, today: string) {
       });
     }
   });
+  const has = (kind: ReadProblem["kind"]) => problems.some((problem) => problem.kind === kind);
   return {
     accounts,
     transactions,
+    /** Which derived figures were computed from a partial read. */
+    incomplete: {
+      transactions: has("transactions"),
+      accounts: has("accounts"),
+      budgets: has("budgets") || budgetProblem !== undefined,
+    },
     ...categories,
     rules,
     rulesProblem,
