@@ -254,7 +254,13 @@ it("keeps the outbox instance across session-object rerenders while a send is in
     return null;
   }
   const view = await mount(h(ChatProvider, { session: activeSession, children: h(Probe) }));
-  await act(() => sender.send("Only once"));
+  // send() now resolves on delivery, which this test holds back until release().
+  await act(async () => {
+    void sender.send("Only once");
+  });
+  await vi.waitFor(() => expect(sending).toHaveBeenCalledTimes(1));
+  // Let the durable queue finish recording the entry, so the snapshot is its settled state.
+  await vi.waitFor(() => expect(chat.outbox[0]?.queueId).toBeDefined());
   const snapshot = chat.outbox;
   await view.render(
     h(ChatProvider, { session: { ...activeSession, displayName: "New name" }, children: h(Probe) }),

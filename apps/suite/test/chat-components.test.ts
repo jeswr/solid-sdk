@@ -968,7 +968,10 @@ it.each([
     );
     await click(document.querySelector(".su-picker-input button") as HTMLElement);
     await click(document.querySelector('button[type="submit"]') as HTMLElement);
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Invite people");
+    // Creating a room now settles its writes before resolving, so allow the creation to finish.
+    await vi.waitFor(() =>
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain("Invite people"),
+    );
     const notice = toast.getHistory().at(-1);
     if (!notice || !("title" in notice)) throw new Error("Missing delivery notice");
     const title = typeof notice.title === "function" ? notice.title() : notice.title;
