@@ -1,0 +1,13 @@
+{
+  "lockfileVersion": 1,
+  "generator": {
+    "name": "@jeswr/federation-codegen",
+    "specVersion": "1"
+  },
+  "adapter": "owl-rdfs-v1",
+  "inputs": {
+    "ontology.ttl": "dba609ddece0ce0fe78eb5454e71307adb2d51d3452c4d30806d1e22fce562c6",
+    "shapes.shacl.ttl": "9813bb21976940dafd2617eecbd6f55b46aa074a9cc331638d1625b0f360ddb7",
+    "codegen.config.json": "7eca4dfc5cd4b35657e71af481941c6982f3b974c871d2016bc92cbdb6a692ce"
+  }
+}

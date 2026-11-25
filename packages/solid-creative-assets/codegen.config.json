@@ -1,0 +1,88 @@
+{
+  "shapesBase": "https://jeswr.org/ns/creative-assets/shapes#",
+  "prefixes": {
+    "schema": "https://schema.org/",
+    "prov": "http://www.w3.org/ns/prov#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "targetClass": "https://schema.org/ImageObject",
+      "name": "Image",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "keywords": {
+          "trim": true,
+          "dropBlank": true,
+          "sortOnRead": true
+        }
+      }
+    },
+    {
+      "targetClass": "https://schema.org/VideoObject",
+      "name": "Video",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "keywords": {
+          "trim": true,
+          "dropBlank": true,
+          "sortOnRead": true
+        }
+      }
+    },
+    {
+      "targetClass": "https://schema.org/3DModel",
+      "name": "Model3D",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "keywords": {
+          "trim": true,
+          "dropBlank": true,
+          "sortOnRead": true
+        }
+      }
+    },
+    {
+      "targetClass": "https://schema.org/CreativeWork",
+      "name": "CreativeWork",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://schema.org/Collection",
+      "name": "Collection",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://schema.org/SoftwareApplication",
+      "name": "AiModel",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "https://schema.org/PropertyValue",
+      "name": "Setting",
+      "subject": {
+        "convention": "self"
+      }
+    },
+    {
+      "targetClass": "http://www.w3.org/ns/prov#Activity",
+      "name": "Run",
+      "subject": {
+        "convention": "self"
+      }
+    }
+  ]
+}
