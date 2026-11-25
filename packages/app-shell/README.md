@@ -47,6 +47,7 @@ styles for the class names used by the components.
 - Account: `AccountControl`, `AccountMenu`; the host owns session, profile, navigation, and logout.
 - Header: `AppHeader` renders the standard `.app-header` (brand, optional extra children, `FeedbackButton`, `ThemeToggle`, `AccountControl`). Everything is a prop (`brand`, `feedback`, `account`); it does not depend on any session package.
 - Frame: `AppFrame` renders `.app-shell` with `AppHeader`, the "no storage address" fallback note (when `session.podRootIsFallback`) and your children. It takes a structural `session` slice (`webId`, `displayName`, `avatarUrl`, `podRoot`, `podRootIsFallback`) and `onSignOut`, so it stays decoupled from any session package.
+- Discovery view: `AppMain` (`<main className="app-main">` with a `.app-loading` wait until `value` resolves, optional `notice` before it) and `useSessionResource(session, resolve, fallback, deps)` (resolve a per-session value, falling back on rejection, dropping stale results).
 - Feedback: `FeedbackButton`, `FeedbackDialog`, and pure issue-body helpers.
 - Errors: `ErrorBoundary`, `ErrorState`.
 - Extension signal: `useSolidExtensionPresent` reports presence, not identity or authentication.
