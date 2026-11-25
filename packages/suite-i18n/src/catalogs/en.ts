@@ -74,6 +74,8 @@ export const en = {
     feedback: "Give feedback",
     skip: "Skip to main content",
     sections: "{name} sections",
+    appNavigation: "{name} navigation",
+    details: "Details",
   },
   search: {
     label: "Search",
