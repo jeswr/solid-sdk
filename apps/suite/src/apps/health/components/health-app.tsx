@@ -33,6 +33,16 @@ const MeasurementContext = createContext<(metric?: MetricId) => void>(() => {});
 export function useMeasurement() {
   return useContext(MeasurementContext);
 }
+const RECORD_LINKS: [string, string, typeof Pill][] = [
+  ["/health/medications", "Medications", Pill],
+  ["/health/conditions", "Conditions", ShieldCheck],
+  ["/health/immunisations", "Immunisations", Syringe],
+  ["/health/knowledge", "Assistant knowledge", BrainCircuit],
+  ["/health/workouts", "Workouts", Footprints],
+  ["/health/diary", "Diary", BookOpen],
+  ["/health/import", "Import", ArrowDownToLine],
+  ["/health/export", "Export", ArrowUpFromLine],
+];
 const icons = [Footprints, HeartPulse, Moon, Scale, Activity];
 function Sidebar() {
   const pathname = useRoutePathname();
@@ -44,14 +54,7 @@ function Sidebar() {
       label: metric.label,
       icon: icons[index] ?? Activity,
     })),
-    { href: "/health/medications", label: "Medications", icon: Pill },
-    { href: "/health/conditions", label: "Conditions", icon: ShieldCheck },
-    { href: "/health/immunisations", label: "Immunisations", icon: Syringe },
-    { href: "/health/knowledge", label: "Assistant knowledge", icon: BrainCircuit },
-    { href: "/health/workouts", label: "Workouts", icon: Footprints },
-    { href: "/health/diary", label: "Diary", icon: BookOpen },
-    { href: "/health/import", label: "Import", icon: ArrowDownToLine },
-    { href: "/health/export", label: "Export", icon: ArrowUpFromLine },
+    ...RECORD_LINKS.map(([href, label, icon]) => ({ href, label, icon })),
   ];
   return (
     <div className="hlt-sidebar">
