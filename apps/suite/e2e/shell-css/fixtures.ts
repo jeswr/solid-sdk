@@ -75,8 +75,23 @@ async function typeInto(page: Page, target: Locator, value: string, keyboardOnly
   } else await target.fill(value);
 }
 
+/**
+ * The next dev overlay (its "issues"/Insight badge, e.g. Next's upgrade advisory) is a fixed,
+ * focusable element that intercepts clicks and joins the Tab order. It is tooling, not the app
+ * under test, so keep it out of every page that signs in.
+ */
+async function hideDevOverlay(page: Page) {
+  await page.addInitScript(() => {
+    // An adopted sheet survives React replacing <head> children during hydration.
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync("nextjs-portal { display: none !important; }");
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+  });
+}
+
 /** Interactive OIDC only: never inject a demo account, stub OAuth, or bypass issuer checks. */
 export async function signIn(page: Page, name: AccountName, options: SignInOptions = {}) {
+  await hideDevOverlay(page);
   const account = cssAccount(name);
   const keyboardOnly = options.keyboardOnly ?? false;
   await page.goto("/signin");
