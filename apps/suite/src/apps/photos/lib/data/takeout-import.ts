@@ -1,4 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
+
+import { VideoLocationError } from "../model/mp4";
 import { statusOf } from "./shared";
 import type { TakeoutItem, TakeoutPlan } from "./takeout";
 
@@ -31,7 +33,16 @@ export function takeoutFailure(
   )
     return { kind: "pod" };
   if (status !== undefined)
-    return { kind: "photo", reason: `Your pod refused this photo (error ${status}).` };
+    return {
+      kind: "photo",
+      reason: `Your pod refused this ${type.startsWith("video/") ? "video" : "photo"} (error ${status}).`,
+    };
+  if (error instanceof VideoLocationError) return { kind: "photo", reason: error.message };
+  if (type.startsWith("video/"))
+    return {
+      kind: "photo",
+      reason: "This browser couldn't read this video. Try an MP4, MOV or WebM it can play.",
+    };
   if (stripLocation && /^image\/(heic|heif|tiff|avif)$/u.test(type))
     return {
       kind: "photo",
@@ -144,6 +155,7 @@ export async function importTakeoutPlan(
       withDetails: failed.filter((item) => item.metadata && Object.keys(item.metadata).length)
         .length,
       duplicates: 0,
+      videos: failed.filter((item) => item.file.type.startsWith("video/")).length,
     },
   };
 }
