@@ -18,7 +18,10 @@ import { ShellSearchProvider } from "@/shell/search/search-context";
 import { AccountsProvider } from "@/shell/session/accounts-provider";
 import { AppearanceEffect, PreferencesProvider } from "@/shell/settings/preferences";
 import { OutboxSessionProvider } from "@/shell/sync/outbox-session";
-import { ServiceWorkerRegistration } from "@/shell/sync/service-worker";
+import {
+  RememberedPagesAccountGuard,
+  ServiceWorkerRegistration,
+} from "@/shell/sync/service-worker";
 import { UndoProvider } from "@/shell/undo/provider";
 import { WalkthroughProvider } from "@/welcome/walkthrough-provider";
 
@@ -43,6 +46,7 @@ export function Providers({
       <ServiceWorkerRegistration />
       <SuiteEnvironmentContext.Provider value={environment}>
         <AccountsProvider {...accountFixtureProps()}>
+          <RememberedPagesAccountGuard />
           <NativePushProvider>
             <Suspense>
               <NativeShareLaunch />
