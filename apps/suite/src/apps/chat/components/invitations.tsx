@@ -14,6 +14,9 @@ import {
   invitationDismissals,
 } from "../state/local-state";
 
+/** Unverified rows listed before "Show all"; verified rows are always listed. */
+const MAX_UNVERIFIED_SHOWN = 20;
+
 function senderHost(actor: string | undefined): string {
   try {
     const url = new URL(actor ?? "");
@@ -96,6 +99,7 @@ export function Invitations() {
   const store = useMemo(() => invitationDismissals(session.webId), [session.webId]);
   const [dismissals, setDismissals] = useState(() => ({ store, rooms: store.load() }));
   const hidden = dismissals.store === store ? dismissals.rooms : store.load();
+  const [showAll, setShowAll] = useState(false);
   const section = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const nextFocus = useRef<string | null | undefined>(undefined);
@@ -146,10 +150,15 @@ export function Invitations() {
     target?.focus();
     nextFocus.current = undefined;
   }, [dismissals]);
-  const visible =
-    result.data?.invitations.filter((invitation) => !hidden.has(invitation.room)) ?? [];
+  // Dismissals apply first, so dismissed rows never take a place in what is shown.
+  const live = result.data?.invitations.filter((invitation) => !hidden.has(invitation.room)) ?? [];
+  const unverified = live.filter((invitation) => !invitation.verified);
+  const overflow = unverified.slice(MAX_UNVERIFIED_SHOWN);
+  const folded = new Set(overflow.map((invitation) => invitation.room));
+  const visible = live.filter((invitation) => !folded.has(invitation.room));
   const own = visible.filter((invitation) => client.canOpen(invitation.room));
   const foreign = visible.filter((invitation) => !client.canOpen(invitation.room));
+  const rest = showAll ? overflow : [];
   const dismiss = (rooms: string[]) => {
     const rows = Array.from(section.current?.querySelectorAll<HTMLElement>("[data-room]") ?? []);
     const index = rows.findIndex((row) => row.dataset.room === rooms[0]);
@@ -172,13 +181,29 @@ export function Invitations() {
       </Button>
     </p>
   );
-  // Static text only: nothing from the inbox reaches the notice.
-  const notice = result.data?.truncated && (
-    <p className="chat-hint" role="status">
-      Some invitations are not shown.
-    </p>
-  );
-  if (!visible.length && retainHeading !== session.webId) return failure || notice || null;
+  // Static text only: nothing from the inbox reaches a notice (counts are computed here).
+  const notices = [
+    result.data?.truncated && (
+      <p key="scan" className="chat-hint" role="status">
+        The inbox scan was cut off, so some invitations may not be shown.
+      </p>
+    ),
+    result.data?.ownUnchecked && (
+      <p key="own" className="chat-hint" role="status">
+        Invitations to rooms in your pod could not be checked.
+      </p>
+    ),
+    overflow.length > 0 && !showAll && (
+      <p key="more" className="chat-hint" role="status">
+        {overflow.length} more unverified invitations are hidden.{" "}
+        <Button variant="ghost" size="sm" onClick={() => setShowAll(true)}>
+          Show all
+        </Button>
+      </p>
+    ),
+  ].filter(Boolean);
+  if (!visible.length && !rest.length && retainHeading !== session.webId && !notices.length)
+    return failure || null;
   return (
     <section ref={section} aria-labelledby={headingId}>
       <h2 ref={heading} id={headingId} tabIndex={-1} onBlur={() => setRetainHeading(undefined)}>
@@ -206,16 +231,39 @@ export function Invitations() {
           ))}
         </Collapsed>
       )}
-      {visible.length > 3 && (
+      {visible.length + rest.length > 3 && (
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => dismiss(visible.map((invitation) => invitation.room))}
+          onClick={() => dismiss([...visible, ...rest].map((invitation) => invitation.room))}
         >
-          Dismiss all {visible.length} invitations
+          Dismiss all {visible.length + rest.length} invitations
         </Button>
       )}
-      {notice}
+      {!!rest.length && (
+        <ul
+          className="chat-invitations-more"
+          aria-label="More unverified invitations"
+          style={{ maxHeight: "24rem", overflowY: "auto" }}
+        >
+          {rest.map((invitation) =>
+            client.canOpen(invitation.room) ? (
+              <InvitationRow
+                key={invitation.room}
+                invitation={invitation}
+                dismiss={() => dismiss([invitation.room])}
+              />
+            ) : (
+              <ForeignInvitationRow
+                key={invitation.room}
+                invitation={invitation}
+                dismiss={() => dismiss([invitation.room])}
+              />
+            ),
+          )}
+        </ul>
+      )}
+      {notices}
       {failure}
     </section>
   );

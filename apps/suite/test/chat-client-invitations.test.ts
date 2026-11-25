@@ -194,19 +194,19 @@ it("filters kinds, unsafe objects and joined rooms, deduplicating newest first",
   ]);
   await client.join(joined);
   expect(await rows(client)).toEqual([
-    { room, actor: ME, name: "New" },
-    { room: "http://pod.example/chat/rooms/other/" },
+    { room, actor: ME, name: "New", verified: true },
+    { room: "http://pod.example/chat/rooms/other/", verified: false },
   ]);
   expect(fetch.mock.calls.some(([url]) => String(url).includes("elsewhere"))).toBe(false);
 });
-it("caps unverified invitations globally, reports truncation and bounds inbox reads", async () => {
+it("applies no row cap, reports a cut-off scan and bounds inbox reads", async () => {
   const { client, fetch } = await inboxFixture(
     Array.from({ length: 410 }, (_, i) => offer(`${FOREIGN}chat/rooms/r${i}/`)),
   );
-  // Changed from the per-sender cap of five: one global cap of 20 unverified rows, and the
-  // scan says rows were left out. The scan reads at most 300 children.
+  // Changed: the client returns every candidate the scan read (no unverified cap); `truncated`
+  // means only that the scan itself was cut off. The scan reads at most 300 children.
   const scanned = await client.invitations();
-  expect(scanned.invitations).toHaveLength(20);
+  expect(scanned.invitations).toHaveLength(300);
   expect(scanned.truncated).toBe(true);
   expect(fetch.mock.calls.some(([url]) => String(url).endsWith("index.ttl"))).toBe(false);
   expect(
@@ -226,7 +226,7 @@ it("finds a genuine invitation behind more than 100 junk inbox items", async () 
     ),
     offer(room, `; as:actor <${BOB}>${published(1)}`),
   ]);
-  expect(await rows(client)).toContainEqual({ room, actor: BOB, name: "Real" });
+  expect(await rows(client)).toContainEqual({ room, actor: BOB, name: "Real", verified: true });
 });
 it("does not let a flood of newer foreign Offers hide a verified invitation", async () => {
   const { client } = await inboxFixture([]);
@@ -240,10 +240,11 @@ it("does not let a flood of newer foreign Offers hide a verified invitation", as
     ),
   ]);
   const found = await client.invitations();
-  expect(found.invitations).toContainEqual({ room, actor: BOB, name: "Real" });
-  // Changed from the per-sender cap of five: 20 unverified rows in all, and the rest reported.
-  expect(found.invitations.filter((item) => item.actor === spammer)).toHaveLength(20);
-  expect(found.truncated).toBe(true);
+  expect(found.invitations).toContainEqual({ room, actor: BOB, name: "Real", verified: true });
+  // Changed: no unverified cap in the client; every forged row is returned after the verified one.
+  expect(found.invitations.filter((item) => item.actor === spammer)).toHaveLength(60);
+  expect(found.invitations[0]).toEqual({ room, actor: BOB, name: "Real", verified: true });
+  expect(found.truncated).toBe(false);
 });
 it("keys no limit on the claimed actor: varied or spoofed actors hide no genuine invitation", async () => {
   const { client, fetch } = await inboxFixture([]);
@@ -282,8 +283,7 @@ it("keys no limit on the claimed actor: varied or spoofed actors hide no genuine
   ]);
   const before = fetch.mock.calls.length;
   const found = await client.invitations();
-  expect(found.invitations).toContainEqual({ room, actor: BOB, name: "Real" });
-  // The unverified rows share one global cap: this fixture stays within it, so BOB2's too.
+  expect(found.invitations).toContainEqual({ room, actor: BOB, name: "Real", verified: true });
   expect(found.invitations.map((item) => item.room)).toContain(foreignReal);
   // Forged claims for rooms that do not exist cost no room check.
   const indexReads = fetch.mock.calls
@@ -292,7 +292,7 @@ it("keys no limit on the claimed actor: varied or spoofed actors hide no genuine
   expect(indexReads).toHaveLength(1);
   expect(indexReads[0]?.[0]).toBe(`${room}index.ttl`);
 });
-it("keeps a verified invitation when unverified Offers exceed their cap, and says rows are hidden", async () => {
+it("lists a verified invitation first among many unverified Offers", async () => {
   const { client } = await inboxFixture([]);
   const { url: room } = await client.createRoom({ name: "Real", members: [BOB] });
   await client.leave(room);
@@ -303,9 +303,11 @@ it("keeps a verified invitation when unverified Offers exceed their cap, and say
     ),
   ]);
   const found = await client.invitations();
-  expect(found.invitations).toContainEqual({ room, actor: BOB, name: "Real" });
-  expect(found.invitations).toHaveLength(21);
-  expect(found.truncated).toBe(true);
+  expect(found.invitations).toContainEqual({ room, actor: BOB, name: "Real", verified: true });
+  // Changed: all 40 unverified rows are returned (the UI folds them), after the verified row.
+  expect(found.invitations).toHaveLength(41);
+  expect(found.invitations[0]?.verified).toBe(true);
+  expect(found.truncated).toBe(false);
 });
 it("bounds room checks by the user's own existing rooms and the scan's total requests", async () => {
   const { client, fetch } = await inboxFixture([]);
@@ -322,7 +324,7 @@ it("bounds room checks by the user's own existing rooms and the scan's total req
   ]);
   const before = fetch.mock.calls.length;
   const found = await client.invitations();
-  expect(found.invitations).toContainEqual({ room, actor: BOB, name: "Real" });
+  expect(found.invitations).toContainEqual({ room, actor: BOB, name: "Real", verified: true });
   // Final bound per scan: joined rooms (1) + rooms listing (1) + inbox listing (1) + at most
   // INBOX_SCAN_LIMIT inbox children + at most MAX_ROOM_CHECKS room indexes, plus discovery (<= 2).
   const requests = fetch.mock.calls.length - before;
@@ -331,7 +333,7 @@ it("bounds room checks by the user's own existing rooms and the scan's total req
     fetch.mock.calls.slice(before).filter(([url]) => String(url).endsWith("/index.ttl")),
   ).toHaveLength(1);
 });
-it("caps verified rows and room checks, reporting both as truncated", async () => {
+it("returns every verified row and reports the room-check budget as truncated", async () => {
   const { client, fetch } = await inboxFixture([]);
   const real: string[] = [];
   for (let i = 0; i < 51; i++) {
@@ -352,7 +354,12 @@ it("caps verified rows and room checks, reporting both as truncated", async () =
   ]);
   const before = fetch.mock.calls.length;
   const found = await client.invitations();
-  expect(found.invitations).toHaveLength(50);
+  // Changed: no 50-row cap on verified rows; all 51 genuine rooms are returned, and the room-check
+  // budget (100 of 111 listed rooms) still reports a cut-off scan, and the 11 unchecked rooms
+  // are returned as unverified rows after the verified ones.
+  expect(found.invitations).toHaveLength(62);
+  expect(found.invitations.filter((item) => item.verified)).toHaveLength(51);
+  expect(found.invitations.slice(0, 51).every((item) => item.verified)).toBe(true);
   expect(found.truncated).toBe(true);
   // 111 existing claimed rooms, but only 100 indexes are read.
   expect(
@@ -483,22 +490,23 @@ it("ignores own-pod Offers for rooms whose index fails with a 4xx, and checks ea
     calls.filter(([url, init]) => String(url).endsWith("/index.ttl") && !init?.method).length;
   const before = rooms(fetch.mock.calls);
   expect(await rows(reader)).toEqual([
-    { room: `${ROOT}chat/rooms/slow/`, actor: BOB },
-    { room: `${ROOT}chat/rooms/expired/`, actor: BOB },
-    { room: `${ROOT}chat/rooms/down/`, actor: BOB },
-    { room: `${FOREIGN}chat/rooms/far/`, actor: BOB },
-    { room: real, actor: BOB, name: "Real" },
-    { room: `${ROOT}chat/rooms/offline/` },
+    // Changed: verified rows first; unverified own-pod rows, then foreign ones, by room URL.
+    { room: real, actor: BOB, name: "Real", verified: true },
+    { room: `${ROOT}chat/rooms/down/`, actor: BOB, verified: false },
+    { room: `${ROOT}chat/rooms/expired/`, actor: BOB, verified: false },
+    { room: `${ROOT}chat/rooms/offline/`, verified: false },
+    { room: `${ROOT}chat/rooms/slow/`, actor: BOB, verified: false },
+    { room: `${FOREIGN}chat/rooms/far/`, actor: BOB, verified: false },
   ]);
   const first = rooms(fetch.mock.calls) - before;
   // Missing and loaded rooms stay cached; unreachable ones are retried on the next scan.
   down = false;
   expect((await rows(reader)).map((invitation) => invitation.room)).toEqual([
-    `${ROOT}chat/rooms/slow/`,
-    `${ROOT}chat/rooms/expired/`,
-    `${FOREIGN}chat/rooms/far/`,
     real,
+    `${ROOT}chat/rooms/expired/`,
     `${ROOT}chat/rooms/offline/`,
+    `${ROOT}chat/rooms/slow/`,
+    `${FOREIGN}chat/rooms/far/`,
   ]);
   expect(rooms(fetch.mock.calls) - before - first).toBe(1);
 });
@@ -515,11 +523,11 @@ it("checks membership per claimed sender before de-duplicating own-pod rooms", a
     offer(alone, dated("https://forged.example/#me", 3)),
     offer(alone),
   ]);
-  expect(await rows(client)).toEqual([{ room, actor: BOB, name: "Club" }]);
+  expect(await rows(client)).toEqual([{ room, actor: BOB, name: "Club", verified: true }]);
   // Rooms the inbox no longer offers leave the check cache.
   for (const index of [2, 3])
     expect((await pod.fetch(`${INBOX}${index}.ttl`, { method: "DELETE" })).ok).toBe(true);
-  expect(await rows(client)).toEqual([{ room, actor: BOB, name: "Club" }]);
+  expect(await rows(client)).toEqual([{ room, actor: BOB, name: "Club", verified: true }]);
 });
 
 it("shares one scan between concurrent callers, isolating each caller's cancellation", async () => {
@@ -548,8 +556,8 @@ it("shares one scan between concurrent callers, isolating each caller's cancella
   a.abort();
   await expect(first).rejects.toMatchObject({ name: "AbortError" });
   release();
-  expect((await second).invitations).toEqual([{ room }]);
-  expect((await third).invitations).toEqual([{ room }]);
+  expect((await second).invitations).toEqual([{ room, verified: false }]);
+  expect((await third).invitations).toEqual([{ room, verified: false }]);
   expect(signals.some((signal) => signal.aborted)).toBe(false);
   expect(fetch.mock.calls.filter(([url]) => String(url) === `${ROOT}profile`)).toHaveLength(1);
   expect(fetch.mock.calls.filter(([url]) => String(url) === INBOX)).toHaveLength(1);
@@ -584,5 +592,80 @@ it("aborts the shared scan once every caller leaves, then starts a fresh one", a
   await expect(second).rejects.toMatchObject({ name: "AbortError" });
   const next = client.invitations();
   release();
-  expect((await next).invitations).toEqual([{ room }]);
+  expect((await next).invitations).toEqual([{ room, verified: false }]);
+});
+
+it("returns a genuine foreign invitation hidden by 25 newer forged ones, and keeps all of them", async () => {
+  const { client } = await inboxFixture([]);
+  const genuine = `${FOREIGN}chat/rooms/genuine/`;
+  await writeInbox(client, [
+    offer(genuine, `; as:actor <${BOB}>${published(1)}`),
+    ...Array.from({ length: 25 }, (_, i) =>
+      offer(`${FOREIGN}chat/rooms/forged${i}/`, `; as:actor <${BOB}>${published(20)}`),
+    ),
+  ]);
+  const found = await client.invitations();
+  expect(found.invitations).toHaveLength(26);
+  expect(found.invitations).toContainEqual({ room: genuine, actor: BOB, verified: false });
+  expect(found.invitations.every((item) => !item.verified)).toBe(true);
+  expect(found.truncated).toBe(false);
+  expect(found.ownUnchecked).toBe(false);
+  // Unverified rows are ordered by room URL, not by the poster's date.
+  const order = found.invitations.map((item) => item.room);
+  expect(order).toEqual([...order].sort());
+});
+
+it("keeps a verified invitation with an empty room name verified", async () => {
+  const { client } = await inboxFixture([]);
+  const { url: room } = await client.createRoom({ name: "", members: [BOB] });
+  await client.leave(room);
+  await writeInbox(client, [
+    offer(room, `; as:actor <${BOB}>${published(1)}`),
+    ...Array.from({ length: 30 }, (_, i) => offer(`${FOREIGN}chat/rooms/e${i}/`, published(10))),
+  ]);
+  const found = await client.invitations();
+  expect(found.invitations[0]).toEqual({ room, actor: BOB, name: "", verified: true });
+  expect(found.invitations).toHaveLength(31);
+});
+
+const LISTING = `${ROOT}chat/rooms/`;
+it.each([
+  ["403", () => new Response(null, { status: 403 })],
+  ["503", () => new Response(null, { status: 503 })],
+  ["non-RDF", () => new Response("<html></html>", { headers: { "content-type": "text/html" } })],
+  [
+    "oversized",
+    () =>
+      new Response(`# ${"x".repeat(1024 * 1024 + 10)}\n`, {
+        headers: { "content-type": "text/turtle" },
+      }),
+  ],
+])("degrades when the own rooms listing fails (%s): foreign rows stay, own claims are unverified", async (_name, failure) => {
+  const { client: owner } = await inboxFixture([]);
+  const { url: real } = await owner.createRoom({ name: "Real", members: [BOB] });
+  await owner.leave(real);
+  const foreign = `${FOREIGN}chat/rooms/far/`;
+  const ghost = `${ROOT}chat/rooms/ghost/`;
+  await writeInbox(owner, [
+    offer(real, `; as:actor <${BOB}>${published(1)}`),
+    offer(ghost, `; as:actor <${BOB}>${published(2)}`),
+    offer(foreign, `; as:actor <${BOB}>${published(3)}`),
+  ]);
+  const transport: typeof globalThis.fetch = (input, init) =>
+    String(input) === LISTING && (init?.method ?? "GET") === "GET"
+      ? Promise.resolve(failure())
+      : owner.fetch(input, init);
+  const found = await new ChatClient(transport, ROOT, ME).invitations();
+  expect(found.ownUnchecked).toBe(true);
+  expect(found.invitations.every((item) => !item.verified)).toBe(true);
+  expect(found.invitations.map((item) => item.room).sort()).toEqual([ghost, real, foreign].sort());
+});
+
+it("builds the rooms listing URL from a storage root without a trailing slash", async () => {
+  const { client, fetch } = await inboxFixture([]);
+  const storage = `${ROOT}pod`;
+  await writeInbox(client, [offer(`${storage}/chat/rooms/x/`, `; as:actor <${BOB}>`)]);
+  const found = await new ChatClient(fetch, storage, ME).invitations();
+  expect(found.ownUnchecked).toBe(false);
+  expect(fetch.mock.calls.some(([url]) => String(url) === `${storage}/chat/rooms/`)).toBe(true);
 });
