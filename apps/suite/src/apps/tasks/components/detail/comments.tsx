@@ -4,7 +4,7 @@ import { Button, Textarea, toast } from "@jeswr/suite-ui";
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { plainTextLinks } from "@/lib/plain-text-links";
 import { ModifiedTime } from "../../../docs/components/modified-time";
-import type { TaskComment, TaskCommentThread } from "../../lib/model/comments";
+import type { TaskComment, TaskCommentStore, TaskCommentThread } from "../../lib/model/comments";
 import { classifyError } from "../../lib/model/errors";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
 import { memberName } from "../../lib/views/member-name";
@@ -91,9 +91,27 @@ function CommentForm({
     </form>
   );
 }
+/** The store throws on a non-canonical stateStore: render the pane without comments then. */
 export function TaskComments({ stored, project }: { stored: StoredTask; project: StoredProject }) {
   const tasks = useTasks();
-  const [store] = useState(() => tasks.cache.store.comments(project, stored));
+  const [store] = useState<TaskCommentStore | undefined>(() => {
+    try {
+      return tasks.cache.store.comments(project, stored);
+    } catch {
+      return undefined;
+    }
+  });
+  if (!store)
+    return (
+      <section className="tsk-comments">
+        <h3>Comments</h3>
+        <p role="status">Comments aren't available for this task.</p>
+      </section>
+    );
+  return <TaskCommentsPane store={store} />;
+}
+function TaskCommentsPane({ store }: { store: TaskCommentStore }) {
+  const tasks = useTasks();
   const id = useId();
   const [threads, setThreads] = useState<TaskCommentThread[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,6 +121,7 @@ export function TaskComments({ stored, project }: { stored: StoredTask; project:
   const [editing, setEditing] = useState<TaskComment>();
   const [replying, setReplying] = useState<TaskComment>();
   const origin = useRef<HTMLButtonElement | null>(null);
+  const editingUrl = useRef<string | undefined>(undefined);
   const pending = useRef(false);
   const generation = useRef(0);
   const live = useRef(true);
@@ -111,14 +130,19 @@ export function TaskComments({ stored, project }: { stored: StoredTask; project:
     try {
       const [rows, access] = await Promise.all([store.list(), store.canWrite()]);
       if (live.current && request === generation.current) {
-        setThreads(rows);
+        // Keep showing the comment being edited when only its load failed: the draft stays.
+        setThreads((previous) =>
+          editingUrl.current && store.failed.has(editingUrl.current) ? previous : rows,
+        );
         setWritable(access);
         setEditing((current) =>
           current &&
           access !== false &&
-          rows.some(({ root, replies }) =>
-            [root, ...replies].some((comment) => comment.url === current.url && !comment.deleted),
-          )
+          // A comment that failed to load must not discard the draft being edited.
+          (store.failed.has(current.url) ||
+            rows.some(({ root, replies }) =>
+              [root, ...replies].some((comment) => comment.url === current.url && !comment.deleted),
+            ))
             ? current
             : undefined,
         );
@@ -170,6 +194,7 @@ export function TaskComments({ stored, project }: { stored: StoredTask; project:
       if (live.current) setBusy(false);
     }
   };
+  editingUrl.current = editing?.url;
   const cancel = useCallback(() => {
     setEditing(undefined);
     setReplying(undefined);

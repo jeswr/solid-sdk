@@ -539,6 +539,39 @@ export class TaskStore {
   }
   async deleteTask(item: StoredTask): Promise<void> {
     await this.io.remove(item.url, item.etag);
+    // The task is gone: its comments must not outlive it. A failure here never undoes or
+    // blocks the delete; it stays queued and is retried on the next delete or retry call.
+    const folder = item.url.slice(0, item.url.lastIndexOf("/") + 1);
+    try {
+      this.pendingCommentCleanup.set(
+        item.url,
+        new TaskCommentStore(
+          { tracker: { stateStore: folder } },
+          item,
+          this.options.webId,
+          this.options.fetch,
+        ),
+      );
+    } catch (error) {
+      console.warn("Tasks: cannot locate comments of a deleted task.", error);
+    }
+    await this.retryCommentCleanup();
+  }
+  private readonly pendingCommentCleanup = new Map<string, TaskCommentStore>();
+  /** Task URLs whose comments could not be removed yet. */
+  get commentCleanupPending(): string[] {
+    return [...this.pendingCommentCleanup.keys()];
+  }
+  /** Retry removing comments of deleted tasks. Failures are warned about and stay queued. */
+  async retryCommentCleanup(): Promise<void> {
+    for (const [url, comments] of [...this.pendingCommentCleanup]) {
+      try {
+        await comments.removeAll();
+        this.pendingCommentCleanup.delete(url);
+      } catch (error) {
+        console.warn("Tasks: could not remove comments of a deleted task; will retry.", error);
+      }
+    }
   }
   /** Each resource keeps its own read validator; a conflict stops further removal. */
   async deleteSection(project: StoredProject, id: string): Promise<StoredProject> {

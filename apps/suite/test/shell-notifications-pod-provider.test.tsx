@@ -166,6 +166,7 @@ it("does not advance a digest while expired or before its fresh pod listing, the
   vi.mocked(createInboxReader).mockReturnValue({
     inbox: async (id) => id,
     list: vi.fn(() => pending.promise),
+    listPage: vi.fn(),
   });
   accounts.current = { ...accounts.current, status: "ready" };
   view.rerender(tree());

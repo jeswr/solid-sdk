@@ -1,14 +1,19 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 import { isDirectChild } from "../../../docs/lib/model/layout";
 import { ModelError } from "./errors";
 import { RdfIO, type Resource } from "./io";
 import type { ResourceCopy } from "./move";
 import { DataFactory, type Node, NS, node, requireHttp, Store } from "./rdf";
-import type { StoredProject, StoredTask } from "./store";
+import type { StoredTask } from "./store";
 
 const OA = "http://www.w3.org/ns/oa#";
 const FORMAT = "http://purl.org/dc/elements/1.1/format";
 export const DELETED_COMMENT = "[Comment deleted]";
+/** Matches the Sheets comment cap. Longer bodies are refused on write and malformed on read. */
+export const MAX_COMMENT_LENGTH = 10_000;
+/** A listing reads at most this many comment resources, so a hostile writer cannot make it unbounded. */
+export const MAX_LISTED_COMMENTS = 500;
 export interface TaskComment {
   url: string;
   id: string;
@@ -59,7 +64,7 @@ function readComment(resource: Resource): TaskComment {
   )
     throw new TypeError("Malformed comment.");
   const value = text(body, `${NS.RDF}value`);
-  if (!value.trim()) throw new TypeError("Malformed comment.");
+  if (!value.trim() || value.length > MAX_COMMENT_LENGTH) throw new TypeError("Malformed comment.");
   return {
     url: resource.url,
     id,
@@ -72,6 +77,12 @@ function readComment(resource: Resource): TaskComment {
     deleted: annotation.nodes(`${NS.PROV}invalidatedAtTime`).size > 0,
   };
 }
+function checkLength(value: string) {
+  if (value.trim().length > MAX_COMMENT_LENGTH)
+    throw new TypeError(
+      `Comments are limited to ${MAX_COMMENT_LENGTH.toLocaleString("en")} characters.`,
+    );
+}
 const oldest = (a: TaskComment, b: TaskComment) =>
   a.created.localeCompare(b.created) || a.url.localeCompare(b.url);
 
@@ -82,8 +93,8 @@ export class TaskCommentStore {
   private readonly folder: string;
   private readonly io: RdfIO;
   constructor(
-    project: StoredProject,
-    task: StoredTask,
+    project: { tracker: { stateStore?: string | undefined } },
+    task: Pick<StoredTask, "url" | "task">,
     private readonly webId: string,
     private readonly http: typeof fetch,
   ) {
@@ -144,10 +155,16 @@ export class TaskCommentStore {
       return undefined;
     }
   }
+  /** Resources that failed transiently in the last listing (not malformed, absent or forbidden). */
+  failed = new Set<string>();
   private async resources(strict = false) {
     const entries: (Resource & { comment: TaskComment })[] = [];
+    const failed = new Set<string>();
+    if (!strict) this.failed = failed;
+    let read = 0;
     for (const url of await this.io.list(this.container)) {
       if (!isDirectChild(url, this.container) || !url.endsWith(".ttl")) continue;
+      if (!strict && ++read > MAX_LISTED_COMMENTS) break;
       // Transport/redirect failures must abort a move, even when they are TypeErrors.
       const resource = strict ? await this.io.read(url) : undefined;
       try {
@@ -155,6 +172,11 @@ export class TaskCommentStore {
       } catch (error) {
         // Moves must abort on unreadable comments; UI listings tolerate them.
         if (strict && !(error instanceof TypeError)) throw error;
+        if (
+          error instanceof ModelError &&
+          (error.status === 0 || error.status >= 500 || error.status === 429)
+        )
+          failed.add(url);
       }
     }
     return entries;
@@ -170,6 +192,26 @@ export class TaskCommentStore {
           .filter((entry) => entry.kind === "reply" && entry.target === root.id)
           .sort(oldest),
       }));
+  }
+  /**
+   * Remove this task's root comments and their replies, each with If-Match. Used after the task
+   * itself is deleted. Throws on the first failure; removing an already-absent resource is fine.
+   */
+  async removeAll(): Promise<void> {
+    const entries = await this.resources(true);
+    const roots = new Set(
+      entries
+        .filter(({ comment }) => comment.kind === "root" && comment.target === this.target)
+        .map(({ comment }) => comment.id),
+    );
+    for (const entry of entries) {
+      if (!(roots.has(entry.comment.id) || roots.has(entry.comment.target))) continue;
+      try {
+        await this.io.remove(entry.url, entry.etag);
+      } catch (error) {
+        if (!(error instanceof ModelError && error.status === 404)) throw error;
+      }
+    }
   }
   /** Capture full RDF revisions, including tombstones, before a recoverable task move. */
   async prepareMove(
@@ -240,6 +282,7 @@ export class TaskCommentStore {
     if (creator !== this.webId)
       throw new TypeError("The comment creator must be the signed-in account.");
     if (!value.trim()) throw new TypeError("Enter a comment.");
+    checkLength(value);
     const url = `${this.container}${crypto.randomUUID()}.ttl`;
     const dataset = new Store();
     const annotation = node(`${url}#it`, dataset);
@@ -270,6 +313,7 @@ export class TaskCommentStore {
   async edit(entry: TaskComment, value: string, now = new Date()) {
     const current = await this.own(entry);
     if (!value.trim() || current.comment.deleted) throw new TypeError("Enter a comment.");
+    checkLength(value.trim());
     await this.replaceBody(current, value.trim(), now);
   }
   private async replaceBody(

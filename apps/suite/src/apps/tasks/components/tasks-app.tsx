@@ -127,11 +127,16 @@ function TasksChrome({ children }: { children: ReactNode }) {
     [tasks.cache, taskUrl, params, pathname],
   );
   // Reminder notifications and toasts open the same `?task=` detail pane as a task row.
-  useReminderScheduler(tasks.cache, (url) => {
-    const query = new URLSearchParams(params.toString());
-    query.set("task", encodeRef(url));
-    router.push(`${pathname}?${query}`, { scroll: false });
-  });
+  useReminderScheduler(
+    tasks.cache,
+    (url) => {
+      const query = new URLSearchParams(params.toString());
+      query.set("task", encodeRef(url));
+      router.push(`${pathname}?${query}`, { scroll: false });
+    },
+    undefined,
+    tasks.webId,
+  );
   const origin = useRef<string | undefined>(undefined);
   const returnTo = useRef<string | undefined>(undefined);
   // A narrow-viewport details Sheet restores focus itself once it unmounts; point it at the
