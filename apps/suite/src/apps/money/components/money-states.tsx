@@ -5,7 +5,7 @@ import { X } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useRoutePathname } from "@/lib/route-params";
 import { useOptionalAccounts } from "@/shell/session/accounts-context";
-import { useMoney } from "../state/money-context";
+import { useIncompleteFigures, useMoney } from "../state/money-context";
 import type { ReadProblem } from "../state/read-snapshot";
 
 export function MoneyLoading() {
@@ -19,6 +19,26 @@ export function MoneyOpening() {
       <MoneyLoading />
     </>
   );
+}
+
+/** Persistent, text-only marker for figures derived from a partial read; it cannot be dismissed. */
+export function IncompleteNotice({ figures }: { figures: "balances" | "budgets" | "reports" }) {
+  const incomplete = useIncompleteFigures();
+  if (!incomplete[figures]) return null;
+  return (
+    <p className="mon-hint mon-incomplete" role="status">
+      Incomplete: some of your Money data couldn't be read, so{" "}
+      {figures === "balances"
+        ? "balances are not shown"
+        : `these ${figures === "budgets" ? "budget" : "report"} figures may be wrong`}{" "}
+      until it can be.
+    </p>
+  );
+}
+
+/** Stands in for a balance that cannot be trusted; stated in words, not colour. */
+export function WithheldBalance() {
+  return <span className="mon-withheld">Unavailable (incomplete data)</span>;
 }
 
 export function focusMoneyHeading() {
@@ -43,6 +63,9 @@ export function MoneyContent({ children }: { children: ReactNode }) {
     error: unknown;
   }>();
   const problems = money.problems;
+  const incompleteFigures = useIncompleteFigures();
+  const partialFigures =
+    incompleteFigures.balances || incompleteFigures.budgets || incompleteFigures.reports;
   const scoped = problems?.find(
     (problem) =>
       path === `/money/${problem.kind}` &&
@@ -144,7 +167,8 @@ export function MoneyContent({ children }: { children: ReactNode }) {
       ) : (
         <>
           {(money.status === "error" || issueCount > 0) &&
-            (dismissed?.problems !== problems ||
+            (partialFigures ||
+              dismissed?.problems !== problems ||
               dismissed?.error !== money.error ||
               !dismissed) && (
               <div
@@ -167,16 +191,18 @@ export function MoneyContent({ children }: { children: ReactNode }) {
                 <Button variant="outline" onClick={retry} disabled={retrying}>
                   Retry
                 </Button>
-                <IconButton
-                  label="Dismiss read problems"
-                  variant="ghost"
-                  onClick={() => {
-                    setDismissed({ problems, error: money.error });
-                    focusMoneyHeading();
-                  }}
-                >
-                  <X aria-hidden="true" />
-                </IconButton>
+                {!partialFigures && (
+                  <IconButton
+                    label="Dismiss read problems"
+                    variant="ghost"
+                    onClick={() => {
+                      setDismissed({ problems, error: money.error });
+                      focusMoneyHeading();
+                    }}
+                  >
+                    <X aria-hidden="true" />
+                  </IconButton>
+                )}
               </div>
             )}
           {children}

@@ -16,7 +16,7 @@ import {
 import { type Category, type CategoryNode, categoryTree } from "../lib/model";
 import { useMoney } from "../state/money-context";
 import { Amount } from "./money-forms";
-import { focusMoneyHeading } from "./money-states";
+import { focusMoneyHeading, IncompleteNotice } from "./money-states";
 
 const validMonth = (value: string) => /^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(value);
 function adjacent(month: string, offset: number) {
@@ -256,6 +256,7 @@ export function BudgetScreen() {
           <Link href={`/money/budget?m=${state.today.slice(0, 7)}`}>This month</Link>
         </Button>
       </nav>
+      <IncompleteNotice figures="budgets" />
       {selected && !accepted && (
         <p role="status" className="mon-hint">
           That month is invalid or outside the allowed range. Showing this month.
@@ -470,6 +471,7 @@ export function BudgetSummary() {
         <h2>Budget this month</h2>
         <Link href="/money/budget">Open budget</Link>
       </div>
+      <IncompleteNotice figures="budgets" />
       {problem || !data ? (
         <p>
           Budget unavailable.{" "}

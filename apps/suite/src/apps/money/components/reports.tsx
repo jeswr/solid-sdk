@@ -17,7 +17,7 @@ import {
 import { minorUnits } from "../lib/reports";
 import { useMoney } from "../state/money-context";
 import { Amount } from "./money-forms";
-import { focusMoneyHeading } from "./money-states";
+import { focusMoneyHeading, IncompleteNotice } from "./money-states";
 
 const monthLabel = (month: string, style: "short" | "long" = "short") =>
   new Intl.DateTimeFormat("en-GB", { month: style, year: "numeric", timeZone: "UTC" }).format(
@@ -78,6 +78,7 @@ export function ReportsScreen() {
   return (
     <>
       <Heading />
+      <IncompleteNotice figures="reports" />
       <div className="mon-report-controls">
         <fieldset className="mon-segmented">
           <legend className="sr-only">Period</legend>
