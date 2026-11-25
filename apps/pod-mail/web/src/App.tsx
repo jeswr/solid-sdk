@@ -4,8 +4,8 @@
 // App — shared sign-in and chrome around the local Inbox. Pod reads receive
 // pod-auth's bounded fetch explicitly; global fetch stays public. Mailbox discovery
 // uses the Type Index, falling back to mail/folders/inbox.ttl with a visible note.
-import { LoginScreen, SessionGate, useSession } from "@jeswr/app-session/react";
-import { AccountControl, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
+import { EnvLoginScreen, SessionGate, useSession } from "@jeswr/app-session/react";
+import { AppFrame, AppMain } from "@jeswr/app-shell";
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { Inbox } from "@jeswr/pod-mail/ui";
 // SOLID-ELEMENTS PILOT (#115): the framework-agnostic W3C Web Components consumed
@@ -65,49 +65,17 @@ export function App() {
   return (
     <SessionGate
       appName="Pod Mail"
-      login={<AppLoginScreen />}
+      login={<EnvLoginScreen appName="Pod Mail" env={import.meta.env} />}
       renderLoading={(label) => <Loading label={label} />}
     >
-      {({ webId, session }) => (
-        <div className="app-shell">
-          {/* The header now uses the shared @jeswr/app-shell chrome: a header-level
-          <FeedbackButton/> (opens a themed dialog that files a GitHub issue against
-          THIS app's own repo), a light/dark/system <ThemeToggle/>, and a real
-          top-right <AccountControl/> (profile menu or extension-aware sign-out). The
-          session's WebID / profile name / avatar / logout wire straight into the
-          props (the components are fully decoupled — everything is a prop).
-          `app-header-actions` right-aligns the trio.
-
-          FEEDBACK: `repo` is the only app-specific value — pod-mail files against
-          `jeswr/pod-mail`. `appVersion` is the build SHA injected by Vite
-          (`__APP_VERSION__`), so a filed issue pins the deployed commit. `webId` is
-          attached to diagnostics ONLY if the reporter ticks the consent box. `submit`
-          is intentionally UNSET → the dialog uses the GitHub prefill page; the
-          feedback-proxy hook is wired suite-wide later. */}
-          <header className="app-header">
-            <span className="app-brand">Pod Mail</span>
-            <div className="app-header-actions">
-              <FeedbackButton
-                repo={FEEDBACK_REPO}
-                appName={FEEDBACK_APP_NAME}
-                appVersion={__APP_VERSION__}
-                webId={webId}
-              />
-              <ThemeToggle />
-              <AccountControl
-                webId={webId}
-                displayName={session.displayName}
-                avatarUrl={session.avatarUrl}
-                onSignOut={logout}
-              />
-            </div>
-          </header>
-          {session.podRootIsFallback ? (
-            <p className="app-note" role="note">
-              Your profile doesn't list a storage address, so Mail can only show public messages at{" "}
-              {session.podRoot}.
-            </p>
-          ) : null}
+      {({ session }) => (
+        <AppFrame
+          appName="Pod Mail"
+          feedback={{ repo: FEEDBACK_REPO, appVersion: __APP_VERSION__ }}
+          session={session}
+          onSignOut={logout}
+          storageNote={{ product: "Mail", kind: "messages" }}
+        >
           {/* A plain fallback note only when discovery SUCCEEDED but found no
           Type-Index entry. When discovery threw, the error alert below already
           explains the conventional-location fallback, so we don't double up. */}
@@ -130,38 +98,18 @@ export function App() {
               .
             </p>
           ) : null}
-          <main className="app-main">
-            {mailbox ? (
+          <AppMain value={mailbox} loading={<Loading label="Locating your mailbox…" />}>
+            {(mailbox) => (
               <Inbox
                 key={session.webId}
                 mailboxUrl={mailbox.mailboxUrl}
                 title="Your inbox"
                 fetch={fetch}
               />
-            ) : (
-              // SOLID-ELEMENTS: the host-level "locating your mailbox" wait, now the
-              // themed <jeswr-loading> spinner (via @lit/react) instead of a bare <p>.
-              // It owns role="status" + aria-live; .app-loading keeps the muted colour
-              // wrapper for layout parity.
-              <p className="app-loading">
-                <Loading label="Locating your mailbox…" />
-              </p>
             )}
-          </main>
-        </div>
+          </AppMain>
+        </AppFrame>
       )}
     </SessionGate>
-  );
-}
-
-function AppLoginScreen() {
-  return (
-    <LoginScreen
-      appName="Pod Mail"
-      knownProviders={import.meta.env.VITE_KNOWN_PROVIDERS}
-      homeIdp={import.meta.env.VITE_HOME_IDP}
-      homeIdpName={import.meta.env.VITE_HOME_IDP_NAME}
-      dev={import.meta.env.DEV}
-    />
   );
 }

@@ -6,8 +6,8 @@
 // <DocumentBrowser> pointed at the user's pod. The browser gets pod-auth's
 // `auth.fetch` explicitly; global fetch is never patched.
 
-import { LoginScreen, SessionGate, useSession } from "@jeswr/app-session/react";
-import { AccountControl, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
+import { EnvLoginScreen, SessionGate, useSession } from "@jeswr/app-session/react";
+import { AppFrame } from "@jeswr/app-shell";
 // SOLID-ELEMENTS (#115 / D-parity rollout #67/#68/#70): the framework-agnostic W3C
 // Web Components consumed through the @lit/react adapter. <Loading> is a Lit custom
 // element (spinner + polite-live label, prefers-reduced-motion aware) wrapped by
@@ -36,35 +36,17 @@ export function App() {
   return (
     <SessionGate
       appName="Pod Docs"
-      login={<AppLoginScreen />}
+      login={<EnvLoginScreen appName="Pod Docs" env={import.meta.env} />}
       renderLoading={(label) => <Loading label={label} />}
     >
-      {({ webId, session }) => (
-        <div className="app-shell">
-          <header className="app-header">
-            <span className="app-brand">Pod Docs</span>
-            <div className="app-header-actions">
-              <FeedbackButton
-                repo={FEEDBACK_REPO}
-                appName={FEEDBACK_APP_NAME}
-                appVersion={__APP_VERSION__}
-                webId={webId}
-              />
-              <ThemeToggle />
-              <AccountControl
-                webId={webId}
-                displayName={session.displayName}
-                avatarUrl={session.avatarUrl}
-                onSignOut={logout}
-              />
-            </div>
-          </header>
-          {session.podRootIsFallback ? (
-            <p className="app-note" role="note">
-              Your profile doesn't list a storage address, so Docs can only show public documents at{" "}
-              {session.podRoot}.
-            </p>
-          ) : null}
+      {({ session }) => (
+        <AppFrame
+          appName="Pod Docs"
+          feedback={{ repo: FEEDBACK_REPO, appVersion: __APP_VERSION__ }}
+          session={session}
+          onSignOut={logout}
+          storageNote={{ product: "Docs", kind: "documents" }}
+        >
           <main className="app-main">
             <CollectionBrowser
               key={JSON.stringify([session.webId, session.podRoot])}
@@ -73,20 +55,8 @@ export function App() {
               fetch={fetch}
             />
           </main>
-        </div>
+        </AppFrame>
       )}
     </SessionGate>
-  );
-}
-
-function AppLoginScreen() {
-  return (
-    <LoginScreen
-      appName="Pod Docs"
-      knownProviders={import.meta.env.VITE_KNOWN_PROVIDERS}
-      homeIdp={import.meta.env.VITE_HOME_IDP}
-      homeIdpName={import.meta.env.VITE_HOME_IDP_NAME}
-      dev={import.meta.env.DEV}
-    />
   );
 }

@@ -4,8 +4,8 @@
 // → a @jeswr/app-shell header (FeedbackButton + ThemeToggle + AccountControl) over
 // the LOCAL @jeswr/pod-chat <ChatRooms> pointed at the user's pod. The view
 // receives pod-auth's bounded `auth.fetch` explicitly for all pod reads and writes.
-import { LoginScreen, SessionGate, useSession } from "@jeswr/app-session/react";
-import { AccountControl, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
+import { EnvLoginScreen, SessionGate, useSession } from "@jeswr/app-session/react";
+import { AppFrame } from "@jeswr/app-shell";
 import { ChatRooms } from "@jeswr/pod-chat/ui";
 // SOLID-ELEMENTS (#67/#68/#70 D-parity rollout): the framework-agnostic W3C Web
 // Component <jeswr-loading> — a Lit custom element (spinner + polite-live label,
@@ -36,50 +36,17 @@ export function App() {
   return (
     <SessionGate
       appName="Pod Chat"
-      login={<AppLoginScreen />}
+      login={<EnvLoginScreen appName="Pod Chat" env={import.meta.env} />}
       renderLoading={(label) => <jeswr-loading label={label} />}
     >
-      {({ webId, session }) => (
-        <div className="app-shell">
-          {/* The header uses the shared @jeswr/app-shell chrome: a header-level
-              <FeedbackButton/> (opens a themed dialog that files a GitHub issue against
-              THIS app's own repo), a light/dark/system <ThemeToggle/>, and a real
-              top-right <AccountControl/> (avatar + display name, dropdown showing the WebID
-              + Sign out) — replacing the old raw-WebID span + bare logout button. The
-              session's WebID / profile name / avatar / logout wire straight into the
-              props (the components are fully decoupled — everything is a prop).
-              `app-header-actions` right-aligns the trio.
-
-              FEEDBACK: `repo` is the only app-specific value — pod-chat files against
-              `jeswr/pod-chat`. `appVersion` is the build SHA injected by Vite
-              (`__APP_VERSION__`), so a filed issue pins the deployed commit. `webId` is
-              attached to diagnostics ONLY if the reporter ticks the consent box. `submit`
-              is intentionally UNSET → the dialog uses the GitHub prefill page; the
-              feedback-proxy hook is wired suite-wide later. */}
-          <header className="app-header">
-            <span className="app-brand">Pod Chat</span>
-            <div className="app-header-actions">
-              <FeedbackButton
-                repo="jeswr/pod-chat"
-                appName="Pod Chat"
-                appVersion={__APP_VERSION__}
-                webId={webId}
-              />
-              <ThemeToggle />
-              <AccountControl
-                webId={webId}
-                displayName={session.displayName}
-                avatarUrl={session.avatarUrl}
-                onSignOut={logout}
-              />
-            </div>
-          </header>
-          {session.podRootIsFallback ? (
-            <p className="app-note" role="note">
-              Your profile doesn't list a storage address, so Chat can only show public rooms at{" "}
-              {session.podRoot}.
-            </p>
-          ) : null}
+      {({ session }) => (
+        <AppFrame
+          appName="Pod Chat"
+          feedback={{ repo: "jeswr/pod-chat", appVersion: __APP_VERSION__ }}
+          session={session}
+          onSignOut={logout}
+          storageNote={{ product: "Chat", kind: "rooms" }}
+        >
           <main className="app-main">
             {/* podRoot + webId only — ChatStore derives the pod-chat/rooms/ +
                 pod-chat/messages/ containers from the pod root (and registers them in
@@ -93,20 +60,8 @@ export function App() {
               title="Your chat"
             />
           </main>
-        </div>
+        </AppFrame>
       )}
     </SessionGate>
-  );
-}
-
-function AppLoginScreen() {
-  return (
-    <LoginScreen
-      appName="Pod Chat"
-      knownProviders={import.meta.env.VITE_KNOWN_PROVIDERS}
-      homeIdp={import.meta.env.VITE_HOME_IDP}
-      homeIdpName={import.meta.env.VITE_HOME_IDP_NAME}
-      dev={import.meta.env.DEV}
-    />
   );
 }

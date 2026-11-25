@@ -13,8 +13,8 @@
 // `${podRoot}health/record.ttl` DOCUMENT (NOT the `health/` container) and
 // surfacing a banner when it does.
 
-import { LoginScreen, SessionGate, useSession } from "@jeswr/app-session/react";
-import { AccountControl, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
+import { EnvLoginScreen, SessionGate, useSession } from "@jeswr/app-session/react";
+import { AppFrame, AppMain, useSessionResource } from "@jeswr/app-shell";
 // SOLID-ELEMENTS (#115 / D-parity rollout #67/#68/#70): the framework-agnostic W3C
 // Web Components consumed through the @lit/react adapter. <Loading> is a Lit custom
 // element (spinner + polite-live label, prefers-reduced-motion aware) wrapped by
@@ -27,128 +27,74 @@ import { AccountControl, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 // step, so the client-only custom elements need no mount-gating here.
 import { Loading } from "@jeswr/solid-elements/react";
 import { HealthRecords } from "pod-health/ui";
-import { useEffect, useState } from "react";
 import { APP_NAME } from "./auth/pod-auth";
 import { discoverHealthResource, type HealthResource } from "./health-resource";
 
 export function App() {
   const { session, fetch, logout } = useSession();
-  // The discovered health resource (Type Index → else conventional fallback).
-  const [resource, setResource] = useState<HealthResource | null>(null);
 
-  // Resolve the resource URL once a session exists; re-run if the identity
-  // changes. Cancellation guards against a stale discovery committing after a
-  // fast logout / re-login.
-  useEffect(() => {
-    if (!session) {
-      setResource(null);
-      return;
-    }
-    let cancelled = false;
-    setResource(null);
-    discoverHealthResource(session.webId, session.podRoot, fetch)
-      .then((r) => {
-        if (!cancelled) setResource(r);
-      })
-      .catch(() => {
-        // discoverHealthResource never rejects, but guard defensively: degrade to
-        // the conventional record DOCUMENT (`${podRoot}health/record.ttl`, NOT the
-        // `health/` container — the data layer reads a single document) rather than
-        // stranding the view with no resource.
-        if (!cancelled) {
-          setResource({ resourceUrl: `${session.podRoot}health/record.ttl`, isFallback: true });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [session, fetch]);
+  // The discovered health resource (Type Index → else conventional fallback), resolved once a
+  // session exists. discoverHealthResource never rejects, but the fallback degrades to the
+  // conventional record DOCUMENT (`${podRoot}health/record.ttl`, NOT the `health/` container;
+  // the data layer reads a single document) rather than stranding the view with no resource.
+  const resource: HealthResource | null = useSessionResource(
+    session,
+    (s) => discoverHealthResource(s.webId, s.podRoot, fetch),
+    (s) => ({ resourceUrl: `${s.podRoot}health/record.ttl`, isFallback: true }),
+    [fetch],
+  );
 
   return (
     <SessionGate
       appName={APP_NAME}
-      login={<AppLoginScreen />}
+      login={<EnvLoginScreen appName={APP_NAME} env={import.meta.env} />}
       renderLoading={(label) => <Loading label={label} />}
     >
-      {({ webId, session }) => (
-        <div className="app-shell">
-          {/* The header uses the shared @jeswr/app-shell chrome: a header-level
-          <FeedbackButton/> (opens a themed dialog that files a GitHub issue against
-          THIS app's own repo), a light/dark/system <ThemeToggle/>, and a real
-          top-right <AccountControl/> (account menu or extension-aware sign-out). The
-          session's WebID / profile name / avatar / logout wire straight into the
-          props (the components are fully decoupled — everything is a prop).
-          `app-header-actions` right-aligns the trio.
-
-          FEEDBACK: `repo` is the only app-specific value — pod-health files against
-          `jeswr/pod-health`. `appVersion` is the build SHA injected by Vite
-          (`__APP_VERSION__`), so a filed issue pins the deployed commit. `webId` is
-          attached to diagnostics ONLY if the reporter ticks the consent box. `submit`
-          is intentionally UNSET → the dialog uses the GitHub prefill page; the
-          feedback-proxy hook is wired suite-wide later. */}
-          <header className="app-header">
-            <span className="app-brand">{APP_NAME}</span>
-            <div className="app-header-actions">
-              <FeedbackButton
-                repo="jeswr/pod-health"
-                appName={APP_NAME}
-                appVersion={__APP_VERSION__}
-                webId={webId}
-              />
-              <ThemeToggle />
-              <AccountControl
-                webId={webId}
-                displayName={session.displayName}
-                avatarUrl={session.avatarUrl}
-                onSignOut={logout}
-              />
-            </div>
-          </header>
-          {session.podRootIsFallback ? (
-            <p className="app-note" role="note">
-              Your profile doesn't list a storage address, so Health can only show public records at{" "}
-              {session.podRoot}.
-            </p>
-          ) : null}
-          {resource?.isFallback ? (
-            <p className="app-note" role="note">
-              No <code>health:HealthRecord</code> registration was found in your Type Index; reading
-              the conventional <code>{resource.resourceUrl}</code> path instead.
-            </p>
-          ) : null}
-          <main className="app-main">
-            {resource ? (
-              <HealthRecords
-                key={JSON.stringify([session.webId, resource.resourceUrl])}
-                resourceUrl={resource.resourceUrl}
-                title="Your health records"
-                fetch={fetch}
-              />
-            ) : (
-              // SOLID-ELEMENTS: the host-level "finding your health records" wait, now
-              // the themed <jeswr-loading> spinner (via @lit/react) instead of a bare
-              // <p>. It owns role="status" + aria-live; .app-loading keeps the
-              // muted-colour wrapper for layout parity (its redundant role="status" is
-              // dropped so the page has a single live region).
-              <p className="app-loading">
-                <Loading label="Finding your health records…" />
-              </p>
-            )}
-          </main>
-        </div>
+      {({ session }) => (
+        <AppFrame
+          appName={APP_NAME}
+          feedback={{ repo: "jeswr/pod-health", appVersion: __APP_VERSION__ }}
+          session={session}
+          onSignOut={logout}
+          storageNote={{ product: "Health", kind: "records" }}
+        >
+          <AppMain
+            value={resource}
+            loading={<Loading label="Finding your health records…" />}
+            notice={<FallbackNote resource={resource} />}
+          >
+            {(resource) => <HealthView webId={session.webId} resource={resource} fetch={fetch} />}
+          </AppMain>
+        </AppFrame>
       )}
     </SessionGate>
   );
 }
 
-function AppLoginScreen() {
+function FallbackNote({ resource }: { resource: HealthResource | null }) {
+  return resource?.isFallback ? (
+    <p className="app-note" role="note">
+      No <code>health:HealthRecord</code> registration was found in your Type Index; reading the
+      conventional <code>{resource.resourceUrl}</code> path instead.
+    </p>
+  ) : null;
+}
+
+function HealthView({
+  webId,
+  resource,
+  fetch,
+}: {
+  webId: string;
+  resource: HealthResource;
+  fetch: typeof globalThis.fetch;
+}) {
   return (
-    <LoginScreen
-      appName={APP_NAME}
-      knownProviders={import.meta.env.VITE_KNOWN_PROVIDERS}
-      homeIdp={import.meta.env.VITE_HOME_IDP}
-      homeIdpName={import.meta.env.VITE_HOME_IDP_NAME}
-      dev={import.meta.env.DEV}
+    <HealthRecords
+      key={JSON.stringify([webId, resource.resourceUrl])}
+      resourceUrl={resource.resourceUrl}
+      title="Your health records"
+      fetch={fetch}
     />
   );
 }

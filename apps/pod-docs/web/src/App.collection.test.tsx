@@ -30,9 +30,7 @@ vi.mock("@jeswr/app-session/react", async (original) => ({
 }));
 vi.mock("@jeswr/app-session", () => ({ allowInsecureLoopback: () => fixtures.loopback }));
 vi.mock("@jeswr/app-shell", () => ({
-  AccountControl: () => null,
-  FeedbackButton: () => null,
-  ThemeToggle: () => null,
+  AppFrame: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("@jeswr/pod-docs/ui", () => ({
   DocumentBrowser: (props: DocumentBrowserProps) => {

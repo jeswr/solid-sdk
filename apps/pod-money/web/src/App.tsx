@@ -4,8 +4,8 @@
 // App — the host shell: shared sign-in, extension-aware account controls and the
 // local AccountsView. Pod-auth's bounded fetch is injected into both finance-ledger
 // discovery and the view; global fetch stays public.
-import { LoginScreen, SessionGate, useSession } from "@jeswr/app-session/react";
-import { AccountControl, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
+import { EnvLoginScreen, SessionGate, useSession } from "@jeswr/app-session/react";
+import { AppHeader } from "@jeswr/app-shell";
 import { MoneyStore } from "@jeswr/pod-money";
 import { AccountsView } from "@jeswr/pod-money/ui";
 // SOLID-ELEMENTS (#115 / D-parity rollout #67/#68/#70): the framework-agnostic W3C
@@ -121,15 +121,7 @@ export function App() {
   return (
     <SessionGate
       appName="Pod Money"
-      login={
-        <LoginScreen
-          appName="Pod Money"
-          knownProviders={import.meta.env.VITE_KNOWN_PROVIDERS}
-          homeIdp={import.meta.env.VITE_HOME_IDP}
-          homeIdpName={import.meta.env.VITE_HOME_IDP_NAME}
-          dev={import.meta.env.DEV}
-        />
-      }
+      login={<EnvLoginScreen appName="Pod Money" env={import.meta.env} />}
       renderLoading={(label) => <Loading label={label} />}
     >
       {({ webId, session }) => (
@@ -174,38 +166,22 @@ export function LoggedIn({
 
   return (
     <div className="app-shell">
-      {/* The header now uses the shared @jeswr/app-shell chrome: a header-level
-          <FeedbackButton/> (opens a themed dialog that files a GitHub issue against
-          THIS app's own repo), a light/dark/system <ThemeToggle/>, and a real
-          top-right <AccountControl/> (account menu or extension-aware sign-out). The
-          session's WebID / profile name / avatar / logout wire straight into the
-          props (the components are fully decoupled — everything is a prop).
-          `app-header-actions` right-aligns the trio.
-
-          FEEDBACK: `repo` is the only app-specific value — pod-money files against
-          `jeswr/pod-money`. `appVersion` is the build SHA injected by Vite
-          (`__APP_VERSION__`), so a filed issue pins the deployed commit. `webId` is
-          attached to diagnostics ONLY if the reporter ticks the consent box. `submit`
-          is intentionally UNSET → the dialog uses the GitHub prefill page; the
-          feedback-proxy hook is wired suite-wide later. */}
-      <header className="app-header">
-        <span className="app-brand">Pod Money</span>
-        <div className="app-header-actions">
-          <FeedbackButton
-            repo={FEEDBACK_REPO}
-            appName={FEEDBACK_APP_NAME}
-            appVersion={__APP_VERSION__}
-            webId={webId}
-          />
-          <ThemeToggle />
-          <AccountControl
-            webId={webId}
-            displayName={displayName}
-            avatarUrl={avatarUrl}
-            onSignOut={onLogout}
-          />
-        </div>
-      </header>
+      {/* Shared app-shell header: brand, feedback (files an issue on this app's own repo), theme, account. */}
+      <AppHeader
+        brand="Pod Money"
+        feedback={{
+          repo: FEEDBACK_REPO,
+          appName: FEEDBACK_APP_NAME,
+          appVersion: __APP_VERSION__,
+          webId,
+        }}
+        account={{
+          webId,
+          displayName: displayName,
+          avatarUrl: avatarUrl,
+          onSignOut: onLogout,
+        }}
+      />
       {podRootIsFallback ? (
         <p className="app-note" role="note">
           Your profile doesn't list a storage address, so Money can only show public finance data at{" "}
