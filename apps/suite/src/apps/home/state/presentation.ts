@@ -17,7 +17,7 @@ export function greetingPeriod(date: Date): "morning" | "afternoon" | "evening" 
 
 /** The first word of a display name, or "" for a blank one. */
 export function firstName(displayName: string): string {
-  return displayName.trim().replace(/\s.*$/s, "");
+  return displayName.trim().replace(/\s[\s\S]*$/, "");
 }
 
 export function parseTypes(value: string | null, domain: DataCategory): string[] {
