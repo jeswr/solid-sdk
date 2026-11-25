@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
-import type { SharedItem } from "@jeswr/suite-sdk/shared";
+import { mergeSharedItems, type SharedItem } from "@jeswr/suite-sdk/shared";
 import { describe, expect, it } from "vitest";
 import { encodeRef } from "../src/lib/refs";
 import { openedSharedItems, sharedItemHref, sharedSender } from "../src/lib/shared/items";
@@ -64,6 +64,17 @@ describe("shared item presentation", () => {
     expect(
       sharedItemHref({ ...item, url: `${storage}file.bin`, name: "docs/secret.ttl" }, storage),
     ).toBe(`/drive/p/${encodeRef(`${storage}file.bin`)}`);
+  });
+  it("keeps an announced item preview-only after an open record is merged in", () => {
+    const [merged] = mergeSharedItems(
+      [{ ...item, source: "inbox", announced: true, fromAnotherPod: false }],
+      [{ ...item, source: "opened", sharedAt: "2999-01-01T00:00:00Z" }],
+    );
+    expect(merged).toMatchObject({ source: "opened", announced: true });
+    // Same URL, same storage: only the announcement flag separates preview from native routing.
+    expect(sharedItemHref(merged as SharedItem, storage)).toBe(`/drive/p/${encodeRef(url)}`);
+    const { announced: _announced, ...opened } = merged as SharedItem;
+    expect(sharedItemHref(opened, storage)).toBe(`/docs/d/${encodeRef(url)}`);
   });
   it("uses the pod boundary, not the origin, on path-based multi-pod hosts", () => {
     const alice = "https://pod.example/alice/";

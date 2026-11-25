@@ -1,12 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { Button, EmptyState, FilterChips, LoadingSkeleton } from "@jeswr/suite-ui";
+import { EmptyState, FilterChips, LoadingSkeleton } from "@jeswr/suite-ui";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { useHomeSession } from "@/apps/home/components/home-app";
 import { AppHeading } from "@/shell/app-frame";
 import { appLabel, sharedApps } from "./items";
 import { SharedList } from "./shared-list";
+import { SharedFailure, SharedTruncated } from "./shared-status";
 import { useSharedItems } from "./use-shared-items";
 
 export function SharedPage() {
@@ -32,14 +33,8 @@ export function SharedPage() {
         Newest first. Resource origins are shown first. Announcement senders and roles are
         unverified.
       </p>
-      {data.error ? (
-        <p role="alert">
-          Couldn't load shared announcements.{" "}
-          <Button variant="outline" onClick={data.refresh}>
-            Retry
-          </Button>
-        </p>
-      ) : null}
+      {data.failure ? <SharedFailure failure={data.failure} retry={data.refresh} /> : null}
+      {data.truncated ? <SharedTruncated limit={data.truncated.limit} /> : null}
       {data.loading ? (
         <LoadingSkeleton preset="list" count={4} label="Loading shared items" />
       ) : items.length ? (
@@ -51,7 +46,7 @@ export function SharedPage() {
             setRemoved("Removed from Shared with me");
           }}
         />
-      ) : (
+      ) : data.failure ? null : (
         <EmptyState
           title={apps.length ? "No shared items for these apps" : "Nothing shared with you yet"}
           body="Shared announcements and links you've opened will appear here."
