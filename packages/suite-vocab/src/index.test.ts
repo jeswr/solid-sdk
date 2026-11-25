@@ -1,6 +1,22 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
-import { canonicalize, isLegacy, LEGACY_NAMESPACES, NS, termsEqual } from "./index.js";
+import {
+  canonicalize,
+  DEMO_CONNECTOR,
+  isLegacy,
+  LEGACY_NAMESPACES,
+  NS,
+  termsEqual,
+} from "./index.js";
+
+it("declares the suite-owned demo connector agent with its display label", () => {
+  expect(DEMO_CONNECTOR).toEqual({
+    iri: `${NS.SUITE}demo-connector`,
+    label: "Demo data",
+  });
+  expect(new URL(DEMO_CONNECTOR.iri).protocol).toBe("https:");
+  expect(isLegacy(DEMO_CONNECTOR.iri)).toBe(false);
+});
 
 describe("namespace aliases", () => {
   it.each(Object.entries(LEGACY_NAMESPACES))("canonicalizes %s", (legacy, canonical) => {
