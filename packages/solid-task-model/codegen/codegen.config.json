@@ -1,0 +1,35 @@
+{
+  "shapesBase": "https://jeswr.org/ns/task-model/shapes#",
+  "prefixes": {
+    "wf": "http://www.w3.org/2005/01/wf/flow#",
+    "dct": "http://purl.org/dc/terms/",
+    "dc": "http://purl.org/dc/elements/1.1/",
+    "acl": "http://www.w3.org/ns/auth/acl#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "schema": "http://schema.org/",
+    "prov": "http://www.w3.org/ns/prov#",
+    "vcard": "http://www.w3.org/2006/vcard/ns#"
+  },
+  "entities": [
+    {
+      "targetClass": "http://www.w3.org/2005/01/wf/flow#Task",
+      "name": "Task",
+      "subject": { "convention": "hash-it" },
+      "fields": {
+        "title": { "emptyStringDrop": true },
+        "description": { "emptyStringDrop": true },
+        "descriptionDct": { "emptyStringDrop": true },
+        "created": { "defaultNow": true },
+        "creator": { "iriScheme": "http-https" },
+        "assignee": { "iriScheme": "http-https" },
+        "project": { "iriScheme": "http-https" },
+        "parent": { "iriScheme": "http-https" },
+        "duplicateOf": { "iriScheme": "http-https" },
+        "clonedFrom": { "iriScheme": "http-https" },
+        "blockedBy": { "iriScheme": "http-https" },
+        "relatesTo": { "iriScheme": "http-https" }
+      }
+    }
+  ]
+}
