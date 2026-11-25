@@ -12,8 +12,9 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
+import { IssuesTaskStore } from "../lib/issues/store";
 import { classifyError } from "../lib/model/errors";
-import { type StoredProject, TaskStore } from "../lib/model/store";
+import type { StoredProject } from "../lib/model/store";
 import { TasksSharingAdapter } from "../lib/share/adapter";
 import { ensurePrivateIndexAccess, ensurePrivateTasksAccess, supportsTasksSharing } from "./access";
 import { pendingDeletes } from "./actions";
@@ -28,7 +29,7 @@ function useTasksValue(session: PodSession) {
   const [cache] = useState(
     () =>
       new TasksCache(
-        new TaskStore({
+        new IssuesTaskStore({
           storage: session.storageUrl,
           webId: session.webId,
           fetch: session.fetch,
