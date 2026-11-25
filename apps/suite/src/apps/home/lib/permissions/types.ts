@@ -46,6 +46,8 @@ export interface PermissionLine {
   /** Conjunctive policy metadata; unknown condition enforcement never hides exposure. */
   conditions?: Subject[];
   conditionEnforcement?: "ignored" | "unknown";
+  /** Labels separate grants on a folder's own resource and member scopes. */
+  folderScope?: "resource" | "members";
   inherited: boolean;
 }
 export interface AgentRow {

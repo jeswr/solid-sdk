@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
 import { type ReactNode, useState } from "react";
@@ -23,8 +24,20 @@ import {
   PermissionNotices,
   RequestsLink,
 } from "../src/apps/home/components/permissions/permissions-page";
-import type { AgentRow } from "../src/apps/home/lib/permissions";
+import {
+  type AgentRow,
+  aggregateHoldings,
+  type GrantRecord,
+  type WalkedAccess,
+} from "../src/apps/home/lib/permissions";
 import type { PermissionsBinding } from "../src/apps/home/state/permissions";
+import { DEMO_ROOT } from "../src/lib/demo-pod/constants";
+import { createDemoPod } from "../src/lib/demo-pod/pod";
+import {
+  DEMO_APP_CLIENT_ID,
+  DEMO_APP_LOGO,
+  seedPermissionApp,
+} from "../src/lib/demo-pod/seed-permission-app";
 
 vi.stubGlobal("HTMLFormElement", window.HTMLFormElement);
 
@@ -139,6 +152,214 @@ it("keeps inherited toggles behind the parent-name confirmation and restores key
   if (!confirm) throw new Error("Missing inherited confirmation");
   await click(confirm);
   expect(state.revoke).toHaveBeenCalledWith(inherited.lines[0]);
+});
+
+it.each([
+  false,
+  true,
+])("labels separate folder scopes and confirms changes to members in the list/detail renderer (expanded=%s)", async (alwaysExpanded) => {
+  const folder = "https://pod.test/drive/Work/";
+  const own: WalkedAccess = {
+    url: folder,
+    isContainer: true,
+    inherited: false,
+    system: "wac",
+    policy: {
+      denials: [],
+      grants: [
+        {
+          who: [[{ kind: "agent", webId: row.id }]],
+          except: [],
+          modes: new Set(["read"]),
+          appliesTo: "resource",
+          source: { url: `${folder}.acl`, node: "own" },
+        },
+        {
+          who: [[{ kind: "agent", webId: row.id }]],
+          except: [],
+          modes: new Set(["write"]),
+          appliesTo: "members",
+          source: { url: `${folder}.acl`, node: "members" },
+        },
+      ],
+    },
+  };
+  for (const shape of [
+    "split",
+    "merged",
+    "file",
+    "ancestor",
+    "purpose",
+    "expiry",
+    "conditions",
+  ] as const) {
+    const separateMetadata = ["purpose", "expiry", "conditions"].includes(shape);
+    const nodes: WalkedAccess[] =
+      shape === "ancestor"
+        ? [
+            {
+              ...own,
+              inherited: true,
+              inheritedFrom: "https://pod.test/drive/",
+              policy: {
+                denials: [],
+                grants: [own.policy.grants[1] as WalkedAccess["policy"]["grants"][number]],
+              },
+            },
+          ]
+        : [
+            {
+              ...own,
+              url: shape === "file" ? `${folder}report.pdf` : folder,
+              isContainer: shape !== "file",
+              policy: {
+                denials: [],
+                grants:
+                  shape === "split" || separateMetadata
+                    ? own.policy.grants.map((grant, index) =>
+                        separateMetadata && index === 1
+                          ? {
+                              ...grant,
+                              modes: new Set(["read"] as const),
+                              ...(shape === "conditions"
+                                ? {
+                                    who: grant.who.map((clause) => [
+                                      ...clause,
+                                      { kind: "origin" as const, origin: "https://app.test" },
+                                    ]),
+                                  }
+                                : {}),
+                            }
+                          : grant,
+                      )
+                    : [
+                        {
+                          ...(own.policy.grants[0] as WalkedAccess["policy"]["grants"][number]),
+                          appliesTo: shape === "file" ? "resource" : "both",
+                        },
+                      ],
+              },
+            },
+          ];
+    const holding = aggregateHoldings(nodes, {
+      webId: "https://pod.test/profile#me",
+      classify: () => undefined,
+      records: new Map<string, GrantRecord>([
+        [
+          "members",
+          shape === "purpose"
+            ? { purpose: { label: "Preview" } }
+            : shape === "expiry"
+              ? { expiresAt: "2030-01-01" }
+              : {},
+        ],
+      ]),
+    }).rows.find((holding) => holding.id === row.id);
+    if (!holding) throw new Error("Missing scoped holding");
+    const person = {
+      ...holding,
+      name: "Bob",
+    };
+    const state = binding();
+    const view = await mount(
+      h(PermissionAccessRow, {
+        row: person,
+        binding: state,
+        storage: "https://pod.test/",
+        view: "overview",
+        technical: false,
+        alwaysExpanded,
+      }),
+    );
+    if (!alwaysExpanded) {
+      const trigger = view.host.querySelector<HTMLButtonElement>(".su-permission-trigger");
+      if (!trigger) throw new Error("Missing scope header");
+      await click(trigger);
+    }
+    const lines = view.host.querySelector(".hm-permission-lines");
+    if (!lines) throw new Error("Missing scoped lines");
+    if (separateMetadata) {
+      expect(person.lines).toHaveLength(2);
+      expect(person.lines.map((line) => line.modes)).toEqual([["read"], ["read"]]);
+    }
+    expect(lines?.textContent?.includes("This folder")).toBe(shape === "split");
+    expect(lines?.textContent?.includes("Everything in it")).toBe(
+      shape === "split" || separateMetadata,
+    );
+    expect(lines?.textContent?.includes("Inherited from")).toBe(shape === "ancestor");
+    if (shape === "split") {
+      expect(
+        [...lines.querySelectorAll("[role=switch]")].map((toggle) =>
+          toggle.getAttribute("aria-label"),
+        ),
+      ).toEqual(["Files · This folder for Bob", "Files · Everything in it for Bob"]);
+      const toggles = [...lines.querySelectorAll<HTMLButtonElement>("[role=switch]")];
+      const folderToggle = toggles[0];
+      const membersToggle = toggles[1];
+      if (!folderToggle || !membersToggle) throw new Error("Missing split scope toggles");
+      await click(folderToggle);
+      expect(state.revoke).toHaveBeenCalledExactlyOnceWith(person.lines[0]);
+      expect(document.querySelector('[role="alertdialog"]')).toBeNull();
+      await click(membersToggle);
+      expect(state.revoke).toHaveBeenCalledTimes(1);
+      const dialog = document.querySelector('[role="alertdialog"]');
+      expect(dialog?.textContent).toContain("This changes access for everything in Work");
+      const confirm = [...(dialog?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent === "Remove access",
+      );
+      if (!confirm) throw new Error("Missing members confirmation");
+      await click(confirm);
+      expect(state.revoke).toHaveBeenLastCalledWith(person.lines[1]);
+    }
+    if (shape === "merged") {
+      const toggle = lines.querySelector<HTMLButtonElement>("[role=switch]");
+      if (!toggle) throw new Error("Missing merged toggle");
+      await click(toggle);
+      expect(state.revoke).not.toHaveBeenCalled();
+      const dialog = document.querySelector('[role="alertdialog"]');
+      expect(dialog?.textContent).toContain("This changes access for everything in Work");
+      const confirm = [...(dialog?.querySelectorAll("button") || [])].find(
+        (button) => button.textContent === "Remove access",
+      );
+      if (!confirm) throw new Error("Missing merged confirmation");
+      await click(confirm);
+      expect(state.revoke).toHaveBeenCalledExactlyOnceWith(person.lines[0]);
+      const merged = person.lines[0];
+      if (!merged) throw new Error("Missing merged line");
+      await view.render(
+        h(PermissionAccessRow, {
+          row: person,
+          binding: {
+            ...state,
+            removed: { [merged.key]: { row: person, line: merged, token: "merged" } },
+          },
+          storage: "https://pod.test/",
+          view: "advanced",
+          technical: false,
+          alwaysExpanded: true,
+        }),
+      );
+      const paths = [...view.host.querySelectorAll(".hm-permission-path")];
+      expect(paths.map((path) => path.querySelector("span")?.textContent)).toEqual([
+        "This folder",
+        "Everything in it",
+      ]);
+      expect(paths.map((path) => path.querySelector("code")?.textContent)).toEqual([
+        "drive/Work/",
+        "drive/Work/",
+      ]);
+      expect(view.host.querySelector('[role="status"]')?.textContent).toContain(
+        "Bob will lose access to your Files",
+      );
+      const undo = [...view.host.querySelectorAll("button")].find(
+        (button) => button.textContent === "Undo",
+      );
+      if (!undo) throw new Error("Missing merged Undo");
+      await click(undo);
+      expect(state.undo).toHaveBeenCalledWith("merged");
+    }
+    await view.unmount();
+  }
 });
 
 it.each([
@@ -387,4 +608,64 @@ it("shows Client ID Document links safely and loads a remote logo only after con
   expect(logo?.getAttribute("alt")).toBe("MaraCoach logo");
   const empty = await mount(h(ClientCard, { metadata: {} }));
   expect(empty.host.textContent).toContain("This app hasn't provided any details.");
+});
+
+it("reports a failed logo load inline and clears the message after a successful retry", async () => {
+  vi.stubEnv("NEXT_PUBLIC_DEV_FIXTURES", "1");
+  const pod = createDemoPod({ root: DEMO_ROOT });
+  const browser = await import("../src/lib/demo-pod/browser");
+  const getPod = vi.spyOn(browser, "getDemoPod").mockResolvedValue(pod);
+  try {
+    const view = await mount(h(ClientCard, { metadata: { logoUri: DEMO_APP_LOGO } }));
+    expect(view.host.querySelector('[role="status"]')).toBeNull();
+    const show = [...view.host.querySelectorAll("button")].find(
+      (button) => button.textContent === "Show logo",
+    );
+    if (!show) throw new Error("Missing Show logo");
+    await click(show);
+    expect(view.host.querySelector("img")).toBeNull();
+    expect(view.host.querySelector('[role="status"]')?.textContent).toBe("Couldn't load the logo");
+    const logoFile = seedPermissionApp(0).find((file) => file.path.endsWith("logo.svg"));
+    if (!logoFile || typeof logoFile.body !== "string") throw new Error("Missing SVG logo seed");
+    await pod.fetch(DEMO_APP_LOGO, {
+      method: "PUT",
+      headers: { "content-type": "image/svg+xml; charset=utf-8" },
+      body: logoFile.body,
+    });
+    await click(show);
+    expect(view.host.querySelector('[role="status"]')).toBeNull();
+    expect(view.host.querySelector("img")?.getAttribute("alt")).toBe("App logo");
+  } finally {
+    getPod.mockRestore();
+    vi.unstubAllEnvs();
+  }
+});
+
+it("shows the seeded app's resolved name and loads its demo logo only after Show logo", async () => {
+  vi.stubEnv("NEXT_PUBLIC_DEV_FIXTURES", "1");
+  const pod = createDemoPod({ root: DEMO_ROOT, seed: seedPermissionApp(0) });
+  const fetch = vi.spyOn(pod, "fetch");
+  const browser = await import("../src/lib/demo-pod/browser");
+  const getPod = vi.spyOn(browser, "getDemoPod").mockResolvedValue(pod);
+  try {
+    const { resolveClientName } = await import("../src/apps/home/lib/permissions/client");
+    const metadata = await resolveClientName(DEMO_APP_CLIENT_ID);
+    expect(metadata.name).toBe("NoteNest");
+    expect(metadata.logoUri).toBe(DEMO_APP_LOGO);
+    const view = await mount(h(ClientCard, { metadata }));
+    expect(view.host.textContent).toContain("NoteNest");
+    expect(view.host.querySelector("img")).toBeNull();
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([DEMO_APP_CLIENT_ID]);
+    const show = [...view.host.querySelectorAll("button")].find(
+      (button) => button.textContent === "Show logo",
+    );
+    if (!show) throw new Error("Missing demo Show logo");
+    await click(show);
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([DEMO_APP_CLIENT_ID, DEMO_APP_LOGO]);
+    expect(view.host.querySelector("img")?.getAttribute("alt")).toBe("NoteNest logo");
+    expect(view.host.querySelector("img")?.getAttribute("src")).toMatch(/^data:image\/svg\+xml/);
+  } finally {
+    getPod.mockRestore();
+    vi.unstubAllEnvs();
+  }
 });

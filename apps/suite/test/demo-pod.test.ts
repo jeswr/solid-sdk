@@ -45,7 +45,8 @@ describe("demo seed and binary fixtures", () => {
       .map((file) => file.path)
       .filter((path) => !path.startsWith("agent/"));
     // Groups & family adds two group records, two folder ACLs and the family sharing state.
-    expect(nonAgentPaths).toHaveLength(103);
+    // The named demo app and folder grants (#521) add four more.
+    expect(nonAgentPaths).toHaveLength(107);
     expect(nonAgentPaths).toEqual(
       expect.arrayContaining([
         "groups/.acl",
@@ -179,6 +180,7 @@ describe("demo pod HTTP contract", () => {
     ]);
     expect(objects(rootGraph, DEMO_ROOT, `${LDP}contains`)).toEqual([
       `${DEMO_ROOT}agent/`,
+      `${DEMO_ROOT}apps/`,
       `${DEMO_ROOT}bookmarks/`,
       `${DEMO_ROOT}calendar/`,
       `${DEMO_ROOT}contacts-pm/`,

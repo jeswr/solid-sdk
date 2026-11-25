@@ -1,5 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import {
+  classifyIpLiteral,
+  DEFAULT_HOSTNAME_DENYLIST,
+  isDeniedHostname,
+  isPublicAddress,
+  normalizeHostForClassification,
+} from "@jeswr/guarded-fetch";
 import { httpUrl } from "../model/rdf";
+import { demoClientResource } from "./demo-client";
 
 export interface ClientMetadata {
   name?: string;
@@ -14,8 +22,19 @@ const DAY = 24 * 60 * 60 * 1000;
 export const CLIENT_RETRY_MS = 5 * 60 * 1000;
 export const CLIENT_TIMEOUT_MS = 5000;
 function https(value: unknown): value is string {
-  return typeof value === "string" && httpUrl(value)?.protocol === "https:";
+  const url = typeof value === "string" ? httpUrl(value) : undefined;
+  if (url?.protocol !== "https:") return false;
+  const host = normalizeHostForClassification(url.hostname).replace(/\.$/, "");
+  // Browsers cannot block hostnames that resolve to private addresses without DNS access.
+  return (
+    !isDeniedHostname(host, [...DEFAULT_HOSTNAME_DENYLIST, "localhost", "local"]) &&
+    (classifyIpLiteral(host) === 0
+      ? host.includes(".") && host.split(".").every(Boolean)
+      : isPublicAddress(host, false))
+  );
 }
+const publicClientFetch: typeof globalThis.fetch = async (input, init) =>
+  (await demoClientResource(String(input), init)) ?? globalThis.fetch(input, init);
 /** Client ID Documents have a path; a bare origin (an acl:origin value) is never fetched. */
 export function isClientIdDocument(value: string): boolean {
   return https(value) && new URL(value).pathname !== "/";
@@ -23,7 +42,7 @@ export function isClientIdDocument(value: string): boolean {
 /** The optional fetch is an unauthenticated transport seam, NEVER a session fetch. */
 export async function resolveClientName(
   clientId: string,
-  publicFetch: typeof globalThis.fetch = globalThis.fetch,
+  publicFetch: typeof globalThis.fetch = publicClientFetch,
   now: number = Date.now(),
 ): Promise<ClientMetadata> {
   if (!isClientIdDocument(clientId)) return {};
