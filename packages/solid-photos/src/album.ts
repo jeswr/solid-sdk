@@ -3,7 +3,7 @@ import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, type Store } from "n3";
 import { entities } from "./generated/model.js";
 import { orderedStore } from "./order.js";
-import { documentUrl, httpIri, isoDate } from "./validation.js";
+import { documentUrl, httpIri, isoDate, optionalHttpIri } from "./validation.js";
 import { ImageGalleryDoc, ListItemDoc } from "./views.js";
 import { RDF_TYPE, SCHEMA } from "./vocab.js";
 
@@ -52,6 +52,7 @@ export function parseAlbum(url: string, dataset: DatasetCore): Album | undefined
   const core = entities.ImageGallery.parse(subject, dataset);
   if (!core) return undefined;
   const doc = new ImageGalleryDoc(subject, dataset, DataFactory);
+  const cover = optionalHttpIri(core.coverUrl);
   const elements = [...doc.elements].map((ref) => new ListItemDoc(ref, dataset, DataFactory));
   const members = elements.length
     ? elements
@@ -73,7 +74,7 @@ export function parseAlbum(url: string, dataset: DatasetCore): Album | undefined
     name: core.name ?? "",
     ...(core.description !== undefined ? { description: core.description } : {}),
     ...(core.dateCreated ? { dateCreated: core.dateCreated.toISOString() } : {}),
-    ...(core.coverUrl !== undefined ? { coverUrl: core.coverUrl } : {}),
+    ...(cover !== undefined ? { coverUrl: cover } : {}),
     members: normaliseMembers(members),
   };
 }

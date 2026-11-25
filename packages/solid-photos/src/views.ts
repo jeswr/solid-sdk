@@ -191,6 +191,65 @@ export class ListItemDoc extends BlankListItem {
   }
 }
 
+/**
+ * Tolerant read view for write-back. The generated readers drop language-tagged text,
+ * decimal/`xsd:date` values and ambiguous singletons; the hand-written model returned
+ * their lexical value (the first for a singleton). An edit rebuilds the whole document,
+ * so the Suite reads through this view to keep that metadata. Literals only: IRIs and
+ * blank nodes never become text or numbers.
+ */
+export class LenientPhoto extends TermWrapper {
+  private literals(predicate: string): string[] {
+    return [...SetFrom.subjectPredicate(this, predicate, TermAs.term, TermFrom.itself)]
+      .filter((term) => term.termType === "Literal")
+      .map((term) => term.value);
+  }
+  private terms(predicate: string): Term[] {
+    return [...SetFrom.subjectPredicate(this, predicate, TermAs.term, TermFrom.itself)];
+  }
+  text(predicate: string): string | undefined {
+    return this.literals(predicate)[0];
+  }
+  textSet(predicate: string): string[] {
+    return this.literals(predicate);
+  }
+  /** First object that is a numeric literal of any numeric datatype. */
+  number(predicate: string): number | undefined {
+    for (const term of this.terms(predicate)) {
+      const value = optionalNumber(term, this);
+      if (value !== undefined) return value;
+    }
+    return undefined;
+  }
+  /** First object that is a valid date or dateTime literal (`xsd:date` included). */
+  date(predicate: string): Date | undefined {
+    for (const term of this.terms(predicate)) {
+      try {
+        const value = LiteralAs.date(new TermWrapper(term, this.dataset, this.factory));
+        if (Number.isFinite(value.getTime())) return value;
+      } catch {
+        // Not a date literal: try the next value.
+      }
+    }
+    return undefined;
+  }
+  /** First named-node object, for IRI fields with more than one value. */
+  iri(predicate: string): string | undefined {
+    return this.terms(predicate).find((term) => term.termType === "NamedNode")?.value;
+  }
+}
+function optionalNumber(term: Term, anchor: TermWrapper): number | undefined {
+  try {
+    const value = LiteralAs.number(new TermWrapper(term, anchor.dataset, anchor.factory));
+    return Number.isNaN(value) ? undefined : value;
+  } catch {
+    return undefined;
+  }
+}
+export function lenientPhoto(subject: string, dataset: DatasetCore): LenientPhoto {
+  return new LenientPhoto(DataFactory.namedNode(subject), dataset, DataFactory);
+}
+
 class CapturePoint extends TermWrapper {
   // Numeric datatype unions in imported geo data are outside closed admission.
   get lat(): number | undefined {

@@ -10,8 +10,8 @@ import {
   httpIri,
   type Photo,
   parseAlbum,
-  parsePhoto,
   parsePhotos,
+  parseStoredPhoto,
   RestoreReceipt,
   serializePhotos,
 } from "@jeswr/solid-photos";
@@ -120,11 +120,11 @@ export function photoStorage(fetch: typeof globalThis.fetch, storage: string) {
     ensureContainers,
     async loadPhoto(url: string) {
       const { dataset, etag } = await read(url);
-      return { photo: parsePhoto(url, dataset), dataset, etag };
+      return { photo: parseStoredPhoto(url, dataset), dataset, etag };
     },
     async loadPhotos(url: string) {
       const { dataset, etag } = await read(url);
-      return { photos: parsePhotos(url, dataset), etag };
+      return { photos: parsePhotos(url, dataset, { tolerant: true }), etag };
     },
     async savePhoto(url: string, photo: Photo, precondition: Precondition) {
       const dataset = buildPhoto(url, photo);

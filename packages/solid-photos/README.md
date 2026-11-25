@@ -87,6 +87,20 @@ Additional differences outside that oracle are pinned in
   integers, `xsd:date` timestamps and rolled-over dates (`drops language-tagged…`,
   `requires the written numeric and date datatypes…`). Capture-point reads and
   blank ListItem reads retain their original datatype handling as documented above.
+- **Write-back keeps what the strict reads drop:** editing or trashing a photo rebuilds
+  the whole document, so the Suite reads through `parseStoredPhoto` /
+  `parsePhotos(url, dataset, { tolerant: true })`. When the strict generated reader
+  drops a field, these fall back to the first literal's lexical value (language-tagged
+  text, decimal numbers, `xsd:date`, the first value of a repeated singleton, every
+  literal keyword), as the hand-written model did; IRIs and blank nodes never become
+  text or numbers. `parsePhoto` stays strict. Still lost on rebuild, as before the
+  port: the second and later values of a repeated singleton, language tags (written
+  back as plain strings), numbers written back as `xsd:integer`/`xsd:double`, `xsd:date`
+  written back as `xsd:dateTime`, and predicates the model does not know
+  (`test/tolerant-read.test.ts`).
+- **http(s)-only IRIs on read:** `contentUrl`, `thumbnailUrl` and an album's cover read
+  as absent unless they are http(s) IRIs without credentials, so `javascript:`/`data:`
+  values from a pod never reach a UI (`test/tolerant-read.test.ts`).
 - **Wrong RDF term kinds:** optional IRI fields and invalid members of the legacy
   IRI set drop rather than throwing (`drops wrong-term IRI fields…`).
 - **Subclass recognition:** the generated parsers recognize Photograph, ImageObject,

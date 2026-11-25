@@ -11,6 +11,16 @@ export function httpIri(value: string): string {
   return safe;
 }
 
+/** Read-side guard: an untrusted IRI is returned only when it is a safe http(s) IRI. */
+export function optionalHttpIri(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  try {
+    return httpIri(value);
+  } catch {
+    return undefined;
+  }
+}
+
 export function documentUrl(value: string): string {
   const safe = httpIri(value);
   if (new URL(safe).hash || new URL(safe).search || safe.endsWith("/")) {
