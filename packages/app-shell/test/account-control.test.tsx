@@ -53,4 +53,30 @@ describe("AccountControl", () => {
     fireEvent.click(screen.getByRole("button", { name: "Leave account" }));
     expect(onSignOut).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps the app's own signed-in identity visible beside the extension sign-out", () => {
+    document.documentElement.setAttribute("data-solid-extension", "1");
+    const onSignOut = vi.fn();
+    const { rerender } = render(
+      <AccountControl
+        webId="https://alice.example/#me"
+        displayName="Alice Example"
+        onSignOut={onSignOut}
+      />,
+    );
+    const label = screen.getByText("Alice Example");
+    expect(label).toHaveAttribute("title", "https://alice.example/#me");
+    expect(label).toHaveTextContent("Signed in to this app as Alice Example");
+    rerender(<AccountControl webId="https://alice.example/#me" onSignOut={onSignOut} />);
+    expect(screen.getByText("https://alice.example/#me")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    // The click event is not leaked into the app's sign-out handler.
+    expect(onSignOut).toHaveBeenCalledWith();
+  });
+
+  it("shows no identity label beside the extension when the app has none", () => {
+    document.documentElement.setAttribute("data-solid-extension", "1");
+    render(<AccountControl onSignOut={vi.fn()} />);
+    expect(document.querySelector("[data-account-identity]")).toBeNull();
+  });
 });

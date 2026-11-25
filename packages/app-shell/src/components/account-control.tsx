@@ -9,14 +9,31 @@ export interface AccountControlProps
   signOutLabel?: string;
 }
 
-/** Keep app-owned sign-out available when the extension supplies the profile menu. */
+/**
+ * Keep app-owned sign-out available when the extension supplies the profile menu.
+ *
+ * The extension being present says nothing about WHICH account it shows, and the app keeps its
+ * own session, so the app's signed-in identity stays visible beside the sign-out button.
+ */
 export function AccountControl({ signOutLabel = "Sign out", ...props }: AccountControlProps) {
   const extensionPresent = useSolidExtensionPresent();
-  return extensionPresent ? (
-    <Button variant="ghost" onClick={props.onSignOut}>
-      {signOutLabel}
-    </Button>
-  ) : (
-    <AccountMenu {...props} />
+  if (!extensionPresent) return <AccountMenu {...props} />;
+  const identity = props.displayName || props.webId;
+  return (
+    <span className="inline-flex min-w-0 items-center gap-2">
+      {identity ? (
+        <span
+          className="max-w-40 truncate text-xs text-as-muted-foreground"
+          title={props.webId ?? undefined}
+          data-account-identity=""
+        >
+          <span className="sr-only">Signed in to this app as </span>
+          {identity}
+        </span>
+      ) : null}
+      <Button variant="ghost" onClick={() => props.onSignOut()}>
+        {signOutLabel}
+      </Button>
+    </span>
   );
 }

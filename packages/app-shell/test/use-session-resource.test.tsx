@@ -26,6 +26,25 @@ describe("useSessionResource", () => {
     expect(result.current).toBeNull();
   });
 
+  it("never returns one session's value beside another session, even for one render", async () => {
+    let session = { id: "a" };
+    const seen: Array<[string, string | null]> = [];
+    const { result, rerender } = renderHook(() => {
+      const value = useSessionResource(
+        session,
+        async (s) => `resolved-${s.id}`,
+        () => "fb",
+      );
+      seen.push([session.id, value]);
+      return value;
+    });
+    await waitFor(() => expect(result.current).toBe("resolved-a"));
+    session = { id: "b" };
+    rerender();
+    await waitFor(() => expect(result.current).toBe("resolved-b"));
+    expect(seen).not.toContainEqual(["b", "resolved-a"]);
+  });
+
   it("falls back when resolution rejects", async () => {
     const session = { id: "a" };
     const { result } = renderHook(() =>
