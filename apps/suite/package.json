@@ -57,6 +57,7 @@
     "@jeswr/solid-offline": "workspace:*",
     "@jeswr/solid-places": "workspace:*",
     "@jeswr/solid-recipe": "workspace:*",
+    "@jeswr/solid-health-diary": "workspace:*",
     "@jeswr/solid-sheets": "workspace:*",
     "@jeswr/solid-slides": "workspace:*",
     "@jeswr/solid-money": "workspace:*",

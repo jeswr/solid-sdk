@@ -1,4 +1,5 @@
 /* AUTHORED-BY Codex GPT-6 */
+/* AUTHORED-BY Codex GPT-6.1-Sol */
 .hlt-page {
   font-variant-numeric: tabular-nums;
   padding: var(--space-6);
@@ -684,4 +685,58 @@
   color: var(--foreground-muted);
   cursor: wait;
   text-decoration: none;
+}
+
+.hlt-diary-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.hlt-diary-timeline {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+.hlt-diary-entry {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  background: var(--surface);
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  scroll-margin-block: var(--space-6);
+}
+.hlt-diary-entry-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.hlt-diary-entry-heading time {
+  margin-inline-start: auto;
+}
+.hlt-diary-entry h3,
+.hlt-diary-entry p {
+  margin: 0;
+}
+.hlt-diary-note {
+  white-space: pre-wrap;
+}
+.hlt-diary-window {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-4);
+}
+.hlt-diary-window > div {
+  display: grid;
+  gap: var(--space-2);
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.hlt-pattern-table {
+  min-width: 36rem;
 }
