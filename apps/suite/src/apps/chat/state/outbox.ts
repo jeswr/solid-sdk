@@ -237,32 +237,55 @@ export class ChatOutbox {
       initialStatus: item.status === "failed" ? "failed" : "waiting",
     });
   }
+  /** The valid legacy entries of one room's localStorage envelope; corrupt ones are skipped. */
+  private legacyEntries(local: ChatLocalState, room: string) {
+    const stored = local.read("outbox", room);
+    const entries: { value: { localId: string; status: string }; item: Outgoing }[] = [];
+    for (const value of Array.isArray(stored) ? stored : []) {
+      try {
+        const item = this.decode(
+          new TextEncoder().encode(
+            JSON.stringify({
+              ...value,
+              webId: this.client.webId,
+              storageUrl: this.client.storageUrl,
+              room,
+            }),
+          ),
+          documentOf(this.outgoing(room, "", String(value.localId), new Date(value.at))),
+        );
+        if (["sending", "failed"].includes(value.status)) {
+          item.status = value.status;
+          entries.push({ value, item });
+        }
+      } catch {
+        // Corrupt: dropped, and must not block the rest or hydration.
+      }
+    }
+    return entries;
+  }
+  /** Show a legacy entry that only lives in memory; its localStorage copy goes once it is sent. */
+  private hold(item: Outgoing) {
+    this.legacy.add(item.id);
+    this.local.add(item.id);
+    if (!this.entries.some((entry) => entry.id === item.id)) this.update([...this.entries, item]);
+  }
+  /**
+   * Without a durable queue (no IndexedDB), legacy localStorage entries are still shown and sent
+   * from memory; each leaves localStorage only once delivered or discarded.
+   */
+  private holdLegacy() {
+    const local = new ChatLocalState(this.client.webId);
+    for (const room of local.pendingRooms())
+      for (const { item } of this.legacyEntries(local, room)) this.hold(item);
+  }
   /** One-time import only: localStorage no longer participates in live queue state. */
   private async migrate(connection: ChatOutboxConnection) {
     const local = new ChatLocalState(this.client.webId);
     const run = async () => {
       for (const room of local.pendingRooms()) {
-        const stored = local.read("outbox", room);
         const kept: unknown[] = [];
-        for (const value of Array.isArray(stored) ? stored : []) {
-          let item: Outgoing;
-          try {
-            item = this.decode(
-              new TextEncoder().encode(
-                JSON.stringify({
-                  ...value,
-                  webId: this.client.webId,
-                  storageUrl: this.client.storageUrl,
-                  room,
-                }),
-              ),
-              messageSubject(room, new Date(value.at), value.localId).split("#")[0]!,
-            );
-          } catch {
-            continue; // Corrupt: dropped, and must not block the rest or hydration.
-          }
-          if (!["sending", "failed"].includes(value.status)) continue;
-          item.status = value.status;
+        for (const { value, item } of this.legacyEntries(local, room)) {
           try {
             if (!this.queueable(item)) throw new Error("Not replayable from the queue");
             await this.enqueue(connection, item);
@@ -271,9 +294,7 @@ export class ChatOutbox {
             // A room outside the storage, or a storage failure (quota, a write error): keep
             // the legacy copy and show the entry so it can still be sent.
             kept.push(value);
-            this.legacy.add(item.id);
-            this.local.add(item.id);
-            this.update([...this.entries, item]);
+            this.hold(item);
           }
         }
         // Processed, including invalid envelopes and non-array values: never re-read.
@@ -380,6 +401,7 @@ export class ChatOutbox {
     } catch {
       // No IndexedDB (blocked site data, some embedded webviews): deliver directly.
       this.connection = undefined;
+      this.holdLegacy();
       this.ready = Promise.resolve();
       return () => {};
     }
@@ -443,6 +465,7 @@ export class ChatOutbox {
         // IndexedDB exists but cannot open: keep Chat usable by sending directly.
         if (this.connection !== connection) return;
         disconnect();
+        this.holdLegacy();
         for (const entry of this.entries) this.local.add(entry.id);
         this.update(this.entries.map((entry) => ({ ...entry, queueId: undefined })));
       },

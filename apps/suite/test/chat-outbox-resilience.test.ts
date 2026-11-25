@@ -689,3 +689,78 @@ describe("replay that keeps failing after IndexedDB opened (L5)", () => {
     ]);
   });
 });
+
+describe("legacy localStorage entries without a working IndexedDB (F3)", () => {
+  const entry = (localId: string, status: string) => ({
+    localId,
+    at: "2026-06-01T12:00:00Z",
+    draft: `draft ${localId}`,
+    status,
+    owner: "closed-tab",
+  });
+  it.each([
+    [
+      "no IndexedDB factory",
+      (): Outbox => {
+        vi.stubGlobal("indexedDB", undefined);
+        return createOutbox({ webId });
+      },
+    ],
+    ["an open request that errors", (): Outbox => createOutbox({ webId, idb: brokenIndexedDb() })],
+    [
+      "a throwing factory",
+      (): Outbox => {
+        throw new Error("blocked");
+      },
+    ],
+  ])("shows, sends and removes them once delivered with %s", async (_, create) => {
+    const data = stubLocalStorage();
+    const local = new ChatLocalState(webId);
+    local.write("outbox", room, [entry("a", "sending"), entry("b", "failed")]);
+    new ChatLocalState("other").write("outbox", room, [entry("c", "sending")]);
+    const send = sender();
+    const { queue } = box(send, () => true, webId, {
+      open: () => ({
+        outbox: create(),
+        storage: async () => createMemoryStorage({ root: storageUrl, protocol: "solid" }),
+      }),
+    });
+    await queue.ready;
+    expect(queue.snapshot().map((row) => [row.localId, row.status])).toEqual([
+      ["a", "sending"],
+      ["b", "failed"],
+    ]);
+    // Still in localStorage until delivered: a crash now must not lose them.
+    expect(local.read("outbox", room)).toHaveLength(2);
+    await queue.flush();
+    expect(send.mock.calls.map(([, text]) => text)).toEqual(["draft a"]);
+    expect(queue.snapshot().map((row) => row.status)).toEqual([undefined, "failed"]);
+    expect((local.read("outbox", room) as { localId: string }[]).map((e) => e.localId)).toEqual([
+      "b",
+    ]);
+    await queue.retry(queue.snapshot()[1]?.id as string);
+    expect(send.mock.calls.map(([, text]) => text)).toEqual(["draft a", "draft b"]);
+    expect(queue.snapshot().map((row) => row.status)).toEqual([undefined, undefined]);
+    expect(local.pendingRooms()).toEqual([]);
+    expect(data.size).toBe(1); // Another WebID's legacy queue is untouched.
+  });
+  it("keeps the legacy copy of a discarded entry out of localStorage and imports nothing twice", async () => {
+    stubLocalStorage();
+    const local = new ChatLocalState(webId);
+    local.write("outbox", room, [entry("a", "failed")]);
+    const send = sender();
+    const open = () => {
+      throw new Error("blocked");
+    };
+    const { queue, close } = box(send, () => true, webId, { open });
+    expect(queue.snapshot()).toHaveLength(1);
+    // A reconnect (Strict Mode replays effects) must not duplicate the row.
+    close();
+    queue.connect();
+    expect(queue.snapshot()).toHaveLength(1);
+    await queue.discard(queue.snapshot()[0]?.id as string);
+    expect(queue.snapshot()).toEqual([]);
+    expect(local.pendingRooms()).toEqual([]);
+    expect(send).not.toHaveBeenCalled();
+  });
+});
