@@ -14,6 +14,7 @@ import {
 } from "../src/apps/calendar/lib/model";
 import {
   type CalendarAccount,
+  CalendarPrivacyError,
   calendarDocument,
   calendarSlug,
   createCalendar,
@@ -51,7 +52,12 @@ const event: CalendarEvent = {
 };
 async function setup() {
   const pod = createDemoPod({ root, seed: await buildDemoSeed(now), now: () => now });
-  const account: CalendarAccount = { webId: DEMO_WEBID, storageUrl: root, fetch: pod.fetch };
+  const account: CalendarAccount = {
+    webId: DEMO_WEBID,
+    storageUrl: root,
+    fetch: pod.fetch,
+    mode: "demo",
+  };
   return { pod, account, io: calendarIO(pod.fetch, root) };
 }
 function altered(
@@ -317,6 +323,119 @@ describe("Calendar repository discovery and demo", () => {
     expect(await createCalendar(account, "Plain", PALETTE[0] as string)).toBe(
       `${root}calendar/plain.ttl`,
     );
+  });
+});
+describe("Calendar creation privacy", () => {
+  function recording(account: CalendarAccount) {
+    const writes: string[] = [];
+    return {
+      writes,
+      account: altered(account, (url, init) => {
+        if (init?.method && !["GET", "HEAD", "OPTIONS"].includes(init.method))
+          writes.push(`${init.method} ${url}`);
+        return undefined;
+      }),
+    };
+  }
+  it("writes once the destination is proven owner-only, verifying before and confirming after", async () => {
+    const { account, io } = await setup();
+    const order: string[] = [];
+    const recorded = recording(account);
+    const privateDestination = {
+      verify: vi.fn(async (url: string) => {
+        order.push(`verify ${url} after ${recorded.writes.length} writes`);
+        return true;
+      }),
+      confirm: vi.fn(async (url: string, version: { etag?: string }) => {
+        order.push(`confirm ${url} after ${recorded.writes.length} writes`);
+        return Boolean(version.etag);
+      }),
+    };
+    const url = await createCalendar(
+      { ...recorded.account, privateDestination },
+      "Owner",
+      "#123456",
+    );
+    expect(url).toBe(`${root}calendar/owner.ttl`);
+    expect((await io.loadCalendar(url))?.data.title).toBe("Owner");
+    expect(order[0]).toBe(`verify ${root}calendar/owner.ttl after 0 writes`);
+    expect(order[1]).toBe(`confirm ${root}calendar/owner.ttl after 1 writes`);
+    expect(privateDestination.verify).toHaveBeenCalledWith(`${root}calendar/owner/events.ttl`);
+  });
+  it("refuses a destination with a looser inherited ACL before any write", async () => {
+    const { account, io } = await setup();
+    const recorded = recording(account);
+    const privateDestination = { verify: vi.fn(async () => false), confirm: vi.fn() };
+    const refused = createCalendar({ ...recorded.account, privateDestination }, "Loose", "#123456");
+    await expect(refused).rejects.toBeInstanceOf(CalendarPrivacyError);
+    await expect(refused).rejects.not.toThrow(/https?:|acl|public/i);
+    expect(recorded.writes).toEqual([]);
+    expect(privateDestination.confirm).not.toHaveBeenCalled();
+    await expect(io.loadCalendar(`${root}calendar/loose.ttl`)).rejects.toThrow();
+  });
+  it("fails closed when the policy cannot be read, and removes a document that fails confirmation", async () => {
+    const { account, io } = await setup();
+    const unreadable = recording(account);
+    await expect(
+      createCalendar(
+        {
+          ...unreadable.account,
+          privateDestination: {
+            verify: async () => {
+              throw new Error("https://pod.example/secret.acl is unreadable");
+            },
+            confirm: vi.fn(),
+          },
+        },
+        "Unreadable",
+        "#123456",
+      ),
+    ).rejects.toThrow(/could not confirm/);
+    expect(unreadable.writes).toEqual([]);
+    const changed = recording(account);
+    await expect(
+      createCalendar(
+        {
+          ...changed.account,
+          privateDestination: { verify: async () => true, confirm: async () => false },
+        },
+        "Changed",
+        "#123456",
+      ),
+    ).rejects.toBeInstanceOf(CalendarPrivacyError);
+    expect(changed.writes).toEqual([
+      `PUT ${root}calendar/changed.ttl`,
+      `DELETE ${root}calendar/changed.ttl`,
+    ]);
+    await expect(io.loadCalendar(`${root}calendar/changed.ttl`)).rejects.toThrow();
+  });
+  it("refuses to create the events folder when it would be readable by others", async () => {
+    const { account } = await setup();
+    const verify = vi.fn(async (url: string) => !url.endsWith("/events.ttl"));
+    await expect(
+      createCalendar(
+        { ...account, privateDestination: { verify, confirm: async () => true } },
+        "Shared Folder",
+        "#123456",
+      ),
+    ).rejects.toBeInstanceOf(CalendarPrivacyError);
+    expect((await discoverCalendars({ ...account })).calendars.map((c) => c.title)).not.toContain(
+      "Shared Folder",
+    );
+  });
+  it("fails closed outside the demo pod when storage cannot prove owner-only access", async () => {
+    const { account } = await setup();
+    // Every access document is unreadable, so the real owner-only check cannot prove anything.
+    const recorded = recording({
+      ...altered(account, (url) =>
+        /\.acl$/.test(url) ? new Response(null, { status: 403 }) : undefined,
+      ),
+      mode: "solid",
+    });
+    await expect(createCalendar(recorded.account, "Real", "#123456")).rejects.toBeInstanceOf(
+      CalendarPrivacyError,
+    );
+    expect(recorded.writes).toEqual([]);
   });
 });
 describe("Calendar optimistic event writes", () => {
