@@ -106,9 +106,7 @@ export async function seedFriendsPod(now: number): Promise<DemoSeedFile[]> {
   files.push(
     file(
       "calendar/work.ttl",
-      await serializeDataset(
-        buildCalendar(`${root}calendar/work.ttl`, { title: "Team calendar", color: "#4f46e5" }),
-      ),
+      await serializeDataset(buildCalendar(`${root}calendar/work.ttl`, { title: "Team calendar" })),
     ),
   );
   return files;
