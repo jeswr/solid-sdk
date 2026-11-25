@@ -212,13 +212,16 @@ export function mergeNanopublications(a: Nanopublications, b: Nanopublications):
     // An unreadable update in one input may name a nanopub only the other holds.
     const skippedTargets = new Set([...(a.skippedTargets ?? []), ...(b.skippedTargets ?? [])]);
     const affected = new Set([...(a.affected ?? []), ...(b.affected ?? [])]);
+    const overflow = a.skippedTargetsOverflow || b.skippedTargetsOverflow;
     for (const np of nanopubs.values())
-      if (skippedTargets.has(np.id) || skippedTargets.has(np.assertionId)) affected.add(np.id);
+      if (overflow || skippedTargets.has(np.id) || skippedTargets.has(np.assertionId))
+        affected.add(np.id);
     return {
       dataset: compactStore(quads) as ReferenceStore,
       nanopubs: [...nanopubs.values()].sort((x, y) => (x.id < y.id ? -1 : 1)),
       affected: [...affected],
       skippedTargets: [...skippedTargets].sort(),
+      ...(overflow ? { skippedTargetsOverflow: true as const } : {}),
     };
   } catch {
     refuse();

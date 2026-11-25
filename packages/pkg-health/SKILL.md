@@ -21,9 +21,8 @@ Correspondence-batch graphs are validated/retained; envelopes sharing a skipped
 head are also skipped transitively (`SharedGraphWithSkipped`).
 Reads are bounded and fail closed with `HealthGraphError("too-large")` (no values):
 `importHealthExport` and `projectHealthFacts` accept at most
-`MAX_IMPORT_NANOPUBLICATIONS` (20,000) nanopubs and `MAX_ENVELOPES_PER_IMPORTED_ASSERTION`
-(64) envelopes per assertion graph; a projection builds at most `MAX_PROJECTED_FACTS`
-(20,000) facts. Keep `skippedTargets` with `affected` so merged exports stay correct.
+`MAX_IMPORT_NANOPUBLICATIONS` (20,000) nanopubs, and a projection builds at most
+`MAX_PROJECTED_FACTS` (20,000) facts. Envelopes sharing an assertion are never refused. Keep `skippedTargets` with `affected` so merged exports stay correct.
 Apply the owner's purpose policy before handing data to a UI. The projector keeps
 all belief levels and history; consumers choose filters. Current validity is required
 in addition to definite belief before acting on a fact.

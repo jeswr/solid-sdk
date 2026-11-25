@@ -452,17 +452,30 @@ Tolerant results also carry `skippedTargets: string[]`: every safe IRI that a sk
 envelope's updates pointed at, matched or not (unsafe IRIs cannot name a retained
 nanopub and are dropped). `mergeNanopublications` unions both inputs' lists and marks
 every merged nanopub they name, so a retraction skipped in one export still lowers the
-matching fact held by another. Keep `skippedTargets` beside `affected`.
+matching fact held by another. Keep `skippedTargets` beside `affected`: like `affected`
+it is derived context, not serialized into RDF, so it is lost by serializing and parsing
+again or by copying fields by name. The list holds at most `MAX_SKIPPED_TARGETS`
+(10,000) IRIs; above that it is truncated, `skippedTargetsOverflow: true` is set and
+every retained nanopub counts as affected, in the parse and in any merge. It holds IRIs
+from skipped graphs, so treat it as untrusted data.
 
 Reports never echo a rejected IRI: a skipped head whose own IRI fails validation is
-listed as `urn:pkg:skipped:<n>`, where `n` is its position among the sorted head IRIs.
+listed as `urn:pkg:skipped:<n>`, using the next index that no head in the file already
+uses, so reported IDs stay unique.
 Error messages for unknown statuses and claim references are fixed text.
 
 Work bounds. Graph snapshots are cached within one read or classification only, so
 many heads sharing a provenance or pubinfo graph cost one copy of it, and nothing is
-cached across reads. `classifyNanopublications` throws fixed errors above
-`MAX_CLASSIFIED_NANOPUBLICATIONS` (20,000 nanopubs) and `MAX_ENVELOPES_PER_ASSERTION`
-(64 envelopes sharing one assertion graph; replacement sets grow with its square).
+cached across reads. Assertion-level fields are read once per (provenance graph,
+assertion), emptiness is tested on the cached snapshot, and classification stores
+replacements per assertion, so work is linear in envelopes plus links however many
+envelopes share an assertion (assertion IDs are content hashes, so a restated fact
+always shares one). `replacedBy` lists at most `MAX_REPLACED_BY` (64) replacing IDs,
+the smallest in code-unit order; belief never depends on the truncated list. The only
+size cap is `MAX_CLASSIFIED_NANOPUBLICATIONS` (20,000 heads): the parsers refuse more
+before reading any graph and `classifyNanopublications` refuses more, both with the
+fixed error `Too many nanopublications`. `mergeNanopublications` has no cap, so a merge
+of two parses can exceed it and then be refused by classification and projection.
 `ReferenceStore.addQuad` keeps language-tag de-duplication in a constant-time index.
 
 `createNanopubProvenanceReader(value)` returns a provenance lookup with a per-invocation

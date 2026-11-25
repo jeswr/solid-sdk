@@ -5,7 +5,6 @@ export { type BodySystem, classifyBodySystem } from "./body-system.js";
 export { healthTimeline, observationSeries } from "./charts.js";
 export { importHealthExport } from "./import.js";
 export {
-  MAX_ENVELOPES_PER_IMPORTED_ASSERTION,
   MAX_IMPORT_NANOPUBLICATIONS,
   MAX_PROJECTED_FACTS,
 } from "./limits.js";
