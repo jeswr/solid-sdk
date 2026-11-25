@@ -18,6 +18,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { StartSomethingNew } from "@/components/templates/start-something-new";
+import { domainItemKey } from "../lib/model/discovery";
 import { DOMAINS, UNCATEGORISED, visibleDomains } from "../lib/model/domains";
 import {
   connectedSources,
@@ -256,7 +257,7 @@ export function HomePage({ domain }: { domain: string }) {
                     <ul className="hm-grid" role="list" aria-label={`${section.label} items`}>
                       {section.items.map((item) => (
                         <HomeCard
-                          key={`${item.url}|${item.dataType?.id}`}
+                          key={domainItemKey(item)}
                           item={item}
                           view={
                             data.views.get(item) as NonNullable<ReturnType<typeof data.views.get>>

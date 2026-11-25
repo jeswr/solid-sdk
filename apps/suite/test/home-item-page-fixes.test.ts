@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { beforeEach, expect, it, vi } from "vitest";
 import type { HomeSession } from "../src/apps/home/state/use-domain-items";
@@ -16,6 +17,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("../src/apps/home/components/home-app", () => ({ useHomeSession: () => current.session }));
 
 import { ItemPage } from "../src/apps/home/components/item/item-page";
+import { itemHref } from "../src/apps/home/state/presentation";
 import { domainStore } from "../src/apps/home/state/use-domain-items";
 
 const root = "https://pod.example/alice/";
@@ -206,6 +208,54 @@ it("finding 10: offline, Edit stays disabled and the saved copy says when it was
     // There is no outbox, so an offline edit could not be saved: Edit is never enabled.
     expect(button(view.host, "Edit")?.disabled ?? true).toBe(true);
     await view.unmount();
+  } finally {
+    connection.mockRestore();
+  }
+});
+
+it("offline navigation opens the primary imported record even when its sibling sorts first", async () => {
+  const historyUrl = `${root}integrations/netflix/media/viewing-history.ttl`;
+  const pod = createDemoPod({
+    root,
+    seed: [
+      {
+        path: "integrations/netflix/media/viewing-history.ttl",
+        contentType: "text/turtle",
+        body: `@prefix s: <https://schema.org/>. @prefix prov: <http://www.w3.org/ns/prov#>.
+        <#garden> a s:WatchAction; s:name "The Garden"; prov:wasGeneratedBy <#import>.
+        <#weekend> a s:WatchAction; s:name "A Quiet Weekend"; prov:wasGeneratedBy <#import>.`,
+      },
+    ],
+  });
+  const fetch = vi.fn(pod.fetch);
+  const session: HomeSession = {
+    mode: "demo",
+    fetch,
+    storageUrl: root,
+    webId: `${root}profile/card#me`,
+    displayName: "Alice",
+    subscribe: pod.subscribe,
+    reset: async () => {},
+  };
+  current.session = session;
+  await domainStore(session).refresh();
+  const items = domainStore(session).getSnapshot().items;
+  expect(items.map((item) => item.title)).toEqual(["A Quiet Weekend", "The Garden"]);
+  const garden = items.find((item) => item.title === "The Garden");
+  if (!garden) throw new Error("Missing Garden card");
+  expect(itemHref(garden)).not.toContain("?s=");
+  const connection = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+  fetch.mockClear();
+  try {
+    const view = await mount(h(ItemPage, { domain: "media", itemRef: encodeRef(historyUrl) }));
+    try {
+      await settle(view.host);
+      expect(view.host.querySelector("h1")?.textContent).toBe("The Garden");
+      expect(view.host.textContent).toContain("Showing saved copies");
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      await view.unmount();
+    }
   } finally {
     connection.mockRestore();
   }
