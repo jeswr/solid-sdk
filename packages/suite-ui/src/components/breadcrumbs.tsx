@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import { ChevronRight, Ellipsis } from "lucide-react";
@@ -103,7 +104,7 @@ export function Breadcrumbs({ items, label = "Breadcrumb" }: BreadcrumbsProps) {
           <li className="suite-crumb" key={item.id}>
             {index > 0 && (
               <ChevronRight
-                className="suite-crumb-separator"
+                className="suite-crumb-separator suite-rtl-mirror"
                 size={16}
                 strokeWidth={1.75}
                 aria-hidden="true"
@@ -129,7 +130,7 @@ export function Breadcrumbs({ items, label = "Breadcrumb" }: BreadcrumbsProps) {
                   </MenuContent>
                 </DropdownMenu.Root>
                 <ChevronRight
-                  className="suite-crumb-separator"
+                  className="suite-crumb-separator suite-rtl-mirror"
                   size={16}
                   strokeWidth={1.75}
                   aria-hidden="true"
@@ -143,7 +144,9 @@ export function Breadcrumbs({ items, label = "Breadcrumb" }: BreadcrumbsProps) {
       <ol ref={measure} className="suite-measure suite-crumb-list" aria-hidden="true" inert>
         {items.map((item, index) => (
           <li className="suite-crumb" key={item.id}>
-            {index > 0 && <ChevronRight size={16} strokeWidth={1.75} />}
+            {index > 0 && (
+              <ChevronRight size={16} strokeWidth={1.75} className="suite-rtl-mirror" />
+            )}
             <span className="suite-crumb-link">{item.label}</span>
           </li>
         ))}

@@ -5,6 +5,7 @@
  * name (02-suite-shell §8.2). It decides availability, picks the backend and
  * runs the three steps, handing the last one to the shell's session layer.
  */
+import { en } from "@jeswr/suite-i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSuiteEnvironment } from "../environment";
 import {
@@ -26,9 +27,10 @@ import {
   type UsernameAvailability,
 } from "./types";
 
-/** Shown on /signin when /signup is visited without registration. */
-export const SIGNUP_UNAVAILABLE_NOTE =
-  "Account creation isn't offered here yet — sign in with an existing account.";
+/** Shown on /signin when /signup is visited without registration (a catalog key). */
+export const SIGNUP_UNAVAILABLE_KEY = "signin.unavailable" as const;
+/** The English text, for the registration flow's errors, which are not translated yet. */
+export const SIGNUP_UNAVAILABLE_NOTE: string = en.signin.unavailable;
 export const SIGNUP_UNAVAILABLE_PARAM = "signup";
 
 const NO_FIXTURE: RegistrationFixture = { available: false, failOnce: [] };

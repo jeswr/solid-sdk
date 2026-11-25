@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { useT } from "@jeswr/suite-i18n/react";
 import { APP_ICONS, Avatar, AvatarFallback, AvatarImage, Badge, Button } from "@jeswr/suite-ui";
 import { useState } from "react";
 import { accountHue } from "../lib/account-hue";
@@ -38,39 +39,35 @@ export function AccountAvatar({
 }
 
 /** A clipboard failure never claims success, including on browsers without the API. */
-export function CopyButton({
-  value,
-  label = "Copy Account ID",
-}: {
-  value: string;
-  label?: string;
-}) {
-  const [status, setStatus] = useState("");
+export function CopyButton({ value, label }: { value: string; label?: string }) {
+  const t = useT();
+  const [status, setStatus] = useState<"" | "copied" | "copyFailed">("");
   return (
     <span className="account-copy">
       <Button
         size="sm"
         variant="outline"
-        aria-label={label}
+        aria-label={label ?? t("account.copyId")}
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(value);
-            setStatus("Copied");
+            setStatus("copied");
           } catch {
-            setStatus("Couldn't copy. Select and copy the text.");
+            setStatus("copyFailed");
           }
         }}
       >
-        Copy
+        {t("account.copy")}
       </Button>
       <span role="status" className="account-copy-status">
-        {status}
+        {status ? t(`account.${status}`) : ""}
       </span>
     </span>
   );
 }
 
 export function AccountCard({ account }: { account: SuiteAccount }) {
+  const t = useT();
   const id = account.webId;
   const shortened = id.length > 44 ? `${id.slice(0, 24)}…${id.slice(-17)}` : id;
   return (
@@ -80,15 +77,17 @@ export function AccountCard({ account }: { account: SuiteAccount }) {
         <strong>{account.name}</strong>
       </div>
       <div className="account-id">
-        <span>Account ID</span>
+        <span>{t("account.id")}</span>
         <span title={id}>
           <span aria-hidden="true">{shortened}</span>
           <span className="suite-sr-only">{id}</span>
         </span>
         <CopyButton value={id} />
       </div>
-      <Badge variant="secondary">stored at {new URL(account.storageUrl).host}</Badge>
-      {account.kind === "extension" && <p>Signed in through the Solid browser extension</p>}
+      <Badge variant="secondary">
+        {t("account.storedAt", { host: new URL(account.storageUrl).host })}
+      </Badge>
+      {account.kind === "extension" && <p>{t("account.extension")}</p>}
     </div>
   );
 }
