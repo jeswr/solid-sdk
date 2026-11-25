@@ -172,6 +172,8 @@ export function createUndoStack({
   };
   return {
     push(entry) {
+      if (entry.expiresAt !== undefined && !Number.isFinite(entry.expiresAt))
+        throw new TypeError("Undo expiresAt must be a finite epoch-ms number");
       prune();
       branches.set(entry.scope, (branches.get(entry.scope) ?? 0) + 1);
       // Retire in-flight undo's future redo too: new intent starts a new branch of history.

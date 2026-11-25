@@ -439,4 +439,12 @@ describe("history integrity", () => {
     await late;
     expect(second.entries("tasks").map((item) => item.label)).toEqual(["Q"]);
   });
+  it.each([
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+  ])("rejects a non-finite expiresAt (%s)", (value) => {
+    const stack = createUndoStack();
+    expect(() => stack.push({ ...entry("bad"), expiresAt: value })).toThrow(TypeError);
+    expect(stack.entries()).toEqual([]);
+  });
 });
