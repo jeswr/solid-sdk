@@ -198,6 +198,28 @@ it("renders one continuous bar per week with named continuation ends above timed
   await click(bars[1] as HTMLElement);
   expect(mounted.host.querySelector(".cal-details h2")?.textContent).toBe("Three-day trip");
 });
+it("lets Shift+Tab leave the month grid from a day covered by an earlier continued bar", async () => {
+  mocks.path = "/calendar/month";
+  const mounted = await mount(screen("month"));
+  await settle();
+  const grid = mounted.host.querySelector(".cal-month") as HTMLElement;
+  const bar = [...grid.querySelectorAll<HTMLButtonElement>(".cal-month-bar")].find(
+    (candidate) =>
+      candidate.getAttribute("aria-label")?.startsWith("Three-day trip,") &&
+      candidate.classList.contains("cal-continues-before"),
+  ) as HTMLButtonElement;
+  // The bar starts on Monday; Tuesday's cell follows it in DOM order and the bar stays tabbable.
+  const tuesday = grid.querySelector<HTMLElement>('[data-day="2026-11-03"]') as HTMLElement;
+  expect(tuesday.closest("tr")?.contains(bar)).toBe(true);
+  expect(tuesday.contains(bar)).toBe(false);
+  await act(() => tuesday.focus());
+  expect(bar.tabIndex).toBe(0);
+  // Press repeatedly: focus must reach an element outside the grid, not loop back to the cell.
+  for (let press = 0; press < 3 && grid.contains(document.activeElement); press++)
+    await key(document.activeElement as HTMLElement, "Tab", true);
+  expect(grid.contains(document.activeElement)).toBe(false);
+  expect(document.activeElement).not.toBe(document.body);
+});
 it("shows two phone indicators, opens the tapped day's agenda and preserves grid keys", async () => {
   const width = window.innerWidth;
   Object.defineProperty(window, "innerWidth", { value: 375, configurable: true });
