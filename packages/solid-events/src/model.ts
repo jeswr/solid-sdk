@@ -38,6 +38,17 @@ export function eventDocumentUrl(value: string): string {
   return url.href;
 }
 
+/**
+ * Whether other guests may read replies. Only named, invited WebIDs can: a link-visible
+ * invitation grants the public Append only, never Read on raw replies, so its guest list
+ * stays with the organiser whatever `guestListVisible` says.
+ */
+export function guestListAvailable(
+  event: Pick<EventData, "visibility" | "guestListVisible">,
+): boolean {
+  return event.guestListVisible && event.visibility === "invitees";
+}
+
 /** Cross-field policy is separate from generated property access. */
 export function validateEvent(data: EventData): void {
   const parsed = entities.Event.parse(

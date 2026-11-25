@@ -2,7 +2,7 @@
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
-import type { PageData, SiteData } from "../src/index.js";
+import { type PageData, type SiteData, type StoredPage, serializePage } from "../src/index.js";
 export const root = "https://pod.example/";
 export const owner = `${root}profile/card#me`;
 export const at = new Date("2026-11-10T12:00:00Z");
@@ -25,8 +25,23 @@ export const pageData: PageData = {
   position: 0,
   modified: at,
 };
+/**
+ * Stand-in for an edit made outside Publish (another client, a hand edit): writes the page source
+ * directly, so tests can reach states `savePage` now refuses for a published page.
+ */
+export async function editSourceDirectly(
+  storage: StorageClient,
+  page: StoredPage,
+  data: PageData,
+): Promise<StoredPage> {
+  const written = await storage.write(page.url, await serializePage(page.url, data), {
+    ifMatch: page.etag,
+    contentType: "text/turtle",
+  });
+  return { url: page.url, etag: written.etag as string, data };
+}
 /** Actual storage-client ETags and RDF; only the access-document HEAD seam is synthetic. */
-export async function podFixture() {
+export async function podFixture(webId = owner) {
   const backing = createMemoryStorage({ root, protocol: "solid" });
   await backing.create(root, null, { name: "profile", kind: "container" });
   await backing.create(
@@ -36,7 +51,7 @@ export async function podFixture() {
   );
   await backing.create(
     root,
-    `@prefix acl: <http://www.w3.org/ns/auth/acl#>. <#owner> a acl:Authorization; acl:agent <${owner}>; acl:accessTo <${root}>; acl:default <${root}>; acl:mode acl:Read, acl:Write, acl:Control.`,
+    `@prefix acl: <http://www.w3.org/ns/auth/acl#>. <#owner> a acl:Authorization; acl:agent <${webId}>; acl:accessTo <${root}>; acl:default <${root}>; acl:mode acl:Read, acl:Write, acl:Control.`,
     { name: ".acl", contentType: "text/turtle" },
   );
   const calls: { url: string; method: string; body: unknown }[] = [];

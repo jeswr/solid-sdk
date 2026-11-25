@@ -7,6 +7,13 @@ import type { StorageClient } from "@jeswr/storage-client";
 import { NamedNodeAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
 
+/** A user-explainable reason the private Type Index cannot take a registration. */
+export class TypeIndexSetupError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TypeIndexSetupError";
+  }
+}
 const PRIVATE = "http://www.w3.org/ns/solid/terms#privateTypeIndex";
 const PREFS = "http://www.w3.org/ns/pim/space#preferencesFile";
 /** Exact identity-document read exception; all data and mutations stay pod-scoped. */
@@ -33,7 +40,7 @@ export function tripsTypeIndex(
   const verify = async (url: string) => {
     const scoped = assertWithinPodScope(storage.root, url);
     if (!demo && !(await checkOwnerOnly({ storage, url: scoped, ownerWebId: owner })).private)
-      throw new Error(
+      throw new TypeIndexSetupError(
         "Your private Type Index must already be owner-only. Trips has not changed its access.",
       );
   };
@@ -72,7 +79,7 @@ export function tripsTypeIndex(
     // Registration only edits an existing private index. Bootstrap belongs to the
     // account setup flow; this must never create shared settings or rewrite the profile.
     create: async () => {
-      throw new Error("Set up a private Type Index before registering Trips");
+      throw new TypeIndexSetupError("Set up a private Type Index before registering Trips");
     },
   };
   const index = createTypeIndex({
@@ -100,7 +107,8 @@ export function tripsTypeIndex(
       );
       if (linked) indexes.add(assertWithinPodScope(storage.root, linked));
     }
-    if (!indexes.size) throw new Error("Set up a private Type Index before registering Trips");
+    if (!indexes.size)
+      throw new TypeIndexSetupError("Set up a private Type Index before registering Trips");
     for (const url of indexes) await verify(url);
   }
   return { index, verifyPrivateIndex };

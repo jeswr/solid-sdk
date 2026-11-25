@@ -30,6 +30,7 @@ export function placesController(
   repository: PlacesRepository,
   demo: boolean,
   failed: (message: string) => void,
+  warn: (message: string) => void = () => {},
 ) {
   let state: PlacesState = {
     status: "loading",
@@ -72,7 +73,9 @@ export function placesController(
     const current = ++generation;
     publish({ status: "loading", error: null });
     try {
-      await repository.initialize();
+      // Type Index registration is best-effort: surface its warning, but open Places regardless.
+      const opened = await repository.initialize();
+      if (opened?.registrationWarning) warn(opened.registrationWarning);
       if (demo) await repository.importTimeline(sampleWeek());
       const data = await repository.load();
       if (alive && current === generation) {

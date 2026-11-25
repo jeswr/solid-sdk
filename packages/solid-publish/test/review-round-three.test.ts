@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import { createSolidBackend } from "@jeswr/storage-client/solid";
 import { describe, expect, it, vi } from "vitest";
-import { PublicationError, publishRepository } from "../src/index.js";
+import { PublicationError, publishRepository, RetainedFilesError } from "../src/index.js";
 import { owner, pageData, podFixture, root, siteData } from "./fixtures.js";
 
 async function prepared() {
@@ -148,7 +148,7 @@ describe("Publish third review regressions", () => {
     await expect(failure).rejects.toBeInstanceOf(PublicationError);
     await expect(failure).rejects.toThrow(`Couldn't read permissions for ${folder}`);
   });
-  it("warns when reusing a private slug folder makes its retained files public again", async () => {
+  it("refuses to reuse a private slug folder whose retained files would become public", async () => {
     const pod = await prepared();
     const folder = `${pod.repo.publicUrl(pod.site)}second/`;
     await pod.storage.create(folder, "keep this", { name: "extra.txt", contentType: "text/plain" });
@@ -160,21 +160,34 @@ describe("Publish third review regressions", () => {
     );
     expect(warnings(pod).some((message) => message.includes("now owner-only"))).toBe(true);
     pod.warning.mockClear();
-    const reused = await pod.repo.publish(
+    const acl = `${folder}.acl`;
+    const privateVersion = (await pod.storage.head(acl)).etag;
+    const sourceVersion = (await pod.storage.head(renamed.page.url)).etag;
+    const writes = pod.calls.length;
+    const refused = pod.repo.publish(
       renamed.site,
       renamed.page,
       { ...renamed.page.data, slug: "second" },
       false,
     );
-    expect(warnings(pod)).toEqual([
-      `Publish reused ${folder}. Files left in this folder by an earlier unpublish are public again.`,
-    ]);
-    // Once the folder is public again, later rebuilds do not repeat the notice.
-    pod.warning.mockClear();
-    await pod.repo.refreshPublic(reused.site);
-    expect(pod.warning).not.toHaveBeenCalled();
+    await expect(refused).rejects.toBeInstanceOf(RetainedFilesError);
+    await expect(refused).rejects.toMatchObject({ directory: folder });
+    // Refused before any write: no PUT, DELETE or POST, the folder stays private, and the page
+    // source was not even re-saved under the contested slug.
+    expect(
+      pod.calls.slice(writes).filter(({ method }) => !["GET", "HEAD"].includes(method)),
+    ).toEqual([]);
+    expect((await pod.storage.head(acl)).etag).toBe(privateVersion);
+    expect((await pod.storage.head(renamed.page.url)).etag).toBe(sourceVersion);
+    await expect(pod.storage.head(`${folder}index.html`)).rejects.toMatchObject({
+      code: "not-found",
+    });
+    expect(await (await pod.storage.read(`${folder}extra.txt`)).text()).toBe("keep this");
+    expect(warnings(pod).some((message) => message.includes("public again"))).toBe(false);
+    // Other pages still refresh normally.
+    await pod.repo.refreshPublic(renamed.site);
   });
-  it("keeps retained files private when their folder listing fails and warns on retry", async () => {
+  it("keeps retained files private when their folder listing fails and refuses on retry", async () => {
     const pod = await prepared();
     const folder = `${pod.repo.publicUrl(pod.site)}second/`;
     await pod.storage.create(folder, "keep this", { name: "extra.txt", contentType: "text/plain" });
@@ -199,10 +212,13 @@ describe("Publish third review regressions", () => {
       url === folder && init.method === "GET" ? new Response(null, { status: 503 }) : undefined,
     );
     pod.warning.mockClear();
+    const sourceVersion = (await pod.storage.head(renamed.page.url)).etag;
+    // The listing fails during the read-only check, so nothing was written.
     await expect(
       repo.publish(renamed.site, renamed.page, { ...renamed.page.data, slug: "second" }, false),
-    ).rejects.toMatchObject({ cause: { status: 503 } });
+    ).rejects.toMatchObject({ status: 503 });
     expect((await pod.storage.head(acl)).etag).toBe(privateVersion);
+    expect((await pod.storage.head(renamed.page.url)).etag).toBe(sourceVersion);
     expect(pod.warning).not.toHaveBeenCalled();
 
     pod.intercept(undefined);
@@ -210,8 +226,10 @@ describe("Publish third review regressions", () => {
       (p) => p.url === renamed.page.url,
     );
     if (!saved) throw new Error("Missing source after failed publish");
-    await repo.publish(renamed.site, saved, saved.data, false);
-    expect(warnings(pod)).toEqual([expect.stringContaining("are public again")]);
+    await expect(
+      repo.publish(renamed.site, saved, { ...saved.data, slug: "second" }, false),
+    ).rejects.toBeInstanceOf(RetainedFilesError);
+    expect((await pod.storage.head(acl)).etag).toBe(privateVersion);
   });
   it("does not warn when a private slug folder is reused after its extra files were removed", async () => {
     const pod = await prepared();

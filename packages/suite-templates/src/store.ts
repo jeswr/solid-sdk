@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
-import { createTypeIndex } from "@jeswr/pod-type-index";
+import { createTypeIndex, type TypeIndex } from "@jeswr/pod-type-index";
 import { displayNameOf, type StorageClient, StorageError } from "@jeswr/storage-client";
 import type { TemplateApp } from "./builtins.js";
 import { copyTemplateImages } from "./images.js";
@@ -50,6 +50,16 @@ function validator(etag: string | null): string {
     throw new Error("Templates require a strong ETag");
   return etag;
 }
+/**
+ * Type Index registration is discovery metadata, never a precondition for saving or listing.
+ * `unavailable`: no profile, or a Solid WebID outside this storage (the Type Index SDK throws a
+ * `scope` error at construction). `failed` keeps only the error code and can be retried.
+ */
+export type TemplateRegistration =
+  | { state: "pending" }
+  | { state: "registered" }
+  | { state: "unavailable" }
+  | { state: "failed"; reason: string };
 /** One account-scoped store; all I/O uses the public, credential-bounded StorageClient. */
 export function createTemplateStore(options: {
   storage: StorageClient;
@@ -59,16 +69,37 @@ export function createTemplateStore(options: {
   /** Provision (only when `created`) or verify owner-only access before any content write. */
   ensurePrivateAccess: (url: string, context: { created: boolean }) => Promise<boolean>;
   onEntryError?: (url: string, error: unknown) => void;
+  /** Called with the error code each time a registration attempt fails; the store keeps working. */
+  onRegistrationError?: (reason: string) => void;
 }) {
   const { storage } = options;
-  const index = options.profile
-    ? createTypeIndex({
+  let index: TypeIndex | undefined;
+  if (options.profile) {
+    try {
+      index = createTypeIndex({
         storage,
         features: storage.features,
         profile: options.profile,
         ...(options.fetch ? { fetch: options.fetch } : {}),
-      })
-    : undefined;
+      });
+    } catch (error) {
+      if (!(error instanceof StorageError) || error.code !== "scope") throw error;
+    }
+  }
+  let registration: TemplateRegistration = index ? { state: "pending" } : { state: "unavailable" };
+  /** Best effort and never throws. Registers the collection in the private index only. */
+  async function register(url: string): Promise<TemplateRegistration> {
+    if (!index) return registration;
+    try {
+      await index.register(TEMPLATE_CLASS, { container: url });
+      registration = { state: "registered" };
+    } catch (error) {
+      const reason = error instanceof StorageError ? error.code : "unknown";
+      registration = { state: "failed", reason };
+      options.onRegistrationError?.(reason);
+    }
+    return registration;
+  }
   let container: Promise<string> | undefined;
   let containerUrl: string | undefined;
   // A collection this store created; kept until access is established so a retry provisions.
@@ -152,8 +183,9 @@ export function createTemplateStore(options: {
         if (!url) throw new Error("Missing templates container");
         containerUrl = url;
         // Register first: Solid drops the type link, so the index is the only adoption path
-        // back to a created collection. Access is still verified before every first write.
-        await index?.register(TEMPLATE_CLASS, { container: url });
+        // back to a created collection. A failure is reported, not fatal; access is still
+        // verified before every first write.
+        await register(url);
         const created = url === createdUrl;
         if (!(await options.ensurePrivateAccess(url, { created })))
           throw new TemplateAccessError(created);
@@ -224,6 +256,14 @@ export function createTemplateStore(options: {
     }
   }
   return {
+    get registration(): TemplateRegistration {
+      return registration;
+    },
+    /** Tries again to register the located collection; never throws. */
+    async retryRegistration(): Promise<TemplateRegistration> {
+      const url = await locate(false);
+      return url ? register(url) : registration;
+    },
     read: (url: string) => readCurrent(url),
     container: () => locate(false),
     async assertContains(url: string): Promise<void> {
