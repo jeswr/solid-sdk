@@ -131,7 +131,7 @@
     "id": "baseline",
     "layers": {
       "transport": "direct-http",
-      "data-access": "by-value",
+      "data-access": "aggregate-mpc",
       "identity": "pinned-key",
       "meaning": "fixed-vocabulary",
       "authority": "mandate-signed",
@@ -159,8 +159,13 @@
     }
   ],
   "generated": {
-    "commit": "a18590053c610e2daa59fb02e56671a9fa07bcb0",
-    "core": "scripted"
+    "commit": "663263df678f242a97b3e8141be622495b8ad72d",
+    "core": "scripted",
+    "method": "sparq-aggregate/1",
+    "package": "sparq-verifiable-aggregate",
+    "packageCommit": "61989f5",
+    "sha256": "9832ef937efbcc8970db3f70ec4e72e3384a867f3ecb40a1be81ea002a6a6830",
+    "notice": "Research-grade and unaudited."
   },
   "standIns": [
     {
@@ -172,6 +177,10 @@
       "replacedBy": "Contributing organisations are fictional local parties with their own identity and aggregate keys. Real cryptographic evidence is checked by the research-grade, unaudited sparq-verifiable-aggregate package (61989f5)."
     }
   ],
+  "assurance": {
+    "kind": "joint",
+    "assumption": "Research-grade and unaudited. An input stays hidden from a coalition missing at least one other party, beyond what totals and its own inputs reveal; contributors can reconstruct both totals, including on refusal or a threshold verdict."
+  },
   "events": [
     {
       "seq": 1,
