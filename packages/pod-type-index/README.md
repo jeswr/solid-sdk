@@ -17,6 +17,33 @@ await storage.create(documents, body, { contentType: 'text/turtle', ...hint });
 await index.unregister(documentClass, { container: documents });
 ```
 
+## Registration source
+
+`find`/`findAll` keep returning plain URL strings (locations de-duplicated across sources).
+`findRegistrations(class, options?)` and `findAllRegistrations(classes, options?)` return
+`{ location, source }` entries instead, one per (source, location): a location asserted by both
+indexes is returned twice, never merged. `source` is `'private'` (Solid `solid:privateTypeIndex`,
+from preferences or a legacy direct profile pointer), `'public'` (`solid:publicTypeIndex`), or
+`'lws-search'` (LWS TypeSearchService; the server asserts types but not private/public, so this says
+nothing about visibility).
+
+```ts
+// Private media must never be redirected by a planted public registration:
+const dirs = await index.findRegistrations(mediaClass, { sources: ['private'] });
+```
+
+`options.sources` restricts discovery to a subset (`[]` returns nothing; unknown values throw
+`TypeError`). Excluded documents are never fetched: `['private']` does not read the public index,
+`['public']` reads neither preferences nor the private index, and a Solid-only or LWS-only
+restriction that excludes the active protocol's source makes no request at all. Order is private
+before public (within each, document then registration order); LWS results keep server order.
+A document linked by both pointer kinds is labelled `private` unless only `public` is requested.
+
+**Security note.** The private index is *unlisted*, not access-controlled: `source` tells a
+consumer which document asserted the registration, nothing more. It does not prove the document is
+unreadable by others, and a registration is still only a hint. Consumers that write private data
+should request `sources: ['private']` and still check where they write.
+
 `register` and `unregister` require exactly one `container` or `instance`. Their optional third
 argument is `{ index: 'private' | 'public' }` (default `private`). Solid registration returns
 `undefined`; LWS returns `{ links: [{ rel: 'type', target: canonicalClass }] }` without I/O.

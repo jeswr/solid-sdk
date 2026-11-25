@@ -1,7 +1,30 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { type StorageClient, StorageError, type StorageErrorCode } from "@jeswr/storage-client";
 import { canonicalize, LEGACY_NAMESPACES } from "@jeswr/suite-vocab";
-import type { RegistrationOptions, TypeLocation } from "./types.js";
+import type {
+  FindOptions,
+  FoundRegistration,
+  RegistrationOptions,
+  TypeLocation,
+  TypeSource,
+} from "./types.js";
+
+const ALL_SOURCES: readonly TypeSource[] = ["private", "public", "lws-search"];
+
+/** Validate `sources` before any I/O; unknown or malformed values fail closed. */
+export function selectSources(options?: FindOptions): Set<TypeSource> {
+  const requested = options?.sources;
+  if (requested === undefined) return new Set(ALL_SOURCES);
+  if (!Array.isArray(requested) || requested.some((value) => !ALL_SOURCES.includes(value))) {
+    throw new TypeError("Invalid type index sources");
+  }
+  return new Set(requested);
+}
+
+/** Locations de-duplicated across sources, first occurrence wins (legacy `find` shape). */
+export function locations(found: FoundRegistration[]): string[] {
+  return [...new Set(found.map((entry) => entry.location))];
+}
 
 // Regex literals are hoisted to named module-level constants: an inline literal after `(`, `!` or
 // `||` can be misread as division by bundler import-analysis lexers (see regex-literals.test.ts).

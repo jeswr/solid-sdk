@@ -21,6 +21,13 @@ suite-vocab canonical classes, typed TermWrapper/SetFrom construction, and N3 se
 Do not overwrite an unreadable document or grant permissions implicitly. The caller's access layer
 must provision owner-only private destinations. Preserve profile readability and unrelated RDF.
 
+Results carry provenance: `findRegistrations`/`findAllRegistrations` return `{ location, source }`
+with `source` `"private" | "public" | "lws-search"`, one entry per (source, location), private before
+public; `find`/`findAll` stay string-valued and de-duplicate by location. `{ sources: [...] }`
+restricts discovery and excluded documents are never fetched (no request at all when nothing
+applies). Code that writes private data must use `sources: ["private"]`. The private index is
+unlisted, not access-controlled: `source` only names the asserting document.
+
 Find all requested classes with one request per Solid document. Accept legacy namespace aliases,
 return scoped instances and containers, and avoid container crawling. Unregister requires an exact
 location; preserve unrelated registrations/annotations and reject ambiguous registrations.
