@@ -819,7 +819,9 @@ describe("MCP chat tools over the scoped fetch port", () => {
     const remove = port.delete?.bind(port);
     if (!remove) throw new Error("chat port cannot delete");
     const target = `${ROOT}private/chats/claude/thread-1/m-legacy.ttl`;
-    await port.write(target, new TextEncoder().encode(""), "text/turtle", {});
+    await port.write(target, new TextEncoder().encode(""), "text/turtle", {
+      ifNoneMatch: "*",
+    });
     await expect(remove(target, { ifMatch: "" })).rejects.toThrow(/If-Match/);
     await expect(remove(target, {} as { ifMatch: string })).rejects.toThrow(/If-Match/);
     await expect(remove("https://evil.example/x", { ifMatch: '"chat"' })).rejects.toThrow(

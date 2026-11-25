@@ -511,7 +511,11 @@ export class ChatWriter {
       throw error;
     }
     const title = roomTitle(`${metadataUrl}#it`, metadata.dataset, candidate.id);
-    const room = new entities.Conversation.Wrapper(`${metadataUrl}#it`, metadata.dataset, DataFactory);
+    const room = new entities.Conversation.Wrapper(
+      `${metadataUrl}#it`,
+      metadata.dataset,
+      DataFactory,
+    );
     const provenance = new ConversationProvenanceDoc(
       `${metadataUrl}#it`,
       metadata.dataset,
