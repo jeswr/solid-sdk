@@ -7,14 +7,8 @@
       "useCase": "age-check",
       "path": "main",
       "settlement": "rdf-order",
-      "status": "runs",
-      "actual": {
-        "outcome": "admit",
-        "reason": "fit-for-use",
-        "check": "fitness"
-      },
-      "consequences": [],
-      "trace": "age-check--baseline.json"
+      "status": "blocked",
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
       "scenario": "age-check",
@@ -1555,14 +1549,8 @@
       "useCase": "introduction",
       "path": "main",
       "settlement": "rdf-order",
-      "status": "runs",
-      "actual": {
-        "outcome": "admit",
-        "reason": "fit-for-use",
-        "check": "fitness"
-      },
-      "consequences": [],
-      "trace": "introduction--baseline.json"
+      "status": "blocked",
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
       "scenario": "introduction",
@@ -15977,18 +15965,8 @@
       "path": "hidden-validity-proof",
       "settlement": "rdf-order",
       "what": "Show valid until at least a date while hiding the actual date",
-      "status": "runs",
-      "actual": {
-        "outcome": "admit",
-        "reason": "fit-for-use",
-        "check": "fitness"
-      },
-      "expected": {
-        "outcome": "admit",
-        "reason": "fit-for-use"
-      },
-      "consequences": [],
-      "trace": "right-to-work--hidden-validity-proof--baseline.json"
+      "status": "blocked",
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
       "scenario": "salary-account-change",
@@ -16546,14 +16524,8 @@
       "useCase": "tenancy-application",
       "path": "main",
       "settlement": "rdf-order",
-      "status": "runs",
-      "actual": {
-        "outcome": "admit",
-        "reason": "fit-for-use",
-        "check": "fitness"
-      },
-      "consequences": [],
-      "trace": "tenancy-application--baseline.json"
+      "status": "blocked",
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
       "scenario": "tenancy-application",
@@ -16700,14 +16672,8 @@
       "useCase": "visa-application",
       "path": "main",
       "settlement": "rdf-order",
-      "status": "runs",
-      "actual": {
-        "outcome": "admit",
-        "reason": "fit-for-use",
-        "check": "fitness"
-      },
-      "consequences": [],
-      "trace": "visa-application--baseline.json"
+      "status": "blocked",
+      "reason": "needs a proof system: needs the sparq-zk-result/5 package, which is not installed"
     },
     {
       "scenario": "visa-application",

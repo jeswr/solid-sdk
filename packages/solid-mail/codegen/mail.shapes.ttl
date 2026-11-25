@@ -1,0 +1,60 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Package profile of the suite mail model; no federation mail sector exists.
+# Exact IRIs are those of apps/suite and pod-connectors/mail/constants (http schema).
+# Narrowings from the permissive app mappers: scalar maxCount 1, xsd:string text
+# (no language tags, other datatypes or non-literals), xsd:dateTime dates (the old
+# mapper also read xsd:date),
+# xsd:integer byte size. Every field remains optional; all IRI sets are unbounded.
+# No sh:class or sh:node on links: external contacts, threads, folders, attachments
+# and message members need not occur in this document. No nesting is omitted.
+# Unused constants (about, reply_of, email, ContactPoint, LdpContainer) have no model
+# accessor and therefore no shape. SIOC Thread is a write alignment, not a read alias.
+# Attachment wrapping remains untyped until explicitly marked; MediaObject is the
+# existing connector attachment type, not a new type asserted by the facade.
+# Config disables text sanitization to preserve decoded mail text/HTML verbatim.
+@prefix schema: <http://schema.org/> .
+@prefix sioc: <http://rdfs.org/sioc/ns#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+[] a sh:NodeShape ;
+  sh:targetClass schema:EmailMessage ;
+  sh:property [ sh:path schema:headline ; sh:name "subjectLine" ; sh:datatype xsd:string ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path schema:text ; sh:name "body" ; sh:datatype xsd:string ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path schema:articleBody ; sh:name "bodyHtml" ; sh:datatype xsd:string ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path schema:sender ; sh:name "sender" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path schema:toRecipient ; sh:name "to" ; sh:nodeKind sh:IRI ; ] ;
+  sh:property [ sh:path schema:ccRecipient ; sh:name "cc" ; sh:nodeKind sh:IRI ; ] ;
+  sh:property [ sh:path schema:bccRecipient ; sh:name "bcc" ; sh:nodeKind sh:IRI ; ] ;
+  sh:property [ sh:path schema:dateSent ; sh:name "dateSent" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path schema:dateReceived ; sh:name "dateReceived" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path schema:dateRead ; sh:name "dateRead" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path schema:isPartOf ; sh:name "partOfThread" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path schema:replyToUrl ; sh:name "inReplyTo" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path schema:encoding ; sh:name "encoding" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path schema:identifier ; sh:name "identifier" ; sh:datatype xsd:string ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path sioc:has_container ; sh:name "folderIris" ; sh:nodeKind sh:IRI ; ] ;
+  sh:property [ sh:path schema:messageAttachment ; sh:name "attachments" ; sh:nodeKind sh:IRI ; ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass schema:Conversation ;
+  sh:property [ sh:path dct:title ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path schema:hasPart ; sh:name "messageIris" ; sh:nodeKind sh:IRI ; ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass schema:Collection ;
+  sh:property [ sh:path dct:title ; sh:name "title" ; sh:datatype xsd:string ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path schema:hasPart ; sh:name "messageIris" ; sh:nodeKind sh:IRI ; ] .
+
+[] a sh:NodeShape ;
+  sh:targetClass schema:MediaObject ;
+  sh:property [ sh:path schema:contentSize ; sh:name "size" ; sh:datatype xsd:integer ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path schema:name ; sh:name "name" ; sh:datatype xsd:string ; sh:maxCount 1 ; ] ;
+  sh:property [ sh:path schema:encodingFormat ; sh:name "contentType" ; sh:datatype xsd:string ; sh:maxCount 1 ; ] .
+

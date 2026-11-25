@@ -25,6 +25,7 @@
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/pod-connectors": "workspace:*",
     "@jeswr/solid-elements": "workspace:*",
+    "@jeswr/solid-mail": "workspace:*",
     "@jeswr/solid-session-restore": "workspace:*",
     "@lit/react": "^1.0.8",
     "@radix-ui/react-avatar": "^1.2.0",

@@ -1,15 +1,5 @@
 [
   {
-    "file": "age-check--baseline.json",
-    "scenario": {
-      "id": "age-check",
-      "title": "Proving age to buy something",
-      "steps": {}
-    },
-    "configuration": "baseline",
-    "events": 70
-  },
-  {
     "file": "age-check--branch-1--baseline.json",
     "scenario": {
       "id": "age-check--branch-1",
@@ -1728,16 +1718,6 @@
     },
     "configuration": "baseline",
     "events": 14
-  },
-  {
-    "file": "introduction--baseline.json",
-    "scenario": {
-      "id": "introduction",
-      "title": "Being introduced to a stranger safely",
-      "steps": {}
-    },
-    "configuration": "baseline",
-    "events": 140
   },
   {
     "file": "introduction--branch-1--baseline.json",
@@ -8630,21 +8610,6 @@
     "events": 50
   },
   {
-    "file": "right-to-work--hidden-validity-proof--baseline.json",
-    "scenario": {
-      "id": "right-to-work--hidden-validity-proof",
-      "title": "Hiring: right to work and qualifications: Show valid until at least a date while hiding the actual date",
-      "steps": {
-        "1": "The candidate’s agent checks and admits the signed statements.",
-        "2": "The candidate’s agent sends a signed request.",
-        "3": "The employer’s agent checks the incoming message and prepares a response.",
-        "4": "The employer’s agent checks the durable record."
-      }
-    },
-    "configuration": "right-to-work-local",
-    "events": 70
-  },
-  {
     "file": "salary-account-change--baseline.json",
     "scenario": {
       "id": "salary-account-change",
@@ -9280,16 +9245,6 @@
     "events": 33
   },
   {
-    "file": "tenancy-application--baseline.json",
-    "scenario": {
-      "id": "tenancy-application",
-      "title": "Applying to rent a home",
-      "steps": {}
-    },
-    "configuration": "baseline",
-    "events": 111
-  },
-  {
     "file": "tenancy-application--branch-1--baseline.json",
     "scenario": {
       "id": "tenancy-application--branch-1",
@@ -9405,16 +9360,6 @@
     },
     "configuration": "trip-booking-local",
     "events": 32
-  },
-  {
-    "file": "visa-application--baseline.json",
-    "scenario": {
-      "id": "visa-application",
-      "title": "Applying for a visa",
-      "steps": {}
-    },
-    "configuration": "baseline",
-    "events": 111
   },
   {
     "file": "visa-application--branch-1--baseline.json",

@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6 -->
 # Pod Mail
 
 > ⚠️ Experimental — AI-agent-generated (Claude Opus 4.8, @jeswr PSS agent); under active development, not production-hardened.
@@ -25,6 +26,21 @@ suite's apps are built in parallel on a shared data-federation substrate).
 | `model/store` | Pod-shaped read / write / list with WAC-aware errors and conditional (ETag) writes. |
 | `model/typeIndex` | Solid Type Index read + write; registers the app's primary class (`schema:EmailMessage`) for cross-app discovery. |
 | `model/paths` | Pod-shaped path conventions (containers end in `/`). |
+
+The message, thread, folder and mailbox modules re-export the generated
+[`@jeswr/solid-mail`](../../packages/solid-mail/README.md) model, preserving existing
+import paths. Shared fields use its generated accessors, including the documented
+[handling of malformed RDF](../../packages/solid-mail/README.md#exact-divergences).
+The package's additional optional message fields are available but are not used by
+Pod Mail; no Attachment module is added here. `vocab` keeps Pod Mail's existing
+predicate surface, and `serialise` uses the shared prefix map while retaining its
+local N3 Writer path, including named-graph output (TriG).
+
+Store I/O, paths and Type Index registration stay local: Pod Mail keeps its default
+fetch, `loadOrEmpty`, ETag and unconditional-save policies, account-free paths and
+preservation of an omitted Type Index location. These intentionally differ from
+Suite Mail, as described in the shared package's
+[app comparison](../../packages/solid-mail/README.md#differences-between-the-app-copies).
 
 ## Design invariants
 
