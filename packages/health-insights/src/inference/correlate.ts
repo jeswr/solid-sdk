@@ -77,6 +77,12 @@ export interface CorrelateOptions {
   thresholds?: EngineThresholds;
   /** Restrict scoring to these triggers (defaults to every evidence-prior trigger). */
   triggers?: readonly TriggerSlug[];
+  /**
+   * The end of the observed record. An exposure whose lag window has not fully elapsed by
+   * then, and that no symptom has followed yet, is not evidence of "no reaction": it is
+   * left out of the exposure count. Omitted → every exposure counts (unchanged behaviour).
+   */
+  observedUntil?: Date;
 }
 
 /**
@@ -120,7 +126,18 @@ export function correlate(
     if (events.length === 0) continue; // no data → no score.
     const lag = lags.get(trigger);
     if (!lag) continue;
-    scores.push(scoreTrigger(trigger, events, qualifying, annotated, lag, span, thresholds));
+    scores.push(
+      scoreTrigger(
+        trigger,
+        events,
+        qualifying,
+        annotated,
+        lag,
+        span,
+        thresholds,
+        options.observedUntil,
+      ),
+    );
   }
   return scores;
 }
@@ -209,6 +226,7 @@ function scoreTrigger(
   lag: ResolvedLag,
   spanHours: number,
   thresholds: EngineThresholds,
+  observedUntil?: Date,
 ): SuspicionScore {
   // Forward direction. Assign each qualifying symptom to AT MOST ONE exposure — the
   // nearest PRECEDING in-window exposure (largest ingestion time ≤ onset, still inside
@@ -232,9 +250,18 @@ function scoreTrigger(
 
   const evidence: EvidencePairing[] = [];
   let followedCount = 0;
+  // An exposure still inside its lag window, with no symptom yet, is not "not followed".
+  let pending = 0;
   for (const e of events) {
     const pairedSymptoms = assigned.get(e);
-    if (!pairedSymptoms || pairedSymptoms.length === 0) continue;
+    if (!pairedSymptoms || pairedSymptoms.length === 0) {
+      if (
+        observedUntil !== undefined &&
+        e.ingestedAt.getTime() + lag.lagWindowMax * 3_600_000 > observedUntil.getTime()
+      )
+        pending += 1;
+      continue;
+    }
     followedCount += 1;
     const coPresent = new Set<TriggerSlug>();
     for (const s of pairedSymptoms) {
@@ -249,7 +276,7 @@ function scoreTrigger(
       coPresentTriggers: [...coPresent].sort(),
     });
   }
-  const exposureCount = events.length;
+  const exposureCount = events.length - pending;
   const followedRate = exposureCount > 0 ? followedCount / exposureCount : 0;
 
   // Reverse direction: attribution + confounding over the annotated symptoms.

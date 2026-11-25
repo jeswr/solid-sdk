@@ -2,7 +2,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
-import { correlate, rankSuspicions } from "@jeswr/health-insights";
+import { diaryTriggers, type SafetyContext } from "@jeswr/health-insights";
+import { createOwnerOnlyDestinationChecks } from "@jeswr/pod-access";
 import {
   buildMeal,
   buildSymptom,
@@ -18,6 +19,7 @@ import {
   type SymptomData,
   type SymptomType,
 } from "@jeswr/solid-health-diary";
+import { createPodClient } from "@jeswr/storage-client";
 import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
 import {
@@ -129,6 +131,23 @@ function packageDataset(document: DatasetCore) {
   }
   return copy;
 }
+/**
+ * A written entry could not be confirmed as owner-only afterwards. `removed` is true only
+ * when the server confirmed the deletion of the file this run created.
+ */
+export class DiaryPrivacyError extends Error {
+  constructor(readonly removed: boolean) {
+    super(
+      removed
+        ? "Couldn't confirm this entry is private to you, so it was removed."
+        : "Couldn't confirm this entry is private to you. It may still be stored; check your Health access settings.",
+    );
+    this.name = "DiaryPrivacyError";
+  }
+}
+function strongEtag(value: string | null): string | undefined {
+  return value !== null && /^"[^"\r\n]*"$/.test(value) ? value : undefined;
+}
 function missing(error: unknown) {
   return error instanceof RdfFetchError && error.status === 404;
 }
@@ -184,6 +203,13 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     return fetch(input, init);
   };
   const store = createHealthDataStore(transport, storage, owner);
+  // The shared after-write contract: the written version, its container and its policy
+  // must still be owner-only. Storage discovery uses the account's own fetch.
+  const checks = createOwnerOnlyDestinationChecks({
+    podRoot: storage,
+    ownerWebId: owner,
+    openStorage: async () => (await createPodClient({ fetch, storage })).storage,
+  });
   const base = `${store.base}diary/`;
   const scoped = (url: string) => {
     const safe = assertWithinPodScope(base, url);
@@ -449,6 +475,38 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
       if (!conflict(error)) throw error;
     }
   }
+  /**
+   * After a write: the file must still carry the ETag the write returned, and it and its
+   * container must be owner-only. On refusal, delete ONLY a file this run created (201 to a
+   * create-only request) with If-Match on that ETag, so a replaced or concurrently changed
+   * file is never removed, and report removal only once the server confirms it.
+   */
+  async function confirmPrivate(url: string, written: Response | undefined) {
+    // A recovered lost-response create has no response of its own: nothing here is ours to delete.
+    const etag = strongEtag(written?.headers.get("etag") ?? null);
+    let confirmed = false;
+    try {
+      confirmed = await checks.confirmPrivateWrite(url, etag === undefined ? {} : { etag });
+    } catch {
+      // An unreadable policy or unexpected metadata is a refusal as well.
+    }
+    if (confirmed) return;
+    let removed = false;
+    if (written?.status === 201 && etag !== undefined) {
+      try {
+        const response = await fetch(url, {
+          method: "DELETE",
+          redirect: "error",
+          headers: { "if-match": etag },
+        });
+        removed = response.ok;
+      } catch {
+        // The entry may remain; the error says so.
+      }
+    }
+    invalidateSuite();
+    throw new DiaryPrivacyError(removed);
+  }
   async function save(
     draft: DiaryDraft,
     id: string,
@@ -516,8 +574,9 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
     await store.initialize();
     await container(base);
     await container(new URL(".", url).href);
+    let written: Response | undefined;
     try {
-      await store.write(url, document, condition);
+      written = await store.write(url, document, condition);
     } catch (error) {
       if (!conflict(error)) throw error;
       // Creation timestamps differ when retrying a create after a lost response.
@@ -529,6 +588,7 @@ export function createDiaryStore(fetch: typeof globalThis.fetch, storage: string
       if (stored.length !== intended.length || !intended.every((quad) => actual.document.has(quad)))
         throw error;
     }
+    await confirmPrivate(url, written);
     const saved = await read(url);
     if (moving) {
       try {
@@ -679,8 +739,15 @@ export function diaryExposures(
   }
   return [...result.values()];
 }
-/** Use the shared engine over both storage layouts; future events are excluded. */
-export function likelyDiaryTriggers(entries: readonly DiaryEntry[], now = new Date()) {
+/**
+ * Use the shared engine over both storage layouts: ranked suspicions plus the hard safety
+ * rails that every surface must render above them. Future entries are excluded.
+ */
+export function likelyDiaryTriggers(
+  entries: readonly DiaryEntry[],
+  now = new Date(),
+  context: SafetyContext = {},
+) {
   const meals: MealData[] = [],
     symptoms: SymptomData[] = [];
   for (const entry of entries) {
@@ -700,5 +767,5 @@ export function likelyDiaryTriggers(entries: readonly DiaryEntry[], now = new Da
         ...(entry.severity === null ? {} : { severity: entry.severity }),
       });
   }
-  return rankSuspicions(correlate(meals, symptoms)).filter((score) => score.exposureCount > 0);
+  return diaryTriggers({ meals, symptoms }, context, now);
 }
