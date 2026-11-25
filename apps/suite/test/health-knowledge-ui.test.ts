@@ -163,6 +163,9 @@ it("renders the full sample on every knowledge tab, filters facts and shows evid
     expect(result.violations).toEqual([]);
   }
   await tab("Facts");
+  // The list is paged (50 at a time) so a large graph never mounts all at once.
+  await until(() => expect(view.host.querySelectorAll("[data-fact-id]")).toHaveLength(50));
+  await click(element("button", "Show more facts (27 remaining)"));
   await until(() => expect(view.host.querySelectorAll("[data-fact-id]")).toHaveLength(77));
   const belief = view.host.querySelector("fieldset") as Element;
   await click(element("button", "Might", belief));

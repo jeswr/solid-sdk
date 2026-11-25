@@ -2,6 +2,7 @@
 "use client";
 import type { HealthGraphView } from "@jeswr/pkg-health";
 import { StatTile } from "@jeswr/suite-charts";
+import { useMemo } from "react";
 import {
   beliefLabel,
   bodySystemGroups,
@@ -10,7 +11,9 @@ import {
   knowledgeStats,
   needsReview,
   sourceCounts,
+  uncertaintyNote,
 } from "../lib/knowledge/view-model";
+import { ShowMore, usePaged } from "./knowledge-paging";
 export function KnowledgeOverview({
   view,
   onReview,
@@ -18,20 +21,24 @@ export function KnowledgeOverview({
   view: HealthGraphView;
   onReview(label: string): void;
 }) {
-  const stats = knowledgeStats(view);
-  const review = needsReview(view);
+  const stats = useMemo(() => knowledgeStats(view), [view]);
+  const review = useMemo(() => needsReview(view), [view]);
+  const systems = useMemo(() => bodySystemGroups(view), [view]);
+  const sources = useMemo(() => sourceCounts(view), [view]);
+  const shownReview = usePaged(review);
+  const shownSources = usePaged(sources);
   return (
     <div className="hlt-knowledge-stack">
       <div className="hlt-knowledge-stats">
         <StatTile
           label="Current conditions"
           value={stats.conditions}
-          footnote="Definitely · Current claims"
+          footnote="Definitely · Current claims, not counting any with an unread later update"
         />
         <StatTile
           label="Current medications"
           value={stats.medications}
-          footnote="Definitely · Current claims"
+          footnote="Definitely · Current claims, not counting any with an unread later update"
         />
         <StatTile label="Tracked results" value={stats.results} footnote="Numeric result series" />
         <StatTile
@@ -50,7 +57,7 @@ export function KnowledgeOverview({
         </div>
         {review.length ? (
           <ul className="hlt-knowledge-list">
-            {review.map((f) => (
+            {shownReview.visible.map((f) => (
               <li key={factKey(f)}>
                 {/* biome-ignore lint/a11y/useValidAnchor: This native hash link navigates to the Facts tab. */}
                 <a href="#facts" onClick={() => onReview(f.label)}>
@@ -58,7 +65,8 @@ export function KnowledgeOverview({
                 </a>
                 <span className="hlt-knowledge-badge">{beliefLabel(f.belief)}</span>
                 <span className="hlt-muted">
-                  {f.validity === "Contradicted" ? "Conflicting claim" : f.hedge || "Uncertain"}
+                  {uncertaintyNote(f) ||
+                    (f.validity === "Contradicted" ? "Conflicting claim" : f.hedge || "Uncertain")}
                 </span>
               </li>
             ))}
@@ -66,6 +74,7 @@ export function KnowledgeOverview({
         ) : (
           <p>No uncertain or conflicting claims to review.</p>
         )}
+        <ShowMore remaining={shownReview.remaining} noun="claims" onMore={shownReview.more} />
       </section>
       <section className="hlt-knowledge-stack" aria-labelledby="hlt-knowledge-systems-title">
         <div>
@@ -73,7 +82,7 @@ export function KnowledgeOverview({
           <p className="hlt-muted">Grouped by keyword, for browsing only</p>
         </div>
         <div className="hlt-knowledge-grid">
-          {bodySystemGroups(view).map((group) => (
+          {systems.map((group) => (
             <article className="hlt-panel" key={group.id}>
               <h3 className="hlt-knowledge-capital">{group.id}</h3>
               <p className="hlt-muted">
@@ -94,8 +103,8 @@ export function KnowledgeOverview({
       >
         <h2 id="hlt-knowledge-sources-title">Sources</h2>
         <ul className="hlt-knowledge-list">
-          {sourceCounts(view).map((s) => (
-            <li key={s.iri}>
+          {shownSources.visible.map((s) => (
+            <li key={`${s.batch}\u0000${s.iri}`}>
               <strong>{s.title ?? "Untitled source"}</strong>
               <span className="hlt-muted">
                 {s.kind ?? "Kind not recorded"} · {formatKnowledgeDate(s.created)}
@@ -106,6 +115,7 @@ export function KnowledgeOverview({
             </li>
           ))}
         </ul>
+        <ShowMore remaining={shownSources.remaining} noun="sources" onMore={shownSources.more} />
       </section>
     </div>
   );
