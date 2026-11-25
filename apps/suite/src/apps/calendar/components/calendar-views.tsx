@@ -199,9 +199,15 @@ function MonthView({ events }: { events: Occurrence[] }) {
         !element.contains(table) &&
         table.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_PRECEDING,
     );
-    const previous = before[before.length - 1];
-    if (previous) previous.focus();
-    else (document.activeElement as HTMLElement | null)?.blur();
+    // Walk back to the nearest element that really takes focus (hidden, inert and collapsed
+    // ones silently ignore focus()); only claim the key when focus moved.
+    for (let index = before.length - 1; index >= 0; index--) {
+      const candidate = before[index] as HTMLElement;
+      candidate.focus();
+      if (document.activeElement === candidate) return true;
+    }
+    if (before.length) return false;
+    (document.activeElement as HTMLElement | null)?.blur();
     return true;
   }
   function onKey(event: KeyboardEvent, key: string) {

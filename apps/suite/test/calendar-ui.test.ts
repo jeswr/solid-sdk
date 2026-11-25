@@ -220,6 +220,62 @@ it("lets Shift+Tab leave the month grid from a day covered by an earlier continu
   expect(grid.contains(document.activeElement)).toBe(false);
   expect(document.activeElement).not.toBe(document.body);
 });
+async function mountContinuedBarGrid() {
+  mocks.path = "/calendar/month";
+  const mounted = await mount(screen("month"));
+  await settle();
+  const grid = mounted.host.querySelector(".cal-month") as HTMLElement;
+  const tuesday = grid.querySelector<HTMLElement>('[data-day="2026-11-03"]') as HTMLElement;
+  /** A tabbable predecessor that, like a hidden, inert or collapsed element, ignores focus(). */
+  const unfocusable = (kind: "hidden" | "inert" | "disabled") => {
+    const element = document.createElement("button");
+    element.textContent = kind;
+    if (kind === "disabled") element.disabled = true;
+    else element.setAttribute(kind, "");
+    if (kind !== "disabled") element.focus = () => undefined;
+    grid.parentElement?.insertBefore(element, grid);
+    return element;
+  };
+  return { grid, tuesday, unfocusable };
+}
+it("skips hidden, inert and disabled predecessors when Shift+Tab leaves the month grid", async () => {
+  const { grid, tuesday, unfocusable } = await mountContinuedBarGrid();
+  const reachable = document.createElement("button");
+  grid.parentElement?.insertBefore(reachable, grid);
+  // Closest to the grid first: these precede the grid but cannot take focus.
+  unfocusable("disabled");
+  unfocusable("inert");
+  unfocusable("hidden");
+  await act(() => tuesday.focus());
+  for (let press = 0; press < 3 && grid.contains(document.activeElement); press++)
+    await key(document.activeElement as HTMLElement, "Tab", true);
+  expect(document.activeElement).toBe(reachable);
+});
+it("leaves Shift+Tab to the browser when no predecessor can take focus", async () => {
+  const { grid, tuesday, unfocusable } = await mountContinuedBarGrid();
+  unfocusable("hidden");
+  unfocusable("inert");
+  // Every other tabbable element before the grid refuses focus too.
+  for (const element of document.querySelectorAll<HTMLElement>(
+    "a[href], button, input, select, textarea, summary, [tabindex]",
+  ))
+    if (
+      !grid.contains(element) &&
+      grid.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_PRECEDING
+    )
+      element.focus = () => undefined;
+  await act(() => tuesday.focus());
+  const event = new KeyboardEvent("keydown", {
+    key: "Tab",
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  await act(async () => {
+    tuesday.dispatchEvent(event);
+  });
+  expect(event.defaultPrevented).toBe(false);
+});
 it("shows two phone indicators, opens the tapped day's agenda and preserves grid keys", async () => {
   const width = window.innerWidth;
   Object.defineProperty(window, "innerWidth", { value: 375, configurable: true });
