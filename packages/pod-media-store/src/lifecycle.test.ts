@@ -282,7 +282,7 @@ describe("exposure", () => {
     expect(await allResources(h.storage)).toHaveLength(2);
   });
 
-  it("F-09: anything but a clear private answer refuses, unless unknown is allowed", async () => {
+  it("F-09: anything but a clear private answer refuses", async () => {
     for (const probe of [
       exposure("unknown"),
       async () => {
@@ -301,21 +301,161 @@ describe("exposure", () => {
     const none = await harness("solid", { exposure: undefined });
     expect(await none.store.put(putInput())).toEqual(refused("exposure-unknown"));
     expect(must(await none.store.checkExposure())).toBe("unknown");
-    const lenient = await harness("solid", { exposure: undefined, allowUnknownExposure: true });
-    expect((await lenient.store.put(putInput())).ok).toBe(true);
-    // Allowing unknown never allows exposed.
-    const exposed = await harness("solid", {
-      exposure: exposure("exposed"),
-      allowUnknownExposure: true,
+  });
+
+  describe.each(["solid", "lws"] as const)("allowUnknownExposureFor (%s)", (protocol) => {
+    it("lets only an exact unknown answer through, for the containers it approves", async () => {
+      const asked: string[] = [];
+      const h = await harness(protocol, {
+        exposure: exposure("unknown"),
+        allowUnknownExposureFor: (url) => {
+          asked.push(url);
+          return true;
+        },
+      });
+      expect(must(await h.store.put(putInput())).existed).toBe(false);
+      // The library and the month shard were each asked about, by their own URL.
+      expect(asked).toHaveLength(2);
+      expect(new Set(asked).size).toBe(2);
+      expect(asked[0]).toBe(h.store.library);
     });
-    expect(await exposed.store.put(putInput())).toEqual(refused("library-exposed"));
+
+    it("accepts an asynchronous override", async () => {
+      const h = await harness(protocol, {
+        exposure: exposure("unknown"),
+        allowUnknownExposureFor: async () => true,
+      });
+      expect((await h.store.put(putInput())).ok).toBe(true);
+    });
+
+    it("can never override an exposed answer, and is not even asked", async () => {
+      const asked: string[] = [];
+      const h = await harness(protocol, {
+        exposure: exposure("exposed"),
+        allowUnknownExposureFor: (url) => {
+          asked.push(url);
+          return true;
+        },
+      });
+      expect(await h.store.put(putInput())).toEqual(refused("library-exposed"));
+      expect(asked).toEqual([]);
+      expect(await allResources(h.storage)).toEqual([]);
+    });
+
+    it("is not asked about a missing, failing or nonsensical probe, which stay refused", async () => {
+      for (const probe of [
+        undefined,
+        async () => {
+          throw new Error("probe failed");
+        },
+        async () => "public" as never,
+      ]) {
+        const asked: string[] = [];
+        const h = await harness(protocol, {
+          exposure: probe,
+          allowUnknownExposureFor: (url) => {
+            asked.push(url);
+            return true;
+          },
+        });
+        expect(await h.store.put(putInput())).toEqual(refused("exposure-unknown"));
+        expect(asked).toEqual([]);
+        expect(await allResources(h.storage)).toEqual([]);
+      }
+    });
+
+    it("counts a throw, a rejection or any non-boolean answer as false", async () => {
+      for (const override of [
+        () => {
+          throw new Error("override failed with token=secret");
+        },
+        async () => {
+          throw new Error("override rejected");
+        },
+        () => "yes" as never,
+        () => 1 as never,
+        () => undefined as never,
+        () => null as never,
+        () => ({}) as never,
+        async () => "true" as never,
+        () => false,
+      ]) {
+        const h = await harness(protocol, {
+          exposure: exposure("unknown"),
+          allowUnknownExposureFor: override,
+        });
+        const result = await h.store.put(putInput());
+        expect(result).toEqual(refused("exposure-unknown"));
+        expect(JSON.stringify(result)).not.toContain("secret");
+        expect(await allResources(h.storage)).toEqual([]);
+      }
+    });
+
+    it("is decided per container and never carried from one to the next", async () => {
+      const asked: string[] = [];
+      let approved = (_url: string) => true;
+      const h = await harness(protocol, {
+        exposure: exposure("unknown"),
+        allowUnknownExposureFor: (url) => {
+          asked.push(url);
+          return approved(url);
+        },
+      });
+      // The library is approved but the shard below it is not: the answer for one does not
+      // extend to the other.
+      let library = "";
+      approved = (url) => {
+        library ||= url;
+        return url === library;
+      };
+      expect(await h.store.put(putInput())).toEqual(refused("exposure-unknown"));
+      expect(asked).toHaveLength(2);
+      expect(asked[0]).toBe(library);
+      expect(asked[1]).not.toBe(library);
+      expect(await allResources(h.storage)).toEqual([]);
+      // And the other way round: a shard approval does not approve the library.
+      asked.length = 0;
+      approved = (url) => url !== library;
+      expect(await h.store.put(putInput({ seed: 2 }))).toEqual(refused("exposure-unknown"));
+      expect(asked).toEqual([library]);
+    });
+
+    it("is asked again for every write: an approval is never cached", async () => {
+      const asked: string[] = [];
+      const h = await harness(protocol, {
+        exposure: exposure("unknown"),
+        allowUnknownExposureFor: (url) => {
+          asked.push(url);
+          return true;
+        },
+      });
+      must(await h.store.put(putInput()));
+      const first = asked.length;
+      must(await h.store.put(putInput({ seed: 2 })));
+      expect(asked.length).toBe(first * 2);
+    });
+
+    it("stops waiting for the override when the call is aborted", async () => {
+      const controller = new AbortController();
+      const h = await harness(protocol, {
+        exposure: exposure("unknown"),
+        allowUnknownExposureFor: () =>
+          new Promise<boolean>(() => {
+            controller.abort();
+          }),
+      });
+      expect(await h.store.put(putInput({ signal: controller.signal }))).toEqual({
+        ok: false,
+        error: { kind: "failed", reason: "aborted" },
+      });
+    });
   });
 
   it("M43: an unknown answer is never cached as private", async () => {
     const seen: string[] = [];
     const h = await harness("solid", {
       exposure: exposure("unknown", seen),
-      allowUnknownExposure: true,
+      allowUnknownExposureFor: () => true,
     });
     must(await h.store.put(putInput()));
     const first = seen.length;

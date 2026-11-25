@@ -67,13 +67,19 @@ export interface MediaStoreOptions<T, I> {
   /**
    * Read-only exposure probe, asked about the library container and about each shard before
    * anything is written into it. See {@link ExposureCheck}. Writes fail closed: an `exposed`
-   * answer, an inconclusive one, a failure of the probe, any value other than the three
-   * states, and a missing probe all refuse the write, unless `allowUnknownExposure` is set
-   * (which lets the inconclusive cases through, never an `exposed` answer).
+   * answer, an `unknown` one, a failure of the probe, any value other than the three states,
+   * and a missing probe all refuse the write. Only a probe that answers exactly `unknown` can be
+   * overridden, and only per container through `allowUnknownExposureFor`.
    */
   exposure?: ExposureCheck;
-  /** Let writes proceed when exposure is unknown or unchecked. Default false. */
-  allowUnknownExposure?: boolean;
+  /**
+   * Per-container override, consulted only when the probe answered exactly `"unknown"` for that
+   * container (never for `exposed`, a throwing or missing probe, or any other value). Return
+   * `true` to let writes into that container proceed. A throw, a rejection or any value other
+   * than `true` counts as `false`. It is asked again for every refused write and its answer is
+   * never cached, so it cannot carry over from one container to another. Default: never.
+   */
+  allowUnknownExposureFor?: (containerUrl: string) => boolean | Promise<boolean>;
   /** How long a "private" answer is reused for one container, in milliseconds. Default 60 000. */
   exposureTtlMs?: number;
   /**
@@ -91,6 +97,11 @@ export interface MediaStoreOptions<T, I> {
 }
 
 export interface PutInput<I> {
+  /**
+   * A `Blob` or `File` is handed to storage-client as this very instance (never converted to
+   * bytes), so the authenticated fetch can stream it: pass large uploads this way. See the
+   * README, "Large bodies".
+   */
   bytes: Blob | Uint8Array;
   /** Declared type. Not trusted: it must agree with the sniffed type or the put is refused. */
   contentType: string;

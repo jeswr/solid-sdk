@@ -23,20 +23,51 @@ export function baseType(contentType: string): string {
   return (contentType.split(";")[0] as string).trim().toLowerCase();
 }
 
-export async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>);
+export async function sha256Hex(bytes: Uint8Array | ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", bytes as ArrayBuffer);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** Load caller bytes, refusing anything over `max` before it is read into memory. */
-export async function loadBytes(body: Blob | Uint8Array, max: number): Promise<Uint8Array> {
+/**
+ * Caller bytes as the store holds them: the ORIGINAL body (a `Blob` is never converted, so the
+ * transport can stream it), its size, and only the leading bytes the sniffer needs.
+ */
+export interface Source {
+  readonly body: Blob | Uint8Array;
+  readonly size: number;
+  readonly head: Uint8Array;
+}
+
+/**
+ * Check the size cap before reading anything, then read just the first `headBytes` bytes. A
+ * `Blob` is sliced, not copied whole; a `Uint8Array` is already in memory and is only viewed.
+ */
+export async function loadSource(
+  body: Blob | Uint8Array,
+  max: number,
+  headBytes: number,
+): Promise<Source> {
   if (body instanceof Uint8Array) {
     if (body.byteLength > max) throw fail("too-large", "bytes-too-large");
-    return body;
+    return { body, size: body.byteLength, head: body.subarray(0, headBytes) };
   }
   if (!(body instanceof Blob)) throw fail("failed", "invalid-input");
   if (body.size > max) throw fail("too-large", "bytes-too-large");
-  return new Uint8Array(await body.arrayBuffer());
+  return {
+    body,
+    size: body.size,
+    head: new Uint8Array(await body.slice(0, headBytes).arrayBuffer()),
+  };
+}
+
+/**
+ * SHA-256 of the whole body. WebCrypto has no streaming digest, so a `Blob` is read into ONE
+ * transient buffer that is released as soon as the digest resolves; nothing else is retained.
+ */
+export async function sha256Source(source: Source): Promise<string> {
+  return sha256Hex(
+    source.body instanceof Uint8Array ? source.body : await source.body.arrayBuffer(),
+  );
 }
 
 /** Read a response body fully, refusing (and cancelling) as soon as it exceeds `max` bytes. */

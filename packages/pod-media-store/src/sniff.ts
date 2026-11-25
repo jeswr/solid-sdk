@@ -7,7 +7,20 @@ export interface Sniffed {
   readonly extension: string;
 }
 
-export type Sniffer = (bytes: Uint8Array) => Sniffed | undefined;
+/** What the caller declared about the bytes. Untrusted: a sniffer may use it only to narrow. */
+export interface SniffHints {
+  /** The declared extension as given (any case, with or without the dot). */
+  readonly extension?: string;
+}
+
+/**
+ * Decides the real type of a binary from its leading bytes. The store passes at most
+ * {@link SNIFF_BYTES} bytes (never the whole body) and the caller's declared extension.
+ */
+export type Sniffer = (bytes: Uint8Array, hints?: SniffHints) => Sniffed | undefined;
+
+/** How many leading bytes the store reads for sniffing; the default sniffer needs no more. */
+export const SNIFF_BYTES = 4096;
 
 const startsWith = (bytes: Uint8Array, offset: number, text: string): boolean => {
   if (bytes.length < offset + text.length) return false;
@@ -130,7 +143,56 @@ const isOggAudio = (bytes: Uint8Array): boolean => {
   return head.includes("vorbis") || head.includes("OpusHead");
 };
 
-function magic(bytes: Uint8Array): Sniffed | undefined {
+const OCTET_STREAM = "application/octet-stream";
+
+/** PLY header lines that may precede the mandatory `format` line. */
+const PLY_PRELUDE = /^(comment|obj_info)( |$)/;
+const PLY_FORMAT = /^format (ascii|binary_little_endian|binary_big_endian) 1\.0$/;
+const PRINTABLE_ASCII = /^[\x20-\x7e]*$/;
+
+/**
+ * PLY: the ASCII magic `ply` and a newline, then a header whose `format` line (after optional
+ * `comment`/`obj_info` lines) is present within the bytes given. Header lines are printable ASCII.
+ */
+function isPly(bytes: Uint8Array): boolean {
+  const eol = bytes[3] === 0x0d ? 2 : bytes[3] === 0x0a ? 1 : 0;
+  if (!startsWith(bytes, 0, "ply") || eol === 0 || (eol === 2 && bytes[4] !== 0x0a)) return false;
+  // Only complete lines count: a cut-off final line proves nothing.
+  const lines = latin1(bytes, 3 + eol, bytes.length)
+    .split("\n")
+    .slice(0, -1);
+  for (const raw of lines) {
+    const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+    if (!PRINTABLE_ASCII.test(line)) return false;
+    if (PLY_FORMAT.test(line)) return true;
+    if (!PLY_PRELUDE.test(line)) return false;
+  }
+  return false;
+}
+
+/**
+ * SPZ (compressed 3D Gaussian splats) has no signature beyond its container, so it is accepted
+ * only when the caller declares `.spz`: a version 4 header (`NGSP`, version 4, as the format's
+ * public documentation specifies) or a gzip member (versions 1 to 3: deflate, no reserved flag).
+ */
+function isSpz(bytes: Uint8Array, hints: SniffHints | undefined): boolean {
+  const declared = hints?.extension?.trim().toLowerCase().replace(/^\./, "");
+  if (declared !== "spz") return false;
+  if (startsWith(bytes, 0, "NGSP")) {
+    return (
+      bytes.length >= 32 &&
+      new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(4, true) === 4 &&
+      (bytes[12] as number) <= 4
+    );
+  }
+  return (
+    startsWithBytes(bytes, [0x1f, 0x8b, 0x08]) &&
+    bytes.length >= 10 &&
+    ((bytes[3] as number) & 0xe0) === 0
+  );
+}
+
+function magic(bytes: Uint8Array, hints: SniffHints | undefined): Sniffed | undefined {
   if (startsWithBytes(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
     return { contentType: "image/png", extension: ".png" };
   }
@@ -165,17 +227,22 @@ function magic(bytes: Uint8Array): Sniffed | undefined {
     return isOggAudio(bytes) ? { contentType: "audio/ogg", extension: ".ogg" } : undefined;
   }
   if (startsWith(bytes, 0, "fLaC")) return { contentType: "audio/flac", extension: ".flac" };
+  // No registered media type exists for either (see README), and neither may ever be rendered.
+  if (isPly(bytes)) return { contentType: OCTET_STREAM, extension: ".ply" };
+  if (isSpz(bytes, hints)) return { contentType: OCTET_STREAM, extension: ".spz" };
   return isMp3(bytes) ? { contentType: "audio/mpeg", extension: ".mp3" } : undefined;
 }
 
 /**
  * Default sniffer: magic bytes against a short allowlist (PNG, JPEG, GIF, WebP, AVIF, HEIC, MP4,
- * M4A, QuickTime, WebM, GLB, MP3, WAV, Ogg Vorbis/Opus, FLAC). It never returns SVG, HTML, XML
+ * M4A, QuickTime, WebM, GLB, MP3, WAV, Ogg Vorbis/Opus, FLAC, PLY, and SPZ only when the declared
+ * extension is `.spz`; PLY and SPZ are `application/octet-stream`, never a renderable type). It
+ * never returns SVG, HTML, XML
  * or any script-capable type, and it refuses bytes that carry markup in their first 512 bytes (an
  * XML prolog in the first 64), ignoring NULs so UTF-16 markup is seen too (a polyglot).
  */
-export const defaultSniff: Sniffer = (bytes) => {
-  const found = magic(bytes);
+export const defaultSniff: Sniffer = (bytes, hints) => {
+  const found = magic(bytes, hints);
   if (found === undefined) return undefined;
   const head = latin1(bytes, 0, SCAN).replaceAll("\0", "").toLowerCase();
   const prolog = latin1(bytes, 0, PROLOG_SCAN).replaceAll("\0", "").toLowerCase();

@@ -18,10 +18,12 @@ import {
   baseType,
   DESCRIPTION_ACCEPT,
   DESCRIPTION_TYPES,
-  loadBytes,
+  loadSource,
   normaliseDescription,
   readBounded,
+  type Source,
   sha256Hex,
+  sha256Source,
 } from "./io.js";
 import { createMemoryJournal, type DeleteJournalEntry } from "./journal.js";
 import {
@@ -33,7 +35,7 @@ import {
   shardKeyOf,
   YEAR,
 } from "./scope.js";
-import { defaultSniff, type Sniffed } from "./sniff.js";
+import { defaultSniff, SNIFF_BYTES, type Sniffed } from "./sniff.js";
 import type {
   AttachThumbnailInput,
   Current,
@@ -72,12 +74,13 @@ type Loaded<T> =
   | { state: "ok"; item: MediaItem<T> }
   | { state: "pending" | "unparseable" | "outOfScope"; item?: undefined };
 
+/** The caller's body (a Blob stays a Blob), its facts and what the sniffer said. */
 interface Prepared {
-  bytes: Uint8Array;
+  source: Source;
   sniffed: Sniffed;
   sha256: string;
   key: string;
-  thumbnail: { bytes: Uint8Array; sniffed: Sniffed } | undefined;
+  thumbnail: { source: Source; sniffed: Sniffed } | undefined;
 }
 
 interface Written {
@@ -373,31 +376,46 @@ export async function openMediaStore<T, I>(
 
   // ---- exposure --------------------------------------------------------------------------
 
-  /** Ask the probe about one container; anything but a clear answer is `unknown`. */
+  /**
+   * Ask the probe about one container. Only a clear answer is reported as one: a missing probe,
+   * a probe that throws and any value but the three states are `failed`, which no override can
+   * lift (the override is for a probe that says `unknown` itself, such as the LWS adapter).
+   */
   async function exposureOf(
     target: string,
     signal: AbortSignal | undefined,
-  ): Promise<ExposureState> {
+  ): Promise<ExposureState | "failed"> {
     const probe = options.exposure;
-    if (probe === undefined) return "unknown";
-    let state: ExposureState;
+    if (probe === undefined) return "failed";
+    let state: ExposureState | "failed";
     try {
       const answer = await abortable(signal, probe(target, signal));
-      state = answer === "private" || answer === "exposed" ? answer : "unknown";
+      state =
+        answer === "private" || answer === "exposed" || answer === "unknown" ? answer : "failed";
     } catch (cause) {
       if (signal?.aborted) throw cause;
-      state = "unknown";
+      state = "failed";
     }
     if (state === "private") privateUntil.set(target, now() + exposureTtlMs);
     return state;
   }
 
-  /** Refuse a write into `target` unless it is known private (or unknown and allowed). */
+  /**
+   * The per-container override, asked fresh on every refusal for `target` (never cached, never
+   * shared between containers). A throw, a rejection or any value but `true` is a no.
+   */
+  async function unknownAllowed(target: string, signal: AbortSignal | undefined): Promise<boolean> {
+    const allow = options.allowUnknownExposureFor;
+    if (typeof allow !== "function") return false;
+    return (await safely(signal, () => abortable(signal, Promise.resolve(allow(target))))) === true;
+  }
+
+  /** Refuse a write into `target` unless it is known private (or `unknown` and allowed for it). */
   async function requireNotExposed(target: string, signal: AbortSignal | undefined): Promise<void> {
     if ((privateUntil.get(target) ?? 0) > now()) return;
     const state = await exposureOf(target, signal);
     if (state === "exposed") throw fail("exposed", "library-exposed");
-    if (state === "unknown" && options.allowUnknownExposure !== true) {
+    if (state === "failed" || (state === "unknown" && !(await unknownAllowed(target, signal)))) {
       throw fail("exposed", "exposure-unknown");
     }
   }
@@ -484,20 +502,20 @@ export async function openMediaStore<T, I>(
 
   /** A thumbnail's bytes, size-bounded and sniffed: it must be a recognised image. */
   async function loadThumbnail(
-    source: Blob | Uint8Array,
-  ): Promise<{ bytes: Uint8Array; sniffed: Sniffed }> {
-    const bytes = await loadBytes(source, maxThumbnailBytes);
-    const sniffed = sniff(bytes);
+    body: Blob | Uint8Array,
+  ): Promise<{ source: Source; sniffed: Sniffed }> {
+    const source = await loadSource(body, maxThumbnailBytes, SNIFF_BYTES);
+    const sniffed = sniff(source.head);
     if (!usable(sniffed) || !sniffed.contentType.startsWith("image/")) {
       throw fail("unsupported", "unsniffable");
     }
-    return { bytes, sniffed };
+    return { source, sniffed };
   }
 
   async function prepare(input: PutInput<I>): Promise<Prepared> {
-    const bytes = await loadBytes(input.bytes, maxBytes);
+    const source = await loadSource(input.bytes, maxBytes, SNIFF_BYTES);
     throwIfAborted(input.signal);
-    const sniffed = sniff(bytes);
+    const sniffed = sniff(source.head, { extension: input.extension });
     if (!usable(sniffed)) throw fail("unsupported", "unsniffable");
     if (
       baseType(input.contentType) !== sniffed.contentType ||
@@ -509,9 +527,9 @@ export async function openMediaStore<T, I>(
     if (key === undefined) throw fail("failed", "invalid-input");
     const thumbnail =
       input.thumbnail === undefined ? undefined : await loadThumbnail(input.thumbnail.bytes);
-    const sha256 = await sha256Hex(bytes);
+    const sha256 = await sha256Source(source);
     throwIfAborted(input.signal);
-    return { bytes, sniffed, sha256, key, thumbnail };
+    return { source, sniffed, sha256, key, thumbnail };
   }
 
   /** Hash the bytes behind `url`, reading at most `max`. */
@@ -533,14 +551,14 @@ export async function openMediaStore<T, I>(
   async function createMedia(
     shardUrl: string,
     fileName: string,
-    bytes: Uint8Array,
+    body: Blob | Uint8Array,
     contentType: string,
     verify: (existing: string) => Promise<void>,
     signal: AbortSignal | undefined,
     created: string[],
   ): Promise<string> {
     try {
-      const made = await storage.create(shardUrl, bytes, { name: fileName, contentType, signal });
+      const made = await storage.create(shardUrl, body, { name: fileName, contentType, signal });
       created.push(made.url);
       return made.url;
     } catch (cause) {
@@ -573,20 +591,22 @@ export async function openMediaStore<T, I>(
       const bytes = await readBounded(result, maxThumbnailBytes, () =>
         fail("too-large", "bytes-too-large"),
       );
-      if (!sniff(bytes)?.contentType.startsWith("image/")) throw fail("conflict", "hash-mismatch");
+      if (!sniff(bytes.subarray(0, SNIFF_BYTES))?.contentType.startsWith("image/")) {
+        throw fail("conflict", "hash-mismatch");
+      }
     };
 
   function createThumbnail(
     shardUrl: string,
     fileName: string,
-    thumbnail: { bytes: Uint8Array; sniffed: Sniffed },
+    thumbnail: { source: Source; sniffed: Sniffed },
     signal: AbortSignal | undefined,
     created: string[],
   ): Promise<string> {
     return createMedia(
       shardUrl,
       `${fileName}${thumbnail.sniffed.extension}`,
-      thumbnail.bytes,
+      thumbnail.source.body,
       thumbnail.sniffed.contentType,
       verifyThumbnail(signal),
       signal,
@@ -609,7 +629,7 @@ export async function openMediaStore<T, I>(
         options.build(url, binaryUrl, input.description, {
           sha256: prepared.sha256,
           contentType: prepared.sniffed.contentType,
-          byteLength: prepared.bytes.byteLength,
+          byteLength: prepared.source.size,
           createdAt: input.createdAt,
           thumbnailUrl,
         }),
@@ -825,7 +845,7 @@ export async function openMediaStore<T, I>(
       const binaryUrl = await createMedia(
         shardUrl,
         `${sha256}${prepared.sniffed.extension}`,
-        prepared.bytes,
+        prepared.source.body,
         prepared.sniffed.contentType,
         verifyBinary(sha256, signal),
         signal,
@@ -1379,7 +1399,9 @@ export async function openMediaStore<T, I>(
       (lws ? memberShard.has(url) || verifiedShards.has(url) : isInsideLibrary(library, url)),
     checkExposure: (signal) =>
       run(signal, async () =>
-        exposureOf(library ?? (await discover(signal)) ?? storage.root, signal),
+        exposureOf(library ?? (await discover(signal)) ?? storage.root, signal).then((state) =>
+          state === "failed" ? "unknown" : state,
+        ),
       ),
     put: (input) => run(input?.signal, () => put(input)),
     list: (opts = {}) => run(opts.signal, () => list(opts)),

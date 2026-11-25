@@ -1,10 +1,10 @@
 // AUTHORED-BY Claude Sonnet 5.5
 import { StorageError } from "@jeswr/storage-client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { decodeCursor, encodeCursor } from "./cursor.js";
 import { fail, MediaFailure, run, toError } from "./errors.js";
 import { exposureFromOwnerOnly } from "./exposure.js";
-import { loadBytes, normaliseDescription, readBounded } from "./io.js";
+import { loadSource, normaliseDescription, readBounded, sha256Source } from "./io.js";
 import { createMemoryJournal } from "./journal.js";
 import {
   isInsideLibrary,
@@ -386,18 +386,40 @@ describe("io helpers", () => {
     expect(cancelled).toBe(true);
   });
 
-  it("loadBytes enforces the cap before reading and rejects other inputs", async () => {
-    expect(await loadBytes(new Uint8Array(3), 3)).toHaveLength(3);
-    expect(await loadBytes(new Blob(["abc"]), 3)).toHaveLength(3);
-    await expect(loadBytes(new Uint8Array(4), 3)).rejects.toMatchObject({
+  it("loadSource enforces the cap before reading, keeps the original body and reads only a head", async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4, 5]);
+    const fromBytes = await loadSource(bytes, 5, 2);
+    expect(fromBytes.body).toBe(bytes);
+    expect(fromBytes.size).toBe(5);
+    expect([...fromBytes.head]).toEqual([1, 2]);
+    const blob = new Blob([bytes]);
+    const sliced = vi.spyOn(blob, "slice");
+    const arrayBuffer = vi.spyOn(blob, "arrayBuffer");
+    const fromBlob = await loadSource(blob, 5, 2);
+    expect(fromBlob.body).toBe(blob);
+    expect(fromBlob.size).toBe(5);
+    expect([...fromBlob.head]).toEqual([1, 2]);
+    expect(sliced).toHaveBeenCalledWith(0, 2);
+    expect(arrayBuffer).not.toHaveBeenCalled();
+    await expect(loadSource(new Uint8Array(4), 3, 2)).rejects.toMatchObject({
       error: { kind: "too-large" },
     });
-    await expect(loadBytes(new Blob(["abcd"]), 3)).rejects.toMatchObject({
+    const big = new Blob(["abcd"]);
+    const bigRead = vi.spyOn(big, "arrayBuffer");
+    await expect(loadSource(big, 3, 2)).rejects.toMatchObject({
       error: { kind: "too-large" },
     });
-    await expect(loadBytes("abc" as never, 3)).rejects.toMatchObject({
+    expect(bigRead).not.toHaveBeenCalled();
+    await expect(loadSource("abc" as never, 3, 2)).rejects.toMatchObject({
       error: { reason: "invalid-input" },
     });
+  });
+
+  it("sha256Source hashes a Uint8Array or a whole Blob identically", async () => {
+    const bytes = new TextEncoder().encode("abc");
+    const expected = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+    expect(await sha256Source(await loadSource(bytes, 3, 1))).toBe(expected);
+    expect(await sha256Source(await loadSource(new Blob(["abc"]), 3, 1))).toBe(expected);
   });
 
   it("normaliseDescription accepts RDF types only and caps the size", () => {

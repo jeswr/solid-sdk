@@ -33,10 +33,18 @@ Rules that must survive any change:
   having listed or created the resource this session.
 - The journal, cursor, type index and descriptions are untrusted input. `resumePending` acts only inside the library.
 - Exposure fails closed: the probe must say `private` for the library and for the shard before a write;
-  `unknown` and a missing probe refuse unless `allowUnknownExposure`; `exposed` always refuses; only `private`
-  is cached. Registration is private-index only.
+  `unknown` refuses unless `allowUnknownExposureFor(containerUrl)` returns exactly `true` for that container;
+  `exposed`, a missing probe, a throwing probe and a nonsense answer always refuse (the override is not even
+  asked); a throwing or non-boolean override is `false`; the override is asked per refusal and never cached;
+  only `private` is cached. Registration is private-index only.
+- A `Blob` body is handed to storage-client as the caller's own instance, never converted to bytes. Hashing
+  reads it into one transient buffer (WebCrypto has no streaming digest); sniffing gets only the first
+  `SNIFF_BYTES` (4096) bytes plus the declared extension as `hints.extension`. Keep it that way: a copy would
+  hit `auth.fetch`'s 16 MiB replay limit.
 - The default sniffer never returns SVG, HTML or XML types and refuses bytes carrying markup in the first 512
-  bytes; MP3 needs an ID3v2 header or two consecutive valid frames.
+  bytes; MP3 needs an ID3v2 header or two consecutive valid frames. PLY needs `ply` + newline and a `format`
+  header line; SPZ (gzip or `NGSP` v4) only when the declared extension is `.spz`; both are reported as
+  `application/octet-stream`. No glTF JSON, OBJ or FBX.
 
 Test pattern: the storage-client memory pod in both `solid` and `lws` modes (`test/support.ts` has the harness,
 fault injection `intercept`, `serverNames` for an LWS that picks its own names, and `withoutResponseEtags` for a

@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Sonnet 5.5
 import { StorageError } from "@jeswr/storage-client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   allResources,
   harness,
@@ -10,6 +10,7 @@ import {
   png,
   putInput,
   ROOT,
+  sha256Of,
   text,
 } from "../test/support.js";
 
@@ -50,6 +51,149 @@ describe.each(["solid", "lws"] as const)("put (%s)", (protocol) => {
     const hex = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
     expect(binary.endsWith(`/${hex}.jpg`)).toBe(true);
     if (protocol === "solid") expect(listing.some((url) => url.endsWith(`/${hex}`))).toBe(true);
+  });
+
+  describe("Blob bodies", () => {
+    /** Every body that reached `storage.create`, in order, with the options it came with. */
+    const spyCreates = (bodies: unknown[]) => (storage: Parameters<typeof intercept>[0]) =>
+      intercept(storage, ({ method, args }) => {
+        if (method === "create") bodies.push(args[1]);
+      });
+
+    it("hands the caller's own Blob (not a copy) to the transport, once, and reads it once", async () => {
+      const bytes = png(7, 4096);
+      const blob = new Blob([bytes as Uint8Array<ArrayBuffer>]);
+      const thumb = new Blob([jpeg(3) as Uint8Array<ArrayBuffer>]);
+      const read = vi.spyOn(blob, "arrayBuffer");
+      const sliced = vi.spyOn(blob, "slice");
+      const bodies: unknown[] = [];
+      const h = await harness(protocol, {}, spyCreates(bodies));
+      const out = must(await h.store.put(putInput({ bytes: blob, thumbnail: { bytes: thumb } })));
+      expect(bodies.filter((body) => body === blob)).toHaveLength(1);
+      expect(bodies.filter((body) => body === thumb)).toHaveLength(1);
+      expect(bodies.some((body) => body instanceof Uint8Array && body.byteLength === 4096)).toBe(
+        false,
+      );
+      // One whole read for the digest, and the sniffer was given only the leading bytes.
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(sliced).toHaveBeenCalledTimes(1);
+      expect(sliced.mock.calls[0]?.[0]).toBe(0);
+      expect(sliced.mock.calls[0]?.[1]).toBeLessThanOrEqual(4096);
+      expect(out.sha256).toBe(await sha256Of(bytes));
+      const stored = await h.storage.read(out.binaryUrl);
+      expect(new Uint8Array(await new Response(stored.body).arrayBuffer())).toEqual(bytes);
+    });
+
+    it("stores a body larger than the 16 MiB replay limit when maxBytes allows it", async () => {
+      const big = png(9, 17 * 1024 * 1024);
+      const blob = new Blob([big as Uint8Array<ArrayBuffer>]);
+      const bodies: unknown[] = [];
+      const h = await harness(protocol, { maxBytes: 20 * 1024 * 1024 }, spyCreates(bodies));
+      const out = must(await h.store.put(putInput({ bytes: blob })));
+      expect(bodies).toContain(blob);
+      expect(out.sha256).toBe(await sha256Of(big));
+      const stored = await h.storage.read(out.binaryUrl);
+      expect((await new Response(stored.body).arrayBuffer()).byteLength).toBe(17 * 1024 * 1024);
+    });
+
+    it("still refuses a Blob over maxBytes before reading any of it", async () => {
+      const blob = new Blob([png(1, 2048) as Uint8Array<ArrayBuffer>]);
+      const read = vi.spyOn(blob, "arrayBuffer");
+      const sliced = vi.spyOn(blob, "slice");
+      const h = await harness(protocol, { maxBytes: 1024 });
+      expect(await h.store.put(putInput({ bytes: blob }))).toEqual({
+        ok: false,
+        error: { kind: "too-large", reason: "bytes-too-large" },
+      });
+      expect(read).not.toHaveBeenCalled();
+      expect(sliced).not.toHaveBeenCalled();
+    });
+
+    it("keeps a Uint8Array body as it is too", async () => {
+      const bytes = png(5, 256);
+      const bodies: unknown[] = [];
+      const h = await harness(protocol, {}, spyCreates(bodies));
+      must(await h.store.put(putInput({ bytes })));
+      expect(bodies).toContain(bytes);
+    });
+
+    it("passes an attached thumbnail Blob through unchanged", async () => {
+      const bodies: unknown[] = [];
+      const h = await harness(protocol, {}, spyCreates(bodies));
+      const first = must(await h.store.put(putInput()));
+      expect(first.thumbnailUrl).toBeUndefined();
+      const thumb = new Blob([jpeg(4) as Uint8Array<ArrayBuffer>]);
+      const read = vi.spyOn(thumb, "arrayBuffer");
+      bodies.length = 0;
+      await h.store.attachThumbnail(first.descriptionUrl, {
+        bytes: thumb,
+        mutate: async (current, thumbnailUrl) => ({
+          contentType: "application/ld+json",
+          body: JSON.stringify({ ...JSON.parse(current.body), thumbnailUrl }),
+        }),
+      });
+      expect(bodies).toEqual([thumb]);
+      expect(read).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("3D formats", () => {
+    const ply = new TextEncoder().encode(
+      "ply\nformat binary_little_endian 1.0\nelement vertex 1\nend_header\n\u0000\u0001\u0002",
+    );
+    const Ngsp = new Uint8Array(48);
+    Ngsp.set(new TextEncoder().encode("NGSP"));
+    new DataView(Ngsp.buffer).setUint32(4, 4, true);
+
+    it("stores PLY as an opaque model (application/octet-stream, .ply)", async () => {
+      const h = await harness(protocol);
+      const out = must(
+        await h.store.put(
+          putInput({ bytes: ply, contentType: "application/octet-stream", extension: ".ply" }),
+        ),
+      );
+      expect((await h.storage.head(out.binaryUrl)).contentType).toBe("application/octet-stream");
+      expect(out.binaryUrl.endsWith(".ply")).toBe(true);
+    });
+
+    it("stores SPZ only when the declared extension is .spz", async () => {
+      const h = await harness(protocol);
+      const out = must(
+        await h.store.put(
+          putInput({ bytes: Ngsp, contentType: "application/octet-stream", extension: ".spz" }),
+        ),
+      );
+      expect(out.binaryUrl.endsWith(".spz")).toBe(true);
+      for (const extension of [".gz", ".bin", ".ply"]) {
+        expect(
+          await h.store.put(
+            putInput({ bytes: Ngsp, contentType: "application/octet-stream", extension }),
+          ),
+        ).toEqual({ ok: false, error: { kind: "unsupported", reason: "unsniffable" } });
+      }
+    });
+
+    it("keeps refusing glTF JSON, OBJ and FBX, and svg named as a model", async () => {
+      const h = await harness(protocol);
+      for (const [text, extension] of [
+        ['{"asset":{"version":"2.0"}}', ".gltf"],
+        ["# obj\nv 0 0 0\n", ".obj"],
+        ["Kaydara FBX Binary  \u0000", ".fbx"],
+        ['<svg xmlns="http://www.w3.org/2000/svg"/>', ".svg"],
+      ] as const) {
+        const result = await h.store.put(
+          putInput({
+            bytes: new TextEncoder().encode(text),
+            contentType: "application/octet-stream",
+            extension,
+          }),
+        );
+        expect(result).toEqual({
+          ok: false,
+          error: { kind: "unsupported", reason: "unsniffable" },
+        });
+      }
+    });
   });
 
   it("finds the library again through the type index and reuses an existing registration", async () => {

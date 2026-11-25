@@ -6,8 +6,8 @@ export { exposureFromOwnerOnly } from "./exposure.js";
 export type { DeleteJournal, DeleteJournalEntry } from "./journal.js";
 export { createMemoryJournal } from "./journal.js";
 export { isInsideLibrary } from "./scope.js";
-export type { Sniffed, Sniffer } from "./sniff.js";
-export { defaultSniff } from "./sniff.js";
+export type { Sniffed, Sniffer, SniffHints } from "./sniff.js";
+export { defaultSniff, SNIFF_BYTES } from "./sniff.js";
 export { openMediaStore } from "./store.js";
 export type {
   AttachThumbnailInput,

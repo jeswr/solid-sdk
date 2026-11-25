@@ -63,10 +63,12 @@ included. An abort is `failed` / `aborted`. No operation throws, whatever it is 
 
 `put({ bytes, contentType, extension, createdAt, description, thumbnail?, signal? })`:
 
-1. The size is checked first (`maxBytes`, `too-large`), then the bytes are sniffed. The declared type and
-   extension are not trusted: the injected `sniff` (default `defaultSniff`) decides; an `undefined` answer is
-   `unsupported`, and a declared type that disagrees with the sniffed one is `unsupported` too. A
-   thumbnail is sniffed and validated the same way and must be an image.
+1. The size is checked first (`maxBytes`, `too-large`; a `Blob` is not read at all for this), then the
+   leading bytes are sniffed. The declared type and extension are not trusted: the injected `sniff` (default
+   `defaultSniff`) decides; an `undefined` answer is `unsupported`, and a declared type that disagrees with the
+   sniffed one is `unsupported` too. A thumbnail is sniffed and validated the same way and must be an image.
+   A sniffer receives at most the first `SNIFF_BYTES` (4096) bytes, never the whole body, and the declared
+   extension as `hints.extension` (only to narrow, as SPZ does below).
 2. SHA-256 (WebCrypto). Names: `<hex><ext>` for the binary, `<hex>-thumb<ext>` for the thumbnail and
    `<hex>` for the description.
 3. The probe is asked about the library and the shard (see Exposure) before anything is written into them.
@@ -98,6 +100,37 @@ the first by name. Inject `findByHash(sha256, signal) => { descriptionUrl } | un
 used only if it is a member of the library, its binary hashes to the expected value and its description
 parses; a hit that is stale, foreign or from before the library exists is a miss, not a failure. The same
 bytes with `createdAt` in two different months are stored twice (one shard per month).
+
+## Large bodies: memory and size limits
+
+`put` and `attachThumbnail` give storage-client the caller's **original** `Blob` (`File` included), not a
+copy, so the injected authenticated fetch can send it without buffering. `@jeswr/pod-auth`'s `auth.fetch`
+replays a `Blob`/`File` body as it is and rejects only the other body kinds above `maxReplayBodyBytes` (16 MiB
+default), so a `Blob` upload is not subject to that limit; a `Uint8Array` is already in memory and is passed as
+it is (still subject to the replay limit above 16 MiB, so pass large uploads as a `Blob` or `File`).
+storage-client forwards the body to `fetch` unchanged on both backends (`create` and `write`; the memory pod
+used in tests copies it, as a server would).
+
+What is actually held in memory for a `Blob` of `n` bytes:
+
+- Sizing reads nothing (`blob.size`). Sniffing reads only the first 4096 bytes (`blob.slice(0, 4096)`).
+- The SHA-256 needs the whole content: WebCrypto has no streaming digest and this package adds no hashing
+  dependency. The store reads the `Blob` into **one** transient buffer of `n` bytes, hashes it, and drops it
+  before anything is written. The store keeps no other full copy; the upload itself streams from the `Blob`
+  (a browser `Blob` or `File` is typically disk-backed, so it does not count against the heap). The engine may
+  copy once more inside `digest`, which this package cannot avoid, so peak transient use is about one to two
+  times `n`, once per `put`, for the duration of the hash only.
+- A `Uint8Array` body is hashed in place and uploaded as it is: no copy is made.
+- "Already exists" checks keep their bounded read: an existing binary is read through `maxBytes` (a thumbnail
+  through `maxThumbnailBytes`), buffered in chunks and joined, so while that check runs it holds up to the size
+  of the existing file, briefly twice (chunks and joined copy). It happens only when a name is taken.
+
+Effective limits: `maxBytes` (default 50 MiB; raise it for larger uploads) and `maxThumbnailBytes` (5 MiB) bound
+what is accepted. Above that, the practical ceiling is the largest `ArrayBuffer` the runtime can allocate for the
+digest (about 2 GiB in some browsers, larger in Node) and the server's own upload limit. A body whose hash
+cannot be computed fails the put; it is never uploaded unhashed. `Blob` content is immutable, so the bytes that
+were hashed are the bytes that are sent. A `Uint8Array` the caller mutates during a `put` is the caller's bug
+(as before).
 
 ## list, get, update, remove, attachThumbnail, sweepOrphans
 
@@ -140,12 +173,49 @@ bytes with `createdAt` in two different months are stored twice (one shard per m
 adapts it (structurally) to `(containerUrl) => 'private' | 'exposed' | 'unknown'`. The store **fails closed**:
 before writing into the library and before writing into a shard (`put`, `attachThumbnail`) the probe must say
 `private`. `exposed` refuses with `exposed` / `library-exposed`. Anything else (`unknown`, a probe that throws,
-any other value, or no `exposure` option at all) refuses with `exposed` / `exposure-unknown`, unless
-`allowUnknownExposure: true` is set, which lets only the inconclusive cases through, never `exposed`. A `private`
-answer is cached per container for `exposureTtlMs` (default 60 s); an inconclusive answer is never cached.
-`checkExposure()` runs the probe on demand (on the library, or the storage root before it exists). The package
-never writes `.acl` or `.acr`. On LWS the adapter answers `unknown`, so LWS needs `allowUnknownExposure` or a
-probe of the caller's own.
+any other value, or no `exposure` option at all) refuses with `exposed` / `exposure-unknown`, unless the one
+exception below applies. A `private` answer is cached per container for `exposureTtlMs` (default 60 s); an
+inconclusive answer is never cached. `checkExposure()` runs the probe on demand (on the library, or the storage
+root before it exists; a failed probe reads as `unknown`). The package never writes `.acl` or `.acr`. On LWS the
+adapter answers `unknown`, so LWS needs `allowUnknownExposureFor` or a probe of the caller's own.
+
+`allowUnknownExposureFor?: (containerUrl: string) => boolean | Promise<boolean>` is the per-container override.
+It is consulted only when the probe answered exactly `"unknown"` for that container (the library or one shard):
+never for `"exposed"` (not even asked), and never for a missing probe, a probe that threw or an answer that is
+not one of the three states (those stay refused). Only the value `true` lets the write proceed; `false`, a
+throw, a rejection and any other value (a string, a number, `undefined`, an object) count as `false`, and its
+errors are never surfaced. It is asked afresh for every refused write and the answer is never cached, so
+approving the library does not approve its shards, or the reverse. There is no store-wide switch.
+
+## Default sniffer
+
+`defaultSniff(bytes, hints?)` is a short allowlist of magic bytes: PNG, JPEG, GIF, WebP, AVIF, HEIC, MP4, M4A,
+QuickTime, WebM, GLB, MP3, WAV, Ogg Vorbis/Opus, FLAC, PLY and (only for a declared `.spz`) SPZ. SVG, HTML, XML
+and script types are never returned, and bytes carrying markup in the first 512 bytes (an XML prolog in the
+first 64) are refused, with NULs ignored so UTF-16 markup is seen. glTF JSON, OBJ and FBX are not recognised.
+
+- **PLY** (`.ply`): the ASCII magic `ply` and a newline (`\n` or `\r\n`), then complete printable-ASCII header
+  lines in which, after any `comment` / `obj_info` lines, the `format ascii|binary_little_endian|binary_big_endian
+  1.0` line appears within the bytes sniffed (4096). Anything else before `format`, a cut-off format line or
+  a non-printable header byte is refused; the markup guard applies as for every type.
+- **SPZ** (`.spz`, compressed 3D Gaussian splats): accepted **only** when the caller's declared extension is
+  `.spz` (any case, dot optional), never as a general gzip type. The public format documentation
+  (nianticlabs/spz) specifies version 4 as a plaintext 32-byte header starting `NGSP` with version 4 (little endian) and an SH
+  degree of at most 4, followed by ZSTD streams, and versions 1 to 3 as one gzip member. Both are accepted for
+  `.spz`: the gzip form needs the deflate method byte and no reserved flag bits; the `NGSP` form needs a
+  version of exactly 4.
+- **Content type.** The same documentation names no media type, and no IANA registration for either format was
+  found (the IANA site was not reachable from the authoring environment, so this is the absence from the
+  format's own documentation rather than a registry lookup). Both are therefore reported as
+  `application/octet-stream` with extensions `.ply` and `.spz`, so a declared type of `application/octet-stream` is
+  what `put` expects. Neither is ever a renderable type.
+- **Why a gzip that inflates to markup is acceptable.** The sniffer sees only the compressed bytes, so a
+  `.spz` gzip whose inflated head is markup is accepted as opaque bytes. That is harmless for a type that is never
+  rendered as a document: it is stored and served as `application/octet-stream` (a browser does not sniff
+  that into HTML, especially with `X-Content-Type-Options: nosniff`), and its only consumer decodes it as
+  gaussian-splat data, not markup. The markup guard still refuses compressed bytes that carry markup in their
+  first 512 bytes. Consumers must keep serving it as `application/octet-stream` and must not inflate it into
+  a document.
 
 ## Containment
 
