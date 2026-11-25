@@ -15,6 +15,7 @@ afterEach(() => {
   vi.resetModules();
   vi.doUnmock("./capture.js");
   vi.doUnmock("./export-import.js");
+  vi.doUnmock("./redaction-migration.js");
 });
 
 describe("export process contract", () => {
@@ -58,6 +59,36 @@ describe("export process contract", () => {
     expect(exit).toHaveBeenCalledWith(status);
     expect(stderr).toHaveBeenCalledTimes(status);
     expect(vi.getTimerCount()).toBe(0);
+  });
+  // AUTHORED-BY Claude Sonnet 5.5
+  it.each([0, 1])("propagates redact-archive status %i", async (status) => {
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    const run = vi.fn().mockResolvedValue(status);
+    vi.doMock("./redaction-migration.js", () => ({ runRedactionMigration: run }));
+    process.argv = ["node", "solid-capture", "redact-archive", "--dry-run"];
+    await import("./cli.js");
+    expect(run).toHaveBeenCalledWith(["redact-archive", "--dry-run"]);
+    expect(exit).toHaveBeenCalledWith(status);
+    expect(stderr).toHaveBeenCalledTimes(status);
+    if (status === 1)
+      expect(stderr).toHaveBeenCalledWith(
+        "Redaction failed. Check the owner MCP configuration and run it again.\n",
+      );
+  });
+  it("sanitizes redact-archive startup failures", async () => {
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    vi.doMock("./redaction-migration.js", () => {
+      throw new Error("secret redaction error");
+    });
+    process.argv = ["node", "solid-capture", "redact-archive"];
+    await import("./cli.js");
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(stderr).toHaveBeenCalledWith(
+      "Redaction failed. Check the owner MCP configuration and run it again.\n",
+    );
+    expect(JSON.stringify(stderr.mock.calls)).not.toContain("secret redaction error");
   });
   it("sanitizes export startup failures", async () => {
     const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
