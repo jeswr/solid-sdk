@@ -104,10 +104,20 @@ export function calendarIO(fetch: typeof globalThis.fetch, podRoot: string) {
       from: Date,
       to: Date,
       timeZone = "UTC",
+      onUnreadable?: (url: string, error: unknown) => void,
     ): Promise<StoredItem<CalendarEvent>[]> {
       const events: StoredItem<CalendarEvent>[] = [];
       for (const url of await listResources(containerUrl)) {
-        const item = await load(url, parseEvent);
+        // One event that fails validation must not hide the rest of the range. Network, scope
+        // and RDF syntax errors still propagate.
+        const item = await load(url, (target, dataset) => {
+          try {
+            return parseEvent(target, dataset);
+          } catch (error) {
+            onUnreadable?.(url, error);
+            return undefined;
+          }
+        });
         if (item)
           for (const data of expandEvent(item.data, from, to, timeZone))
             events.push({ ...item, data });

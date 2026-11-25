@@ -152,14 +152,23 @@ export class EventDoc extends ModelNode {
   private get fields() {
     return new CalendarEventView(this.value, this.dataset, this.factory);
   }
+  /**
+   * The generated reader is strict: it returns `undefined` for a language-tagged, duplicated or
+   * non-`xsd:string` value. The app rewrites whole documents on every edit, so a field dropped on
+   * read would be erased from the pod. Fall back to the first literal's lexical value, as the
+   * hand-written model always did.
+   */
+  private tolerant(generated: string | undefined, predicate: string): string | undefined {
+    return generated ?? this.text(predicate);
+  }
   get timeZone() {
-    return this.fields.timeZone;
+    return this.tolerant(this.fields.timeZone, `${c}timeZone`);
   }
   set timeZone(v: string | undefined) {
     this.fields.timeZone = v;
   }
   get name() {
-    return this.fields.name ?? this.text(`${c}summary`);
+    return this.tolerant(this.fields.name, `${s}name`) ?? this.text(`${c}summary`);
   }
   set name(v: string | undefined) {
     this.fields.name = v;
@@ -180,13 +189,13 @@ export class EventDoc extends ModelNode {
     this.setDate(`${c}endTime`, v);
   }
   get location() {
-    return this.fields.location;
+    return this.tolerant(this.fields.location, `${s}location`);
   }
   set location(v: string | undefined) {
     this.fields.location = v;
   }
   get description() {
-    return this.fields.description;
+    return this.tolerant(this.fields.description, `${s}description`);
   }
   set description(v: string | undefined) {
     this.fields.description = v;
@@ -198,7 +207,7 @@ export class EventDoc extends ModelNode {
     this.setIri(`${c}inCalendar`, v);
   }
   get uid() {
-    return this.fields.uid;
+    return this.tolerant(this.fields.uid, `${s}identifier`);
   }
   set uid(v: string | undefined) {
     this.fields.uid = v;
@@ -285,9 +294,17 @@ export function buildCalendar(url: string, data: Calendar): Store {
 }
 export function parseCalendar(url: string, dataset: DatasetCore): Calendar | undefined {
   const target = httpIri(url);
-  if (!isCalendarDocument(target, dataset)) return undefined;
+  const node = new ModelNode(subject(url), dataset, DataFactory);
+  // The generated type check does not know the legacy w3id `Calendar` class the hand-written
+  // reader accepted through `canonicalize`, so that class is accepted here.
+  if (!isCalendarDocument(target, dataset) && !node.hasType(CALENDAR_CLASS)) return undefined;
   const doc = parseCalendarDocument(target, dataset);
-  const data = { title: doc?.title ?? "", color: doc?.color };
+  // The generated parse rejects the whole document for a tagged or duplicated title; read the
+  // first literal as the hand-written model did.
+  const data = {
+    title: doc?.title ?? node.text(`${NS.DCT}title`) ?? "",
+    color: doc?.color ?? node.text(`${s}color`),
+  };
   validateCalendar(data);
   return data;
 }
