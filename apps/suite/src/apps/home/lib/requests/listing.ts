@@ -30,6 +30,9 @@ export async function listInboxRequests(options: ListRequestsOptions): Promise<I
   const shares = await shareNotificationUrls(unreadable, {
     fetch: options.fetch,
     webId: options.webId,
+    // Credentials stay inside the storage; a profile elsewhere is read credential-free.
+    storageUrl: options.storage,
+    ...(options.publicFetch && { publicFetch: options.publicFetch }),
     ...(options.inbox !== undefined && { inbox: options.inbox }),
     ...(options.signal && { signal: options.signal }),
   }).catch((): ReadonlySet<string> => {

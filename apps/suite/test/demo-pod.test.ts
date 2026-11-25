@@ -46,8 +46,9 @@ describe("demo seed and binary fixtures", () => {
       .filter((path) => !path.startsWith("agent/"));
     // Groups & family adds two group records, two folder ACLs and the family sharing state.
     // The named demo app and folder grants (#521) add four more.
-    // Shared with me (#504) seeds eight more.
-    expect(nonAgentPaths).toHaveLength(115);
+    // Shared with me (#504) seeds four share notifications; the shared resources themselves live
+    // in the friends' pod (seed-friends), outside this storage.
+    expect(nonAgentPaths).toHaveLength(111);
     expect(nonAgentPaths).toEqual(
       expect.arrayContaining([
         "groups/.acl",
@@ -196,8 +197,6 @@ describe("demo pod HTTP contract", () => {
       `${DEMO_ROOT}private/`,
       `${DEMO_ROOT}profile/`,
       `${DEMO_ROOT}settings/`,
-      `${DEMO_ROOT}sheets/`,
-      `${DEMO_ROOT}tasks/`,
       `${DEMO_ROOT}templates/`,
     ]);
     const description = await graph(await pod.fetch(descriptionUrl), descriptionUrl);

@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
-import { createInboxReader } from "@jeswr/pod-access/notify";
 import {
   mergeSharedItems,
+  readSharedInbox,
+  type SharedInboxFailure,
   type SharedItem,
   sharedHiddenAt,
   sharedItemsFromInbox,
@@ -33,20 +34,25 @@ export function useSharedItems(session: PodSession) {
     session: PodSession;
     items: SharedItem[];
     projects: SharedItem[];
-    error: boolean;
+    /** Why the inbox could not be read; absent when it was read (even if empty). */
+    failure?: SharedInboxFailure;
+    /** The inbox is larger than the bound read: older announcements may be missing. */
+    truncated?: { limit: number };
   }>();
   useEffect(() => {
     void version;
     const controller = new AbortController();
-    const reader = createInboxReader({
-      fetch: (input, init) => {
+    const transport =
+      (fetchImpl: typeof fetch): typeof fetch =>
+      (input, init) => {
         controller.signal.throwIfAborted();
         const signal = init?.signal
           ? AbortSignal.any([controller.signal, init.signal])
           : controller.signal;
-        return session.fetch(input, { ...init, signal });
-      },
-    });
+        return fetchImpl(input, { ...init, signal });
+      };
+    // Credentials only reach the user's storage; a WebID elsewhere is read credential-free.
+    const publicFetch = session.mode === "demo" ? undefined : session.publicFetch;
     let generation = 0;
     const load = async () => {
       const current = ++generation;
@@ -67,17 +73,30 @@ export function useSharedItems(session: PodSession) {
         }
       })();
       try {
-        const inbox = await reader.inbox(session.webId);
-        const items = inbox
-          ? sharedItemsFromInbox(await reader.list(inbox, { signal: controller.signal }), {
-              storageUrl: session.storageUrl,
-            })
-          : [];
+        const result = await readSharedInbox({
+          webId: session.webId,
+          storageUrl: session.storageUrl,
+          fetch: transport(session.fetch),
+          ...(publicFetch ? { publicFetch: transport(publicFetch) } : {}),
+          signal: controller.signal,
+        });
+        const items =
+          result.status === "ok"
+            ? sharedItemsFromInbox(result.notifications, { storageUrl: session.storageUrl })
+            : [];
         if (!controller.signal.aborted && current === generation)
-          setSnapshot({ session, items, projects, error: false });
+          setSnapshot({
+            session,
+            items,
+            projects,
+            ...(result.status === "failed" ? { failure: result.reason } : {}),
+            ...(result.status === "ok" && result.truncated
+              ? { truncated: { limit: result.limit } }
+              : {}),
+          });
       } catch {
         if (!controller.signal.aborted && current === generation)
-          setSnapshot({ session, items: [], projects, error: true });
+          setSnapshot({ session, items: [], projects, failure: "network" });
       }
     };
     void load();
@@ -110,7 +129,9 @@ export function useSharedItems(session: PodSession) {
   return {
     items: visibleSharedItems(merged, hidden),
     loading: !current,
-    error: current?.error ?? false,
+    error: current?.failure !== undefined,
+    failure: current?.failure,
+    truncated: current?.truncated,
     storageUrl: session.storageUrl,
     remove: (url: string) => {
       if (active.current !== session) return;

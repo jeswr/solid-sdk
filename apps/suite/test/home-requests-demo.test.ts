@@ -72,7 +72,7 @@ describe("demo access request fixture", () => {
       dataTypes: [ACTIVITY_CLASS],
       modes: ["read"],
     });
-    if (entry?.status === "unreadable" || !entry) throw new Error("unreadable");
+    if (!entry) throw new Error("unreadable");
     expect(requestCards(entry).map((card) => card.label)).toEqual(["Activity"]);
     // listRequests reports every other inbox member as unreadable: here, exactly the seeded shares.
     expect(

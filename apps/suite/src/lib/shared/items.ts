@@ -40,9 +40,11 @@ export function sharedItemHref(item: SharedItem, storageUrl?: string): string {
       shared: true,
       ...(storageUrl ? { storageUrl } : {}),
       // The pod boundary, not the origin: one host may serve many path-based pods.
+      // `announced` is sticky: recording a preview as opened never lifts it for a sender's link.
       previewOnly:
-        item.source === "inbox" &&
-        (item.fromAnotherPod === true || !storageUrl || !isWithinPodScope(storageUrl, item.url)),
+        item.announced === true ||
+        (item.source === "inbox" &&
+          (item.fromAnotherPod === true || !storageUrl || !isWithinPodScope(storageUrl, item.url))),
     },
   ).href;
 }

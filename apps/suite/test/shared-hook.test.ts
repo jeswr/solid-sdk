@@ -6,9 +6,19 @@ import type { PodSession } from "../src/lib/session/pod-session";
 import { act, h, mount } from "./drive-ui-dom";
 
 const reader = vi.hoisted(() => ({ inbox: vi.fn(), list: vi.fn() }));
-vi.mock("@jeswr/pod-access/notify", async (original) => ({
+// The transport and confinement of the real reader are covered in shared-hook-transport.test.ts.
+vi.mock("@jeswr/suite-sdk/shared", async (original) => ({
   ...(await original<object>()),
-  createInboxReader: () => reader,
+  readSharedInbox: async () => {
+    const inbox = await reader.inbox();
+    if (!inbox) return { status: "none" };
+    return {
+      status: "ok",
+      notifications: await reader.list(inbox),
+      truncated: false,
+      limit: 100,
+    };
+  },
 }));
 
 import { sharedAccountKey } from "@jeswr/suite-sdk/shared";

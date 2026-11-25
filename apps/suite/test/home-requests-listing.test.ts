@@ -49,9 +49,17 @@ it("asks the share reader about unreadable members, with the inbox and signal wh
   expect(mocks.shares).toHaveBeenCalledWith([share.id], {
     fetch,
     webId: options.webId,
+    storageUrl: ROOT,
     inbox,
     signal,
   });
+  // The public transport for a profile outside the storage is passed through.
+  const publicFetch = vi.fn<typeof globalThis.fetch>();
+  await listInboxRequests({ ...options, publicFetch });
+  expect(mocks.shares).toHaveBeenLastCalledWith(
+    [share.id],
+    expect.objectContaining({ storageUrl: ROOT, publicFetch }),
+  );
 });
 
 it("keeps every unreadable member counted when share recognition fails, unless aborted", async () => {

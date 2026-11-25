@@ -8,6 +8,8 @@ const state = vi.hoisted(() => ({
   storageUrl: "https://bob.example/",
   loading: false,
   error: false,
+  failure: undefined as string | undefined,
+  truncated: undefined as { limit: number } | undefined,
   remove: vi.fn(),
   refresh: vi.fn(),
 }));
@@ -28,6 +30,8 @@ beforeEach(() => {
   localStorage.clear();
   state.loading = false;
   state.error = false;
+  state.failure = undefined;
+  state.truncated = undefined;
   state.remove.mockReset();
   state.items = Array.from(
     { length: 6 },
@@ -85,16 +89,50 @@ it("renders loading, error/retry, and empty states", async () => {
   expect(view.host.querySelector('[aria-label="Loading shared items"]')).not.toBeNull();
   await view.unmount();
   state.loading = false;
-  state.error = true;
   state.items = [];
+  // An empty inbox is an empty state; a failed read is an error with Retry, never "Nothing shared".
   view = await mount(h(SharedPage));
-  expect(view.host.textContent).toContain("Couldn't load shared announcements");
   expect(view.host.textContent).toContain("No shared items for these apps");
+  expect(view.host.textContent).not.toContain("Retry");
+  await view.unmount();
+  state.error = true;
+  state.failure = "network";
+  view = await mount(h(SharedPage));
+  expect(view.host.querySelector('[role="alert"]')?.textContent).toContain(
+    "Can't reach your storage",
+  );
+  expect(view.host.textContent).not.toContain("Nothing shared");
+  expect(view.host.textContent).not.toContain("No shared items");
   await act(async () =>
     [...view.host.querySelectorAll("button")].find((b) => b.textContent === "Retry")?.click(),
   );
   expect(state.refresh).toHaveBeenCalled();
   await view.unmount();
+  const card = await mount(h(SharedCard));
+  expect(card.host.textContent).toContain("Can't reach your storage");
+  expect(card.host.textContent).not.toContain("Nothing shared with you yet");
+  await card.unmount();
+  state.failure = "forbidden";
+  view = await mount(h(SharedPage));
+  expect(view.host.textContent).toContain("Retry");
+  expect(view.host.textContent).not.toContain("No shared items");
+  await view.unmount();
+  state.failure = "lws-no-ldn";
+  view = await mount(h(SharedPage));
+  expect(view.host.textContent).toContain("can't list announcements");
+  expect(view.host.textContent).not.toContain("Retry");
+  await view.unmount();
+});
+
+it("says when only the most recent inbox notifications were read", async () => {
+  state.truncated = { limit: 100 };
+  const view = await mount(h(SharedPage));
+  expect(view.host.textContent).toContain("Showing the most recent 100 inbox notifications");
+  await view.unmount();
+  state.truncated = undefined;
+  const none = await mount(h(SharedPage));
+  expect(none.host.textContent).not.toContain("most recent");
+  await none.unmount();
 });
 
 it("keeps hidden items per account, handles disabled storage, and fences retained removals", async () => {
