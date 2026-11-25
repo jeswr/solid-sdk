@@ -427,6 +427,11 @@ export function publishRepository(
   async function createPage(site: StoredSite, id: string, data: PageData): Promise<StoredPage> {
     assertSlug(id);
     validatePage(data);
+    // A new page is always a private draft; only `publish` makes a page public.
+    if (data.status === "published")
+      throw new PublicationError(
+        "A new page starts as a private draft. Create it, then use publish. Nothing was saved.",
+      );
     await checkSlug(site, data);
     const root = await container(new URL("./", site.url).href, "pages", true);
     const url = new URL(`${id}.ttl`, root).href;

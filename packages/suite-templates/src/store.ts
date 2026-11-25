@@ -108,21 +108,23 @@ export function createTemplateStore(options: {
     containerUrl = url;
     return url;
   }
+  /** Adopts an existing folder only when it is verifiably owner-only; never changes its sharing. */
+  async function adopt(url: string): Promise<string> {
+    if (!(await options.ensurePrivateAccess(url, { created: false })))
+      throw new TemplateAccessError(false);
+    return remember(url);
+  }
   async function locate(create: boolean): Promise<string | undefined> {
     if (containerUrl) return containerUrl;
     const conventional = new URL("templates/", storage.root).href;
     let registered: string[] = [];
+    let untyped: string | undefined;
     try {
       registered = (await index?.find(TEMPLATE_CLASS)) ?? [];
-    } catch (error) {
-      if (
-        !(
-          storage.protocol === "lws" &&
-          error instanceof StorageError &&
-          error.code === "unsupported"
-        )
-      )
-        throw error;
+    } catch {
+      // An unreadable or malformed index only means there is no usable entry: the conventional
+      // folder is still adopted (after verification) rather than blocking Templates.
+      registered = [];
     }
     for (const url of registered) {
       // A stale or foreign registration must not block the collection for good.
@@ -145,6 +147,7 @@ export function createTemplateStore(options: {
       if (found.kind !== "container") throw new Error("The templates location is not a container");
       if (found.links.get("type")?.some((link) => link.target === TEMPLATE_CLASS))
         return remember(found.url);
+      if (storage.protocol === "solid") untyped = found.url;
     } catch (error) {
       if (!missing(error)) throw error;
     }
@@ -155,6 +158,9 @@ export function createTemplateStore(options: {
           return remember(entry.url);
       }
     }
+    // Solid drops the creation type link (LWS keeps it, and names there are only hints), so a collection created while registration failed or
+    // was unavailable has no marker: the conventional folder is adopted once verified.
+    if (untyped) return adopt(untyped);
     if (!create) return undefined;
     try {
       createdUrl = (
@@ -168,11 +174,11 @@ export function createTemplateStore(options: {
     } catch (error) {
       if (error instanceof StorageError && error.code === "conflict") {
         const found = await storage.head(conventional);
-        if (
-          found.kind === "container" &&
-          found.links.get("type")?.some((link) => link.target === TEMPLATE_CLASS)
-        )
-          return remember(found.url);
+        if (found.kind === "container") {
+          if (found.links.get("type")?.some((link) => link.target === TEMPLATE_CLASS))
+            return remember(found.url);
+          if (storage.protocol === "solid") return adopt(found.url);
+        }
       }
       throw error;
     }
