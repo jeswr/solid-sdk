@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { classifyError, type ErrorCategory } from "@jeswr/suite-sdk/react";
+import { classifyError, type ErrorCategory } from "@jeswr/suite-sdk/errors";
 
 export { classifyError, type ErrorCategory };
 
