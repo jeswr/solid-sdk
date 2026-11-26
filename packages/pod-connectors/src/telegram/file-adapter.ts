@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 /**
  * Telegram → Social & interests (Tier-C file import).
  *
@@ -38,7 +39,12 @@ import {
   MAX_TITLE_CHARS,
   unixSecondsDate,
 } from "../core/export-fields.js";
-import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
+import type {
+  FileImportAdapter,
+  FileImportContext,
+  FileImportOutcome,
+  ImportFile,
+} from "../core/file-import.js";
 import { jsonEntries } from "../core/file-json.js";
 import { sha256Hex32 } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
@@ -74,28 +80,56 @@ export const telegramFileAdapter: FileImportAdapter = {
   fileHint:
     "Telegram Desktop → Settings → Advanced → Export Telegram data (or a chat's ⋮ → Export chat history), choosing Machine-readable JSON. Select result.json.",
 
-  async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
+  async importFile(
+    file: ImportFile,
+    ctx: FileImportContext,
+  ): Promise<FileImportOutcome | undefined> {
     ctx.progress({ label: "Reading your chats…", done: 0, total: 1 });
     const chats = new Map<string, ChatDocument>();
     // The root chat (single-chat export) and the current member of an account chat list.
     const root: PendingChat = { messages: [] };
     let member: PendingChat = { messages: [] };
     let rows = 0;
+    let skipped = 0;
+    const chatFor = (path: string) => (path.includes(".") ? member : root);
+    const admitMessage = (chat: PendingChat): boolean => {
+      if (rows++ < ctx.maxRows) return true;
+      chat.capped = true;
+      skipped++;
+      return false;
+    };
+    const finishChat = async (chat: PendingChat) => {
+      if (!chat.capped) {
+        await addChat(chat, chats, ctx);
+        return;
+      }
+      skipped += chat.messages.length;
+      // Another member with the same id may already be staged for this document.
+      const earlier = chat.id ? chats.get(chat.id) : undefined;
+      if (earlier) {
+        skipped += earlier.rows;
+        chats.delete(earlier.id);
+      }
+    };
     const entries = jsonEntries(
       file,
       MESSAGE_ARRAYS,
       CHAT_FIELDS,
-      ctx.skip,
+      (path) => {
+        ctx.signal?.throwIfAborted();
+        if (!MESSAGE_ARRAYS.includes(path) || admitMessage(chatFor(path))) ctx.skip();
+      },
       undefined,
       CHAT_LIST_ARRAYS,
     );
     for await (const entry of entries) {
+      ctx.signal?.throwIfAborted();
       if (entry.end) {
-        await addChat(member, chats, ctx);
+        await finishChat(member);
         member = { messages: [] };
         continue;
       }
-      const chat = entry.path.includes(".") ? member : root;
+      const chat = chatFor(entry.path);
       if (!MESSAGE_ARRAYS.includes(entry.path)) {
         // The first name and id win: a repeated key never re-homes earlier messages.
         if (entry.path.endsWith("name"))
@@ -103,8 +137,7 @@ export const telegramFileAdapter: FileImportAdapter = {
         else chat.id ??= chatId(entry.value) ?? "";
         continue;
       }
-      if (rows >= ctx.maxRows) break;
-      rows++;
+      if (!admitMessage(chat)) continue;
       const parsed = parseTelegramMessage(entry.value);
       if (parsed === "service") continue;
       if (!parsed) {
@@ -113,9 +146,10 @@ export const telegramFileAdapter: FileImportAdapter = {
       }
       chat.messages.push(parsed);
     }
-    // A row-capped run stops inside a chat: keep what that chat read so far.
-    await addChat(member, chats, ctx);
-    await addChat(root, chats, ctx);
+    await finishChat(member);
+    // A mixed export can name the root chat after its capped account copy has passed.
+    if (rows > ctx.maxRows && root.messages.length > 0) root.capped = true;
+    await finishChat(root);
 
     ctx.progress({ label: "Saving to your pod…", done: 1, total: 1 });
     for (const chat of chats.values()) {
@@ -126,6 +160,7 @@ export const telegramFileAdapter: FileImportAdapter = {
         dataset: chat.store,
       });
     }
+    if (skipped > 0) return { skipped, warnings: ["row-cap"] };
   },
 };
 
@@ -133,6 +168,7 @@ export const telegramFileAdapter: FileImportAdapter = {
 interface PendingChat {
   name?: string;
   id?: string;
+  capped?: boolean;
   readonly messages: TelegramMessage[];
 }
 
@@ -144,6 +180,7 @@ interface ChatDocument {
   readonly id: string;
   readonly store: Store;
   readonly seen: Set<number>;
+  rows: number;
 }
 
 /** Map a finished chat's messages into its document; a chat without an id is skipped. */
@@ -168,9 +205,11 @@ async function addChat(
       id: chat.id,
       store: new Store(),
       seen: new Set(),
+      rows: 0,
     };
     chats.set(chat.id, target);
   }
+  target.rows += chat.messages.length;
   for (const parsed of chat.messages) {
     if (target.seen.has(parsed.id)) continue;
     target.seen.add(parsed.id);

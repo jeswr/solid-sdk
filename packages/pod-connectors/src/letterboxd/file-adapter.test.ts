@@ -1,10 +1,11 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 import type { DatasetCore } from "@rdfjs/types";
 import { strToU8, zipSync } from "fflate";
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { MAX_TITLE_CHARS } from "../core/export-fields.js";
-import { MAX_FILE_BYTES } from "../core/file-import.js";
+import { type FileImportAdapter, MAX_FILE_BYTES } from "../core/file-import.js";
 import { MAX_CSV_RECORD_BYTES } from "../core/file-stream.js";
 import { fileImport, memoryFile, streamedBytesFile, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, Movie, WatchAction } from "../core/vocab.js";
@@ -168,6 +169,58 @@ describe("letterboxd file adapter", () => {
     expect(again.report.written.map((w) => [...pod.dataset(w.url)].length)).toEqual(before);
     expect(subjectsOf(pod.dataset(DIARY_DOC), CLASSES.WatchAction)).toEqual(subjects);
     expect(again.report.state?.counts).toEqual(report.state?.counts);
+  });
+
+  it("writes completed kinds and counts all omitted rows across a capped ZIP", async () => {
+    const adapter: FileImportAdapter = {
+      ...letterboxdFileAdapter,
+      importFile: (file, ctx) => letterboxdFileAdapter.importFile(file, { ...ctx, maxRows: 2 }),
+    };
+    const entries = { "watched.csv": WATCHED, "ratings.csv": RATINGS, "watchlist.csv": WATCHLIST };
+    const { pod, report: exact } = await fileImport(adapter, memoryFile("watched.csv", WATCHED));
+    expect(exact.written.map((w) => w.url)).toEqual([WATCHED_DOC]);
+    expect(exact.warnings).toBeUndefined();
+    const before = pod.get(WATCHED_DOC);
+    expect(before).toContain("Never Logged");
+
+    const { report } = await fileImport(
+      adapter,
+      zipFile({ ...entries, "diary.csv": DIARY.split("\n").slice(0, 2).join("\n") }).file,
+      { pod },
+    );
+    expect(report.written.map((w) => w.url)).toEqual([DIARY_DOC]);
+    expect(report.warnings).toEqual(["row-cap"]);
+    expect(report.skipped).toBe(4);
+    expect(report.state?.counts.skipped).toBe(4);
+    expect(pod.get(WATCHED_DOC)).toBe(before);
+    expect(pod.get(RATINGS_DOC)).toBeUndefined();
+    expect(pod.get(WATCHLIST_DOC)).toBeUndefined();
+  });
+
+  it("withholds the diary and reviews when the review file crosses the cap", async () => {
+    const adapter: FileImportAdapter = {
+      ...letterboxdFileAdapter,
+      importFile: (file, ctx) => letterboxdFileAdapter.importFile(file, { ...ctx, maxRows: 4 }),
+    };
+    const { pod } = await fileImport(
+      adapter,
+      zipFile({ "diary.csv": DIARY, "reviews.csv": REVIEWS }).file,
+    );
+    const diary = pod.get(DIARY_DOC);
+    const reviews = pod.get(REVIEWS_DOC);
+    expect(diary).toContain("synthetic");
+    expect(reviews).toContain("synthetic");
+    const { report } = await fileImport(
+      adapter,
+      zipFile({
+        "diary.csv": DIARY,
+        "reviews.csv": `${REVIEWS.replace("synthetic", "changed")}\n${REVIEWS.slice(REVIEWS.indexOf("\n") + 1)}`,
+      }).file,
+      { pod },
+    );
+    expect(report).toMatchObject({ written: [], skipped: 5, warnings: ["row-cap"] });
+    expect(pod.get(DIARY_DOC)).toBe(diary);
+    expect(pod.get(REVIEWS_DOC)).toBe(reviews);
   });
 
   it("dedups repeated rows and merges reviews without a URI by film and date", async () => {

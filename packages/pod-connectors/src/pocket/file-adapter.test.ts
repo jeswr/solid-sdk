@@ -1,10 +1,12 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 import { readFileSync } from "node:fs";
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, Parser, Store } from "n3";
 import SHACLValidator from "rdf-validate-shacl";
 import { describe, expect, it } from "vitest";
 import { MAX_TITLE_CHARS } from "../core/export-fields.js";
+import type { FileImportAdapter } from "../core/file-import.js";
 import { MAX_XML_TAG_BYTES, MAX_XML_TEXT_BYTES } from "../core/file-stream.js";
 import { fileImport, memoryFile, streamedBytesFile, TEST_POD_ROOT } from "../core/testing.js";
 import { Bookmark, CLASSES, SCHEMA_HTTP } from "../core/vocab.js";
@@ -46,6 +48,40 @@ const bookmarkShapes = new Store(
 );
 
 describe("pocket file adapter", () => {
+  it.each([
+    {
+      name: "pocket.csv",
+      exact: CSV,
+      overflow: `${CSV.replace("http://example.org/c", "/invalid")}\nFourth,https://example.org/d\nFifth,https://example.org/e`,
+    },
+    {
+      name: "ril_export.html",
+      exact: HTML.replace("</body>", '<a href="https://example.org/c">Third</a></body>'),
+      overflow: HTML.replace(
+        "</body>",
+        '<a href="https://example.org/c">Third</a><a href="https://example.org/d">Fourth</a><a href="/relative">Invalid</a></body>',
+      ),
+    },
+  ])("preserves the full $name snapshot when rows exceed the cap", async ({
+    name,
+    exact,
+    overflow,
+  }) => {
+    const adapter: FileImportAdapter = {
+      ...pocketFileAdapter,
+      importFile: (file, ctx) => pocketFileAdapter.importFile(file, { ...ctx, maxRows: 3 }),
+    };
+    const { pod, report: atCap } = await fileImport(adapter, streamedBytesFile(name, exact));
+    expect(atCap.written.map((w) => w.url)).toEqual([DOC]);
+    expect(atCap.warnings).toBeUndefined();
+    const before = pod.get(DOC);
+    expect(bookmarks(pod.dataset(DOC))).toHaveLength(3);
+    const { report } = await fileImport(adapter, streamedBytesFile(name, overflow), { pod });
+    expect(report).toMatchObject({ written: [], skipped: 5, warnings: ["row-cap"] });
+    expect(report.state?.counts.skipped).toBe(5);
+    expect(pod.get(DOC)).toBe(before);
+  });
+
   it("maps the CSV export to solid-bookmark bookmarks", async () => {
     const { pod, report } = await fileImport(
       pocketFileAdapter,

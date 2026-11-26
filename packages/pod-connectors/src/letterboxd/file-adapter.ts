@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 /**
  * Letterboxd → Media (Tier-C file import).
  *
@@ -48,10 +49,11 @@ import {
 import {
   type FileImportAdapter,
   type FileImportContext,
+  type FileImportOutcome,
   type ImportFile,
   MAX_FILE_BYTES,
 } from "../core/file-import.js";
-import { csvRows, csvRowsFromChunks } from "../core/file-stream.js";
+import { csvRowsFromChunks, fileText } from "../core/file-stream.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, Movie, WatchAction } from "../core/vocab.js";
@@ -98,13 +100,16 @@ export const letterboxdFileAdapter: FileImportAdapter = {
     "Letterboxd → Settings → Data → Export your data. Select the downloaded .zip (no need to unzip), or one of its CSV files such as diary.csv.",
   exportUrl: "https://letterboxd.com/settings/data/",
 
-  async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
+  async importFile(
+    file: ImportFile,
+    ctx: FileImportContext,
+  ): Promise<FileImportOutcome | undefined> {
     ctx.progress({ label: "Reading your Letterboxd export…", done: 0, total: 1 });
     const library = new LetterboxdLibrary(ctx);
     if (await isZipArchive(file)) await importArchive(file, ctx, library);
-    else await library.rows(csvRows(file, ctx.skip), file.name);
+    else await library.rows(fileText(file), file.name);
     ctx.progress({ label: "Saving to your pod…", done: 1, total: 1 });
-    await library.save();
+    return library.save();
   },
 };
 
@@ -198,12 +203,9 @@ async function importArchive(
           ctx.signal?.throwIfAborted();
           const text = decoder.decode(bytes);
           await library.rows(
-            csvRowsFromChunks(
-              (async function* () {
-                yield text;
-              })(),
-              ctx.skip,
-            ),
+            (async function* () {
+              yield text;
+            })(),
             name,
             letterboxdEntryKind(name),
           );
@@ -280,7 +282,9 @@ class LetterboxdLibrary {
   private readonly viewings = new Map<string, Viewing>();
   /** Diary viewings by film and watched date, for the reviews fallback. */
   private readonly byFilmDate = new Map<string, Viewing[]>();
+  private readonly cappedKinds = new Set<LetterboxdKind>();
   private rowsRead = 0;
+  private capSkipped = 0;
 
   constructor(private readonly ctx: FileImportContext) {}
 
@@ -294,26 +298,31 @@ class LetterboxdLibrary {
   }
 
   async rows(
-    rows: AsyncIterable<Record<string, string>>,
+    chunks: AsyncIterable<string>,
     fileName: string,
     knownKind?: LetterboxdKind,
   ): Promise<void> {
     let kind = knownKind;
-    let checked = knownKind !== undefined;
+    let capped = false;
+    const admitRow = () => {
+      this.ctx.signal?.throwIfAborted();
+      if (this.rowsRead++ < this.ctx.maxRows) return true;
+      capped = true;
+      this.capSkipped++;
+      return false;
+    };
+    const rows = csvRowsFromChunks(chunks, () => {
+      if (admitRow()) this.ctx.skip();
+    });
     for await (const row of rows) {
-      if (!checked) {
-        kind = letterboxdCsvKind(fileName, Object.keys(row));
-        checked = true;
-        if (!kind)
-          throw new Error(
-            "This CSV is not a Letterboxd diary, review, rating or watchlist export.",
-          );
-      }
-      if (this.rowsRead >= this.ctx.maxRows) return;
-      this.rowsRead++;
-      if (this.row(kind as LetterboxdKind, row)) this.kind(kind as LetterboxdKind).rows++;
+      kind ??= letterboxdCsvKind(fileName, Object.keys(row));
+      if (!kind)
+        throw new Error("This CSV is not a Letterboxd diary, review, rating or watchlist export.");
+      if (!admitRow()) continue;
+      if (this.row(kind, row)) this.kind(kind).rows++;
       else this.ctx.skip();
     }
+    if (capped && kind) this.cappedKinds.add(kind);
   }
 
   /** Map one row; false when it lacks the film name every kind needs. */
@@ -420,10 +429,16 @@ class LetterboxdLibrary {
     if (review) event.reviewBody = review;
   }
 
-  async save(): Promise<void> {
+  async save(): Promise<FileImportOutcome | undefined> {
+    // The diary embeds reviews, so replacing it would also drop any capped reviews.
+    if (this.cappedKinds.has("reviews")) this.cappedKinds.add("diary");
     for (const kind of KINDS) {
       const entry = this.kinds.get(kind);
       if (!entry || entry.rows === 0) continue;
+      if (this.cappedKinds.has(kind)) {
+        this.capSkipped += entry.rows;
+        continue;
+      }
       await this.ctx.write({
         slug: slugOf(kind),
         category: "media",
@@ -431,5 +446,6 @@ class LetterboxdLibrary {
         dataset: entry.store,
       });
     }
+    if (this.capSkipped > 0) return { skipped: this.capSkipped, warnings: ["row-cap"] };
   }
 }

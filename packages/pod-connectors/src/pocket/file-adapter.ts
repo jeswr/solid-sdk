@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 /**
  * Pocket → Documents (Tier-C file import).
  *
@@ -23,7 +24,12 @@ import {
   tagList,
   unixSecondsDate,
 } from "../core/export-fields.js";
-import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
+import type {
+  FileImportAdapter,
+  FileImportContext,
+  FileImportOutcome,
+  ImportFile,
+} from "../core/file-import.js";
 import { csvRowsFromChunks, fileText } from "../core/file-stream.js";
 import { strongRecordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
@@ -55,20 +61,34 @@ export const pocketFileAdapter: FileImportAdapter = {
   fileHint:
     "Select the Pocket export you downloaded before Pocket closed: the CSV from the export ZIP (unzip it first) or the older ril_export.html.",
 
-  async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
+  async importFile(
+    file: ImportFile,
+    ctx: FileImportContext,
+  ): Promise<FileImportOutcome | undefined> {
     ctx.progress({ label: "Reading your saved links…", done: 0, total: 1 });
     const doc = ctx.resolve(SLUG);
     const store = new Store();
     const seen = new Set<string>();
     let rows = 0;
+    let invalid = 0;
+    const admitRow = () => {
+      ctx.signal?.throwIfAborted();
+      return rows++ < ctx.maxRows;
+    };
+    const skipInvalid = () => {
+      invalid++;
+      ctx.skip();
+    };
+    const skipInput = () => {
+      if (admitRow()) skipInvalid();
+    };
     const { html, chunks } = await sniffMarkup(fileText(file));
-    const items = html ? pocketHtmlItems(chunks, ctx.skip) : pocketCsvItems(chunks, ctx.skip);
+    const items = html ? pocketHtmlItems(chunks, skipInput) : pocketCsvItems(chunks, skipInput);
     for await (const item of items) {
-      if (rows >= ctx.maxRows) break;
-      rows++;
+      if (!admitRow()) continue;
       const url = httpUrl(item.url);
       if (!url) {
-        ctx.skip();
+        skipInvalid();
         continue;
       }
       // The link is attacker-chosen, so the discriminator is a 128-bit hash, not 32-bit FNV.
@@ -88,6 +108,8 @@ export const pocketFileAdapter: FileImportAdapter = {
       for (const tag of tags) bookmark.tags.add(tag);
     }
 
+    // A capped snapshot omits even the staged rows, except invalid rows already counted.
+    if (rows > ctx.maxRows) return { skipped: rows - invalid, warnings: ["row-cap"] };
     ctx.progress({ label: "Saving to your pod…", done: 1, total: 1 });
     if (store.size === 0) return;
     await ctx.write({
