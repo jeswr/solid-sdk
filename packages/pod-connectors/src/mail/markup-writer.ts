@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6.2
 import { serialize } from "@jeswr/rdf-serialize";
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
@@ -437,9 +438,23 @@ export function createMailMarkupWriter(
             throw error;
           }
         }
-      } catch {
+      } catch (error) {
         for (const slug of [...retained]) release(slug);
         abort();
+        if (
+          error instanceof DOMException ||
+          (error instanceof Error && error.name === "AbortError")
+        )
+          throw error;
+        // Run-level failures end the import. Match by name: the public mail entry must not
+        // load the connector framework, and these classes all set a stable name.
+        if (
+          error instanceof Error &&
+          ["PrivateDestinationError", "RunBudgetExceededError", "IntegrationAuthError"].includes(
+            error.name,
+          )
+        )
+          throw error;
         errors.add(phase);
       }
       return results();
