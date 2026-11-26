@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { describe, expect, it, vi } from "vitest";
 import {
   type ImageEncoder,
@@ -1342,6 +1343,7 @@ describe("fail-closed video refusals", () => {
     [".mp3", "soun", "audio"],
     ["ac-4", "soun", "audio"],
     ["apac", "soun", "audio"],
+    ["zzzz", "tmcd", "timecode"],
     ["tx3g", "text", "subtitle"],
     ["tx3g", "sbtl", "subtitle"],
     ["c608", "clcp", "subtitle"],
@@ -1560,6 +1562,14 @@ describe("elementary stream and FLAC checks", () => {
       const before = bytes.slice();
       expect(stripVideoLocation(bytes)).toEqual(before);
     }
+  });
+  it("finds the decoder configuration after another ES descriptor", () => {
+    const slConfig = descriptor(0x06, Uint8Array.of(2));
+    const decoder = descriptor(0x04, Uint8Array.of(0x20, 0x11), new Uint8Array(11));
+    const es = descriptor(0x03, uint(1, 2), uint(0, 1), slConfig, decoder);
+    const bytes = mp4vTrack(box("esds", full(), es));
+    const before = bytes.slice();
+    expect(stripVideoLocation(bytes)).toEqual(before);
   });
   it.each([
     [0x40, true],

@@ -1,11 +1,14 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { buildMeal, buildSymptom, storeToTurtle } from "@jeswr/solid-health-diary";
+import { NS } from "@jeswr/suite-vocab";
 import { expect, it, vi } from "vitest";
 import {
   createDiaryStore,
   type DiaryEntry,
   type DiaryReadFailure,
+  diaryExposures,
   likelyDiaryTriggers,
   MANUAL_EXPOSURE_NOTE,
 } from "../../src/apps/health/lib/data/diary";
@@ -156,18 +159,27 @@ it("refreshes legacy membership on focus, reuses documents and drops removed URL
   expect((await list()).map((entry) => entry.url)).toContain(added);
   expect(pod.calls.filter((call) => call.url === added)).toHaveLength(1);
 });
-it("retries transient legacy document failures on the next listing", async () => {
+it.each([
+  "document",
+  "month folder",
+])("retries a failed legacy %s on the next cached listing", async (target) => {
   const pod = await legacyFixture();
-  pod.faults.set(`GET ${pod.url}`, () => new Response(null, { status: 503 }));
+  const url = target === "document" ? pod.url : new URL(".", pod.url).href;
+  pod.faults.set(`GET ${url}`, () => new Response(null, { status: 503 }));
   const failures: DiaryReadFailure[] = [];
   expect(await pod.diary.list(undefined, { cached: true, failures })).toHaveLength(2);
-  expect(failures.map((failure) => failure.url)).toEqual([pod.url]);
-  pod.faults.delete(`GET ${pod.url}`);
+  expect(failures.map((failure) => failure.url)).toEqual([url]);
+  pod.faults.delete(`GET ${url}`);
   pod.calls.length = 0;
   const retried: DiaryReadFailure[] = [];
-  expect(await pod.diary.list(undefined, { cached: true, failures: retried })).toHaveLength(3);
+  const entries = await pod.diary.list(undefined, { cached: true, failures: retried });
+  expect(entries.map((entry) => entry.url).sort()).toEqual(
+    [pod.modern, pod.url, pod.symptomUrl].sort(),
+  );
   expect(retried).toEqual([]);
-  expect(pod.calls.map((call) => call.url)).toEqual([pod.url]);
+  expect(pod.calls.map((call) => call.url)).toEqual(
+    target === "document" ? [pod.url] : [url, pod.url],
+  );
 });
 it("prioritizes a save's reads ahead of queued legacy listing reads within six slots", async () => {
   const pod = createDemoPod({ root: storage });
@@ -363,6 +375,53 @@ it("never overwrites unreadable preferences", async () => {
   await expect(preferences.save({ enabled: true, trigger: "gluten" })).rejects.toThrow();
   expect(pod.calls.some((call) => call.method === "PUT")).toBe(false);
 });
+it("rejects a stored trigger outside the diary vocabulary", async () => {
+  const pod = podFixture();
+  const preferences = createDiaryPreferencesStore(pod.fetch, storage, OWNER);
+  pod.put(
+    preferences.url,
+    JSON.stringify({
+      "@id": `${preferences.url}#it`,
+      [`${NS.HEALTH}diaryTriggerClass`]: "unknown",
+    }),
+    "application/ld+json",
+  );
+  await expect(preferences.read()).rejects.toThrow("Invalid diary trigger class");
+});
+it("rejects invalid preference values before contacting the pod", async () => {
+  const pod = podFixture();
+  const preferences = createDiaryPreferencesStore(pod.fetch, storage, OWNER);
+  // @ts-expect-error Exercise runtime validation for a non-boolean setting.
+  await expect(preferences.save({ enabled: "false", trigger: "gluten" })).rejects.toThrow(
+    "Invalid diary preferences",
+  );
+  // @ts-expect-error Exercise runtime validation for an unknown trigger.
+  await expect(preferences.save({ enabled: true, trigger: "unknown" })).rejects.toThrow(
+    "Invalid diary preferences",
+  );
+  expect(pod.calls).toEqual([]);
+});
+it("refuses to replace existing preferences when the pod omits their ETag", async () => {
+  const pod = podFixture();
+  const preferences = createDiaryPreferencesStore(pod.fetch, storage, OWNER);
+  pod.faults.set(
+    `GET ${preferences.url}`,
+    () => new Response("", { headers: { "content-type": "text/turtle" } }),
+  );
+  await expect(preferences.save({ enabled: true, trigger: "gluten" })).rejects.toThrow(
+    "Refresh diary settings before saving",
+  );
+  expect(pod.calls).toMatchObject([{ method: "GET", url: preferences.url }]);
+});
+it("preserves stronger product exposures and gives manual observations precedence on ties", () => {
+  const id = `${BASE}diary/2026-11/meal.ttl#item-0`;
+  const items = [{ id, name: "Bread", traceAllergen: ["en:gluten"] }];
+  const manual = { trigger: "gluten", exposureLevel: "trace", note: MANUAL_EXPOSURE_NOTE } as const;
+  expect(diaryExposures(items, [{ ...manual, exposureLevel: "possible-undeclared" }])).toEqual([
+    { trigger: "gluten", exposureLevel: "trace", derivedFrom: [id] },
+  ]);
+  expect(diaryExposures(items, [manual])).toEqual([manual]);
+});
 it("round-trips suspected and present exposures, preserves them on edit and removes them explicitly", async () => {
   const pod = createDemoPod({ root: storage });
   const diary = createDiaryStore(pod.fetch, storage, OWNER);
@@ -439,4 +498,37 @@ it("does not count exposures whose follow-up window is still open as not followe
     (score) => score.trigger === "gluten",
   );
   expect(gluten).toMatchObject({ exposureCount: 1, followedCount: 1 });
+});
+it("derives missing exposures from item data and ignores future meals", () => {
+  const meal: DiaryEntry = {
+    kind: "meal",
+    url: `${BASE}diary/2026-11/plain.ttl`,
+    etag: null,
+    at,
+    foods: ["Milk"],
+    ingredients: "",
+    tags: [],
+    note: "",
+  };
+  const now = new Date(at.getTime() + 100 * 3600000);
+  const result = likelyDiaryTriggers(
+    [
+      meal,
+      {
+        ...meal,
+        url: `${BASE}diary/2026-11/scanned.ttl`,
+        items: [{ name: "Milk", declaredAllergen: ["en:milk"] }],
+      },
+      {
+        ...meal,
+        url: `${BASE}diary/2026-11/future.ttl`,
+        at: new Date(now.getTime() + 1),
+        foods: ["Bread"],
+        exposures: [{ trigger: "gluten", exposureLevel: "present" }],
+      },
+    ],
+    now,
+  );
+  expect(result.suspicions).toMatchObject([{ trigger: "lactose", exposureCount: 1 }]);
+  expect(result.safetyRails).toEqual([]);
 });

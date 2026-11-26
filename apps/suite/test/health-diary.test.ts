@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { buildMeal, buildProtocol, buildSymptom, parseMealTtl } from "@jeswr/solid-health-diary";
 import { NamedNodeFrom, OptionalAs, TermWrapper } from "@rdfjs/wrapper";
 import { Authorization } from "@solid/object";
@@ -216,6 +217,12 @@ describe("private Health diary on the demo pod", () => {
     expect(await diary.list(undefined, { failures, cached: true })).toEqual([]);
     expect(failures.map((item) => item.url)).toEqual([`${ROOT}health/diary/2026-11/`]);
     refuse = false;
+    expect(await diary.list(undefined, { cached: true })).toEqual([saved]);
+    // An independent, uncached read can fail without evicting the recovered month.
+    refuse = true;
+    failures.length = 0;
+    expect(await diary.list(undefined, { failures })).toEqual([]);
+    expect(failures.map((item) => item.url)).toEqual([`${ROOT}health/diary/2026-11/`]);
     expect(await diary.list(undefined, { cached: true })).toEqual([saved]);
   });
   it("partitions by the local date and moves timestamp edits to the matching month", async () => {

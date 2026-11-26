@@ -42,8 +42,9 @@ export function createPrivateWriteConfirmer(
     if (!opened) {
       const attempt = createPodClient({ fetch, storage }).then((client) => client.storage);
       opened = attempt;
+      // Only this handler clears the cache, so it always clears this attempt.
       attempt.catch(() => {
-        if (opened === attempt) opened = undefined;
+        opened = undefined;
       });
     }
     return opened;
