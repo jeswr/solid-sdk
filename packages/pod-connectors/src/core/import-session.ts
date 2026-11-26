@@ -22,6 +22,7 @@ import {
 import { PROV, Provenance } from "./provenance.js";
 import type {
   BinaryDoc,
+  ConnectorRunCounts,
   ConnectorState,
   ConnectorStateOptions,
   ImportOutcome,
@@ -132,6 +133,23 @@ export function createImportSession(
     });
     options.signal?.throwIfAborted();
   }
+  const changes = new Map<string, "created" | "updated" | "unchanged">();
+  const changesCount = { created: 0, updated: 0, unchanged: 0 };
+  const tracking = options.trackChanges === true || options.onRunCounts !== undefined;
+  function counts(skipped = 0): ConnectorRunCounts {
+    return { ...changesCount, skipped };
+  }
+  const contentOnly = (dataset: DatasetCore) => {
+    const result = copyDataset();
+    for (const quad of dataset) {
+      if (
+        quad.predicate.value !== `${PROV}wasGeneratedBy` &&
+        quad.predicate.value !== `${PROV}wasDerivedFrom`
+      )
+        result.add(quad);
+    }
+    return result;
+  };
   const conditionFor = (
     existing: Awaited<ReturnType<PodWriter["read"]>>,
   ): WriteConditions | undefined =>
@@ -227,6 +245,10 @@ export function createImportSession(
       error.name = "DocumentTooLargeError";
       throw error;
     }
+    const before = tracking && previous ? contentOnly(previous.dataset) : undefined;
+    const after = tracking ? contentOnly(dataset) : undefined;
+    const unchanged =
+      before && after && before.size === after.size && [...after].every((q) => before.has(q));
     const slug = doc.slug;
     const destination = privateImport ? writer.resolve(slug) : url;
     await verifyDestination(destination);
@@ -240,6 +262,19 @@ export function createImportSession(
     );
     if (privateImport)
       await confirmWrittenDestination(slug, destination, writeCreated === true, writeEtag);
+    if (tracking) {
+      const priorChange = changes.get(url);
+      const change =
+        priorChange === "created" || !previous
+          ? "created"
+          : unchanged && priorChange !== "updated"
+            ? "unchanged"
+            : "updated";
+      if (priorChange) changesCount[priorChange]--;
+      changes.set(url, change);
+      changesCount[change]++;
+      options.onRunCounts?.(counts());
+    }
     // Take extra classes from the document, not the host writer's result: custom PodWriter
     // ports need not echo them.
     let registered: WrittenDoc = doc.additionalClasses?.length
@@ -293,6 +328,10 @@ export function createImportSession(
     await writer.remove(slug, previous?.etag ? { ifMatch: previous.etag } : undefined, ...guards);
     if (privateImport) options.signal?.throwIfAborted();
     itemCounts.delete(url);
+    const priorChange = changes.get(url);
+    if (priorChange) changesCount[priorChange]--;
+    changes.delete(url);
+    options.onRunCounts?.(counts());
     const index = written.findIndex((w) => w.url === url);
     if (index !== -1) written.splice(index, 1);
   }
@@ -435,6 +474,7 @@ export function createImportSession(
   function state(outcome?: ImportOutcome): ConnectorState {
     const success = outcome !== undefined;
     return {
+      ...options.state,
       connectedAt: options.state?.connectedAt ?? started.toISOString(),
       lastSync: success ? new Date().toISOString() : options.state?.lastSync,
       cursor: success ? (outcome.cursor ?? options.state?.cursor) : options.state?.cursor,
@@ -456,6 +496,8 @@ export function createImportSession(
     writeBinary: trackPrivateWrite(writeBinary),
     remove,
     written,
+    counts,
+    tracking,
     /** Document-level accounting, exposed read-only for diagnostics. */
     itemCounts: itemCounts as ReadonlyMap<string, number>,
     /** Bounded run provenance summary, exposed read-only for diagnostics. */

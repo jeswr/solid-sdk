@@ -43,6 +43,13 @@ import { whoopAdapter } from "./whoop/adapter.js";
 import { xTwitterAdapter } from "./x-twitter/adapter.js";
 import { youtubeAdapter } from "./youtube/adapter.js";
 
+/** Host scheduling default, exposed on API catalog rows for connection settings UIs. */
+export const DEFAULT_CONNECTOR_INTERVAL_MINUTES = 60;
+const scheduledMetadata = (a: IntegrationAdapter): IntegrationMetadata => ({
+  ...a.metadata,
+  defaultIntervalMinutes: a.metadata.defaultIntervalMinutes ?? DEFAULT_CONNECTOR_INTERVAL_MINUTES,
+});
+
 /** A renderable catalog row — metadata plus tier-specific honesty fields. */
 export interface CatalogEntry extends IntegrationMetadata {
   /** Write-back capability only; the connection still defaults to writeBack=false. */
@@ -68,7 +75,7 @@ export function catalogEntry(adapter: IntegrationAdapter): CatalogEntry {
     Array.isArray(candidate.writeBackContainers) &&
     Array.isArray(candidate.requiredWriteScopes);
   return {
-    ...adapter.metadata,
+    ...scheduledMetadata(adapter),
     ...(adapter.metadata.id === "spotify" ? { exportFormat: "Streaming history ZIP / JSON" } : {}),
     ...(twoWay
       ? {
@@ -265,7 +272,12 @@ export const TIER_C: readonly CatalogEntry[] = [
 
 /** All new-connection catalog entries, A → B → C, in display order. */
 export function allCatalogEntries(): CatalogEntry[] {
-  return [...ADAPTERS.map(catalogEntry), ...TIER_B, { ...vesyncAdapter.metadata }, ...TIER_C];
+  return [
+    ...ADAPTERS.map(catalogEntry),
+    ...TIER_B,
+    { ...scheduledMetadata(vesyncAdapter) },
+    ...TIER_C,
+  ];
 }
 
 /** Public per-source configuration supplied by the host. Tokens stay in SourceAuth. */
@@ -280,6 +292,7 @@ export type ConnectorConfigs = Readonly<Record<string, ConnectorConfig>>;
 /** Create an isolated catalog with host-provided OAuth configuration. */
 export function createRegistry(config: ConnectorConfigs = {}) {
   const configured = ALL_ADAPTERS.map((adapter): IntegrationAdapter => {
+    adapter = { ...adapter, metadata: scheduledMetadata(adapter) };
     const settings = config[adapter.metadata.id];
     if (!settings || !adapter.oauth) return adapter;
     return {
@@ -305,7 +318,7 @@ export function createRegistry(config: ConnectorConfigs = {}) {
     allCatalogEntries: (): CatalogEntry[] => [
       ...tierA.map(catalogEntry),
       ...tierB.map((a) => ({ ...catalogEntry(a), blocker: a.metadata.requirements[0] })),
-      { ...vesyncAdapter.metadata },
+      { ...scheduledMetadata(vesyncAdapter) },
       ...TIER_C,
     ],
     statusOf: (entry: CatalogEntry): IntegrationStatus => {

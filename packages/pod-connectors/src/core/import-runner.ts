@@ -22,6 +22,7 @@ import { createImportSession } from "./import-session.js";
 import { scopeList } from "./oauth.js";
 import { budgetedFetch } from "./source-budget.js";
 import type {
+  ConnectorRunCounts,
   ConnectorState,
   ConnectorStateOptions,
   ImportProgress,
@@ -83,6 +84,8 @@ export interface ImportReport {
   adapterId: string;
   /** Updated host-owned checkpoint; persist only in the host. */
   state?: ConnectorState;
+  /** Document changes and malformed-item skips in this attempt. */
+  counts?: ConnectorRunCounts;
   mode: ImportMode;
   written: WrittenDoc[];
   /** Distinct category ids that received data (for the success screen). */
@@ -190,10 +193,14 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     const { indexUrl } = await session.registerTypes();
     opts.signal?.throwIfAborted();
     let state: ConnectorState | undefined;
+    let counts: ConnectorRunCounts | undefined;
     await session.finish(async () => {
       // A cancel during the final provenance write is still a cancel: never report success.
       opts.signal?.throwIfAborted();
       state = session.state(outcome);
+      counts = session.counts(outcome.skipped);
+      opts.onRunCounts?.(counts);
+      opts.signal?.throwIfAborted();
       opts.onState?.(state);
       // The run is committed and its cursor reported. Only now may the adapter discard
       // private resume state that the cursor supersedes; a failure or cancel leaves it.
@@ -216,6 +223,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       errors: outcome.errors,
       indexUrl,
       state,
+      counts: session.tracking ? counts : undefined,
     };
   } catch (error) {
     try {

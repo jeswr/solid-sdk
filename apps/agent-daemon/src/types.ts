@@ -8,6 +8,7 @@ import type { Interpreter } from "@jeswr/agentic-legacy-bridge";
 import type { PodAuth } from "@jeswr/pod-auth";
 import type { NotificationsClient, Timers } from "@jeswr/pod-notifications";
 import type { DaemonGatePort } from "./gate.js";
+import type { ConnectorsJob } from "./connectors.js";
 import type { PodWorkspace } from "./workspace.js";
 
 export interface DaemonAccount {
@@ -39,6 +40,8 @@ export interface ProcessLease {
 }
 export interface DaemonOptions {
   readonly gate: DaemonGatePort;
+  /** Trusted connector composition; runs independently of channel ingest. */
+  readonly connectors?: ConnectorsJob;
   readonly accounts: readonly DaemonAccount[];
   readonly workspace: PodWorkspace;
   readonly notifications: NotificationsClient;
@@ -86,5 +89,6 @@ export interface Daemon {
 export interface AuthenticatedComposition {
   readonly auth: PodAuth;
   readonly daemon: Daemon;
+  readonly connectors?: ConnectorsJob;
   close(): Promise<void>;
 }
