@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
-import { allCatalogEntries } from "@jeswr/pod-connectors";
+import { adapterContainerUrl, allCatalogEntries } from "@jeswr/pod-connectors";
 import { Provenance as ItemProvenance } from "@jeswr/pod-connectors/core/provenance";
 import { MusicRecording, PodThing } from "@jeswr/pod-connectors/core/vocab";
 import { DataFactory, Store } from "n3";
@@ -415,7 +415,8 @@ describe("Home §5.3 provenance", () => {
         .sort(),
     );
     for (const { id } of allCatalogEntries()) {
-      const subject = `${STORAGE}integrations/${id}/item.ttl#it`;
+      // A successor connector writes into its predecessor's container (Google Health → fitbit/).
+      const subject = `${adapterContainerUrl(STORAGE, id)}item.ttl#it`;
       const dataset = new Store();
       new ItemProvenance(subject, dataset, DataFactory).attributedTo.add(DEMO_CONNECTOR.iri);
       expect(
