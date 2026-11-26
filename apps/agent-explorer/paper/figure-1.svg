@@ -22,8 +22,8 @@
 <text x="72" y="152" class="ht gt">Inbound gate</text><text x="72" y="172" class="it gt">ordinary code, in order</text>
 <g class="li"><circle class="gb" cx="83" cy="203" r="10"/><text x="83" y="207" class="n">1</text><text x="101" y="208">integrity</text>
 <circle class="gb" cx="83" cy="230" r="10"/><text x="83" y="234" class="n">2</text><text x="101" y="235">source</text>
-<circle class="gb" cx="83" cy="257" r="10"/><text x="83" y="261" class="n">3</text><text x="101" y="262">authority</text>
-<circle class="gb" cx="83" cy="284" r="10"/><text x="83" y="288" class="n">4</text><text x="101" y="289">terms</text>
+<circle class="gb" cx="83" cy="257" r="10"/><text x="83" y="261" class="n">3</text><text x="101" y="262">mandate</text>
+<circle class="gb" cx="83" cy="284" r="10"/><text x="83" y="288" class="n">4</text><text x="101" y="289">conditions of use</text>
 <circle class="gb" cx="83" cy="311" r="10"/><text x="83" y="315" class="n">5</text><text x="101" y="316">fitness</text></g>
 <rect class="v" x="69" y="359" width="215" height="38" rx="7"/><text x="176" y="383" text-anchor="middle" font-size="13.5" font-weight="700" class="gt">admit · ask for more · refuse</text>
 
@@ -37,7 +37,7 @@
 <g class="li"><circle class="gb" cx="730" cy="203" r="10"/><text x="730" y="207" class="n">1</text><text x="748" y="208">mandate</text>
 <circle class="gb" cx="730" cy="230" r="10"/><text x="730" y="234" class="n">2</text><text x="748" y="235">recipient</text>
 <circle class="gb" cx="730" cy="257" r="10"/><text x="730" y="261" class="n">3</text><text x="748" y="262">disclosure</text>
-<circle class="gb" cx="730" cy="284" r="10"/><text x="730" y="288" class="n">4</text><text x="748" y="289">data terms</text>
+<circle class="gb" cx="730" cy="284" r="10"/><text x="730" y="288" class="n">4</text><text x="748" y="289">conditions of use</text>
 <circle class="gb" cx="730" cy="311" r="10"/><text x="730" y="315" class="n">5</text><text x="748" y="316">limits and approval</text>
 <circle class="gb" cx="730" cy="338" r="10"/><text x="730" y="342" class="n">6</text><text x="748" y="343">evidence</text></g>
 <rect class="v" x="716" y="359" width="215" height="38" rx="7"/><text x="823" y="383" text-anchor="middle" font-size="13.5" font-weight="700" class="gt">go · ask the principal · stop</text>
@@ -52,7 +52,7 @@
 <path class="ls" stroke-dasharray="6 5" d="M612 468V440H750V414" marker-end="url(#a)"/>
 <path class="ls" d="M887 410V464" marker-end="url(#a)"/>
 <g><rect class="s" x="55" y="468" width="210" height="80" rx="9"/><text x="70" y="495" class="ht st" font-size="17">Trust store</text><text x="70" y="517" class="sm">keys, registers,</text><text x="70" y="535" class="sm">accepted sources</text>
-<rect class="s" x="282" y="468" width="210" height="80" rx="9"/><text x="297" y="495" class="ht st" font-size="17">Memory</text><text x="297" y="517" class="sm">facts, each with its</text><text x="297" y="535" class="sm">source and terms</text>
+<rect class="s" x="282" y="468" width="210" height="80" rx="9"/><text x="297" y="495" class="ht st" font-size="17">Memory</text><text x="297" y="517" class="sm">facts, each with its</text><text x="297" y="535" class="sm">source and conditions</text>
 <rect class="s" x="508" y="468" width="210" height="80" rx="9"/><text x="523" y="495" class="ht st" font-size="17">Policies</text><text x="523" y="517" class="sm">Sam's mandate</text><text x="523" y="535" class="sm">and rules</text>
 <rect class="s" x="735" y="468" width="210" height="80" rx="9"/><text x="750" y="495" class="ht st" font-size="17">Record</text><text x="750" y="517" class="sm">every verdict,</text><text x="750" y="535" class="sm">signed and chained</text></g>
 </svg>
