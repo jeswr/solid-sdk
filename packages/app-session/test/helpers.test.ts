@@ -1,5 +1,6 @@
 // AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { Agent } from "@solid/object";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -120,6 +121,9 @@ it("the public testing helper supports subscriptions, empty events, transport an
   expect(first).toHaveBeenCalledTimes(1);
   expect(await fake.auth.identity()).toBeNull();
   expect(await (await fake.auth.fetch("https://storage.example/")).text()).toBe("private files");
+  expect(await (await fake.auth.nonInteractiveFetch("https://storage.example/")).text()).toBe(
+    "private files",
+  );
   const pending = deferred<void>();
   pending.resolve();
   await expect(pending.promise).resolves.toBeUndefined();
