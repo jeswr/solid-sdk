@@ -114,8 +114,13 @@ Owners can edit folder roles for people and general access. The SDK writes both 
 and member scope and removes both on revocation. Every folder dialog shows `CONTENTS_DIFFER`
 before saving: items inside with their own sharing keep it, and users must open an item's
 sharing to change it. The existing `contentsDiffer` signal also keeps this notice visible.
-No descendant access document is rewritten. Partial-scope folders fail closed with copy
-explaining that separate folder/contents permissions need a scope-aware tool.
+No descendant access document is rewritten. A Drive folder whose own and contents access
+differ (`partial-scope`) opens the scope-aware editor (`share-scoped.tsx`): people and general
+access per scope, each scope's group access read-only, and "Make … match" buttons that first
+preview every change. A match never gives Owner (Control) to anyone but the signed-in owner,
+and keeps other owners' and inherited rows; group access counts when comparing scopes and in
+the post-save check. Items whose sharing an app coordinates (a Docs document, a Sheets
+workbook) pass `scopedEditor={false}` and keep the fail-closed `partial-scope` copy.
 Commenter stays disabled until Drive has a separate comments resource.
 
 The ACP dialect is the SDK default (CSS: managers hold resource Control); no

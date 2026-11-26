@@ -112,6 +112,7 @@ export function useDocumentSharing(
           session={session}
           link={`/docs/d/${encodeRef(resource)}`}
           load={loadDocumentSharing}
+          scopedEditor={false}
           apply={applyDocumentSharing}
           disabledReason={disabledReason}
           onClose={() => setShown(false)}

@@ -270,3 +270,76 @@ it("fails closed when a scope's raw access is not what its roles show", async ()
     ),
   ).rejects.toThrow(UNMAPPED);
 });
+
+const TEAM = `${ROOT}groups/team#g`;
+/** Bob's rule rewritten to name a group instead of a person. */
+function group(rule: ReturnType<typeof authorization>, id = TEAM) {
+  properties(rule).values(`${ACL}agent`).clear();
+  properties(rule).values(`${ACL}agentGroup`).add(id);
+}
+
+it("shows group access per scope, makes groups match, and checks groups after a save", async () => {
+  // Only the items inside are shared, with a group that can edit them.
+  const env = await setup(ALICE, (doc) => {
+    authorization(doc, ALICE, ["Read", "Write", "Control"]).default = FOLDER;
+    const rule = authorization(doc, BOB, ["Read", "Write"]);
+    properties(rule).values(`${ACL}accessTo`).clear();
+    rule.default = FOLDER;
+    group(rule);
+  });
+  expect(isPartialScope(await loadSharing(env.session, FOLDER).catch((e: unknown) => e))).toBe(
+    true,
+  );
+  const scoped = await loadScopedSharing(env.session, FOLDER);
+  expect(roles(scoped.folder)).toEqual(roles(scoped.contents));
+  expect(scoped.groups.folder).toEqual([]);
+  expect(scoped.groups.contents).toMatchObject([{ id: TEAM, role: "editor", inherited: false }]);
+  // Matching carries the folder's (empty) group access to the items inside.
+  const { snapshot: matched, changed } = await applyScopedSharing(env.session, scoped, {
+    folder: scoped.folder,
+    contents: scoped.folder,
+    groups: { folder: [], contents: [] },
+  });
+  expect(changed).toBe(true);
+  expect(matched.groups).toEqual({ folder: [], contents: [] });
+  expect(roles((await loadSharing(env.session, FOLDER)).state)).toEqual([
+    [[ALICE, "owner"]],
+    "none",
+  ]);
+});
+
+it("reports a save whose group access landed differently", async () => {
+  const env = await setup(ALICE, (doc) => {
+    authorization(doc, ALICE, ["Read", "Write", "Control"]).default = FOLDER;
+    const rule = authorization(doc, BOB, ["Read"]);
+    properties(rule).values(`${ACL}accessTo`).clear();
+    rule.default = FOLDER;
+    group(rule);
+  });
+  const scoped = await loadScopedSharing(env.session, FOLDER);
+  // The PUT is acknowledged but not stored: the group still reads the items inside.
+  env.intercept((url, init) =>
+    url === env.doc.source && init?.method === "PUT"
+      ? new Response(null, { status: 204 })
+      : undefined,
+  );
+  await expect(
+    applyScopedSharing(env.session, scoped, {
+      folder: scoped.folder,
+      contents: scoped.folder,
+      groups: { folder: [], contents: [] },
+    }),
+  ).rejects.toSatisfy(
+    (error) =>
+      error instanceof ScopedSharingIncompleteError &&
+      error.message.includes(`group ${TEAM} (items inside)`),
+  );
+  // Owner access is never given to a group here.
+  await expect(
+    applyScopedSharing(env.session, scoped, {
+      folder: scoped.folder,
+      contents: scoped.contents,
+      groups: { folder: [{ id: TEAM, role: "owner" }], contents: scoped.groups.contents },
+    }),
+  ).rejects.toThrow("Owner rows are read-only");
+});

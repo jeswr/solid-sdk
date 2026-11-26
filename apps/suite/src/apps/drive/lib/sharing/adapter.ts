@@ -468,12 +468,39 @@ export function isPartialScope(error: unknown): boolean {
   return isRoleError(cause) && cause.code === "partial-scope";
 }
 
+/** A group's access on one scope. */
+export interface GroupAccess extends AccessOrigin {
+  readonly id: string;
+  readonly role: SharingRole;
+}
+/** The access a selection asks for a group; an omitted group loses its access. */
+export interface GroupChoice {
+  readonly id: string;
+  readonly role: SharingRole;
+}
+/** Project a scope's group grants, one entry per group at its highest role. */
+export function groupAccess(grants: readonly RoleGrant[]): GroupAccess[] {
+  const groups = new Map<string, RoleGrant[]>();
+  for (const grant of grants)
+    if (grant.agent.type === "group")
+      groups.set(grant.agent.id, [...(groups.get(grant.agent.id) ?? []), grant]);
+  return [...groups.keys()].sort().map((id) => {
+    const rows = groups.get(id) as RoleGrant[];
+    return { id, role: highest(rows), ...origin(rows) };
+  });
+}
+
 /** A folder's access shown separately for the folder itself and for the items inside it. */
 export interface ScopedSharingSnapshot {
   readonly resource: string;
   readonly grants: ScopedGrantSnapshot;
   readonly folder: SharingState;
   readonly contents: SharingState;
+  /** Group access per scope; the people and general access are in `folder` and `contents`. */
+  readonly groups: {
+    readonly folder: readonly GroupAccess[];
+    readonly contents: readonly GroupAccess[];
+  };
   /** The user owns the folder itself. */
   readonly canManage: boolean;
   /** The user also owns the items inside; without it only aligning them to the folder works. */
@@ -482,6 +509,11 @@ export interface ScopedSharingSnapshot {
 export interface ScopedSharingSelection {
   readonly folder: SharingSelection;
   readonly contents: SharingSelection;
+  /** Group access per scope. Omitted, each scope keeps its group rows as they are. */
+  readonly groups?: {
+    readonly folder: readonly GroupChoice[];
+    readonly contents: readonly GroupChoice[];
+  };
 }
 /** A per-scope save the pod took, but whose reloaded access differs from what was chosen. */
 export class ScopedSharingIncompleteError extends Error {
@@ -516,6 +548,7 @@ export async function loadScopedSharing(
     grants,
     folder,
     contents,
+    groups: { folder: groupAccess(grants.folder), contents: groupAccess(grants.contents) },
     canManage: owns(folder),
     ownsContents: owns(contents),
   };
@@ -527,6 +560,7 @@ function scopeGrants(
   snapshot: ScopedSharingSnapshot,
   scope: "folder" | "contents",
   selection: SharingSelection,
+  groups: readonly GroupChoice[] | undefined,
 ): RoleGrant[] {
   const view: SharingSnapshot = {
     resource: snapshot.resource,
@@ -543,7 +577,53 @@ function scopeGrants(
   // setScopedGrants takes the full set, so an omitted principal is removed directly. An
   // unchanged scope is still sent: its raw modes may differ from its roles (Write without
   // Append, say), and the SDK rewrites only rules whose modes differ from the roles given.
-  return plan ? plan.grants : snapshot.grants[scope];
+  const grants = plan ? plan.grants : snapshot.grants[scope];
+  return groups
+    ? [
+        ...grants.filter((g) => g.agent.type !== "group"),
+        ...groupGrants(snapshot.grants[scope], groups),
+      ]
+    : grants;
+}
+
+/**
+ * A scope's group rows for the chosen group access: unchanged groups keep their rows
+ * verbatim. As for people, inherited and owner rows are read-only here and no group is
+ * given owner access (Control).
+ */
+function groupGrants(rows: readonly RoleGrant[], groups: readonly GroupChoice[]): RoleGrant[] {
+  const current = new Map(groupAccess(rows).map((group) => [group.id, group]));
+  const wanted = new Map<string, SharingRole>();
+  for (const group of groups) {
+    if (safeHttpIri(group.id) !== group.id)
+      throw new SharingError("Enter a valid group identifier");
+    if (wanted.has(group.id)) throw new SharingError("Duplicate group identifier");
+    wanted.set(group.id, group.role);
+  }
+  const grants: RoleGrant[] = [];
+  for (const id of new Set([...current.keys(), ...wanted.keys()])) {
+    const before = current.get(id);
+    const role = wanted.get(id);
+    if (before?.role === role) {
+      grants.push(...rows.filter((row) => row.agent.type === "group" && row.agent.id === id));
+      continue;
+    }
+    if (before?.role === "owner" || role === "owner")
+      throw new SharingError("Owner rows are read-only");
+    if (before?.inherited) throw new SharingError("Inherited access must be changed at its source");
+    if (role) grants.push({ agent: { type: "group", id }, role, inherited: false, source: "" });
+  }
+  return grants;
+}
+/** Groups whose access in `actual` is not the access `wanted` asked for. */
+function unmetGroups(actual: readonly GroupAccess[], wanted: readonly GroupChoice[]): string[] {
+  const roles = (list: readonly GroupChoice[]) => new Map(list.map((g) => [g.id, g.role]));
+  const a = roles(actual);
+  const w = roles(wanted);
+  return [...new Set([...a.keys(), ...w.keys()])]
+    .filter((id) => a.get(id) !== w.get(id))
+    .sort()
+    .map((id) => `group ${id}`);
 }
 
 /**
@@ -556,8 +636,20 @@ export async function applyScopedSharing(
   selection: ScopedSharingSelection,
 ): Promise<{ snapshot: ScopedSharingSnapshot; changed: boolean }> {
   if (!snapshot.canManage) throw new SharingError("Only an owner can change sharing");
-  const folder = scopeGrants(session, snapshot, "folder", selection.folder);
-  const contents = scopeGrants(session, snapshot, "contents", selection.contents);
+  const folder = scopeGrants(
+    session,
+    snapshot,
+    "folder",
+    selection.folder,
+    selection.groups?.folder,
+  );
+  const contents = scopeGrants(
+    session,
+    snapshot,
+    "contents",
+    selection.contents,
+    selection.groups?.contents,
+  );
   let writing = false;
   const fetch: typeof globalThis.fetch = (input, init) => {
     if (init?.method === "PUT") writing = true;
@@ -592,9 +684,17 @@ export async function applyScopedSharing(
   } catch (cause) {
     throw new SharingRefreshError(cause);
   }
+  // Groups count too: a save that left group access other than chosen is not "saved".
+  const wanted = selection.groups ?? snapshot.groups;
   const unchanged = [
-    ...unmet(fresh.folder, selection.folder).map((id) => `${id} (this folder)`),
-    ...unmet(fresh.contents, selection.contents).map((id) => `${id} (items inside)`),
+    ...[
+      ...unmet(fresh.folder, selection.folder),
+      ...unmetGroups(fresh.groups.folder, wanted.folder),
+    ].map((id) => `${id} (this folder)`),
+    ...[
+      ...unmet(fresh.contents, selection.contents),
+      ...unmetGroups(fresh.groups.contents, wanted.contents),
+    ].map((id) => `${id} (items inside)`),
   ];
   if (unchanged.length) throw new ScopedSharingIncompleteError(fresh, unchanged);
   return { snapshot: fresh, changed: true };
