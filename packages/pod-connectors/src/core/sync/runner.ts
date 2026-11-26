@@ -1321,6 +1321,7 @@ export async function runTwoWaySync<Op>(
     const adopting = links.adoptedAt === undefined;
     const outcome = await adapter.import({
       api,
+      budget,
       signal,
       scopes: ports.scopes,
       cursor: adopting ? undefined : (ports.cursor ?? ports.state?.cursor),
@@ -1512,7 +1513,10 @@ export async function runTwoWaySync<Op>(
       pending: finalHealth.pending,
     });
     check();
-    const { indexUrl } = await writer.registerType(session.registrations());
+    await session.waitForPrivateWrites();
+    check();
+    request();
+    const { indexUrl } = await session.registerTypes();
     await session.finish();
     check();
     const sessionState = session.state(outcome);
