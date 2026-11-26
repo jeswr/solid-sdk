@@ -81,11 +81,14 @@ export function signInDiagnostic(error: unknown): string {
   const parts: string[] = [];
   let current: unknown = error;
   for (let depth = 0; depth < 3 && current instanceof Error; depth++) {
-    const message = current.message
-      .replace(/[a-z][a-z0-9+.-]*:\/\/?\S*/giu, "[url]")
-      .replace(/[A-Za-z0-9_~+/=.-]{20,}/gu, "[value]")
-      .slice(0, 120);
-    parts.push(`${current.name}: ${message}`);
+    // Any word with a scheme, percent-encoding, "@" or a long run of token characters may be
+    // a URL, identifier, address or credential; keep only plain words.
+    const redact = (text: unknown) =>
+      String(text)
+        .replace(/\S*[:%@]\S*/gu, "[value]")
+        .replace(/[A-Za-z0-9_~+/=.-]{20,}/gu, "[value]")
+        .slice(0, 120);
+    parts.push(`${redact(current.name)}: ${redact(current.message)}`);
     current = current.cause;
   }
   return parts.length > 0 ? parts.join(" <- ") : typeof error;

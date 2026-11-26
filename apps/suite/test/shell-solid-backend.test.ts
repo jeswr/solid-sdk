@@ -1472,12 +1472,23 @@ describe("signInDiagnostic", () => {
     const error = new Error("Token exchange failed", { cause });
     const text = signInDiagnostic(error);
     expect(text).toBe(
-      "Error: Token exchange failed <- TypeError: Failed to fetch [url] with [value]",
+      "Error: Token exchange failed <- TypeError: Failed to fetch [value] with [value]",
     );
     expect(text).not.toContain("pod.example");
     expect(text).not.toContain("code=");
     expect(signInDiagnostic(new Error("org.jeswr.suite:/oauth/callback?code=1"))).toBe(
-      "Error: [url]",
+      "Error: [value]",
+    );
+    expect(
+      signInDiagnostic(
+        new Error("bad https%3A%2F%2Fpod.example did:key:z6Mk urn:x:y a@b.example c0de"),
+      ),
+    ).toBe("Error: bad [value] [value] [value] [value] c0de");
+    const odd = new Error("x");
+    Object.defineProperty(odd, "message", { value: 42 });
+    expect(signInDiagnostic(odd)).toBe("Error: 42");
+    expect(signInDiagnostic(new TypeError("Symbol.dispose is not defined."))).toBe(
+      "TypeError: Symbol.dispose is not defined.",
     );
     expect(signInDiagnostic("nope")).toBe("string");
   });

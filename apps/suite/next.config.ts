@@ -11,6 +11,12 @@ if (
 )
   throw new Error("Demo fixtures must be disabled for deployment builds");
 
+if (
+  process.env.NEXT_PUBLIC_SIGN_IN_DIAGNOSTICS === "1" &&
+  (process.env.VERCEL === "1" || process.env.GITHUB_WORKFLOW === "pages")
+)
+  throw new Error("Sign-in diagnostics are for the MOB-07 test build only");
+
 const config: NextConfig = {
   // The live OIDC harness needs next dev for HTTP loopback. Keep its warmed route
   // entries alive so eviction/recompilation cannot Fast Refresh the opener mid-login.
