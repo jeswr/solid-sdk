@@ -224,7 +224,9 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
 - Stored `body`, `ifMatch`, `keepalive`, `createOptions` and `deleteOptions` are copied field by
   field and type-checked before dispatch; unknown option keys are dropped and a wrong type fails
   the item (`invalid stored request options`). `createOptions.exactUrl` is the bound destination
-  of an exact create; keep-both copies drop it and create by name.
+  of an exact create; keep-both copies drop it and create by name. Hydration rebinds older
+  container-bound exact creates only for a canonical direct child of the stored container with
+  the matching kind. Replay checks the destination policy against the persisted child URL.
 - Queued RDF keeps the requested Turtle or expanded, context-free JSON-LD format; named
   graphs require JSON-LD. Rebuild validated RDF/JS fields before N3 Writer; never trust private
   IDs, unsafe IRIs, language tags or prefix mappings. Omit queued Turtle prefixes. Generated create names stay stable for replay. Use named StorageClient
