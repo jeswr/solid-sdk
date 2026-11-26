@@ -15,6 +15,7 @@
 // The shadcn-compatible primitives are exported too for apps that want to build
 // their own header chrome on the same Radix + token base.
 
+export { AccountControl, type AccountControlProps } from "./components/account-control.js";
 export { AccountMenu, type AccountMenuProps, initials } from "./components/account-menu.js";
 export {
   ErrorBoundary,
