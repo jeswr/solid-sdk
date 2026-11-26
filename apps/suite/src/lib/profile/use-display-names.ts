@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
@@ -19,16 +20,14 @@ export function useDisplayNames(webIds: (string | undefined)[], supplied?: PodSe
     let live = true;
     if (session) {
       const ids = (JSON.parse(key) as (string | null)[]).filter((id) => id !== null);
-      setResolved({ session, key, names: new Map() });
+      let names = new Map<string, string>();
+      setResolved({ session, key, names });
       // Publish each name as it resolves: one slow profile must not hold back the rest.
       for (const id of new Set(ids))
         void resolveDisplayName(session, id).then((name) => {
           if (!live) return;
-          setResolved((previous) =>
-            previous?.session === session && previous.key === key
-              ? { session, key, names: new Map(previous.names).set(id, name) }
-              : previous,
-          );
+          names = new Map(names).set(id, name);
+          setResolved({ session, key, names });
         });
     }
     return () => {

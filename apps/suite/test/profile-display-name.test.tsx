@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.2-Astra
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
@@ -131,6 +132,19 @@ it("uses page fetch for foreign profiles in demo sessions", async () => {
   expect(await resolveDisplayName(account, webId)).toBe("Alice");
   expect(http).toHaveBeenCalledOnce();
 });
+it("drops the resolved profile name on sign-out", async () => {
+  const account = session(`<${webId}> <${foaf}> "Alice" .`);
+  const hook = renderHook(
+    (signedIn: boolean) => useDisplayNames([webId], signedIn ? account : undefined),
+    {
+      initialProps: true,
+    },
+  );
+  await waitFor(() => expect(hook.result.current(webId)).toBe("Alice"));
+  hook.rerender(false);
+  expect(hook.result.current(webId)).toBe("people.example");
+});
+
 it("resolves hook names through the session context and handles unknown identities", async () => {
   const account = session(`<${webId}> <${foaf}> "Alice" .`);
   const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -199,15 +213,19 @@ it("strips bidirectional and invisible characters and caps long names", async ()
 });
 it("publishes each name as it resolves, without waiting for a slow profile", async () => {
   const slow = "https://slow.example/profile#me";
+  const pending = Promise.withResolvers<Response>();
   const account = {
     ...session(),
     publicFetch: vi.fn(async (input: RequestInfo | URL) =>
       String(input).startsWith("https://slow.example/")
-        ? new Promise<Response>(() => {})
+        ? pending.promise
         : response(`<${webId}> <${foaf}> "Alice" .`),
     ),
   } satisfies PodSession;
   const hook = renderHook(() => useDisplayNames([slow, webId], account));
   await waitFor(() => expect(hook.result.current(webId)).toBe("Alice"));
   expect(hook.result.current(slow)).toBe("slow.example");
+  await act(async () => pending.resolve(response(`<${slow}> <${foaf}> "Bob" .`)));
+  expect(hook.result.current(slow)).toBe("Bob");
+  expect(hook.result.current(webId)).toBe("Alice");
 });

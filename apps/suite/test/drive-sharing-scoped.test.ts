@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.2-Astra
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Claude Opus 5.5
 // Drive's scope-aware sharing (sst-uo4.4) through the SDK role layer against the demo pod.
+import { readGrants } from "@jeswr/pod-access/roles";
 import { serialize } from "@jeswr/rdf-serialize";
 import { expect, it, vi } from "vitest";
 import { matchPlan } from "../src/apps/drive/components/share-scoped";
@@ -85,6 +87,8 @@ it("opens a WAC folder with different contents access per scope, and makes them 
   const env = await setup();
   const plain = await loadSharing(env.session, FOLDER).catch((error: unknown) => error);
   expect(isPartialScope(plain)).toBe(true);
+  const raw = readGrants(FOLDER, { fetch: env.fetch, root: ROOT, kind: "folder" });
+  await expect(raw).rejects.toSatisfy(isPartialScope);
   expect(isPartialScope(new SharingError("other"))).toBe(false);
   const scoped = await loadScopedSharing(env.session, FOLDER);
   expect(scoped.canManage).toBe(true);
@@ -316,6 +320,48 @@ it("preserves an unchanged URN group while applying a match", async () => {
   );
   expect(snapshot.groups).toEqual(scoped.groups);
   expect(snapshot.groups.folder).toMatchObject([{ id, role: "viewer" }]);
+});
+
+it("refuses two roles for the same group before issuing a request", async () => {
+  const env = await setup();
+  const scoped = await loadScopedSharing(env.session, FOLDER);
+  env.fetch.mockClear();
+  await expect(
+    applyScopedSharing(env.session, scoped, {
+      folder: scoped.folder,
+      contents: scoped.contents,
+      groups: {
+        folder: [
+          { id: TEAM, role: "viewer" },
+          { id: TEAM, role: "editor" },
+        ],
+        contents: [],
+      },
+    }),
+  ).rejects.toThrow("Duplicate group identifier");
+  expect(env.fetch).not.toHaveBeenCalled();
+});
+
+it("requires inherited group access to be removed at the parent", async () => {
+  const env = await setup(ALICE, (doc) => {
+    authorization(doc, ALICE, ["Read", "Write", "Control"]).default = FOLDER;
+    const rule = authorization(doc, TEAM, ["Read"]);
+    rule.default = FOLDER;
+    group(rule);
+  });
+  const child = `${FOLDER}child/`;
+  await env.pod.fetch(child, { method: "PUT" });
+  const scoped = await loadScopedSharing(env.session, child);
+  expect(scoped.groups.folder).toMatchObject([{ id: TEAM, role: "viewer", inherited: true }]);
+  env.fetch.mockClear();
+  await expect(
+    applyScopedSharing(env.session, scoped, {
+      folder: scoped.folder,
+      contents: scoped.contents,
+      groups: { ...scoped.groups, folder: [] },
+    }),
+  ).rejects.toThrow("Inherited access must be changed at its source");
+  expect(env.fetch).not.toHaveBeenCalled();
 });
 
 it("refuses new or changed URN group grants before writing", async () => {

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import "./drive-ui-dom";
@@ -1123,15 +1124,36 @@ test("offline, Save queues through the outbox with Drive's text guard and the GE
   expect((get.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
 });
 
-test("a save that loses the network before any answer is queued, and an online delivery refreshes", async () => {
-  const outbox = queueing({ queued: undefined, etag: '"replayed"' });
+test.each([
+  '"replayed"',
+  null,
+])("an outbox delivery with ETag %s refreshes the file and uses the receipt for the next edit", async (etag) => {
+  const outbox = queueing({ queued: undefined, etag });
   const { get } = await setup({ preview: true });
-  vi.spyOn(drive.client, "write").mockRejectedValue(new TypeError("Failed to fetch"));
+  const write = vi
+    .spyOn(drive.client, "write")
+    .mockRejectedValueOnce(new TypeError("Failed to fetch"));
   await editText(get);
   await save(get);
   expect(outbox.write).toHaveBeenCalledOnce();
   expect(toast.success).toHaveBeenCalledWith("Saved");
   expect(drive.invalidate).toHaveBeenCalledWith(FILE);
+  await editText(get, "Second edit");
+  expect((get.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(
+    etag === null,
+  );
+  if (etag === null) {
+    expect(get.getByText("Reload this file to get a current version before saving.")).toBeTruthy();
+  } else {
+    write.mockResolvedValueOnce({ etag: '"next"' });
+    await save(get);
+    expect(write).toHaveBeenLastCalledWith(
+      FILE,
+      "Second edit",
+      expect.objectContaining({ ifMatch: etag }),
+      { kind: "protect-ancestors" },
+    );
+  }
 });
 
 test("without a captured discovery, Drive neither queues nor enables an offline save", async () => {

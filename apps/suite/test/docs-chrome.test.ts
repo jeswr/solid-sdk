@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6.2-Astra
 
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -401,7 +402,11 @@ it("runs file actions after menus close and preserves keyboard focus for Rename"
   const editor = create();
   const input = document.createElement("input");
   document.body.append(input);
-  const options = props(editor, { rename: () => input.focus() });
+  const options = props(editor, {
+    rename: () => input.focus(),
+    fromTemplate: vi.fn(),
+    saveTemplate: vi.fn(),
+  });
   render(h(EditorMenubar, options));
   await openMenu("File");
   expect(screen.getByRole("menuitem", { name: "New" }).getAttribute("href")).toBe("/docs/new");
@@ -409,7 +414,9 @@ it("runs file actions after menus close and preserves keyboard focus for Rename"
   await selectItem("Rename");
   expect(document.activeElement).toBe(input);
   for (const [label, callback] of [
+    ["From template…", options.fromTemplate],
     ["Make a copy", options.copy],
+    ["Save as template", options.saveTemplate],
     ["Move to trash", options.remove],
     ["Import to replace…", options.importFile],
     ["Print Ctrl+P", options.print],
@@ -499,6 +506,8 @@ it("disables mutation commands for view-only documents and handles absent option
   const options = props(editor, { readOnly: true, draft: true, online: false, actions: [] });
   render(h(EditorMenubar, options));
   await openMenu("File");
+  expect(screen.queryByRole("menuitem", { name: "From template…" })).toBeNull();
+  expect(screen.queryByRole("menuitem", { name: "Save as template" })).toBeNull();
   expect(menuitem("Rename").hasAttribute("data-disabled")).toBe(true);
   expect(menuitem("Make a copy").hasAttribute("data-disabled")).toBe(true);
   key(screen.getByRole("menu"), "Escape");
