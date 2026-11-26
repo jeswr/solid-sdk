@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { normalizePodBase, refuseRedirects } from "@jeswr/guarded-fetch";
 import { parseContainerMembers } from "@jeswr/ldp-container";
@@ -144,8 +145,8 @@ export function planUnusedNoteImages(
   );
 }
 
-const relative = (url: string, podRoot: string) =>
-  url.startsWith(podRoot) ? url.slice(podRoot.length) : "a file";
+// Listings are scoped to the normalized pod root, as are the history folders derived from them.
+const relative = (url: string, podRoot: string) => url.slice(podRoot.length);
 
 /** Notes-specific collection policy; transport and listing safety stay in the SDK. */
 export class NoteImageCleanup {

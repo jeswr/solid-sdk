@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { uploadPodImage } from "../src/apps/docs/lib/editor/image-upload";
 import { DocsStore } from "../src/apps/docs/lib/model/store";
@@ -351,4 +352,37 @@ it("refuses an over-cap source image without publishing (D3)", async () => {
   );
   await expect(f.convert(note, "copy", f.dependencies)).rejects.toThrow("under 20 MB");
   expect(f.documents()).toEqual([]);
+});
+
+it("preserves the read error when the source image stream fails", async () => {
+  const error = new TypeError("Image stream interrupted");
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      controller.error(error);
+    },
+  });
+  await expect(readCappedImage(new Response(stream))).rejects.toBe(error);
+  expect(stream.locked).toBe(false);
+});
+
+it.each([
+  "declared",
+  "streamed",
+])("preserves the %s size-limit error when cancellation fails", async (size) => {
+  const cancel = vi.fn(async () => {
+    throw new Error("Cancellation failed");
+  });
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(2));
+    },
+    cancel,
+  });
+  const headers = new Headers();
+  if (size === "declared") headers.set("content-length", "2");
+  await expect(readCappedImage(new Response(stream, { headers }), 1)).rejects.toThrow(
+    "Images must be under 20 MB",
+  );
+  expect(cancel).toHaveBeenCalledOnce();
+  expect(stream.locked).toBe(false);
 });
