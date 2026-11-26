@@ -9,13 +9,8 @@
 import { StorageError, type StorageErrorCode } from "@jeswr/storage-client";
 import type { GuardedDelivery, ReplayDelegate } from "@jeswr/suite-sdk/offline";
 import { isEndpointCapture } from "../client/access";
-import {
-  createSolidDriveClient,
-  type DriveClient,
-  DriveError,
-  type DriveItem,
-} from "../client/client";
-import { childUrl, createFolder, uploadFile } from "../operations/operations";
+import { createSolidDriveClient, type DriveClient, DriveError, parentOf } from "../client/client";
+import { childUrl, createFolder } from "../operations/operations";
 import { normalizeUploadName } from "../upload";
 import { type DriveGuardKind, inside, isPolicyDocument } from "./guards";
 import { isNetworkFailure } from "./network";
@@ -66,7 +61,11 @@ function body(delivery: GuardedDelivery, contentType: string): Blob {
   return new Blob(delivery.body ? [delivery.body as BlobPart] : [], { type: contentType });
 }
 
-function assertions(delivery: GuardedDelivery): { kind?: unknown; discovery?: unknown } {
+function assertions(delivery: GuardedDelivery): {
+  kind?: unknown;
+  source?: unknown;
+  discovery?: unknown;
+} {
   const value = delivery.assertions;
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
@@ -125,17 +124,30 @@ export function driveReplayDelegate(
       if (delivery.op === "create") {
         const name = delivery.createOptions?.name;
         if (!name) refuse(delivery, "This queued copy has no name.");
-        const saved = await uploadFile(
-          client,
-          container,
+        const { source, discovery } = assertions(delivery);
+        if (
+          typeof source !== "string" ||
+          !isEndpointCapture(discovery) ||
+          !inside(session.storageUrl, source) ||
+          source.endsWith("/") ||
+          isPolicyDocument(source) ||
+          parentOf(source) !== container
+        )
+          refuse(delivery, "This queued copy doesn't name the file it keeps.");
+        const url = childUrl(container, normalizeUploadName(name));
+        // "Keep both" copies the file, so the copy keeps the file's own access, as Drive's
+        // "Make a copy" does (preserve-source). A plain upload would inherit the folder's
+        // access, which can be wider than a file with its own ACL.
+        const verifyHeaders = client.discoveryVerifier(source, discovery);
+        const { etag } = await client.stat(source);
+        if (!etag) throw new DriveError("missing-validator", 409, source);
+        await client.write(
+          url,
           body(delivery, contentType),
-          name,
-          "fail",
-          undefined,
-          contentType,
+          { contentType, restoreFrom: { url: source, etag, verifyHeaders } },
+          { kind: "protect-ancestors" },
         );
-        // With "fail", a name clash throws; only "skip" resolves without an item.
-        return { url: (saved as DriveItem).url, etag: null, created: true };
+        return { url, etag: null, created: true };
       }
       const { discovery } = assertions(delivery);
       if (!isEndpointCapture(discovery) || !delivery.ifMatch)

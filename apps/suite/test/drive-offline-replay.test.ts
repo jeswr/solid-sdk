@@ -16,7 +16,7 @@ import {
 } from "../src/apps/drive/lib/offline/guards";
 import { isNetworkFailure } from "../src/apps/drive/lib/offline/network";
 import { driveReplayDelegate } from "../src/apps/drive/lib/offline/replay";
-import { DRIVE, OWNER, PRIVATE, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
+import { aclBody, DRIVE, OWNER, PRIVATE, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
 
 const FILE = `${PUBLIC}placeholder`;
 const encode = (text: string) => new TextEncoder().encode(text);
@@ -94,11 +94,11 @@ it("text guards carry the captured discovery as plain JSON", async () => {
   const f = await wacPod();
   const { version } = await opened(f);
   expect(isEndpointCapture(version.discovery)).toBe(true);
-  const guard = textGuard(version.discovery as NonNullable<typeof version.discovery>);
+  const guard = textGuard(version.discovery as NonNullable<typeof version.discovery>, FILE);
   expect(JSON.parse(JSON.stringify(guard))).toEqual(guard);
   expect(guard).toMatchObject({
     tag: DRIVE_TAG,
-    assertions: { kind: "text", discovery: version.discovery },
+    assertions: { kind: "text", source: FILE, discovery: version.discovery },
   });
   for (const bad of [
     null,
@@ -119,7 +119,7 @@ it("replays a queued text save through Drive's guarded write", async () => {
   const { version } = await opened(f);
   const delegate = driveReplayDelegate()(session(f));
   const result = await delegate(
-    textDelivery(FILE, version.etag, textGuard(version.discovery as never).assertions),
+    textDelivery(FILE, version.etag, textGuard(version.discovery as never, FILE).assertions),
     ctx(),
   );
   expect(result).toMatchObject({ url: FILE, created: false });
@@ -136,7 +136,7 @@ it("turns a changed file into an outbox conflict", async () => {
   });
   const delegate = driveReplayDelegate()(session(f));
   const error = await delegate(
-    textDelivery(FILE, version.etag, textGuard(version.discovery as never).assertions),
+    textDelivery(FILE, version.etag, textGuard(version.discovery as never, FILE).assertions),
     ctx(),
   ).catch((cause: unknown) => cause);
   expect(error).toBeInstanceOf(StorageError);
@@ -150,7 +150,7 @@ it("refuses a replay whose access discovery changed since the file was opened", 
   f.endpoints.set(FILE, `${FILE}.moved-policy`);
   const delegate = driveReplayDelegate()(session(f));
   const error = await delegate(
-    textDelivery(FILE, version.etag, textGuard(version.discovery as never).assertions),
+    textDelivery(FILE, version.etag, textGuard(version.discovery as never, FILE).assertions),
     ctx(),
   ).catch((cause: unknown) => cause);
   expect(error).toBeInstanceOf(StorageError);
@@ -162,7 +162,7 @@ it("fails closed on tampered or incomplete queued saves", async () => {
   const f = await wacPod();
   const { version } = await opened(f);
   const delegate = driveReplayDelegate()(session(f));
-  const assertions = textGuard(version.discovery as never).assertions;
+  const assertions = textGuard(version.discovery as never, FILE).assertions;
   for (const delivery of [
     textDelivery(FILE, undefined, assertions),
     textDelivery(FILE, version.etag, { kind: "text", discovery: { endpoint: 5 } }),
@@ -189,37 +189,43 @@ it("fails closed on tampered or incomplete queued saves", async () => {
   expect(await (await f.pod.fetch(FILE)).text()).toBe("public");
 });
 
-it("stores a kept copy as a new file through Drive's upload", async () => {
+it("stores a kept copy as a new file next to the file it keeps", async () => {
   const f = await wacPod();
+  const { version } = await opened(f);
+  const assertions = textGuard(version.discovery as never, FILE).assertions;
   const delegate = driveReplayDelegate()(session(f));
-  const result = await delegate(
-    {
-      op: "create",
-      url: PUBLIC,
-      container: PUBLIC,
-      contentType: "text/plain",
-      body: encode("kept"),
-      createOptions: { name: "placeholder (copy).txt", contentType: "text/plain" },
-      assertions: { kind: "text" },
-      purpose: "resolve-both",
-    },
-    ctx(),
-  );
+  const copy = (overrides: Partial<GuardedDelivery> = {}): GuardedDelivery => ({
+    op: "create",
+    url: PUBLIC,
+    container: PUBLIC,
+    contentType: "text/plain",
+    body: encode("kept"),
+    createOptions: { name: "placeholder (copy).txt", contentType: "text/plain" },
+    assertions: assertions ?? null,
+    purpose: "resolve-both",
+    ...overrides,
+  });
+  const result = await delegate(copy(), ctx());
   expect(result).toMatchObject({ url: `${PUBLIC}placeholder%20(copy).txt`, created: true });
   expect(await (await f.pod.fetch(`${PUBLIC}placeholder%20(copy).txt`)).text()).toBe("kept");
-  await expect(
-    delegate(
-      {
-        op: "create",
-        url: PUBLIC,
-        container: PUBLIC,
-        body: null,
-        assertions: { kind: "text" },
-        purpose: "resolve-both",
-      },
-      ctx(),
-    ),
-  ).rejects.toMatchObject({ code: "bad-request" });
+  // The file inherits the public folder's access, and so does its copy.
+  expect((await f.anonymous(`${PUBLIC}placeholder%20(copy).txt`)).status).toBe(200);
+  const discovery = (assertions as { discovery: unknown }).discovery;
+  for (const delivery of [
+    copy({ createOptions: {} }),
+    // Without the file it keeps, the copy's access can't be chosen.
+    copy({ assertions: { kind: "text" } }),
+    copy({ assertions: { kind: "text", discovery } }),
+    copy({ assertions: { kind: "text", source: FILE } }),
+    copy({ assertions: { kind: "text", source: 5, discovery } }),
+    copy({ assertions: { kind: "text", source: `${PRIVATE}secret`, discovery } }),
+    copy({ assertions: { kind: "text", source: `${FILE}.acl`, discovery } }),
+    copy({ assertions: { kind: "text", source: PUBLIC, discovery } }),
+    copy({
+      assertions: { kind: "text", source: "https://elsewhere.test/drive/public/a", discovery },
+    }),
+  ])
+    await expect(delegate(delivery, ctx())).rejects.toMatchObject({ code: "bad-request" });
 });
 
 it("replays a queued folder as an inherit-verified create", async () => {
@@ -392,4 +398,30 @@ it("returns the write receipt's ETag when the server sends one, and none otherwi
       { kind: "protect-ancestors" },
     );
   }
+});
+
+it("gives a kept copy the source file's own access, not its looser folder's", async () => {
+  const f = await wacPod();
+  // The public folder is readable by everyone; this file has its own owner-only ACL.
+  f.policies.set(`${FILE}.policy`, await aclBody(FILE));
+  expect((await f.anonymous(FILE)).status).toBe(403);
+  const { version } = await opened(f);
+  const delegate = driveReplayDelegate()(session(f));
+  const result = await delegate(
+    {
+      op: "create",
+      url: PUBLIC,
+      container: PUBLIC,
+      contentType: "text/plain",
+      body: encode("private offline text"),
+      createOptions: { name: "placeholder-conflict-1000", contentType: "text/plain" },
+      assertions: textGuard(version.discovery as never, FILE).assertions,
+      purpose: "resolve-both",
+    },
+    ctx(),
+  );
+  const copy = `${PUBLIC}placeholder-conflict-1000`;
+  expect(result).toMatchObject({ url: copy, created: true });
+  expect(await (await f.pod.fetch(copy)).text()).toBe("private offline text");
+  expect((await f.anonymous(copy)).status).toBe(403);
 });

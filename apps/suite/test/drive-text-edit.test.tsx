@@ -1111,7 +1111,7 @@ test("offline, Save queues through the outbox with Drive's text guard and the GE
     contentType: "text/plain",
     ifMatch: opened.etag,
     offline: "queue",
-    guard: textGuard(opened.discovery as NonNullable<typeof opened.discovery>),
+    guard: textGuard(opened.discovery as NonNullable<typeof opened.discovery>, FILE),
   });
   expect(toast.success).toHaveBeenCalledWith(
     "Saved on this device. It will sync when you're back online.",

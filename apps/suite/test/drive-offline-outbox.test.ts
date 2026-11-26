@@ -44,7 +44,7 @@ it("queues a text save and a new folder offline, and replays both through Drive"
     contentType: "text/plain",
     ifMatch: opened.etag as string,
     offline: "queue",
-    guard: textGuard(opened.discovery as NonNullable<typeof opened.discovery>),
+    guard: textGuard(opened.discovery as NonNullable<typeof opened.discovery>, FILE),
   });
   expect(saved.queued).toBe(true);
   let queued = 0;
@@ -93,7 +93,7 @@ it("surfaces a changed file as a conflict that Keep both resolves with a copy", 
     contentType: "text/plain",
     ifMatch: opened.etag as string,
     offline: "queue",
-    guard: textGuard(opened.discovery as NonNullable<typeof opened.discovery>),
+    guard: textGuard(opened.discovery as NonNullable<typeof opened.discovery>, FILE),
   });
   await f.pod.fetch(FILE, {
     method: "PUT",

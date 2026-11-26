@@ -11,12 +11,21 @@ import type { EndpointCapture } from "../client/access";
 export const DRIVE_TAG = "drive";
 export type DriveGuardKind = "text" | "folder";
 
-/** The guard a queued text save carries: its validator's access discovery, as JSON. */
-export function textGuard(discovery: EndpointCapture): OutboxGuard {
+/**
+ * The guard a queued text save carries: its validator's access discovery and the file it
+ * saves, as JSON. A conflict's "keep both" copy is created with that file's own access, so
+ * the delegate must know which file it copies; the outbox's create delivery names only the
+ * folder.
+ */
+export function textGuard(discovery: EndpointCapture, source: string): OutboxGuard {
   const { endpoint, wacHeaders, mode } = discovery;
   return {
     tag: DRIVE_TAG,
-    assertions: { kind: "text", discovery: { endpoint, wacHeaders: [...wacHeaders], mode } },
+    assertions: {
+      kind: "text",
+      source,
+      discovery: { endpoint, wacHeaders: [...wacHeaders], mode },
+    },
   };
 }
 export const folderGuard: OutboxGuard = { tag: DRIVE_TAG, assertions: { kind: "folder" } };
