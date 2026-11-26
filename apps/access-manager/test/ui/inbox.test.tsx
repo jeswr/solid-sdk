@@ -470,8 +470,11 @@ describe("InboxView using requests-solid", () => {
     );
     pod.seed(`${POD}.acl`, await toTurtle(dataset));
     renderInbox(pod);
+    // The notice (access-model probe) and the request list (inbox read) come
+    // from two independent reads that can resolve in either order, so wait
+    // for each one rather than assuming the list is there once the notice is.
     await screen.findByText("Approving requests isn't available on this storage yet.");
-    expect(screen.getByText("Review & approve…")).toBeDisabled();
+    expect(await screen.findByText("Review & approve…")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Deny" })).toBeDisabled();
     expect(pod.log.some((call) => call.method === "PUT")).toBe(false);
   });
