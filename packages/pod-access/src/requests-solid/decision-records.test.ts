@@ -878,3 +878,199 @@ describe("recorded decision choices", () => {
     expect((await decide({ id: ID }, { approve: true }, opts(pod))).status).toBe("approved");
   });
 });
+
+describe("listed recorded choices", () => {
+  const writes = (pod: PodStub, from: number) =>
+    pod.log.slice(from).filter(({ method }) => method !== "GET" && method !== "HEAD");
+
+  it("lists a pinned approval's recorded choices, read-only, so it can be finished as recorded", async () => {
+    const pod = buildPod();
+    pod.seed(ID, readWrite());
+    const expiresAt = new Date("2028-01-01Z");
+    await pinOnly(pod, { approve: true, role: "viewer", expiresAt });
+    const denied = `${POD}inbox/request-2.ttl`;
+    pod.seed(denied, `${accessRequestTurtle(denied)}<${denied}> accm:status accm:Denied .`);
+    const before = pod.log.length;
+    // Storage given without its trailing slash names the same records folder.
+    const listed = await listRequests({ ...opts(pod), storage: POD.slice(0, -1) });
+    expect(writes(pod, before)).toEqual([]);
+    const pending = listed.find((entry) => entry.id === ID);
+    expect(pending).toMatchObject({
+      status: "pending",
+      recorded: {
+        dataTypes: [CONTACTS_CLASS],
+        grantedTypes: [CONTACTS_CLASS],
+        role: "viewer",
+        expiresAt,
+      },
+    });
+    expect(listed.find((entry) => entry.id === denied)).not.toHaveProperty("recorded");
+    // An approval that stopped after the Approving CAS lists its recorded choices too.
+    pod.intercept = (method, url) =>
+      method === "PUT" && url.includes("/grant-") ? new Response(null, { status: 500 }) : undefined;
+    // The recorded choices passed back resume the pin (a choice-less call would be refused).
+    const fromList = { ...(pending?.recorded as Parameters<typeof decide>[1]), approve: true };
+    await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
+      "still finishing",
+    );
+    await expect(decide({ id: ID }, fromList, opts(pod))).rejects.toThrow("500");
+    pod.intercept = undefined;
+    const approving = (await listRequests(opts(pod))).find((entry) => entry.id === ID);
+    expect(approving).toMatchObject({ status: "approving", recorded: pending?.recorded });
+    const recorded = (approving as { recorded: Parameters<typeof decide>[1] }).recorded;
+    const result = await decide({ id: ID }, { ...recorded, approve: true }, opts(pod));
+    expect(result.choices).toEqual({
+      dataTypes: [CONTACTS_CLASS],
+      role: "viewer",
+      targetRoles: { [ALICE]: "viewer", [CAROL]: "viewer" },
+      expiresAt,
+    });
+    // Finished requests carry no recorded choices.
+    expect((await listRequests(opts(pod))).find((entry) => entry.id === ID)).not.toHaveProperty(
+      "recorded",
+    );
+  });
+
+  it("lists no recorded choices without a sealed, private records folder or a valid record", async () => {
+    // No records folder at all.
+    const fresh = buildPod();
+    const before = fresh.log.length;
+    expect((await listRequests(opts(fresh)))[0]).not.toHaveProperty("recorded");
+    expect(writes(fresh, before)).toEqual([]);
+    // A folder still marked unverified, or private but never given a key: nothing is sealed.
+    for (const acl of [
+      ownerOnly(`<${RECORDS}.acl> accm:unverifiedRecords "true"; accm:recordsKey "k".`),
+      ownerOnly(),
+    ]) {
+      const pod = buildPod();
+      pod.seed(RECORDS, "");
+      pod.seed(`${RECORDS}.acl`, acl);
+      const from = pod.log.length;
+      expect((await listRequests(opts(pod)))[0]).not.toHaveProperty("recorded");
+      expect(writes(pod, from)).toEqual([]);
+      expect(pod.body(`${RECORDS}.acl`)).toBe(acl);
+    }
+    // A shared records folder is not trusted; the listing itself still succeeds.
+    const shared = buildPod();
+    await pinOnly(shared);
+    shared.seed(
+      `${RECORDS}.acl`,
+      `${shared.body(`${RECORDS}.acl`)}\n<${RECORDS}.acl#public> a acl:Authorization; acl:agentClass foaf:Agent; acl:accessTo <${RECORDS}>; acl:mode acl:Read.`,
+    );
+    const [entry] = await listRequests(opts(shared));
+    expect(entry).toMatchObject({ status: "pending" });
+    expect(entry).not.toHaveProperty("recorded");
+    // A record whose end date is not one we wrote is refused, by listing and by decide alike.
+    for (const expiresAt of ["soon", "2028-01-01Z", 1830297600000]) {
+      const pod = buildPod();
+      await pinOnly(pod, { approve: true, expiresAt: new Date("2028-01-01Z") });
+      const slot = await decisionUrl(pod);
+      const { snapshot } = await record(pod, slot);
+      pod.seed(
+        slot,
+        await recordTurtle(slot, { outcome: "approving", snapshot: { ...snapshot, expiresAt } }),
+      );
+      expect((await listRequests(opts(pod)))[0]).not.toHaveProperty("recorded");
+      await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
+        "Invalid persisted approval snapshot",
+      );
+    }
+  });
+
+  it("refuses a pinned record whose data type lists are not the ones decide() writes", async () => {
+    // Calendar is named but has no permission of its own: chosen, never granted.
+    const unnamed = `${PREFIXES}<${ID}> a odrl:Offer; odrl:uid <${ID}>; accm:dataClass <${CONTACTS_CLASS}>, <${CALENDAR}>;
+  odrl:permission [ odrl:assignee <${REQUESTER}>; odrl:action odrl:read; odrl:target <${CONTACTS_CLASS}> ].`;
+    for (const change of [
+      { chosen: { dataTypes: [CONTACTS_CLASS, CALENDAR], viewer: false } },
+      { chosen: { dataTypes: [CALENDAR, CALENDAR, CONTACTS_CLASS], viewer: false } },
+      { chosen: { dataTypes: [CALENDAR, 7], viewer: false } },
+      { chosen: { dataTypes: [CALENDAR, CONTACTS_CLASS, "urn:x"], viewer: false } },
+      { chosen: { dataTypes: "nope", viewer: false } },
+      // Granted but never chosen.
+      { chosen: { dataTypes: [CALENDAR], viewer: false } },
+      { dataTypes: "nope" },
+    ]) {
+      const pod = buildPod();
+      pod.seed(ID, unnamed);
+      await pinOnly(pod);
+      const slot = await decisionUrl(pod);
+      const { snapshot } = await record(pod, slot);
+      expect(snapshot.chosen.dataTypes).toEqual([CALENDAR, CONTACTS_CLASS].sort());
+      expect((await listRequests(opts(pod)))[0]).toMatchObject({
+        recorded: { dataTypes: [CALENDAR, CONTACTS_CLASS].sort(), grantedTypes: [CONTACTS_CLASS] },
+      });
+      // No role was chosen, so none is recorded: passing the choices back omits it too.
+      expect((await listRequests(opts(pod)))[0]?.recorded).not.toHaveProperty("role");
+      pod.seed(
+        slot,
+        await recordTurtle(slot, { outcome: "approving", snapshot: { ...snapshot, ...change } }),
+      );
+      expect((await listRequests(opts(pod)))[0]).not.toHaveProperty("recorded");
+      await expect(decide({ id: ID }, { approve: true }, opts(pod))).rejects.toThrow(
+        "Invalid persisted approval snapshot",
+      );
+    }
+  });
+
+  it("lists no recorded choices from a record or folder it can't trust", async () => {
+    // A record at the slot that names another request.
+    const other = buildPod();
+    await pinOnly(other);
+    const slot = await decisionUrl(other);
+    const { snapshot } = await record(other, slot);
+    other.seed(
+      slot,
+      await recordTurtle(slot, { id: `${POD}inbox/other.ttl`, outcome: "approving", snapshot }),
+    );
+    const [entry] = await listRequests(opts(other));
+    expect(entry).toMatchObject({ status: "pending" });
+    expect(entry).not.toHaveProperty("recorded");
+    // An owner-only folder ACL without Control.
+    const noControl = buildPod();
+    await pinOnly(noControl);
+    noControl.seed(
+      `${RECORDS}.acl`,
+      `${PREFIXES}<${RECORDS}.acl#owner> a acl:Authorization; acl:agent <${OWNER}>;
+  acl:accessTo <${RECORDS}>; acl:default <${RECORDS}>; acl:mode acl:Read, acl:Write.
+<${RECORDS}.acl> accm:recordsKey "${sealedKey(noControl)}".`,
+    );
+    expect((await listRequests(opts(noControl)))[0]).not.toHaveProperty("recorded");
+    // A folder whose own Link header doesn't advertise the WAC ACL it has (mixed ACP and WAC, or
+    // no access document) is not trusted, and nothing is written.
+    for (const link of [
+      `<${RECORDS}.acr>; rel="http://www.w3.org/ns/solid/acp#accessControl", <${RECORDS}.acl>; rel="acl"`,
+      `<${RECORDS}meta>; rel="describedby"`,
+      undefined,
+    ]) {
+      const pod = buildPod();
+      await pinOnly(pod);
+      pod.intercept = (method, url) =>
+        method === "HEAD" && url === RECORDS
+          ? new Response(null, { status: 200, headers: link === undefined ? {} : { link } })
+          : undefined;
+      const before = pod.log.length;
+      expect((await listRequests(opts(pod)))[0]).not.toHaveProperty("recorded");
+      expect(writes(pod, before)).toEqual([]);
+    }
+  });
+
+  it("propagates cancellation during the records lookup", async () => {
+    for (const at of [
+      (method: string, url: string) => method === "HEAD" && url === RECORDS,
+      (method: string, url: string) => method === "GET" && url.includes("/decision-"),
+    ]) {
+      const pod = buildPod();
+      await pinOnly(pod);
+      const controller = new AbortController();
+      pod.intercept = (method, url) => {
+        if (!at(method, url)) return undefined;
+        controller.abort();
+        return new Response(null, { status: 500 });
+      };
+      await expect(listRequests({ ...opts(pod), signal: controller.signal })).rejects.toMatchObject(
+        { name: "AbortError" },
+      );
+    }
+  });
+});

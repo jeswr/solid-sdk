@@ -8,6 +8,7 @@
 
 import {
   type AccessRequestEntry,
+  type DecisionResult,
   RequestConflictError,
   type RequestMode,
   UnsupportedAccessModelError,
@@ -249,6 +250,29 @@ export function deniedMessage(name: string, notified: boolean): string {
  */
 export function finishedMessage(name: string, notified: boolean): string {
   return `You finished approving ${name}'s request.${notified ? "" : NOT_TOLD(name)}`;
+}
+
+/** The choices an approval's result reports it applied. */
+export type AppliedChoices = NonNullable<DecisionResult["choices"]>;
+
+/**
+ * What an approval actually applied, from the choices the SDK reports (`DecisionResult.choices`).
+ * They can differ from what this sheet sent: another tab may have approved first. Only data types
+ * that were granted a mode are named (a change-only type under a Viewer approval was not), and a
+ * Viewer approval can only see.
+ */
+export function recordedMessage(
+  name: string,
+  cards: readonly RequestCard[],
+  applied: AppliedChoices,
+  notified: boolean,
+): string {
+  const chosen = cards.filter((card) =>
+    card.shareableTypes.some((type) => applied.dataTypes.includes(type)),
+  );
+  if (chosen.length === 0) return finishedMessage(name, notified);
+  const change = applied.role === "editor" && chosen.some((card) => card.modes.includes("write"));
+  return `${name} can now ${change ? "see and change" : "see"} your ${listText(cardLabels(chosen))}.${notified ? "" : NOT_TOLD(name)}`;
 }
 
 /** Added to a confirmation when an expiry was sent but the storage won't enforce it. */

@@ -45,6 +45,7 @@ import {
   purposeText,
   type ReadableRequest,
   type RequestCard,
+  recordedMessage,
   requestCards,
   requesterHost,
   requesterName,
@@ -346,6 +347,43 @@ describe("data type cards", () => {
     expect(finishedMessage("Bob", false)).toContain("We couldn't tell Bob;");
     expect(EXPIRY_NOT_ENFORCED).toBe(
       "Access won't end automatically on this storage; remove it from Permissions when you're done.",
+    );
+  });
+
+  it("words an approval from the choices the SDK applied, not the ones sent", () => {
+    const Doc = "https://vocab.example/Doc";
+    const Other = "https://vocab.example/Other";
+    const cards = requestCards({
+      dataTypes: [STEPS, Doc],
+      modesByType: { [STEPS]: ["read"], [Doc]: ["read", "write"] },
+    });
+    const applied = (dataTypes: string[], role: "viewer" | "editor") => ({
+      dataTypes,
+      role,
+      targetRoles: {},
+    });
+    expect(recordedMessage("MaraCoach", cards, applied([STEPS], "editor"), true)).toBe(
+      "MaraCoach can now see your Activity.",
+    );
+    expect(recordedMessage("MaraCoach", cards, applied([STEPS, Doc], "editor"), false)).toBe(
+      "MaraCoach can now see and change your Activity and Doc. We couldn't tell MaraCoach; they'll see it next time they check.",
+    );
+    // A Viewer approval can only see, whatever was asked for.
+    expect(recordedMessage("MaraCoach", cards, applied([Doc], "viewer"), true)).toBe(
+      "MaraCoach can now see your Doc.",
+    );
+    // Chosen but not granted (it asked only to change, under a Viewer approval): the SDK reports
+    // only granted types, so it is not named.
+    const changeOnly = requestCards({
+      dataTypes: [STEPS, Doc],
+      modesByType: { [STEPS]: ["read"], [Doc]: ["write"] },
+    });
+    expect(recordedMessage("MaraCoach", changeOnly, applied([STEPS], "viewer"), true)).toBe(
+      "MaraCoach can now see your Activity.",
+    );
+    // Applied types this sheet has no card for: name none.
+    expect(recordedMessage("Bob", cards, applied([Other], "editor"), true)).toBe(
+      "You finished approving Bob's request.",
     );
   });
 });
