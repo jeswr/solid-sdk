@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
-import { createMemoryPod, TEST_POD_ROOT } from "@jeswr/pod-connectors/testing";
+import { ownerPolicy, writeWac } from "@jeswr/pod-access";
+import { PrivateDestinationError } from "@jeswr/pod-connectors";
 import { expect, it } from "vitest";
 import { ensureSample } from "../src/apps/music/demo/sample";
 import { importSpotifyFixture } from "../src/apps/music/demo/spotify";
@@ -12,9 +13,14 @@ import {
   type MusicPlaylist,
 } from "../src/apps/music/lib/data/playlists";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
+import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 
-const root = "https://sample.test/alice/";
+const root = DEMO_ROOT;
+const webId = DEMO_WEBID;
 const now = new Date("2026-11-01T12:00:00Z");
+// The Suite's demo pod is seeded with owner ACLs, which the private-destination check verifies.
+const seededPod = async () =>
+  createDemoPod({ root, seed: await buildDemoSeed(Date.now(), { calendar: false }) });
 it("seeds a realistic idempotent sample with different period leaders", async () => {
   const pod = createDemoPod({ root });
   const session = { mode: "demo" as const, fetch: pod.fetch, storageUrl: root };
@@ -58,8 +64,8 @@ it("does not seed after storage errors, and can retry", async () => {
   expect((await loadLibrary(pod.fetch, root)).tracks).toHaveLength(40);
 });
 it("runs the real Spotify mapping entirely against recorded JSON and the pod", async () => {
-  const pod = createDemoPod({ root });
-  await importSpotifyFixture(pod.fetch, root);
+  const pod = await seededPod();
+  await importSpotifyFixture({ fetch: pod.fetch, storageUrl: root, webId });
   const library = await loadLibrary(pod.fetch, root);
   expect(search(library, "Blinding Lights").length).toBeGreaterThan(0);
   expect(search(library, "Rick Astley").length).toBeGreaterThan(0);
@@ -70,17 +76,46 @@ it("runs the real Spotify mapping entirely against recorded JSON and the pod", a
   expect(await loadHistory(pod.fetch, root, now)).toHaveLength(1);
   expect(await loadHistory(pod.fetch, root, now, 1)).toEqual([]);
   const before = pod.snapshot();
-  await importSpotifyFixture(pod.fetch, root);
+  await importSpotifyFixture({ fetch: pod.fetch, storageUrl: root, webId });
   expect(pod.snapshot()).toEqual(before);
 });
 
 // Moved from pod-connectors: the Music demo entry point runs through a budgeted context.
 it("imports the Spotify fixture through a budgeted runner context", async () => {
-  const pod = createMemoryPod();
-  await expect(importSpotifyFixture(pod.fetch, TEST_POD_ROOT)).resolves.toBeUndefined();
+  const pod = await seededPod();
+  await expect(
+    importSpotifyFixture({ fetch: pod.fetch, storageUrl: root, webId }),
+  ).resolves.toBeUndefined();
   expect(
-    pod.urls().some((url) => url.includes("integrations/spotify/") && url.endsWith(".ttl")),
+    pod
+      .snapshot()
+      .resources.some(([url]) => url.includes("integrations/spotify/") && url.endsWith(".ttl")),
   ).toBe(true);
+});
+
+it("refuses the Spotify import, writing nothing, when its destination is readable by the public", async () => {
+  const pod = await seededPod();
+  const parent = `${root}integrations/`;
+  const policy = ownerPolicy(webId, true);
+  const [owner] = policy.grants;
+  if (!owner) throw new Error("Expected an owner grant");
+  policy.grants.push({ ...owner, modes: new Set(["read"]), who: [[{ kind: "public" }]] });
+  const seed = await pod.fetch(`${parent}.acl`, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: await writeWac(policy, parent, `${parent}.acl`),
+  });
+  expect(seed.ok).toBe(true);
+  await expect(
+    importSpotifyFixture({ fetch: pod.fetch, storageUrl: root, webId }),
+  ).rejects.toBeInstanceOf(PrivateDestinationError);
+  expect(
+    pod
+      .snapshot()
+      .resources.map(([url]) => url)
+      // The seeded demo pod already holds some Spotify files; the import adds none of its own.
+      .filter((url) => /integrations\/spotify\/(music\/|_provenance)/.test(url)),
+  ).toEqual([]);
 });
 
 it.each([
