@@ -11,6 +11,7 @@ import {
   SHEETS_READ_ONLY_REASON,
   SHEETS_TOO_LARGE_REASON,
 } from "../src/apps/drive/lib/open-with/sheets";
+import type { OpenedWorkbook } from "../src/apps/sheets/lib/contract";
 import { csvToWorkbook } from "../src/apps/sheets/lib/univer-spike";
 import { encodeRef } from "../src/lib/refs";
 
@@ -218,7 +219,7 @@ describe("Open with Sheets", () => {
     const importer = {
       createFromCsv: vi.fn(async ({ title, csv }: { title: string; csv: string }) => {
         csvToWorkbook("new", title, [{ id: "sheet1", name: "Sheet1", csv }]);
-        return { container: `${ROOT}sheets/budget/` };
+        return { container: `${ROOT}sheets/budget/` } as unknown as OpenedWorkbook;
       }),
     };
     const download = (body: string) =>
