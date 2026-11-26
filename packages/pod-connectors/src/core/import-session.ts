@@ -296,6 +296,57 @@ export function createImportSession(
     const index = written.findIndex((w) => w.url === url);
     if (index !== -1) written.splice(index, 1);
   }
+  /**
+   * Guarded raw ports for framework-owned documents that must not be remapped or stamped with
+   * import provenance (two-way sync's mapped items, link shards and manifest, snapshots). They
+   * apply exactly the private-destination contract of `write`/`remove`: verification before
+   * the mutation (with the session's mutation guard), confirmation and clean-up after it, the
+   * shared sticky refusal and pending-write tracking. They skip vocabulary mapping, provenance,
+   * Type Index registration and written-document accounting. Non-private imports pass through.
+   */
+  const raw = {
+    write: trackPrivateWrite(
+      async (doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc> => {
+        const url = writer.resolve(doc.slug);
+        if (url.split(/[?#]/, 1)[0] === writer.resolve(RUNS))
+          throw new Error("Reserved connector provenance slug.");
+        reads.delete(url);
+        await verifyDestination(url);
+        if (privacyRefused) throw await privacyRefused;
+        const { writeEtag, writeCreated, ...result } = await writer.write(
+          doc,
+          conditions,
+          ...guards,
+        );
+        if (privateImport)
+          await confirmWrittenDestination(doc.slug, url, writeCreated === true, writeEtag);
+        return result;
+      },
+    ),
+    remove: trackPrivateWrite(
+      async (slug: string, conditions?: { readonly ifMatch?: string }): Promise<void> => {
+        if (!writer.remove)
+          throw new IntegrationSyncError(id, "This host cannot delete resources.");
+        const url = writer.resolve(slug);
+        if (url.split(/[?#]/, 1)[0] === writer.resolve(RUNS))
+          throw new Error("Reserved connector provenance slug.");
+        reads.delete(url);
+        // As `remove`: a delete exposes nothing, so it needs no destination check, but it is a
+        // mutation and never runs after a refusal.
+        if (privacyRefused) throw await privacyRefused;
+        await writer.remove(slug, conditions, ...guards);
+        if (privateImport) options.signal?.throwIfAborted();
+      },
+    ),
+    /**
+     * Gate a host mutation the session cannot confirm itself (an owner-only ACL install for the
+     * resource at `url`): verify the destination first and never run after a refusal.
+     */
+    async beforeMutation(url: string): Promise<void> {
+      await verifyDestination(url);
+      if (privacyRefused) throw await privacyRefused;
+    },
+  };
   let finalized = false;
   /** Records the run, then runs `committed` while this run still holds the connector. */
   async function finish(committed?: () => Promise<void>) {
@@ -413,6 +464,7 @@ export function createImportSession(
       if (privacyRefused) throw await privacyRefused;
       return writer.registerType([...registrations.values()], ...guards);
     },
+    raw,
     waitForPrivateWrites,
     finish,
     release,

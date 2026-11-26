@@ -168,7 +168,11 @@ per-response/per-file caps. `getJson`/`postJson` only map HTTP errors and call t
 a cancellation failure replace a status, byte-limit or deadline error. Drive uses these same JSON/binary body
 helpers.
 CON-A3.1 adds `./sync`: read the README's two-way section and `src/core/sync/types.ts` before
-extending it. Existing adapters remain import-only. TwoWayAdapter inbound mapping resolves
+extending it. Existing adapters remain import-only. Sync hosts must supply the owner-only
+`verifyPrivateDestination`/`confirmPrivateWrite` checks (sync connectors are private); route
+every new direct Pod mutation in `sync/` through the runner's session-guarded `pod` port
+(`session.raw`), never the raw writer, and keep `PrivateDestinationError` run-level.
+TwoWayAdapter inbound mapping resolves
 the pod URL with `ctx.sync.resolve(remoteId, prefix, idempotencyKey?)` before constructing
 subjects; slugs are framework-owned (`<prefix>/<32 hex of sha-256(id)>.ttl`), never built
 from raw ids. Then use `ctx.sync.upsert`/`delete`/`fail` with explicit remote versions,

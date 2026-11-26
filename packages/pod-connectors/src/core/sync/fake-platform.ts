@@ -64,14 +64,36 @@ export async function fakeOneWayImport(
   }
 }
 
-/** Bounded-memory fixture host with real validator checks, owner protection and complete lists. */
-export function createMemorySyncPod() {
+/**
+ * Owner-only model of the reference pod. `verify`/`confirm` decide the private-destination
+ * checks per URL (default: every destination is owner-only); set `owner` false to refuse all.
+ */
+export interface MemorySyncPodPrivacy {
+  owner: boolean;
+  verify?: (url: string) => boolean | Promise<boolean>;
+  confirm?: (url: string) => boolean | Promise<boolean>;
+}
+export interface MemorySyncPodOptions {
+  /** Supply no verifier at all, as a host that cannot check owner-only access. */
+  readonly withoutPrivacyChecks?: boolean;
+}
+
+/**
+ * Bounded-memory fixture host with real validator checks, owner protection and complete lists.
+ * It models an owner-only pod: it supplies `verifyPrivateDestination`, `confirmPrivateWrite`
+ * and `cleanupPrivateWrite`, so private sync runs go THROUGH the private-destination gate.
+ */
+export function createMemorySyncPod(options: MemorySyncPodOptions = {}) {
   const root = `https://pod.test/integrations/fake-${crypto.randomUUID()}/`;
   const documents = new Map<
     string,
     { dataset: ReturnType<typeof copyDataset>; etag: string; lastModified: string }
   >();
   const protectedUrls = new Set<string>();
+  const privacy: MemorySyncPodPrivacy = { owner: true };
+  /** URLs checked before a mutation, and confirmed after one, in order. */
+  const verified: string[] = [];
+  const confirmed: string[] = [];
   let version = 0;
   const resolve = (slug: string) => {
     const url = new URL(slug, root);
@@ -79,9 +101,29 @@ export function createMemorySyncPod() {
       throw new Error("Fixture URL escapes connector.");
     return url.href;
   };
+  const checks: Pick<
+    SyncPodWriter,
+    "verifyPrivateDestination" | "confirmPrivateWrite" | "cleanupPrivateWrite"
+  > = {
+    async verifyPrivateDestination(url) {
+      verified.push(url);
+      return privacy.owner && (await (privacy.verify?.(url) ?? true));
+    },
+    async confirmPrivateWrite(url) {
+      confirmed.push(url);
+      return privacy.owner && (await (privacy.confirm?.(url) ?? true));
+    },
+    async cleanupPrivateWrite(slug, { etag }) {
+      const url = resolve(slug);
+      if (documents.get(url)?.etag !== etag) return false;
+      documents.delete(url);
+      return true;
+    },
+  };
   const writer: SyncPodWriter = {
     webId: "https://pod.test/profile#owner",
     resolve,
+    ...(options.withoutPrivacyChecks ? {} : checks),
     async read(slug) {
       const stored = documents.get(resolve(slug));
       return stored ? { ...stored, dataset: copyDataset(stored.dataset) } : undefined;
@@ -95,6 +137,7 @@ export function createMemorySyncPod() {
       )
         throw new ResourceWriteError(url, 412);
       const etag = `"v${++version}"`;
+      const created = !stored;
       documents.set(url, {
         dataset: copyDataset(doc.dataset),
         etag,
@@ -106,6 +149,9 @@ export function createMemorySyncPod() {
         category: doc.category,
         forClass: doc.forClass,
         skipRegistration: doc.skipRegistration,
+        // Validators for the private-write confirmation and clean-up of a refused create.
+        writeEtag: etag,
+        writeCreated: created && conditions?.ifNoneMatch === "*",
       };
     },
     async remove(slug, conditions) {
@@ -133,6 +179,9 @@ export function createMemorySyncPod() {
     writer,
     documents,
     protectedUrls,
+    privacy,
+    verified,
+    confirmed,
     async put(slug: string, name: string, modifiedAt = "2026-01-01T00:00:00Z") {
       await writer.write(fakeSyncDocument(resolve(slug), name));
       const stored = documents.get(resolve(slug));
