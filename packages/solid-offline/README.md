@@ -306,6 +306,25 @@ it). An unknown `status` becomes `failed` and the item stays
 listed; an item with any other invalid required field is withheld from `pending()`. A stored
 conflict with any invalid field, or whose item is invalid, is withheld from `conflicts()`.
 
+Withheld records are quarantined, not lost. `quarantinedRecords(outbox)` lists each one as
+`{ id, itemId?, conflict, invalid: true }`: `id` is a surrogate (`invalid:<key>`) derived from the
+IndexedDB key, `itemId` appears only when the stored item ID has the shape the outbox generates,
+and nothing else is read from the record body. A record whose `item` is missing or not an object
+is set aside the same way: hydration neither mutates nor deletes it, so `ready` still resolves and
+valid queued writes still replay. `retry()` skips items that are invalid by construction.
+`discardQuarantined(outbox, id)` deletes one quarantined record and sends nothing. A quarantined
+conflict keeps holding later writes to its URL (fail closed) until it is discarded, either that way
+or with `resolve(id, 'theirs')`; `'mine'` and `'both'` reject with `invalid stored conflict`.
+
+Stored dispatch fields are copied by name and type before use: `body` (`Uint8Array` or null),
+`ifMatch` (string), `keepalive` (boolean), `deleteOptions.recursive` (boolean) and the
+`createOptions` fields `exactUrl`, `contentType`, `kind`, `name`, `keepalive` and `links`
+(`{ rel, target }` strings). Unknown option keys are dropped; a present field of the wrong type
+fails the item with `invalid stored request options` before any storage call. An exact create
+(`createOptions.exactUrl`) is described and bound by its `exactUrl`, so policies see the real
+destination and a moved stored `exactUrl` fails as `invalid stored request destination`; its
+keep-both copy is a named create without the exact target.
+
 `registerGuardPolicy(tag, matches: GuardPolicy)` binds a trusted requirement to operations
 described only by `{ op, url, container? }`. On hydration and immediately before delivery,
 each matching policy requires its own tag; a throwing matcher counts as a match. Stripped

@@ -214,6 +214,17 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
   unknown status becomes `failed` and stays listed, and any other such item is withheld from
   `pending()`. `resolve(id, 'mine' | 'both')` refuses such an item (`'theirs'` discards it). A
   conflict with any invalid field, or whose item is invalid, is withheld from `conflicts()`.
+- Withheld records are quarantined: `quarantinedRecords(outbox)` lists
+  `{ id: 'invalid:<key>', itemId?, conflict, invalid: true }` with nothing else from the record
+  body; envelopes whose `item` is missing or not an object are set aside unread and unmutated, so
+  hydration and valid writes continue. `retry()` skips invalid items. `discardQuarantined(outbox,
+  id)` deletes one, sending nothing. A quarantined conflict still holds its URL (fail closed) until
+  discarded or resolved with `'theirs'`; `'mine'`/`'both'` reject. Never surface quarantined
+  bodies or read other fields of a quarantined record.
+- Stored `body`, `ifMatch`, `keepalive`, `createOptions` and `deleteOptions` are copied field by
+  field and type-checked before dispatch; unknown option keys are dropped and a wrong type fails
+  the item (`invalid stored request options`). `createOptions.exactUrl` is the bound destination
+  of an exact create; keep-both copies drop it and create by name.
 - Queued RDF keeps the requested Turtle or expanded, context-free JSON-LD format; named
   graphs require JSON-LD. Rebuild validated RDF/JS fields before N3 Writer; never trust private
   IDs, unsafe IRIs, language tags or prefix mappings. Omit queued Turtle prefixes. Generated create names stay stable for replay. Use named StorageClient
