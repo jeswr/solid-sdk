@@ -23,9 +23,21 @@ import { CLIENT_ID_URL } from "../src/lib/urls";
 import { SolidBackend, type SolidBackendOptions } from "../src/shell/session/solid-backend";
 import { SignInError, type SuiteAccount } from "../src/shell/session/types";
 
-const nativeBindings = vi.hoisted(() => ({
-  authSessionPlugin: { authenticate: vi.fn(), cancel: vi.fn(async () => {}) },
-}));
+const nativeBindings = vi.hoisted(() => {
+  const methods = { authenticate: vi.fn(), cancel: vi.fn(async () => {}) };
+  // Like Capacitor's registerPlugin proxy: every other property, `then` included, is a method
+  // that rejects as not implemented, so awaiting the binding itself fails.
+  const authSessionPlugin = new Proxy(methods, {
+    get: (target, property) =>
+      property in target
+        ? target[property as keyof typeof target]
+        : () =>
+            Promise.reject(
+              new Error(`"SuiteAuthSession.${String(property)}()" is not implemented on android`),
+            ),
+  });
+  return { authSessionPlugin };
+});
 vi.mock("@jeswr/suite-native/capacitor", () => nativeBindings);
 
 const alice = {
