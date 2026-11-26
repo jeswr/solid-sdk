@@ -320,3 +320,33 @@ test("coalesces transient discovery failures and safely retries after all observ
   expect(await reader.inbox(webId)).toBe(inbox);
   expect(fetch).toHaveBeenCalledTimes(2);
 });
+
+test("reports an over-limit listing through onTruncated, and not one that exactly fits", async () => {
+  const members = [`${inbox}a`, `${inbox}b`, `${inbox}c`];
+  const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (url) => {
+    if (url === inbox) return listing(members);
+    return note();
+  });
+  const onTruncated = vi.fn();
+  const over = await createInboxReader({ fetch, maxItems: 2, onTruncated }).list(inbox);
+  expect(over).toHaveLength(2);
+  expect(onTruncated).toHaveBeenCalledExactlyOnceWith(3, 2);
+  onTruncated.mockClear();
+  const exact = await createInboxReader({ fetch, maxItems: 3, onTruncated }).list(inbox);
+  expect(exact).toHaveLength(3);
+  expect(onTruncated).not.toHaveBeenCalled();
+});
+
+test("a throwing onTruncated callback fails the read", async () => {
+  const fetch = vi
+    .fn<typeof globalThis.fetch>()
+    .mockImplementation(async (url) =>
+      url === inbox ? listing([`${inbox}a`, `${inbox}b`]) : note(),
+    );
+  const onTruncated = vi.fn(() => {
+    throw new Error("callback failed");
+  });
+  await expect(createInboxReader({ fetch, maxItems: 1, onTruncated }).list(inbox)).rejects.toThrow(
+    "callback failed",
+  );
+});

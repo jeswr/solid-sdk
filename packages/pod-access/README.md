@@ -318,7 +318,7 @@ pin DNS and use guarded-fetch's browser policy. Activity IRIs currently require 
 React applications can use `useNotify()` from `@jeswr/suite-sdk` under `PodAuthProvider`; it
 supplies the current actor/fetch and resets the cache on identity changes.
 
-`createInboxReader({ fetch, pinningFetch?, clock?, maxItems? })` at the same `./notify` subpath
+`createInboxReader({ fetch, pinningFetch?, clock?, maxItems?, onTruncated? })` at the same `./notify` subpath
 is a thin browser-safe reader wrapper. `inbox(webId)` discovers the owner's inbox or returns
 null (including LWS profiles). `list(inboxUrl, { signal? })` returns `InboxNotification[]`,
 newest first with undated items last and URL ties deterministic. Items carry `url`, `type`
@@ -329,12 +329,34 @@ Reads use the delivery transport's HTTPS, redirect, byte and deadline guards. At
 order, with concurrency at most six. Foreign, outside-container, nested, query/fragment and
 encoded-slash members are never dereferenced; unreadable members are skipped. Container
 401/403/404 or RDF parse failures return `[]`; other container failures reject. Abort rejects
-with `AbortError` and stops new work. There is no mark-read or delete operation.
+with `AbortError` and stops new work. `onTruncated(listed, read)` is called once per `list`
+whose container holds more children than `maxItems`. There is no mark-read or delete operation.
 
 `notificationKind(notification)` classifies builder round-trips as `share` (Announce with
 summary starting `Shared with you as `), `assignment` (Announce with target), `mention`
 (Create with target), `invitation` (Offer), or `other`. Share summaries take precedence
 when an Announce also has a target. React consumers use `useInbox()` from suite-sdk.
+
+`readInvitations<T>({ reader, webId, kind?, normalise, exclude?, limit?, signal? })` shares
+inbox discovery, kind filtering, projection and newest-first de-duplication. `normalise(item)`
+returns `{ key, value }`, where the key identifies the offered resource; null, empty keys and
+validation exceptions discard malformed items. `exclude` contains accepted resource keys.
+Omitting `kind` makes it a generic inbox projection, as the shell's mixed tray uses it; the
+name and the "Invalid invitation limit" error reflect its first consumer. A `normalise` that
+throws drops that item by design, programming errors included, so keep projections small and
+tested. The reader's ordering decides duplicate winners. `limit` defaults to 50 and must be a
+non-negative safe integer; zero performs no I/O. Missing inboxes return empty. With this
+package's `createInboxReader`, every profile discovery failure (network, 401/403, 5xx or an
+unparseable profile) is indistinguishable from a missing inbox and also returns empty; an
+inbox listing 401/403/404 or unparseable container returns empty, and other listing failures
+(5xx, network) propagate. A custom reader whose `inbox()` rejects propagates that error.
+Cancellation is checked before/after each await and projection, including transports that
+ignore abort. Reuse one reader per client/session.
+
+`withAbortSignal(fetch, signalOrGetter)` combines the caller's lifetime with each request's
+signal (including the guarded transport's deadline), checks cancellation before I/O and fences
+late responses. A getter supports committed session fences and superseding refreshes without
+replacing the reader's cached transport. Supply this wrapper to readers to cancel discovery too.
 
 ## Offline policy translation
 

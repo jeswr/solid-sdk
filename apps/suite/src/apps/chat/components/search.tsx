@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type ReactNode, useCallback, useEffect } from "react";
 import { encodeIdentifierRef, encodeRef } from "@/lib/refs";
+import { AppHeading } from "@/shell/app-frame";
 import type { ChatSearchRoom } from "../lib/client";
 import { SearchError, type SearchSnippet } from "../lib/search";
 import { useAsync, useChat } from "../state/chat-context";
@@ -75,7 +76,7 @@ export function ChatSearchPage({ query }: { query: string }) {
   const roomCount = new Set(data?.results.map(({ room }) => room.url)).size;
   return (
     <div className="chat-search-page">
-      <h1>Search</h1>
+      <AppHeading>Search</AppHeading>
       <ChatSearchField query={query} page />
       <p role="status" aria-atomic="true">
         {term && search.status === "loading" ? (
@@ -107,7 +108,7 @@ export function ChatSearchPage({ query }: { query: string }) {
       ) : search.status === "error" ? (
         queryError ? (
           <div role="alert">
-            <h2>Check your search</h2>
+            <AppHeading level={2}>Check your search</AppHeading>
             <p>Use the filter examples above and a valid date or time zone.</p>
           </div>
         ) : (

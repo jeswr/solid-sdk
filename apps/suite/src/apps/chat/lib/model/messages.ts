@@ -101,7 +101,7 @@ export function appendMessage(
   isoDate(input.at);
   if (input.inReplyTo !== undefined) httpIri(input.inReplyTo);
   if (dataset.match(DataFactory.namedNode(id), null, null).size)
-    throw new ChatModelError("duplicate");
+    throw new ChatModelError("duplicate", id);
   const message = buildAs2Message(id, {
     content: sanitizeText(input.content),
     author: input.author,

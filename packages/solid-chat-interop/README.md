@@ -380,6 +380,120 @@ header rules run first with their existing markers. Redaction is pure, emits no
 diagnostics containing input, and produces a fixpoint, so derived message IDs stay
 stable when capture and storage both redact. Value scanning takes linear time.
 
+### Repairing chats stored before redaction
+
+Older MCP `chat_save` calls stored titles and message text verbatim, and the redaction rules
+have grown since. `migrateRedaction()` is an owner-run repair (bead sst-5ax.39):
+
+```ts
+const report = await chats.migrateRedaction({ dryRun: true }); // counts only, no writes
+await chats.migrateRedaction();
+// { conversations, titles, messagesRewritten, messagesReplaced, conflicts, failed, unverified }
+```
+
+It walks every provider's conversations and redacts each one as a whole, like `save`: the
+title and all messages go through the same redaction together (`redactSecretFields`), so a
+secret split across the title and a message, or a PEM block across messages, is caught. It
+checks each title, account label and message against the current redaction rules. Every
+change is conditional on the strong ETag it read, so the port's `read` must return one; a
+resource that changed meanwhile (412) is counted in `conflicts` and left for the next run.
+
+What the repair guarantees, and what it does not:
+
+- **Stored order.** Messages are read in stored order (`createdAt`, then ID), which equals the
+  order they were submitted in only when timestamps differ. Messages sharing one `createdAt`
+  sort by ID, a digest for ID-less messages, so their stored order is arbitrary. The stored
+  data carries no sequence number, reply link or derivable ID that restores it. So each run
+  of equal timestamps is redacted as if stored in ANY order: a field is redacted if it would
+  be under some ordering, which can redact more than `save` would have (for example a
+  message beside a key block, a word after a token at the end of a sibling). Every adjacent
+  pair a run can produce is examined. A PEM block that any member of a run opens (a BEGIN
+  without an END in the same message, even a plain mention such as "keys start with
+  -----BEGIN RSA PRIVATE KEY-----") redacts every other tied message up to its first END,
+  and, because a run holding an opener always leaves the block open, every later message of
+  the conversation to its end or first END. In a conversation saved with one timestamp for
+  all messages that is everything but the title. A key split over two tied messages
+  redacts both, and everything after them as well. Over-redaction is the price; a surviving fragment is not,
+  within the detectors' own limits (adjacent pairs and PEM continuation, see above).
+  A run of more than 64 messages, or two neighbouring runs with more than 4096 ordered pairs
+  between them, is too large for that and is NEVER blanket-redacted: each member is redacted
+  as it would be alone, each against its stored neighbours, and a PEM block is followed in
+  stored order (the BEGIN and END members and those stored between them are covered, other
+  members are untouched; a run in which nothing changes is left byte-identical). The
+  any-ordering guarantee is then unproven (a key body stored before its BEGIN, or a secret
+  split over two members that are not stored neighbours, can survive), so the conversation
+  counts in `failed` and in `unverified` on EVERY run, deterministically, even when nothing
+  needs writing, and `solid-capture redact-archive` tells the owner to review it by hand. A
+  run that reports it is never clean (exit 1) until the conversation is fixed by hand.
+- **Replay IDs.** The text stored for a message, and so the ID a replay derives, equals what
+  `save` of the original conversation would store only when the conversation has no equal
+  timestamps (or none that redact differently). Otherwise a replay of the original through
+  `save` can derive different IDs and write a duplicate beside the repaired message.
+- **Interruption.** A write that fails (412, timeout, 5xx) or a crash must never leave half a
+  secret that the next run cannot see, because the next run only sees what is stored. The
+  field carrying the context (a PEM `BEGIN`, a token prefix, the title) must not be replaced
+  while a still-raw field needs it. The run therefore writes in an order it checks: a field
+  is written only if re-redacting the stored state after that write still redacts every other
+  field to what an uninterrupted run produces. In practice that is last message first, title
+  last. The first write that does not land stops the conversation (the run counts it, and
+  every change it left unwritten in `conflicts`), and the next run resumes. For any
+  interruption point, re-running converges on the uninterrupted result and no fragment
+  survives (the test suite injects a failure at every write of three split-secret
+  conversations, in both naming schemes, and for every stored order of a tied key block).
+  The check always runs, including when every field redacts correctly alone: a key split over
+  two messages must write its END message after its BEGIN message, or an interruption would
+  leave an unterminated BEGIN that wipes everything after it. Where no such order exists (two
+  fields that each need the other raw, such as one unterminated quoted value repeated in two
+  messages), or a conversation with tied messages has more than 48 changed fields (1000
+  without ties; each check re-redacts the conversation), the run still repairs, last field
+  first, but its order is not proven recoverable. If every write lands, it re-reads the
+  stored state and reports clean only when redacting that changes nothing; otherwise it
+  counts one `failed`. The dry run does not simulate this and reports such a conversation as
+  it would be if the run completes. If such a run is interrupted, it counts `failed`, but the
+  NEXT run cannot tell: it sees the half-redacted state, may redact the remaining fields
+  without the context they needed (leaving a fragment the detectors treat as secret) and
+  reports clean. Detecting that needs a durable "repair in progress" record, which is not
+  implemented.
+- A message that is already the redacted copy of a sibling with the same role and time (an
+  interrupted move leaves the copy and the original side by side) is kept as it is and
+  excluded from the redaction input, so it neither widens nor is widened by the original.
+
+- Titles and account labels are rewritten in place with `If-Match`, keeping the rest of the
+  metadata (provenance). Stored IDs and paths never change, even when a label redacts.
+- A message named by a hash of its unredacted text moves to the ID a redacted save derives.
+  The redacted message is created owner-only first (ACL before content, as in `save`), then
+  the original is deleted with `If-Match`. When a redacted copy with the same role, text
+  and time already exists, which is what a replay after the redaction change wrote, it is
+  kept and the original is deleted. A copy that does not match is never trusted: the
+  original stays and counts as `failed`.
+- Writers before 4 November 2026 hashed the raw text but stored it without control
+  characters, so such a name no longer matches its text. Outside capture, any 64-hex message
+  name whose text changes is treated as one of these and moved. Capture always passes
+  hash-shaped source IDs and redacts first, so in conversations with channel `hook` or
+  `export`, or legacy ones with no channel and a 64-hex conversation ID, messages are
+  rewritten in place and keep their IDs.
+- Every other message is rewritten in place under its ID with `If-Match`; its ACL is not
+  touched. A message saved both with a source ID and without one stays as two messages, as
+  before.
+- A conversation whose metadata is missing still has its messages repaired. So does one
+  whose metadata is unreadable or fails validation (wrong identifier, invalid title): that is
+  counted in `failed`, the metadata is left as it is and its messages are redacted anyway. An
+  account label that fails validation (too long, control characters) may still hold a secret,
+  so it is replaced by `[REDACTED]` and counted in `titles`.
+- The repair does not audit who can read a conversation; it never changes an ACL it did not
+  create.
+
+One unreadable or malformed conversation or message, a missing ETag, or a failed request
+counts in `failed` (no URLs or content are reported). A failed or conflicting write stops
+only its own conversation; the run carries on with the next one. After a run that reports
+`failed` and `conflicts` of 0, every title, label and message the run could check matches
+the current rules and each message appears once. Replaying the original conversation writes
+nothing only when its redaction equals the repaired text (see Replay IDs above). Re-running
+is safe. The real run needs the optional `ChatPodPort.delete(url, { ifMatch })`; a dry run does
+not. Delete must reject an ETag mismatch with status 412, and the server must delete the
+resource's ACL with it, as Solid servers do. `solid-capture redact-archive [--dry-run]` in
+`@jeswr/agent-session-capture` runs it with the owner's MCP configuration.
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-chat-interop)

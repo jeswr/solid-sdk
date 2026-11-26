@@ -19,7 +19,7 @@ import {
 } from "@jeswr/suite-ui/shell";
 import { OfflinePill } from "@jeswr/suite-ui/sync";
 import { useRouter } from "next/navigation";
-import { type ReactNode, Suspense, useEffect, useState } from "react";
+import { type ReactNode, Suspense, useEffect, useRef, useState } from "react";
 import { useRoutePathname } from "@/lib/route-params";
 import { WalkthroughDock } from "@/welcome/walkthrough";
 import { AccountMenu } from "./account/account-menu";
@@ -53,6 +53,14 @@ export interface SuiteShellProps {
   children: ReactNode;
 }
 
+function saveShellPreferences(value: ShellPreferences) {
+  try {
+    localStorage.setItem("suite.shell.v1", JSON.stringify(value));
+  } catch {
+    /* Memory-only preferences. */
+  }
+}
+
 function Frame({
   app: slug,
   pageTitle,
@@ -77,12 +85,24 @@ function Frame({
   const app = appRegistry
     .map((item) => ({ ...item, name: t(`apps.${item.slug}`) }))
     .find((item) => item.slug === slug);
-  const title = app ? `${pageTitle} · ${app.name} · Solid Suite` : undefined;
+  const title = app
+    ? `${pageTitle === app.name ? app.name : `${pageTitle} · ${app.name}`} · Solid Suite`
+    : undefined;
   useEffect(() => {
     if (title) document.title = title;
   }, [title]);
   useRecentTitle(title);
   const [preferences, setPreferences] = useState<ShellPreferences>(defaultShellPreferences);
+  const previousPathname = useRef(pathname);
+  useEffect(() => {
+    if (previousPathname.current === pathname) return;
+    previousPathname.current = pathname;
+    if (!preferences.sidebarOpen || window.matchMedia("(min-width: 1024px)").matches) return;
+    // Save the close like the sheet's own close does, so a reload doesn't reopen the drawer.
+    const closed = { ...preferences, sidebarOpen: false };
+    setPreferences(closed);
+    saveShellPreferences(closed);
+  }, [pathname, preferences]);
   const [rail, setRail] = useState<RailPreferences>(() => parseRailPreferences(null));
   useEffect(() => {
     try {
@@ -101,11 +121,7 @@ function Frame({
   if (!app) return null;
   const updateShell = (value: ShellPreferences) => {
     setPreferences(value);
-    try {
-      localStorage.setItem("suite.shell.v1", JSON.stringify(value));
-    } catch {
-      /* Memory-only preferences. */
-    }
+    saveShellPreferences(value);
   };
   const updateRail = (value: RailPreferences) => {
     const valid = parseRailPreferences(value);
