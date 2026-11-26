@@ -28,7 +28,8 @@ export function assertSharedWorkbook(root: string, container: string): string {
     if (
       url !== container ||
       /[%?#]/.test(container) ||
-      !/^\/(?:[^/]+\/)+sheets\/[^/]+\/$/.test(new URL(url).pathname)
+      // No dot-prefixed (.acl, .well-known, .meta) or ;-parameter segments anywhere.
+      !/^\/(?:[^/.;][^/;]*\/)+sheets\/[^/.;][^/;]*\/$/.test(new URL(url).pathname)
     )
       throw new WorkbookLinkError();
     return assertWithinPodScope(new URL("/", root).href, url);
