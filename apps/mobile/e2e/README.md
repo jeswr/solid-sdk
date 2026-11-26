@@ -326,7 +326,14 @@ form; protocol values are never returned by CDP or written to the report. Failur
 redacted before writing `artifacts/logcat-real-suite.txt`; callback URLs, token/credential lines
 and disposable secrets are removed. The independent
 `.github/workflows/mobile-real-suite.yml` uses the existing KVM/SDK/AVD setup and action versions,
-runs on scoped PRs/main pushes, and uploads the report, emulator log and sanitized logcat.
+runs on pull requests that change `apps/mobile`, `packages/suite-native` or the workflow, on
+main pushes that also cover `apps/suite`, `packages/pod-auth` and the lockfile, and by manual
+dispatch. It uploads the report, emulator log and sanitized logcat, and collects logcat when the
+40-minute run step fails or the job is cancelled.
+
+If a local run is killed before its cleanup, remove the stale port reverse with
+`adb reverse --remove tcp:8443` and restore `android/app/src/debug/res/xml/network_security_config.xml`
+with `git checkout`; the trust anchor `android/app/src/debug/res/raw/mob07_ca.crt` is gitignored.
 The existing `mobile.yml` fixture job remains independent and unchanged.
 
 Host-only checks:

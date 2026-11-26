@@ -592,7 +592,7 @@ async function trustedRun(tlsDir) {
     );
     login.schemeCallback = true;
     login.signedInAccount = true;
-    assert(serverEvidence.clientDocumentReads > 1, "CSS must dereference the client document");
+    assert(serverEvidence.clientDocumentReads > 0, "CSS must dereference the client document");
     return { ...login, clientDocumentDereferenced: true };
   }
   async function privateReadScenario() {

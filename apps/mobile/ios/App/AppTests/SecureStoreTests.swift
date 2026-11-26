@@ -512,7 +512,11 @@ private struct FixtureLoadTimedOut: Error, CustomStringConvertible {
     let result: XCTWaiter.Result
     let pending: [String]
     var description: String {
-        "Fixture document \(url.absoluteString) did not finish loading within "
+        if result == .incorrectOrder {
+            return "Fixture document \(url.absoluteString) reported its load steps out of order "
+                + "(still waiting for: \(pending.joined(separator: ", ")))."
+        }
+        return "Fixture document \(url.absoluteString) did not finish loading within "
             + "\(Int(SecureStoreAdmissionTests.fixtureLoadTimeout))s (waiter result \(result.rawValue); "
             + "still waiting for: \(pending.joined(separator: ", "))). The simulated load needs no network, "
             + "so this usually means the simulator's WebKit content process stalled."

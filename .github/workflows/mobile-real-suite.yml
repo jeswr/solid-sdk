@@ -2,14 +2,14 @@
 name: Mobile real-suite Android E2E
 
 on:
+  # The emulator run takes up to an hour and has not yet passed in CI, so pull requests start it
+  # only when they change the mobile host itself. Suite, auth and lockfile changes reach it on main
+  # and by manual dispatch until the lane is green; then widen these paths again.
   pull_request:
     paths:
-      - "apps/suite/**"
       - "apps/mobile/**"
       - "packages/suite-native/**"
-      - "packages/pod-auth/**"
       - ".github/workflows/mobile-real-suite.yml"
-      - "pnpm-lock.yaml"
   push:
     branches: [main]
     paths:
@@ -19,6 +19,7 @@ on:
       - "packages/pod-auth/**"
       - ".github/workflows/mobile-real-suite.yml"
       - "pnpm-lock.yaml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -100,9 +101,11 @@ jobs:
           timeout 10 adb shell settings put global transition_animation_scale 0
           timeout 10 adb shell settings put global animator_duration_scale 0
       - name: Build and exercise the real bundled suite
+        # Inside the job timeout, so a hang still reaches the logcat step below.
+        timeout-minutes: 40
         run: node apps/mobile/e2e/android-real-suite.mjs
       - name: Collect sanitized emulator logcat
-        if: failure()
+        if: failure() || cancelled()
         timeout-minutes: 1
         run: node apps/mobile/e2e/android-real-suite.mjs --collect-logcat
       - if: always()

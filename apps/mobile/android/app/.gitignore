@@ -1,2 +1,5 @@
 /build/*
 !/build/.npmkeep
+
+# Ephemeral MOB-07 trust anchor written by e2e/android-real-suite.mjs and removed in its cleanup.
+/src/debug/res/raw/mob07_ca.crt

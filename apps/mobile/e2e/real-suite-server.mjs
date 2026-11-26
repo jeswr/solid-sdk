@@ -104,14 +104,22 @@ export async function startRealSuiteServer(tlsDir, progress = () => {}) {
               callback.searchParams.has(key),
             );
           }
+          response.on("error", () => outgoing.destroy());
           outgoing.writeHead(response.statusCode, response.headers);
           response.pipe(outgoing);
         },
       );
+      // After headers are sent a 502 is no longer possible; drop the connection instead of
+      // letting ERR_HTTP_HEADERS_SENT kill the server mid-run.
       upstream.on("error", () => {
+        if (outgoing.headersSent) {
+          outgoing.destroy();
+          return;
+        }
         outgoing.writeHead(502);
         outgoing.end();
       });
+      incoming.on("error", () => upstream.destroy());
       incoming.pipe(upstream);
     },
   );
@@ -194,6 +202,8 @@ export async function startRealSuiteServer(tlsDir, progress = () => {}) {
       cid.ok && (await cid.json()).client_id === CLIENT_ID,
       "Client document is not dereferenceable",
     );
+    // The self-check above is not CSS; count only reads after seeding.
+    clientDocumentReads = 0;
     return {
       account,
       resource,
