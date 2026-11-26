@@ -48,7 +48,14 @@ export interface SolidBackendOptions {
 }
 
 async function loadAuthSessionPlugin(): Promise<AuthSessionPlugin> {
-  return (await import("@jeswr/suite-native/capacitor")).authSessionPlugin;
+  const { authSessionPlugin } = await import("@jeswr/suite-native/capacitor");
+  // A Capacitor plugin proxy answers every property, `then` included, so resolving an async
+  // function with it makes `await` call `then()`, which rejects with "SuiteAuthSession.then()
+  // is not implemented" (MOB-07 on Android). Resolve with a plain object that delegates instead.
+  return {
+    authenticate: (options) => authSessionPlugin.authenticate(options),
+    cancel: () => authSessionPlugin.cancel(),
+  };
 }
 
 function isLoopback(hostname: string): boolean {
