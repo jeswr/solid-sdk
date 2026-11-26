@@ -1,11 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
+import { TermAs } from "@rdfjs/wrapper";
 import { describe, expect, it } from "vitest";
 import {
   capRecords,
   type DomainItem,
   discoverDomainItems,
+  documentRecords,
   domainItemKey,
   nameFromUrl,
   sortItems,
@@ -645,5 +647,25 @@ describe("domain discovery", () => {
     expect(nameFromUrl("https://pod.example/")).toBe("pod.example");
     expect(nameFromUrl("bad")).toBe("bad");
     expect(nameFromUrl(`${STORAGE}bad%ZZ`)).toBe(`${STORAGE}bad%ZZ`);
+  });
+
+  it("stops one record past a document limit so callers can tell it was cut", async () => {
+    const url = `${STORAGE}history.ttl`;
+    const dataset = await rdf(
+      Array.from(
+        { length: 4 },
+        (_, index) =>
+          `<#record-${index}> a schema:WatchAction; schema:name "Film ${index}";
+            prov:wasGeneratedBy <runs.ttl#run>.`,
+      ).join("\n"),
+      url,
+    );
+    expect(documentRecords(dataset, url)).toHaveLength(4);
+    const limited = documentRecords(dataset, url, undefined, 1);
+    expect(limited).toHaveLength(2);
+    expect(limited.map(({ node }) => TermAs.term(node).value)).toEqual([
+      `${url}#record-0`,
+      `${url}#record-1`,
+    ]);
   });
 });
