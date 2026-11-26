@@ -1190,8 +1190,8 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       return { etag: node.metaEtag };
     }),
 
-    async parentOf(url) {
-      begin("HEAD", url);
+    async parentOf(url, opts = {}) {
+      begin("HEAD", url, opts.signal);
       if (!lws) return pathParent(url, root);
       return need("HEAD", url).parent;
     },

@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { classIri, error, registration } from "./common.js";
+import { classIri, error, registration, throwIfAborted } from "./common.js";
 import { lwsIndex } from "./lws.js";
 import { solidIndex } from "./solid.js";
 import type { TypeIndex, TypeIndexOptions } from "./types.js";
@@ -9,6 +9,7 @@ export type {
   TypeHint,
   TypeIndex,
   TypeIndexOptions,
+  TypeIndexReadOptions,
   TypeLocation,
 } from "./types.js";
 
@@ -20,26 +21,44 @@ export function createTypeIndex(options: TypeIndexOptions): TypeIndex {
   const solid = storage.protocol === "solid" ? solidIndex(storage, profile) : undefined;
   const lws = lwsIndex(options);
 
-  const findAll: TypeIndex["findAll"] = async (classes) => {
+  const findAll: TypeIndex["findAll"] = async (classes, opts = {}) => {
     for (const iri of classes) classIri(iri);
-    return solid ? solid.findAll(classes) : lws.findAll(classes);
+    throwIfAborted(opts.signal, storage.root);
+    return solid ? solid.findAll(classes, opts.signal) : lws.findAll(classes, opts.signal);
   };
   return {
-    find: async (iri) => (await findAll([iri])).get(iri) as string[],
+    find: async (iri, opts) => (await findAll([iri], opts)).get(iri) as string[],
     findAll,
     async register(iri, location, opts = {}) {
       const args = registration(storage, iri, location, opts);
       if (!solid) return { links: [{ rel: "type", target: args.canonical }] };
-      await solid.mutate(args.canonical, args.target, args.container, args.index, false);
+      await solid.mutate(
+        args.canonical,
+        args.target,
+        args.container,
+        args.index,
+        false,
+        opts.signal,
+      );
       return undefined;
     },
     async unregister(iri, location, opts = {}) {
       const args = registration(storage, iri, location, opts);
-      if (solid) await solid.mutate(args.canonical, args.target, args.container, args.index, true);
+      if (solid) {
+        await solid.mutate(
+          args.canonical,
+          args.target,
+          args.container,
+          args.index,
+          true,
+          opts.signal,
+        );
+      }
     },
-    async listClasses() {
+    async listClasses(opts = {}) {
       if (solid) throw error("unsupported", storage.root);
-      return lws.listClasses();
+      throwIfAborted(opts.signal, storage.root);
+      return lws.listClasses(opts.signal);
     },
   };
 }

@@ -9,6 +9,32 @@ export function error(code: StorageErrorCode, url: string, method = "GET"): Stor
   return new StorageError(code, { url, method, feature: "typeIndex" });
 }
 
+/**
+ * The caller's signal combined with the package's 30 s ceiling, so a caller can cancel any
+ * request chain early but never extend it.
+ */
+export function deadline(signal?: AbortSignal): AbortSignal {
+  const ceiling = AbortSignal.timeout(30_000);
+  return signal ? AbortSignal.any([signal, ceiling]) : ceiling;
+}
+
+/**
+ * Throw the package's non-retryable `network` error, with the abort reason as `cause`, when the
+ * caller's signal has fired. Only the caller's signal counts: the 30 s ceiling keeps its own path.
+ */
+export function throwIfAborted(signal: AbortSignal | undefined, url: string, method = "GET") {
+  if (signal?.aborted) {
+    throw new StorageError("network", {
+      url,
+      method,
+      feature: "typeIndex",
+      retryable: false,
+      cause: signal.reason,
+      message: `${method} ${url} aborted`,
+    });
+  }
+}
+
 export function classIri(value: string): string {
   if (!/^[a-z][a-z0-9+.-]*:[^\s\p{Cc}<>"{}|^`\\]+$/iu.test(value)) {
     throw new TypeError("Expected an absolute class IRI");

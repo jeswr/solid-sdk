@@ -13,7 +13,7 @@ import {
   type ReadShape,
   scoped,
 } from "./http.js";
-import { listingTooLarge, paginate, validateListingMaxBytes } from "./internal.js";
+import { listingTooLarge, paginate, throwIfAborted, validateListingMaxBytes } from "./internal.js";
 import { lwsWrites } from "./lws-write.js";
 import {
   acceptReadStatus,
@@ -332,9 +332,10 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
       );
     },
     metadata,
-    async parentOf(url) {
+    async parentOf(url, opts = {}) {
       const target = scoped(root, "HEAD", url);
-      return isRoot(target) ? null : (await head(target)).parent;
+      throwIfAborted("HEAD", target, opts.signal);
+      return isRoot(target) ? null : (await head(target, { signal: opts.signal })).parent;
     },
     ...lwsWrites({ ...options, root }, () => client, inspect, metadata, list),
   };

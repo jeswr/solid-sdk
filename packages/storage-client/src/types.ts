@@ -238,6 +238,6 @@ export interface StorageClient {
   ): Promise<{ etag: string | null }>;
 
   /** Path helpers that respect the backend's containment model. LWS: `up` link (HEAD if unknown); Solid: path arithmetic. */
-  parentOf(url: string): Promise<string | null>;
+  parentOf(url: string, opts?: { signal?: AbortSignal }): Promise<string | null>;
   isWithinStorage(url: string): boolean;
 }

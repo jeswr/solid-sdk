@@ -5,7 +5,7 @@ import type { RdfReadResult, StorageClient } from "@jeswr/storage-client";
 import { StorageError } from "@jeswr/storage-client";
 import { canonicalize } from "@jeswr/suite-vocab";
 import { DataFactory } from "n3";
-import { documentUrl, error, requireScoped, scoped } from "./common.js";
+import { deadline, documentUrl, error, requireScoped, scoped, throwIfAborted } from "./common.js";
 import type { Resource } from "./rdf.js";
 import {
   addRegistration,
@@ -96,15 +96,19 @@ export function solidIndex(storage: StorageClient, webId: string) {
     return { indexes };
   }
 
-  async function findAll(classes: string[]): Promise<Map<string, string[]>> {
+  async function findAll(
+    classes: string[],
+    callerSignal?: AbortSignal,
+  ): Promise<Map<string, string[]>> {
     const output = new Map(classes.map((iri) => [iri, [] as string[]]));
     if (output.size === 0) return output;
     const wanted = new Map<string, Set<string>>();
     for (const iri of classes) wanted.set(canonicalize(iri), new Set());
-    const read = reader(storage, AbortSignal.timeout(30_000));
+    const read = reader(storage, deadline(callerSignal));
     const { indexes } = await discovery(read);
     let count = 0;
     for (const url of indexes) {
+      throwIfAborted(callerSignal, url);
       const document = await read(url);
       if (!document) continue;
       for (const reg of indexDataset(document).registrations) {
@@ -170,9 +174,11 @@ export function solidIndex(storage: StorageClient, webId: string) {
     container: boolean,
     visibility: "private" | "public",
     remove: boolean,
+    callerSignal?: AbortSignal,
   ) {
-    const signal = AbortSignal.timeout(30_000);
+    const signal = deadline(callerSignal);
     for (let attempt = 0; ; attempt++) {
+      throwIfAborted(callerSignal, profileUrl, remove ? "DELETE" : "PUT");
       try {
         const read = reader(storage, signal);
         const card = await read(profileUrl);
@@ -263,7 +269,7 @@ export function solidIndex(storage: StorageClient, webId: string) {
         const retry =
           cause instanceof StorageError &&
           (cause.code === "precondition-failed" || cause.code === "conflict");
-        if (!retry || attempt >= 2) throw cause;
+        if (!retry || attempt >= 2 || callerSignal?.aborted) throw cause;
       }
     }
   }

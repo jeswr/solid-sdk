@@ -2,7 +2,7 @@
 import { parseLinkHeaders } from "@jeswr/storage-capabilities";
 import { StorageError, toStorageError } from "@jeswr/storage-client";
 import { canonicalize } from "@jeswr/suite-vocab";
-import { aliases, error, requireScoped, scoped } from "./common.js";
+import { aliases, deadline, error, requireScoped, scoped, throwIfAborted } from "./common.js";
 import type { TypeIndexOptions } from "./types.js";
 
 const MEDIA = "application/lws+json";
@@ -75,12 +75,13 @@ export function lwsIndex({ storage, features, fetch: transport }: TypeIndexOptio
     return requireScoped(storage, url);
   }
 
-  async function* pages(start: string, query?: string) {
-    const signal = AbortSignal.timeout(30_000);
+  async function* pages(start: string, query?: string, callerSignal?: AbortSignal) {
+    const signal = deadline(callerSignal);
     const seen = new Set<string>();
     let url: string | undefined = start;
     let totalItems = 0;
     while (url) {
+      throwIfAborted(callerSignal, url);
       if (url.length > 8192 || seen.has(url) || seen.size >= MAX_PAGES)
         throw error("invalid-response", start);
       seen.add(url);
@@ -99,6 +100,7 @@ export function lwsIndex({ storage, features, fetch: transport }: TypeIndexOptio
             body: query,
           });
         } catch {
+          throwIfAborted(callerSignal, url, "QUERY");
           throw error("network", url, "QUERY");
         }
         if (
@@ -133,7 +135,13 @@ export function lwsIndex({ storage, features, fetch: transport }: TypeIndexOptio
         void body?.cancel().catch(() => undefined);
         throw error("invalid-response", url);
       }
-      const data = await json(body, url);
+      let data: Record<string, unknown>;
+      try {
+        data = await json(body, url);
+      } catch (cause) {
+        throwIfAborted(callerSignal, url);
+        throw cause;
+      }
       const expected = query === undefined ? "TypeIndex" : "ContainerPage";
       if (
         !strings(data.type).some((type) => type === expected || type === LWS + expected) ||
@@ -155,7 +163,10 @@ export function lwsIndex({ storage, features, fetch: transport }: TypeIndexOptio
     }
   }
 
-  async function findAll(classes: string[]): Promise<Map<string, string[]>> {
+  async function findAll(
+    classes: string[],
+    callerSignal?: AbortSignal,
+  ): Promise<Map<string, string[]>> {
     const output = new Map(classes.map((iri) => [iri, [] as string[]]));
     if (output.size === 0) return output;
     const wanted = new Map([...output.keys()].map((iri) => [canonicalize(iri), new Set<string>()]));
@@ -163,6 +174,7 @@ export function lwsIndex({ storage, features, fetch: transport }: TypeIndexOptio
     for await (const { item, url } of pages(
       endpoint("searchEndpoint"),
       JSON.stringify({ type: [types] }),
+      callerSignal,
     )) {
       let target: string | undefined;
       try {
@@ -184,9 +196,9 @@ export function lwsIndex({ storage, features, fetch: transport }: TypeIndexOptio
     return output;
   }
 
-  async function listClasses(): Promise<string[]> {
+  async function listClasses(callerSignal?: AbortSignal): Promise<string[]> {
     const result = new Set<string>();
-    for await (const { item } of pages(endpoint("indexEndpoint"))) {
+    for await (const { item } of pages(endpoint("indexEndpoint"), undefined, callerSignal)) {
       // Type identifiers are vocabulary IRIs, not resource URLs to fetch.
       if (/^[a-z][a-z0-9+.-]*:[^\s\p{Cc}<>"{}|^`\\]+$/iu.test(item.id as string))
         result.add(canonicalize(item.id as string));

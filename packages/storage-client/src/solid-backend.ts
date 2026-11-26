@@ -8,7 +8,7 @@ import { Container, Resource } from "@solid/object/solid";
 import { DataFactory } from "n3";
 import { StorageError } from "./errors.js";
 import { allowOf, discard, linksOf, listingContainer, type ReadShape, scoped } from "./http.js";
-import { paginate, pathParent, validateListingMaxBytes } from "./internal.js";
+import { paginate, pathParent, throwIfAborted, validateListingMaxBytes } from "./internal.js";
 import {
   acceptReadStatus,
   createReadOperations,
@@ -267,8 +267,10 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       return { url: document.url, etag: document.etag, links, raw: dataset };
     },
 
-    async parentOf(url) {
-      return pathParent(scoped(root, "HEAD", url), root);
+    async parentOf(url, opts = {}) {
+      const target = scoped(root, "HEAD", url);
+      throwIfAborted("HEAD", target, opts.signal);
+      return pathParent(target, root);
     },
 
     isWithinStorage(url) {

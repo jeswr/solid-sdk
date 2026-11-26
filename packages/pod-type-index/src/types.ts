@@ -11,6 +11,14 @@ export interface TypeLocation {
 /** Solid defaults to the private index. */
 export interface RegistrationOptions {
   index?: "private" | "public";
+  /** Cancels the registration (including its conflict retries); never extends the 30 s limit. */
+  signal?: AbortSignal;
+}
+
+/** Options shared by the read-only Type Index methods. */
+export interface TypeIndexReadOptions {
+  /** Cancels the request chain; rejects with a non-retryable `network` StorageError. */
+  signal?: AbortSignal;
 }
 
 /** Spread into storage.create options to declare an LWS resource's class. */
@@ -33,9 +41,9 @@ export interface TypeIndexOptions {
 /** Discovery hints do not grant access to the returned resources. */
 export interface TypeIndex {
   /** Both instances and instance containers, de-duplicated. */
-  find(classIri: string): Promise<string[]>;
+  find(classIri: string, options?: TypeIndexReadOptions): Promise<string[]>;
   /** One read of each Solid document, or one batched LWS query plus its pages. */
-  findAll(classes: string[]): Promise<Map<string, string[]>>;
+  findAll(classes: string[], options?: TypeIndexReadOptions): Promise<Map<string, string[]>>;
   /** Idempotent Solid registration; LWS returns a creation hint without I/O. */
   register(
     classIri: string,
@@ -49,5 +57,5 @@ export interface TypeIndex {
     options?: RegistrationOptions,
   ): Promise<void>;
   /** Enumerate server-advertised types through LWS TypeIndexService. */
-  listClasses(): Promise<string[]>;
+  listClasses(options?: TypeIndexReadOptions): Promise<string[]>;
 }
