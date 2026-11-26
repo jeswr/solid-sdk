@@ -53,7 +53,7 @@ describe("editable targets", () => {
     expect(isEditableTarget(element)).toBe(true);
     expect(isEditableTarget({ parentElement: element } as unknown as EventTarget)).toBe(true);
     expect(closest).toHaveBeenCalledWith(
-      'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [data-shortcuts="off"]',
+      'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [data-shortcuts="off"]',
     );
     closest.mockReturnValue(null);
     expect(isEditableTarget(element)).toBe(false);

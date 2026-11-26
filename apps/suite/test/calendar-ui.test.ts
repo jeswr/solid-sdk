@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
@@ -110,7 +111,7 @@ async function settle() {
 }
 function buttons(host: HTMLElement, title: string) {
   return [...host.querySelectorAll<HTMLButtonElement>("button.cal-event")].filter((button) =>
-    button.getAttribute("aria-label")?.startsWith(title),
+    (button.getAttribute("aria-label") ?? button.textContent ?? "").startsWith(title),
   );
 }
 
@@ -157,6 +158,181 @@ it("moves month focus, handles date navigation and opens quick-create", async ()
   await key(document.activeElement as HTMLElement, "Escape");
   await settle();
   expect(document.activeElement?.getAttribute("data-day")).toBe("2026-12-02");
+});
+it("renders one continuous bar per week with named continuation ends above timed events", async () => {
+  mocks.path = "/calendar/month";
+  const mounted = await mount(screen("month"));
+  await settle();
+  const bars = [...mounted.host.querySelectorAll<HTMLButtonElement>(".cal-month-bar")].filter(
+    (bar) => bar.getAttribute("aria-label")?.startsWith("Three-day trip,"),
+  );
+  expect(bars).toHaveLength(2);
+  expect(bars[0]?.style.getPropertyValue("--cal-bar-span")).toBe("1");
+  expect(bars[0]?.classList.contains("cal-continues-after")).toBe(true);
+  expect(bars[1]?.style.getPropertyValue("--cal-bar-span")).toBe("2");
+  expect(bars[1]?.classList.contains("cal-continues-before")).toBe(true);
+  expect(bars[1]?.getAttribute("aria-label")).toBe(
+    "Three-day trip, Sun 1 Nov 2026 – Tue 3 Nov 2026, Personal",
+  );
+  const monday = mounted.host.querySelector<HTMLElement>(
+    '.cal-month [data-day="2026-11-02"]',
+  ) as HTMLElement;
+  await act(() => monday.focus());
+  expect(bars[1]?.tabIndex).toBe(0);
+  expect(bars[0]?.tabIndex).toBe(-1);
+  expect(monday.querySelector(".cal-month-timed .cal-month-chip")).not.toBeNull();
+  await key(monday, "Tab");
+  expect(document.activeElement).toBe(bars[1]);
+  await key(bars[1] as HTMLElement, "Tab");
+  const timed = monday.querySelector(".cal-month-chip") as HTMLElement;
+  expect(document.activeElement).toBe(timed);
+  await key(timed, "Tab", true);
+  expect(document.activeElement).toBe(bars[1]);
+  await key(bars[1] as HTMLElement, "Tab", true);
+  expect(document.activeElement).toBe(monday);
+  const tuesday = mounted.host.querySelector<HTMLElement>(
+    '.cal-month [data-day="2026-11-03"]',
+  ) as HTMLElement;
+  await act(() => tuesday.focus());
+  await key(tuesday, "Tab");
+  expect(document.activeElement).toBe(bars[1]);
+  await click(bars[1] as HTMLElement);
+  expect(mounted.host.querySelector(".cal-details h2")?.textContent).toBe("Three-day trip");
+});
+it("lets Shift+Tab leave the month grid from a day covered by an earlier continued bar", async () => {
+  mocks.path = "/calendar/month";
+  const mounted = await mount(screen("month"));
+  await settle();
+  const grid = mounted.host.querySelector(".cal-month") as HTMLElement;
+  const bar = [...grid.querySelectorAll<HTMLButtonElement>(".cal-month-bar")].find(
+    (candidate) =>
+      candidate.getAttribute("aria-label")?.startsWith("Three-day trip,") &&
+      candidate.classList.contains("cal-continues-before"),
+  ) as HTMLButtonElement;
+  // The bar starts on Monday; Tuesday's cell follows it in DOM order and the bar stays tabbable.
+  const tuesday = grid.querySelector<HTMLElement>('[data-day="2026-11-03"]') as HTMLElement;
+  expect(tuesday.closest("tr")?.contains(bar)).toBe(true);
+  expect(tuesday.contains(bar)).toBe(false);
+  await act(() => tuesday.focus());
+  expect(bar.tabIndex).toBe(0);
+  // Press repeatedly: focus must reach an element outside the grid, not loop back to the cell.
+  for (let press = 0; press < 3 && grid.contains(document.activeElement); press++)
+    await key(document.activeElement as HTMLElement, "Tab", true);
+  expect(grid.contains(document.activeElement)).toBe(false);
+  expect(document.activeElement).not.toBe(document.body);
+});
+async function mountContinuedBarGrid() {
+  mocks.path = "/calendar/month";
+  const mounted = await mount(screen("month"));
+  await settle();
+  const grid = mounted.host.querySelector(".cal-month") as HTMLElement;
+  const tuesday = grid.querySelector<HTMLElement>('[data-day="2026-11-03"]') as HTMLElement;
+  /** A tabbable predecessor that, like a hidden, inert or collapsed element, ignores focus(). */
+  const unfocusable = (kind: "hidden" | "inert" | "disabled") => {
+    const element = document.createElement("button");
+    element.textContent = kind;
+    if (kind === "disabled") element.disabled = true;
+    else element.setAttribute(kind, "");
+    if (kind !== "disabled") element.focus = () => undefined;
+    grid.parentElement?.insertBefore(element, grid);
+    return element;
+  };
+  return { grid, tuesday, unfocusable };
+}
+it("skips hidden, inert and disabled predecessors when Shift+Tab leaves the month grid", async () => {
+  const { grid, tuesday, unfocusable } = await mountContinuedBarGrid();
+  const reachable = document.createElement("button");
+  grid.parentElement?.insertBefore(reachable, grid);
+  // Closest to the grid first: these precede the grid but cannot take focus.
+  unfocusable("disabled");
+  unfocusable("inert");
+  unfocusable("hidden");
+  await act(() => tuesday.focus());
+  for (let press = 0; press < 3 && grid.contains(document.activeElement); press++)
+    await key(document.activeElement as HTMLElement, "Tab", true);
+  expect(document.activeElement).toBe(reachable);
+});
+it("leaves Shift+Tab to the browser when no predecessor can take focus", async () => {
+  const { grid, tuesday, unfocusable } = await mountContinuedBarGrid();
+  unfocusable("hidden");
+  unfocusable("inert");
+  // Every other tabbable element before the grid refuses focus too.
+  for (const element of document.querySelectorAll<HTMLElement>(
+    "a[href], button, input, select, textarea, summary, [tabindex]",
+  ))
+    if (
+      !grid.contains(element) &&
+      grid.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_PRECEDING
+    )
+      element.focus = () => undefined;
+  await act(() => tuesday.focus());
+  const event = new KeyboardEvent("keydown", {
+    key: "Tab",
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  await act(async () => {
+    tuesday.dispatchEvent(event);
+  });
+  expect(event.defaultPrevented).toBe(false);
+});
+it("shows two phone indicators, opens the tapped day's agenda and preserves grid keys", async () => {
+  const width = window.innerWidth;
+  Object.defineProperty(window, "innerWidth", { value: 375, configurable: true });
+  onTestFinished(() => {
+    Object.defineProperty(window, "innerWidth", { value: width, configurable: true });
+  });
+  mocks.path = "/calendar/month";
+  const mounted = await mount(screen("month"));
+  await settle();
+  expect(mounted.host.querySelectorAll(".cal-month button.cal-event")).toHaveLength(0);
+  const sunday = mounted.host.querySelector<HTMLElement>(
+    '.cal-month [data-day="2026-11-01"]',
+  ) as HTMLElement;
+  expect(sunday.querySelectorAll(".cal-month-mark")).toHaveLength(2);
+  const open = sunday.querySelector<HTMLElement>(".cal-month-open") as HTMLElement;
+  expect(open.textContent).toContain("+9");
+  expect(open.textContent).toContain("9 more events");
+  expect(open.getAttribute("aria-label")).toBeNull();
+  await click(open);
+  const agenda = mounted.host.querySelector<HTMLElement>("#cal-month-agenda") as HTMLElement;
+  expect(agenda.getAttribute("aria-label")).toBe("Events on Sunday, 1 November 2026");
+  expect(buttons(agenda, "Read in the park,")).toHaveLength(1);
+  expect(buttons(agenda, "Three-day trip,")).toHaveLength(1);
+  await click(buttons(agenda, "Read in the park,")[0] as HTMLElement);
+  await click(mounted.host.querySelector('[aria-label="Close event details"]') as HTMLElement);
+  await settle();
+  expect(document.activeElement).toBe(buttons(agenda, "Read in the park,")[0]);
+  const monday = mounted.host.querySelector<HTMLElement>(
+    '.cal-month [data-day="2026-11-02"]',
+  ) as HTMLElement;
+  await click(monday.querySelector(".cal-month-open") as HTMLElement);
+  expect(agenda.getAttribute("aria-label")).toBe("Events on Monday, 2 November 2026");
+  expect(buttons(agenda, "Three-day trip,")).toHaveLength(1);
+  expect(buttons(agenda, "Team stand-up,")).toHaveLength(1);
+  expect(monday.querySelectorAll(".cal-month-dot")).toHaveLength(1);
+  await act(() => monday.focus());
+  await key(monday, "ArrowRight");
+  expect(document.activeElement?.getAttribute("data-day")).toBe("2026-11-03");
+  expect(agenda.getAttribute("aria-label")).toBe("Events on Tuesday, 3 November 2026");
+  await key(document.activeElement as HTMLElement, "Enter");
+  expect(document.querySelector(".cal-quick")).not.toBeNull();
+  await key(document.activeElement as HTMLElement, "Escape");
+  await settle();
+  expect(document.querySelector(".cal-quick")).toBeNull();
+  expect(document.activeElement?.getAttribute("data-day")).toBe("2026-11-03");
+  const empty = mounted.host.querySelector<HTMLElement>(
+    '.cal-month [data-day="2026-11-05"] .cal-month-open',
+  ) as HTMLElement;
+  await click(empty);
+  expect(agenda.textContent).toContain("No events");
+  await act(() => {
+    Object.defineProperty(window, "innerWidth", { value: 1280, configurable: true });
+    window.dispatchEvent(new Event("resize"));
+  });
+  expect(mounted.host.querySelector("#cal-month-agenda")).toBeNull();
+  expect(mounted.host.querySelector("button.cal-month-bar")).not.toBeNull();
 });
 it("moves between week slots, tabs to an event, shows read-only details and restores focus", async () => {
   const mounted = await mount(screen());
@@ -316,7 +492,7 @@ it("renders agenda pagination, navigation shortcuts and input exclusions", async
   await key(mounted.host.querySelector("input") as HTMLElement, "t");
   expect(mocks.router.replace).not.toHaveBeenCalled();
 });
-it("renders empty and error states with calendar creation and retry actions", async () => {
+async function withoutCalendars() {
   const session = mocks.session as PodSession;
   mocks.session = {
     ...session,
@@ -328,15 +504,167 @@ it("renders empty and error states with calendar creation and retry actions", as
       ),
     }).fetch,
   };
+}
+async function nameFirstCalendar(name: string) {
+  const dialog = document.querySelector(".cal-create") as HTMLElement;
+  await changeField(dialog.querySelector("input") as HTMLInputElement, name);
+  await act(() =>
+    dialog
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  await settle();
+}
+it("renders first-run explanation with New event and Import .ics actions", async () => {
+  await withoutCalendars();
   const mounted = await mount(screen());
   await settle();
   expect(mounted.host.textContent).toContain("Your calendar starts here");
-  await mounted.unmount();
-  mocks.session = { ...session, fetch: async () => new Response(null, { status: 403 }) };
-  const denied = await mount(screen());
+  expect(mounted.host.textContent).toContain("first calendar");
+  const action = mounted.host.querySelector<HTMLAnchorElement>(".cal-screen a");
+  expect(action?.textContent).toBe("New event");
+  const query = new URL(action?.href as string).searchParams;
+  expect(query.get("start")).toBe("2026-11-01");
+  expect(query.get("end")).toBe("2026-11-02");
+  expect(query.get("return")).toBe("/calendar/week?d=2026-11-01");
+  const input = document.querySelector('[aria-label="Import ICS file"]') as HTMLInputElement;
+  const choose = vi.spyOn(input, "click").mockImplementation(() => undefined);
+  await click(
+    [...mounted.host.querySelectorAll("button")].find(
+      (b) => b.textContent === "Import .ics",
+    ) as HTMLElement,
+  );
+  expect(choose).toHaveBeenCalledOnce();
+  expect(mounted.host.querySelector('[aria-label="Loading events"]')).toBeNull();
+});
+it("creates the first calendar inside the event editor without submitting or losing its draft", async () => {
+  await withoutCalendars();
+  mocks.path = "/calendar/e/new";
+  mocks.extra = { start: "2026-11-01", end: "2026-11-02", return: "/calendar/week?d=2026-11-01" };
+  await mount(h(CalendarApp, { children: h(CalendarEditorRoute, { eventRef: "new" }) }));
   await settle();
-  expect(denied.host.querySelector('[role="alert"]')).not.toBeNull();
-  expect(denied.host.querySelector('[aria-label="Loading events"]')).toBeNull();
+  const editor = document.querySelector(".cal-editor-page") as HTMLElement;
+  await changeField(editor.querySelector('[aria-label="Title"]') as HTMLInputElement, "First plan");
+  await click(
+    [...editor.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Create calendar"),
+    ) as HTMLElement,
+  );
+  await nameFirstCalendar("Family");
+  expect((editor.querySelector('[aria-label="Title"]') as HTMLInputElement).value).toBe(
+    "First plan",
+  );
+  expect((editor.querySelector('[aria-label="Calendar"]') as HTMLSelectElement).value).toBe(
+    `${DEMO_ROOT}calendar/family.ttl#it`,
+  );
+  expect(mocks.router.push).not.toHaveBeenCalled();
+  expect(editor.querySelector('[role="alert"]')).toBeNull();
+  await act(() =>
+    editor
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  await settle();
+  expect(mocks.router.push).toHaveBeenCalledWith("/calendar/week?d=2026-11-01");
+  const account = mocks.session as PodSession;
+  const events = await calendarIO(account.fetch, account.storageUrl).eventsInRange(
+    `${DEMO_ROOT}calendar/family/`,
+    new Date("2026-11-01"),
+    new Date("2026-11-02"),
+  );
+  expect(events.map((e) => e.data.name)).toEqual(["First plan"]);
+});
+it("imports into the first calendar created from the import dialog", async () => {
+  await withoutCalendars();
+  await mount(screen());
+  await settle();
+  const input = document.querySelector('[aria-label="Import ICS file"]') as HTMLInputElement;
+  const text =
+    "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:first\nSUMMARY:First import\nDTSTART;VALUE=DATE:20261101\nEND:VEVENT\nEND:VCALENDAR";
+  Object.defineProperty(input, "files", {
+    value: [{ name: "first.ics", size: text.length, text: async () => text }],
+    configurable: true,
+  });
+  await act(() => input.dispatchEvent(new Event("change", { bubbles: true })));
+  await settle();
+  const dialog = document.querySelector(".cal-import-dialog") as HTMLElement;
+  expect(dialog.textContent).toContain("1 events · 0 skipped");
+  await click(
+    [...dialog.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Create calendar"),
+    ) as HTMLElement,
+  );
+  await nameFirstCalendar("Imported");
+  expect((dialog.querySelector('[aria-label="Target calendar"]') as HTMLSelectElement).value).toBe(
+    `${DEMO_ROOT}calendar/imported.ttl#it`,
+  );
+  await click(
+    [...dialog.querySelectorAll("button")].find((b) => b.textContent === "Import") as HTMLElement,
+  );
+  await settle();
+  expect(dialog.querySelector('[role="status"]')?.textContent).toBe("1 imported, 0 failed");
+});
+it("renders Nothing scheduled for the visible agenda range and updates it on pagination", async () => {
+  const session = mocks.session as PodSession;
+  mocks.session = {
+    ...session,
+    fetch: createDemoPod({
+      root: DEMO_ROOT,
+      seed: (await buildDemoSeed(NOW)).filter(
+        (file) => !/^calendar\/(work|personal)\/.+\.ttl$/.test(file.path),
+      ),
+    }).fetch,
+  };
+  mocks.path = "/calendar/agenda";
+  const mounted = await mount(screen("agenda"));
+  await settle();
+  const agenda = mounted.host.querySelector(".cal-agenda") as HTMLElement;
+  expect(agenda.textContent).toContain("Nothing scheduled");
+  expect(agenda.textContent).toContain("1 Nov 2026 to 30 Nov 2026");
+  expect(mounted.host.textContent).not.toContain("Your calendar starts here");
+  await click(
+    [...mounted.host.querySelectorAll("button")].find(
+      (b) => b.textContent === "Load more",
+    ) as HTMLElement,
+  );
+  await settle();
+  expect(mounted.host.querySelector(".cal-agenda")?.textContent).toContain(
+    "1 Nov 2026 to 30 Dec 2026",
+  );
+});
+it.each([
+  "unreachable",
+  "load failure",
+])("renders a plain-English %s state and retries successfully", async (failure) => {
+  const session = mocks.session as PodSession;
+  let broken = true;
+  mocks.session = {
+    ...session,
+    fetch: async (input, init) => {
+      if (broken) {
+        if (failure === "unreachable") throw new TypeError("private diagnostic details");
+        return new Response("private diagnostic details", { status: 500 });
+      }
+      return session.fetch(input, init);
+    },
+  };
+  const mounted = await mount(screen());
+  await settle();
+  const error = mounted.host.querySelector('[role="alert"]') as HTMLElement;
+  expect(error.textContent).toContain("Can't reach your storage");
+  expect(error.textContent).toContain(
+    "We couldn't load your calendar. Check your connection and try again.",
+  );
+  expect(error.textContent).not.toContain("private diagnostic");
+  expect(mounted.host.querySelector('[aria-label="Loading events"]')).toBeNull();
+  expect(mounted.host.textContent).not.toContain("Nothing scheduled");
+  broken = false;
+  await click(
+    [...error.querySelectorAll("button")].find((b) => b.textContent === "Retry") as HTMLElement,
+  );
+  await settle();
+  expect(mounted.host.querySelector('[role="alert"]')).toBeNull();
+  expect(buttons(mounted.host, "Team stand-up,")).toHaveLength(3);
 });
 it("exposes optimistic mutation hooks and refreshes subscriptions without leaking the old account", async () => {
   let latest: ReturnType<typeof useEventsInRange> | undefined;
@@ -653,6 +981,28 @@ it("requires a provider for calendar hooks", async () => {
   } finally {
     errors.mockRestore();
   }
+});
+
+it("shows the privacy refusal and keeps the calendar name available to retry", async () => {
+  const account = mocks.session as PodSession;
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) =>
+      String(input) === `${DEMO_ROOT}calendar/private.ttl` && init?.method === "HEAD"
+        ? new Response(null, { status: 403 })
+        : account.fetch(input, init),
+  };
+  const mounted = await mount(screen());
+  await click(
+    [...mounted.host.querySelectorAll("button")].find(
+      (button) => button.textContent === "Create calendar",
+    ) as HTMLElement,
+  );
+  await nameFirstCalendar("Private");
+  expect(mounted.host.textContent).toContain(
+    "Your pod could not confirm that this calendar would stay private, so it was not created.",
+  );
+  expect(document.querySelector<HTMLInputElement>("#cal-name")?.value).toBe("Private");
 });
 
 it("retries an incomplete calendar creation through the context", async () => {

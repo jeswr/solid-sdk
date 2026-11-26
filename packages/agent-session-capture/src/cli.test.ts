@@ -15,6 +15,7 @@ afterEach(() => {
   vi.resetModules();
   vi.doUnmock("./capture.js");
   vi.doUnmock("./export-import.js");
+  vi.doUnmock("./redaction-migration.js");
 });
 
 describe("export process contract", () => {
@@ -33,6 +34,19 @@ describe("export process contract", () => {
     );
     expect(result).toHaveProperty("code", 1);
   });
+  // AUTHORED-BY Claude Opus 5.5
+  it("reports redact-archive failure with a fixed message (sst-5ax.39)", async () => {
+    const result = await promisify(execFile)(
+      process.execPath,
+      [fileURLToPath(new URL("../dist/cli.js", import.meta.url)), "redact-archive", "--secret"],
+      { env: { PATH: process.env.PATH ?? "", HOME: "/nonexistent-capture-home" } },
+    ).catch((error: { code: number; stdout: string; stderr: string }) => error);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe(
+      "Redaction failed. Check the owner MCP configuration and run it again.\n",
+    );
+    expect(result).toHaveProperty("code", 1);
+  });
   it.each([0, 1])("propagates import status %i without the hook watchdog", async (status) => {
     vi.useFakeTimers();
     const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
@@ -45,6 +59,62 @@ describe("export process contract", () => {
     expect(exit).toHaveBeenCalledWith(status);
     expect(stderr).toHaveBeenCalledTimes(status);
     expect(vi.getTimerCount()).toBe(0);
+  });
+  // AUTHORED-BY Claude Sonnet 5.5
+  it.each([0, 1])("propagates redact-archive status %i", async (status) => {
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    const run = vi.fn().mockResolvedValue(status);
+    vi.doMock("./redaction-migration.js", () => ({ runRedactionMigration: run }));
+    process.argv = ["node", "solid-capture", "redact-archive", "--dry-run"];
+    await import("./cli.js");
+    expect(run).toHaveBeenCalledWith(["redact-archive", "--dry-run"], {
+      warn: expect.any(Function),
+    });
+    expect(exit).toHaveBeenCalledWith(status);
+    expect(stderr).toHaveBeenCalledTimes(status);
+    if (status === 1)
+      expect(stderr).toHaveBeenCalledWith(
+        "Redaction failed. Check the owner MCP configuration and run it again.\n",
+      );
+  });
+  it("gives no configuration hint after a run that finished incomplete (A5)", async () => {
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    const run = vi.fn(async (_args: string[], options: { warn?: (message: string) => void }) => {
+      options.warn?.("redact-archive: the archive is NOT fully redacted.");
+      return 1;
+    });
+    vi.doMock("./redaction-migration.js", () => ({ runRedactionMigration: run }));
+    process.argv = ["node", "solid-capture", "redact-archive"];
+    await import("./cli.js");
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(stderr.mock.calls).toEqual([["redact-archive: the archive is NOT fully redacted.\n"]]);
+  });
+  it("gives the configuration hint when redact-archive fails before it can report", async () => {
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    vi.doMock("./redaction-migration.js", () => ({ runRedactionMigration: async () => 1 }));
+    process.argv = ["node", "solid-capture", "redact-archive"];
+    await import("./cli.js");
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(stderr.mock.calls).toEqual([
+      ["Redaction failed. Check the owner MCP configuration and run it again.\n"],
+    ]);
+  });
+  it("sanitizes redact-archive startup failures", async () => {
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);
+    const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+    vi.doMock("./redaction-migration.js", () => {
+      throw new Error("secret redaction error");
+    });
+    process.argv = ["node", "solid-capture", "redact-archive"];
+    await import("./cli.js");
+    expect(exit).toHaveBeenCalledWith(1);
+    expect(stderr).toHaveBeenCalledWith(
+      "Redaction failed. Check the owner MCP configuration and run it again.\n",
+    );
+    expect(JSON.stringify(stderr.mock.calls)).not.toContain("secret redaction error");
   });
   it("sanitizes export startup failures", async () => {
     const exit = vi.spyOn(process, "exit").mockImplementation((() => undefined) as never);

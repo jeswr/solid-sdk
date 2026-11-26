@@ -63,6 +63,72 @@ export function createInboxReader(options: InboxReaderOptions): InboxReader {
   return createClientInboxReader(options);
 }
 
+/** Preserve request deadlines while fencing a fixed or dynamically selected caller lifetime. */
+export function withAbortSignal(
+  fetch: typeof globalThis.fetch,
+  lifetime: AbortSignal | (() => AbortSignal),
+): typeof globalThis.fetch {
+  return async (input, init) => {
+    const signal = typeof lifetime === "function" ? lifetime() : lifetime;
+    const combined = init?.signal ? AbortSignal.any([signal, init.signal]) : signal;
+    combined.throwIfAborted();
+    const response = await fetch(input, { ...init, signal: combined });
+    combined.throwIfAborted();
+    return response;
+  };
+}
+
+export interface ReadInvitationsOptions<T> {
+  reader: InboxReader;
+  webId: string;
+  signal?: AbortSignal | undefined;
+  /** Omit to project all notification kinds, as a mixed inbox tray does. */
+  kind?: ReturnType<typeof notificationKind>;
+  /** Null or a thrown validation error discards a malformed item. Keys identify the offered resource. */
+  normalise(item: InboxNotification): { key: string; value: T } | null;
+  exclude?: ReadonlySet<string>;
+  /** Non-negative safe integer; defaults to 50. Zero performs no I/O. */
+  limit?: number;
+}
+
+/** Discover/read once, project one kind, and retain the newest distinct, unaccepted resources. */
+export async function readInvitations<T>({
+  reader,
+  webId,
+  signal,
+  kind,
+  normalise,
+  exclude,
+  limit = 50,
+}: ReadInvitationsOptions<T>): Promise<T[]> {
+  signal?.throwIfAborted();
+  if (!Number.isSafeInteger(limit) || limit < 0) throw new TypeError("Invalid invitation limit");
+  if (limit === 0) return [];
+  const inbox = await reader.inbox(webId);
+  signal?.throwIfAborted();
+  if (!inbox) return [];
+  const items = await reader.list(inbox, signal ? { signal } : {});
+  signal?.throwIfAborted();
+  const selected = new Map<string, T>();
+  // InboxReader guarantees newest-first order, with deterministic ties and undated items last.
+  for (const item of items) {
+    signal?.throwIfAborted();
+    if (kind !== undefined && notificationKind(item) !== kind) continue;
+    let result: { key: string; value: T } | null;
+    try {
+      result = normalise(item);
+    } catch {
+      signal?.throwIfAborted();
+      continue;
+    }
+    signal?.throwIfAborted();
+    if (!result?.key || exclude?.has(result.key) || selected.has(result.key)) continue;
+    selected.set(result.key, result.value);
+    if (selected.size === limit) break;
+  }
+  return [...selected.values()];
+}
+
 /** Classify the four suite builder shapes; unfamiliar activities remain other. */
 export function notificationKind(
   notification: InboxNotification,

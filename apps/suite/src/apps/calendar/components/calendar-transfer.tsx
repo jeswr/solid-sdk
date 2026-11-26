@@ -75,7 +75,7 @@ export function CalendarTransferProvider({ children }: { children: ReactNode }) 
     <Transfer
       value={{
         choose: (value) => {
-          setCalendar(`${value}#it`);
+          setCalendar(value ? `${value}#it` : "");
           picker.current?.click();
         },
         read,
@@ -205,6 +205,14 @@ export function CalendarDropArea({ children }: { children: ReactNode }) {
         Drop to import into {target?.title}
       </div>
     </div>
+  );
+}
+export function CalendarImportButton() {
+  const transfer = useContext(Transfer);
+  return (
+    <Button variant="outline" onClick={() => transfer?.choose("")}>
+      Import .ics
+    </Button>
   );
 }
 export function CalendarMenu({ calendar }: { calendar: CalendarInfo }) {

@@ -2,17 +2,12 @@
 // AUTHORED-BY Claude Opus 5.5
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { parseVCards } from "../../src/apps/contacts/lib/vcard";
+import { accessible, test } from "./helpers";
 
 const fixture = fileURLToPath(new URL("./fixtures/three.vcf", import.meta.url));
-async function accessible(page: Page) {
-  const result = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-    .analyze();
-  expect(result.violations).toEqual([]);
-}
+
 async function open(page: Page) {
   await page.goto("/contacts");
   await expect(page.locator(".con-list-heading").getByRole("status")).toHaveText("40 contacts");
