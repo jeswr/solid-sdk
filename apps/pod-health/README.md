@@ -69,9 +69,9 @@ const { workout } = gpxToWorkout(gpxString, {
 });
 ```
 
-Authentication is the caller's concern: pass no `fetch` and
-[`@solid/reactive-authentication`](https://www.npmjs.com/package/@solid/reactive-authentication)
-patches `globalThis.fetch`, or pass an authenticated `fetch` explicitly.
+Authentication is the caller's concern: pass the `@jeswr/pod-auth` session's bounded
+`auth.fetch` explicitly. Omitting it uses the unauthenticated global fetch.
+The standalone [web host](web/README.md) uses pod-auth and the shared SignInCard.
 
 ## Gate
 

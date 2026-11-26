@@ -3,6 +3,7 @@
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
+import { DataFactory, serialiseTurtle } from "../src/serialise.js";
 import {
   FINANCE_PATH,
   LEDGER_RESOURCE,
@@ -11,6 +12,7 @@ import {
   PUBLIC_TYPE_INDEX_PATH,
   WriteError,
 } from "../src/store.js";
+import { TypeIndexDataset } from "../src/typeIndex.js";
 import { FinClass, SolidTerm } from "../src/vocab.js";
 import { fakeFetch, fakeFetchRdf, type RecordedPut } from "./helpers.js";
 
@@ -52,6 +54,49 @@ describe("MoneyStore construction + URL shaping", () => {
 });
 
 describe("MoneyStore.load", () => {
+  it("uses the injected fetch for private discovery and ledger reads without patching global fetch", async () => {
+    const dataset = new Store();
+    const index = new TypeIndexDataset(dataset, DataFactory);
+    index.markIndex(INDEX, "public");
+    index.register(INDEX, "#finance", FinClass.Transaction, { instance: LEDGER });
+    const indexTurtle = await serialiseTurtle(dataset);
+    const ambient = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 401 }));
+    const authenticated = vi.fn<typeof fetch>(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      return new Response(url === INDEX ? indexTurtle : SEED_LEDGER, {
+        headers: { "content-type": "text/turtle", etag: '"private"' },
+      });
+    });
+    try {
+      const store = new MoneyStore({ podRoot: POD, fetch: authenticated });
+      expect(await store.discover(MoneyStore.primaryClass)).toEqual([{ instance: LEDGER }]);
+      expect(await store.listAccounts()).toEqual([expect.objectContaining({ label: "Everyday" })]);
+      expect(authenticated.mock.calls.map(([input]) => String(input))).toEqual([INDEX, LEDGER]);
+      expect(ambient).not.toHaveBeenCalled();
+      expect(globalThis.fetch).toBe(ambient);
+      expect((await globalThis.fetch(LEDGER)).status).toBe(401);
+    } finally {
+      ambient.mockRestore();
+    }
+  });
+
+  it("uses public global fetch for reads when no transport is supplied", async () => {
+    const ambient = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(
+        async () => new Response(SEED_LEDGER, { headers: { "content-type": "text/turtle" } }),
+      );
+    try {
+      const store = new MoneyStore({ podRoot: POD });
+      expect(await store.listAccounts()).toEqual([expect.objectContaining({ label: "Everyday" })]);
+      expect(ambient).toHaveBeenCalledTimes(1);
+    } finally {
+      ambient.mockRestore();
+    }
+  });
+
   it("reads an existing resource into a typed document with its ETag", async () => {
     const store = new MoneyStore({
       podRoot: POD,

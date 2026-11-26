@@ -15,16 +15,8 @@
 //
 // ── AUTH SEAM ────────────────────────────────────────────────────────────────
 // The authenticated `fetch` is INJECTED, not imported. Pass the session's fetch
-// via `options.fetch`; omit it and `@jeswr/fetch-rdf` falls back to the global
-// `fetch`. In production that global is the one
-// @solid/reactive-authentication's ReactiveFetchManager.registerGlobally()
-// patches (a plain fetch transparently upgrades on a 401 with a DPoP token),
-// wired ONCE in the create-solid-app shell. That wiring is #18-gated
-// (create-solid-app S2 — interactive auth-code login;
-// https://github.com/solid-contrib/reactive-authentication/issues/18). This
-// reader is DELIBERATELY unaware of any of that: it works today against a
-// stubbed fetch in unit tests and later against the real session with NO code
-// change. Do NOT hard-wire a login flow here.
+// via `options.fetch`; omit it and `@jeswr/fetch-rdf` uses the public global fetch.
+// Hosts supply pod-auth's bounded auth.fetch. This reader owns no login flow.
 
 import { fetchRdf as defaultFetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import {

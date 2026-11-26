@@ -6,8 +6,7 @@
   "client_name": "Pod Mail",
   "client_uri": "http://localhost:5173/",
   "redirect_uris": [
-    "http://localhost:5173/callback.html",
-    "http://localhost:5173/"
+    "http://localhost:5173/callback.html"
   ],
   "scope": "openid webid offline_access",
   "grant_types": [

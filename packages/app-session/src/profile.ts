@@ -28,8 +28,12 @@ export interface Profile {
  * @throws {import("@jeswr/fetch-rdf").RdfFetchError} on transport / non-2xx / parse failure.
  * Authentication has already been verified by pod-auth; this reads display metadata only.
  */
-export async function readProfile(webId: string, fetchImpl: typeof fetch): Promise<Profile> {
-  const { dataset } = await fetchRdf(webId, { fetch: fetchImpl });
+export async function readProfile(
+  webId: string,
+  fetchImpl: typeof fetch,
+  signal?: AbortSignal,
+): Promise<Profile> {
+  const { dataset } = await fetchRdf(webId, { fetch: fetchImpl, ...(signal && { signal }) });
   const agent = new Agent(webId, dataset, DataFactory);
   return {
     webId,

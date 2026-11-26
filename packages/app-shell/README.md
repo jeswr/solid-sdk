@@ -19,7 +19,7 @@ Requires React 18 or newer and Node.js 20.12 or newer for tooling.
 
 ```tsx
 import {
-  AccountMenu,
+  AccountControl,
   ErrorBoundary,
   FeedbackButton,
   ThemeProvider,
@@ -30,7 +30,7 @@ import "@jeswr/app-shell/styles.css";
 <ThemeProvider>
   <header>
     <ThemeToggle />
-    <AccountMenu webId={webId} displayName={name} onSignOut={logout} />
+    <AccountControl webId={webId} displayName={name} onSignOut={logout} />
     <FeedbackButton repo="jeswr/my-app" appName="My App" />
   </header>
   <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
@@ -44,11 +44,21 @@ styles for the class names used by the components.
 ## Key API
 
 - Theme: `ThemeProvider`, `ThemeToggle`, `useTheme`, `themeScript`.
-- Account: `AccountMenu`; the host owns session, profile, navigation, and logout.
+- Account: `AccountControl`, `AccountMenu`; the host owns session, profile, navigation, and logout.
+- Header: `AppHeader` renders the standard `.app-header` (brand, optional extra children, `FeedbackButton`, `ThemeToggle`, `AccountControl`). Everything is a prop (`brand`, `feedback`, `account`); it does not depend on any session package.
+- Frame: `AppFrame` renders `.app-shell` with `AppHeader`, the "no storage address" fallback note (when `session.podRootIsFallback`) and your children. It takes a structural `session` slice (`webId`, `displayName`, `avatarUrl`, `podRoot`, `podRootIsFallback`) and `onSignOut`, so it stays decoupled from any session package.
+- Discovery view: `AppMain` (`<main className="app-main">` with a `.app-loading` wait until `value` resolves, optional `notice` before it) and `useSessionResource(session, resolve, fallback, deps)` (resolve a per-session value, falling back on rejection, dropping stale results).
 - Feedback: `FeedbackButton`, `FeedbackDialog`, and pure issue-body helpers.
 - Errors: `ErrorBoundary`, `ErrorState`.
 - Extension signal: `useSolidExtensionPresent` reports presence, not identity or authentication.
 - CSS exports: `styles.css`, `tokens.css`, `theme.css`, `reset.css`.
+
+`AccountControl` accepts `webId`, `displayName`, `avatarUrl` and required `onSignOut` with
+the same types as `AccountMenu`. It renders the account menu when the extension is absent,
+or an isolated ghost sign-out button when `useSolidExtensionPresent()` reports presence.
+Optional `signOutLabel` customizes that standalone button (default “Sign out”). Presence
+changes presentation only; the callback always signs out the host's session. Use `AccountMenu`
+directly when you need its extra navigation callbacks or menu items.
 
 ## Links
 

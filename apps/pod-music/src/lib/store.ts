@@ -10,9 +10,8 @@
 //
 // WAC-aware: a 401/403 read becomes an AccessDeniedError (a hint is not a grant
 // — never silently swallow it); a 404 on a required GET becomes
-// ResourceNotFoundError. Auth is ambient — pass an authenticated `fetch`
-// (e.g. patched by @solid/reactive-authentication) via the constructor; default
-// is globalThis.fetch.
+// ResourceNotFoundError. Pass pod-auth's authenticated `auth.fetch`
+// via the constructor; the default is unauthenticated globalThis.fetch.
 
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import {

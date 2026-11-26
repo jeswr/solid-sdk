@@ -13,6 +13,14 @@ import type * as React_2 from 'react';
 import { ReactNode } from 'react';
 
 // @public
+export function AccountControl(input: AccountControlProps): JSX.Element;
+
+// @public (undocumented)
+export interface AccountControlProps extends Pick<AccountMenuProps, "webId" | "displayName" | "avatarUrl" | "onSignOut"> {
+    signOutLabel?: string;
+}
+
+// @public
 export function AccountMenu(input: AccountMenuProps): React_2.JSX.Element;
 
 // @public (undocumented)
@@ -24,6 +32,60 @@ export interface AccountMenuProps {
     onSettings?: () => void;
     onSignOut: () => void;
     webId?: string | null;
+}
+
+// @public
+export function AppFrame(input: AppFrameProps): JSX.Element;
+
+// @public (undocumented)
+export interface AppFrameProps {
+    appName: string;
+    children?: ReactNode;
+    feedback: Pick<FeedbackButtonProps, "repo" | "appVersion">;
+    // (undocumented)
+    onSignOut: () => void;
+    // (undocumented)
+    session: AppFrameSession;
+    storageNote: {
+        product: string;
+        kind: string;
+        podRootAsCode?: boolean;
+    };
+}
+
+// @public
+export interface AppFrameSession {
+    // (undocumented)
+    avatarUrl?: string;
+    // (undocumented)
+    displayName?: string;
+    // (undocumented)
+    podRoot: string;
+    podRootIsFallback?: boolean;
+    // (undocumented)
+    webId: string;
+}
+
+// @public
+export function AppHeader(input: AppHeaderProps): JSX.Element;
+
+// @public (undocumented)
+export interface AppHeaderProps {
+    account: AccountControlProps;
+    brand: ReactNode;
+    children?: ReactNode;
+    feedback: FeedbackButtonProps;
+}
+
+// @public
+export function AppMain<T>(input: AppMainProps<T>): JSX.Element;
+
+// @public (undocumented)
+export interface AppMainProps<T> {
+    children: (value: T) => ReactNode;
+    loading: ReactNode;
+    notice?: ReactNode;
+    value: T | null | undefined;
 }
 
 // @public (undocumented)
@@ -230,6 +292,9 @@ export function themeScript(storageKey?: string, attributeClass?: string): strin
 
 // @public
 export function ThemeToggle(): JSX.Element;
+
+// @public
+export function useSessionResource<S, T>(session: S | null | undefined, resolve: (session: S) => Promise<T>, fallback: (session: S) => T, deps?: readonly unknown[]): T | null;
 
 // @public
 export function useSolidExtensionPresent(): boolean;

@@ -7,8 +7,8 @@
 // (`@jeswr/pod-mail`). React is a *peer* dependency so a data-layer-only
 // consumer never pulls it in. The view never touches RDF/fetch directly — it
 // drives the data layer through `useInbox`, and takes the authenticated fetch
-// as an injected seam (post-#18 the create-solid-app shell patches the global
-// fetch; until then a stub fetch makes it unit-testable today).
+// as an injected seam: hosts pass pod-auth's auth.fetch for private mail; the
+// default global fetch stays public. Tests inject the same seam.
 
 export {
   errorMessage,
