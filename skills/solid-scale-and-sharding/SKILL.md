@@ -50,7 +50,7 @@ A Solid pod is a **document store, not a query engine**. There is no `WHERE`, no
 `LIMIT` you can push to the server. Layout is therefore a design decision you make up front —
 and the first rule is to keep it simple.
 
-This skill assumes the house stack in [`AGENTS.md`](../../AGENTS.md): read/parse with
+This skill assumes the house stack: read/parse with
 `@jeswr/fetch-rdf`, typed access via `@solid/object` + `@rdfjs/wrapper`, mutations through
 `TermWrapper` subclasses, conditional `PUT` writes. Never hand-built triples, never
 `@inrupt/*` / `@ldo/*`.
@@ -139,7 +139,7 @@ the Type Index) instead.
 
 N3 Patch for partial updates: servers advertising `PATCH` accept it, but no sanctioned library
 builds patch bodies yet and hand-building them is banned — conditional `PUT` until one ships
-(`AGENTS.md` §Writing data).
+([guide chapter 4, Edit a resource](../../docs/guide/04-reading-and-writing.md#edit-a-resource)).
 
 ## Decision checklist
 
