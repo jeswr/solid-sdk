@@ -17,7 +17,9 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/drive/my",
   useSearchParams: () => new URLSearchParams(),
 }));
-const { shown } = vi.hoisted(() => ({ shown: [] as { url: string; scopedEditor?: boolean | undefined }[] }));
+const { shown } = vi.hoisted(() => ({
+  shown: [] as { url: string; scopedEditor?: boolean | undefined }[],
+}));
 vi.mock("../src/apps/drive/components/share-dialog", () => ({
   ShareDialog: (props: { item: { url: string }; scopedEditor?: boolean }) => {
     shown.push({ url: props.item.url, scopedEditor: props.scopedEditor });
