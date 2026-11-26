@@ -16,6 +16,7 @@ import { baseExtensions } from "../src/apps/docs/editor/extensions";
 import { useDocumentSharing } from "../src/apps/docs/hooks/use-document-sharing";
 import {
   applyDocumentSharing as applySharing,
+  checkDocumentSharing,
   loadDocumentSharing as loadSharing,
 } from "../src/apps/docs/lib/sharing/document-sharing";
 import {
@@ -27,7 +28,14 @@ import {
 vi.mock("../src/apps/docs/lib/sharing/document-sharing", async (original) => ({
   ...(await original<typeof import("../src/apps/docs/lib/sharing/document-sharing")>()),
   loadDocumentSharing: vi.fn(),
+  checkDocumentSharing: vi.fn(),
   applyDocumentSharing: vi.fn(),
+}));
+// Records which resources the dialog's group panel would grant and revoke on.
+vi.mock("../src/shell/groups/group-sharing", () => ({
+  GroupSharing: ({ url, targets = [url] }: { url: string; targets?: string[] }) => (
+    <section aria-label="Group sharing" data-targets={targets.join(" ")} />
+  ),
 }));
 const resource = "https://example.org/docs/plan.ttl";
 const session: SharingSession = {
@@ -134,6 +142,8 @@ beforeEach(() => {
   editor = new Editor({ extensions: baseExtensions(fetch), content: "<p></p>" });
   vi.clearAllMocks();
   vi.mocked(loadSharing).mockResolvedValue(snapshot());
+  // The button's permission check decides exactly as the dialog's full load would.
+  vi.mocked(checkDocumentSharing).mockImplementation((...args) => loadSharing(...args));
   vi.mocked(applySharing).mockResolvedValue(snapshot());
   Element.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal(
@@ -425,4 +435,34 @@ it("offers Retry for an incomplete document plan, then shows the legacy repair a
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   fireEvent.click(await screen.findByRole("button", { name: /^Save$/ }));
   await screen.findByText("Sharing saved");
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("checks only the cheap permission for the button and loads every part when the dialog opens", async () => {
+  render(<Harness />);
+  await enabled();
+  expect(checkDocumentSharing).toHaveBeenCalledWith(session, resource);
+  vi.mocked(checkDocumentSharing).mockClear();
+  vi.mocked(loadSharing).mockClear();
+  expect(loadSharing).not.toHaveBeenCalled();
+  fireEvent.click(header());
+  await screen.findByLabelText("Who can access");
+  expect(loadSharing).toHaveBeenCalledOnce();
+});
+
+it("grants and revokes groups on the document and every companion part", async () => {
+  const container = "https://example.org/docs/plan/";
+  vi.mocked(loadSharing).mockResolvedValue(
+    snapshot({
+      companions: [
+        snapshot({ resource: container }),
+        snapshot({ resource: `${container}assets/` }),
+      ],
+    } as Partial<SharingSnapshot>),
+  );
+  render(<Harness />);
+  await enabled();
+  fireEvent.click(header());
+  const groups = await screen.findByRole("region", { name: "Group sharing" });
+  expect(groups.getAttribute("data-targets")).toBe(`${resource} ${container} ${container}assets/`);
 });

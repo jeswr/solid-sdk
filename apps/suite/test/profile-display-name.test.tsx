@@ -7,7 +7,7 @@ import {
   renderHook,
   waitFor,
 } from "../../../packages/suite-ui/node_modules/@testing-library/react";
-import { resolveDisplayName, shortWebId } from "../src/lib/profile/display-name";
+import { MAX_NAME_LENGTH, resolveDisplayName, shortWebId } from "../src/lib/profile/display-name";
 import { useDisplayNames } from "../src/lib/profile/use-display-names";
 import { ABSENT } from "../src/lib/session/extension-session";
 import { SessionContext } from "../src/lib/session/shell-pod-session";
@@ -163,4 +163,42 @@ it("fences late hook results on account switches, key changes and unmount", asyn
   hook.rerender({ account: bob, ids: ["https://other.example/#me"] });
   expect(hook.result.current(webId)).toBe("people.example");
   hook.unmount();
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it.each([
+  "You",
+  " you ",
+  "YOU",
+  "Y\u200bou",
+  "\u202eYou",
+])("does not let a foreign profile named %j read as the viewer's own entries", async (name) => {
+  const account = session(`<${webId}> <${foaf}> ${JSON.stringify(name)} .`);
+  const label = await resolveDisplayName(account, webId);
+  expect(label).not.toBe("You");
+  expect(label.endsWith("(people.example)")).toBe(true);
+});
+it("strips bidirectional and invisible characters and caps long names", async () => {
+  const spoof = session(`<${webId}> <${foaf}> "Mallory\u202e\u2066 txt.exe\u2069" .`);
+  expect(await resolveDisplayName(spoof, webId)).toBe("Mallory txt.exe");
+  const long = session(`<${webId}> <${foaf}> "${"a".repeat(5000)}" .`);
+  const label = await resolveDisplayName(long, webId);
+  expect([...label]).toHaveLength(MAX_NAME_LENGTH);
+  expect(label.endsWith("…")).toBe(true);
+  const invisible = session(`<${webId}> <${foaf}> "\u200b\u200f", "Visible" .`);
+  expect(await resolveDisplayName(invisible, webId)).toBe("Visible");
+});
+it("publishes each name as it resolves, without waiting for a slow profile", async () => {
+  const slow = "https://slow.example/profile#me";
+  const account = {
+    ...session(),
+    publicFetch: vi.fn(async (input: RequestInfo | URL) =>
+      String(input).startsWith("https://slow.example/")
+        ? new Promise<Response>(() => {})
+        : response(`<${webId}> <${foaf}> "Alice" .`),
+    ),
+  } satisfies PodSession;
+  const hook = renderHook(() => useDisplayNames([slow, webId], account));
+  await waitFor(() => expect(hook.result.current(webId)).toBe("Alice"));
+  expect(hook.result.current(slow)).toBe("slow.example");
 });

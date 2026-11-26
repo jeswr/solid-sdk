@@ -9,7 +9,12 @@ import { encodeRef } from "@/lib/refs";
 import { ShareDialog } from "../../drive/components/share-dialog";
 import type { SharingSession } from "../../drive/lib/sharing/adapter";
 import { Hint } from "../components/common";
-import { applyDocumentSharing, loadDocumentSharing } from "../lib/sharing/document-sharing";
+import {
+  applyDocumentSharing,
+  checkDocumentSharing,
+  documentGroupTargets,
+  loadDocumentSharing,
+} from "../lib/sharing/document-sharing";
 
 const OWNER_REASON = "Only the owner can change sharing.";
 
@@ -52,7 +57,8 @@ export function useDocumentSharing(
       const resolved = (reason: string | undefined) => {
         if (live) setAccess({ session, resource, reason });
       };
-      void loadDocumentSharing(session, resource).then(
+      // Only the entry point and companion root: the whole tree is checked when the dialog opens.
+      void checkDocumentSharing(session, resource).then(
         (snapshot) =>
           resolved(snapshot.canManage ? undefined : (snapshot.readOnly ?? OWNER_REASON)),
         (error: unknown) => resolved(permissionFailureReason(error)),
@@ -114,6 +120,7 @@ export function useDocumentSharing(
           load={loadDocumentSharing}
           scopedEditor={false}
           apply={applyDocumentSharing}
+          groupTargets={documentGroupTargets}
           disabledReason={disabledReason}
           onClose={() => setShown(false)}
           onSaved={() => {}}

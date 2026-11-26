@@ -82,6 +82,7 @@ export function ShareDialog({
   load = loadSharing,
   apply = applySharing,
   scopedEditor = true,
+  groupTargets,
 }: {
   item: Pick<DriveItem, "name" | "url">;
   session: SharingSession;
@@ -99,6 +100,8 @@ export function ShareDialog({
    * workbook), where per-scope rules would bypass that app's model.
    */
   scopedEditor?: boolean;
+  /** Every resource a group grant must cover, from the loaded snapshot; the item by default. */
+  groupTargets?: (snapshot: SharingSnapshot) => string[];
 }) {
   const [snapshot, setSnapshot] = useState<SharingSnapshot>();
   const [error, setError] = useState("");
@@ -394,6 +397,7 @@ export function ShareDialog({
             <GroupSharing
               session={session}
               url={item.url}
+              targets={groupTargets?.(snapshot)}
               disabled={blocked}
               onSaved={() => {
                 setRetry((value) => value + 1);

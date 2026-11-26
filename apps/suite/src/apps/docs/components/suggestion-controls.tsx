@@ -15,6 +15,7 @@ import type { Editor } from "@tiptap/react";
 import { Check, Pencil, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useDisplayNames } from "@/lib/profile/use-display-names";
+import type { PodSession } from "@/lib/session/types";
 import { focusDocument } from "../editor/focus";
 import {
   resolveSuggestions,
@@ -54,10 +55,11 @@ function decide(editor: Editor, accept: boolean, id?: string) {
   focusDocument(editor);
 }
 
-export function SuggestionPopover({ editor }: { editor: Editor }) {
+export function SuggestionPopover({ editor, session }: { editor: Editor; session?: PodSession }) {
   const [active, setActive] = useState<Suggestion | undefined>(() => suggestionAt(editor.state));
   const [dismissed, setDismissed] = useState<string | undefined>();
-  const displayName = useDisplayNames([active?.author]);
+  // The document's own account, not the shell's, decides "You" and pod-scoped reads.
+  const displayName = useDisplayNames([active?.author], session);
   const acceptButton = useRef<HTMLButtonElement>(null);
   const keyboardReview = useRef(false);
   useEffect(() => {
@@ -142,7 +144,9 @@ export function SuggestionPopover({ editor }: { editor: Editor }) {
               <strong>
                 {active.kind === "suggestionInsert" ? "Suggested addition" : "Suggested deletion"}
               </strong>
-              <span title={active.author}>{displayName(active.author)}</span>
+              <span title={active.author} aria-description={active.author}>
+                {displayName(active.author)}
+              </span>
               <time dateTime={active.created}>{active.created}</time>
               <small>Ctrl/Cmd+Alt+Shift+A to review; Escape to return to the document.</small>
               <div className="docs-suggestion-actions">

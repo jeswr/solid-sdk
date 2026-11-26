@@ -36,8 +36,29 @@ const isSuggestion = (mark: Mark) =>
 interface BreakSuggestion extends Suggestion {
   edge?: "start" | "end";
 }
+/** The same shape check for every source: HTML, Yjs updates and attribute steps. */
+function isBreak(item: unknown): item is BreakSuggestion {
+  if (!item || typeof item !== "object") return false;
+  const value = item as Record<string, unknown>;
+  return (
+    typeof value.id === "string" &&
+    typeof value.author === "string" &&
+    typeof value.created === "string" &&
+    ["suggestionInsert", "suggestionDelete"].includes(value.kind as string) &&
+    [undefined, "start", "end"].includes(value.edge as string | undefined)
+  );
+}
 function breaks(node: Node): BreakSuggestion[] {
-  return node.attrs.suggestionBreaks ?? [];
+  const value: unknown = node.attrs.suggestionBreaks;
+  return Array.isArray(value) ? value.filter(isBreak) : [];
+}
+/**
+ * Carry a stored edge across an edit. Each end maps towards the inside of its boundary:
+ * text typed at a paragraph's first position stays after its opening token, and text
+ * typed at its last position stays before its closing token.
+ */
+function mapEdge(mapping: Mapping, edge: { from: number; to: number }) {
+  return { from: mapping.mapResult(edge.from, 1), to: mapping.mapResult(edge.to, -1) };
 }
 function boundaries(doc: Node) {
   const blocks: { node: Node; pos: number }[] = [];
@@ -171,8 +192,7 @@ function remapBreaks(
     const items = breaks(boundary.node).filter((item) => item.edge === boundary.edge);
     if (!items.length) continue;
     tracked = true;
-    const from = mapping.mapResult(boundary.from, 1);
-    const to = mapping.mapResult(boundary.to, 1);
+    const { from, to } = mapEdge(mapping, boundary);
     if (from.deleted || to.deleted) continue;
     const key = `${boundary.edge}:${from.pos}:${to.pos}`;
     remaining.set(key, [...(remaining.get(key) ?? []), ...items]);
@@ -326,11 +346,10 @@ function rewriteText(
     });
   const structuralMapping = tr.mapping.slice(structuralStart);
   const mappedBoundaries = new Map<string, BreakSuggestion[]>();
-  for (const original of originalBoundaries)
-    mappedBoundaries.set(
-      `${original.edge}:${structuralMapping.map(original.from, 1)}:${structuralMapping.map(original.to, 1)}`,
-      original.items,
-    );
+  for (const original of originalBoundaries) {
+    const { from, to } = mapEdge(structuralMapping, original);
+    mappedBoundaries.set(`${original.edge}:${from.pos}:${to.pos}`, original.items);
+  }
   const rebuilt = new Map<number, BreakSuggestion[]>();
   for (const boundary of boundaries(tr.doc)) {
     const items = [
@@ -519,17 +538,7 @@ export const Suggestions = Extension.create({
                 const value: unknown = JSON.parse(
                   element.getAttribute("data-suggestion-breaks") ?? "null",
                 );
-                return Array.isArray(value)
-                  ? value.filter(
-                      (item) =>
-                        item &&
-                        typeof item.id === "string" &&
-                        typeof item.author === "string" &&
-                        typeof item.created === "string" &&
-                        ["suggestionInsert", "suggestionDelete"].includes(item.kind) &&
-                        [undefined, "start", "end"].includes(item.edge),
-                    )
-                  : null;
+                return Array.isArray(value) ? value.filter(isBreak) : null;
               } catch {
                 return null;
               }
