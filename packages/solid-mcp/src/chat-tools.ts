@@ -24,6 +24,18 @@ import { containerCandidates } from "./pod.js";
 import { withPodReadLimits } from "./pod-operation.js";
 import { createFetchPodPort, type PodPort } from "./pod-port.js";
 
+/** `<archive>/<provider>/<conversation>/m-<message>.ttl`, exactly, with the names ChatWriter emits. */
+function isChatMessageUrl(archive: string, target: string): boolean {
+  if (!target.startsWith(archive)) return false;
+  const [provider, conversation, message, ...rest] = target.slice(archive.length).split("/");
+  return (
+    rest.length === 0 &&
+    CHAT_PROVIDERS.includes(provider as (typeof CHAT_PROVIDERS)[number]) &&
+    /^[a-zA-Z0-9_-]{1,200}$/.test(conversation ?? "") &&
+    /^m-[a-zA-Z0-9_-]{1,200}\.ttl$/.test(message ?? "")
+  );
+}
+
 /** Adapt chat persistence with owner-only WAC provisioning through the current guarded port. */
 export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPodPort {
   const currentPod = pod ?? createFetchPodPort(config);
@@ -121,6 +133,20 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
           throw error;
         }
       });
+    },
+    async delete(url, cond) {
+      if (!writesEnabled(config)) throw new Error("write disabled: server is read-only");
+      // Only the owner-run redaction migration deletes, and always conditionally.
+      if (typeof cond?.ifMatch !== "string" || cond.ifMatch === "")
+        throw new Error("Chat deletes require If-Match");
+      const target = requirePodScopedWriteUrl(config, url);
+      // Defence in depth: this public port must not delete anything but a chat message
+      // (never an ACL, metadata document, container or any other pod resource).
+      if (!isChatMessageUrl(new URL("private/chats/", currentPod.root).href, target))
+        throw new Error("Chat deletes are limited to chat message resources");
+      return portOperation(() =>
+        new PodOutput(currentPod).delete(target, { ifMatch: cond.ifMatch }),
+      );
     },
   };
 }

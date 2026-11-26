@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2-Astra
+import { type Grant, ownerPolicy, type Subject, writeWac } from "@jeswr/pod-access";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -14,6 +16,8 @@ import {
 } from "../src/apps/calendar/lib/model";
 import {
   type CalendarAccount,
+  CalendarPrivacyError,
+  CalendarUnconfirmedError,
   calendarDocument,
   calendarSlug,
   createCalendar,
@@ -51,7 +55,12 @@ const event: CalendarEvent = {
 };
 async function setup() {
   const pod = createDemoPod({ root, seed: await buildDemoSeed(now), now: () => now });
-  const account: CalendarAccount = { webId: DEMO_WEBID, storageUrl: root, fetch: pod.fetch };
+  const account: CalendarAccount = {
+    webId: DEMO_WEBID,
+    storageUrl: root,
+    fetch: pod.fetch,
+    mode: "demo",
+  };
   return { pod, account, io: calendarIO(pod.fetch, root) };
 }
 function altered(
@@ -317,6 +326,376 @@ describe("Calendar repository discovery and demo", () => {
     expect(await createCalendar(account, "Plain", PALETTE[0] as string)).toBe(
       `${root}calendar/plain.ttl`,
     );
+  });
+});
+describe("Calendar creation privacy", () => {
+  function recording(account: CalendarAccount) {
+    const writes: string[] = [];
+    return {
+      writes,
+      account: altered(account, (url, init) => {
+        if (init?.method && !["GET", "HEAD", "OPTIONS"].includes(init.method))
+          writes.push(`${init.method} ${url}`);
+        return undefined;
+      }),
+    };
+  }
+  it("writes once the destination is proven owner-only, verifying before and confirming after", async () => {
+    const { account, io } = await setup();
+    const order: string[] = [];
+    const recorded = recording(account);
+    const privateDestination = {
+      verify: vi.fn(async (url: string) => {
+        order.push(`verify ${url} after ${recorded.writes.length} writes`);
+        return true;
+      }),
+      confirm: vi.fn(async (url: string, version: { etag?: string }) => {
+        order.push(`confirm ${url} after ${recorded.writes.length} writes`);
+        return Boolean(version.etag);
+      }),
+    };
+    const url = await createCalendar(
+      { ...recorded.account, privateDestination },
+      "Owner",
+      PALETTE[0] as string,
+    );
+    expect(url).toBe(`${root}calendar/owner.ttl`);
+    expect((await io.loadCalendar(url))?.data.title).toBe("Owner");
+    expect(order[0]).toBe(`verify ${root}calendar/owner.ttl after 0 writes`);
+    expect(order[1]).toBe(`confirm ${root}calendar/owner.ttl after 1 writes`);
+    expect(privateDestination.verify).toHaveBeenCalledWith(`${root}calendar/owner/events.ttl`);
+  });
+  it("refuses a destination with a looser inherited ACL before any write", async () => {
+    const { account, io } = await setup();
+    const recorded = recording(account);
+    const privateDestination = { verify: vi.fn(async () => false), confirm: vi.fn() };
+    const refused = createCalendar(
+      { ...recorded.account, privateDestination },
+      "Loose",
+      PALETTE[0] as string,
+    );
+    await expect(refused).rejects.toBeInstanceOf(CalendarPrivacyError);
+    await expect(refused).rejects.not.toThrow(/https?:|acl|public/i);
+    expect(recorded.writes).toEqual([]);
+    expect(privateDestination.confirm).not.toHaveBeenCalled();
+    await expect(io.loadCalendar(`${root}calendar/loose.ttl`)).rejects.toThrow();
+  });
+  it("fails closed when the policy cannot be read, and removes a document that fails confirmation", async () => {
+    const { account, io } = await setup();
+    const unreadable = recording(account);
+    await expect(
+      createCalendar(
+        {
+          ...unreadable.account,
+          privateDestination: {
+            verify: async () => {
+              throw new Error("https://pod.example/secret.acl is unreadable");
+            },
+            confirm: vi.fn(),
+          },
+        },
+        "Unreadable",
+        PALETTE[0] as string,
+      ),
+    ).rejects.toThrow(/could not confirm/);
+    expect(unreadable.writes).toEqual([]);
+    const changed = recording(account);
+    await expect(
+      createCalendar(
+        {
+          ...changed.account,
+          privateDestination: { verify: async () => true, confirm: async () => false },
+        },
+        "Changed",
+        PALETTE[0] as string,
+      ),
+    ).rejects.toBeInstanceOf(CalendarPrivacyError);
+    expect(changed.writes).toEqual([
+      `PUT ${root}calendar/changed.ttl`,
+      `DELETE ${root}calendar/changed.ttl`,
+    ]);
+    await expect(io.loadCalendar(`${root}calendar/changed.ttl`)).rejects.toThrow();
+  });
+  it("refuses to create the events folder when it would be readable by others", async () => {
+    const { account } = await setup();
+    const verify = vi.fn(async (url: string) => !url.endsWith("/events.ttl"));
+    await expect(
+      createCalendar(
+        { ...account, privateDestination: { verify, confirm: async () => true } },
+        "Shared Folder",
+        PALETTE[0] as string,
+      ),
+    ).rejects.toBeInstanceOf(CalendarPrivacyError);
+    expect((await discoverCalendars({ ...account })).calendars.map((c) => c.title)).not.toContain(
+      "Shared Folder",
+    );
+  });
+  function deletes(account: CalendarAccount) {
+    const log: { url: string; ifMatch: string | null }[] = [];
+    return {
+      log,
+      account: altered(account, (url, init) => {
+        if (init?.method === "DELETE")
+          log.push({ url, ifMatch: new Headers(init.headers).get("If-Match") });
+        return undefined;
+      }),
+    };
+  }
+  const refuseEvents = async (url: string) => !url.endsWith("/events.ttl");
+  it("never deletes an events folder that existed before the call, but removes the calendar document with If-Match", async () => {
+    const { account, io } = await setup();
+    const folder = `${root}calendar/existing/`;
+    expect(
+      (
+        await account.fetch(folder, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "text/turtle",
+            Link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
+          },
+          body: "",
+        })
+      ).ok,
+    ).toBe(true);
+    const recorded = deletes(account);
+    await expect(
+      createCalendar(
+        {
+          ...recorded.account,
+          privateDestination: { verify: refuseEvents, confirm: async () => true },
+        },
+        "Existing",
+        PALETTE[0] as string,
+      ),
+    ).rejects.toBeInstanceOf(CalendarPrivacyError);
+    expect(recorded.log.map((entry) => entry.url)).toEqual([`${root}calendar/existing.ttl`]);
+    expect(recorded.log[0]?.ifMatch).toMatch(/^"/);
+    expect((await account.fetch(folder, { method: "HEAD" })).status).toBe(200);
+    await expect(io.loadCalendar(`${root}calendar/existing.ttl`)).rejects.toThrow();
+  });
+  it("deletes an events folder this call created, conditionally on its ETag", async () => {
+    const { account } = await setup();
+    const recorded = deletes(account);
+    await expect(
+      createCalendar(
+        {
+          ...recorded.account,
+          privateDestination: { verify: refuseEvents, confirm: async () => true },
+        },
+        "Fresh",
+        PALETTE[0] as string,
+      ),
+    ).rejects.toBeInstanceOf(CalendarPrivacyError);
+    expect(recorded.log.map((entry) => entry.url)).toEqual([
+      `${root}calendar/fresh/`,
+      `${root}calendar/fresh.ttl`,
+    ]);
+    expect(recorded.log.every((entry) => /^"/.test(entry.ifMatch ?? ""))).toBe(true);
+    expect((await account.fetch(`${root}calendar/fresh/`, { method: "HEAD" })).status).toBe(404);
+  });
+  it("does not delete a document or folder that changed since this call created it", async () => {
+    const { account, io } = await setup();
+    const recorded = deletes(account);
+    const url = `${root}calendar/changing.ttl`;
+    const changeBoth = async (target: string) => {
+      if (!target.endsWith("/events.ttl")) return true;
+      // Another writer replaces both resources before the cleanup runs.
+      await account.fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "text/turtle" },
+        body: await serializeDataset(
+          buildCalendar(url, { title: "Edited", color: PALETTE[0] as string }),
+        ),
+      });
+      await account.fetch(`${root}calendar/changing/`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "text/turtle",
+          Link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
+        },
+        body: "",
+      });
+      return false;
+    };
+    await expect(
+      createCalendar(
+        {
+          ...recorded.account,
+          privateDestination: { verify: changeBoth, confirm: async () => true },
+        },
+        "Changing",
+        PALETTE[0] as string,
+      ),
+    ).rejects.toBeInstanceOf(CalendarUnconfirmedError);
+    expect((await io.loadCalendar(url))?.data.title).toBe("Edited");
+  });
+  it("reports a calendar that could not be confirmed private and could not be removed", async () => {
+    const { account, io } = await setup();
+    const failing = altered(account, (_url, init) =>
+      init?.method === "DELETE" ? new Response(null, { status: 503 }) : undefined,
+    );
+    const failure = createCalendar(
+      { ...failing, privateDestination: { verify: async () => true, confirm: async () => false } },
+      "Stuck",
+      PALETTE[0] as string,
+    );
+    await expect(failure).rejects.toBeInstanceOf(CalendarUnconfirmedError);
+    await expect(failure).rejects.toBeInstanceOf(CalendarPrivacyError);
+    await expect(failure).rejects.toThrow(/could not be removed/);
+    await expect(failure).rejects.not.toThrow(/https?:|acl|public|was not created/i);
+    // The document really is still there, so the honest message matters.
+    expect((await io.loadCalendar(`${root}calendar/stuck.ttl`))?.data.title).toBe("Stuck");
+    // A network failure during cleanup is reported the same way.
+    const offline = altered(account, (_url, init) => {
+      if (init?.method === "DELETE") throw new TypeError("offline");
+      return undefined;
+    });
+    await expect(
+      createCalendar(
+        {
+          ...offline,
+          privateDestination: { verify: async () => true, confirm: async () => false },
+        },
+        "Offline",
+        PALETTE[0] as string,
+      ),
+    ).rejects.toBeInstanceOf(CalendarUnconfirmedError);
+  });
+  it("preserves the calendar when confirmation fails and the write returned no ETag", async () => {
+    const { account, io } = await setup();
+    const url = `${root}calendar/no-validator.ttl`;
+    const recorded = recording({
+      ...account,
+      fetch: async (input, init) => {
+        const response = await account.fetch(input, init);
+        if (String(input) === url && init?.method === "PUT") response.headers.delete("etag");
+        return response;
+      },
+    });
+    const confirm = vi.fn(async () => false);
+    await expect(
+      createCalendar(
+        { ...recorded.account, privateDestination: { verify: async () => true, confirm } },
+        "No Validator",
+        PALETTE[0] as string,
+      ),
+    ).rejects.toBeInstanceOf(CalendarUnconfirmedError);
+    expect(confirm).toHaveBeenCalledWith(url, {});
+    expect(recorded.writes).toEqual([`PUT ${url}`]);
+    expect((await io.loadCalendar(url))?.data.title).toBe("No Validator");
+  });
+  /** A fake pod serving a real WAC root ACL, with the account in "solid" mode (no seam, no demo). */
+  async function wacPod(extra?: (aclUrl: string) => Grant) {
+    const aclUrl = `${root}.acl`;
+    const policy = ownerPolicy(DEMO_WEBID, true);
+    if (extra) policy.grants.push(extra(aclUrl));
+    const body = await writeWac(policy, root, aclUrl);
+    const pod = createDemoPod({
+      root,
+      seed: (await buildDemoSeed(now, { calendar: false })).map((file) =>
+        file.path === ".acl" ? { ...file, body } : file,
+      ),
+      now: () => now,
+    });
+    const writes: string[] = [];
+    const account: CalendarAccount = {
+      webId: DEMO_WEBID,
+      storageUrl: root,
+      mode: "solid",
+      fetch: async (input, init) => {
+        const method = init?.method ?? "GET";
+        if (!["GET", "HEAD", "OPTIONS"].includes(method))
+          writes.push(`${method} ${new URL(String(input)).pathname}`);
+        return pod.fetch(input, init);
+      },
+    };
+    return { pod, account, writes, io: calendarIO(pod.fetch, root) };
+  }
+  const readGrant =
+    (subject: Subject) =>
+    (aclUrl: string): Grant => ({
+      modes: new Set(["read"]),
+      who: [[subject]],
+      except: [],
+      appliesTo: "members",
+      source: { url: aclUrl, node: `${aclUrl}#extra` },
+    });
+  it("creates a calendar through the real owner-only check when the WAC ACL is owner-only", async () => {
+    const { account, writes, io } = await wacPod();
+    const url = await createCalendar(account, "Real Owner", PALETTE[0] as string);
+    expect(url).toBe(`${root}calendar/real-owner.ttl`);
+    expect((await io.loadCalendar(url))?.data.title).toBe("Real Owner");
+    expect(writes).toContain("PUT /calendar/real-owner.ttl");
+    // The document is verified before its own write, and its container is created afterwards.
+    expect(writes.indexOf("PUT /calendar/real-owner.ttl")).toBeLessThan(
+      writes.indexOf("PUT /calendar/real-owner/"),
+    );
+  });
+  it.each([
+    ["public", { kind: "public" }],
+    ["another agent", { kind: "agent", webId: "https://bob.example/profile#me" }],
+  ] satisfies [
+    string,
+    Subject,
+  ][])("refuses a loose inherited ACL granting %s read, leaving nothing behind", async (_name, who) => {
+    const { account, writes, io } = await wacPod(readGrant(who));
+    const refused = createCalendar(account, "Loose Real", PALETTE[0] as string);
+    await expect(refused).rejects.toBeInstanceOf(CalendarPrivacyError);
+    await expect(refused).rejects.not.toThrow(/https?:|acl|public|bob/i);
+    expect(writes.filter((write) => write.includes("loose-real"))).toEqual([]);
+    await expect(io.loadCalendar(`${root}calendar/loose-real.ttl`)).rejects.toThrow();
+  });
+  it("refuses when the WAC ACL is unreadable, writing nothing", async () => {
+    const { account, writes } = await wacPod();
+    const unreadable: CalendarAccount = {
+      ...account,
+      fetch: async (input, init) =>
+        /\.acl$/.test(String(input))
+          ? new Response(null, { status: 403 })
+          : account.fetch(input, init),
+    };
+    await expect(
+      createCalendar(unreadable, "Unreadable Real", PALETTE[0] as string),
+    ).rejects.toBeInstanceOf(CalendarPrivacyError);
+    expect(writes).toEqual([]);
+  });
+  it("uses the real check, failing closed or allowing on the evidence, when the session carries no mode", async () => {
+    // A GroupsSession-shaped account has no `mode`, as family-space creation passes.
+    const allowed = await wacPod();
+    const { mode: _mode, ...modeless } = allowed.account;
+    expect("mode" in modeless).toBe(false);
+    expect(await createCalendar(modeless, "Modeless", PALETTE[0] as string)).toBe(
+      `${root}calendar/modeless.ttl`,
+    );
+    const loose = await wacPod(readGrant({ kind: "public" }));
+    const { mode: _loose, ...looseModeless } = loose.account;
+    await expect(
+      createCalendar(looseModeless, "Modeless Loose", PALETTE[0] as string),
+    ).rejects.toBeInstanceOf(CalendarPrivacyError);
+    expect(loose.writes).toEqual([]);
+  });
+  it("creates an exclusive family calendar on the default demo pod without a session mode (family spaces)", async () => {
+    // The demo pod serves an owner-only root ACL, so the real check passes with `mode` absent.
+    const { account, io } = await setup();
+    const { mode: _mode, ...modeless } = account;
+    const url = await createCalendar(modeless, "Family", PALETTE[0] as string, {
+      exclusive: true,
+    });
+    expect((await io.loadCalendar(url))?.data.title).toBe("Family");
+  });
+  it("fails closed outside the demo pod when storage cannot prove owner-only access", async () => {
+    const { account } = await setup();
+    // Every access document is unreadable, so the real owner-only check cannot prove anything.
+    const recorded = recording({
+      ...altered(account, (url) =>
+        /\.acl$/.test(url) ? new Response(null, { status: 403 }) : undefined,
+      ),
+      mode: "solid",
+    });
+    await expect(
+      createCalendar(recorded.account, "Real", PALETTE[0] as string),
+    ).rejects.toBeInstanceOf(CalendarPrivacyError);
+    expect(recorded.writes).toEqual([]);
   });
 });
 describe("Calendar optimistic event writes", () => {

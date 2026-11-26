@@ -57,15 +57,15 @@ diverge in ways the spec permits or doesn't yet pin down. An app written and
 tested against one server silently depends on that server's behaviour. This
 skill is the differential model: **identify which server you're on, then branch.**
 
-It assumes the house stack from [`AGENTS.md`](../../AGENTS.md):
-`@solid/reactive-authentication` (auth, DPoP), `@jeswr/fetch-rdf` (fetch+parse),
+It assumes the house stack:
+`@jeswr/pod-auth` (auth, DPoP, credential-bounded `auth.fetch`), `@jeswr/fetch-rdf` (fetch+parse),
 `@solid/object` + `@rdfjs/wrapper` (typed RDF), `n3`. Never `@inrupt/*`,
 `@ldo/*`, or hand-built triples. RDF mutations go through `TermWrapper`
 subclasses. This skill diagnoses *server* behaviour; it does not change the
 client libraries.
 
-Local two-instance setup (one WAC, one ACP CSS) is in AGENTS.md §"Servers —
-develop, test, release". Exercise both from day one.
+Run two local CSS instances, one WAC and one ACP, and exercise both from day one. The
+single-instance harness is in the [`solid-test-infrastructure`](../solid-test-infrastructure/SKILL.md) skill; this repository has no two-instance recipe yet.
 
 ---
 
@@ -107,13 +107,12 @@ as "detect at runtime" (next section).
 | `solidweb.org` | Solid Grassroots | EU | **NSS** + SolidOS (catalog status: Exploration) |
 | `trinpod.eu` / `trinpod.us` | Graphmetrix | EU / US | **Trinpod** |
 | `use.id` | Digita | EU | **CSS** |
-| `localhost:3000` (default config) | you | — | local CSS (this repo's AGENTS.md) |
+| `localhost:3000` (default config) | you | — | local CSS ([`solid-test-infrastructure`](../solid-test-infrastructure/SKILL.md)) |
 
 Most hosted pods run CSS or its Pivot remix — but **two get-a-pod providers run legacy NSS**
 (Data Pod, solidweb.org), so the NSS column of the matrix is live, not historical. Use the
 table as the first guess, then **confirm at runtime** (next section); never branch on the
-hostname alone. The final-stage test matrix in `AGENTS.md` §Servers is exactly this provider
-list.
+hostname alone. Use exactly this provider list as the final-stage test matrix.
 
 ---
 
@@ -140,8 +139,8 @@ Branch on these. Each cell carries evidence or is marked **[unverified]**.
    not ms. ESS "doesn't appear to check the IAT at all"; CSS rejects with
    `400 invalid_dpop_proof / "iat is not recent enough"`.
    [forum/.../dpop-rejects-iat-on-community-solid-server/7444](https://forum.solidproject.org/t/solid-oidc-primer-works-great-for-inrupt-pods-but-dpop-rejects-iat-on-community-solid-server/7444).
-   The house auth lib (`@solid/reactive-authentication`) gets this right — if you
-   hit it, suspect a *second* auth layer you added (AGENTS.md §Authentication).
+   Let the house auth lib (`@jeswr/pod-auth`) build DPoP proofs rather than adding
+   your own; if you hit this, suspect a *second* auth layer you added ([guide chapter 3](../../docs/guide/03-sign-in.md)).
 2. ESS "returns a UMA-compliant `WWW-Authenticate` header with an `as_uri`
    parameter on unauthenticated requests"; NSS does not; CSS has since implemented
    it. [forum/usage-of-as-uri/6462](https://forum.solidproject.org/t/usage-of-as-uri-www-authenticate-parameter/6462).
@@ -165,7 +164,7 @@ Branch on these. Each cell carries evidence or is marked **[unverified]**.
 6. "ETags are not supported in node-solid-server."
    [forum/state-of-the-art-for-querying-large-containers/3320](https://forum.solidproject.org/t/state-of-the-art-for-querying-large-containers/3320).
    Implication for the conditional-PUT write path: NSS may give you no ETag, so
-   `If-Match` is unavailable — handle a `null` etag (AGENTS.md §Writing data).
+   `If-Match` is unavailable — handle a `null` etag ([guide chapter 4, Edit a resource](../../docs/guide/04-reading-and-writing.md#edit-a-resource)).
 7. WebSocketChannel2023 type IRI `http://www.w3.org/ns/solid/notification#WebSocketChannel2023`:
    [spec](https://solid.github.io/notifications/websocket-channel-2023). Discovery
    via `Link rel="describedby"` (resource) / `rel="…#storageDescription"` (storage):
@@ -200,8 +199,8 @@ Don't trust the hostname. Probe the live server.
 **1. Access-control language (WAC vs ACP).** GET (or HEAD) the resource and read
 its `Link: <…>; rel="acl"` header — never guess the URL. Then fetch that document
 and inspect it: WAC documents use `acl:` (`AclResource`/`Authorization`); ACP
-documents use `acp:` (`AccessControlResource`/`Policy`/`Matcher`). The local ACP
-CSS instance in AGENTS.md advertises `Link: <…/.acr>; rel="acl"`. Parse only
+documents use `acp:` (`AccessControlResource`/`Policy`/`Matcher`). A local ACP
+CSS instance advertises `Link: <…/.acr>; rel="acl"`. Parse only
 through `@solid/object`'s typed classes; convert with `wacToAcp` / `acpToWac` —
 never hand-parse the Turtle.
 
@@ -226,7 +225,7 @@ detect it; don't assume an ETag exists.
 
 For a hackathon or first integration:
 
-1. **Local CSS, in-memory** (AGENTS.md). Two instances, WAC + ACP. Disposable,
+1. **Local CSS, in-memory** (single-instance harness in [`solid-test-infrastructure`](../solid-test-infrastructure/SKILL.md); run a second ACP instance yourself). Two instances, WAC + ACP. Disposable,
    pristine on restart, both auth languages from day one. Default for build/iterate.
 2. **solidcommunity.net** (hosted CSS) — real-network smoke test, WAC. Community
    service, **no SLA**. On the auth issuer list.
@@ -286,8 +285,7 @@ byte-for-byte audience/URL equality rule. See the
 - **`500` on PUT.** NSS 5.x with no `Content-Type`. Always send it. Footnote 5.
 - **Session dropped after navigation/reload.** A hard reload drops in-memory tokens;
   full-page reloads destroy the auth context. Use client-side navigation; the house
-  auth lib re-runs `prompt=none` silently while the IdP cookie lives (AGENTS.md
-  §Authentication).
+  auth lib re-runs `prompt=none` silently while the IdP cookie lives ([guide chapter 3](../../docs/guide/03-sign-in.md)).
   [forum/losing-session-when-going-to-different-page-after-login/5077](https://forum.solidproject.org/t/losing-session-when-going-to-different-page-after-login/5077).
 - **Container request 301-redirects / relative IRIs resolve wrong.** Missing trailing
   slash. Container URLs end in `/`; the IdP/login URL is **not** the container URL.

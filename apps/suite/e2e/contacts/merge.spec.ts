@@ -1,16 +1,11 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
-import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
+import { accessible, test } from "./helpers";
 
 const row = (page: Page, name: string) => page.getByRole("row", { name, exact: true });
 const group = (page: Page, name: string) => page.getByRole("region", { name, exact: true });
-async function accessible(page: Page) {
-  await expect(page).toHaveTitle("Contacts · Solid Suite");
-  const result = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-    .analyze();
-  expect(result.violations).toEqual([]);
-}
+
 async function openDuplicates(page: Page) {
   await page.goto("/contacts");
   await expect(page.locator(".con-list-heading").getByRole("status")).toHaveText("40 contacts");

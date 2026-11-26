@@ -10,6 +10,11 @@ interface SessionAccount {
   readonly fetch: typeof globalThis.fetch;
   /** Change events or focus-driven revalidation for resources in the storage. */
   subscribe(listener: (url: string) => void): () => void;
+  /**
+   * False once this session's account was switched away or signed out, which can precede the
+   * React commit that replaces it (its `fetch` then throws). Absent: always live.
+   */
+  active?(): boolean;
 }
 
 export interface DemoPodSession extends SessionAccount {

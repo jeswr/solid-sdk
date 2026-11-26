@@ -424,44 +424,50 @@ const BOUNDARY_WINDOW = 512;
 
 function boundarySpans(fields: readonly string[]): Span[][] {
   const spans: Span[][] = fields.map(() => []);
-  for (let i = 1; i < fields.length; i++) {
-    const left = fields[i - 1] as string;
-    const right = fields[i] as string;
-    let offset = Math.max(0, left.length - BOUNDARY_WINDOW);
-    let limit = Math.min(right.length, BOUNDARY_WINDOW);
-    // Snap inward so both bounded windows contain complete code points.
-    if (/[\uDC00-\uDFFF]/.test(left[offset] ?? "")) offset += 1;
-    if (/[\uD800-\uDBFF]/.test(right[limit - 1] ?? "")) limit -= 1;
-    const join = left.length - offset;
-    const window = left.slice(offset) + right.slice(0, limit);
-    redactNormalized(
-      window,
-      ({ start, end, contextStart, contextEnd }) => {
-        // A key/operator may span the join while its value lies entirely on the right.
-        // URL userinfo also needs the @ on the right even if its value is on the left.
-        if (contextStart >= join || contextEnd <= join || start >= end) return;
-        // A previously redacted value completes the left field's contribution.
-        // Otherwise retained assignment names would consume another 512 units of
-        // the next field on every replay. Original source windows still detect
-        // plaintext fragments before any per-field markers are introduced.
-        if (onlyMarkers(window, start, Math.min(end, join))) return;
-        if (start < join)
-          spans[i - 1]?.push({ start: offset + start, end: offset + Math.min(end, join) });
-        if (end > join) spans[i]?.push({ start: Math.max(0, start - join), end: end - join });
-      },
-      [],
-      join,
+  for (let i = 1; i < fields.length; i++)
+    joinSpans(
+      fields[i - 1] as string,
+      fields[i] as string,
+      spans[i - 1] as Span[],
+      spans[i] as Span[],
     );
-  }
   return spans;
+}
+
+/** Add to `leftSpans`/`rightSpans` the pieces of two adjacent fields that one detection spans. */
+function joinSpans(left: string, right: string, leftSpans: Span[], rightSpans: Span[]): void {
+  let offset = Math.max(0, left.length - BOUNDARY_WINDOW);
+  let limit = Math.min(right.length, BOUNDARY_WINDOW);
+  // Snap inward so both bounded windows contain complete code points.
+  if (/[\uDC00-\uDFFF]/.test(left[offset] ?? "")) offset += 1;
+  if (/[\uD800-\uDBFF]/.test(right[limit - 1] ?? "")) limit -= 1;
+  const join = left.length - offset;
+  const window = left.slice(offset) + right.slice(0, limit);
+  redactNormalized(
+    window,
+    ({ start, end, contextStart, contextEnd }) => {
+      // A key/operator may span the join while its value lies entirely on the right.
+      // URL userinfo also needs the @ on the right even if its value is on the left.
+      if (contextStart >= join || contextEnd <= join || start >= end) return;
+      // A previously redacted value completes the left field's contribution.
+      // Otherwise retained assignment names would consume another 512 units of
+      // the next field on every replay. Original source windows still detect
+      // plaintext fragments before any per-field markers are introduced.
+      if (onlyMarkers(window, start, Math.min(end, join))) return;
+      if (start < join)
+        leftSpans.push({ start: offset + start, end: offset + Math.min(end, join) });
+      if (end > join) rightSpans.push({ start: Math.max(0, start - join), end: end - join });
+    },
+    [],
+    join,
+  );
 }
 
 /** Follow recognized PEM headers to their first END, across arbitrarily long fields.
  * Only delimiter recognition needs a bounded previous suffix; no body is concatenated
  * with an ever-growing prefix. Header/END splits across one join are recognized too.
  */
-function pemContinuationSpans(fields: readonly string[], spans: Span[][]): void {
-  let open = false;
+function pemContinuationSpans(fields: readonly string[], spans: Span[][], open = false): boolean {
   for (let i = 0; i < fields.length; i++) {
     const field = fields[i] as string;
     const previous = fields[i - 1] ?? "";
@@ -491,6 +497,7 @@ function pemContinuationSpans(fields: readonly string[], spans: Span[][]): void 
     // keeping the number of mapped ranges per field bounded even with many keys.
     if (open && continued) spans[i]?.push({ start, end: field.length });
   }
+  return open;
 }
 
 function replaceSpans(text: string, spans: Span[]): string {
@@ -540,6 +547,121 @@ function replaceSpans(text: string, spans: Span[]): string {
   return parts.join("");
 }
 
+/** Largest run of interchangeable fields examined pair by pair. */
+const MAX_TIED_FIELDS = 64;
+/** Largest number of ordered field pairs examined for one run and its predecessor. */
+const MAX_TIED_PAIRS = 4096;
+const PEM_END = /-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----/;
+
+function tiedRuns(groups: readonly number[]): number[][] {
+  const runs: number[][] = [];
+  for (let i = 0; i < groups.length; i++) {
+    if (i > 0 && groups[i] === groups[i - 1]) (runs[runs.length - 1] as number[]).push(i);
+    else runs.push([i]);
+  }
+  return runs;
+}
+
+/** Whether a run, or a run with its predecessor, is too large for the pair budget. */
+function overBudget(run: readonly number[], previous: readonly number[]): boolean {
+  return (
+    run.length > MAX_TIED_FIELDS ||
+    run.length * (run.length - 1) + run.length * previous.length > MAX_TIED_PAIRS
+  );
+}
+
+/**
+ * True when some run of interchangeable fields exceeds the pair budget, so redacting it
+ * as under any ordering is not proven: cross-field secrets other than PEM blocks are only
+ * checked against stored neighbours. Deterministic in the labels alone.
+ */
+export function hasUnprovenTies(groups: readonly number[]): boolean {
+  const runs = tiedRuns(groups);
+  return runs.some((run, at) => overBudget(run, runs[at - 1] ?? []));
+}
+
+/**
+ * Source spans for fields whose order within a run is unknown (`groups`: consecutive
+ * equal labels are interchangeable). A field is covered when it would be covered under
+ * ANY ordering of its run, which errs toward redacting more:
+ * - Every adjacency an ordering can produce is examined: each ordered pair inside a
+ *   run, and each pair across two neighbouring runs. A run, or a run with its predecessor,
+ *   too large for the pair budget is never blanket-redacted: it keeps the checks that are
+ *   linear in its size (each member alone, PEM below, each member against its stored
+ *   neighbours, PEM followed in stored order). Its any-ordering guarantee is then unproven,
+ *   see {@link hasUnprovenTies}.
+ * - PEM: a block open on entry to a run, or opened by a member (alone or across a join
+ *   with another member or the previous run), puts every other member inside the block
+ *   in some ordering, so each is covered from its start to its first END (or whole). A
+ *   lone opener keeps its own coverage, from its BEGIN on. The block stays open after the
+ *   run unless the run holds an END delimiter and nothing in the run opens one.
+ * A run of one field behaves exactly as {@link redactSecretFields} does without groups.
+ */
+function unorderedSpans(fields: readonly string[], groups: readonly number[]): Span[][] {
+  const spans: Span[][] = fields.map(() => []);
+  const runs = tiedRuns(groups);
+  /** Scan fields in the given order for PEM; map the spans back and report an open block. */
+  const scan = (order: readonly number[], open = false): boolean => {
+    const scratch: Span[][] = order.map(() => []);
+    const result = pemContinuationSpans(
+      order.map((i) => fields[i] as string),
+      scratch,
+      open,
+    );
+    for (const [position, i] of order.entries()) spans[i]?.push(...(scratch[position] as Span[]));
+    return result;
+  };
+  const opensAlone = new Map<number, boolean>();
+  const alone = (i: number): boolean => {
+    let result = opensAlone.get(i);
+    if (result === undefined) {
+      result = scan([i]);
+      opensAlone.set(i, result);
+    }
+    return result;
+  };
+  const join = (x: number, y: number) =>
+    joinSpans(fields[x] as string, fields[y] as string, spans[x] as Span[], spans[y] as Span[]);
+  let open: boolean = false;
+  let previous: readonly number[] = [];
+  for (const run of runs) {
+    if (overBudget(run, previous)) {
+      // Linear in the run: join stored neighbours, and follow PEM in stored order, so only
+      // the members between a BEGIN and its END (and those delimiters) are covered.
+      const last = previous.at(-1);
+      for (const [at, y] of run.entries()) {
+        const x = run[at - 1] ?? last;
+        if (x !== undefined) join(x, y);
+      }
+      open = scan(open || last === undefined ? run : [last, ...run], open);
+      previous = run;
+      continue;
+    }
+    // Members that open a block, alone or across a join with another member.
+    const openers = new Set(run.filter(alone));
+    let crossOpen = false;
+    for (const x of run)
+      for (const y of run)
+        if (x !== y) {
+          join(x, y);
+          if (scan([x, y]) && !alone(x) && !alone(y)) {
+            openers.add(x);
+            openers.add(y);
+          }
+        }
+    for (const x of previous)
+      for (const y of run) {
+        join(x, y);
+        if (scan([x, y]) && !alone(x) && !alone(y)) crossOpen = true;
+      }
+    const entered: boolean = open || crossOpen;
+    for (const i of run) if (entered || openers.size > (openers.has(i) ? 1 : 0)) scan([i], true);
+    open = openers.size > 0 || (entered && !run.some((i) => PEM_END.test(fields[i] as string)));
+    previous = run;
+  }
+  return spans;
+}
+
 /**
  * Normalize/redact fields in persistence order (title, then messages or capture chunks).
  * Inspect each adjacent suffix/prefix of at most 512 UTF-16 code units, joined without
@@ -552,17 +674,34 @@ function replaceSpans(text: string, spans: Span[]): string {
  * Recognized PEM BEGIN headers carry redaction through subsequent fields to the
  * first END delimiter, or the conversation end, including bodies beyond the window.
  * Work is O(total input length + field count); no full-conversation concatenation.
+ *
+ * `groups` (one label per field) marks runs of consecutive equal labels whose stored order
+ * is unreliable, for example messages sharing a timestamp. Such a field is redacted if it
+ * would be under any ordering of its run, so the result may redact more than the
+ * submitted order would; see unorderedSpans for the bounds.
  */
-export function redactSecretFields(fields: readonly string[]): string[] {
+export function redactSecretFields(
+  fields: readonly string[],
+  groups?: readonly number[],
+): string[] {
+  if (groups && groups.length !== fields.length) throw new Error("Invalid field groups");
+  // Fields in a run of equal labels may be stored in any order (see unorderedSpans).
+  const tied = groups?.some((group, i) => i > 0 && group === groups[i - 1]) === true;
   const normalized = fields.map((field) => sanitizeText(field));
   const redacted = normalized.map((field) => redactNormalized(field));
-  const sourceSpans = boundarySpans(normalized);
-  pemContinuationSpans(normalized, sourceSpans);
+  let sourceSpans: Span[][];
+  if (tied) sourceSpans = unorderedSpans(normalized, groups as readonly number[]);
+  else {
+    sourceSpans = boundarySpans(normalized);
+    pemContinuationSpans(normalized, sourceSpans);
+  }
   for (let i = 0; i < redacted.length; i++) {
     const spans = sourceSpans[i] as Span[];
     if (spans.length) redacted[i] = redactNormalized(normalized[i] as string, undefined, spans);
   }
-  const spans = boundarySpans(redacted);
+  const spans = tied
+    ? unorderedSpans(redacted, groups as readonly number[])
+    : boundarySpans(redacted);
   // A window edge may remove an emoji's base while leaving its ZWJ/tags beyond the
   // match. Normalize once more so the rendered result and the RDF serializer agree.
   return redacted.map((field, i) => {

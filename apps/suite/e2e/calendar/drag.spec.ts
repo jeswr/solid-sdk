@@ -1,11 +1,11 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { prepareCalendar } from "./fixtures";
 
 // The demo seed is relative to "today": Sunday 1 Nov 2026, in a Monday-start week.
 test.use({ locale: "en-GB", timezoneId: "Europe/London" });
-test.beforeEach(async ({ page }) => {
-  await page.clock.setFixedTime(new Date("2026-11-01T12:00:00Z"));
-});
+test.beforeEach(({ page }) => prepareCalendar(page));
 async function open(page: Page, view: "week" | "day" | "month") {
   await page.goto(`/calendar/${view}?d=2026-11-01`);
   await expect(page.getByText(/events loaded/)).toBeAttached();
@@ -85,6 +85,10 @@ test("resizes a timed event's end in day view", async ({ page }) => {
 });
 
 test("moves a multi-day all-day event as a block in month view", async ({ page }) => {
+  test.skip(
+    (page.viewportSize()?.width ?? 0) < 640,
+    "Compact month indicators open the day's agenda; dragging uses the desktop bars.",
+  );
   await open(page, "month");
   const trip = (day: string) =>
     page
@@ -99,8 +103,11 @@ test("moves a multi-day all-day event as a block in month view", async ({ page }
     );
   await expect(page.locator(".cal-month .cal-drag-ghost")).toHaveCount(3);
   await page.mouse.up();
-  for (const day of ["2026-11-08", "2026-11-09", "2026-11-10"])
-    await expect(trip(day)).toHaveAccessibleName("Three-day trip, All day, Personal");
+  for (const day of ["2026-11-08", "2026-11-09"])
+    await expect(trip(day)).toHaveAccessibleName(
+      "Three-day trip, Sun 8 Nov 2026 – Tue 10 Nov 2026, Personal",
+    );
+  await expect(trip("2026-11-10")).toHaveCount(0);
   for (const day of ["2026-11-01", "2026-11-02", "2026-11-03"])
     await expect(trip(day)).toHaveCount(0);
   await expect(announcement(page)).toHaveText("Moved Three-day trip to Sun 8 Nov");

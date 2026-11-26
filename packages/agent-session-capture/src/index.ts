@@ -5,3 +5,4 @@ export { parseChatgptExport, parseClaudeExport } from "./export-parsers.js";
 export type { AccountOptions } from "./parsers.js";
 export { type CapturedSession, parseClaudeTranscript, parseCodexTranscript } from "./parsers.js";
 export { redactSecrets } from "./redact.js";
+export { type RedactionMigrationOptions, runRedactionMigration } from "./redaction-migration.js";

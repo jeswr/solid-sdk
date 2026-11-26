@@ -103,6 +103,7 @@ export function ShellPodSessionProvider({
       storageUrl: account.storageUrl,
       fetch,
       subscribe,
+      active: usable,
     };
     if (account.kind === "demo")
       return {
