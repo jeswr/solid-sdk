@@ -31,7 +31,20 @@ import { offerReminderPermission } from "../state/reminders";
 import { ColourPicker, ConfirmDialog, LabelChips, LabelPicker } from "./controls";
 import { ReminderChip, ReminderPicker } from "./reminder-picker";
 
-export function NoteCard({ note, now = new Date() }: { note: StoredNote; now?: Date }) {
+export function NoteCard({
+  note,
+  now = new Date(),
+  selection,
+}: {
+  note: StoredNote;
+  now?: Date;
+  selection?: {
+    checked: boolean;
+    active: boolean;
+    busy: boolean;
+    toggle: (range: boolean) => void;
+  };
+}) {
   const {
     prefs,
     openNote,
@@ -72,15 +85,32 @@ export function NoteCard({ note, now = new Date() }: { note: StoredNote; now?: D
   return (
     <article
       className="notes-card"
+      data-note-url={note.url}
+      data-selected={selection?.checked || undefined}
       aria-labelledby={id}
       data-note-colour={prefs.colours[note.url] ?? "default"}
       aria-busy={pending || busy}
     >
+      {selection && (
+        <label className="notes-card-select">
+          <input
+            type="checkbox"
+            aria-label={`Select ${note.title || "Untitled note"}`}
+            checked={selection.checked}
+            disabled={selection.busy || busy || pending}
+            onChange={(event) => selection.toggle((event.nativeEvent as MouseEvent).shiftKey)}
+          />
+          <span aria-hidden="true">✓</span>
+        </label>
+      )}
       <button
         type="button"
         className="notes-card-body"
         disabled={busy || pending}
-        onClick={(event) => openNote(note, event.currentTarget)}
+        onClick={(event) => {
+          if (selection && (selection.active || event.shiftKey)) selection.toggle(event.shiftKey);
+          else openNote(note, event.currentTarget);
+        }}
         aria-label={`Open ${note.title || "Untitled note"}`}
       >
         {cover && <NoteCover {...cover} fetchImpl={session.fetch} />}
