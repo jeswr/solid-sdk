@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2-Astra
 // The real outbox with Drive's registered policy and delegate: what a user's offline
 // Drive changes go through, end to end (sst-8xm.74.1).
 import { createRequire } from "node:module";
@@ -85,7 +86,7 @@ it("inside Drive's root only Drive-guarded changes queue; elsewhere other apps a
   outbox.close();
 });
 
-it("surfaces a changed file as a conflict that Keep both resolves with a copy", async () => {
+async function conflictingEdit() {
   const { f, network, outbox, storage, queueing, client } = await setup();
   const opened = await client.readVersion(FILE);
   network.up = false;
@@ -103,8 +104,13 @@ it("surfaces a changed file as a conflict that Keep both resolves with a copy", 
   network.up = true;
   await outbox.replay(storage);
   const [conflict] = outbox.conflicts();
-  expect(conflict).toBeDefined();
-  await outbox.resolve((conflict as NonNullable<typeof conflict>).id, "both");
+  if (!conflict) throw new Error("Expected a queued conflict");
+  return { f, outbox, conflict };
+}
+
+it("surfaces a changed file as a conflict that Keep both resolves with a copy", async () => {
+  const { f, outbox, conflict } = await conflictingEdit();
+  await outbox.resolve(conflict.id, "both");
   expect(outbox.conflicts()).toEqual([]);
   expect(outbox.pending()).toEqual([]);
   expect(await (await f.pod.fetch(FILE)).text()).toBe("theirs");
@@ -115,6 +121,49 @@ it("surfaces a changed file as a conflict that Keep both resolves with a copy", 
   expect(copy).toBeDefined();
   expect(await (await f.pod.fetch(new URL(copy as string, PUBLIC).href)).text()).toBe("mine");
   outbox.close();
+});
+
+it.each([
+  ["unreadable source ACL", false],
+  ["changed discovery", false],
+  ["unreadable source ACL", true],
+  ["changed discovery", true],
+] as const)("keeps the conflict on %s (identical sibling present: %s)", async (failure, sibling) => {
+  const { f, outbox, conflict } = await conflictingEdit();
+  try {
+    if (sibling)
+      await f.pod.fetch(`${FILE}-conflict-1000`, {
+        method: "PUT",
+        headers: { "content-type": "text/plain" },
+        body: "mine",
+      });
+    if (failure === "unreadable source ACL")
+      f.intercept(async (url) =>
+        url === `${FILE}.policy` ? new Response(null, { status: 403 }) : undefined,
+      );
+    else f.endpoints.set(FILE, `${FILE}.moved.policy`);
+    f.calls.length = 0;
+    await expect(outbox.resolve(conflict.id, "both")).rejects.toMatchObject({
+      code: "bad-request",
+    });
+    expect(outbox.conflicts()).toEqual([conflict]);
+    expect(f.calls.filter(({ method }) => method !== "HEAD" && method !== "GET")).toEqual([]);
+    expect(await (await f.pod.fetch(FILE)).text()).toBe("theirs");
+
+    // Once access is verifiable again, the same conflict can still save the queued bytes.
+    f.intercept(undefined);
+    f.endpoints.delete(FILE);
+    await outbox.resolve(conflict.id, "both");
+    expect(outbox.conflicts()).toEqual([]);
+    const copies = f.pod
+      .snapshot()
+      .resources.map(([url]) => url)
+      .filter((url) => url.startsWith(`${FILE}-conflict-`));
+    expect(copies).toHaveLength(1);
+    expect(await (await f.pod.fetch(copies[0] as string)).text()).toBe("mine");
+  } finally {
+    outbox.close();
+  }
 });
 
 it("treats a queued folder that already exists as done", async () => {

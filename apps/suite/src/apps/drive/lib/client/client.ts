@@ -101,7 +101,10 @@ export interface DriveItem {
 export interface WriteOptions {
   readonly contentType: string;
   /** Rewritten restore: install the archived source ACL before any payload. */
-  readonly restoreFrom?: ResourceIdentity;
+  readonly restoreFrom?: ResourceIdentity & {
+    /** Keep-both already has the bytes to recover. Only read the source identity and ACL. */
+    readonly recoveryBody?: Blob;
+  };
   /** `"*"`: fail with {@link DriveConflictError} when the target exists. */
   readonly ifNoneMatch?: "*";
   /** Overwrite only this version. */
@@ -1414,7 +1417,12 @@ export function createSolidDriveClient(options: {
     requirePolicy(policy, ["protect-ancestors", "owner-only"]);
     access.assertContentDestination(url);
     if (opts.restoreFrom) {
-      const source = await snapshot(opts.restoreFrom.url, true, opts.restoreFrom.verifyHeaders);
+      const source = await snapshot(
+        opts.restoreFrom.url,
+        true,
+        opts.restoreFrom.verifyHeaders,
+        opts.restoreFrom.recoveryBody,
+      );
       if (source.etag !== opts.restoreFrom.etag) throw new DriveError("conflict", 412, source.url);
       const recoveryOwner = recoveryOwnerFor((source.binding as AccessBinding).source, source.demo);
       await provision.guard(url, true);
@@ -1640,6 +1648,7 @@ export function createSolidDriveClient(options: {
     url: string,
     bodies: boolean,
     approvedDiscovery?: ResourceAssertion["verifyHeaders"],
+    recoveryBody?: Blob,
   ): Promise<SourceSnapshot> => {
     if (bodies) await provision.check(url);
     const policy = (headers: Headers): Promise<AccessState> =>
@@ -1675,13 +1684,16 @@ export function createSolidDriveClient(options: {
         ...(binding ? { binding } : {}),
       };
     }
-    const response = await ensureOk(await http(url, bodies ? undefined : { method: "HEAD" }), url);
+    const response = await ensureOk(
+      await http(url, bodies && !recoveryBody ? undefined : { method: "HEAD" }),
+      url,
+    );
     approvedDiscovery?.(response.headers);
     const etag = response.headers.get("etag") ?? undefined;
     validator(url, etag);
     const own = await policy(response.headers);
     const binding = bodies ? await bindAccess(access, url, url, false, own) : undefined;
-    const body = bodies ? await response.blob() : undefined;
+    const body = recoveryBody ?? (bodies ? await response.blob() : undefined);
     const capturedDiscovery = access.captureEndpoint(url, response.headers);
     const verifyHeaders: ResourceAssertion["verifyHeaders"] = (headers) => {
       approvedDiscovery?.(headers);
@@ -1696,10 +1708,13 @@ export function createSolidDriveClient(options: {
       access: own,
       verifyHeaders,
       ...(binding ? { binding } : {}),
-      ...(bodies
+      ...(body
         ? {
-            body: body as Blob,
-            contentType: response.headers.get("content-type") ?? "application/octet-stream",
+            body,
+            contentType:
+              recoveryBody?.type ??
+              response.headers.get("content-type") ??
+              "application/octet-stream",
           }
         : {}),
     };
