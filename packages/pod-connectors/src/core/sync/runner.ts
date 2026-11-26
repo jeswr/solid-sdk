@@ -271,7 +271,7 @@ export async function runTwoWaySync<Op>(
    * refusal, pending-write tracking) without the session's vocabulary remapping or provenance,
    * which mapped items, link records and snapshots must not receive.
    *
-   * `ensureOwnerOnly` writes the auxiliary `<item>.acl`. That ACL carries no imported data,
+   * `ensureOwnerOnly` creates a missing `<item>.acl`. That ACL carries no imported data,
    * only narrows access, and is not itself a data destination the host verifier judges, so it
    * is not separately verified or confirmed. It is still a Pod mutation: it runs only after the
    * protected resource's own destination is verified, never after a refusal, and the data
@@ -594,7 +594,6 @@ export async function runTwoWaySync<Op>(
     return snapshotUrl;
   }
   async function readSnapshot(snapshotUrl: string, url: string): Promise<DatasetCore> {
-    await pod.ensureOwnerOnly(slug(snapshotUrl));
     const stored = await writer.read(slug(snapshotUrl));
     if (!stored) throw new Error("Missing sync snapshot.");
     return snapshotPayload(stored.dataset, snapshotUrl, url);

@@ -686,22 +686,22 @@ describe("two-way reference conformance", () => {
     expect(f.platform.items.get("remote-1")?.name).toBe("notified edit");
     expect(f.platform.calls.update).toBe(1);
   });
-  it("renews owner protection before reading a create payload on retry", async () => {
+  it("reads the existing create snapshot on retry without reinstalling its ACL", async () => {
     const f = fixture({ writeBack: true });
     await f.pod.put("account/items/new.ttl", "original");
     const apply = f.adapter.applyRemote;
     f.adapter.applyRemote = vi.fn().mockRejectedValue(new Error("transport down"));
     expectSkipped(await f.run(), "remote-failed");
     const intent = present((await readLinks(f)).all()[0]?.pendingCreate);
-    f.pod.protectedUrls.clear();
-    const read = f.pod.writer.read;
-    f.pod.writer.read = async (value) => {
-      if (f.pod.writer.resolve(value) === intent.resourceUrl)
-        expect(f.pod.protectedUrls.has(intent.resourceUrl)).toBe(true);
-      return read(value);
-    };
+    expect(f.pod.protectedUrls.has(intent.resourceUrl)).toBe(true);
+    const read = vi.spyOn(f.pod.writer, "read");
+    const ensureOwnerOnly = vi.spyOn(f.pod.writer, "ensureOwnerOnly");
     f.adapter.applyRemote = apply;
     await f.run();
+    const [snapshotSlug] = present(
+      read.mock.calls.find(([slug]) => f.pod.writer.resolve(slug) === intent.resourceUrl),
+    );
+    expect(ensureOwnerOnly).not.toHaveBeenCalledWith(snapshotSlug);
     expect(f.platform.calls.create).toBe(1);
   });
   it("charges companion binary bytes and refuses binary writes over mapped items", async () => {
