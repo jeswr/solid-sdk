@@ -3,7 +3,7 @@
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { createRegistry } from "../registry.js";
-import { IntegrationSyncError, RateLimitedError } from "./errors.js";
+import { IntegrationAuthError, IntegrationSyncError, RateLimitedError } from "./errors.js";
 import { connectorHealth, connectorHealthSummary } from "./health.js";
 import { type ImportReport, type RunImportOptions, runImport } from "./import-runner.js";
 import { createFetchPodWriter } from "./pod-writer.js";
@@ -283,6 +283,18 @@ describe("scheduler execution", () => {
     expect(h.states.get("spotify")?.health).toMatchObject({
       outcome: "ok",
       consecutiveFailures: 0,
+    });
+  });
+  it("treats a source auth reauthorise failure from the run as needs-reauth", async () => {
+    const h = harness();
+    h.runner.mockRejectedValueOnce(
+      new IntegrationAuthError("spotify", "reauthorise", "Re-authorize Spotify."),
+    );
+    await h.scheduler.tick();
+    expect(h.scheduler.list()[0]).toMatchObject({ enabled: false, status: "needs-reauth" });
+    expect(h.states.get("spotify")?.health).toMatchObject({
+      outcome: "needs-reauth",
+      errorClass: "reauthorise",
     });
   });
   it("disables and durably latches needs-reauth until explicit re-enable, including restart", async () => {

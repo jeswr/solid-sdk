@@ -16,6 +16,7 @@ import {
   createRegistry,
   createSessionPrivateDestinationChecks,
   DEFAULT_CONNECTOR_RUN_TIMEOUT_MS,
+  type MutationGuard,
   NoVaultError,
   type PrivateDestinationChecks,
   parseConnectorConnections,
@@ -105,8 +106,35 @@ export function createConnectorsJob(o: ConnectorsJobOptions): ConnectorsJob {
         webId: o.webId,
         ...(signal && { signal }),
       }));
-  // Long-lived stores share one set of checks; refusals are sticky per store instance.
-  const storeChecks = checks();
+  // Long-lived stores share one set of checks. Session checks cache their storage open, so a
+  // check that throws (Pod offline at boot, a 503) is rebuilt for the next call instead of
+  // failing every later pass until restart.
+  let inner = checks();
+  const fresh = <T>(run: (current: PrivateDestinationChecks) => Promise<T>): Promise<T> => {
+    const current = inner;
+    return run(current).catch((error: unknown) => {
+      if (inner === current) inner = checks();
+      throw error;
+    });
+  };
+  const storeChecks: PrivateDestinationChecks = {
+    verifyPrivateDestination: Object.assign(
+      (url: string) => fresh((c) => c.verifyPrivateDestination?.(url) ?? Promise.resolve(false)),
+      {
+        beforeWrite: (url: string, guard: MutationGuard) =>
+          fresh((c) => {
+            const verify = c.verifyPrivateDestination;
+            if (!verify) return Promise.resolve(false);
+            return verify.beforeWrite ? verify.beforeWrite(url, guard) : verify(url);
+          }),
+      },
+    ),
+    confirmPrivateWrite: (url, version, observe) =>
+      fresh((c) => {
+        if (!c.confirmPrivateWrite) return Promise.reject(new Error("No confirmation port."));
+        return c.confirmPrivateWrite(url, version, observe);
+      }),
+  };
   const settings = () =>
     createConnectionStore({
       podRoot: o.podRoot,

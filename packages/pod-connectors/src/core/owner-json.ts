@@ -89,15 +89,34 @@ export function createOwnerJsonStore<T>(o: OwnerJsonOptions<T>) {
     if (!gate) return;
     if (refused) throw refused;
     const checks = gate.checks;
+    // A verifier that throws (network, 5xx, storage open) refuses this write only; an explicit
+    // non-true answer or a missing port is sticky. Either way every later mutation re-verifies.
+    let threw = false;
     try {
       // Both ports are required up front: a write that could never be confirmed never starts.
       if (!checks?.verifyPrivateDestination || !checks.confirmPrivateWrite)
         throw new PrivateDestinationError(gate.id);
-      await requirePrivateDestination(gate.id, checks, url, guard);
+      const verify = checks.verifyPrivateDestination;
+      const noteThrow = async (run: () => Promise<boolean>): Promise<boolean> => {
+        try {
+          return await run();
+        } catch (error) {
+          threw = true;
+          throw error;
+        }
+      };
+      const probed = Object.assign((target: string) => noteThrow(() => verify(target)), {
+        ...(verify.beforeWrite && {
+          beforeWrite: (target: string, g: MutationGuard) =>
+            noteThrow(() => verify.beforeWrite?.(target, g) ?? Promise.resolve(false)),
+        }),
+      });
+      await requirePrivateDestination(gate.id, { verifyPrivateDestination: probed }, url, guard);
     } catch (error) {
       // Cancellation is not a policy refusal: it must not poison a long-lived store.
       const cancelled = signal?.aborted ? signal : o.signal?.aborted ? o.signal : undefined;
       if (cancelled) throw cancelled.reason;
+      if (threw && !refused) throw new PrivateDestinationError(gate.id);
       refused ??=
         error instanceof PrivateDestinationError ? error : new PrivateDestinationError(gate.id);
       throw refused;

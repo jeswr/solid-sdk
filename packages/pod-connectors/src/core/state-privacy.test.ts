@@ -179,6 +179,26 @@ describe("private connector state writes (scheduler path)", () => {
     await expect(store.read()).resolves.toBeUndefined();
   });
 
+  it("refuses a throwing verification once without making it sticky", async () => {
+    const h = fixture();
+    const verify = vi
+      .fn<(url: string) => Promise<boolean>>()
+      .mockRejectedValueOnce(new Error("pod offline"))
+      .mockResolvedValue(true);
+    const store = createConnectorStateStore({
+      ...h.options,
+      adapterId: "spotify",
+      privateDestination: {
+        verifyPrivateDestination: verify,
+        confirmPrivateWrite: async () => true,
+      },
+    });
+    await expect(store.read()).rejects.toBeInstanceOf(PrivateDestinationError);
+    expect(h.requests).toEqual([]);
+    await expect(store.read()).resolves.toBeUndefined();
+    expect(verify).toHaveBeenCalledTimes(2);
+  });
+
   it("removes a created state file whose after-write confirmation refuses, then stays refused", async () => {
     const h = fixture();
     const store = createConnectorStateStore({

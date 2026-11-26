@@ -7,7 +7,7 @@
 `./adapters/whoop` exposes the Tier A OAuth adapter/factory and streaming file adapter under the single `whoop`
 catalogue id. Default token exchange uses a proxy; Node hosts may inject a secret for direct exchange. Do not
 assume public secretless exchange. Read `src/whoop/{adapter,file-adapter,model,vocab}.ts`, the README's WHOOP
-section and `../solid-health/SKILL.md` before changing it. Reuse the Takeout ZIP reader; keep CSV normalized-header
+section and `../../solid-health/SKILL.md` before changing it. Reuse the Takeout ZIP reader; keep CSV normalized-header
 collision checks, explicit-offset timestamps, native-id/CSV-start reconciliation and API-over-file precedence.
 Source rows and normalized records are capped independently, including duplicate and malformed rows. Stage all
 source parsing before writes. One RunBudget covers every API page. Item/request exhaustion commits a bounded batch

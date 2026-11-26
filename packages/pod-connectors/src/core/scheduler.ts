@@ -2,7 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 import { createRegistry, DEFAULT_CONNECTOR_INTERVAL_MINUTES } from "../registry.js";
 import { abortableFetch, unlessAborted } from "./abort.js";
-import { IntegrationSyncError, RateLimitedError } from "./errors.js";
+import { IntegrationAuthError, IntegrationSyncError, RateLimitedError } from "./errors.js";
 import { connectorReenabled } from "./health.js";
 import {
   createSourceAuth,
@@ -295,6 +295,8 @@ function trustedCheckpoint(
 function errorClass(error: unknown, signal: AbortSignal): ConnectorErrorClass {
   if (signal.aborted) return "aborted";
   if (error instanceof ReauthoriseError) return "reauthorise";
+  // A source auth that reports a revoked or expired grant (e.g. Google invalid_grant).
+  if (error instanceof IntegrationAuthError && error.reason === "reauthorise") return "reauthorise";
   if (error instanceof RateLimitedError) return "rate-limited";
   if (error instanceof IntegrationSyncError) {
     // Only 401 means the access token was rejected. 403 also covers rate limits, quotas

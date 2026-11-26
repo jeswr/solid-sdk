@@ -515,3 +515,31 @@ it("refuses every state write when the host's checks refuse, before any state mu
   expect(runner).not.toHaveBeenCalled();
   expect(h.pod.requests.filter((r) => r.url.startsWith(state) && r.method !== "GET")).toEqual([]);
 });
+
+it("rebuilds the shared store checks after one throws, so a Pod hiccup does not stop later passes", async () => {
+  const h = fixture();
+  await seed(h, [{ connectorId: "spotify", account: "fixture", enabled: true }]);
+  let built = 0;
+  const checks = vi.fn((_signal?: AbortSignal) => {
+    const first = built++ === 0;
+    return {
+      // The first (store) set fails like a session whose storage open hit a 503.
+      verifyPrivateDestination: async () => {
+        if (first) throw new Error("pod offline");
+        return true;
+      },
+      confirmPrivateWrite: async () => true,
+    };
+  });
+  const runner = vi.fn(okRun);
+  const job = createConnectorsJob({
+    ...h.options,
+    privateDestination: checks,
+    runner,
+    tokenSource: { accessToken: async () => "synthetic" },
+  });
+  await expect(job.tick()).rejects.toThrow();
+  expect(runner).not.toHaveBeenCalled();
+  await job.tick();
+  expect(runner).toHaveBeenCalledOnce();
+});
