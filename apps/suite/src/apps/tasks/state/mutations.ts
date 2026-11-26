@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6
 import { DataFactory, Store } from "../lib/model/rdf";
 import type { StoredProject, StoredTask } from "../lib/model/store";
-import { TaskItem } from "../lib/model/task";
-import { TaskTracker } from "../lib/model/tracker";
+import type { TaskItem } from "../lib/model/task";
+import type { TaskTracker } from "../lib/model/tracker";
 export function changeTask(item: StoredTask, change: (task: TaskItem) => void): StoredTask {
   const dataset = new Store([...item.dataset]);
-  const task = new TaskItem(item.task.id, dataset, DataFactory);
+  const Item = item.task.constructor as typeof TaskItem;
+  const task = new Item(item.task.id, dataset, DataFactory);
   change(task);
   return { ...item, dataset, task };
 }
@@ -14,7 +15,8 @@ export function changeProject(
   change: (tracker: TaskTracker) => void,
 ): StoredProject {
   const dataset = new Store([...item.dataset]);
-  const tracker = new TaskTracker(item.tracker.id, dataset, DataFactory);
+  const Tracker = item.tracker.constructor as typeof TaskTracker;
+  const tracker = new Tracker(item.tracker.id, dataset, DataFactory);
   change(tracker);
   return { ...item, dataset, tracker };
 }

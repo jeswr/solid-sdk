@@ -163,6 +163,11 @@ describe("project calendar adapter", () => {
   });
 
   it.each([
+    [
+      { frequency: "MONTHLY", byDay: ["Friday"], bySetPos: 3 },
+      "2026-11-20",
+      ["2026-11-20", "2026-12-18", "2027-01-15"],
+    ],
     [{ frequency: "MONTHLY" }, "2026-06-01", ["2026-06-01", "2026-07-01", "2026-08-01"]],
     [
       { frequency: "MONTHLY", byMonthDay: 15 },

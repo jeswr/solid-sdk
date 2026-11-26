@@ -19,18 +19,33 @@ import { categoryIcon } from "@/components/category-icon";
 import { EmptyState, ErrorState } from "@/components/states";
 import { AppHomepageLink, ModeBadges } from "@/components/permissions-ui";
 import {
-  freshGrantsForAgent,
-  freshGrantsForCategory,
   usePermissionsBackend,
   useConnectedApp,
 } from "@/components/use-permissions";
+import { SharingError } from "@/lib/errors";
 import {
+  ALL_DATA,
+  canRestoreGrants,
   describeModes,
+  grantsForAgent,
+  grantsForCategory,
   type CategoryAccess,
 } from "@/lib/permissions";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Skeleton,
+} from "@jeswr/suite-ui";
+
+/** A refusal explains itself; anything else is most likely the network. */
+function revokeFailure(error: unknown): string {
+  return error instanceof SharingError
+    ? error.message
+    : "Nothing was changed. Check your connection and try again.";
+}
 
 export default function ConnectedAppPage() {
   // useSearchParams requires a Suspense boundary in a prerendered page.
@@ -68,21 +83,27 @@ function ConnectedAppDetail() {
       // still be revoked. getFreshModel re-discovers live; the backend write
       // is independently authoritative under If-Match.
       const fresh = await getFreshModel();
-      const grants = freshGrantsForCategory(fresh, app.agentId, categoryId);
-      await permissionsBackend.revokeGrants(app.agentId, grants);
+      const grants = grantsForCategory(fresh.apps, app.agentId, categoryId, app.kind);
+      await permissionsBackend.revokeGrants(app.agentId, grants, app.kind);
+      // Undo re-creates exactly the grants that were revoked (per location, per
+      // mode set), so it is only offered when every one is role-shaped with a
+      // scope the role layer can write back (never a category-wide
+      // approximation, and never for a WebID rule when the app was an origin),
+      // and not for whole-pod access: a stock CSS root's own ACL has a partial
+      // scope that role writes refuse, so the restore would fail.
+      const canRestore =
+        app.kind === "agent" && categoryId !== ALL_DATA.id && canRestoreGrants(grants);
       toast.success(
         `${app.name} can no longer ${describeModes(access.modes)} your ${label}.`,
         {
           description: "You can grant access again anytime.",
-          action: {
+          action: canRestore ? {
             label: "Undo",
             onClick: () => {
               // Re-grant against a FRESH context too (the owner WebID / pod
               // root / category targets, re-discovered live).
               getFreshModel()
-                .then((m) =>
-                  permissionsBackend.grant(m.ctx, app.agentId, categoryId, access.modes),
-                )
+                .then((m) => permissionsBackend.restoreGrants(m.ctx, app.agentId, grants))
                 .then(() => {
                   // Un-hide the optimistically removed row before reloading.
                   setRemovedCategories((r) => {
@@ -94,22 +115,27 @@ function ConnectedAppDetail() {
                   reload();
                 })
                 .catch(() => {
-                  toast.error(`Couldn't restore access to your ${label}.`);
+                  toast.error(`Couldn't restore access to your ${label}.`, {
+                    description: "Some of it may have been restored. The current access is shown.",
+                  });
+                  reload();
                 });
             },
-          },
+          } : undefined,
         },
       );
       reload();
-    } catch {
+    } catch (e) {
       setRemovedCategories((r) => {
         const next = new Set(r);
         next.delete(categoryId);
         return next;
       });
       toast.error(`Couldn't revoke access to your ${label}.`, {
-        description: "Nothing was changed. Check your connection and try again.",
+        description: revokeFailure(e),
       });
+      // Earlier documents may already have been written: show the live state.
+      reload();
     }
   }
 
@@ -119,16 +145,17 @@ function ConnectedAppDetail() {
     try {
       // SECURITY: revoke against FRESH grants (see revokeCategory).
       const fresh = await getFreshModel();
-      const grants = freshGrantsForAgent(fresh, app.agentId);
-      await permissionsBackend.revokeGrants(app.agentId, grants);
+      const grants = grantsForAgent(fresh.apps, app.agentId, app.kind);
+      await permissionsBackend.revokeGrants(app.agentId, grants, app.kind);
       toast.success(`${app.name} can no longer access anything in your pod.`, {
         description: "You can grant access again anytime.",
       });
       router.push("/connected-apps");
-    } catch {
+    } catch (e) {
       toast.error(`Couldn't remove ${app.name}'s access.`, {
-        description: "Nothing was changed. Check your connection and try again.",
+        description: revokeFailure(e),
       });
+      reload();
       setBusy(false);
     }
   }

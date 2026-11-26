@@ -42,10 +42,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Skeleton,
+} from "@jeswr/suite-ui";
 import {
   bindingBadge,
   DomainNotFoundError,
@@ -314,7 +317,7 @@ function DomainDetail() {
                     <AlertDialogFooter>
                       <AlertDialogCancel>Keep it connected</AlertDialogCancel>
                       <AlertDialogAction
-                        className="bg-destructive text-white hover:bg-destructive/90"
+                        variant="destructive"
                         onClick={() => void release()}
                       >
                         Disconnect
@@ -412,7 +415,7 @@ function PendingApprovalCard({
               <AlertDialogFooter>
                 <AlertDialogCancel>Keep waiting</AlertDialogCancel>
                 <AlertDialogAction
-                  className="bg-destructive text-white hover:bg-destructive/90"
+                  variant="destructive"
                   onClick={onCancel}
                 >
                   Cancel purchase
@@ -562,7 +565,7 @@ function PurchaseDeadEndCard({
               <AlertDialogFooter>
                 <AlertDialogCancel>Keep it</AlertDialogCancel>
                 <AlertDialogAction
-                  className="bg-destructive text-white hover:bg-destructive/90"
+                  variant="destructive"
                   onClick={onRelease}
                 >
                   Release

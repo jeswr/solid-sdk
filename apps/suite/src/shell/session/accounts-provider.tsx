@@ -6,6 +6,7 @@
 import type { FetchForOptions } from "@jeswr/pod-auth";
 import { toast } from "@jeswr/suite-ui";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { clearTasksCachesFor } from "@/apps/tasks/state/offline-cache-key";
 import { purgeNativePodCache } from "@/lib/session/native-pod-cache";
 import {
   ACCOUNTS_KEY,
@@ -239,6 +240,7 @@ export function AccountsProvider({
     }
     // Keep pending outbox items: signing out must not discard unsent changes.
     dispatch({ type: "remove", id });
+    clearTasksCachesFor(account.webId);
     try {
       const results = await Promise.allSettled([
         purgeNativePodCache(account.webId),
@@ -271,6 +273,7 @@ export function AccountsProvider({
       /* Browser storage may be blocked. */
     }
     dispatch({ type: "clear" });
+    for (const { account } of previous) clearTasksCachesFor(account.webId);
     try {
       const results = await Promise.allSettled(
         previous.flatMap(({ account, backend }) => [

@@ -25,6 +25,19 @@ const parse = (text: string, extra: Partial<ComposeContext> = {}) =>
 afterEach(() => vi.unstubAllEnvs());
 
 describe("compose dates and times", () => {
+  it("retains the monthly ordinal in the model rule and repeat chip", () => {
+    const result = parse("Review every 3rd Friday");
+    expect(result.recurrence).toEqual({
+      frequency: "MONTHLY",
+      interval: 1,
+      byDay: ["Friday"],
+      bySetPos: 3,
+    });
+    expect(result.due?.allDay).toBe("2026-11-20");
+    expect(result.chips.map((chip) => chip.label)).toContain(
+      "Repeats every month on the 3rd Friday",
+    );
+  });
   it.each([
     ["today", "2026-10-30", "Due Today"],
     ["tomorrow", "2026-10-31", "Due Tomorrow"],

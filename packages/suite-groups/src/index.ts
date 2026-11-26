@@ -149,7 +149,7 @@ export class GroupDirectory {
     this.container = new URL("groups/", session.storage.root).href;
     this.settingsContainer = new URL("settings/group-sharing/", session.storage.root).href;
     this.settingsUrl = new URL("state.json", this.settingsContainer).href;
-    this.notify = notify ?? createNotify({ fetch: session.fetch });
+    this.notify = notify ?? createNotify({ fetch: session.fetch, webId: session.webId });
   }
   private options(url: string) {
     return {

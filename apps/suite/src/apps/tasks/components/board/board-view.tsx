@@ -6,6 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   EditableText,
+  EmptyState,
   ErrorState,
   IconButton,
   Input,
@@ -17,6 +18,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
+import { useConnectionState } from "../../../../shell/sync/connection-state";
 import { type BoardGrouping, boardLanes, inLane, type Swimlane } from "../../lib/board/swimlanes";
 import { formatDue, isOverdue } from "../../lib/format/due";
 import { classifyError } from "../../lib/model/errors";
@@ -33,6 +35,7 @@ import { useTasks } from "../../state/tasks-context";
 import { AddTaskRow } from "../add-task-row";
 import { AssigneeAvatar } from "../assignee-avatar";
 import { useTaskDrag } from "../dnd/use-task-drag";
+import { useIssueAccess } from "../issues/use-issue-access";
 import { LabelChip } from "../label-chip";
 import { LabelFilterBar } from "../label-filter-bar";
 import { MoveMenuItems } from "../move-menu";
@@ -59,7 +62,9 @@ function BoardCard({
   const now = useNow();
   const pathname = usePathname();
   const params = useSearchParams();
-  const pending = !tasks.tasks[task.projectUrl]?.items.find((item) => item.url === task.url)?.etag;
+  const { readOnly } = useIssueAccess(task);
+  const pending =
+    readOnly || !tasks.tasks[task.projectUrl]?.items.find((item) => item.url === task.url)?.etag;
   const completing = useCompleting(task);
   const drag = useTaskDrag(
     task,
@@ -287,6 +292,7 @@ function AddColumn({ project }: { project: StoredProject }) {
  */
 export function BoardView({ projectUrl }: { projectUrl: string }) {
   const tasks = useTasks();
+  const offline = useConnectionState() !== "online";
   const { preferences, dispatch } = useTasksPreferences();
   const grouping = preferences.boardGrouping[encodeRef(projectUrl)] ?? "none";
   const project = tasks.projects.find((item) => item.url === projectUrl);
@@ -368,7 +374,9 @@ export function BoardView({ projectUrl }: { projectUrl: string }) {
             <LoadingSkeleton preset="grid" count={6} />
           ) : undefined,
         error:
-          load?.status === "error" ? (
+          offline && ((!project && tasks.status !== "loading") || load?.status === "error") ? (
+            <EmptyState title="Not available offline" body="Reconnect to open this project" />
+          ) : load?.status === "error" ? (
             <ProjectError
               error={load.error}
               retry={() => {

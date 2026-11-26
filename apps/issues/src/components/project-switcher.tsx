@@ -6,24 +6,22 @@ import { listProjects, createProject } from "@/lib/workspaces";
 import { Repository } from "@/lib/repository";
 import type { TrackerLocation } from "@/lib/profile";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
+  Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  Input,
+  Label,
+} from "@jeswr/suite-ui";
 import { Check, ChevronsUpDown, FolderKanban, Loader2, Plus } from "lucide-react";
 import { shortWebId } from "@/lib/people";
 
@@ -135,7 +133,7 @@ export function ProjectSwitcher({
       </DropdownMenu>
 
       <Dialog open={newOpen} onOpenChange={setNewOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md sm:w-md!">
           <DialogHeader>
             <DialogTitle>New project</DialogTitle>
             <DialogDescription>

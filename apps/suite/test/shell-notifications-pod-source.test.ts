@@ -28,7 +28,7 @@ beforeEach(() => {
   inbox.mockResolvedValue(inboxUrl);
   list.mockResolvedValue([]);
   fetch.mockResolvedValue(new Response());
-  vi.mocked(createInboxReader).mockReturnValue({ inbox, list });
+  vi.mocked(createInboxReader).mockReturnValue({ inbox, list, listPage: vi.fn() });
 });
 
 it.each([

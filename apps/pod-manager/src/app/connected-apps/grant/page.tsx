@@ -29,12 +29,16 @@ import { categoryById, CATEGORIES, type DataCategory } from "@/lib/categories";
 import {
   describeModes,
   fetchAppIdentity,
+  PartialGrantError,
+  roleForModes,
   type AccessMode,
   type AppIdentity,
 } from "@/lib/permissions";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Button,
+  Checkbox,
+  Skeleton,
+} from "@jeswr/suite-ui";
 
 const VALID_MODES: readonly AccessMode[] = ["read", "append", "write", "control"];
 
@@ -83,6 +87,22 @@ function GrantScreen() {
         icon={AppWindow}
         title="This access request is incomplete"
         description="The link that brought you here doesn't say which app is asking. Nothing has been shared. You can review your connected apps instead."
+        action={
+          <Button variant="outline" asChild>
+            <Link href="/connected-apps">Review connected apps</Link>
+          </Button>
+        }
+      />
+    );
+  }
+  if (!roleForModes(modes)) {
+    // Only role-shaped requests (see / change / manage) can be granted; a
+    // partial set such as add-only is refused rather than widened to a role.
+    return (
+      <EmptyState
+        icon={AppWindow}
+        title="This access request can't be granted here"
+        description={`The app asked to ${describeModes(modes)} your data, a combination Pod Manager can't grant safely. Nothing has been shared.`}
         action={
           <Button variant="outline" asChild>
             <Link href="/connected-apps">Review connected apps</Link>
@@ -158,23 +178,37 @@ function GrantScreen() {
     }
     const granted: string[] = [];
     const failed: string[] = [];
+    const partial: string[] = [];
     for (const { category, grantable } of offered) {
       if (!checked.has(category.id) || grantable === 0) continue;
       try {
         await permissionsBackend.grant(writeCtx, clientId as string, category.id, modes);
         granted.push(category.label.toLowerCase());
-      } catch {
-        failed.push(category.label.toLowerCase());
+      } catch (e) {
+        // A category spans several locations; some may have been written.
+        if (e instanceof PartialGrantError && e.applied.length > 0) {
+          partial.push(category.label.toLowerCase());
+        } else {
+          failed.push(category.label.toLowerCase());
+        }
       }
     }
     setBusy(false);
-    if (failed.length > 0) {
-      toast.error(`Couldn't grant access to ${failed.join(", ")}.`, {
+    if (failed.length > 0 || partial.length > 0) {
+      const done: string[] = [];
+      if (granted.length > 0) done.push(`Access to ${granted.join(", ")} was granted.`);
+      if (partial.length > 0)
+        done.push(
+          `Access to ${partial.join(", ")} was granted at some locations only; review it in Connected apps.`,
+        );
+      toast.error(`Couldn't grant access to ${[...failed, ...partial].join(", ")} fully.`, {
         description:
-          granted.length > 0
-            ? `Access to ${granted.join(", ")} was granted.`
+          done.length > 0
+            ? done.join(" ")
             : "Nothing was changed. Check your connection and try again.",
       });
+      // Some writes may have landed: show the live list, not the pre-grant one.
+      reload();
       return;
     }
     toast.success(`${appName} can now ${describeModes(modes)} your ${granted.join(", ")}.`);

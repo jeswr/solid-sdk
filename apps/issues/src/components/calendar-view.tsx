@@ -3,7 +3,9 @@
 import { useMemo, useState } from "react";
 import { buildMonth } from "@/lib/timeline";
 import type { IssueRecord } from "@/lib/use-issues";
-import { Button } from "@/components/ui/button";
+import {
+  Button,
+} from "@jeswr/suite-ui";
 import { TypeBadge } from "@/components/type-badge";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 

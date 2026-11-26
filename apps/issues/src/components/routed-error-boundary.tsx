@@ -4,7 +4,9 @@
 import { usePathname } from "next/navigation";
 import { RotateCcw, TriangleAlert } from "lucide-react";
 import { ErrorBoundary } from "@jeswr/app-shell";
-import { Button } from "@/components/ui/button";
+import {
+  Button,
+} from "@jeswr/suite-ui";
 
 /**
  * Wraps the routed page content in the suite-shared <ErrorBoundary> (cross-app

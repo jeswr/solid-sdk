@@ -579,7 +579,7 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
       return result;
     },
     async notify(event: Invitation, webIds: readonly string[]) {
-      const notify = createNotify({ fetch: options.fetch });
+      const notify = createNotify({ fetch: options.fetch, webId: owner });
       return Promise.all(
         webIds.map((webId) => notify(webId, { ...roomInvitation(event.url), actor: owner })),
       );

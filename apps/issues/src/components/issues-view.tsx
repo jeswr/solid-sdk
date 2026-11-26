@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useSolidSession } from "@/lib/session-context";
 import { useIssues, type IssueRecord, type ActivityRecord } from "@/lib/use-issues";
 import { Repository } from "@/lib/repository";
-import { setGroupAccess } from "@/lib/sharing";
+import { assignGroupRole } from "@/lib/sharing";
 import { type TrackerLocation } from "@/lib/profile";
 import { ConflictError } from "@/lib/errors";
 import { filterAndSort, facets, DEFAULT_QUERY, type IssueQuery, type SortKey } from "@/lib/filter";
@@ -40,21 +40,18 @@ import { IssueCard, shortWebId, type IssueCardActions } from "@/components/issue
 import { IssuesTable } from "@/components/issues-table";
 import { makeInlineEditController, type EditableField } from "@/lib/inline-edit";
 import type { IssueStatusRef } from "@/lib/workflow-editor";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Card, CardHeader } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  Checkbox,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
@@ -62,8 +59,14 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Skeleton,
+} from "@jeswr/suite-ui";
 import {
   AlertCircle,
   ArrowDownUp,
@@ -685,7 +688,7 @@ export function IssuesView() {
     onShare: () => setShareResource({ url: issue.url, label: "this issue" }),
     onShareTeam: () =>
       run(
-        () => setGroupAccess(issue.url, profile!.webId, group.iri!, { read: true, write: true, control: false }),
+        () => assignGroupRole(issue.url, profile!.webId, group.iri!, "editor"),
         "Shared with the team",
       ),
     onToggle: () => {
@@ -1638,6 +1641,9 @@ export function IssuesView() {
           onOpenChange={(o) => !o && setShareResource(undefined)}
           resourceUrl={shareResource.url}
           extraResourceUrls={shareResource.extraUrls}
+          memberUrls={
+            shareResource.url === repo.containerUrl ? issues.issues.map((i) => i.url) : []
+          }
           ownerWebId={profile.webId}
           title={`Share ${shareResource.label}`}
           description="Grant another person access by their WebID. They can open it from their own app."
@@ -1685,7 +1691,7 @@ export function IssuesView() {
       />
 
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(undefined)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md sm:w-md!">
           <DialogHeader>
             <DialogTitle>Delete this issue?</DialogTitle>
             <DialogDescription>
@@ -1714,7 +1720,7 @@ export function IssuesView() {
           issue that still has open blockers — the user may proceed (override) or
           cancel. Never a hard block. */}
       <Dialog open={!!pendingTransition} onOpenChange={(o) => !o && setPendingTransition(undefined)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md sm:w-md!">
           <DialogHeader>
             <DialogTitle>This issue is still blocked</DialogTitle>
             <DialogDescription>
@@ -1749,7 +1755,7 @@ export function IssuesView() {
 
       {/* WIP-limit move warning (#111 P1-1) — advisory, override allowed. */}
       <Dialog open={!!pendingWipMove} onOpenChange={(o) => !o && setPendingWipMove(undefined)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md sm:w-md!">
           <DialogHeader>
             <DialogTitle>Over the WIP limit</DialogTitle>
             <DialogDescription>
@@ -1775,7 +1781,7 @@ export function IssuesView() {
       </Dialog>
 
       <Dialog open={saveViewOpen} onOpenChange={setSaveViewOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md sm:w-md!">
           <DialogHeader>
             <DialogTitle>Save current view</DialogTitle>
             <DialogDescription>Remember the current search, filters, and sort under a name.</DialogDescription>
@@ -1803,7 +1809,7 @@ export function IssuesView() {
           A select field offers its options; other types take a typed input. An
           empty value clears the field on every selected issue. */}
       <Dialog open={!!bulkFieldTarget} onOpenChange={(o) => !o && setBulkFieldTarget(undefined)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md sm:w-md!">
           <DialogHeader>
             <DialogTitle>Set “{bulkFieldTarget?.label}”</DialogTitle>
             <DialogDescription>
@@ -1857,7 +1863,7 @@ export function IssuesView() {
       </Dialog>
 
       <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md sm:w-md!">
           <DialogHeader>
             <DialogTitle>Delete {selectedVisible.length} issues?</DialogTitle>
             <DialogDescription>

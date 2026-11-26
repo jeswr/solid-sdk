@@ -5,8 +5,11 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { RoutedErrorBoundary } from "@/components/routed-error-boundary";
+import { SuiteRedirect } from "@/components/suite-redirect";
 import { ThemeProvider } from "@/components/theme-provider";
-import { Toaster } from "@/components/ui/sonner";
+import {
+  Toaster,
+} from "@jeswr/suite-ui";
 import { SolidSessionProvider } from "@/lib/session-context";
 
 const geistSans = localFont({
@@ -67,19 +70,21 @@ export default function RootLayout({
         >
           Skip to content
         </a>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <SolidSessionProvider>
-            <AppShell>
-              <RoutedErrorBoundary>{children}</RoutedErrorBoundary>
-            </AppShell>
-          </SolidSessionProvider>
-          <Toaster richColors closeButton />
-        </ThemeProvider>
+        <SuiteRedirect>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <SolidSessionProvider>
+              <AppShell>
+                <RoutedErrorBoundary>{children}</RoutedErrorBoundary>
+              </AppShell>
+            </SolidSessionProvider>
+            <Toaster richColors closeButton />
+          </ThemeProvider>
+        </SuiteRedirect>
       </body>
     </html>
   );

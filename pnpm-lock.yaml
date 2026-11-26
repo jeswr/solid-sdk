@@ -581,6 +581,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../../packages/guarded-fetch
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../../packages/pod-access
       '@jeswr/pod-notifications':
         specifier: workspace:*
         version: link:../../packages/pod-notifications
@@ -1678,6 +1681,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/pod-access':
+        specifier: workspace:*
+        version: link:../../packages/pod-access
       '@jeswr/pod-auth':
         specifier: workspace:*
         version: link:../../packages/pod-auth

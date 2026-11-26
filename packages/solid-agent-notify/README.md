@@ -31,23 +31,39 @@ DNS-pinning path, which requires Node ≥ 22.19.0.)
 > `ignore-scripts=true`. Maintainers change source here and use the workspace's
 > mirror-publishing workflow; mirrors are never hand-edited. npm publishing remains deferred.
 
-## Caller-fetch JSON-LD client
+## Caller-fetch notification client
 
-`solid-agent-notify/client` exposes `createNotifyClient({ fetch, clock?, recipientProtocol?,
+`solid-agent-notify/client` exposes `createNotifyClient({ webId, fetch, clock?, recipientProtocol?,
 pinningFetch? })`. Its returned `notify(agentWebId, activity)` discovers exactly one `ldp:inbox`
 on the recipient's exact WebID subject using fetch-rdf, caches positive/negative discovery for
-ten minutes per transport/clock scope, and POSTs ActivityStreams JSON-LD through the caller's fetch.
-Activities carry `type: 'Announce'|'Offer'|'Accept'|'Reject'|'Create'`, `actor`, `object`, optional
-`target` and `summary`; the POSTed body also carries `published` (the send time from `clock`, default
+ten minutes per transport/clock scope, and POSTs a typed RDF/JS ActivityStreams dataset serialized by n3.Writer as Turtle (`text/turtle`) with the named `<#it>` activity subject through the caller's fetch.
+Activities carry `type: 'Announce'|'Offer'|'Accept'|'Reject'|'Create'|'Invite'|'Update'`, `actor`,
+and optional `object`, `target`, `summary` and `content`; the POSTed body also carries `published` (the send time from `clock`, default
 `Date.now`, as an ISO string) so readers can date and order items. Results are `{delivered, inbox, reason?}`; delivery failures never throw.
-Reasons are `no-inbox`, `forbidden` (401/403), `lws-no-ldn`, and `network` (other failures).
+On HTTP 415, the client retries once with `application/ld+json`, serialized from the same
+RDF dataset by the existing rdf-serialize dependency, retaining `@id: "#it"` so receivers can
+reference the activity relative to the stored notification URL; no remote contexts are emitted. A
+second 415 is returned with its status.
+The session `webId` binds the actor; mismatches return `invalid-actor`. Non-HTTPS optional
+object/target links are omitted. Reasons are `no-inbox`, `forbidden` (inbox 401/403),
+`lws-no-ldn`, `invalid-target`, `profile-unreadable`, and `network`. HTTP failures retain `status`.
 
 The client entry avoids the root API's Node transport/config imports. Its egress boundary is
 `src/security/clientFetch.ts`: public HTTPS, no credentials in URLs, no redirects, 256 KiB body
 caps, and eight-second deadlines. Node hostname destinations require an authenticated
 `pinningFetch` explicitly asserted to pin DNS; supplying only an ordinary caller fetch fails
 closed. Browsers use the shared guard's syntactic policy because sockets cannot be pinned there.
-The fetch implementation must honor manual redirects. Activity IRIs require HTTPS.
+`refuseRedirects` is the primary redirect control; the fetch implementation must honor manual
+redirects. A changed final response URL or `redirected: true` (even with an empty URL on a
+rebuilt Response) is also refused as a backstop. The redirected flag is checked before
+body capping rebuilds the response. `createNotifyFetch({ fetch, pinningFetch? })` exposes this same boundary
+for SDK notification management and linked-resource reads. Activity IRIs require HTTPS. All branches reject single-label hosts, empty labels and trailing
+dots. `devLoopback: true` explicitly admits HTTP(S) only on localhost, 127.0.0.1 and [::1], any
+port. `ownStorageRoots` from the trusted session permits other HTTPS ports only for scoped
+GET/HEAD. With a trusted `ownInboxUrl` strictly inside those roots, direct-child marker PUT
+and child DELETE also use the own-storage port. Foreign requests and POST retain port 443.
+`isLoopbackHostname(hostname)` exports the exact host check; apps must also require a
+development build before opting in. Discovery caches isolate these policies.
 
 Known LWS recipients can be short-circuited with `recipientProtocol(webId) => 'lws'`; LWS profile
 media types also return `lws-no-ldn`. The sender's protocol never determines the recipient's.
@@ -70,14 +86,27 @@ identities match (omitted clock uses Date.now). Recreate session transports on a
 Discovery failures return null; transient failures are retried. The cache holds at most 256 WebIDs.
 
 `list` returns `InboxNotification[]` (`url`, `type`, optional `actor`, `object`, `target`,
-`summary`, `content`, `published`), newest first, undated last, with URL tie ordering. It reads
-at most `maxItems` direct children in listing order (default 50, a non-negative safe integer),
+`summary`, `content`, `name`, `published`), newest first, undated last, with URL tie ordering. It reads
+at most `maxItems` direct children in listing order (default 50, a non-negative safe integer up to exported `MAX_INBOX_ITEMS` = 500),
 with at most six member requests active. Cross-origin, outside-container, nested, query,
-fragment and encoded-slash members are skipped. Unreadable/non-activity members are skipped;
-401/403/404 containers and unparseable listings return `[]`. Other container transport/HTTP
+fragment, credentialed and encoded-delimiter members are skipped. Unreadable members are skipped.
+A notification requires an ActivityStreams property (such as actor, object, summary, content,
+published or legacy name) or an ActivityStreams/LDN type; unrelated self-describing RDF is
+skipped. Unknown-type activities with recognizable properties retain a display fallback.
+404 containers and unparseable listings return `[]`. 401/403 and other container transport/HTTP
 failures reject. Cancellation rejects with `AbortError`, even for a custom abort reason, and
 starts no further requests. Reads use the same bounded `clientFetch` as delivery: HTTPS only,
-no URL credentials or redirects, including on members. This API does not mark read or delete.
+no URL credentials or redirects, including on members. Legacy names and valid untyped publication
+dates are retained. `listPage(inboxUrl, { signal? })` returns `{ notifications, members, truncated }`,
+with the full eligible direct-child list and an explicit fetch-limit flag. `isInboxChild(url, inbox)`
+exposes the same pure direct-child scope guard for SDK mutations. Idempotent unconditional read markers and
+dismissal live in `@jeswr/pod-access/notify` via `createInboxManager`.
+
+Listing byte overflow retains complete Turtle/N-Triples statements and returns `truncated: true`
+(incomplete JSON-LD yields an empty truncated page). Notification bodies retain the hard
+256 KiB cap. Read sidecars are excluded from fetch budgets. Blank-node activity subjects
+preserve RDF/JS identity; missing/unknown types and repeated malformed publication dates do
+not hide otherwise readable notifications.
 
 ## Node API
 
@@ -170,7 +199,7 @@ const store = buildTaskNotification(
   { actor: "https://me.example/card#me" },
 );
 // …and read a task back out of a parsed notification:
-const task = parseTaskFromNotification(activitySubject, dataset);
+const task = parseTaskFromNotification(activitySubject.value, dataset);
 //   → { task, state?, title?, description?, assignee?, creator?, created? } | undefined
 ```
 
@@ -267,3 +296,7 @@ npm run check:fetch # the single-egress-chokepoint guard
 ## License
 
 [MIT](./LICENSE)
+
+`includeUnknownActivities: true` preserves even empty readable RDF documents as unknown
+notifications. Issues uses this to retain its original untyped-inbox behavior; the display
+fallback is a label and does not assert an ActivityStreams Notification class.

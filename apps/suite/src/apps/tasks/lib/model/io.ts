@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
 import { isomorphic } from "rdf-isomorphic";
 import { ModelError } from "./errors";
@@ -14,21 +14,49 @@ export class RdfIO {
   constructor(private readonly fetch: typeof globalThis.fetch) {}
   async read(url: string): Promise<Resource> {
     requireHttp(url);
+    const response = await this.request(url, {
+      headers: {
+        Accept: "text/turtle, application/ld+json;q=0.9",
+        "Cache-Control": "no-cache",
+      },
+    });
+    // A validator belongs to the requested resource, never to a redirect target.
+    if (response.url && response.url !== url)
+      throw new TypeError("The RDF response URL must match the requested resource.");
+    let body: ReadableStream<Uint8Array> | undefined;
+    let transportFailed = false;
+    let transportError: unknown;
     try {
-      const result = await fetchRdf(url, {
-        fetch: this.fetch,
-        headers: { "Cache-Control": "no-cache" },
-      });
-      // A validator belongs to the requested resource, never to a redirect target.
-      // In particular, listed members must not escape their stateStore after GET.
-      if (result.url !== url)
-        throw new TypeError("The RDF response URL must match the requested resource.");
-      return { url: result.url, dataset: new Store([...result.dataset]), etag: result.etag };
+      const reader = response.body?.getReader();
+      if (reader)
+        body = new ReadableStream<Uint8Array>({
+          async pull(stream) {
+            try {
+              const chunk = await reader.read();
+              if (chunk.done) stream.close();
+              else stream.enqueue(chunk.value);
+            } catch (error) {
+              transportFailed = true;
+              transportError = error;
+              stream.error(error);
+            }
+          },
+          cancel: (reason) => reader.cancel(reason),
+        });
     } catch (error) {
-      if (error instanceof RdfFetchError)
-        throw new ModelError(error.status ?? 0, url, null, { cause: error });
-      throw error;
+      throw new ModelError(0, url, null, { cause: error });
     }
+    // Keep the parser's streaming limits, but distinguish source failures from malformed RDF.
+    const contentType = response.headers.get("content-type");
+    const etag = response.headers.get("etag");
+    let dataset: Store;
+    try {
+      dataset = await parseRdf(body ?? "", contentType, { baseIRI: url });
+    } catch (error) {
+      if (transportFailed) throw new ModelError(0, url, null, { cause: transportError });
+      throw new TypeError("Invalid RDF document.", { cause: error });
+    }
+    return { url, dataset: new Store([...dataset]), etag };
   }
   async optional(url: string): Promise<Resource | undefined> {
     try {
@@ -42,6 +70,8 @@ export class RdfIO {
     url: string,
     dataset: DatasetCore,
     precondition: { create: true } | { etag: string | null },
+    /** Set once the PUT itself succeeded, so callers can tell read-back failures apart. */
+    phase?: { committed: boolean },
   ): Promise<Resource> {
     const headers: Record<string, string> = { "Content-Type": "text/turtle" };
     if ("create" in precondition) headers["If-None-Match"] = "*";
@@ -51,6 +81,7 @@ export class RdfIO {
       headers,
       body: await serialize(dataset),
     });
+    if (phase) phase.committed = true;
     const resource = { url, dataset: new Store([...dataset]), etag: response.headers.get("ETag") };
     if (resource.etag) return resource;
     // A transformed PUT may omit validators. Never attach a read validator to

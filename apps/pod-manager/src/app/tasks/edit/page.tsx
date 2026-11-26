@@ -18,12 +18,14 @@ import { useStore, useItem } from "@/components/use-productivity";
 import { ErrorState } from "@/components/states";
 import { ResourceWriteError } from "@/lib/errors";
 import { fromDateTimeLocal, toDateTimeLocal } from "@/lib/format";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Button,
+  Checkbox,
+  Input,
+  Label,
+  Skeleton,
+  Textarea,
+} from "@jeswr/suite-ui";
 
 const PRIORITIES: { value: TaskPriority; label: string }[] = [
   { value: "none", label: "None" },

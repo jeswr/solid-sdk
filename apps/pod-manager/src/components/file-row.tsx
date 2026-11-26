@@ -41,16 +41,6 @@ import {
 import { ResourceDeleteError } from "@/lib/errors";
 import { chooseViewer, viewerKindLabel } from "@/lib/viewers";
 import { formatBytes, formatModified } from "@/lib/format";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -60,7 +50,15 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  Input,
+  Label,
+} from "@jeswr/suite-ui";
 
 /** Build the in-app link for a child: folders re-enter the browser, files open the viewer. */
 function hrefFor(item: PodItem): string {
@@ -341,7 +339,7 @@ function DeleteDialog({
           <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
           <AlertDialogAction
             disabled={busy}
-            className="bg-destructive text-white hover:bg-destructive/90"
+            variant="destructive"
             onClick={(e) => {
               e.preventDefault();
               void remove();

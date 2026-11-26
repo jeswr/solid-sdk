@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { IssueItem } from "../issues/model";
 import type { StoredTask } from "../model/store";
 import { planCompletion, type TaskDetails, taskDetails } from "../model/task";
 import { shortDayLabel } from "./days";
@@ -23,6 +25,8 @@ export function planComplete(
   now: Date,
   { forever = false }: { forever?: boolean } = {},
 ): CompletionPlan {
+  // Issues use a binary workflow on their loaded subject, including legacy #this IRIs.
+  if (stored.task instanceof IssueItem) return { kind: "close" };
   const data = taskDetails(stored.url, stored.dataset);
   if (!data) throw new TypeError("Expected a wf:Task.");
   const completedCopies = siblings.filter(

@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 import { toast } from "@jeswr/suite-ui";
 import { type CompletionPlan, planComplete, toastCopy } from "../lib/views/completion";
+import { type SkipPlan, skipToastCopy } from "../lib/views/skip";
 import type { TaskView } from "../lib/views/types";
 import { completionVisuals } from "./completion-visuals";
 import { DelayedDeletes, UNDO_WINDOW } from "./delayed-delete";
@@ -22,6 +23,7 @@ export function completeTask(
   }
   const existing = operations.get(view.url);
   if (existing) return existing;
+  if (skipping.get(tasks.cache)?.has(view.url)) return Promise.resolve(undefined);
   const run = async () => {
     const stored = tasks.cache
       .getSnapshot()
@@ -49,6 +51,39 @@ export function completeTask(
       });
       return result;
     }
+  };
+  const running = run().finally(() => operations.delete(view.url));
+  operations.set(view.url, running);
+  return running;
+}
+
+const skipping = new WeakMap<TasksCache, Map<string, Promise<SkipPlan | undefined>>>();
+export function skipTask(view: TaskView, tasks: TasksContextValue): Promise<SkipPlan | undefined> {
+  let operations = skipping.get(tasks.cache);
+  if (!operations) {
+    operations = new Map();
+    skipping.set(tasks.cache, operations);
+  }
+  const existing = operations.get(view.url);
+  if (existing) return existing;
+  if (completing.get(tasks.cache)?.has(view.url)) return Promise.resolve(undefined);
+  const run = async () => {
+    const stored = tasks.cache
+      .getSnapshot()
+      .tasks[view.projectUrl]?.items.find((task) => task.url === view.url);
+    if (!stored) return;
+    const plan = await tasks.cache.skipTask(stored);
+    if (plan)
+      toast.success(skipToastCopy(plan), {
+        duration: UNDO_WINDOW,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            void tasks.cache.undoSkip(stored, plan);
+          },
+        },
+      });
+    return plan;
   };
   const running = run().finally(() => operations.delete(view.url));
   operations.set(view.url, running);
