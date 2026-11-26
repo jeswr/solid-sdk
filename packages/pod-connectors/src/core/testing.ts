@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 
 /**
  * Test doubles for the integrations framework (imported by vitest only).
@@ -19,6 +20,7 @@ import { type FileImportAdapter, type ImportFile, runFileImport } from "./file-i
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createSourceAuth, type ImportReport, runImport } from "./import-runner.js";
 import { createFetchPodWriter } from "./pod-writer.js";
+import { adapterContainer } from "./pod-writer-policy.js";
 import { createStoragePodWriter } from "./storage-pod-writer.js";
 import { storageMemoryPod } from "./storage-testing.js";
 import type { FixtureRoute, IntegrationAdapter } from "./types.js";
@@ -297,6 +299,44 @@ export function memoryFile(name: string, content: string, type = "text/plain"): 
 }
 
 /**
+ * A native-File-like upload backed by bytes (or UTF-8 text): `stream()` yields
+ * `chunkSize`-byte pieces and `slice()` reopens ranges, as ZIP readers need. `text()`
+ * rejects, so tests prove the adapter streams instead of buffering the whole upload.
+ */
+export function streamedBytesFile(
+  name: string,
+  content: string | Uint8Array,
+  chunkSize = 7,
+  type = "",
+): ImportFile {
+  const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
+  const open = (start: number, end: number) => () => {
+    let offset = start;
+    return new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          if (offset >= end) controller.close();
+          else {
+            const next = Math.min(end, offset + chunkSize);
+            controller.enqueue(bytes.slice(offset, next));
+            offset = next;
+          }
+        },
+      },
+      { highWaterMark: 0 },
+    );
+  };
+  return {
+    name,
+    type,
+    size: bytes.byteLength,
+    text: () => Promise.reject(new Error("Whole-file buffering is forbidden in this test")),
+    stream: open(0, bytes.byteLength),
+    slice: (start, end) => ({ stream: open(start, end) }),
+  };
+}
+
+/**
  * The Tier-C contract-test entry: run one file import (uploaded text → memory
  * pod) and hand back both for assertions. Mirrors {@link demoImport}.
  */
@@ -319,6 +359,16 @@ export { fixtureFetch, getJson } from "./fixture-fetch.js";
 
 /** Fail-closed fixture recorder; hosts explicitly allowlist non-personal fields. */
 export { createFixtureRecorder, redactFixture } from "./fixture-recorder.js";
+export { type TwoWayConformanceFixture, twoWayConformanceSuite } from "./sync/conformance.js";
+/** Synthetic reference implementation and provider conformance entry point. */
+export {
+  createFakeTwoWayAdapter,
+  createMemorySyncPod,
+  type FakeTwoWayOptions,
+  fakeOneWayImport,
+  fakeSyncDocument,
+  fakeSyncName,
+} from "./sync/fake-platform.js";
 
 /** Strict storage-client memory backend; every shared adapter fixture import uses this. */
 export function createStorageMemoryPod(): Promise<MemoryPod> {
@@ -337,7 +387,7 @@ export function testPodWriter(pod: MemoryPod, adapterId: string) {
   return pod.storage
     ? createStoragePodWriter({
         storage: pod.storage,
-        container: new URL(`integrations/${adapterId}/`, TEST_POD_ROOT).href,
+        container: adapterContainer(adapterId, TEST_POD_ROOT),
         webId: TEST_WEBID,
         ...privacy,
         typeIndex: { profileDocumentUrl: TEST_PROFILE_DOC },

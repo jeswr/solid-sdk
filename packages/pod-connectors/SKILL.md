@@ -64,6 +64,20 @@ default to the strict storage-client memory backend, retaining synchronous snaps
 assertions. `createMemoryPod` remains available for HTTP fault injection; `createStorageMemoryPod` exposes the real
 memory StorageClient. Run the shared writer contract against fetch, Solid HTTP and strict memory backends. Use
 ./testing for consumers; run lint, build, typecheck, test and workspace gates.
+Read [Google Health details](references/google-health.md) before changing `src/google-health`.
+
+CON-13 takes every jeswr namespace base from `@jeswr/suite-vocab` (`NS`); assemble local
+term names in the existing vocab modules. Keep standard namespace spellings exact,
+especially mail's `http://schema.org/`. Confine `canonicalizeJeswrDataset` to import-session
+reads (including custom PodWriter ports) and run provenance in the connector's own container.
+Build its result in one pass, adding each unchanged or transformed quad without deleting
+from a populated copy. Resolve suite aliases through `canonicalize()` before typed access
+and reconciliation; restrict changes to vocabulary predicates and class values, preserving
+resource identifiers, literal contents and standard IRIs. Rewrites of connector-owned
+documents emit canonical jeswr terms. Keep `freshRdf` datasets raw: shared WebID profiles
+and Type Index documents must preserve other apps' stored terms. Type Index comparisons
+accept legacy classes without changing existing registrations; only new registrations use
+canonical class IRIs. Keep the source-literal guard and legacy Pod regressions green.
 
 The runner owns one shared-core `RunBudget` per import (20,000 requests, 2,000,000 records, 512 MiB JSON/inspected
 response bytes and `maxDurationMs: 1_800_000` by default). It wraps `ctx.api` so every request is charged and every
@@ -86,6 +100,71 @@ reject even if a custom transport ignores its signal. Cap Spotify Retry-After wa
 per-response/per-file caps. `getJson`/`postJson` only map HTTP errors and call the shared capped reader. Never let
 a cancellation failure replace a status, byte-limit or deadline error. Drive uses these same JSON/binary body
 helpers.
+CON-A3.1 adds `./sync`: read the README's two-way section and `src/core/sync/types.ts` before
+extending it. Existing adapters remain import-only. Sync hosts must supply the owner-only
+`verifyPrivateDestination`/`confirmPrivateWrite` checks (sync connectors are private); route
+every new direct Pod mutation in `sync/` through the runner's session-guarded `pod` port
+(`session.raw`), never the raw writer, and keep `PrivateDestinationError` run-level.
+TwoWayAdapter inbound mapping resolves
+the pod URL with `ctx.sync.resolve(remoteId, prefix, idempotencyKey?)` before constructing
+subjects; slugs are framework-owned (`<prefix>/<32 hex of sha-256(id)>.ttl`), never built
+from raw ids. Then use `ctx.sync.upsert`/`delete`/`fail` with explicit remote versions,
+tombstones and any provider-echoed create key. One mapped item per document; never silently
+treat a collection document as an item. `fieldsForHash` is the single mapped-predicate
+declaration: list every field inbound updates must change there, because unmapped incoming
+facts only fill gaps (never overwrite). Hashing and merges cover only the item's own subjects
+(document URL plus its fragments, or plus exactly `itemSubjects(url)` when declared) and the
+blank closure their mapped quads reach; quads about other subjects are never hashed or
+removed. A merge that removes pod quads absent from the incoming document trashes the
+previous pod version first.
+Keep the single shared import-session claim until outbound completes. Write-back and delete
+propagation default off; explicit write grants gate execution. Remote methods use their
+injected `options.api`, enforce conditional versions, and deduplicate durable create keys
+(or declare `deduplicatesCreateKeys: false`, which defers unconfirmed creates). Three
+provider rejections of a create (4xx other than 401/403/408/429) retire it as a manual
+conflict. Preserve
+original create payload snapshots through retries and later local edits. Never absorb a later
+pod ETag into the baseline of an earlier outbound write. Owner protection precedes sensitive
+body access; read sync resources through the session's `readResource(slug, false)` seam to
+preserve ETags and normalize legacy aliases without retaining a run-long resource cache.
+Isolate item failures with the fixed `SyncSkipReason` classes (never provider text); only
+abort, budget, rate-limit, 401/403 and `LinkManifestLostError` end a run. Failed and deferred
+inbound items stay in the owner-only manifest and in `pendingRemoteIds()`, which also lists
+manual conflicts; an inbound failure without a valid remote id holds the cursor
+(`cursorHeld`).
+The first two-way run (no adoption marker) does a full inbound without the cursor; outbound
+never creates an unlinked resource carrying this connector's import provenance. A keyless
+unlinked inbound item is deferred only when its hash equals an open create that will still be
+re-sent; adoption by echoed key requires the intent's hash (else a manual conflict). An open
+create whose pod resource is gone and whose lookup misses is retired as a manual conflict.
+Duplicate identities become manual conflict-only records; tombstone activity becomes a manual
+conflict. A vanished link plus a new resource with the same location-independent hash, or one
+whose subjects or PROV links name the old URL, is a move (reference pairs rebase verbatim
+subjects and push an update). A run with an `unlinked-import` or an ambiguous move candidate
+propagates no pod deletes: links are held as pending deletes and a second held run records a
+manual conflict. A missing manifest beside existing shards is `LinkManifestLostError`, never a
+new salt. Unsupported ACL discovery, absent
+strong validators (per item), incomplete listings and malformed links fail closed;
+sub-containers and non-RDF members are skipped. Link shards: 64 HMAC-salted base shards of 128
+records with overflow documents, a 50,000-link hard cap that skips (never throws), and
+tombstone GC after 30 days. Sync terms come from `CONNECTOR_SYNC` in `@jeswr/suite-vocab`.
+Canonical hashing is exact and complexity-capped, including blank nodes. Keep loser snapshots
+and 30-day trash markers, resume interrupted moves, and never infer a remote deletion from a
+missing delta item. Notifications are finite hints; full scans remain authoritative. Keep
+health details in owner-only links and the manifest, and counts in report/state.sync. Export
+reference fixtures and the async `twoWayConformanceSuite(makeAdapter)` only through
+./testing, not the production catalog; run it over full-listing and delta-only adapters.
+
+Keep item accounting bounded by written documents: retain document counters, never run-long
+subject identifiers. Replacement resets a document's count to its adapter-supplied local subjects
+(excluding the document URL); merging adds only subjects whose previous stored provenance
+does not name the current run. Removal drops the counter. Sector-map-added subjects stay
+uncounted. Test the shared session through runFileImport after Takeout manifest release.
+Keep run provenance a bounded summary: `MAX_RUN_SOURCES = 1,000` distinct source IRIs,
+always adding the connector's own source first. The session's `maxRunSources` option may
+lower that limit (minimum 1). Stop retaining origins once full while preserving complete
+`prov:wasDerivedFrom` on each written document and item. Cover distinct item source URLs
+across entries after reconciliation manifests are released, plus the persisted run summary.
 
 Gmail continuing pages and full-sync budget failures (including duration) flush completed memberships then save a
 private account-local journal with page token, completed IDs, initial history id and seen-message manifest. Skip
@@ -355,145 +434,65 @@ values (including missing/invalid location or duration) and all other row shapes
 incomplete. Contacts use an independent run-level row counter, including duplicate cards, across retained and
 capped paths; manifest release never resets the counter. Excess rows skip before any Pod writes.
 
-## WHOOP hybrid
+Read [device connectors and vault details](references/devices-and-vault.md) before changing WHOOP, Garmin, VeSync,
+`activity-files` or `./vault`. Read [email markup details](references/mail-markup.md) before changing `./mail` markup.
 
-`./adapters/whoop` exposes the Tier A OAuth adapter/factory and streaming file adapter under the single `whoop`
-catalogue id. Default token exchange uses a proxy; Node hosts may inject a secret for direct exchange. Do not
-assume public secretless exchange. Read `src/whoop/{adapter,file-adapter,model,vocab}.ts`, the README's WHOOP
-section and `../solid-health/SKILL.md` before changing it. Reuse the Takeout ZIP reader; keep CSV normalized-header
-collision checks, explicit-offset timestamps, native-id/CSV-start reconciliation and API-over-file precedence.
-Source rows and normalized records are capped independently, including duplicate and malformed rows. Stage all
-source parsing before writes. One RunBudget covers every API page. Item/request exhaustion commits a bounded batch
-and returns a warning plus an opaque collection/page/offset cursor; only a completed traversal returns the ISO
-start cursor, which replays seven days rather than an updated-since feed. A resumed page shorter than its saved
-offset replays from row 0; a 400/404 on the resumed token restarts that collection once per run with no token
-(never on fresh tokens). An empty completed traversal returns `COMPLETE_CURSOR`, never no cursor; file cursors and
-`COMPLETE_CURSOR` start a fresh API traversal. Batch cursors keep `base` (the starting high-water cursor) for
-Suite's partial-scope pinning via `pendingWhoopBatch`. No `offline` scope until refresh exists. Hosts print
-warnings: keep them fixed strings. File batches use content-bound host-owned cursors and select newest-first with a
-bounded heap; preserve the byte caps while scanning sort keys and the row/record caps while parsing selected rows,
-including duplicates and malformed rows. A finished traversal returns the distinct `before: ""` completion cursor;
-the next run of that export starts afresh (never return no cursor, or the session keeps an older partial one).
-Scan-time malformed records are counted only in a traversal's first batch. The CLI keeps file and API cursors in
-separate state slots (`fileCursor`/`cursor`), classifying a legacy shared cursor by shape. Physiological rows
-remain atomic. Never invent a recovery time when its cycle is missing.
-
-Workouts live in monthly `health/workouts/YYYY-MM.ttl` documents with stable id fragments; their container is
-registered for ExerciseAction and (via `additionalClasses`) Observation. Shards must stay within solid-health's
-exported `MAX_OBSERVATION_QUADS`/`MAX_OBSERVATIONS`, including session provenance. Generated wrappers validate
-their whole store: never `mark()` one on a populated shard; build in a small store and merge, like
-`buildObservation`. Health observations are built only through `@jeswr/solid-health`'s `buildObservation`;
-`METRICS` holds the WHOOP mapping policy and `vocab.ts` only the schema:Dataset record marker. Never add a health
-accessor class. A unit outside the profile's QUDT inventory carries UCUM only; a missing subtype or datatype is a
-profile gap to report, not to hand-write around. HRV is RMSSD, not SDNN. Sleep stage totals are generic
-observations so total sleep is counted once. Workouts retain ExerciseAction. Recovery score, strain and sleep
-performance have no sector term: omit them and surface them through ImportOutcome/ImportReport.unsupported (now
-supported for API adapters too). Keep journal entries unsupported. See the README for current Health UI, container
-discovery and cross-month timestamp-correction limitations. Tests are synthetic only; never call WHOOP or add
-dependencies. Preserve byte/row/record/quad caps and cancellation.
-
-Garmin's `garmin` file adapter accepts full account ZIPs. Read `src/garmin/archive.ts`, `health-vocab.ts` and
-[README's Garmin contract and maintenance constraints](./README.md#garmin-account-export) before changing it;
-preserve its shared Takeout/file-json readers, limits, staging, ETag merges and existing sector vocabulary.
-`createGarminFileAdapter` may only lower `GARMIN_ARCHIVE_LIMITS`. Keep the README candid about connector
-chart-discovery gaps.
-
-<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-VeSync is a CLI-only Tier B account adapter (`src/vesync/`), not OAuth. Read the
-README's "Connect your Levoit purifiers" section and `src/node/vesync-auth.ts` before
-changing its protocol. The Node-only credential reader accepts only VESYNC_EMAIL /
-VESYNC_PASSWORD, consumed once, deleted
-from the process environment, password immediately MD5-hashed. Hidden prompts never
-echo. No credentials, hashes, account IDs or tokens enter reports, errors, pod RDF or
-state. Keep Node auth out of browser entry points and keep all source exceptions
-sanitized. Only fixed HTTPS login/list/status routes are allowed; never forward
-redirects, arbitrary methods, source URLs or caller headers with credentials.
-
-Read status keys per pyvesync family (Core snake_case with `level`, Vital camelCase, LV-PUR131S top-level and
-uuid-addressed; no Core 200S air readings) and treat only an explicit login rejection as an authentication failure;
-transport faults stay retryable. Use solid-environment builders and path helpers. Derive sensor slugs as an
-HMAC-SHA-256 of cid/uuid keyed by the connector's `environment/` container URL (stable per pod, unlinkable across
-pods); never persist raw identifiers in IRIs. Preserve per-sensor UTC day appends, minute identities, room/purifier
-feature distinctions, bounded numeric readings, and default model limits including malformed roots. VeSync
-documents set `requirePrecondition`: the shared session must reject existing resources without strong ETags. Do not
-advance checkpoints after source/Pod failures. Log and count capped-day skips. The adapter opts into a 32-activity
-provenance history cap; other adapters retain their existing history semantics. Watch mode rereads protected state
-each cycle, serializes imports, backs off with jitter, and classifies failures by cause with
-`classifyVeSyncFailure` (`src/node/vesync-failure.ts`): transient source/network/Pod 5xx-408-412-429 and transient
-`StateStoreError`s retry; VeSync login rejection, Pod 401/403 and other 4xx, `PreconditionUnsupportedError` (weak
-ETags), structural state problems and config stop. Hidden prompts enter raw mode before the label and always pause
-stdin afterwards. Any unexpected non-zero data code clears the VeSync session so the next cycle logs in again. Keep
-catalogue `cliOnly` / `cli-only` visible without approval flags and show terminal instructions instead of an OAuth
-flow. Test synthetic shapes only, with no provider traffic, including password safety, re-login bounds, source
-budgets and aborts.
-
-CON-A6 adds Tier C `activity-files` (`./adapters/activity-files`): content-detected GPX/TCX/FIT and mixed ZIPs
-through the existing Takeout reader. Read `src/activity-files/{file-adapter,model,xml,fit,mapping,vocab}.ts` before
-changing it. Keep the independent synthetic FIT encoder in `test/activity-fixtures.ts` test-only. Never add
-provider calls or dependencies. XML uses bounded `mini-xml.xmlEvents`, not the legacy whole-string block extractor;
-reject DTDs and structural errors. FIT checks header/file CRC and every definition/data boundary, handles
-compressed 32-second rollover and skips developer fields by declared size. Unknown fields/messages must preserve
-alignment. Decode every declared field in order for normal and compressed headers alike; never require field 253. A
-compressed header's offset (against the previous timestamp) wins over any decoded field 253, which is not a base.
-File bytes, archive inflation, activities, parser messages, records and total points all have hard caps; factory
-options can only lower them. Return fixed diagnostic codes through FileImportOutcome/ImportReport `warnings`. XML
-scanning charges one message per 512 characters; at most 200,000 track samples stay retained per file. finish()
-drops durations outside 1 s to 7 days with the end time and marks out-of-range (1970 to 2100) start/end invalid;
-durations use at most 3 fixed decimals. TCX elapsed time is the trackpoint span, else lap start times; never the
-timer sum. One activity's mapping failure is a skip; Pod port failures and cancellation fail the run. Store each
-file's original lazily (memoised once per file) after an activity's skip and cap checks, so nothing is stored
-unlinked. Origin IRIs are hash-only; the file name is only the original's `schema:name` (256 characters) plus hash
-`schema:identifier`, on the origin IRI when the bytes exceed the binary cap. TCX trackpoint times may be unordered:
-start is the earliest point (or `<Id>` if earlier) and end is exactly the latest point. Keep tracks at most 2,000
-samples, preserve the capped original, and never match a truncated activity against a complete one. Use elapsed
-duration and normalized sport for the two-second cross-export dedup check; retain the original anchor to avoid
-drift. Dedup lookup is five bounded second buckets, at most 32 entries each, with confined activity targets. Source
-histories also cap at 32. Files are add/update imports with no deletion snapshot or cursor. Conditional writes,
-cancellation, run provenance and failed-state retention remain shared runner responsibilities.
-
-CON-A1 exposes `./vault`: ConnectorTokenVault, key helpers, MemoryVaultStore and IndexedDbVaultStore. Keep it
-browser-safe and independent of mcp-oauth. Only `./node` exports FileVaultStore. Read the README's encrypted
-refresh vault contract before changes. Use WebCrypto AES-256-GCM, fresh 96-bit IVs, canonical `[1, connectorId,
-account]` AAD and strict version/base64url parsing. Never expose underlying errors/causes, tokens or key bytes.
-Preserve record, metadata, depth, node, ciphertext and store/list caps. Validate before stringifying untrusted
-input; project plain data without invoking custom getters/toJSON. Unknown record fields and credential-shaped
-metadata are refused. Files require private owner-held directories/files, no symlinks/hardlinks, bounded descriptor
-reads, exclusive temp + fsync + rename + directory fsync. IndexedDB elects/stores its non-extractable key
-transactionally alongside ciphertexts; wait for commit. That key is usable by a copied profile or same-origin
-script (non-extractable only blocks export); getOrCreateKey({ passphrase }) stores only a PBKDF2-SHA-256 (600,000
-iterations, 16-byte salt) AES-GCM-wrapped key, never mixes modes, and fails generically on a wrong passphrase. The
-vault constructor refuses extractable keys. Tests use a minimal structured-cloning IDB fake without dependencies.
-
-OAuth exchange/refresh accepts `{ vault, account, signal? }`; persist rotation before returning access tokens.
-`getOAuthToken` restores on later runs; `createOAuthSourceAuth` shares refresh and retries a GET once. Token
-requests never use the caller's signal: run them on a private controller with TOKEN_REQUEST_TIMEOUT_MS (30 s); a
-pre-send abort prevents sending, a later one is honored with a generic AbortError only after the response is
-validated and persisted (the CLI exempts token/revocation URLs from its signal merge). A code exchange without a
-refresh token deletes the account's record. Disconnect best-effort revokes stored and session refresh tokens at an
-RFC 7009 `revocationEndpoint` (Google declares one; others are manual), ignoring failures, before deleting locally.
-Accept string scope or string-array scope normalized with join(" "); drop other scope types. Token
-endpoints/proxies require HTTPS except HTTP on localhost, 127.0.0.1 or [::1] for development. Request JSON
-(including GitHub); form token responses are unsupported. Spotify's legacy factory refuses a vault; vault hosts use
-createOAuthSourceAuth.
-
-Hold optional VaultStore/ConnectorTokenVault.withLock across reread + refresh + put/delete. Use the newest saved
-credential; on invalid_grant compare before deletion and retry once with a newer credential, never loop. Current
-invalid grants raise typed reauthorise; other failures retain records. Unreadable refresh records raise
-UnreadableCredentialError (reason reauthorise), but fresh code exchange may replace them without decrypting the
-previous ciphertext; the interactive CLI falls through to loopback login, interactiveLogin false exits 3. With a
-vault a missing record means disconnected: an in-memory refresh token raises reauthorise; only vault-less sessions
-fall back to it. Disconnect waits for its in-flight refresh then deletes under the account lock. Memory uses a
-bounded per-key mutex; IndexedDB uses navigator.locks or a shared in-process fallback. Clear the IDB handle on
-versionchange. Custom stores without locks require host serialization.
-
-File stores canonicalize ancestor aliases once at construction, check the real path and refuse
-final-directory/record symlinks. Windows construction throws the POSIX requirement. get/put refuse unsafe records;
-list skips them; delete unlinks any current-uid regular record file regardless of mode, never a symlink or
-foreign-owned file. Per-record O_EXCL 0600 locks break after 60 seconds by mtime, renew while active, wait at most
-65 seconds and always release in finally. Stale takeover renames to `<lock>.<uuid>.stale`, unlinks only on a
-dev+ino match, otherwise restores via link() (EEXIST: leave it to age out) and retries. Unlink a new lock failing
-its safety check (dev+ino verified). Release failure never masks the callback outcome. Clean only own-pattern
-regular current-uid temps and claimed `.stale` locks older than ten minutes at construction and before list/put
-budgets; exclude them from the name budget and retain a separate bounded scan. CLI --vault without
-CONNECTOR_VAULT_KEY exits 2 naming the variable; a key alone warns on stderr and continues in memory.
-connectors[id].account defaults to default. Use fixtures for hostile/error paths and assert secret-free errors.
+`ctx.releaseRead(slug)` releases a read-only session dataset and its ETag, with no Pod I/O;
+the next write to that slug must read again. Keep it optional for custom non-retaining ports.
+Mail markup re-scan releases listing/message reads immediately, and the markup writer releases
+skipped stale updates and protected verified records. Never release a read whose precondition
+is still needed for a subsequent write; this port prevents mailbox-sized dataset retention.
+CON-A2 adds root-exported ConnectorScheduler and owner-only JSON settings/state ports.
+Read the README's Scheduled connectors contract before changing them. Those stores are
+private writes: pass `privateDestination` (the PodWriter's verify/confirm ports) to
+`createConnectorStateStore` and `createConnectionStore`, or every mutation refuses with
+`PrivateDestinationError` before any request; never add a bypass. The CLI and scheduler
+share one checkpoint file (`connectorStateLocation`) and one `connectorState` parser, and
+each must keep the other's validated fields (`fileCursor`, `sync` / `accounts`, `claims`,
+`health`). Preserve the
+whole-container run claim even for different accounts, the continuous worker pool
+(single-flight, cap, drain on stop), bounded connection/concurrency/JSON/retry limits,
+transport cancellation, allowlisted health codes and legacy checkpoint projection.
+Invalid settings rows are skipped one by one as `invalid-config`; one connection's
+failure never rejects a tick. `health.counts` describe the latest attempt's document
+changes; old `counts` remain the last successful import's document/item counters. Keep
+account cursors separate (legacy cursor only for a sole connection; never rewrite root
+checkpoint fields), merge fresh snapshots after 412, distrust timestamps more than five
+minutes ahead (follow a trusted attempt's back-off; with none, a future-dated stored time
+makes the connection due now; persist no future lastSync/connectedAt) and never roll
+back a newer successful cursor. Reauth (or two consecutive 401s; 403 stays a backed-off
+`forbidden` failure and never invalidates) is latched durably, recording the row's
+`enabledAt` in `latchedEnabledAt`, until that value changes (string compare) or an
+explicit setEnabled, which takes priority over pool claims for its container. The
+latch's settings disable is conditional on the row's enabledAt being unchanged;
+`saveConnection`/`update` resolve `"superseded"` when it was skipped. The in-memory row
+is disabled only while it still carries the run-start enabledAt and the save was not
+superseded; otherwise the current row stays untouched. `TokenSource.invalidate` runs
+only for the grant in use for the rejected run, after an applied (or row-removed) save
+with no superseding enabledAt; vaults discard only a token matching that grant.
+Cancellation starts no further state/config I/O. Before the token fetch a run writes
+an expiring claim (`state.claims[account]`, random holder, `expiresAt` = run limit +
+2 min finish + 5 min skew) conditionally; a 412 or another holder's unexpired claim skips
+quietly (no health), defers the connection until expiry, and only an expired (or
+implausibly distant) claim is taken over; the outcome's persist releases it. Each run
+is bounded by `runTimeoutMs` (default 15 min, 1 s to 2 h): its signal reaches token
+source, Pod writer, runner and transports, waits are cut only at the limit (shutdown
+still drains), and a timeout is a backed-off `timeout` failure; finishing I/O has its
+own 2 min bound. `NoVaultError` skips the run (claim released, no health/latch/settings,
+in-memory back-off). Validate a returned checkpoint before success; an unsavable one
+falls back to a health-only failed attempt so back-off is durable. Ok/partial runs are
+due at min(nextRunAt, lastRunEndedAt + interval). Owner-JSON ACL targets must be resource
+ACLs beside the document, never containers or container `.acl`s. Owner-JSON stores protect their ACL
+once per instance and on create, poll with If-None-Match, and `peek` is read-only.
+The token vault is injected via TokenSource, with ReauthoriseError defined in core/types.ts.
+Tests must cover fake-clock scheduling, source/Pod shutdown and conditional merge races.
+The Letterboxd, Pocket, StoryGraph and Telegram file adapters (see the README section) take
+every field bound from `core/export-fields.ts` and Goodreads/StoryGraph book identity from
+`core/books.ts`; do not fork either. Letterboxd reuses the Takeout ZIP reader with an entry
+allowlist and its own entry/inflation caps; keep it from inflating unselected entries.
+Pocket writes the `@jeswr/solid-bookmark` wire format (`http://schema.org/url`), never
+`PodThing.sourceUrl`, so provenance stays on the export. Telegram reads JSON keys as own
+properties and records attachment names only; never open or resolve an export path. Keep
+one document per independently exported unit (Letterboxd `media/letterboxd/<kind>.ttl`,
+Telegram `social/telegram/<chat key>.ttl`, StoryGraph and Open Library one each): a
+partial export must replace only what it covers, never earlier imports.

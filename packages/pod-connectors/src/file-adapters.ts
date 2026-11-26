@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The **file-import** adapter registry — the export-file analogue of the
- * OAuth `ADAPTERS` list in `registry.ts`. Each of the 11 Tier-C catalog entries
+ * OAuth `ADAPTERS` list in `registry.ts`. Each of the 15 Tier-C catalog entries
  * has a parser that turns the platform's official data export into pod RDF.
  *
  * OAuth entries may ALSO appear here (Spotify, Garmin and WHOOP): the file
@@ -18,14 +19,18 @@ import type { FileImportAdapter } from "./core/file-import.js";
 import { garminFileAdapter } from "./garmin/file-adapter.js";
 import { goodreadsFileAdapter } from "./goodreads/file-adapter.js";
 import { googleTakeoutFileAdapter } from "./google-takeout/file-adapter.js";
+import { letterboxdFileAdapter } from "./letterboxd/file-adapter.js";
 import { netflixFileAdapter } from "./netflix/file-adapter.js";
+import { pocketFileAdapter } from "./pocket/file-adapter.js";
 import { spotifyFileAdapter } from "./spotify/file-adapter.js";
 import { steamFileAdapter } from "./steam/file-adapter.js";
+import { storygraphFileAdapter } from "./storygraph/file-adapter.js";
+import { telegramFileAdapter } from "./telegram/file-adapter.js";
 import { uberFileAdapter } from "./uber/file-adapter.js";
 import { whatsappFileAdapter } from "./whatsapp/file-adapter.js";
 import { whoopFileAdapter } from "./whoop/file-adapter.js";
 
-/** The 11 Tier-C file-import adapters plus Spotify, Garmin and WHOOP hybrids. */
+/** The 15 Tier-C file-import adapters plus Spotify, Garmin and WHOOP hybrids. */
 export const FILE_ADAPTERS: readonly FileImportAdapter[] = [
   spotifyFileAdapter,
   activityFilesAdapter,
@@ -39,6 +44,10 @@ export const FILE_ADAPTERS: readonly FileImportAdapter[] = [
   chatgptFileAdapter,
   bankStatementsFileAdapter,
   googleTakeoutFileAdapter,
+  letterboxdFileAdapter,
+  pocketFileAdapter,
+  storygraphFileAdapter,
+  telegramFileAdapter,
   garminFileAdapter,
   whoopFileAdapter,
 ];

@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import { connectorStorageId } from "./container.js";
 import { IntegrationSyncError, PrivateDestinationError } from "./errors.js";
 import type { MutationGuard, PodWriter } from "./types.js";
 
@@ -20,6 +21,7 @@ export const CONNECTOR_PRIVACY = {
   "apple-health": "private",
   fitbit: "private",
   garmin: "private",
+  "google-health": "private",
   strava: "private",
   whoop: "private",
   // Finance and purchases.
@@ -33,6 +35,7 @@ export const CONNECTOR_PRIVACY = {
   "google-contacts": "private",
   "google-drive": "private",
   "google-takeout": "private",
+  telegram: "private",
   whatsapp: "private",
   // An import of a person's own account data is private unless the data is unquestionably
   // public by nature. GitHub was the only candidate, but its adapter requests the `repo` scope
@@ -44,15 +47,18 @@ export const CONNECTOR_PRIVACY = {
   github: "private",
   goodreads: "private",
   "google-photos": "private",
+  letterboxd: "private",
   instagram: "private",
   linkedin: "private",
   netflix: "private",
   notion: "private",
   pinterest: "private",
+  pocket: "private",
   reddit: "private",
   slack: "private",
   spotify: "private",
   steam: "private",
+  storygraph: "private",
   tiktok: "private",
   twitch: "private",
   vesync: "private",
@@ -174,7 +180,10 @@ export function containerResolver(container: string, adapterId: string) {
 export function adapterContainer(adapterId: string, podRoot: string): string {
   if (!/^[a-z0-9-]+$/.test(adapterId))
     throw new IntegrationSyncError(adapterId, "Invalid adapter id.");
-  return assertWithinPodScope(podRoot, new URL(`integrations/${adapterId}/`, podRoot).href);
+  return assertWithinPodScope(
+    podRoot,
+    new URL(`integrations/${connectorStorageId(adapterId)}/`, podRoot).href,
+  );
 }
 
 const RDF_MEDIA_TYPES = new Set([
