@@ -133,7 +133,7 @@ export function ActiveGrantRow({
             : ""
         }${
           outcome.stillHeld.length
-            ? ` ${name} still has their own access to ${placesText(outcome.stillHeld.length)} inside: ${outcome.stillHeld.map((url) => relativePath(url, storage)).join(", ")}. Change it in Permissions.`
+            ? ` ${name} still has their own access to ${placesText(outcome.stillHeld.length)} inside: ${placeList(outcome.stillHeld, storage)}. Change it in Permissions.`
             : ""
         }`,
       );

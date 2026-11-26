@@ -37,12 +37,11 @@ import type {
   SetGrantsResult,
 } from "./types.js";
 
-export interface Row {
+interface Row {
   agent: AgentRef;
   modes: Set<Mode>;
 }
-/** Internal: each principal's merged modes from `documents`, for the resource or its members. */
-export function rows(
+function rows(
   snapshot: Snapshot,
   documents = snapshot.documents,
   members = false,

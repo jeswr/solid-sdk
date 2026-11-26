@@ -3,10 +3,10 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import { parseContainerMembers } from "@jeswr/ldp-container";
 import { DataFactory, Store } from "n3";
 import { serialize } from "../rdf.js";
-import { rows, validators } from "./client.js";
+import { validators } from "./client.js";
 import { roleError } from "./errors.js";
 import { type Document, load, request, requireOk, type Snapshot, scoped } from "./http.js";
-import { agentKey, readPolicy, removeCopiedPrincipal } from "./rdf.js";
+import { agentKey, readPolicy, removeCopiedPrincipal, subjectAgent } from "./rdf.js";
 import type { AgentRef, GrantMutationOptions } from "./types.js";
 
 const LDP_CONTAINS = "http://www.w3.org/ns/ldp#contains";
@@ -40,9 +40,34 @@ export interface RemoveCopiedGrantsResult {
   incomplete: boolean;
 }
 
-/** Whether a document's rules give `key` any mode on the resource (`members`: on its members). */
-function holds(snapshot: Snapshot, document: Document, key: string, members: boolean) {
-  return (rows(snapshot, [document], members).get(key)?.modes.size ?? 0) > 0;
+/**
+ * Whether `documents` give the agent (`key`) any mode on the resource (`members`: on its members).
+ * Only rules naming the agent are read, so another principal's conditional rule (`acl:origin`,
+ * say) never makes the answer unknown; a conditional rule naming the agent is refused, because
+ * whether it still grants them cannot be told.
+ */
+function holds(snapshot: Snapshot, documents: Document[], key: string, members: boolean) {
+  let held = false;
+  for (const document of documents) {
+    const scope = !members && document.resource === snapshot.resource ? "resource" : "members";
+    for (const grant of document.policy.grants) {
+      if (!grant.modes.size || (grant.appliesTo !== scope && grant.appliesTo !== "both")) continue;
+      for (const clause of grant.who) {
+        const named = clause.some((subject) => {
+          try {
+            return agentKey(subjectAgent(subject)) === key;
+          } catch {
+            return false;
+          }
+        });
+        if (!named) continue;
+        if (grant.except.length || clause.length !== 1)
+          throw roleError("unsupported", document.url, "This person's access here is conditional");
+        held = true;
+      }
+    }
+  }
+  return held;
 }
 
 /**
@@ -72,7 +97,10 @@ async function members(url: string, options: RemoveCopiedGrantsOptions, root: st
   );
   return {
     found,
-    complete: found.length === listed.size && dataset.match(subject).size > 0,
+    complete:
+      found.length === listed.size &&
+      found.every((member) => listed.has(`NamedNode ${member.url}`)) &&
+      dataset.match(subject).size > 0,
   };
 }
 function parent(url: string): string {
@@ -132,17 +160,14 @@ export async function removeCopiedGrants(
   const sources = new Map<string, boolean>();
   // Folder URL → whether its members' effective access (own or inherited) still reaches the agent.
   const reaches = new Map<string, boolean>();
-  const topReaches =
-    (top.own ? rows(top, [top.own], true) : rows(top, top.documents, true)).get(key) !== undefined;
+  const topReaches = holds(top, top.own ? [top.own] : top.documents, key, true);
   reaches.set(folder, topReaches);
   if (top.ownUrl) sources.set(top.ownUrl, topReaches);
-  if (top.own && (holds(top, top.own, key, false) || holds(top, top.own, key, true)))
-    result.remaining.push(folder);
+  if (top.own && (holds(top, [top.own], key, false) || topReaches)) result.remaining.push(folder);
   // Each place is read on its own, without the model pin, so a place with no own document
   // reads as inheriting rather than as a model mismatch.
   const { model: _pinned, ...unpinned } = options;
   const queue = [{ url: folder, depth: 0 }];
-  const seen = new Set([folder]);
   let visited = 0;
   for (const container of queue) {
     options.signal?.throwIfAborted();
@@ -157,8 +182,7 @@ export async function removeCopiedGrants(
     if (!listing.complete) result.incomplete = true;
     for (const member of listing.found) {
       options.signal?.throwIfAborted();
-      if (seen.has(member.url) || /\.(?:acl|acr)$/i.test(new URL(member.url).pathname)) continue;
-      seen.add(member.url);
+      if (/\.(?:acl|acr)$/i.test(new URL(member.url).pathname)) continue;
       if (++visited > maxResources) {
         result.incomplete = true;
         return result;
@@ -205,24 +229,15 @@ export async function removeCopiedGrants(
             requireOk(response, own.url);
             result.removed.push(member.url);
           }
-          // What is left there, read best effort: a rule this layer can't project as roles
-          // (`acl:origin`, say) leaves the answer unknown, so the place is reported as possibly
-          // still reachable and, for a folder, its copies' source is treated as still granting.
-          let left = true;
-          try {
-            const after = readPolicy(dataset, member.url, own.url, "wac", implementation);
-            const document = { ...own, dataset, policy: after, etag: null };
-            const onMembers = holds(snapshot, document, key, true);
-            left = holds(snapshot, document, key, false) || onMembers;
-            if (member.container) {
-              reaches.set(member.url, onMembers);
-              sources.set(own.url, onMembers);
-            }
-          } catch {
-            if (member.container) {
-              reaches.set(member.url, true);
-              sources.set(own.url, true);
-            }
+          // What is left there. A conditional rule naming the agent leaves it unknown: that is a
+          // failure (after a successful save too), so nothing is reported as cleared.
+          const after = readPolicy(dataset, member.url, own.url, "wac", implementation);
+          const document = { ...own, dataset, policy: after, etag: null };
+          const onMembers = holds(snapshot, [document], key, true);
+          const left = holds(snapshot, [document], key, false) || onMembers;
+          if (member.container) {
+            reaches.set(member.url, onMembers);
+            sources.set(own.url, onMembers);
           }
           if (left) result.remaining.push(member.url);
         }

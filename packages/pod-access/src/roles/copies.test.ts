@@ -273,12 +273,35 @@ describe("removeCopiedGrants", () => {
     expect(result).toMatchObject({ removed: [], remaining: [folder, nested] });
   });
 
-  it("removes a copy beside a rule it can't project, and reports the place as possibly reachable", async () => {
+  it("is not confused by another person's conditional rule, including for copies of copies", async () => {
+    const { mem, options } = setup(acl(ownerRule));
+    const app = (target: string) =>
+      `<#app> a acl:Authorization; acl:agent <${dave}>; acl:origin <https://app.example>; acl:accessTo <${target}>; acl:mode acl:Read.\n`;
+    mem.put(
+      `${sub}.acl`,
+      acl(
+        `${ownerRule}${app("./")}` +
+          `<#copy> a acl:Authorization; acl:agent <${bob}>; acl:accessTo <./>; acl:default <./>; acl:mode acl:Read; <${MATERIALIZED_FROM}> <${folder}.acl>.\n`,
+      ),
+    );
+    mem.put(
+      `${nested}.acl`,
+      acl(
+        `${rule("owner", [owner], "acl:Read, acl:Write, acl:Control", false, "x.ttl")}${app("x.ttl")}` +
+          `<#copy> a acl:Authorization; acl:agent <${bob}>; acl:accessTo <x.ttl>; acl:mode acl:Read; <${MATERIALIZED_FROM}> <${folder}.acl>, <${sub}.acl>.\n`,
+      ),
+    );
+    const result = await removeCopiedGrants(folder, bobRef, options);
+    expect(result).toMatchObject({ failed: [], remaining: [], removed: [sub, nested] });
+    expect(await agentsOn(mem, nested)).toEqual([owner, dave].sort());
+  });
+
+  it("fails, never clears, a place where the agent's own rule is conditional", async () => {
     const { mem, options } = setup(acl(ownerRule));
     mem.put(
       `${sub}.acl`,
       acl(
-        `${ownerRule}<#app> a acl:Authorization; acl:agent <${dave}>; acl:origin <https://app.example>; acl:accessTo <./>; acl:default <./>; acl:mode acl:Read.\n` +
+        `${ownerRule}<#app> a acl:Authorization; acl:agent <${bob}>; acl:origin <https://app.example>; acl:accessTo <./>; acl:default <./>; acl:mode acl:Read.\n` +
           `<#copy> a acl:Authorization; acl:agent <${bob}>; acl:accessTo <./>; acl:default <./>; acl:mode acl:Read; <${MATERIALIZED_FROM}> <${folder}.acl>.\n`,
       ),
     );
@@ -286,14 +309,15 @@ describe("removeCopiedGrants", () => {
       `${nested}.acl`,
       acl(
         `${rule("owner", [owner], "acl:Read, acl:Write, acl:Control", false, "x.ttl")}` +
-          `<#copy> a acl:Authorization; acl:agent <${bob}>; acl:accessTo <x.ttl>; acl:mode acl:Read; <${MATERIALIZED_FROM}> <${sub}.acl>.\n` +
-          `<#app> a acl:Authorization; acl:agent <${dave}>; acl:origin <https://app.example>; acl:accessTo <x.ttl>; acl:mode acl:Read.\n`,
+          `<#copy> a acl:Authorization; acl:agent <${bob}>; acl:accessTo <x.ttl>; acl:mode acl:Read; <${MATERIALIZED_FROM}> <${sub}.acl>.\n`,
       ),
     );
     const result = await removeCopiedGrants(folder, bobRef, options);
-    expect(result).toMatchObject({ failed: [], remaining: [sub, nested] });
     expect(result.removed).toEqual([sub]);
-    // sub/'s answer is unknown, so the nested copy made from it is kept.
+    expect(result.failed.map((f) => [f.url, isRoleError(f.error) && f.error.code])).toEqual([
+      [sub, "unsupported"],
+    ]);
+    // sub/'s answer is unknown, so the copy made from it is kept, and the sweep has failed.
     expect(await agentsOn(mem, nested)).toContain(bob);
   });
 

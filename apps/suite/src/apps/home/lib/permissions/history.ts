@@ -236,8 +236,8 @@ export interface RevokeOutcome {
 /** A folder could not be checked all the way down, so copies of its access may be left. */
 export class IncompleteFolderCheckError extends Error {
   override name = "IncompleteFolderCheckError";
-  constructor() {
-    super("Not everything inside this folder could be checked");
+  constructor(cause?: unknown) {
+    super("Not everything inside this folder could be checked", { cause });
   }
 }
 
@@ -429,7 +429,8 @@ export async function revokeHistoryGrant(
         failed.push(...result.failed);
         if (result.incomplete) failed.push({ url, error: new IncompleteFolderCheckError() });
       } catch (error) {
-        failed.push({ url, error });
+        // The folder's own rule was handled above; what failed is the look inside it.
+        failed.push({ url, error: new IncompleteFolderCheckError(error) });
       }
     }
     if (failed.length) throw new HistoryRevokeError(removed, failed, gone);
