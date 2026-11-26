@@ -223,6 +223,7 @@ async function trustedRun(tlsDir) {
   let seed;
   const forwards = [];
   let reversed = false;
+  const share = { amClean: null, grantRecorded: null };
   const login = {
     customTab: false,
     passwordSubmitted: false,
@@ -257,7 +258,7 @@ async function trustedRun(tlsDir) {
       entry.pages = await pageDiagnostics();
       // CI artifacts are not always reachable, so print the same fixed-label summary.
       console.log(
-        `MOB-07 diagnostics: ${JSON.stringify({ lastWait, login, serverEvidence, pages: entry.pages })}`,
+        `MOB-07 diagnostics: ${JSON.stringify({ lastWait, login, share, serverEvidence, pages: entry.pages })}`,
       );
       throw new Error(entry.error);
     }
@@ -276,7 +277,10 @@ async function trustedRun(tlsDir) {
           headings: [...document.querySelectorAll('h1,h2')].map(h => h.textContent.trim().slice(0, 80)).slice(0, 6),
           buttons: [...document.querySelectorAll('button')].filter(b => b.getClientRects().length).map(b => b.textContent.trim().slice(0, 40) + (b.matches(':disabled') ? ' (disabled)' : '') + (b.getAttribute('aria-busy') === 'true' ? ' (busy)' : '')).slice(0, 12),
           alerts: [...document.querySelectorAll('[role="alert"],.error')].map(a => a.textContent.trim().slice(0, 160)).slice(0, 4),
+          signInFailure: document.documentElement.dataset.signInFailure?.slice(0, 400),
         })`);
+        if (typeof pages[name]?.signInFailure === "string")
+          pages[name].signInFailure = redactText(pages[name].signInFailure);
       } catch {
         pages[name] = "unavailable";
       }
@@ -412,6 +416,8 @@ async function trustedRun(tlsDir) {
       NEXT_PUBLIC_CLIENT_ID_URL: CLIENT_ID,
       NEXT_PUBLIC_DEV_FIXTURES: "0",
       NEXT_PUBLIC_SUITE_DEMO: "0",
+      // Test build only: the app records a redacted error name for a generic sign-in failure.
+      NEXT_PUBLIC_SIGN_IN_DIAGNOSTICS: "1",
     };
     delete env.SUITE_URL;
     try {
@@ -627,7 +633,8 @@ async function trustedRun(tlsDir) {
   async function fileShareScenario() {
     const name = `mob07-${randomUUID()}.pdf`;
     const bytes = Buffer.from("%PDF-1.4\nMOB-07 incoming file\n%%EOF\n");
-    const inserted = await shell(
+    lastWait = "MediaStore insert";
+    await shell(
       "content",
       "insert",
       "--uri",
@@ -639,8 +646,22 @@ async function trustedRun(tlsDir) {
       "--bind",
       "relative_path:s:Download/",
     );
-    mediaUri = inserted.match(/content:\/\/media\/external\/file\/\d+/)?.[0];
-    assert(mediaUri, "MediaStore insert must return a URI");
+    // `content insert` prints nothing on current Android, so find the row by its unique name.
+    lastWait = "MediaStore row lookup";
+    const rows = await shell(
+      "content",
+      "query",
+      "--uri",
+      "content://media/external/file",
+      "--projection",
+      "_id",
+      "--where",
+      `_display_name='${name}'`,
+    );
+    const ids = [...rows.matchAll(/\b_id=(\d+)/gu)].map((match) => match[1]);
+    assert.equal(ids.length, 1, "MediaStore must hold exactly one row for the shared file");
+    mediaUri = `content://media/external/file/${ids[0]}`;
+    lastWait = "MediaStore write";
     await new Promise((resolve, reject) => {
       const writer = spawn(
         "adb",
@@ -659,13 +680,22 @@ async function trustedRun(tlsDir) {
       writer.stdin.on("error", reject);
       writer.stdin.end(bytes);
     });
+    lastWait = "MediaStore read-back";
     const encoded = await shell(
       "sh",
       "-c",
       `content read --uri ${quoteAndroidShell(mediaUri)} | base64 -w 0`,
     );
     assert(Buffer.from(encoded, "base64").equals(bytes), "Source file must be readable and exact");
-    await shell(...sendIntent(undefined, mediaUri));
+    lastWait = "file share intent";
+    // Share the row through the Downloads collection, as a downloads or files app would.
+    const sharedUri = mediaUri.replace("/external/file/", "/external/downloads/");
+    const started = await shell(...sendIntent(undefined, sharedUri));
+    // Booleans only: whether `am` reported a problem and whether the grant reached the app.
+    share.amClean = !/error|warning|denial|exception/iu.test(started);
+    share.grantRecorded = (await shell("dumpsys", "activity", "permissions"))
+      .split("\n")
+      .some((line) => line.includes(sharedUri));
     const observed = await assertShare(`${name}\napplication/pdf · ${bytes.length} bytes`);
     await clickText(app, "Discard batch");
     await poll("file batch discarded", () =>

@@ -62,10 +62,14 @@ describe("real Android share intents and DOM observations", () => {
     expect(args).toContain("android.intent.action.SEND");
     expect(args).not.toContain("--eu");
   });
-  test("sends a typed external file URI with a read grant", () => {
-    const uri = "content://media/external/file/123";
+  test.each([
+    "content://media/external/file/123",
+    "content://media/external/downloads/123",
+  ])("sends a typed external MediaStore URI %s with a read grant", (uri) => {
     const args = sendIntent(undefined, uri);
     expect(args).toContain("--grant-read-uri-permission");
+    // The read grant covers the intent's data URI, not its extras.
+    expect(args.slice(args.indexOf("-d"), args.indexOf("-d") + 2)).toEqual(["-d", uri]);
     expect(args.slice(args.indexOf("--eu"), args.indexOf("--eu") + 3)).toEqual([
       "--eu",
       "android.intent.extra.STREAM",

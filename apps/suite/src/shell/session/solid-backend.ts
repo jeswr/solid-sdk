@@ -72,6 +72,34 @@ interface LoginPlan {
 function accountId(webId: string): string {
   return `solid:${webId}`;
 }
+/**
+ * Test-build diagnostic for the native e2e harness (MOB-07): records which error a failed sign-in
+ * mapped to "failed", as error names and redacted messages only. Off unless the build sets
+ * NEXT_PUBLIC_SIGN_IN_DIAGNOSTICS=1; production builds never set it.
+ */
+export function signInDiagnostic(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; depth < 3 && current instanceof Error; depth++) {
+    // Any word with a scheme, percent-encoding, "@" or a long run of token characters may be
+    // a URL, identifier, address or credential; keep only plain words.
+    const redact = (text: unknown) =>
+      String(text)
+        .replace(/\S*[:%@]\S*/gu, "[value]")
+        .replace(/[A-Za-z0-9_~+/=.-]{20,}/gu, "[value]")
+        .slice(0, 120);
+    parts.push(`${redact(current.name)}: ${redact(current.message)}`);
+    current = current.cause;
+  }
+  return parts.length > 0 ? parts.join(" <- ") : typeof error;
+}
+
+function recordSignInDiagnostic(error: unknown): void {
+  if (process.env.NEXT_PUBLIC_SIGN_IN_DIAGNOSTICS !== "1") return;
+  if (typeof document === "undefined") return;
+  document.documentElement.dataset.signInFailure = signInDiagnostic(error);
+}
+
 function signInFailure(error: unknown): SignInError {
   if (error instanceof SignInError) return error;
   if (error instanceof IssuerNotAuthorizedError) return new SignInError("issuer-not-authorized");
@@ -83,6 +111,7 @@ function signInFailure(error: unknown): SignInError {
     ["AbortError", "CodeRequestCancelledError", "UserCancelledError"].includes(error.name)
   )
     return new SignInError("cancelled");
+  recordSignInDiagnostic(error);
   return new SignInError("failed");
 }
 

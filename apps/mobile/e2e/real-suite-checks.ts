@@ -31,7 +31,7 @@ export function checkPrivateRead(
 }
 
 export function sendIntent(text: string | undefined, stream?: string): string[] {
-  if (stream && !/^content:\/\/media\/external\/file\/\d+$/.test(stream))
+  if (stream && !/^content:\/\/media\/external\/(?:file|downloads)\/\d+$/.test(stream))
     throw new Error("Expected an external MediaStore content URI");
   if (text === undefined && !stream) throw new Error("Share needs an item");
   return [
@@ -43,7 +43,9 @@ export function sendIntent(text: string | undefined, stream?: string): string[] 
     "-t",
     stream ? "application/pdf" : "text/plain",
     ...(stream
-      ? ["--grant-read-uri-permission", "--eu", "android.intent.extra.STREAM", stream]
+      ? // `am start` neither copies EXTRA_STREAM into ClipData (as an app's startActivity does)
+        // nor extends the read grant to extras, so the grant must name the URI as the data too.
+        ["--grant-read-uri-permission", "-d", stream, "--eu", "android.intent.extra.STREAM", stream]
       : []),
     ...(text === undefined ? [] : ["--es", "android.intent.extra.TEXT", text]),
     "-n",
