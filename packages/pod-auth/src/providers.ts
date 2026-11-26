@@ -36,7 +36,7 @@ import { ResourceGrantError } from "./grants.js";
 import { protectStore, scopedStore } from "./kv.js";
 import { createLwsProvider } from "./lws-provider.js";
 import { namespaceFence } from "./namespace.js";
-import { secureUrl } from "./options.js";
+import { sameServer, secureUrl } from "./options.js";
 import {
   type LoginOwnership,
   memoryStore,
@@ -1008,10 +1008,4 @@ export function createProviders(
     hint = selected;
     setSession(request);
   }
-}
-
-/** Same scheme, port and host, treating a DNS trailing dot as the host it names. */
-function sameServer(a: URL, b: URL): boolean {
-  const host = (url: URL) => url.hostname.replace(/\.$/, "");
-  return a.protocol === b.protocol && a.port === b.port && host(a) === host(b);
 }

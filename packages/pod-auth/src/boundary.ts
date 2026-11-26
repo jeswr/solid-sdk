@@ -15,7 +15,7 @@ import {
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Parser, Store } from "n3";
 import { type ResourceGrant, ResourceGrantError } from "./grants.js";
-import { isLoopback, secureUrl, storageEndpointPaths } from "./options.js";
+import { isLoopback, sameServer, secureUrl, storageEndpointPaths } from "./options.js";
 import type { PodAuthOptions } from "./types.js";
 
 const PIM = "http://www.w3.org/ns/pim/space#";
@@ -141,13 +141,11 @@ export function createBoundary(
       return false;
     }
   };
-  /** Whether a root (container or exact resource) contains `url`. */
-  const contains = (root: string, url: string) => {
-    if (root.endsWith("/")) return isWithin(url, root);
-    const target = new URL(url);
-    const entry = new URL(root);
-    return target.origin === entry.origin && target.pathname === entry.pathname;
-  };
+  // Grant exclusions recognize DNS aliases. Credential attachment still requires the exact origin.
+  const contains = (root: URL, target: URL) =>
+    sameServer(root, target) &&
+    (root.pathname === target.pathname ||
+      (root.pathname.endsWith("/") && target.pathname.startsWith(root.pathname)));
   /** Validates a requested grant without network access; throws {@link ResourceGrantError}. */
   const grantRoot = (value: string): string => {
     let url: URL;
@@ -160,6 +158,7 @@ export function createBoundary(
     // Only the canonical spelling is accepted: no normalization, credentials, query or fragment.
     if (
       url.href !== value ||
+      url.hostname.endsWith(".") ||
       /[?#\\]/.test(value) ||
       url.username !== "" ||
       url.password !== "" ||
@@ -176,8 +175,10 @@ export function createBoundary(
     if (url.pathname === "/") throw new ResourceGrantError("origin-wide");
     if (
       owns(url) ||
-      (value.endsWith("/") &&
-        [...roots(), ...endpoints.keys()].some((root) => contains(value, root)))
+      [...roots(), ...endpoints.keys()].some((root) => {
+        const own = new URL(root);
+        return contains(own, url) || contains(url, own);
+      })
     )
       throw new ResourceGrantError("own-storage");
     return value;
@@ -358,11 +359,14 @@ export function createBoundary(
       const root = grantRoot(value);
       const url = new URL(root);
       const issuer = new URL(protocol.issuer);
+      // Treat a path-based issuer as a container for its account and protocol routes.
+      issuer.pathname = issuer.pathname.replace(/\/?$/, "/");
       if (
-        [protocol.issuer, ...protocol.endpoints].some((endpoint) => contains(root, endpoint)) ||
-        (url.origin === issuer.origin && url.pathname.includes("/.")) ||
-        // Below a path-based issuer (Keycloak /realms/x/account/) is the identity provider's own.
-        (issuer.pathname !== "/" && isWithin(root, issuer.href.replace(/\/?$/, "/")))
+        [protocol.issuer, ...protocol.endpoints].some((endpoint) =>
+          contains(url, new URL(endpoint)),
+        ) ||
+        (sameServer(url, issuer) && url.pathname.includes("/.")) ||
+        (issuer.pathname !== "/" && contains(issuer, url))
       )
         throw new ResourceGrantError("protocol-endpoint");
       const existing = grants.find(
