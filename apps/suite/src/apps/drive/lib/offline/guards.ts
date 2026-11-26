@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2-Astra
 /** Drive's outbox guard and the session policy that requires it (sst-8xm.74.1). */
 import type { GuardPolicy, OutboxGuard } from "@jeswr/suite-sdk/offline";
 import type { EndpointCapture } from "../client/access";
@@ -51,7 +52,22 @@ export function inside(base: string, url: string | undefined): url is string {
     return false;
   }
 }
-export const isPolicyDocument = (url: string) => /\.(acl|acr|meta)$/i.test(new URL(url).pathname);
+
+/** Replay only visible content. The guard policy still claims every path inside Drive. */
+export function isDriveContent(root: string, url: string | undefined): url is string {
+  if (!inside(root, url)) return false;
+  // URL removes whole dot segments (including %2E) before exposing the pathname.
+  if (/\/(?:\.|%2e){1,2}(?:\/|$)/i.test(url)) return false;
+  try {
+    const path = decodeURIComponent(new URL(url).pathname.slice(new URL(root).pathname.length));
+    return (
+      !path.split("/").some((segment) => segment.startsWith(".")) &&
+      !/\.(acl|acr|meta)$/i.test(path)
+    );
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Inside Drive's own root, every queued change must carry Drive's guard, so nothing there

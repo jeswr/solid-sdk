@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1
+// AUTHORED-BY Codex GPT-6.2-Astra
 // @vitest-environment jsdom
 import { type GrantSnapshot, readGrants } from "@jeswr/pod-access/roles";
 import { Editor } from "@tiptap/react";
@@ -450,7 +451,7 @@ it("checks only the cheap permission for the button and loads every part when th
   expect(loadSharing).toHaveBeenCalledOnce();
 });
 
-it("grants and revokes groups on the document and every companion part", async () => {
+it("passes the document and companion root to the group panel when children inherit", async () => {
   const container = "https://example.org/docs/plan/";
   vi.mocked(loadSharing).mockResolvedValue(
     snapshot({
@@ -464,5 +465,5 @@ it("grants and revokes groups on the document and every companion part", async (
   await enabled();
   fireEvent.click(header());
   const groups = await screen.findByRole("region", { name: "Group sharing" });
-  expect(groups.getAttribute("data-targets")).toBe(`${resource} ${container} ${container}assets/`);
+  expect(groups.getAttribute("data-targets")).toBe(`${resource} ${container}`);
 });

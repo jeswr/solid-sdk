@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
 import { Container } from "@solid/object";
@@ -66,10 +67,14 @@ function groupSignature(part: SharingSnapshot): string {
       );
   return JSON.stringify([...groups].sort());
 }
-/** Every resource a group grant on this document must cover: the entry point last on removal. */
+function hasOwnGrants(part: SharingSnapshot): boolean {
+  return part.grants.grants.some((grant) => !grant.inherited);
+}
+/** The companion root governs inheriting children. Remove the entry point last. */
 export function documentGroupTargets(snapshot: SharingSnapshot): string[] {
   const companions = (snapshot as Partial<DocumentSharingSnapshot>).companions ?? [];
-  return [snapshot.resource, ...companions.map((part) => part.resource)];
+  const targets = companions.filter((part, index) => index === 0 || hasOwnGrants(part));
+  return [snapshot.resource, ...targets.map((part) => part.resource)];
 }
 function relative(root: string, url: string): string {
   return url.startsWith(root) && url !== root ? url.slice(root.length) : "the document folder";
@@ -98,6 +103,7 @@ async function ownPolicyParts(
   session: SharingSession,
   root: string,
   standard: ReadonlySet<string>,
+  hasCompanionLinks: boolean,
 ): Promise<string[]> {
   const http = refuseRedirects(session.fetch);
   const access = accessControl(http, session.storageUrl);
@@ -137,6 +143,13 @@ async function ownPolicyParts(
     });
     const members: string[] = [];
     for (const { container, members: contained } of listed) {
+      if (!hasCompanionLinks && container === root) {
+        // Linkless Docs use updates/ by default. Only recognise the Docs layout at the root.
+        const known = (url: string) =>
+          standard.has(url) || isLog(url) || url === `${root}.acl` || url === `${root}.acr`;
+        if (!contained.includes(`${root}updates/`) || !contained.every(known))
+          throw new SharingError(NOT_A_COMPANION);
+      }
       for (const member of contained) {
         assertWithinPodScope(session.storageUrl, member);
         if (!member.startsWith(container) || member === container) throw failed(member);
@@ -159,10 +172,10 @@ async function ownPolicyParts(
 /**
  * The companion is `<slug>/` beside `<slug>.ttl` by naming alone. A document moved without
  * its folder, or a `.ttl` that is not a Docs document, would otherwise apply folder-scoped
- * sharing to an unrelated same-named folder. Require a Docs document whose own links to
- * its update log, images and comments all lie inside that folder.
+ * sharing to an unrelated same-named folder. Refuse non-Docs files and out-of-folder
+ * links. When no links are recorded, the tree walk must confirm the legacy layout.
  */
-async function assertCompanion(session: SharingSession, resource: string, container: string) {
+async function checkCompanionLinks(session: SharingSession, resource: string, container: string) {
   let links: (string | undefined)[];
   try {
     const { dataset } = await fetchRdf(resource, { fetch: refuseRedirects(session.fetch) });
@@ -177,6 +190,7 @@ async function assertCompanion(session: SharingSession, resource: string, contai
     links.some((link) => link !== undefined && (!link.startsWith(container) || link === container))
   )
     throw new SharingError(NOT_A_COMPANION);
+  return links.some((link) => link !== undefined);
 }
 
 /** The main resource drives the controls; every existing part is independently verified. */
@@ -198,13 +212,13 @@ export async function loadDocumentSharing(
     }
     return part;
   };
-  await assertCompanion(listing, resource, layout.container);
+  const hasCompanionLinks = await checkCompanionLinks(listing, resource, layout.container);
   const main = await load(resource);
   const companions = [await load(layout.container)];
   // Docs creates the companion containers lazily, and a member shared from Drive keeps
   // its own policy. Every part with its own policy is a part of this document's sharing.
   const standard = new Set([layout.updateLog, layout.assets, layout.comments, layout.versions]);
-  const found = await ownPolicyParts(listing, layout.container, standard);
+  const found = await ownPolicyParts(listing, layout.container, standard, hasCompanionLinks);
   // The standard containers first, in a fixed order; deeper parts after their parents.
   for (const url of [...[...standard].filter((url) => found.includes(url)), ...found])
     if (!companions.some((part) => part.resource === url)) companions.push(await load(url));
@@ -226,7 +240,10 @@ export async function loadDocumentSharing(
     companions,
     pins,
     // Only a repair Save may rewrite a member that was given its own, different access.
-    ...(differing.some((part) => part.resource !== layout.container && !standard.has(part.resource))
+    ...(differing.some(
+      (part) =>
+        part.resource !== layout.container && (!standard.has(part.resource) || hasOwnGrants(part)),
+    )
       ? { repairFirst: true }
       : {}),
     canManage: main.canManage && !unmanaged,
@@ -352,7 +369,7 @@ export async function applyDocumentSharing(
     throw new SharingError(REPAIR_FIRST);
   const [container, ...children] = document.companions;
   const root = container as SharingSnapshot;
-  const targets = children.filter((part) => part.grants.grants.some((grant) => !grant.inherited));
+  const targets = children.filter(hasOwnGrants);
   const sources = new Set(
     root.grants.grants.filter((grant) => !grant.inherited).map((grant) => grant.source),
   );

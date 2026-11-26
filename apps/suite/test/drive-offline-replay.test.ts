@@ -1,4 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2-Astra
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { StorageError } from "@jeswr/storage-client";
 import type { GuardedDelivery, JsonValue } from "@jeswr/suite-sdk/offline";
 import { expect, it, vi } from "vitest";
@@ -16,7 +18,7 @@ import {
 } from "../src/apps/drive/lib/offline/guards";
 import { isNetworkFailure } from "../src/apps/drive/lib/offline/network";
 import { driveReplayDelegate } from "../src/apps/drive/lib/offline/replay";
-import { aclBody, DRIVE, OWNER, PRIVATE, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
+import { aclBody, aclClauses, DRIVE, OWNER, PRIVATE, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
 
 const FILE = `${PUBLIC}placeholder`;
 const encode = (text: string) => new TextEncoder().encode(text);
@@ -25,7 +27,9 @@ const ctx = () => ({ storage: {} as never, signal: new AbortController().signal 
 async function opened(f: Awaited<ReturnType<typeof wacPod>>, url = FILE) {
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
   const version = await client.readVersion(url);
-  return { client, version };
+  const { discovery } = version;
+  if (!discovery) throw new Error("Expected access discovery when opening the source");
+  return { client, version: { ...version, discovery } };
 }
 function textDelivery(
   url: string,
@@ -41,6 +45,26 @@ function textDelivery(
     ...(ifMatch ? { ifMatch } : {}),
     ...(assertions === undefined ? {} : { assertions }),
     purpose: "replay",
+  };
+}
+function keepDelivery(
+  copy: string,
+  assertions: GuardedDelivery["assertions"],
+  text = "mine",
+): GuardedDelivery {
+  const container = new URL(".", copy).href;
+  return {
+    op: "create",
+    url: container,
+    container,
+    contentType: "text/plain",
+    body: encode(text),
+    createOptions: {
+      name: decodeURIComponent(copy.slice(container.length)),
+      contentType: "text/plain",
+    },
+    assertions: assertions ?? null,
+    purpose: "resolve-both",
   };
 }
 const session = (f: Awaited<ReturnType<typeof wacPod>>) => ({
@@ -103,7 +127,7 @@ it("text guards carry the captured discovery as plain JSON", async () => {
   const f = await wacPod();
   const { version } = await opened(f);
   expect(isEndpointCapture(version.discovery)).toBe(true);
-  const guard = textGuard(version.discovery as NonNullable<typeof version.discovery>, FILE);
+  const guard = textGuard(version.discovery, FILE);
   expect(JSON.parse(JSON.stringify(guard))).toEqual(guard);
   expect(guard).toMatchObject({
     tag: DRIVE_TAG,
@@ -128,7 +152,7 @@ it("replays a queued text save through Drive's guarded write", async () => {
   const { version } = await opened(f);
   const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   const result = await delegate(
-    textDelivery(FILE, version.etag, textGuard(version.discovery as never, FILE).assertions),
+    textDelivery(FILE, version.etag, textGuard(version.discovery, FILE).assertions),
     ctx(),
   );
   expect(result).toMatchObject({ url: FILE, created: false });
@@ -145,7 +169,7 @@ it("turns a changed file into an outbox conflict", async () => {
   });
   const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   const error = await delegate(
-    textDelivery(FILE, version.etag, textGuard(version.discovery as never, FILE).assertions),
+    textDelivery(FILE, version.etag, textGuard(version.discovery, FILE).assertions),
     ctx(),
   ).catch((cause: unknown) => cause);
   expect(error).toBeInstanceOf(StorageError);
@@ -159,7 +183,7 @@ it("refuses a replay whose access discovery changed since the file was opened", 
   f.endpoints.set(FILE, `${FILE}.moved-policy`);
   const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   const error = await delegate(
-    textDelivery(FILE, version.etag, textGuard(version.discovery as never, FILE).assertions),
+    textDelivery(FILE, version.etag, textGuard(version.discovery, FILE).assertions),
     ctx(),
   ).catch((cause: unknown) => cause);
   expect(error).toBeInstanceOf(StorageError);
@@ -171,7 +195,7 @@ it("fails closed on tampered or incomplete queued saves", async () => {
   const f = await wacPod();
   const { version } = await opened(f);
   const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
-  const assertions = textGuard(version.discovery as never, FILE).assertions;
+  const assertions = textGuard(version.discovery, FILE).assertions;
   for (const delivery of [
     textDelivery(FILE, undefined, assertions),
     textDelivery(FILE, version.etag, { kind: "text", discovery: { endpoint: 5 } }),
@@ -216,20 +240,35 @@ it("fails closed on tampered or incomplete queued saves", async () => {
   expect(await (await f.pod.fetch(FILE)).text()).toBe("public");
 });
 
+it.each([
+  "%2Ehidden",
+  "%2etrash/file",
+  "file%2Eacl",
+  "file%2eAcR",
+  "file%2Emeta",
+  "%2E/file",
+  "%2Ehidden%xx",
+])("refuses the encoded path %s before making a request", async (path) => {
+  const f = await wacPod();
+  const { version } = await opened(f);
+  const url = `${PUBLIC}${path}`;
+  const assertions = textGuard(version.discovery, url).assertions;
+  const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
+  f.calls.length = 0;
+  await expect(delegate(textDelivery(url, version.etag, assertions), ctx())).rejects.toMatchObject({
+    code: "bad-request",
+  });
+  expect(f.calls).toEqual([]);
+  expect(driveGuardPolicy(DRIVE)({ op: "write", url })).toBe(true);
+});
+
 it("stores a kept copy as a new file next to the file it keeps", async () => {
   const f = await wacPod();
   const { version } = await opened(f);
-  const assertions = textGuard(version.discovery as never, FILE).assertions;
+  const assertions = textGuard(version.discovery, FILE).assertions;
   const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   const copy = (overrides: Partial<GuardedDelivery> = {}): GuardedDelivery => ({
-    op: "create",
-    url: PUBLIC,
-    container: PUBLIC,
-    contentType: "text/plain",
-    body: encode("kept"),
-    createOptions: { name: "placeholder-conflict-1000", contentType: "text/plain" },
-    assertions: assertions ?? null,
-    purpose: "resolve-both",
+    ...keepDelivery(`${FILE}-conflict-1000`, assertions, "kept"),
     ...overrides,
   });
   const result = await delegate(copy(), ctx());
@@ -476,30 +515,96 @@ it("returns the write receipt's ETag when the server sends one, and none otherwi
   }
 });
 
-it("gives a kept copy the source file's own access, not its looser folder's", async () => {
+it.each([
+  ["own", PUBLIC, FILE],
+  ["inherited", PRIVATE, `${PRIVATE}secret`],
+])("gives a kept copy the source's %s grants, including its named reader", async (access, folder, source) => {
   const f = await wacPod();
-  // The public folder is readable by everyone; this file has its own owner-only ACL.
-  f.policies.set(`${FILE}.policy`, await aclBody(FILE));
-  expect((await f.anonymous(FILE)).status).toBe(403);
-  const { version } = await opened(f);
+  const reader = "https://bob.test/profile#me";
+  const governed = access === "own" ? source : folder;
+  f.policies.set(`${governed}.policy`, await aclBody(governed, reader));
+  expect((await f.anonymous(source)).status).toBe(403);
+  const { version } = await opened(f, source);
   const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
+  const copy = `${source}-conflict-1000`;
   const result = await delegate(
-    {
-      op: "create",
-      url: PUBLIC,
-      container: PUBLIC,
-      contentType: "text/plain",
-      body: encode("private offline text"),
-      createOptions: { name: "placeholder-conflict-1000", contentType: "text/plain" },
-      assertions: textGuard(version.discovery as never, FILE).assertions ?? null,
-      purpose: "resolve-both",
-    },
+    keepDelivery(copy, textGuard(version.discovery, source).assertions),
     ctx(),
   );
-  const copy = `${PUBLIC}placeholder-conflict-1000`;
   expect(result).toMatchObject({ url: copy, created: true });
-  expect(await (await f.pod.fetch(copy)).text()).toBe("private offline text");
+  expect(await (await f.pod.fetch(copy)).text()).toBe("mine");
   expect((await f.anonymous(copy)).status).toBe(403);
+  const ownAcl = await f.fetch(`${copy}.policy`);
+  expect(ownAcl.status).toBe(200);
+  expect(aclClauses(await parseRdf(await ownAcl.text(), "text/turtle"))).toEqual(
+    aclClauses(await parseRdf(await aclBody(copy, reader), "text/turtle")),
+  );
+});
+
+it.each([
+  900, 1000,
+])("creates a new copy when sibling %i has the same bytes and an extra reader", async (stamp) => {
+  const f = await wacPod();
+  const earlier = `${FILE}-conflict-${stamp}`;
+  f.policies.set(`${FILE}.policy`, await aclBody(FILE));
+  await f.pod.fetch(earlier, {
+    method: "PUT",
+    body: "mine",
+    headers: { "content-type": "text/plain" },
+  });
+  const widerAcl = await aclBody(earlier, "https://bob.test/profile#me");
+  f.policies.set(`${earlier}.policy`, widerAcl);
+  const { version } = await opened(f);
+  const result = await driveReplayDelegate({ root: DRIVE })(session(f))(
+    keepDelivery(`${FILE}-conflict-1000`, textGuard(version.discovery, FILE).assertions),
+    ctx(),
+  );
+  if (!result) throw new Error("Expected a receipt for the new copy");
+  const copy = result.url;
+  expect(result.created).toBe(true);
+  expect(copy).toMatch(/^https:\/\/wac\.test\/drive\/public\/placeholder-conflict-\d+$/);
+  expect(copy).not.toBe(earlier);
+  expect(await (await f.pod.fetch(copy)).text()).toBe("mine");
+  expect(
+    aclClauses(await parseRdf(await (await f.fetch(`${copy}.policy`)).text(), "text/turtle")),
+  ).toEqual(aclClauses(await parseRdf(await aclBody(copy), "text/turtle")));
+  expect(f.policies.get(`${earlier}.policy`)).toBe(widerAcl);
+});
+
+it("keeps the offline bytes without downloading the current remote body", async () => {
+  const f = await wacPod();
+  const { version } = await opened(f);
+  await f.pod.fetch(FILE, { method: "PUT", body: "remote replacement" });
+  f.calls.length = 0;
+  const result = await driveReplayDelegate({ root: DRIVE })(session(f))(
+    keepDelivery(`${FILE}-conflict-1000`, textGuard(version.discovery, FILE).assertions),
+    ctx(),
+  );
+  expect(result).toMatchObject({ url: `${FILE}-conflict-1000`, created: true });
+  const methods = f.calls.filter(({ url }) => url === FILE).map(({ method }) => method);
+  expect(methods).toContain("HEAD");
+  expect(methods).not.toContain("GET");
+  expect(await (await f.pod.fetch(`${FILE}-conflict-1000`)).text()).toBe("mine");
+});
+
+it("requires a strong source validator even when the kept copy already exists", async () => {
+  const f = await wacPod();
+  const { version } = await opened(f);
+  const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
+  const delivery = keepDelivery(
+    `${FILE}-conflict-1000`,
+    textGuard(version.discovery, FILE).assertions,
+  );
+  expect(await delegate(delivery, ctx())).toMatchObject({ created: true });
+  f.after(async (url, method, response) => {
+    if (url !== FILE || method !== "HEAD") return response;
+    const headers = new Headers(response.headers);
+    headers.set("etag", 'W/"weak"');
+    return new Response(null, { status: response.status, headers });
+  });
+  await expect(delegate(delivery, ctx())).rejects.toMatchObject({
+    cause: { kind: "missing-validator", url: FILE },
+  });
 });
 
 it("keeps the conflict suffix when a long name has to be shortened", async () => {
@@ -513,16 +618,10 @@ it("keeps the conflict suffix when a long name has to be shortened", async () =>
   const { version } = await opened(f, long);
   const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   const result = await delegate(
-    {
-      op: "create",
-      url: PUBLIC,
-      container: PUBLIC,
-      contentType: "text/plain",
-      body: encode("mine"),
-      createOptions: { name: `${"a".repeat(176)}-conflict-1000.txt`, contentType: "text/plain" },
-      assertions: textGuard(version.discovery as never, long).assertions ?? null,
-      purpose: "resolve-both",
-    },
+    keepDelivery(
+      `${PUBLIC}${"a".repeat(176)}-conflict-1000.txt`,
+      textGuard(version.discovery, long).assertions,
+    ),
     ctx(),
   );
   // 180 characters: the stem gives way, the suffix and extension stay.
@@ -536,11 +635,7 @@ it("keeps the conflict suffix when a long name has to be shortened", async () =>
 it("treats a save whose earlier attempt landed unanswered as done, not as a conflict", async () => {
   const f = await wacPod();
   const { version } = await opened(f);
-  const delivery = textDelivery(
-    FILE,
-    version.etag,
-    textGuard(version.discovery as never, FILE).assertions,
-  );
+  const delivery = textDelivery(FILE, version.etag, textGuard(version.discovery, FILE).assertions);
   const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   let lose = true;
   f.after(async (url, method, response) => {
@@ -567,18 +662,10 @@ it("treats a save whose earlier attempt landed unanswered as done, not as a conf
 it("does not make a second kept copy when the first one landed unanswered", async () => {
   const f = await wacPod();
   const { version } = await opened(f);
-  const assertions = textGuard(version.discovery as never, FILE).assertions;
+  const assertions = textGuard(version.discovery, FILE).assertions;
   const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
-  const keep = (stamp: number, text = "mine"): GuardedDelivery => ({
-    op: "create",
-    url: PUBLIC,
-    container: PUBLIC,
-    contentType: "text/plain",
-    body: encode(text),
-    createOptions: { name: `placeholder-conflict-${stamp}`, contentType: "text/plain" },
-    assertions: assertions ?? null,
-    purpose: "resolve-both",
-  });
+  const keep = (stamp: number, text = "mine") =>
+    keepDelivery(`${FILE}-conflict-${stamp}`, assertions, text);
   const first = `${PUBLIC}placeholder-conflict-1000`;
   let lose = true;
   f.after(async (url, method, response) => {

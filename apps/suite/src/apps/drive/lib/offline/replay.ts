@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2-Astra
 /**
  * Drive's guarded offline replay (sst-8xm.74.1). A queued Drive change is delivered only
  * through Drive's own client, with the same provisioning and access checks as online:
@@ -8,17 +9,18 @@
  */
 import { StorageError, type StorageErrorCode } from "@jeswr/storage-client";
 import type { GuardedDelivery, ReplayDelegate } from "@jeswr/suite-sdk/offline";
-import { isEndpointCapture } from "../client/access";
+import { DriveAccessError, isEndpointCapture } from "../client/access";
 import {
   createSolidDriveClient,
   type DriveClient,
   DriveError,
+  type DriveItem,
   nameOf,
   parentOf,
 } from "../client/client";
 import { childUrl, createFolder } from "../operations/operations";
 import { normalizeUploadName, suffixedName } from "../upload";
-import { type DriveGuardKind, inside, isPolicyDocument } from "./guards";
+import { type DriveGuardKind, isDriveContent } from "./guards";
 import { isNetworkFailure } from "./network";
 
 interface ReplaySession {
@@ -89,19 +91,19 @@ async function holds(client: DriveClient, url: string, bytes: Uint8Array | null)
 }
 
 /**
- * An earlier "keep both" copy of `source` with exactly these bytes. The outbox names each
- * attempt anew, so a copy whose create landed but whose answer was lost would otherwise be
- * made again on retry.
+ * Find an earlier copy with the queued bytes and no wider access. The outbox names
+ * each attempt anew, including retries after a lost acknowledgement.
  */
 async function keptCopy(
   client: DriveClient,
-  container: string,
+  siblings: readonly DriveItem[],
   source: string,
   bytes: Uint8Array | null,
 ): Promise<string | undefined> {
+  if (!client.bindAccess) return undefined;
   const original = nameOf(source);
   const size = bytes?.byteLength ?? 0;
-  const candidates = (await client.list(container)).filter((item) => {
+  const candidates = siblings.filter((item) => {
     if (item.kind !== "file" || (item.size !== undefined && item.size !== size)) return false;
     return [...item.name.matchAll(/-conflict-(\d{1,16})/g)].some(([suffix]) => {
       try {
@@ -111,8 +113,17 @@ async function keptCopy(
       }
     });
   });
-  for (const item of candidates.slice(0, MAX_KEPT_COPIES))
-    if (await holds(client, item.url, bytes)) return item.url;
+  for (const item of candidates.slice(0, MAX_KEPT_COPIES)) {
+    try {
+      // Restore's binding checks effective grants on both files, including inherited ACLs.
+      const binding = await client.bindAccess(source, item.url);
+      if (!(await holds(client, item.url, bytes))) continue;
+      await binding.recheck();
+      return item.url;
+    } catch (error) {
+      if (!(error instanceof DriveAccessError) || isNetworkFailure(error)) throw error;
+    }
+  }
   return undefined;
 }
 
@@ -137,22 +148,12 @@ function conflictSuffix(source: string, name: string): string | undefined {
   return /^\d{1,16}$/.test(stamp) ? `-conflict-${stamp}` : undefined;
 }
 
-/** Inside Drive's root and not under a hidden name there (`.trash/`, policy files). */
-function inRoot(root: string, url: string | undefined): url is string {
-  return (
-    inside(root, url) &&
-    !new URL(url).pathname
-      .slice(new URL(root).pathname.length)
-      .split("/")
-      .some((segment) => segment.startsWith("."))
-  );
-}
-
 /** The delivery shapes Drive queues; anything else is refused before any request. */
 function shape(root: string, delivery: GuardedDelivery): DriveGuardKind {
   const kind = assertions(delivery).kind;
   const container = delivery.container;
-  const createsIn = delivery.op === "create" && inRoot(root, container) && container.endsWith("/");
+  const createsIn =
+    delivery.op === "create" && isDriveContent(root, container) && container.endsWith("/");
   if (kind === "folder" && createsIn && delivery.purpose === "replay") return kind;
   if (kind === "text") {
     // Text creates exist only as a conflict's "keep both" copy.
@@ -160,9 +161,8 @@ function shape(root: string, delivery: GuardedDelivery): DriveGuardKind {
     if (
       delivery.op === "write" &&
       delivery.purpose !== "resolve-both" &&
-      inRoot(root, delivery.url) &&
-      !delivery.url.endsWith("/") &&
-      !isPolicyDocument(delivery.url)
+      isDriveContent(root, delivery.url) &&
+      !delivery.url.endsWith("/")
     )
       return kind;
   }
@@ -232,27 +232,38 @@ export function driveReplayDelegate({
         if (
           typeof source !== "string" ||
           !isEndpointCapture(discovery) ||
-          !inRoot(root, source) ||
+          !isDriveContent(root, source) ||
           source.endsWith("/") ||
-          isPolicyDocument(source) ||
           parentOf(source) !== container
         )
           refuse(delivery, "This queued copy doesn't name the file it keeps.");
         const suffix = conflictSuffix(source, name);
         if (!suffix) refuse(delivery, "This queued copy's name isn't one Drive keeps.");
-        const url = childUrl(container, suffixedName(nameOf(source), suffix));
         // "Keep both" copies the file, so the copy keeps the file's own access, as Drive's
         // "Make a copy" does (preserve-source). A plain upload would inherit the folder's
         // access, which can be wider than a file with its own ACL.
         const verifyHeaders = client.discoveryVerifier(source, discovery);
-        const kept = await keptCopy(client, container, source, delivery.body);
-        if (kept) return { url: kept, etag: null, created: false };
         const { etag } = await client.stat(source);
-        if (!etag) throw new DriveError("missing-validator", 409, source);
+        if (!etag || !STRONG_ETAG.test(etag))
+          throw new DriveError("missing-validator", 409, source);
+        const siblings = await client.list(container);
+        const kept = await keptCopy(client, siblings, source, delivery.body);
+        if (kept) {
+          await client.stat(source, { ifMatch: etag, verifyHeaders });
+          return { url: kept, etag: null, created: false };
+        }
+        // A rejected sibling can occupy the outbox's proposed name.
+        const original = nameOf(source);
+        const occupied = new Set(siblings.map((item) => item.name));
+        let copyName = suffixedName(original, suffix);
+        for (let stamp = Date.now(); occupied.has(copyName); stamp++)
+          copyName = suffixedName(original, `-conflict-${stamp}`);
+        const url = childUrl(container, copyName);
+        const payload = body(delivery, contentType);
         await client.write(
           url,
-          body(delivery, contentType),
-          { contentType, restoreFrom: { url: source, etag, verifyHeaders } },
+          payload,
+          { contentType, restoreFrom: { url: source, etag, verifyHeaders, recoveryBody: payload } },
           { kind: "protect-ancestors" },
         );
         return { url, etag: null, created: true };

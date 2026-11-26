@@ -143,11 +143,14 @@ and version history through WAC defaults / ACP member access.
 
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
+<!-- AUTHORED-BY Codex GPT-6.2-Astra -->
+
 The companion is named only by the URL (`<slug>.ttl` → `<slug>/`), so loading first reads the
 `.ttl` and requires a Docs document whose recorded `pd:updateLog`, `pd:assets` and
-`pd:comments` links (those present) all lie inside `<slug>/`. A moved `.ttl`, or one that is
-not a Docs document, is refused with a message pointing to Drive; a legacy document that
-records none of the links is accepted.
+`pd:comments` links all lie inside `<slug>/`. For a legacy document with no recorded links,
+the folder listing must include `updates/`. Its other entries may be `assets/`, `comments/`,
+`versions/`, recovery logs (`updates-*/`) or the folder's own access document. When Docs
+cannot confirm the companion, the dialog directs the owner to Drive.
 
 `DocsStore.createContainer` creates container RDF without ACLs or ACRs, so new companion
 sub-containers already inherit. Versions are created lazily the same way. Loading walks the
@@ -167,15 +170,16 @@ The dialog shows the main document's roles. Effective roles are compared without
 or inherited/explicit presentation differences. A mismatch displays “Some parts of this
 document are shared differently. Saving will make them match.”, followed by the differing
 parts, and an explicit Save action repairs the companions even when the document selection
-is unchanged. When a differing part is a member other than the companion root and the four
-standard containers (for example one image shared from Drive), any other change is refused
-until that repair Save has run, so a person-only edit never silently rewrites it.
+is unchanged. When a child has its own, differing access, the owner must make that repair
+before changing who has access. This includes standard containers such as `assets/` and
+individual files shared from Drive.
 
-Groups are managed by the dialog's Groups panel, which Docs points at the `.ttl` and every
-companion part: a group is granted on the document first and removed from it last. Group
-grants are compared across parts too; a difference shows a notice naming the parts and asks
-the owner to remove the group and share with it again. The people Save keeps group rows. Every part must
-recognise the caller as an owner; other owners and external inherited rules remain locked.
+The Groups panel grants and removes access on the `.ttl`, the companion root and each child
+with its own grants. Children that inherit follow their governing folder when a group is
+added or removed. The document receives the grant first and loses it last. If group access
+differs across parts, the dialog names the parts and asks the owner to remove the group and
+share with it again. The people Save keeps group rows. Every part must recognise the caller
+as an owner. Other owners and external inherited rules remain locked.
 
 Saving first applies only removals/downgrades to the document, then the full selection to
 the companion root and its explicit sub-containers, then grants/upgrades to the document.
