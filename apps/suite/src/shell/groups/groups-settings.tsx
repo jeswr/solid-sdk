@@ -17,6 +17,7 @@ import { useAccounts } from "../session/accounts-provider";
 import { useNeedsConnection } from "../sync/requires-online";
 import { groupDirectory } from "./client";
 import { familySpaces } from "./family-spaces";
+import { RESOLVED, UnverifiedNotice } from "./unverified-notice";
 
 const profile = () => ({ loading: false });
 export function GroupsSettings() {
@@ -52,6 +53,11 @@ function GroupsPanel({
   const [contacts, setContacts] = useState<SharingPerson[]>([]);
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState("");
+  const [resolved, setResolved] = useState("");
+  // Bumped after the owner resolves an unverified folder, to move focus to the outcome.
+  const [outcome, setOutcome] = useState(0);
+  const alertRef = useRef<HTMLParagraphElement>(null);
+  const statusRef = useRef<HTMLParagraphElement>(null);
   const [busy, setBusy] = useState(false);
   const writing = useRef(false);
   const [review, setReview] = useState<DeletionReview>();
@@ -104,6 +110,22 @@ function GroupsPanel({
       live = false;
     };
   }, [session]);
+  useEffect(() => {
+    if (outcome) (alertRef.current ?? statusRef.current)?.focus();
+  }, [outcome]);
+  /** The owner's decision on an unverified folder; focus then moves to what happened. */
+  async function resolve(folder: GroupFolder, decision: "keep" | "discard") {
+    setResolved("");
+    let done = false;
+    await act(async (directory) => {
+      await directory.verifyFolder(folder, decision);
+      done = true;
+    });
+    if (done) setResolved(RESOLVED[folder][decision]);
+    setOutcome((count) => count + 1);
+  }
+  /** A Family group's name when it is a listed (trusted) group, otherwise its address. */
+  const familyName = (id: string) => groups.find((group) => group.id === id)?.name ?? id;
   async function act(action: (directory: GroupDirectory) => Promise<unknown>) {
     if (!directory || writing.current || connection.disabled) return;
     writing.current = true;
@@ -140,7 +162,16 @@ function GroupsPanel({
         Removing a member ends access through that group when the server next checks it. Other
         grants and downloaded copies remain.
       </p>
-      {message && <p role="alert">{message}</p>}
+      {message && (
+        <p ref={alertRef} role="alert" tabIndex={-1}>
+          {message}
+        </p>
+      )}
+      {resolved && (
+        <p ref={statusRef} role="status" tabIndex={-1}>
+          {resolved}
+        </p>
+      )}
       {busy && <p role="status">Saving groups…</p>}
       {connection.disabled && <p role="status">{connection.reason}</p>}
       {unverified.map((folder) => (
@@ -148,9 +179,8 @@ function GroupsPanel({
           key={folder.folder}
           folder={folder}
           busy={busy || connection.disabled}
-          resolve={(decision) =>
-            void act((directory) => directory.verifyFolder(folder.folder, decision))
-          }
+          family={familyName}
+          resolve={(decision) => void resolve(folder.folder, decision)}
         />
       ))}
       <section aria-label="Create group">
@@ -311,58 +341,6 @@ function GroupsPanel({
         </section>
       )}
     </>
-  );
-}
-const NOTICE: Record<GroupFolder, (count: number) => [string, string]> = {
-  groups: (count) => [
-    "Group files changed",
-    `${count} group ${count === 1 ? "file was" : "files were"} changed outside the suite. Keep them or remove them?`,
-  ],
-  settings: () => [
-    "Group settings changed",
-    "Your group sharing settings were changed outside the suite. Keep them or remove them?",
-  ],
-};
-/** The owner's decision on a folder whose files were written while it was unverified. */
-function UnverifiedNotice({
-  folder,
-  busy,
-  resolve,
-}: {
-  folder: UnverifiedFolder;
-  busy: boolean;
-  resolve(decision: "keep" | "discard"): void;
-}) {
-  const [confirm, setConfirm] = useState(false);
-  const [title, text] = NOTICE[folder.folder](folder.documents.length);
-  const heading = `unverified-${folder.folder}`;
-  return (
-    <section aria-labelledby={heading}>
-      <h2 id={heading}>{title}</h2>
-      <p>{text}</p>
-      {confirm ? (
-        <fieldset disabled={busy}>
-          <legend>Remove them from your pod? This can't be undone.</legend>
-          <div className="settings-choice-row">
-            <Button variant="destructive" onClick={() => resolve("discard")}>
-              Remove files
-            </Button>
-            <Button variant="outline" onClick={() => setConfirm(false)}>
-              Cancel
-            </Button>
-          </div>
-        </fieldset>
-      ) : (
-        <div className="settings-choice-row">
-          <Button disabled={busy} onClick={() => resolve("keep")}>
-            Keep
-          </Button>
-          <Button variant="outline" disabled={busy} onClick={() => setConfirm(true)}>
-            Remove
-          </Button>
-        </div>
-      )}
-    </section>
   );
 }
 function GroupCard({

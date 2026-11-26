@@ -21,7 +21,7 @@ export type {
 export { movePreservingAccess } from "./move.js";
 export type { PrivateAccessSession, PrivateContainerOptions } from "./private-access.js";
 export { ensurePrivateContainerAccess, verifyPrivateDemoAccess } from "./private-access.js";
-export { isSealed, sealAccess, sealDataset, unsealAccess } from "./seal.js";
+export { isSealed, isSecuring, sealAccess, sealDataset, unsealAccess } from "./seal.js";
 export { isGrantableTarget } from "./targets.js";
 export type {
   AccessModesSnapshot,
