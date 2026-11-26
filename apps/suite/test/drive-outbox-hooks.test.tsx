@@ -168,3 +168,21 @@ it("tells the user when a queued folder synced onto an existing folder", () => {
     'A folder named "Plans" already existed, so Drive used it.',
   );
 });
+
+it("shares one registration between two mounted Drive providers until the last unmounts", () => {
+  const { outbox, offPolicy, offDelegate } = fakeOutbox();
+  const first = renderHook(() => useDriveReplay(session(), ROOT, vi.fn()));
+  const second = renderHook(() => useDriveReplay(session(), ROOT, vi.fn()));
+  expect(outbox.registerGuardPolicy).toHaveBeenCalledOnce();
+  expect(outbox.registerReplayDelegate).toHaveBeenCalledOnce();
+  first.unmount();
+  // The share screen's provider still needs the guard and the delegate.
+  expect(offPolicy).not.toHaveBeenCalled();
+  expect(offDelegate).not.toHaveBeenCalled();
+  second.unmount();
+  expect(offPolicy).toHaveBeenCalledOnce();
+  expect(offDelegate).toHaveBeenCalledOnce();
+  // A later mount registers afresh.
+  renderHook(() => useDriveReplay(session(), ROOT, vi.fn()));
+  expect(outbox.registerGuardPolicy).toHaveBeenCalledTimes(2);
+});
