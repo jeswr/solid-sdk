@@ -5,7 +5,7 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import { ACCM, decide, FOAF, listRequests, SOLID } from "@jeswr/pod-access/requests-solid";
 import { policyToRdf } from "@jeswr/solid-odrl";
 import { LiteralFrom, NamedNodeFrom, OptionalAs, SetFrom, TermWrapper } from "@rdfjs/wrapper";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { DataFactory, Store } from "n3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionProvider } from "../../src/auth/SessionContext.js";
@@ -54,14 +54,47 @@ function renderInbox(pod: PodStub, onChanged = () => {}, webId = OWNER) {
     </SessionProvider>,
   );
 }
+/**
+ * Bound for one step of the approval flow over the in-memory pod: the access-model probe,
+ * the preview, or the decision. Every wait below is on the UI's own completion signal,
+ * so a passing run never sleeps. The bound only matters on a loaded machine. Each step
+ * parses and serialises several RDF documents. With 8 copies of this file running
+ * on 4 cores, a decision took up to 0.6 s, close to Testing Library's 1 s default.
+ */
+const STEP = { timeout: 10_000 } as const;
+
+/** Waits until the open preview has finished reading, then requires it to be confirmable. */
+async function previewReady() {
+  const preview = screen.getByTestId("approve-preview");
+  await waitFor(
+    () => expect(within(preview).queryByText("Reading access preview…")).not.toBeInTheDocument(),
+    STEP,
+  );
+  expect(within(preview).queryByRole("alert")).not.toBeInTheDocument();
+  expect(screen.getByTestId("confirm-approve")).toBeEnabled();
+}
 async function review() {
   const button = await screen.findByText("Review & approve…");
-  await waitFor(() => expect(button).toBeEnabled());
+  await waitFor(() => expect(button).toBeEnabled(), STEP);
   fireEvent.click(button);
-  await waitFor(() => expect(screen.getByTestId("confirm-approve")).toBeEnabled());
+  await previewReady();
 }
+/** Waits for the decision the test just started to settle: the saving indicator leaves "Saving…". */
+async function decisionSettled(): Promise<HTMLElement> {
+  await waitFor(
+    () => expect(screen.getByTestId("saving-indicator")).not.toHaveTextContent("Saving…"),
+    STEP,
+  );
+  return screen.getByTestId("saving-indicator");
+}
+/**
+ * The decision must have saved, so a failure reports the app's own error, and the request
+ * record must then hold the expected status. This replaces polling the pod, which re-read
+ * and re-parsed the inbox every 50 ms while the decision was still writing.
+ */
 async function status(pod: PodStub, expected: string) {
-  await waitFor(async () => expect((await entry(pod)).status).toBe(expected));
+  expect(await decisionSettled()).toHaveTextContent("Saved");
+  expect((await entry(pod)).status).toBe(expected);
 }
 
 describe("InboxView using requests-solid", () => {
@@ -322,8 +355,8 @@ describe("InboxView using requests-solid", () => {
     OptionalAs.object(reg, SOLID.instance, `${POD}docs/report.ttl`, NamedNodeFrom.string);
     pod.seed(indexUrl, await toTurtle(index));
     fireEvent.click(screen.getByTestId("confirm-approve"));
-    await screen.findByText(/Access changed since your review/);
-    await waitFor(() => expect(screen.getByTestId("confirm-approve")).toBeEnabled());
+    await screen.findByText(/Access changed since your review/, undefined, STEP);
+    await previewReady();
     const preview = screen.getByTestId("approve-preview");
     expect(preview).toHaveTextContent("Previous preview");
     expect(preview).toHaveTextContent("/contacts/alice.ttl: Can view");
@@ -346,16 +379,16 @@ describe("InboxView using requests-solid", () => {
     pod.delete(indexUrl);
     renderInbox(pod);
     const review = await screen.findByText("Review & approve…");
-    await waitFor(() => expect(review).toBeEnabled());
+    await waitFor(() => expect(review).toBeEnabled(), STEP);
     fireEvent.click(review);
-    await screen.findByRole("alert");
+    await screen.findByRole("alert", undefined, STEP);
     expect(screen.getByRole("alert")).toHaveTextContent("owner registration");
     expect(screen.getByTestId("confirm-approve")).toBeDisabled();
     fireEvent.click(screen.getByTestId("confirm-approve"));
     expect(pod.log.some((call) => call.method === "PUT")).toBe(false);
     pod.seed(indexUrl, index ?? "");
     fireEvent.click(screen.getByText("Retry preview"));
-    await waitFor(() => expect(screen.getByTestId("confirm-approve")).toBeEnabled());
+    await previewReady();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByTestId("approve-preview")).toHaveTextContent(
       "/contacts/alice.ttl: Can view — No expiry",
@@ -367,7 +400,7 @@ describe("InboxView using requests-solid", () => {
     const pod = buildPod();
     renderInbox(pod);
     const reviewButton = await screen.findByText("Review & approve…");
-    await waitFor(() => expect(reviewButton).toBeEnabled());
+    await waitFor(() => expect(reviewButton).toBeEnabled(), STEP);
     const requester = "https://updated.example/profile#app";
     pod.seed(
       REQUEST,
@@ -396,7 +429,7 @@ describe("InboxView using requests-solid", () => {
       ),
     );
     fireEvent.click(reviewButton);
-    await waitFor(() => expect(screen.getByTestId("confirm-approve")).toBeEnabled());
+    await previewReady();
     const preview = screen.getByTestId("approve-preview");
     expect(preview).toHaveTextContent("Recipient: updated.example");
     expect(preview).toHaveTextContent("Purpose: Research");
@@ -430,12 +463,12 @@ describe("InboxView using requests-solid", () => {
     pod.log.length = 0;
     renderInbox(pod);
     const resume = await screen.findByText("Finish saved approval");
-    await waitFor(() => expect(resume).toBeEnabled());
+    await waitFor(() => expect(resume).toBeEnabled(), STEP);
     expect(screen.queryByRole("button", { name: "Deny" })).not.toBeInTheDocument();
     expect(screen.queryByText(/evil.example/)).not.toBeInTheDocument();
     expect(pod.log.some((call) => call.method === "PUT")).toBe(false);
     fireEvent.click(resume);
-    await waitFor(() => expect(screen.getByTestId("confirm-approve")).toBeEnabled());
+    await previewReady();
     fireEvent.click(screen.getByTestId("confirm-approve"));
     await status(pod, "approved");
     expect(pod.log.some((call) => call.url.endsWith("publicTypeIndex.ttl"))).toBe(false);
@@ -447,9 +480,12 @@ describe("InboxView using requests-solid", () => {
     await claimApproval(pod);
     renderInbox(pod);
     const resume = await screen.findByText("Finish saved approval");
-    await waitFor(() => expect(resume).toBeEnabled());
+    await waitFor(() => expect(resume).toBeEnabled(), STEP);
     fireEvent.click(resume);
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("never recorded"));
+    await waitFor(
+      () => expect(screen.getByRole("alert")).toHaveTextContent("never recorded"),
+      STEP,
+    );
     expect(pod.log.some((call) => call.method === "PUT")).toBe(false);
     expect(pod.log.some((call) => call.url.startsWith("https://evil.example/"))).toBe(false);
   });
@@ -491,10 +527,8 @@ describe("InboxView using requests-solid", () => {
           })
         : undefined;
     fireEvent.click(screen.getByTestId("confirm-approve"));
-    await waitFor(() =>
-      expect(screen.getByTestId("saving-indicator")).toHaveTextContent(
-        "Approving requests isn't available on this storage yet.",
-      ),
+    expect(await decisionSettled()).toHaveTextContent(
+      "Approving requests isn't available on this storage yet.",
     );
     expect(pod.log.some((call) => call.method === "PUT")).toBe(false);
   });
@@ -506,9 +540,7 @@ describe("InboxView using requests-solid", () => {
     pod.intercept = (method, url) =>
       method === "PUT" && url === REQUEST ? new Response(null, { status: 412 }) : undefined;
     fireEvent.click(screen.getByTestId("confirm-approve"));
-    await waitFor(() =>
-      expect(screen.getByTestId("saving-indicator")).toHaveTextContent("now pending"),
-    );
+    expect(await decisionSettled()).toHaveTextContent("now pending");
     expect(pod.log.filter((call) => call.method === "PUT" && call.url === REQUEST)).toHaveLength(1);
     expect(pod.has(`${ALICE}.acl`)).toBe(false);
   });
