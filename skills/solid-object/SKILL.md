@@ -81,10 +81,10 @@ map loads `dist/mod.js` directly and works the same with 0.6.0.
 |---|---|---|
 | `Agent` (TermWrapper) | `new Agent(webIdIri, dataset, DataFactory)` | `name` (vcard:fn → foaf:name → IRI path tail), `vcardFn`, `foafName`, `email`, `phone`, `website` (vcard:hasUrl → foaf:homepage), `photoUrl` (vcard:hasPhoto, read as a string), `organization`, `role`, `title`, `pimStorage` / `solidStorage` / `storageUrls: Set<string>`, `oidcIssuer: Set<string>`, `knows: Set<string>`, `hasEmail`, `hasTelephone` |
 | `WebIdDataset` (DatasetWrapper) | `new WebIdDataset(dataset, DataFactory).mainSubject` | `mainSubject: Agent \| undefined` — the **first** subject carrying any `solid:oidcIssuer`; only for when the WebID is unknown |
-| `ContainerDataset` | `new ContainerDataset(dataset, DataFactory).container` | `container: Container \| undefined` |
+| `ContainerDataset` | `new ContainerDataset(dataset, DataFactory).container` | `container: Container \| undefined`. In 0.6.0 (what the workspace resolves) there is no `ldp:Container`/`ldp:BasicContainer` fallback, so an **empty** container gives `undefined`: treat that as "no members", not "not a container" |
 | `Container` / `Resource` | via `ContainerDataset` | `contains: Set<Resource>`; per resource: `id`, `name`, `isContainer`, `title`, `label`, `modified`, `size`, `type`, `mimeType` |
 | `Email` / `Telephone` (+ datasets) | | the only classes **with setters** (`emailAddress = …`) |
-| WAC: `AclResource`, `Authorization`, `Group` | | typed `.acl` access |
+| WAC: `AclResource`, `Authorization`, `Group` | | typed `.acl` access. In 0.6.0, `Authorization.conforms` is false unless a rule has **both** `acl:accessTo` and `acl:default` (0.8.0 needs either), so an ordinary resource-only rule reads as non-conforming: do not filter rules on `conforms` under 0.6.0 |
 | ACP: `AcrDataset`, `AccessControlResource`, `Policy`, `Matcher` | | typed `.acr` access |
 | Converters | `wacToAcp(source: AclResource, target: DatasetCore)` / `acpToWac(source, target)` | translate between the two languages; throw `WacToAcpError` / `AcpToWacError` (extend `TranslationError`) |
 

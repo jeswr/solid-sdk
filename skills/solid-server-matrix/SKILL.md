@@ -139,8 +139,8 @@ Branch on these. Each cell carries evidence or is marked **[unverified]**.
    not ms. ESS "doesn't appear to check the IAT at all"; CSS rejects with
    `400 invalid_dpop_proof / "iat is not recent enough"`.
    [forum/.../dpop-rejects-iat-on-community-solid-server/7444](https://forum.solidproject.org/t/solid-oidc-primer-works-great-for-inrupt-pods-but-dpop-rejects-iat-on-community-solid-server/7444).
-   The house auth lib (`@solid/reactive-authentication`) gets this right — if you
-   hit it, suspect a *second* auth layer you added ([guide chapter 3](../../docs/guide/03-sign-in.md)).
+   Let the house auth lib (`@jeswr/pod-auth`) build DPoP proofs rather than adding
+   your own; if you hit this, suspect a *second* auth layer you added ([guide chapter 3](../../docs/guide/03-sign-in.md)).
 2. ESS "returns a UMA-compliant `WWW-Authenticate` header with an `as_uri`
    parameter on unauthenticated requests"; NSS does not; CSS has since implemented
    it. [forum/usage-of-as-uri/6462](https://forum.solidproject.org/t/usage-of-as-uri-www-authenticate-parameter/6462).

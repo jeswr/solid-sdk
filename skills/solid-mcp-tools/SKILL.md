@@ -27,9 +27,9 @@ integrators who *use* it. Implementation rules live in the package skill.
 - Reads of special-category data (health and the other DPV special categories, plus financial
   data) are audited in the pod before the result is returned. A read-only server cannot
   audit, so it withholds them. Address and contact reads are not audited.
-- Memory, profile, address and health tools work only on the remote server today: the stdio
-  CLI does not configure a client identity, so locally they return "Memory requires a
-  configured client IRI".
+- Memory, profile, address and health tools work only on the remote server: the stdio CLI
+  has no trusted MCP client identity, so it refuses them by design and they return the
+  generic "Pod operation failed".
 
 ## Connecting
 
@@ -44,10 +44,12 @@ credentials, and the person's pod session stays on the server.
 client at the CLI; the package README has copyable Claude Desktop, Claude Code and Codex
 entries. Stdout carries only MCP messages; diagnostics go to stderr.
 
-The stdio CLI does not yet pass a `clientInfo` to the server, so `memory_remember`,
-`memory_recall`, `memory_forget`, `profile_get`, `address_get` and `health_query` return
-"Memory requires a configured client IRI" locally. Use the remote server for them; the
-generic, context and chat tools work locally.
+The stdio CLI has no trusted MCP client identity (it passes no `clientInfo`), so
+`memory_remember`, `memory_recall`, `memory_forget`, `profile_get`, `address_get` and
+`health_query` deliberately refuse locally with the generic "Pod operation failed"
+(pinned in `packages/solid-mcp/test/cli.test.ts`). Do not retry or debug that error on a
+local server: use the remote server for these tools. The generic, context and chat tools
+work locally.
 
 ## Tool catalogue
 

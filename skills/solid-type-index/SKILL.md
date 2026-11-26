@@ -266,7 +266,8 @@ class TypeIndexDataset extends DatasetWrapper {
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { DataFactory } from "n3";
 
-const { dataset, etag } = await fetchRdf(indexUrl);
+// pod-auth does not patch the global fetch: pass its authenticated fetch for a private index.
+const { dataset, etag } = await fetchRdf(indexUrl, { fetch: auth.fetch });
 const index = new TypeIndexDataset(dataset, DataFactory);
 const where = index.locate("https://schema.org/TextDigitalDocument");
 index.register(indexUrl, "#registration-notes", "https://schema.org/TextDigitalDocument", {
