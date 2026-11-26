@@ -68,8 +68,11 @@ fixpoint. The package README documents the word list and delimiters.
 - Message IDs for ID-less input are now derived from the redacted text. A conversation saved through
   MCP `chat_save` before this change, without message IDs and with text a rule rewrites, gets a second,
   redacted copy of those messages on replay. Writes are create-only, so the old unredacted message and
-  title stay in the pod (only `chat_export` re-redacts them). Bead sst-5ax.39 covers re-redacting or
-  purging those legacy records. Capture paths always pass source IDs and are unaffected.
+  title stay in the pod (only `chat_export` re-redacts them). **Fixed by sst-5ax.39:** the owner runs
+  `solid-capture redact-archive` (`ChatWriter.migrateRedaction`), which rewrites changed titles,
+  account labels and source-ID messages in place, moves hash-named messages to their redacted ID, and
+  deletes originals a replay already duplicated. All writes and deletes are conditional, and one bad
+  chat is counted rather than stopping the run. Capture conversations keep their source IDs.
 - Two ID-less messages with the same role and timestamp that differ only in a redacted secret derive
   the same ID, so the second is skipped as a replay.
 

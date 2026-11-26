@@ -4,68 +4,12 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { buildEvent, serializeDataset } from "../../src/apps/calendar/lib/model/rdf";
 import type { DemoPodSnapshot } from "../../src/lib/demo-pod/pod";
+import { accessible, editDemo, prepareCalendar } from "./fixtures";
 
 const ROOT = "https://alice.demo.pod/";
-/** Change the same durable pod another tab reads, then send its real change notification. */
-async function editDemo(page: Page, edits: { path: string; body: string | null }[]) {
-  return page.evaluate(
-    async ({ root, edits }) => {
-      const request = indexedDB.open("solid-suite-demo", 1);
-      const db = await new Promise<IDBDatabase>((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      const originals: { path: string; body: string }[] = [];
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction("pods", "readwrite");
-        const store = tx.objectStore("pods");
-        const read = store.get(root);
-        read.onsuccess = () => {
-          const stored = read.result as { revision: string; snapshot: DemoPodSnapshot };
-          let resources = [...stored.snapshot.resources];
-          let seq = stored.snapshot.etagSeq;
-          for (const edit of edits) {
-            const url = new URL(edit.path, root).href;
-            const previous = resources.find(([key]) => key === url)?.[1];
-            if (!previous) throw new Error(`Missing demo fixture: ${edit.path}`);
-            originals.push({ path: edit.path, body: new TextDecoder().decode(previous.body) });
-            resources = resources.filter(([key]) => key !== url);
-            if (edit.body !== null)
-              resources.push([
-                url,
-                {
-                  ...previous,
-                  body: new TextEncoder().encode(edit.body),
-                  etag: `"regression-${++seq}"`,
-                },
-              ]);
-          }
-          store.put(
-            {
-              revision: crypto.randomUUID(),
-              snapshot: { ...stored.snapshot, resources, etagSeq: seq },
-            },
-            root,
-          );
-        };
-        tx.oncomplete = () => resolve();
-        tx.onabort = tx.onerror = () => reject(tx.error);
-      });
-      db.close();
-      const channel = new BroadcastChannel("solid-suite-demo-changes");
-      channel.postMessage(root);
-      channel.close();
-      return originals;
-    },
-    { root: ROOT, edits },
-  );
-}
-
 const DATE = "2026-11-01";
 test.use({ locale: "en-GB", timezoneId: "Europe/London" });
-test.beforeEach(async ({ page }) => {
-  await page.clock.setFixedTime(new Date("2026-11-01T12:00:00Z"));
-});
+test.beforeEach(({ page }) => prepareCalendar(page));
 async function open(page: Page, view = "week") {
   await page.goto(`/calendar/${view}?d=${DATE}`);
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -78,6 +22,67 @@ async function sidebar(page: Page) {
   }
   return page.getByRole("complementary", { name: "Calendar navigation", exact: true });
 }
+function phoneMonth(page: Page) {
+  return (page.viewportSize()?.width ?? 1280) < 640;
+}
+function dayList(page: Page) {
+  return phoneMonth(page)
+    ? page.getByRole("region", { name: /^Events on/ })
+    : page.getByRole("dialog", { name: /^Events on/ });
+}
+function moreEvents(page: Page) {
+  const cell = page.locator('.cal-month [data-day="2026-11-01"]');
+  return cell.getByRole("button", { name: /more events/ });
+}
+
+test("month bars span weeks and the phone day target opens its full agenda without page overflow", async ({
+  page,
+}) => {
+  await open(page, "month");
+  const grid = page.getByRole("grid", { name: "Month calendar" });
+  const bars = grid.getByRole(phoneMonth(page) ? "img" : "button", { name: /^Three-day trip,/ });
+  await expect(bars).toHaveCount(2);
+  await expect(bars.first()).toHaveClass(/cal-continues-after/);
+  await expect(bars.last()).toHaveClass(/cal-continues-before/);
+  await expect(bars.last()).toHaveAccessibleName(
+    "Three-day trip, Sun 1 Nov 2026 – Tue 3 Nov 2026, Personal",
+  );
+  const monday = grid.locator('[data-day="2026-11-02"]');
+  const dayBox = await monday.boundingBox();
+  const barBox = await bars.last().boundingBox();
+  expect(barBox?.width).toBeGreaterThan((dayBox?.width ?? Infinity) * 1.8);
+  expect(barBox?.width).toBeLessThanOrEqual((dayBox?.width ?? 0) * 2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    page.viewportSize()?.width ?? 0,
+  );
+  if (phoneMonth(page)) {
+    await expect(grid.locator("button.cal-event")).toHaveCount(0);
+    await expect(grid.locator('[data-day="2026-11-01"] .cal-phone-more')).toHaveText("+9");
+    for (const button of await grid.locator(".cal-month-open").all()) {
+      const box = await button.boundingBox();
+      expect(box?.width).toBeGreaterThanOrEqual(44);
+      expect(box?.height).toBeGreaterThanOrEqual(44);
+    }
+    await monday.getByRole("button", { name: /^Show events on/ }).click();
+    const agenda = dayList(page);
+    await expect(agenda).toHaveAccessibleName("Events on Monday, 2 November 2026");
+    await expect(agenda.getByRole("button", { name: /^Three-day trip,/ })).toBeVisible();
+    await expect(agenda.getByRole("button", { name: /^Team stand-up,/ })).toBeVisible();
+    for (const button of await agenda.getByRole("button").all()) {
+      expect((await button.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+    }
+    expect((await new AxeBuilder({ page }).include(".cal-screen").analyze()).violations).toEqual(
+      [],
+    );
+  } else {
+    await monday.focus();
+    await monday.press("ArrowRight");
+    await page.keyboard.press("Tab");
+    await expect(bars.last()).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(grid.locator('[data-day="2026-11-03"]')).toBeFocused();
+  }
+});
 
 test("navigates months, keeps the date in the URL and restores view history", async ({ page }) => {
   await open(page, "month");
@@ -127,6 +132,8 @@ test("moves through month days with the keyboard and opens quick-create", async 
   await expect(page.locator('.cal-month [data-day="2026-12-09"]')).toBeFocused();
   await page.keyboard.press("PageUp");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("November 2026");
+  // The month re-renders before focus returns to the day; Enter must reach the focused cell.
+  await expect(page.locator('.cal-month [data-day="2026-11-09"]')).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("dialog", { name: "Create event", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
@@ -185,11 +192,8 @@ test("shows recurring stand-ups on Mon/Wed/Fri, lays overlaps side by side and o
   expect(second).not.toBeNull();
   expect(second?.x).toBeGreaterThan(first?.x ?? 0);
   await page.getByRole("combobox", { name: "Calendar view", exact: true }).selectOption("month");
-  await page
-    .locator('[data-day="2026-11-01"]')
-    .getByRole("button", { name: /more events/ })
-    .click();
-  const overflow = page.getByRole("dialog", { name: /Events on/ });
+  await moreEvents(page).click();
+  const overflow = dayList(page);
   await expect(overflow).toBeVisible();
   await expect(overflow.getByRole("button", { name: /^Read in the park,/ })).toBeVisible();
 });
@@ -199,12 +203,10 @@ for (const close of ["button", "Escape"] as const) {
     page,
   }) => {
     await open(page, "month");
-    const more = page
-      .locator('[data-day="2026-11-01"]')
-      .getByRole("button", { name: /more events/ });
+    const more = moreEvents(page);
     await more.focus();
     await page.keyboard.press("Enter");
-    const overflow = page.getByRole("dialog", { name: /Events on/ });
+    const overflow = dayList(page);
     const event = overflow.getByRole("button", { name: /^Read in the park,/ });
     await event.focus();
     await page.keyboard.press("Enter");
@@ -219,6 +221,7 @@ for (const close of ["button", "Escape"] as const) {
     await expect(page.locator(".cal-details")).toHaveCount(0);
     await expect(overflow).toBeVisible();
     await expect(event).toBeFocused();
+    if (phoneMonth(page)) return;
     await page.keyboard.press("Escape");
     await expect(overflow).toBeHidden();
     await expect(more).toBeFocused();
@@ -229,19 +232,22 @@ test("restores the connected overflow button if its selected event is removed du
   page,
 }) => {
   await open(page, "month");
-  const day = page.locator('[data-day="2026-11-01"]');
-  const more = day.getByRole("button", { name: /more events/ });
+  const day = page.locator('.cal-month [data-day="2026-11-01"]');
+  const more = moreEvents(page);
   await more.click();
   const event = page
-    .locator(".cal-overflow")
-    .getByRole("button", { name: /^Read in the park,/, includeHidden: true });
+    .locator(phoneMonth(page) ? ".cal-month-agenda" : ".cal-overflow")
+    .getByRole("button", {
+      name: /^Read in the park,/,
+      includeHidden: true,
+    });
   await event.click();
   await expect(page.locator(".cal-details")).toBeVisible();
   // Simulate a detached trigger while keeping the selected Details open.
   await event.evaluate((button) => button.remove());
   await page.getByRole("button", { name: "Close event details", exact: true }).click();
   await expect(page.locator(".cal-details")).toHaveCount(0);
-  await expect(more).toBeFocused();
+  await expect(phoneMonth(page) ? day : more).toBeFocused();
 });
 
 test("searches the labelled six-month window and opens a read-only result", async ({ page }) => {
@@ -274,13 +280,7 @@ test("creates a named calendar with a persisted colour", async ({ page }) => {
 for (const view of ["month", "week", "day", "agenda"]) {
   test(`${view} is accessible and fits the viewport`, async ({ page }) => {
     await open(page, view);
-    const results = await new AxeBuilder({ page })
-      .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-      .analyze();
-    expect(results.violations).toEqual([]);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-      true,
-    );
+    await accessible(page);
     if (view === "agenda") {
       await page.getByRole("button", { name: "Load more", exact: true }).click();
       await expect(page.getByRole("button", { name: "Load more", exact: true })).toBeVisible();
@@ -397,11 +397,7 @@ test("the Sunday seed shows the trip in the default week and month", async ({ pa
     .getByRole("grid", { name: "Month calendar" })
     .locator('[data-day="2026-11-01"]');
   await today.getByRole("button", { name: /more events/ }).click();
-  await expect(
-    page
-      .getByRole("dialog", { name: /Events on/ })
-      .getByRole("button", { name: /^Three-day trip,/ }),
-  ).toBeVisible();
+  await expect(dayList(page).getByRole("button", { name: /^Three-day trip,/ })).toBeVisible();
 });
 
 test("open details follow a remote rename and close after remote deletion", async ({ page }) => {

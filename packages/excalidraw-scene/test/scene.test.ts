@@ -611,7 +611,11 @@ it("starts revisions when explicitly editing an opaque future element without ve
   expect(updateElements(s, ["future"], { vendor: "edited" }).elements[0]?.version).toBe(1);
 });
 
-it("bounds and exports a rotated 20,000-point pen stroke within 100 ms each", () => {
+// The budget catches a quadratic regression (seconds at 20,000 points), not machine speed:
+// a loaded CI runner took 110 ms for the export on 26 Nov 2026, so allow 500 ms.
+const STROKE_BUDGET_MS = 500;
+
+it("bounds and exports a rotated 20,000-point pen stroke within the linear-time budget", () => {
   const element = freedraw(
     10,
     20,
@@ -627,6 +631,6 @@ it("bounds and exports a rotated 20,000-point pen stroke within 100 ms each", ()
   const exportMs = performance.now() - exportStart;
   expect(bounds.width).toBeGreaterThan(1000);
   expect(svg).toContain("polyline");
-  expect(boundsMs).toBeLessThan(100);
-  expect(exportMs).toBeLessThan(100);
+  expect(boundsMs).toBeLessThan(STROKE_BUDGET_MS);
+  expect(exportMs).toBeLessThan(STROKE_BUDGET_MS);
 });

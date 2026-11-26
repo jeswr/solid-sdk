@@ -13,7 +13,6 @@ import {
   AlertDialogTitle,
   Button,
   EmptyState,
-  ErrorState,
   LoadingSkeleton,
   renderAsync,
   TagInput,
@@ -33,6 +32,7 @@ import {
   projectContact,
 } from "../state/data";
 import { ContactExport } from "./contact-export";
+import { ContactLoadError } from "./contact-load-error";
 import { ContactAvatar } from "./contacts-list";
 
 export function ContactDetail({ contactRef, onClose }: { contactRef: string; onClose(): void }) {
@@ -87,9 +87,7 @@ export function ContactDetail({ contactRef, onClose }: { contactRef: string; onC
       </Button>
       {renderAsync({
         loading: state.status === "loading" && <LoadingSkeleton preset="detail" />,
-        error: state.status === "error" && (
-          <ErrorState error="unreachable" actions={{ retry: state.retry }} />
-        ),
+        error: state.status === "error" && <ContactLoadError onRetry={state.retry} />,
         empty: !person && (
           <EmptyState
             title="Contact not found"
