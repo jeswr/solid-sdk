@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 /**
  * The StoryGraph (and Open Library) → Documents (Tier-C file import).
  *
@@ -31,7 +32,12 @@ import {
   parseDateOnly,
   tagList,
 } from "../core/export-fields.js";
-import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
+import type {
+  FileImportAdapter,
+  FileImportContext,
+  FileImportOutcome,
+  ImportFile,
+} from "../core/file-import.js";
 import { csvRows } from "../core/file-stream.js";
 import { sourceItemUrl } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
@@ -65,23 +71,36 @@ export const storygraphFileAdapter: FileImportAdapter = {
   fileHint:
     "The StoryGraph → Manage Account → Export StoryGraph Library, or Open Library → My Books → Export reading log. Select the downloaded CSV.",
 
-  async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
+  async importFile(
+    file: ImportFile,
+    ctx: FileImportContext,
+  ): Promise<FileImportOutcome | undefined> {
     ctx.progress({ label: "Reading your library…", done: 0, total: 1 });
     let doc = "";
     const store = new Store();
     const books = new Set<string>();
     let dialect: ReadingDialect | undefined;
     let rows = 0;
-    for await (const row of csvRows(file, ctx.skip)) {
+    let invalid = 0;
+    const admitRow = () => {
+      ctx.signal?.throwIfAborted();
+      return rows++ < ctx.maxRows;
+    };
+    const skipInvalid = () => {
+      invalid++;
+      ctx.skip();
+    };
+    for await (const row of csvRows(file, () => {
+      if (admitRow()) skipInvalid();
+    })) {
       if (!dialect) {
         dialect = readingDialect(Object.keys(row));
         doc = ctx.resolve(SLUGS[dialect]);
       }
-      if (rows >= ctx.maxRows) break;
-      rows++;
+      if (!admitRow()) continue;
       const title = cappedText(field(row, "Title"), MAX_TITLE_CHARS);
       if (!title) {
-        ctx.skip();
+        skipInvalid();
         continue;
       }
       const authors = cappedText(field(row, "Authors", "Author(s)", "Author"), MAX_NAME_CHARS);
@@ -111,6 +130,8 @@ export const storygraphFileAdapter: FileImportAdapter = {
       if (added) book.dateCreated = added;
     }
 
+    // A capped snapshot omits even the staged rows, except invalid rows already counted.
+    if (rows > ctx.maxRows) return { skipped: rows - invalid, warnings: ["row-cap"] };
     ctx.progress({ label: "Saving to your pod…", done: 1, total: 1 });
     if (books.size === 0 || !dialect) return;
     await ctx.write({

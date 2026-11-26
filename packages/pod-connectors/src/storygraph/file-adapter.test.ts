@@ -1,9 +1,11 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { bookFragment } from "../core/books.js";
 import { MAX_BODY_CHARS } from "../core/export-fields.js";
+import type { FileImportAdapter } from "../core/file-import.js";
 import { fileImport, memoryFile, streamedBytesFile, TEST_POD_ROOT } from "../core/testing.js";
 import { Book, CLASSES } from "../core/vocab.js";
 import { goodreadsFileAdapter } from "../goodreads/file-adapter.js";
@@ -88,6 +90,34 @@ describe("storygraph file adapter", () => {
     expect(edition?.readingStatus).toBe("read");
     expect(edition?.ratingValue).toBe(4);
     expect(edition?.isbn).toBe("9780441013593");
+  });
+
+  it.each([
+    { csv: STORYGRAPH, doc: DOC, maxRows: 3 },
+    { csv: OPEN_LIBRARY, doc: OPEN_LIBRARY_DOC, maxRows: 2 },
+  ])("preserves a complete library on a capped re-import of $doc", async ({
+    csv,
+    doc,
+    maxRows,
+  }) => {
+    const adapter: FileImportAdapter = {
+      ...storygraphFileAdapter,
+      importFile: (file, ctx) => storygraphFileAdapter.importFile(file, { ...ctx, maxRows }),
+    };
+    const { pod, report: exact } = await fileImport(adapter, memoryFile("library.csv", csv));
+    expect(exact.written.map((w) => w.url)).toEqual([doc]);
+    expect(exact.warnings).toBeUndefined();
+    const before = pod.get(doc);
+    expect(books(pod.dataset(doc))).toHaveLength(maxRows);
+    const sample = csv.slice(csv.lastIndexOf("\n") + 1);
+    // The first excess row has too many cells for the CSV reader to yield it.
+    const overflow = `${csv.replace("Synthetic", "Changed")}\n${sample},extra\n${sample}`;
+    const { report } = await fileImport(adapter, streamedBytesFile("library.csv", overflow), {
+      pod,
+    });
+    expect(report).toMatchObject({ written: [], skipped: maxRows + 2, warnings: ["row-cap"] });
+    expect(report.state?.counts.skipped).toBe(maxRows + 2);
+    expect(pod.get(doc)).toBe(before);
   });
 
   it("dedups the same book across Goodreads and StoryGraph (ISBN-10 vs ISBN-13)", async () => {

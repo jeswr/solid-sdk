@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 import { ChunkSlices } from "./chunk-slices.js";
 import type { ImportFile } from "./file-import.js";
 import { fileText } from "./file-stream.js";
@@ -158,7 +159,7 @@ export interface JsonEntry {
 }
 
 /** Select array members and optional root fields without retaining the export.
- * An oversized selected value is discarded and counted once through onSkip.
+ * An oversized selected value is discarded and its selector path reported once through onSkip.
  * Overflow outside a selected value (including routing keys) fails the file.
  * onUnselected reports array members containing no matching selector; empty
  * selected arrays still match. Mixed wrapper/flat imports can account for omissions.
@@ -170,7 +171,7 @@ export async function* jsonEntries(
   file: ImportFile,
   arrays: readonly string[],
   fields: readonly string[] = [],
-  onSkip: () => void = () => {},
+  onSkip: (path: string) => void = () => {},
   onUnselected: (arrayPath: string) => void = () => {},
   boundaries: readonly string[] = [],
 ): AsyncGenerator<JsonEntry> {
@@ -237,7 +238,7 @@ export async function* jsonEntries(
         if (bounded) yield { path, value: undefined, end: true };
         if (select) {
           const raw = reader.endRecord();
-          if (raw === undefined) onSkip();
+          if (raw === undefined) onSkip(path);
           else yield { path, value: JSON.parse(raw) };
         }
         const end = await next();
@@ -261,7 +262,7 @@ export async function* jsonEntries(
     }
     yield* visit(path, first, depth, true);
     const raw = reader.endRecord();
-    if (raw === undefined) onSkip();
+    if (raw === undefined) onSkip(path);
     else yield { path, value: JSON.parse(raw) };
   }
   try {

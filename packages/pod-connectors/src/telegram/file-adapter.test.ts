@@ -1,9 +1,11 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { MAX_BODY_CHARS } from "../core/export-fields.js";
-import { MAX_JSON_RECORD_BYTES } from "../core/file-json.js";
+import { type FileImportAdapter, MAX_ROWS } from "../core/file-import.js";
+import { MAX_JSON_RECORD_BYTES, MAX_JSON_TOKEN_BYTES } from "../core/file-json.js";
 import { sha256Hex32 } from "../core/slug.js";
 import { fileImport, memoryFile, streamedBytesFile, TEST_POD_ROOT } from "../core/testing.js";
 import { CLASSES, Message } from "../core/vocab.js";
@@ -179,6 +181,91 @@ describe("telegram file adapter", () => {
       expect([...pod.dataset(doc)].some((q) => q.object.value === "Ignored")).toBe(false);
     // One Type Index registration covers the per-chat container.
     expect(pod.get(report.indexUrl)).toContain(`${ROOT}social/telegram/`);
+  });
+
+  it("keeps a previously imported chat when an account re-import cuts it off at 100,000 rows", async () => {
+    const first = { id: 1, type: "message", text: "first chat" };
+    const complete = {
+      messages: [
+        { id: 1, type: "message", text: "old first message" },
+        { id: 2, type: "message", text: "old second message" },
+      ],
+      id: 2,
+    };
+    const { pod } = await fileImport(
+      telegramFileAdapter,
+      memoryFile("result.json", JSON.stringify(complete)),
+    );
+    const cutDoc = await chatDoc("2");
+    const before = pod.get(cutDoc);
+    expect(before).toContain("old second message");
+    const account = {
+      chats: {
+        list: [
+          { id: 1, messages: [...Array(MAX_ROWS - 2).fill({ type: "service" }), first] },
+          { ...complete, messages: [{ ...first, text: "changed" }, complete.messages[1]] },
+        ],
+      },
+      left_chats: { list: [{ id: 3, messages: [first, { ...first, id: 2 }] }] },
+    };
+    const { report } = await fileImport(
+      telegramFileAdapter,
+      streamedBytesFile("result.json", JSON.stringify(account), 64 * 1024),
+      { pod },
+    );
+    expect(report.warnings).toEqual(["row-cap"]);
+    expect(report.skipped).toBe(4);
+    expect(report.state?.counts.skipped).toBe(4);
+    expect(report.written.map((w) => w.url)).toEqual([await chatDoc("1")]);
+    expect(pod.get(cutDoc)).toBe(before);
+    expect(pod.get(await chatDoc("3"))).toBeUndefined();
+  }, 20_000);
+
+  it("writes at the exact cap and withholds a chat repeated beyond the cap", async () => {
+    const adapter: FileImportAdapter = {
+      ...telegramFileAdapter,
+      importFile: (file, ctx) => telegramFileAdapter.importFile(file, { ...ctx, maxRows: 1 }),
+    };
+    const message = { id: 1, type: "message", text: "first copy" };
+    const chat = { id: 1, messages: [message] };
+    const result = (data: unknown) => memoryFile("result.json", JSON.stringify(data));
+    const { pod, report } = await fileImport(adapter, result(chat));
+    const doc = await chatDoc("1");
+    const before = pod.get(doc);
+    expect(report.written.map((w) => w.url)).toEqual([doc]);
+    expect(report.warnings).toBeUndefined();
+    expect(report.skipped).toBeUndefined();
+
+    const overflow = await fileImport(
+      adapter,
+      result({
+        chats: { list: [{ ...chat, messages: [{ ...message, text: "changed" }] }] },
+        left_chats: { list: [{ messages: [{ ...message, id: 2 }], id: chat.id }] },
+      }),
+      { pod },
+    );
+    expect(overflow.report).toMatchObject({ written: [], skipped: 2, warnings: ["row-cap"] });
+    expect(pod.get(doc)).toBe(before);
+  });
+
+  it("counts an oversized message at the cap even though the JSON reader discards it", async () => {
+    const adapter: FileImportAdapter = {
+      ...telegramFileAdapter,
+      importFile: (file, ctx) => telegramFileAdapter.importFile(file, { ...ctx, maxRows: 1 }),
+    };
+    const result = JSON.stringify({
+      id: 1,
+      messages: [
+        { id: 1, type: "message", text: "within the cap" },
+        { id: 2, type: "message", text: "x".repeat(MAX_JSON_TOKEN_BYTES + 1) },
+      ],
+    });
+    const { pod, report } = await fileImport(
+      adapter,
+      streamedBytesFile("result.json", result, 64 * 1024),
+    );
+    expect(report).toMatchObject({ written: [], skipped: 2, warnings: ["row-cap"] });
+    expect(pod.get(await chatDoc("1"))).toBeUndefined();
   });
 
   it("dedups repeated messages and re-imports idempotently", async () => {
