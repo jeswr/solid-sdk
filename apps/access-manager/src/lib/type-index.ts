@@ -38,8 +38,9 @@ export function classLabel(classIri: string): string {
 export async function readTypeRegistrations(
   webId: string,
   fetchFn: SolidFetch,
+  profileFetch: SolidFetch = fetchFn,
 ): Promise<TypeRegistration[]> {
-  const profile = await readRdf(webId, fetchFn);
+  const profile = await readRdf(webId, profileFetch);
   if (!profile) return [];
   const out: TypeRegistration[] = [];
   const indexes: { url: string; visibility: "public" | "private" }[] = [];

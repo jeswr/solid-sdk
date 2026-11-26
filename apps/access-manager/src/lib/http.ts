@@ -3,8 +3,8 @@
 // AUTHORED-BY Claude Fable 5
 //
 // The HTTP seam of the whole app. EVERY pod interaction goes through an
-// injectable `SolidFetch` (the authenticated fetch handed down from the login
-// controller), so every view and every pipeline is unit-testable against a
+// injectable `SolidFetch` (the authenticated fetch handed down from the pod-auth
+// core), so every view and every pipeline is unit-testable against a
 // stubbed in-memory pod — no live server needed for the gate.
 //
 // Writes are ALWAYS conditional (the suite CAS discipline, proposal §3.5):

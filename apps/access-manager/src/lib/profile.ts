@@ -2,7 +2,7 @@
 //
 // Requester-profile resolution for the inbox + dashboard: WebID → display name
 // + storage root. SSRF-conscious: only http(s) IRIs are ever dereferenced, the
-// fetch goes through the INJECTED seam (the app's session fetch — never an
+// fetch goes through the INJECTED public seam (a pristine fetch — never an
 // ambient global), and every typed read of the FOREIGN profile is guarded (a
 // malformed profile degrades to the WebID string, never throws into the view).
 
@@ -31,7 +31,7 @@ export function resolveAgentDisplay(webId: string, fetchFn: SolidFetch): Promise
   return hit;
 }
 
-/** Test hook: drop the memo (module-level cache would leak across tests). */
+/** Drop display metadata on logout/account changes and between tests. */
 export function clearAgentDisplayCache(): void {
   cache.clear();
 }

@@ -1,3 +1,4 @@
+// AUTHORED-BY GPT-6.1 Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Claude Fable 5
 // Demo mode renders the REAL four views over the Ada-&-Bex fixture pod:
@@ -144,7 +145,7 @@ describe("DemoApp — actions are inert (read-only fixture pod, no writes)", () 
     const before = pod.body(DEMO_REQUEST);
     render(
       <ThemeProvider>
-        <SessionProvider session={session}>
+        <SessionProvider session={session} publicFetch={session.fetch}>
           <Shell webId={session.webId} onSignOut={() => undefined} initialTab="inbox" />
         </SessionProvider>
       </ThemeProvider>,
@@ -175,7 +176,7 @@ describe("DemoApp — actions are inert (read-only fixture pod, no writes)", () 
     const aclBefore = pod.body(`${HEALTH}.acl`);
     render(
       <ThemeProvider>
-        <SessionProvider session={session}>
+        <SessionProvider session={session} publicFetch={session.fetch}>
           <Shell webId={session.webId} onSignOut={() => undefined} initialTab="dashboard" />
         </SessionProvider>
       </ThemeProvider>,
