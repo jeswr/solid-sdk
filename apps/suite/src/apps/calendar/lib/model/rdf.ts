@@ -22,6 +22,8 @@ import {
   OptionalAs,
   OptionalFrom,
   SetFrom,
+  TermAs,
+  TermFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, type Store } from "n3";
@@ -83,8 +85,16 @@ export class ModelNode extends TermWrapper {
     }
     return undefined;
   }
+  /**
+   * First object with termType "Literal" over the predicate and its aliases. `LiteralAs.string`
+   * does not check the term type, so an IRI or blank-node object must be skipped here rather
+   * than read as text and written back as a string literal.
+   */
   text(p: string): string | undefined {
-    return this.read(p, LiteralAs.string);
+    for (const predicate of aliases(p))
+      for (const term of SetFrom.subjectPredicate(this, predicate, TermAs.term, TermFrom.itself))
+        if (term.termType === "Literal") return term.value;
+    return undefined;
   }
   clear(p: string): void {
     for (const predicate of aliases(p))
@@ -155,7 +165,7 @@ export class EventDoc extends ModelNode {
   /**
    * The generated reader is strict: it returns `undefined` for a language-tagged, duplicated or
    * non-`xsd:string` value. The app rewrites whole documents on every edit, so a field dropped on
-   * read would be erased from the pod. Fall back to the first literal's lexical value, as the
+   * read would be erased from the pod. Fall back to the first Literal object's lexical value (IRI and blank-node objects are ignored), as the
    * hand-written model always did.
    */
   private tolerant(generated: string | undefined, predicate: string): string | undefined {
