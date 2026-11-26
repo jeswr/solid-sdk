@@ -57,3 +57,7 @@ export function validateTransaction(value: Transaction): void {
   ])
     if (optional !== undefined) iri(optional);
 }
+/** False for a listed record that holds links the read could not show; it is read-only. */
+export function isTransactionWritable(value: Transaction): boolean {
+  return !value.unreadableLinks?.length;
+}

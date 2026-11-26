@@ -3,6 +3,7 @@
 import {
   addAmounts,
   type Category,
+  isTransactionWritable,
   MoneyDocument,
   createTransfer as modelTransfer,
   monthKey,
@@ -21,6 +22,20 @@ import { loadCategories, resolveCategory } from "./categories";
 import { type MoneyClient, storeOf } from "./container";
 import { assertImportDeletionAllowed } from "./import";
 import { reconcileMutation } from "./mutations";
+
+/** Shown when a stored record holds links Money could not read; saving would erase them. */
+export const READ_ONLY_TRANSACTION =
+  "This transaction holds links Money can't read, so changing it here would erase them. Repair the record in the pod first.";
+function assertWritable(row: Transaction) {
+  if (!isTransactionWritable(row)) throw new Error(READ_ONLY_TRANSACTION);
+}
+function assertStoredWritable(document: MoneyDocument, id: string) {
+  try {
+    document.assertTransactionWritable(id);
+  } catch (cause) {
+    throw new Error(READ_ONLY_TRANSACTION, { cause });
+  }
+}
 export async function allTransactions(client: MoneyClient): Promise<Transaction[]> {
   const store = storeOf(client);
   const listing = await store.read("transactions/");
@@ -110,6 +125,7 @@ export async function updateTransaction(
   original: Transaction,
   value: Transaction,
 ) {
+  assertWritable(original);
   if (original.debitAccount || original.creditAccount)
     throw new Error(
       "Transfer legs must be changed together. Editing transfers is not supported yet.",
@@ -124,6 +140,9 @@ export async function updateTransaction(
     throw new Error(
       "Transfer legs must be changed together. Editing transfers is not supported yet.",
     );
+  // Check the stored source before any write: a move copies the listed snapshot to another
+  // shard, where nothing would refuse it, and then deletes every quad of the source.
+  if (current) assertStoredWritable(source.document, current.id);
   const moving = monthKey(original.postingTime) !== monthKey(value.postingTime);
   const moved = {
     ...value,
@@ -230,6 +249,11 @@ export async function bulkCategorise(
     throw new Error(
       "Transfer legs must be changed together. Exclude transfers from your selection.",
     );
+  // Refuse before any shard is written, so a selection never half-applies.
+  if (!rows.every(isTransactionWritable))
+    throw new Error(
+      "A selected transaction holds links Money can't read. Exclude it from your selection.",
+    );
   const store = storeOf(client);
   const saved: string[] = [];
   for (const key of new Set(rows.map((row) => monthKey(row.postingTime)))) {
@@ -253,7 +277,13 @@ export async function bulkCategorise(
         const current = loaded.document.transactions();
         for (const row of group) {
           const latest = current.find((value) => value.id === row.id);
-          if (!latest || latest.debitAccount || latest.creditAccount) throw new MoneyIoError(412);
+          if (
+            !latest ||
+            latest.debitAccount ||
+            latest.creditAccount ||
+            !isTransactionWritable(latest)
+          )
+            throw new MoneyIoError(412);
           putTransaction(loaded.document, categorised(latest, category));
         }
         await store.write(loaded.url, loaded.document, loaded.condition);
@@ -267,7 +297,11 @@ export async function bulkCategorise(
 export async function deleteTransaction(client: MoneyClient, row: Transaction) {
   const loaded = await storeOf(client).read(row.id.slice(0, row.id.indexOf("#")));
   const current = loaded.document.transactions().find((value) => value.id === row.id);
-  if (current) await assertImportDeletionAllowed(client, current.derivedFrom);
+  // An unreadable derivedFrom is left out of the listed record: check every stored value, so
+  // a row of an unfinished import cannot be deleted because its link was ambiguous.
+  if (current)
+    for (const derivedFrom of loaded.document.linkIris(current.id, "derivedFrom"))
+      await assertImportDeletionAllowed(client, derivedFrom);
   return deleteAtVersion(client, row, loaded);
 }
 /** The fragment remains stable when a transaction is explicitly moved to another month. */

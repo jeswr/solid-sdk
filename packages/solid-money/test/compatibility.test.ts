@@ -4,6 +4,7 @@ import { NS } from "@jeswr/suite-vocab";
 import { DataFactory } from "n3";
 import { expect, it } from "vitest";
 import {
+  isTransactionWritable,
   MoneyDocument,
   parseMoney,
   putAccount,
@@ -13,6 +14,11 @@ import {
   V,
 } from "../src/index.js";
 import { account, base, row } from "./money-model-fixtures.js";
+
+function must<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("missing value");
+  return value;
+}
 
 it.each([
   '"Current"@en',
@@ -42,19 +48,44 @@ it.each([
 });
 
 it.each([
-  [V.category, '"not an IRI"'],
-  [V.payee, "<#one>, <#two>"],
-  [V.derivedFrom, "<#one>, <#two>"],
-  [V.debitAccount, '"x"'],
-  [V.creditAccount, "<#one>, <#two>"],
-])("lists a record with an unprojectable optional link %s but refuses to save over it", async (predicate, value) => {
+  ["category", V.category, '"not an IRI"'],
+  ["payee", V.payee, "<#one>, <#two>"],
+  ["derivedFrom", V.derivedFrom, "<#one>, <#two>"],
+  ["debitAccount", V.debitAccount, '"x"'],
+  ["creditAccount", V.creditAccount, "<#one>, <#two>"],
+] as const)("lists a record with an unprojectable optional link %s but refuses to save over it", async (key, predicate, value) => {
   const document = new MoneyDocument();
-  putTransaction(document, row);
+  putTransaction(document, { ...row, [key]: undefined });
   const extra = await parseMoney(`<${row.id}> <${predicate}> ${value} .`, base);
   for (const quad of extra.dataset) document.dataset.add(quad);
+  const before = new Set([...document.dataset].map((quad) => JSON.stringify(quad)));
   // One bad link must not hide the ledger: the record still lists, without the link.
-  expect(document.transactions().map((t) => t.id)).toEqual([row.id]);
+  const [listed] = document.transactions();
+  expect(listed?.id).toBe(row.id);
+  expect(listed?.[key]).toBeUndefined();
+  expect(listed?.unreadableLinks).toEqual([key]);
+  expect(isTransactionWritable(must(listed))).toBe(false);
+  expect(() => document.assertTransactionWritable(row.id)).toThrow("Invalid transaction link");
   expect(() => putTransaction(document, row)).toThrow("Invalid transaction link");
+  // The listed snapshot is refused even by a document that holds no copy of the link.
+  const elsewhere = new MoneyDocument();
+  expect(() => putTransaction(elsewhere, { ...must(listed), id: `${base}#moved` })).toThrow(
+    "Invalid transaction link",
+  );
+  expect(elsewhere.dataset.size).toBe(0);
+  // The refused save left the stored record exactly as it was.
+  expect(new Set([...document.dataset].map((quad) => JSON.stringify(quad)))).toEqual(before);
+  if (key === "derivedFrom")
+    expect(document.linkIris(row.id, key)).toEqual([`${base}#one`, `${base}#two`]);
+});
+
+it("lists a readable record without an unreadableLinks marker", () => {
+  const document = new MoneyDocument();
+  putTransaction(document, row);
+  const [listed] = document.transactions();
+  expect(listed).not.toHaveProperty("unreadableLinks");
+  expect(isTransactionWritable(must(listed))).toBe(true);
+  expect(() => document.assertTransactionWritable(row.id)).not.toThrow();
 });
 
 it("keeps every statement of an ambiguous link through a load-edit-save cycle", async () => {
