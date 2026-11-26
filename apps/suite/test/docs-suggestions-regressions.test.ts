@@ -530,3 +530,38 @@ it("finds the suggestion after the caret when the caret is inside marked text", 
   editor.commands.setTextSelection(2);
   expect(suggestionAt(editor.state)).toEqual(pending);
 });
+
+// AUTHORED-BY Claude Opus 5.5
+// Typing at the start of a suggested paragraph (Enter, then type) must keep that
+// paragraph's start edge and the join before it, in both Suggesting and Editing mode.
+it.each([
+  ["the middle", "<p>leftright</p>", 5, ["leftright"], ["left", "Xright"]],
+  ["the end", "<p>left</p><p>other</p>", 5, ["left", "other"], ["left", "X", "other"]],
+] as const)("keeps a suggested paragraph break after typing at its start (Enter at %s, Suggesting)", (_where, html, caret, rejected, accepted) => {
+  for (const accept of [false, true]) {
+    const editor = make(html);
+    editor.commands.setTextSelection(caret);
+    editor.commands.splitBlock();
+    editor.commands.insertContent("X");
+    expect(suggestions(editor.state.doc)).toHaveLength(2);
+    editor.view.dispatch(resolveSuggestions(editor.state, accept));
+    expect(paragraphs(editor)).toEqual(accept ? accepted : rejected);
+    expect(suggestions(editor.state.doc)).toEqual([]);
+  }
+});
+it.each([
+  ["the middle", "<p>leftright</p>", 5, ["leftXright"], ["left", "Xright"]],
+  ["the end", "<p>left</p><p>other</p>", 5, ["leftX", "other"], ["left", "X", "other"]],
+] as const)("keeps a suggested paragraph break after the owner types at its start (Enter at %s, Editing)", (_where, html, caret, rejected, accepted) => {
+  for (const accept of [false, true]) {
+    const editor = make(html);
+    editor.commands.setTextSelection(caret);
+    editor.commands.splitBlock();
+    editor.view.dispatch(editor.state.tr.setMeta(suggestionKey, { enabled: false, author: "" }));
+    editor.commands.insertContent("X");
+    expect(suggestions(editor.state.doc)).toHaveLength(1);
+    editor.view.dispatch(resolveSuggestions(editor.state, accept));
+    expect(paragraphs(editor)).toEqual(accept ? accepted : rejected);
+    expect(suggestions(editor.state.doc)).toEqual([]);
+  }
+});
