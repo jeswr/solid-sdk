@@ -143,92 +143,70 @@ not establish safe migration. Run its regression suite when changing the transla
 
 ## Notification delivery and reading
 
-`createNotify({ webId, fetch, clock?, recipientProtocol?, pinningFetch? })` returns a callable
-`notify(agentWebId, activity)`. Supply the pod-auth fetch and authenticated session `webId`; a different activity actor is refused.
-Builders return templates without actor: `shareNotification`, `assignmentAnnounce`,
-`mentionNotification`, `roomInvitation`, `issueAnnounce(issue, recipient, summary)`. The latter
-preserves Issues' issue-event recipient target and human summary as an Announce draft.
-Preserve Tasks §5.7's assignment summary exactly.
-Delivery failures return structured values and never throw. Do not change permissions here.
+`createNotify({ webId, fetch, clock?, recipientProtocol?, pinningFetch? })` returns
+`notify(agentWebId, activity)`; supply the pod-auth fetch and session `webId` (a different actor is
+refused). Builders return actorless templates: `shareNotification`, `assignmentAnnounce`,
+`mentionNotification`, `roomInvitation`, `issueAnnounce(issue, recipient, summary)` (Issues'
+recipient target and summary as an Announce draft). Preserve Tasks §5.7's assignment summary
+exactly. Delivery failures return structured values and never throw; never change permissions.
+Discovery caches exact WebIDs for ten minutes per identical fetch/pinningFetch/clock; supply fresh
+transport wrappers on account/session changes. Known LWS recipients use `recipientProtocol(webId)`
+(never infer it from the sender's storage); LWS media types also short-circuit. Accept only one
+unambiguous NamedNode inbox on the exact WebID subject. Profiles and inboxes use public HTTPS and
+refuse redirects. Node hostname targets require an authenticated `pinningFetch` (never label an
+ordinary auth fetch as DNS-pinned); browsers keep the guard's DNS limitation. Parse via fetch-rdf
+with remote contexts refused.
 
-Discovery caches exact WebIDs for ten minutes, shared by notifiers/readers with identical
-fetch, pinningFetch and clock functions. Supply fresh transport wrappers on account/session changes. Known LWS recipients use `recipientProtocol(webId)`;
-never infer the recipient's protocol from the sender's storage. LWS media types also short-circuit.
-Only one unambiguous NamedNode inbox on the exact WebID subject is accepted. Profiles and
-inboxes use public HTTPS and refuse redirects. Node hostname targets require an authenticated
-`pinningFetch`; never silently label an ordinary auth fetch as DNS-pinned. Browsers retain the
-guard's documented DNS limitation. All parsing goes through fetch-rdf, with remote contexts refused.
+`createInboxReader({ fetch, pinningFetch?, clock?, maxItems?, onTruncated? })` wraps the client
+reader. `inbox(webId)` returns the owner's inbox or null (LWS too). `list(inboxUrl, { signal? })`
+returns `InboxNotification[]` newest first, undated last, deterministic URL ties. Reuse the shared
+pure scope/parser/ordering helpers and discovery cache; never import the Node transport into the
+client entry. Fetch at most maxItems children (default 50, maximum 500; sidecars excluded), six
+requests at a time; refuse foreign/outside/nested/query/fragment/encoded-slash members and skip
+unreadable ones. Container 404 and parse failures return []; 401/403 and other container failures
+reject; aborts reject with AbortError and start no further requests. `listPage` adds the complete
+eligible `members` and `truncated` (ceiling exceeded, even when fetched items are unreadable);
+`onTruncated(listed, read)` fires once per over-limit `list`/`listPage` and a throw fails it.
+Activities may carry `content`, `object`, Pod Manager `Invite`/`Update` verbs; legacy `as:name` and
+valid untyped dates stay readable. Require an ActivityStreams property or an `as:`/`ldp:` type
+(unrelated RDF is skipped; unknown types with recognizable properties are kept).
+`createNotifyFetch(options)` guards notification-linked foreign resources alike, rejecting a changed
+final URL if the transport ignored manual redirects.
 
-`createInboxReader({ fetch, pinningFetch?, clock?, maxItems? })` wraps the client reader.
-`inbox(webId)` returns the owner's inbox or null, including LWS profiles. `list(inboxUrl,
-{ signal? })` returns `InboxNotification[]` newest first, undated last, deterministic URL ties.
-Reuse the shared pure scope/parser/ordering helpers and discovery cache; never import the
-Node transport into the client entry. Fetch at most maxItems children (default 50, maximum 500; sidecars excluded) with at
-most six requests active. Refuse foreign/outside/nested/query/fragment/encoded-slash members.
-Unreadable members are skipped; container 404 and parse failures return []; 401/403 and other
-container failures reject. Aborts reject with AbortError and start no further requests.
-`listPage(inboxUrl, { signal? })` also returns the complete eligible `members` list and
-`truncated` (whether the child-fetch ceiling was exceeded), retaining limit warnings even
-when fetched notifications are unreadable. Activities can also carry `content`, an optional
-`object`, and the existing Pod Manager `Invite`/`Update` verbs. Legacy `as:name` and valid
-untyped publication dates remain readable. Require an ActivityStreams property (including
-legacy `as:name`) or an `as:`/`ldp:` type; unrelated self-describing RDF is skipped, while
-unknown-type activities with recognizable properties remain readable. `createNotifyFetch(options)` exposes the same
-guarded transport for foreign resources linked by notifications; it rejects a changed final
-response URL if the caller transport ignored manual redirects.
+`createInboxManager({ webId, storageRoots, fetch, pinningFetch?, clock?, maxItems? })` returns null
+unless the discovered inbox is strictly below a trusted active storage root (from the authenticated
+session, never notification RDF) and has no query. It exposes `inboxUrl`, `list()`, `listPage()`,
+`markRead(url)` and `dismiss(url)`. `read` comes from an exactly named listed
+`<notification>.read.ttl` sidecar, whatever its content (never fetch it; legacy actorless markers
+work). Read state is advisory, since a sender can create its own sidecar even claiming the owner as
+actor, and must never gate security decisions. Hide reserved sidecars, keep ordinary `%` names;
+encoded aliases do not match. Mutations target direct children only, rejecting foreign origins,
+nesting, credentials, queries/fragments and encoded slash/backslash before I/O. Mark-read PUT and
+DELETE are unconditional and idempotent (no HEAD/ETag; only read-modify-write needs strong ETags);
+missing resources dismiss idempotently, sidecar cleanup is best effort. It fetches up to
+`MAX_INBOX_ITEMS` (500), sorts before its display cut and exposes `truncated`; sidecars never use
+the fetch budget; byte-limited listings keep complete statements with `truncated: true`; bodies keep
+the hard 256 KiB cap. Listing 401/403 must reach app error states. `includeUnknownActivities: true`
+keeps even empty readable RDF as unknown notifications without inventing an AS type IRI.
 
-`createInboxManager({ webId, storageRoots, fetch, pinningFetch?, clock?, maxItems? })`
-discovers the owner's inbox and returns null unless it is inside a trusted active storage
-root (strictly below it) and has no query. Roots come from the authenticated session, never notification RDF.
-The manager exposes `inboxUrl`, `list()`, `markRead(url)` and `dismiss(url)`. Listing adds
-`read` when the listing contains an exactly named `<notification>.read.ttl` sidecar, whatever
-its content; never fetch marker contents. Legacy markers without an actor keep working.
-Read state in an append-only inbox is advisory: a sender can create its own sidecar, even
-claiming the public owner WebID as actor, and make its own notification appear read.
-Read state must never gate security decisions. Hide reserved sidecars while preserving
-ordinary names containing `%`; encoded filename aliases do not match. Direct children only: reject foreign origins, nesting, credentials,
-queries/fragments and encoded slash/backslash before I/O. Mark-read PUT and notification DELETE are unconditional and idempotent; no HEAD or ETag is
-required. Only read-modify-write operations require strong ETag preconditions. Missing
-resources dismiss idempotently and sidecar cleanup is best effort. The manager fetches up to
-`MAX_INBOX_ITEMS` (500), sorts before its display cut and exposes `listPage().truncated`.
-Sidecars never consume the notification fetch budget. Byte-limited listings preserve complete
-statements with `truncated: true`; individual notification bodies retain the hard 256 KiB cap.
-Listing 401/403 errors must propagate to app error states. `includeUnknownActivities: true`
-retains even empty readable RDF as unknown notifications; Issues opts in and exposes no
-invented ActivityStreams type IRI.
+Delivery writes a typed RDF/JS dataset as n3.Writer Turtle with the named `<#it>` subject; HTTP 415
+retries once with JSON-LD from the same dataset (`@id: "#it"`). Read activity subjects as RDF/JS
+terms, blank nodes included. Issue drafts add PROV-O attribution and generation time; optional
+non-HTTPS object/target links are omitted. Results distinguish invalid targets, unreadable profiles,
+network failures and real HTTP status. All branches refuse dotless hosts, empty labels and trailing
+dots. Public delivery is HTTPS/443; trusted `ownStorageRoots` only relax HTTPS ports for scoped
+GET/HEAD, plus the manager's marker PUT and child DELETE within its inbox. Dot-prefixed and
+`.acl`/`.acr`/`.meta` resources are excluded from mutations and listings, and LDP containers never
+enter the unknown-activity fallback. `isLoopbackHostname` shares the host policy with apps, which
+gate their opt-in on development builds; `devLoopback` admits HTTP(S) on localhost/127.0.0.1/[::1]
+only, any port. Never propagate a development-discovered cache entry into a strict transport policy.
 
-Delivery uses a typed RDF/JS dataset and n3.Writer Turtle with the named `<#it>` activity
-subject so receivers can reference it relative to the stored notification URL.
-HTTP 415 retries once with JSON-LD serialized from that same dataset, retaining `@id: "#it"`.
-Read activity subjects as RDF/JS terms, including blank nodes. Issue drafts add PROV-O
-attribution and generation time. Optional non-HTTPS object/target links are omitted.
-Delivery results distinguish invalid targets, unreadable profiles, network failures and real
-HTTP status. All runtime branches refuse dotless hosts, empty labels and trailing dots.
-Public delivery is HTTPS/443; trusted `ownStorageRoots` only relaxes HTTPS ports for scoped
-GET/HEAD; the manager also permits marker PUT and child DELETE strictly within its own inbox.
-Dot-prefixed and `.acl`/`.acr`/`.meta` resources are excluded from mutations and listings;
-LDP containers cannot enter the unknown-activity fallback. Exported `isLoopbackHostname`
-shares the host policy with apps, which must also gate their opt-in on development builds.
-Explicit `devLoopback` admits HTTP(S) on localhost/127.0.0.1/[::1] only, any port.
-Never propagate a development-discovered cache entry into a strict transport policy.
-
-`notificationKind(n)` maps Announce share summaries before
-Announce targets, then Create targets, then Offer to share/assignment/mention/invitation;
-every other shape is other. Keep wrapper and builder round-trip coverage at 100%.
-
-`readInvitations<T>({ reader, webId, kind?, normalise, exclude?, limit?, signal? })` owns
-shared inbox discovery/filter/projection/de-duplication/capping. A projection returns `{ key,
-value }` or null; validation exceptions and empty keys are skipped. Reader order decides the
-newest duplicate; excluded keys are omitted. Omit kind for a generic mixed-tray projection
-(the name reflects Chat's first use). A throwing `normalise` drops the item by design, even for
-programming errors. Limits are non-negative safe integers, default 50; zero performs no I/O.
-Missing inboxes are empty. With `createInboxReader`, discovery never rejects: network, 401/403,
-5xx and unparseable profiles all read as no inbox (empty), so callers cannot tell an outage from
-a missing inbox. Listing 401/403/404 is empty; listing 5xx/network rejects. A custom reader's
-rejection propagates. Abort checks fence every await and projection. Reuse the reader.
-`withAbortSignal(fetch, signalOrGetter)` preserves both request deadlines and caller lifetimes,
-checks before I/O and after responses, and supports dynamic committed-session signal getters.
-Use it for discovery cancellation instead of copying transport wrappers into consumers.
+`notificationKind(n)`: Announce share summaries, then Announce targets, Create targets and Offer map
+to share/assignment/mention/invitation; all else is other. Keep wrapper/builder coverage 100%.
+`readInvitations` (inbox projection, de-duplication, capping) and `withAbortSignal` (request
+deadline plus caller lifetime; use it rather than copying transport wrappers) are specified in the
+README. With `createInboxReader`, discovery failures read as no inbox (empty); listing 404 is empty;
+listing 401/403, 5xx and network failures reject. Fence every await; reuse the reader.
 
 For `./requests-solid`, preserve resolve-once target pinning before the Approving CAS, deterministic
 grant IDs, create-only records/receipts, ACL writes after the CAS, and forward-only snapshot recovery.
