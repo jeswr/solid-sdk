@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1
+// AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it, vi } from "vitest";
 import { MAX_IMPORT_BYTES } from "../src/apps/docs/lib/convert/import-file";
 import { DOCX_FORMATTING_WARNING } from "../src/apps/docs/lib/convert/skipped";
@@ -106,11 +107,30 @@ describe("Open with Docs availability", () => {
 describe("Docs folder write access", () => {
   it("reads the user's WAC-Allow modes", () => {
     expect(canWriteFromWacAllow('user="read write append control",public="read"')).toBe(true);
-    expect(canWriteFromWacAllow('public="read write", user="read"')).toBe(false);
+    // `user` never grants less than `public`; without a grant beyond it the header says nothing.
+    expect(canWriteFromWacAllow('public="read write", user="read"')).toBeUndefined();
+    expect(canWriteFromWacAllow('public="read", user="read append"')).toBe(false);
     expect(canWriteFromWacAllow('USER="Write"')).toBe(true);
     expect(canWriteFromWacAllow('user="read append"')).toBe(false);
     expect(canWriteFromWacAllow('public="read"')).toBeUndefined();
     expect(canWriteFromWacAllow(null)).toBeUndefined();
+  });
+  it("does not read an anonymous view of a public resource as the user's denial", () => {
+    // Reactive authentication answers a public resource without credentials, so CSS sends the
+    // anonymous requester's modes as `user`, even to the owner.
+    expect(canWriteFromWacAllow('user="read",public="read"')).toBeUndefined();
+    expect(canWriteFromWacAllow('user="read extension",public="read"')).toBeUndefined();
+    expect(canWriteFromWacAllow('user="",public=""')).toBeUndefined();
+    expect(canWriteFromWacAllow('user="read write",public="read write"')).toBe(true);
+    expect(canWriteFromWacAllow('user="read",public=""')).toBe(false);
+  });
+  it("lets the owner convert into Docs when the storage root is public-read", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) =>
+      String(input) === ROOT
+        ? new Response(null, { headers: { "wac-allow": 'user="read",public="read"' } })
+        : new Response(null, { status: 404 }),
+    );
+    await expect(probeDocsWritable({ storageUrl: ROOT, fetch })).resolves.toBeUndefined();
   });
   it("probes the Docs container without following redirects", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>(

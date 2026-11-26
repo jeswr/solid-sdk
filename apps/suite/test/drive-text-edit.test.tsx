@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import "./drive-ui-dom";
 import { createRequire } from "node:module";
 import { toast } from "@jeswr/suite-ui";
@@ -315,13 +316,25 @@ test.each([
   { contentType: "text/csv" },
   { contentType: "text/html" },
   { contentType: "application/json" },
-  { permission: 'user="read",public="read write"' },
+  { permission: 'user="read",public=""' },
+  { permission: 'user="read append",public="read"' },
   { permission: "" },
   { permission: null },
   { permission: 'user="read custom-write"' },
 ])("oversize, non-text and read-only files have no Edit: case %#", async (options) => {
   const { get } = await setup({ preview: true, ...options });
   expect(get.queryByRole("button", { name: "Edit" })).toBeNull();
+});
+
+// Reactive authentication answers a public file without credentials, so the header is the
+// anonymous view (CSS: user="read",public="read" even for the owner). Only the save, which the
+// server checks after authenticating, can tell; the owner must not be shown a read-only file.
+test.each([
+  'user="read",public="read"',
+  'user="read",public="read write"',
+])("a public file's anonymous WAC-Allow (%s) keeps Edit", async (permission) => {
+  const { get } = await setup({ preview: true, permission });
+  expect(get.getByRole("button", { name: "Edit" })).toBeTruthy();
 });
 
 test("Markdown and an exactly 1 MiB plain text file can be edited", async () => {

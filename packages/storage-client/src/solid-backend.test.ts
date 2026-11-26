@@ -610,3 +610,90 @@ describe("review round 1 regressions", () => {
     await rejects(storage.list(NOTES), "invalid-response");
   });
 });
+
+// Reactive authentication sends every request anonymously first and adds credentials only after a
+// 401. A publicly readable resource answers 200 at once, so its WAC-Allow `user` group describes
+// the anonymous requester, not the signed-in agent. ReadResult.allow must not report that view's
+// missing modes as the signed-in agent's denials.
+describe("WAC-Allow under reactive authentication", () => {
+  const owner = { read: true, write: true, append: true, control: true };
+  const resourceLink = '<http://www.w3.org/ns/ldp#Resource>; rel="type"';
+  /** Owner-only by default, public-read `public.ttl`; credentials only after a 401, as reactive auth does. */
+  function reactive() {
+    const calls: { url: string; authenticated: boolean }[] = [];
+    const server = (url: string, authenticated: boolean): Response => {
+      const isPublic = url === `${NOTES}public.ttl`;
+      if (!isPublic && !authenticated) return new Response(null, { status: 401 });
+      const header = authenticated
+        ? `user="read write append control",public="${isPublic ? "read" : ""}"`
+        : 'user="read",public="read"';
+      return new Response(null, {
+        status: 200,
+        headers: { "content-type": "text/turtle", link: resourceLink, "wac-allow": header },
+      });
+    };
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+      const url = String(input);
+      calls.push({ url, authenticated: false });
+      const first = server(url, false);
+      if (first.status !== 401) return first;
+      calls.push({ url, authenticated: true });
+      return server(url, true);
+    });
+    return { storage: createSolidBackend({ fetch, root: CSS_ROOT }), calls };
+  }
+
+  test("a 401 → authenticated retry reports the authenticated response's user grants", async () => {
+    const { storage, calls } = reactive();
+    const result = await storage.head(`${NOTES}private.ttl`);
+    expect(calls.map((c) => c.authenticated)).toEqual([false, true]);
+    expect(result.allow).toEqual(owner);
+  });
+
+  test("a public resource answered anonymously does not report the owner as read-only", async () => {
+    const { storage, calls } = reactive();
+    const result = await storage.head(`${NOTES}public.ttl`);
+    // No challenge, so no credentials were ever sent: the header describes the anonymous caller.
+    expect(calls.map((c) => c.authenticated)).toEqual([false]);
+    expect(result.allow).not.toEqual({ read: true, write: false, append: false, control: false });
+    expect(result.allow).toBeNull();
+  });
+
+  test.each([
+    // user grants beyond public prove an identified requester: missing modes are real denials
+    ['user="read write",public="read"', { read: true, write: true, append: false, control: false }],
+    ['user="read write append control",public="read"', owner],
+    ['user="read",public=""', { read: true, write: false, append: false, control: false }],
+    ['user="append",public=""', { read: false, write: false, append: true, control: false }],
+    ['user="read"', { read: true, write: false, append: false, control: false }],
+    [
+      'public="read", user="read write"',
+      { read: true, write: true, append: false, control: false },
+    ],
+    ['user="READ Write",public="read"', { read: true, write: true, append: false, control: false }],
+    ['user="read write",public="read",user="control"', { ...owner, append: false }],
+    // every mode granted: nothing is withheld, whoever asked
+    ['user="read write append control",public="read write append control"', owner],
+    ['user="read write append control"', owner],
+    // no grant beyond public: possibly an anonymous view, so withheld modes are unknown
+    ['user="read",public="read"', null],
+    ['user="read write",public="read write"', null],
+    ['user="",public=""', null],
+    ['public="read"', null],
+    ['user="read",public="read write"', null],
+    ['user="read extra",public="read"', null],
+    ['user="read",public="read",other="write"', null],
+    // malformed or absent stays null
+    ['user="read', null],
+    ["user=read", null],
+    ["", null],
+  ])("WAC-Allow %j → allow %j", async (header, expected) => {
+    const { storage } = backend({
+      [`HEAD ${NOTES}x`]: {
+        status: 200,
+        headers: { "content-type": "text/plain", link: resourceLink, "wac-allow": header },
+      },
+    });
+    expect((await storage.head(`${NOTES}x`)).allow).toEqual(expected);
+  });
+});

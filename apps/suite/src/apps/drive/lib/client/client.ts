@@ -17,6 +17,7 @@ import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { resolveContentType } from "../files/resolve-content-type";
 import { DriveResource } from "../model/model";
+import { canWriteFromWacAllow } from "../open-with/docs";
 import {
   type AccessBinding,
   type AccessState,
@@ -744,8 +745,12 @@ export function createSolidDriveClient(options: {
       ...(response.headers.has("content-type")
         ? { contentType: response.headers.get("content-type") as string }
         : {}),
+      // A public file is answered without credentials, so its WAC-Allow may be the anonymous
+      // view: only an identified requester's missing Write means read-only. The save still
+      // goes through the server's (authenticated) access check.
       writable:
-        parseWacAllow(response.headers.get("wac-allow") ?? "")?.user.includes("write") ?? false,
+        canWriteFromWacAllow(response.headers.get("wac-allow")) ??
+        parseWacAllow(response.headers.get("wac-allow") ?? "") !== undefined,
       verifyHeaders: access.captureEndpoint(url, response.headers),
     };
   };

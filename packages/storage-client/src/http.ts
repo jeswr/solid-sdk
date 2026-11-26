@@ -210,12 +210,27 @@ export function linksOf(
   return links;
 }
 
-/** The caller's WAC-Allow `user` permissions, or null when the header is absent or malformed. */
+const WAC_MODES = ["read", "write", "append", "control"] as const;
+
+/**
+ * The caller's WAC-Allow `user` permissions, or null when the header is absent, malformed or
+ * cannot speak for the signed-in agent.
+ *
+ * `user` describes whoever sent the request. Reactive authentication sends credentials only after
+ * a 401, so a publicly readable resource is answered to an anonymous request and its `user` group
+ * is the anonymous view (CSS: `user="read",public="read"` even for the owner). A response proves
+ * an identified requester only when `user` grants a mode beyond `public` (an absent `public`
+ * group grants nothing). Without that proof, withheld modes are unknown rather than denied, so
+ * the result is null unless every mode is granted.
+ */
 export function allowOf(response: Response): ReadResult["allow"] {
   const value = response.headers.get("wac-allow");
   const parsed = value === null ? undefined : parseWacAllow(value);
   if (!parsed) return null;
-  const has = (mode: "read" | "write" | "append" | "control") => parsed.user.includes(mode);
+  const has = (mode: (typeof WAC_MODES)[number]) => parsed.user.includes(mode);
+  const complete = WAC_MODES.every(has);
+  const identified = parsed.user.some((mode) => !parsed.public.includes(mode));
+  if (!complete && !identified) return null;
   return { read: has("read"), write: has("write"), append: has("append"), control: has("control") };
 }
 

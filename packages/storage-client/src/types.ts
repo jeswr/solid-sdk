@@ -75,7 +75,12 @@ export interface ReadResult {
   /** LWS linkset; Solid describedby. */
   metadataUrl: string | null;
   kind: ResourceKind;
-  /** WAC-Allow / linkset-derived permissions of the caller, when the server tells us. */
+  /**
+   * WAC-Allow / linkset-derived permissions of the caller, when the server tells us. Solid: null
+   * when WAC-Allow `user` grants nothing beyond `public` (and not every mode), because reactive
+   * authentication answers public resources anonymously and that view is not the signed-in
+   * agent's. A `false` mode is a denial for the identified requester; null means unknown.
+   */
   allow: { read: boolean; write: boolean; append: boolean; control: boolean } | null;
 }
 export interface RdfReadResult {

@@ -185,13 +185,27 @@ function dirOf(url: string): string {
   return url.slice(0, url.lastIndexOf("/") + 1);
 }
 
+/**
+ * Whether WAC-Allow lets the caller change the issue; true when it doesn't say. `user` describes
+ * whoever sent the request, and the auth-patched fetch sends credentials only after a 401, so a
+ * public issue is answered to an anonymous request (CSS: user="read",public="read", even to the
+ * owner). A missing write/append is a denial only when `user` grants a mode beyond `public`,
+ * which proves an identified requester; otherwise the server decides when we save.
+ */
 function wacAllowsWrite(response: Response): boolean {
   const header = response.headers.get("wac-allow");
   if (!header) return true;
-  const user = /user\s*=\s*"([^"]*)"/i.exec(header);
-  if (!user) return true;
-  const modes = user[1].toLowerCase().split(/\s+/);
-  return modes.includes("write") || modes.includes("append");
+  const group = (name: string) =>
+    new RegExp(`(?:^|,)\\s*${name}\\s*=\\s*"([^"]*)"`, "i")
+      .exec(header)?.[1]
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((mode) => ["read", "write", "append", "control"].includes(mode));
+  const modes = group("user");
+  if (!modes) return true;
+  if (modes.includes("write") || modes.includes("append")) return true;
+  const open = group("public") ?? [];
+  return !modes.some((mode) => !open.includes(mode));
 }
 
 function serialize(dataset: DatasetCore): Promise<string> {

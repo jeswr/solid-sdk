@@ -904,3 +904,35 @@ describe("automation rules — repository round-trip through Turtle (#112)", () 
     expect(rules.every((r) => r.enabled === false)).toBe(true); // seeded disabled (legacy default)
   });
 });
+
+// Reactive authentication answers a public issue without credentials, so CSS sends the anonymous
+// requester's modes as WAC-Allow `user` (user="read",public="read") even to the owner.
+describe("Repository canWrite under reactive authentication", () => {
+  async function listWith(header: string) {
+    const { impl } = fakePod();
+    await new Repository(TRACKER, impl).create({ title: "Public", creator: ME });
+    const wrapped = (async (url: string, init?: RequestInit) => {
+      const response = await impl(url, init);
+      const issue = String(url).startsWith(CONTAINER) && !String(url).endsWith("/");
+      if (issue && (init?.method ?? "GET") === "GET") response.headers.set("wac-allow", header);
+      return response;
+    }) as unknown as typeof fetch;
+    const { issues } = await new Repository(TRACKER, wrapped).list();
+    return issues[0].canWrite;
+  }
+
+  it("does not mark a public issue read-only from the anonymous view", async () => {
+    expect(await listWith('user="read",public="read"')).toBe(true);
+    expect(await listWith('user="read",public="read write"')).toBe(true);
+  });
+
+  it("still honours an identified requester's read-only grant", async () => {
+    expect(await listWith('user="read",public=""')).toBe(false);
+    expect(await listWith('user="read control",public="read"')).toBe(false);
+  });
+
+  it("reports write or append grants as writable", async () => {
+    expect(await listWith('user="read write",public="read"')).toBe(true);
+    expect(await listWith('user="read append",public="read"')).toBe(true);
+  });
+});

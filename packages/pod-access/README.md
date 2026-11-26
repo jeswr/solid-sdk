@@ -165,6 +165,8 @@ conditions and ACP deny/anyOf/noneOf/multiple matchers or conditional matchers r
 `unsupported`. Malformed typed RDF returns `invalid-response`.
 
 On Solid, `effective(url)` reads only `storage.head(url).allow`. It returns `null` when unavailable,
+including a publicly readable resource answered to the anonymous first request of reactive
+authentication (its WAC-Allow describes the anonymous caller, so storage-client reports null),
 otherwise `{ me, public: [] }`. The storage interface exposes only caller modes, so an empty
 public list means **unknown**, and is not evidence that anonymous access is denied. It does
 not infer public access from the caller's permissions or from access-document contents.

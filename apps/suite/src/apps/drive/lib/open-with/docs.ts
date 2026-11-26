@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1
+// AUTHORED-BY Claude Opus 5.5
 /**
  * Drive's "Open with Docs" rules (Google Drive parity): a Docs document opens in
  * the editor; a file Docs can import is converted into a NEW document and the
@@ -64,10 +65,26 @@ export function openWithDocsState(
   return { kind: "convert" };
 }
 
-/** The user's write mode from a `WAC-Allow` header; `undefined` when it doesn't say. */
+/**
+ * The user's write mode from a `WAC-Allow` header; `undefined` when it doesn't say.
+ *
+ * `user` describes whoever sent the request, and reactive authentication sends credentials only
+ * after a 401: a publicly readable resource answers the anonymous request, so CSS reports
+ * `user="read",public="read"` even to the owner. A missing `write` is a denial only when `user`
+ * grants something beyond `public`, which proves an identified requester; otherwise it is unknown.
+ */
 export function canWriteFromWacAllow(header: string | null): boolean | undefined {
-  const user = /(?:^|,)\s*user\s*=\s*"([^"]*)"/i.exec(header ?? "");
-  return user ? /\bwrite\b/i.test(user[1] as string) : undefined;
+  const group = (name: string) =>
+    new RegExp(`(?:^|,)\\s*${name}\\s*=\\s*"([^"]*)"`, "i")
+      .exec(header ?? "")?.[1]
+      ?.toLowerCase()
+      .split(/\s+/)
+      .filter((mode) => ["read", "write", "append", "control"].includes(mode));
+  const user = group("user");
+  if (!user) return undefined;
+  if (user.includes("write")) return true;
+  const open = group("public") ?? [];
+  return user.some((mode) => !open.includes(mode)) ? false : undefined;
 }
 
 /**
