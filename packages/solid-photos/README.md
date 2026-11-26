@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Codex GPT-6.2-Astra -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 # @jeswr/solid-photos
 
 Generated RDF models for photographs, videos, EXIF metadata, ordered albums and trash
@@ -32,6 +33,13 @@ Omitting `kind` writes a `schema:Photograph`. Both use the same descriptive,
 dimension, date, EXIF and location fields. A video needs a usable `schema:contentUrl`
 to appear in `parsePhoto`, `parseStoredPhoto` or a mixed `parsePhotos` result.
 If a subject has both video and still-image types, the video rule applies.
+
+Behaviour changes from the Suite's hand-written video model (#676), each pinned in
+`test/video.test.ts`: a video whose `schema:contentUrl` is not an http(s) IRI is skipped
+(the hand-written model listed it with that URL), and strict `parsePhoto` and
+`PhotographDoc.durationSeconds` drop a repeated `schema:duration` instead of reading the
+first value. The Suite's write-back reads (`parseStoredPhoto`, tolerant `parsePhotos`)
+still take the first typed value, as before.
 
 `Photo.durationSeconds` and `PhotographDoc.durationSeconds` expose an optional
 number. The generated field validates `schema:duration` as an `xsd:duration` literal.

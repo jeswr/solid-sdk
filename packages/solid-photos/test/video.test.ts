@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.2-Astra
+// AUTHORED-BY Claude Opus 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -197,4 +198,17 @@ it("retains only the first typed duration on write-back when a video repeats the
     expect(stored?.kind).toBe("video");
     expect(stored?.durationSeconds).toBe(expected);
   }
+});
+
+it("skips a video whose contentUrl is not http(s), which the hand-written model listed", async () => {
+  const dataset = await parseRdf(
+    `@prefix s: <https://schema.org/>.
+    <#it> a s:VideoObject; s:contentUrl <urn:example:clip>; s:name "Clip".`,
+    "text/turtle",
+    { baseIRI: ITEM },
+  );
+  expect(parsePhoto(ITEM, dataset)).toBeUndefined();
+  expect(parseStoredPhoto(ITEM, dataset)).toBeUndefined();
+  for (const tolerant of [false, true])
+    expect(parsePhotos(ITEM, dataset, { tolerant })).toEqual([]);
 });
