@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 "use client";
+
 /**
  * The item menu (04-drive §4.5) as one model rendered two ways: the row's
  * `…` dropdown and the right-click context menu.
@@ -43,6 +44,7 @@ import {
 } from "lucide-react";
 import type { DriveItem } from "../lib/client/client";
 import { isOwnStorage } from "../lib/client/ownership";
+import { isWorkbookLike } from "../lib/client/workbook";
 import { useDrive } from "../state/drive-context";
 import { useOpenWithDocs } from "../state/open-with-docs";
 import { useOpenWithSheets } from "../state/open-with-sheets";
@@ -80,7 +82,7 @@ export function useItemMenu(
   const { session } = useDrive();
   const openWithDocs = useOpenWithDocs(targets.length === 1 ? targets[0] : undefined);
   const openWithSheets = useOpenWithSheets(targets.length === 1 ? targets[0] : undefined);
-  const hasWorkbook = targets.some((item) => item.workbook);
+  const hasWorkbook = targets.some(isWorkbookLike);
   const writable = targets.every((item) => isOwnStorage(item.url, session.storageUrl));
   const [first] = targets;
   if (!first) return [];

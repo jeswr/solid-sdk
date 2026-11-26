@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { createPodScopedFetch, refuseRedirects } from "@jeswr/guarded-fetch";
 import { MAX_IMPORT_BYTES } from "../../../docs/lib/convert/import-file";
 import type { WorkbookService } from "../../../sheets/lib/contract";
 import { workbookHref } from "../../../sheets/lib/routes";
+import { csvImportFailure } from "../../../sheets/lib/univer-spike/csv";
 import type { DriveItem } from "../client/client";
 import { isOwnStorage } from "../client/ownership";
 import { canWriteFromWacAllow } from "./docs";
@@ -104,5 +106,11 @@ export async function openWithSheets(
   const response = await http(item.url);
   if (!response.ok) throw new Error("We couldn't open this file");
   const csv = await readCsv(response);
-  return service.createFromCsv({ title: item.name.replace(/\.csv$/i, ""), csv });
+  try {
+    return await service.createFromCsv({ title: item.name.replace(/\.csv$/i, ""), csv });
+  } catch (error) {
+    // Too many rows or cells, or not CSV at all: say so, not "check your connection".
+    const reason = csvImportFailure(error);
+    throw reason === undefined ? error : new Error(reason);
+  }
 }

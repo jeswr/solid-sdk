@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DriveItem } from "../src/apps/drive/lib/client/client";
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
@@ -176,6 +177,30 @@ describe("Drive Sheets conversion control", () => {
     expect(mocks.router.push).toHaveBeenCalledWith(`/sheets/s/${encodeRef(BOOK.url)}`);
   });
 
+  it("neither refreshes nor opens the new workbook when the account changes mid-import", async () => {
+    const result = deferred<{ container: string }>();
+    mocks.create.mockReturnValue(result.promise);
+    const view = await mount(h(Hook, { item: CSV }));
+    let pending: Promise<void> | undefined;
+    await act(() => {
+      pending = control?.run();
+    });
+    const Bob = "https://pod.example/bob/";
+    session = { storageUrl: Bob, webId: `${Bob}profile#me`, fetch: mocks.fetch };
+    await view.render(h(Hook, { item: CSV }));
+    await act(async () => {
+      result.resolve({ container: BOOK.url });
+      await pending;
+    });
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(mocks.router.push).not.toHaveBeenCalled();
+    expect(mocks.toast.dismiss).toHaveBeenCalledWith("loading");
+    expect(mocks.toast.success).toHaveBeenCalledWith(
+      "Opened Budget.csv with Sheets in your previous account",
+    );
+    expect(control?.pending).toBe(false);
+  });
+
   it("disables offline and read-only conversions and rechecks Write at activation", async () => {
     mocks.connection.disabled = true;
     const view = await mount(h(Hook, { item: CSV }));
@@ -308,6 +333,42 @@ describe("Drive Sheets menu, preview and workbook presentation", () => {
     const open = entries.find((entry) => entry !== "separator" && entry.id === "open");
     if (open && open !== "separator" && "onSelect" in open) await act(() => open.onSelect());
     expect(mocks.router.push).toHaveBeenCalledWith(`/sheets/s/${encodeRef(BOOK.url)}`);
+  });
+
+  it("keeps rename, move and drag off for a Sheets folder whose workbook metadata didn't load", async () => {
+    const unknown: DriveItem = {
+      url: `${ROOT}sheets/maybe/`,
+      name: "maybe",
+      kind: "folder",
+      workbookUnknown: true,
+    };
+    const menu = await mount(h(DriveUiProvider, null, h(Menu, { item: unknown })));
+    const ids = entries.filter((entry) => entry !== "separator").map((entry) => entry.id);
+    expect(ids).toContain("open");
+    for (const id of ["rename", "move"]) expect(ids).not.toContain(id);
+    await menu.unmount();
+    client.stat.mockResolvedValue(unknown);
+    const view = await mount(
+      h(
+        DriveUiProvider,
+        null,
+        h(FileBrowser, {
+          title: "Sheets",
+          folder: `${ROOT}sheets/`,
+          items: [unknown],
+          columns: ["modified", "size"],
+          empty: { title: "Empty", icon: null },
+        }),
+      ),
+    );
+    const row =
+      view.host.querySelector(`[data-item-url="${unknown.url}"]`) ??
+      view.host.querySelector("tbody tr");
+    expect(row?.getAttribute("draggable")).toBe("false");
+    await click(row as Element);
+    await key(row as Element, "F2");
+    await key(row as Element, "m");
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it("prevents workbook rename/move shortcuts and drag actions in the browser", async () => {

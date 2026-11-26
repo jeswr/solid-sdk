@@ -41,6 +41,7 @@ import { unconfirmedIdentityMessage } from "../lib/client/commit";
 import { DriveDeletePendingError } from "../lib/client/deletion";
 import { isOwnStorage } from "../lib/client/ownership";
 import { DriveOperationInProgressError } from "../lib/client/source-operations";
+import { isWorkbookLike } from "../lib/client/workbook";
 import { hrefFor } from "../lib/files/urls";
 import { docsHref, isDocsDocument } from "../lib/open-with/docs";
 import {
@@ -622,7 +623,7 @@ export function useDriveActions() {
     async (items: readonly DriveItem[], target: string, { undoable = true } = {}) => {
       if (
         !isOwnStorage(target, session.storageUrl) ||
-        items.some((item) => item.workbook || !isOwnStorage(item.url, session.storageUrl))
+        items.some((item) => isWorkbookLike(item) || !isOwnStorage(item.url, session.storageUrl))
       )
         return;
       const pending = toast.loading(
@@ -734,7 +735,7 @@ export function useDriveActions() {
 
   const rename = useCallback(
     async (item: DriveItem, name: string) => {
-      if (item.workbook || !isOwnStorage(item.url, session.storageUrl)) return;
+      if (isWorkbookLike(item) || !isOwnStorage(item.url, session.storageUrl)) return;
       try {
         const url = await refreshAfter(
           client,

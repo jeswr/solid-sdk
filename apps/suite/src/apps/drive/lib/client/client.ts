@@ -16,6 +16,7 @@ import { serialize } from "@jeswr/rdf-serialize";
 import { parseWacAllow } from "@jeswr/storage-capabilities";
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { mapConcurrent } from "../../../../lib/parallel";
 import { resolveContentType } from "../files/resolve-content-type";
 import { DriveResource } from "../model/model";
 import {
@@ -83,6 +84,11 @@ export interface DriveItem {
   readonly kind: "folder" | "file";
   /** A validated Sheets workbook; still a folder for whole-container operations. */
   readonly workbook?: true;
+  /**
+   * A direct child of Sheets whose workbook metadata couldn't be read. It stays a browsable
+   * folder, but rename and move stay off, as for a workbook, until a later read settles it.
+   */
+  readonly workbookUnknown?: true;
   readonly contentType?: string;
   readonly size?: number;
   readonly modified?: Date;
@@ -686,12 +692,11 @@ export function createSolidDriveClient(options: {
 
   const list: DriveClient["list"] = async (url, opts) => {
     await provision.check(url, false, options.provision !== false);
-    return Promise.all(
-      (await listing(url, opts)).items.map(async (item) => ({
-        ...(await withWorkbook(item, storageUrl, http)),
-        ...(await protection(item.url)),
-      })),
-    );
+    // Each Sheets child costs two requests; a large Sheets folder mustn't start them all at once.
+    return mapConcurrent((await listing(url, opts)).items, async (item) => ({
+      ...(await withWorkbook(item, storageUrl, http)),
+      ...(await protection(item.url)),
+    }));
   };
 
   const prepareContentTargets = async (targets: readonly string[]): Promise<void> => {
