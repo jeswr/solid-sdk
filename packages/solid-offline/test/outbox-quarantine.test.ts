@@ -185,6 +185,25 @@ describe('malformed envelopes (F2)', () => {
   });
 });
 
+describe('discard alongside malformed envelopes', () => {
+  it('discards a valid intent and leaves a set-aside record untouched', async () => {
+    const original = box();
+    await original.enqueue({ op: 'write', url, body: 'a', contentType: 'text/plain' });
+    await original.enqueue({ op: 'write', url: other, body: 'b', contentType: 'text/plain' });
+    original.close();
+    await stored(([first]) => Object.assign(first as Raw, { item: null }));
+    const before = await readAll();
+
+    const outbox = box();
+    await outbox.ready;
+    const [valid] = outbox.pending();
+    await outbox.discard((valid as NonNullable<typeof valid>).id);
+    expect(outbox.pending()).toEqual([]);
+    expect(await readAll()).toEqual([before[0]]);
+    expect(quarantinedRecords(outbox)).toHaveLength(1);
+  });
+});
+
 describe('invalid failed items (F3)', () => {
   it('lists an item that is invalid by construction, never retries it, and discards it', async () => {
     const original = box();
