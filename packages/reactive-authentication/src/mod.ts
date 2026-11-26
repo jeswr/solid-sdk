@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 /**
  * Reactive authentication: upgrade `fetch` requests with credentials when a server answers 401.
  *

@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Sonnet 5.5
 // ADR-003 §1, verbatim except where marked "Extension".
 
 import type { DatasetCore, Quad } from "@jeswr/fetch-rdf";

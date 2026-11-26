@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 import { describe, it, expect } from "vitest";
 import { Store, Parser } from "n3";
 import { parseTask, isAssignedTo } from "@jeswr/solid-task-model/task";

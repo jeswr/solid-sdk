@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Sonnet 5.5
 // Solid backend read side (ADR-003 §6, T-021); mutations are isolated in solid-write.ts.
 import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
 import { LiteralAs, OptionalFrom, TermAs } from "@rdfjs/wrapper";

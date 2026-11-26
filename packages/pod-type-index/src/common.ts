@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Sonnet 5.5
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import { type StorageClient, StorageError, type StorageErrorCode } from "@jeswr/storage-client";
 import { canonicalize, LEGACY_NAMESPACES } from "@jeswr/suite-vocab";

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 import type { Features } from "@jeswr/storage-capabilities";
 import type { CreateOptions, StorageClient } from "@jeswr/storage-client";
 

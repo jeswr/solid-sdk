@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 import { parseLinkHeaders } from "@jeswr/storage-capabilities";
 import { StorageError, toStorageError } from "@jeswr/storage-client";
 import { canonicalize } from "@jeswr/suite-vocab";

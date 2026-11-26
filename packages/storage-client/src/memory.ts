@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Sonnet 5.5
 /**
  * `createMemoryStorage()`: a faithful in-memory StorageClient (ADR-003 §8) for unit tests and as
  * the conformance reference. It reproduces ETags (monotonic), 412/428 semantics, container

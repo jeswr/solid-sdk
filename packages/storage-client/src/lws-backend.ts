@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Sonnet 5.5
 // LWS backend (ADR-003 §7, T-023/T-024).
 import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
 import { StorageError } from "./errors.js";

@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { canonicalizeTaskDataset } from "./canonical-vocab";
 import { Store, DataFactory, Writer } from "n3";

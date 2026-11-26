@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Claude Sonnet 5.5
 import { isSafeAbsoluteIri } from "@jeswr/model-runtime";
 import type { RdfReadResult, StorageClient } from "@jeswr/storage-client";
 import { StorageError } from "@jeswr/storage-client";
