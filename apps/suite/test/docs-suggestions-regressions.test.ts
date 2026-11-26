@@ -565,3 +565,18 @@ it.each([
     expect(suggestions(editor.state.doc)).toEqual([]);
   }
 });
+it.each([
+  ["oops"],
+  [42],
+  [{ id: "x" }],
+  [[null, "x", { id: 1, author: "a", created: "c", kind: "suggestionInsert" }]],
+])("ignores malformed paragraph-edge metadata that bypasses the HTML parser (%j)", (value) => {
+  const editor = make("<p>plain</p>");
+  // Remote Yjs updates and attribute steps never go through parseHTML.
+  editor.view.dispatch(
+    editor.state.tr.setNodeAttribute(0, "suggestionBreaks", value).setMeta(suggestionAction, true),
+  );
+  expect(suggestions(editor.state.doc)).toEqual([]);
+  editor.commands.setTextSelection(1);
+  expect(suggestionAt(editor.state)).toBeUndefined();
+});

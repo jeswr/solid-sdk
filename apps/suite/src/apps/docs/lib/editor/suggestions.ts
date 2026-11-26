@@ -36,8 +36,21 @@ const isSuggestion = (mark: Mark) =>
 interface BreakSuggestion extends Suggestion {
   edge?: "start" | "end";
 }
+/** The same shape check for every source: HTML, Yjs updates and attribute steps. */
+function isBreak(item: unknown): item is BreakSuggestion {
+  if (!item || typeof item !== "object") return false;
+  const value = item as Record<string, unknown>;
+  return (
+    typeof value.id === "string" &&
+    typeof value.author === "string" &&
+    typeof value.created === "string" &&
+    ["suggestionInsert", "suggestionDelete"].includes(value.kind as string) &&
+    [undefined, "start", "end"].includes(value.edge as string | undefined)
+  );
+}
 function breaks(node: Node): BreakSuggestion[] {
-  return node.attrs.suggestionBreaks ?? [];
+  const value: unknown = node.attrs.suggestionBreaks;
+  return Array.isArray(value) ? value.filter(isBreak) : [];
 }
 /**
  * Carry a stored edge across an edit. Each end maps towards the inside of its boundary:
@@ -525,17 +538,7 @@ export const Suggestions = Extension.create({
                 const value: unknown = JSON.parse(
                   element.getAttribute("data-suggestion-breaks") ?? "null",
                 );
-                return Array.isArray(value)
-                  ? value.filter(
-                      (item) =>
-                        item &&
-                        typeof item.id === "string" &&
-                        typeof item.author === "string" &&
-                        typeof item.created === "string" &&
-                        ["suggestionInsert", "suggestionDelete"].includes(item.kind) &&
-                        [undefined, "start", "end"].includes(item.edge),
-                    )
-                  : null;
+                return Array.isArray(value) ? value.filter(isBreak) : null;
               } catch {
                 return null;
               }
