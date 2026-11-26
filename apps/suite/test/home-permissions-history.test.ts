@@ -15,6 +15,7 @@ import {
   isActiveGrant,
   placesText,
   readAccessHistory,
+  recipientHref,
   recipientLabel,
   revokeHistoryGrant,
   statusText,
@@ -278,6 +279,12 @@ describe("access history", () => {
     expect(placesText(1)).toBe("1 place");
     expect(placesText(3)).toBe("3 places");
   });
+
+  it("links a recipient to Permissions only when it is a web address", () => {
+    expect(recipientHref({ recipient: BOB })).toMatch(/^\/permissions\/a\/[A-Za-z0-9_-]+$/);
+    expect(recipientHref({})).toBeUndefined();
+    expect(recipientHref({ recipient: "urn:example:bob" })).toBeUndefined();
+  });
 });
 
 describe("an approval that is still being applied", () => {
@@ -310,6 +317,32 @@ describe("an approval that is still being applied", () => {
     expect(isActiveGrant(settled as HistoryEntry)).toBe(true);
     await revokeHistoryGrant(settled as ActiveHistoryEntry, options(memory));
     expect(await agentsOn(memory, FOLDER)).toEqual([OWNER]);
+  });
+});
+
+describe("reading grants and unfinished approvals", () => {
+  it("keeps the strongest role for a place named by several permissions", async () => {
+    const dataset = await parseRdf(
+      `${PREFIXES}
+      <${RECEIPT}> a dpv:ConsentRecord; dpv:hasRecipient <${BOB}>; dpv:hasConsentStatus dpv:ConsentGiven;
+        accm:grantRef <${GRANT}>.
+      <${GRANT}> a odrl:Agreement; odrl:assignee <${BOB}>; odrl:permission
+        [ odrl:action odrl:read; odrl:target <${FILE}>, <${FOLDER}> ],
+        [ odrl:action odrl:write; odrl:target <${FILE}> ],
+        [ odrl:action odrl:read; odrl:target <${FILE}>, <${FOLDER}> ].
+      [] accm:outcome "approving"; accm:grantId "1".`,
+      "text/turtle",
+      { baseIRI: RECORDS },
+    );
+    const [entry] = historyFrom(dataset);
+    // An unnamed decision record can't be tied to a grant, so it never holds the grant back.
+    expect(entry).toMatchObject({ status: "granted" });
+    expect(entry?.grant).toEqual({
+      url: GRANT,
+      targets: [FOLDER, FILE],
+      role: "editor",
+      targetRoles: { [FOLDER]: "viewer", [FILE]: "editor" },
+    });
   });
 });
 
@@ -394,6 +427,59 @@ describe("revoking from the history", () => {
         NOW.toISOString(),
       ]);
     }
+  });
+
+  it("reports a place whose check fails on the network or its access document", async () => {
+    const memory = pod();
+    const entry = await active(memory);
+    const offline = new TypeError("Failed to fetch");
+    const fetch = vi.fn<typeof globalThis.fetch>((input, init) =>
+      String(input) === FOLDER && init?.method === "HEAD"
+        ? Promise.reject(offline)
+        : memory.fetch(input, init),
+    );
+    const error = await revokeHistoryGrant(entry, { ...options(memory), fetch }).catch(
+      (caught) => caught,
+    );
+    expect(error).toBeInstanceOf(HistoryRevokeError);
+    expect((error as HistoryRevokeError).failed).toEqual([{ url: FOLDER, error: offline }]);
+    expect((error as HistoryRevokeError).removed).toEqual([FILE]);
+    expect(await agentsOn(memory, FOLDER)).toContain(BOB);
+
+    // The place itself answers, but its access document can't be read: not removed either.
+    const unreadable = pod();
+    const again = await active(unreadable);
+    unreadable.fail("GET", `${FILE}.acl`, 500, 500, 500);
+    const failure = await revokeHistoryGrant(again, options(unreadable)).catch((caught) => caught);
+    expect(failure).toBeInstanceOf(HistoryRevokeError);
+    expect((failure as HistoryRevokeError).failed.map(({ url }) => url)).toEqual([FILE]);
+    expect((failure as HistoryRevokeError).failed[0]?.error).not.toBeInstanceOf(
+      HistoryChangedError,
+    );
+    expect((failure as HistoryRevokeError).removed).toEqual([FOLDER]);
+    expect(await agentsOn(unreadable, FILE)).toContain(BOB);
+    expect(unreadable.writes()).not.toContain(GRANT);
+
+    // The role reads, but the raw policy check that follows can't: unknown, so not removed.
+    const halfway = pod();
+    const third = await active(halfway);
+    const acl = `${FILE}.acl`;
+    let reads = 0;
+    const flaky = vi.fn<typeof globalThis.fetch>((input, init) =>
+      String(input) === acl && (init?.method ?? "GET") === "GET" && ++reads > 1
+        ? Promise.resolve(new Response(null, { status: 500 }))
+        : halfway.fetch(input, init),
+    );
+    const partial = await revokeHistoryGrant(third, { ...options(halfway), fetch: flaky }).catch(
+      (caught) => caught,
+    );
+    expect(reads).toBeGreaterThan(1);
+    expect(partial).toBeInstanceOf(HistoryRevokeError);
+    expect((partial as HistoryRevokeError).failed.map(({ url }) => url)).toEqual([FILE]);
+    expect((partial as HistoryRevokeError).failed[0]?.error).toMatchObject({
+      name: "TargetUnreadableError",
+    });
+    expect(await agentsOn(halfway, FILE)).toContain(BOB);
   });
 
   it("refuses when the recipient's role on a place changed after the approval", async () => {
