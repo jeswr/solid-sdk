@@ -4,7 +4,7 @@ import { z } from "zod";
 import { validateAudio } from "./audio";
 import { questionById } from "./guide";
 import { buildModelRequest } from "./prompt";
-import { MAX_AUDIO_BYTES, verifyReceipts } from "./receipts";
+import { MAX_AUDIO_BYTES, submissionIdSchema, verifyReceipts } from "./receipts";
 import {
   allowedOrigin,
   type FeedbackEnv,
@@ -36,6 +36,16 @@ const anthropicClient = (key: string): InterviewClient => ({
       .join("");
   },
 });
+// Input is validated before storage runs, so any storage failure is upstream (502), never
+// a 400 that would let the client treat a possibly committed record as unsaved.
+const upstream = <T>(work: Promise<T>) =>
+  work.catch((error: unknown) => {
+    if (error instanceof FeedbackError) throw error;
+    throw new FeedbackError(
+      502,
+      "We couldn't save or process that feedback. Your feedback is still here. You can download a copy.",
+    );
+  });
 export function createFeedbackHandlers(options: {
   env: FeedbackEnv;
   client?: InterviewClient;
@@ -54,7 +64,11 @@ export function createFeedbackHandlers(options: {
     const origin = allowedOrigin(request, env);
     if (!origin)
       return json({ error: "Feedback is available from the suite's own pages only." }, 403);
-    const headers = { "Access-Control-Allow-Origin": origin, Vary: "Origin" };
+    const headers = {
+      "Access-Control-Allow-Origin": origin,
+      "Access-Control-Expose-Headers": "Retry-After",
+      Vary: "Origin",
+    };
     try {
       const wait = limiter(visitorOf(request), kind);
       if (wait !== undefined)
@@ -71,7 +85,10 @@ export function createFeedbackHandlers(options: {
       return response;
     } catch (error) {
       if (error instanceof FeedbackError)
-        return json({ error: error.message }, error.status, headers);
+        return json({ error: error.message }, error.status, {
+          ...headers,
+          ...(error.retryAfter !== undefined ? { "Retry-After": String(error.retryAfter) } : {}),
+        });
       if (error instanceof z.ZodError || error instanceof SyntaxError || error instanceof TypeError)
         return json(
           { error: "The feedback request is not valid. Check the fields and try again." },
@@ -180,11 +197,15 @@ export function createFeedbackHandlers(options: {
     },
     audio(request: Request) {
       return protect(request, "audio", async () => {
+        const submissionId = submissionIdSchema.parse(
+          new URL(request.url).searchParams.get("submissionId"),
+        );
         const bytes = await readBody(request, MAX_AUDIO_BYTES);
         const file = new File([bytes as Uint8Array<ArrayBuffer>], "recording", {
           type: request.headers.get("content-type") ?? "",
         });
-        return json(await storage().upload(await validateAudio(file)));
+        const audio = await validateAudio(file);
+        return json(await upstream(storage().upload(audio, submissionId)));
       });
     },
     submit(request: Request) {
@@ -192,14 +213,14 @@ export function createFeedbackHandlers(options: {
         if (!request.headers.get("content-type")?.startsWith("application/json"))
           throw new FeedbackError(415, "Send JSON feedback with recording receipts.");
         const data = z
-          .object({ record: z.unknown(), receipts: z.unknown() })
+          .object({ submissionId: submissionIdSchema, record: z.unknown(), receipts: z.unknown() })
           .strict()
           .parse(JSON.parse(new TextDecoder().decode(await readBody(request, 1_000_000))));
         const submission = validateSubmission(data.record);
-        const receipts = verifyReceipts(data.receipts, env);
+        const receipts = verifyReceipts(data.receipts, data.submissionId, env);
         if (submission.transcript.some((m) => m.audio?.some((i) => i >= receipts.length)))
           throw new FeedbackError(400, "A recording is missing from the feedback.");
-        return json(await storage().save(submission, receipts));
+        return json(await upstream(storage().save(submission, receipts, data.submissionId)));
       });
     },
   };

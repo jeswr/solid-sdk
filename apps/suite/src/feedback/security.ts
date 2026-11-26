@@ -6,6 +6,7 @@ export class FeedbackError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly retryAfter?: number,
   ) {
     super(message);
   }
@@ -143,3 +144,59 @@ export async function readBody(request: Request, max: number): Promise<Uint8Arra
   return bytes;
 }
 export const rateLimiter = createLimiter();
+
+// Shared by uploads and submissions, even though each request creates a fresh store.
+export function createGithubBackoff(now = () => Date.now()) {
+  const until = { core: 0, search: 0, secondary: 0 };
+  // "secondary" is checked before every GitHub call, admitted submissions included.
+  function check(resource: keyof typeof until = "core") {
+    if (until[resource] > now())
+      throw new FeedbackError(
+        503,
+        "Feedback storage is busy. Please try again later, or download your feedback to keep a copy.",
+        Math.ceil((until[resource] - now()) / 1000),
+      );
+  }
+  return {
+    check,
+    async observe(response: Response) {
+      const resource =
+        response.headers.get("x-ratelimit-resource") === "search" ? "search" : "core";
+      const remaining = response.headers.get("x-ratelimit-remaining");
+      const low =
+        remaining !== null &&
+        /^\d+$/.test(remaining) &&
+        (resource === "search" ? Number(remaining) <= 5 : Number(remaining) < 50);
+      const retry = response.headers.get("retry-after");
+      let secondary = response.status === 429;
+      if (response.status === 403) {
+        const data = await response
+          .clone()
+          .json()
+          .catch(() => ({}));
+        secondary = retry !== null || /rate limit|abuse/i.test(String(data?.message ?? ""));
+      }
+      if (!low && !secondary) return;
+      const t = now();
+      const reset = Number(response.headers.get("x-ratelimit-reset")) * 1000;
+      const retryAt = retry
+        ? /^\d+$/.test(retry)
+          ? t + Number(retry) * 1000
+          : Date.parse(retry)
+        : 0;
+      const deadlines = [low ? reset : 0, retryAt].filter((at) => Number.isFinite(at) && at > t);
+      // GitHub asks for at least a minute when a secondary limit has no retry header.
+      const deadline = Math.max(...(deadlines.length ? deadlines : [t + 60_000]));
+      // A primary low budget is per resource; secondary limits can span endpoints,
+      // so they pause both buckets.
+      const buckets: (keyof typeof until)[] = secondary
+        ? ["core", "search", "secondary"]
+        : [resource];
+      for (const bucket of buckets) until[bucket] = Math.max(until[bucket], deadline);
+      // Only an actual rate-limit failure interrupts an admitted submission;
+      // ordinary responses (including the label fallback) can still finish.
+      if (secondary || (response.status === 403 && low)) check(resource);
+    },
+  };
+}
+export const githubBackoff = createGithubBackoff();
