@@ -223,7 +223,8 @@ async function trustedRun(tlsDir) {
   let seed;
   const forwards = [];
   let reversed = false;
-  const share = { amClean: null, grantRecorded: null };
+  const share = { amClean: null, storageOverride: false };
+  let storageOverride = false;
   const login = {
     customTab: false,
     passwordSubmitted: false,
@@ -690,18 +691,24 @@ async function trustedRun(tlsDir) {
     lastWait = "file share intent";
     // Share the row through the Downloads collection, as a downloads or files app would.
     const sharedUri = mediaUri.replace("/external/file/", "/external/downloads/");
+    // MediaProvider ignores a read grant that adb's shell attaches with `am start`, so the
+    // receiver got SecurityException in runs 45766851266 and 45770180631. A real sender's grant
+    // cannot be reproduced from adb; let the app read external storage for this step only.
+    // This still covers intake, copy and display, but not the sender-grant path.
+    await shell("appops", "set", APP, "MANAGE_EXTERNAL_STORAGE", "allow");
+    storageOverride = true;
+    share.storageOverride = true;
     const started = await shell(...sendIntent(undefined, sharedUri));
-    // Booleans only: whether `am` reported a problem and whether the grant reached the app.
+    // A boolean only: whether `am` reported a problem.
     share.amClean = !/error|warning|denial|exception/iu.test(started);
-    share.grantRecorded = (await shell("dumpsys", "activity", "permissions"))
-      .split("\n")
-      .some((line) => line.includes(sharedUri));
     const observed = await assertShare(`${name}\napplication/pdf · ${bytes.length} bytes`);
     await clickText(app, "Discard batch");
     await poll("file batch discarded", () =>
       app.evaluate(`!document.querySelector('[aria-label="Shared items"]')`),
     );
-    return { ...observed, sourceBytesVerified: true };
+    await shell("appops", "set", APP, "MANAGE_EXTERNAL_STORAGE", "default");
+    storageOverride = false;
+    return { ...observed, sourceBytesVerified: true, storageOverride: true };
   }
   try {
     await scenario("Seed private CSS pod and local mobile Client ID Document", seedScenario);
@@ -734,6 +741,9 @@ async function trustedRun(tlsDir) {
         ...forwards.map((port) => () => adb(["forward", "--remove", `tcp:${port}`])),
         ...(reversed ? [() => adb(["reverse", "--remove", "tcp:8443"])] : []),
         ...(mediaUri ? [() => shell("content", "delete", "--uri", mediaUri)] : []),
+        ...(storageOverride
+          ? [() => shell("appops", "set", APP, "MANAGE_EXTERNAL_STORAGE", "default")]
+          : []),
       ];
       for (const cleanup of cleanups) {
         try {

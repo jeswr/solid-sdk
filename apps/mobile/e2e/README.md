@@ -305,7 +305,10 @@ The driver owns these seven scenarios, each with bounded readiness/result waits 
    item on `/share` with “Save to Suite” and the controls that render only for a ready
    signed-in ShareSession. Discard through the UI.
 7. Create a real external MediaStore PDF, write and read back its exact source bytes, then send
-   its typed `content://media/external/file/...` URI with a read grant using `ACTION_SEND`.
+   its typed `content://media/external/downloads/...` URI with a read grant using `ACTION_SEND`.
+   MediaProvider ignores a grant that adb's shell attaches, so for this step only the harness
+   sets the app's `MANAGE_EXTERNAL_STORAGE` app-op to allow (reset afterwards and in cleanup).
+   The step therefore covers intake, copy and display, but not a real sender's grant lifetime.
    Require its exact name, MIME type and byte count in the signed-in `/share` screen
    (the shared-item list renders only after its session is ready).
    Discard through the UI. No pod save is triggered.
@@ -317,7 +320,7 @@ errors only for that certificate's SHA-256 SPKI; it does not disable web securit
 validation. This tests native auth with a local TLS service, not public CA deployment.
 The driver restores the original iOS plist, Capacitor Gradle files/config and Android debug
 network policy in `finally`, removes its temporary trust resource, forwards/reverse, Chrome
-flags, source MediaStore entry, CSS server and temporary key/APK directory, and stops both apps.
+flags, source MediaStore entry, storage app-op, CSS server and temporary key/APK directory, and stops both apps.
 It leaves the chosen browser and cleared app data on the disposable emulator.
 
 Reports contain public evidence and fixed failure labels only. CSS/subprocess output and CDP
