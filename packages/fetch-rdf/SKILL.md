@@ -14,6 +14,17 @@ description: Use when fetching or parsing RDF with @jeswr/fetch-rdf, handling Rd
 
 `@jeswr/fetch-rdf` lives in `packages/fetch-rdf`. Workspace consumers use `workspace:*`; the standalone `jeswr/fetch-rdf` repository is a read-only build mirror.
 
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+
+> **Which version this skill describes.** Everything here describes the workspace source in
+> `packages/fetch-rdf`. Its `package.json` still says `0.1.0`, but the `@jeswr/fetch-rdf@0.1.0`
+> on npm is an older build (checked 2026-11-18): it exports `DEFAULT_ACCEPT` and takes an
+> `accept` option, accepts only string bodies, declares Node `>=20`, returns no `headers`, and
+> has none of `parseRdfSync`, `createFetchDocumentLoader`, the `engine` option, or the size,
+> quad, term and depth budgets below. Use the workspace package (`workspace:*`). Outside
+> this workspace the current code is not yet available (mirror publishing has not run and npm
+> publishing is deferred), so do not rely on the npm build for untrusted input.
+
 ```ts
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 
@@ -73,12 +84,15 @@ Orchestration: `.claude/agents/solid-app-orchestration.md`.
 # @jeswr/fetch-rdf — fetch + parse Solid RDF
 
 The only sanctioned way to GET and parse a Solid RDF resource (companion guide:
-[`AGENTS.md`](../../AGENTS.md)). One HTTP GET + content-type-dispatched parse, returning an
+[`docs/guide`](../../docs/guide/README.md)). One HTTP GET + content-type-dispatched parse, returning an
 in-memory dataset plus the validators you need for conditional writes. Never parse RDF inline
-(`new Parser().parse(await res.text())`) and never use `rdf-parse`.
+(`new Parser().parse(await res.text())`) and never use `rdf-parse`. The one exception is a page
+with no build step, which cannot bundle this package: there the
+[solid-object skill's bounded N3.js recipe](../../skills/solid-object/SKILL.md#no-build-browser-page)
+applies (timeout, `res.ok` and content-type check, byte cap, then parse).
 
 ```sh
-npm install @jeswr/fetch-rdf      # deps (content-type, jsonld-streaming-parser, n3) come with it
+npm install @jeswr/fetch-rdf      # npm still serves the older 0.1.0 build: see the version note above
 ```
 
 Pure ESM, Node ≥24. Workspace dependencies use `workspace:*`.
@@ -186,7 +200,7 @@ A null content type defaults to Turtle. Supported formats are `text/turtle`,
 
 - **No writes.** The write path is yours: mutate the dataset through `@rdfjs/wrapper` typed
   accessors, serialise with `n3.Writer`, conditional `PUT` with `If-Match: <etag>` — see
-  `AGENTS.md` §Writing data.
+  [guide chapter 4, Edit a resource](../../docs/guide/04-reading-and-writing.md#edit-a-resource).
 - **No wrapping.** Feed `dataset` to `@solid/object` / your `TermWrapper` subclasses
   (`new WebIdDataset(dataset, DataFactory)`) — see the `solid-object` skill.
 
