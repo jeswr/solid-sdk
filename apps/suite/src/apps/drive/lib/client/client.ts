@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
@@ -15,6 +16,7 @@ import { serialize } from "@jeswr/rdf-serialize";
 import { parseWacAllow } from "@jeswr/storage-capabilities";
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { mapConcurrent } from "../../../../lib/parallel";
 import { resolveContentType } from "../files/resolve-content-type";
 import { DriveResource } from "../model/model";
 import {
@@ -26,6 +28,7 @@ import {
   type ConfirmAccess,
   DriveAccessChangedError,
   DriveAccessError,
+  type EndpointCapture,
   type OwnAccess,
   ownAccessGuards,
   policyOwner,
@@ -58,6 +61,7 @@ import { DriveDeletePendingError, deletionControl, isDeletionFailure } from "./d
 import { protectionLedger } from "./protection-ledger";
 import { containerData, containsGraph, isomorphicGraph, relocate, sameGraph } from "./rdf";
 import { sourceOperation } from "./source-operations";
+import { withWorkbook } from "./workbook";
 
 export type { ContainerPolicy } from "./ancestors";
 export { policyArchiveOf } from "./ancestors";
@@ -78,6 +82,13 @@ export interface DriveItem {
   readonly url: string;
   readonly name: string;
   readonly kind: "folder" | "file";
+  /** A validated Sheets workbook; still a folder for whole-container operations. */
+  readonly workbook?: true;
+  /**
+   * A direct child of Sheets whose workbook metadata couldn't be read. It stays a browsable
+   * folder, but rename and move stay off, as for a workbook, until a later read settles it.
+   */
+  readonly workbookUnknown?: true;
   readonly contentType?: string;
   readonly size?: number;
   readonly modified?: Date;
@@ -90,7 +101,10 @@ export interface DriveItem {
 export interface WriteOptions {
   readonly contentType: string;
   /** Rewritten restore: install the archived source ACL before any payload. */
-  readonly restoreFrom?: ResourceIdentity;
+  readonly restoreFrom?: ResourceIdentity & {
+    /** Keep-both already has the bytes to recover. Only read the source identity and ACL. */
+    readonly recoveryBody?: Blob;
+  };
   /** `"*"`: fail with {@link DriveConflictError} when the target exists. */
   readonly ifNoneMatch?: "*";
   /** Overwrite only this version. */
@@ -155,7 +169,11 @@ export interface DriveClient {
     /** The GET's effective user write permission, when advertised. */
     writable?: boolean;
     readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
+    /** The same discovery as JSON, for a save queued offline (sst-8xm.74.1). */
+    readonly discovery?: EndpointCapture;
   }>;
+  /** Rebuild the check for a discovery captured by readVersion, when a queued save replays. */
+  discoveryVerifier(url: string, capture: EndpointCapture): ResourceAssertion["verifyHeaders"];
   /** Parsed RDF and its validator; `undefined` when the resource does not exist. */
   readRdf(
     url: string,
@@ -677,12 +695,11 @@ export function createSolidDriveClient(options: {
 
   const list: DriveClient["list"] = async (url, opts) => {
     await provision.check(url, false, options.provision !== false);
-    return Promise.all(
-      (await listing(url, opts)).items.map(async (item) => ({
-        ...item,
-        ...(await protection(item.url)),
-      })),
-    );
+    // Each Sheets child costs two requests; a large Sheets folder mustn't start them all at once.
+    return mapConcurrent((await listing(url, opts)).items, async (item) => ({
+      ...(await withWorkbook(item, storageUrl, http)),
+      ...(await protection(item.url)),
+    }));
   };
 
   const prepareContentTargets = async (targets: readonly string[]): Promise<void> => {
@@ -747,6 +764,7 @@ export function createSolidDriveClient(options: {
       writable:
         parseWacAllow(response.headers.get("wac-allow") ?? "")?.user.includes("write") ?? false,
       verifyHeaders: access.captureEndpoint(url, response.headers),
+      discovery: access.endpointCapture(url, response.headers),
     };
   };
 
@@ -1399,7 +1417,12 @@ export function createSolidDriveClient(options: {
     requirePolicy(policy, ["protect-ancestors", "owner-only"]);
     access.assertContentDestination(url);
     if (opts.restoreFrom) {
-      const source = await snapshot(opts.restoreFrom.url, true, opts.restoreFrom.verifyHeaders);
+      const source = await snapshot(
+        opts.restoreFrom.url,
+        true,
+        opts.restoreFrom.verifyHeaders,
+        opts.restoreFrom.recoveryBody,
+      );
       if (source.etag !== opts.restoreFrom.etag) throw new DriveError("conflict", 412, source.url);
       const recoveryOwner = recoveryOwnerFor((source.binding as AccessBinding).source, source.demo);
       await provision.guard(url, true);
@@ -1625,6 +1648,7 @@ export function createSolidDriveClient(options: {
     url: string,
     bodies: boolean,
     approvedDiscovery?: ResourceAssertion["verifyHeaders"],
+    recoveryBody?: Blob,
   ): Promise<SourceSnapshot> => {
     if (bodies) await provision.check(url);
     const policy = (headers: Headers): Promise<AccessState> =>
@@ -1660,13 +1684,16 @@ export function createSolidDriveClient(options: {
         ...(binding ? { binding } : {}),
       };
     }
-    const response = await ensureOk(await http(url, bodies ? undefined : { method: "HEAD" }), url);
+    const response = await ensureOk(
+      await http(url, bodies && !recoveryBody ? undefined : { method: "HEAD" }),
+      url,
+    );
     approvedDiscovery?.(response.headers);
     const etag = response.headers.get("etag") ?? undefined;
     validator(url, etag);
     const own = await policy(response.headers);
     const binding = bodies ? await bindAccess(access, url, url, false, own) : undefined;
-    const body = bodies ? await response.blob() : undefined;
+    const body = recoveryBody ?? (bodies ? await response.blob() : undefined);
     const capturedDiscovery = access.captureEndpoint(url, response.headers);
     const verifyHeaders: ResourceAssertion["verifyHeaders"] = (headers) => {
       approvedDiscovery?.(headers);
@@ -1681,10 +1708,13 @@ export function createSolidDriveClient(options: {
       access: own,
       verifyHeaders,
       ...(binding ? { binding } : {}),
-      ...(bodies
+      ...(body
         ? {
-            body: body as Blob,
-            contentType: response.headers.get("content-type") ?? "application/octet-stream",
+            body,
+            contentType:
+              recoveryBody?.type ??
+              response.headers.get("content-type") ??
+              "application/octet-stream",
           }
         : {}),
     };
@@ -3088,10 +3118,15 @@ export function createSolidDriveClient(options: {
       bindRecoveryPolicy(url, captured, scopeFor(this));
     },
     list,
-    stat,
+    async stat(url, opts) {
+      const item = await stat(url, opts);
+      // Conditional operation checks retain the raw HEAD boundary.
+      return opts ? item : withWorkbook(item, storageUrl, http);
+    },
     read,
     readLimited,
     readVersion,
+    discoveryVerifier: (url, capture) => access.verifyCapture(url, capture),
     readRdf,
     exclusive(urls, work) {
       return sourceOperation(

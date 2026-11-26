@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
@@ -9,6 +10,7 @@
  */
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
+import type { QueueingStorageClient } from "@jeswr/suite-sdk/offline";
 import { Store } from "n3";
 import { mapConcurrent } from "../../../../lib/parallel";
 import { relocateDocument, writeRestoreSnapshot } from "../../../docs/editor/relocate";
@@ -37,6 +39,8 @@ import { DriveDeletePendingError, rethrowPendingDeletion } from "../client/delet
 import { containerData, containsGraph, relocate, sameGraph } from "../client/rdf";
 import { DriveOperationInProgressError } from "../client/source-operations";
 import { guessContentType } from "../files";
+import { folderGuard } from "../offline/guards";
+import { isNetworkFailure } from "../offline/network";
 import { keepBothName, normalizeUploadName } from "../upload";
 import {
   addTrashRecord,
@@ -209,11 +213,29 @@ export async function createFolder(
   client: DriveClient,
   parentUrl: string,
   rawName: string,
+  /** Offline, queue the create; replay runs this same inherit-verified create (sst-8xm.74.1). */
+  outbox?: { storage: QueueingStorageClient; onQueued: () => void },
 ): Promise<string> {
   const name = normalizeUploadName(rawName, "folder");
   const url = childUrl(parentUrl, name, true);
-  await client.createFolder(url, { kind: "inherit-verified" });
-  return url;
+  if (!outbox || navigator.onLine !== false) {
+    try {
+      await client.createFolder(url, { kind: "inherit-verified" });
+      return url;
+    } catch (error) {
+      // Only a request that never got an HTTP answer may be queued.
+      if (!outbox || !isNetworkFailure(error)) throw error;
+    }
+  }
+  // A named container create is create-only (If-None-Match: * on Solid).
+  const result = await outbox.storage.create(parentUrl, null, {
+    name,
+    kind: "container",
+    offline: "queue",
+    guard: folderGuard,
+  });
+  if (result.queued) outbox.onQueued();
+  return result.url;
 }
 
 /** Whether a rename changes the extension chain (04-drive §2.9 prompt). */
@@ -794,7 +816,7 @@ async function runTrash(
   const trash = trashFolderOf(driveRoot);
   const entries = items.map((item) => {
     const slot = `${trash}${crypto.randomUUID()}/`;
-    const to = childUrl(slot, item.name, item.kind === "folder");
+    const to = childUrl(slot, item.workbook ? nameOf(item.url) : item.name, item.kind === "folder");
     return {
       url: to,
       original: item.url,
@@ -934,15 +956,18 @@ function slotOf(driveRoot: string, entry: Pick<TrashEntry, "url">): string {
 function validateOriginal(client: DriveClient, driveRoot: string, entry: TrashEntry): void {
   try {
     const original = new URL(entry.original);
-    // Docs keeps its snapshot and companion tree beside Drive, in the same pod.
+    // Docs and Sheets keep their resources beside Drive, in the same pod.
     const docs = new URL("docs/", client.storageUrl).href;
     const documentPath = entry.original.slice(docs.length);
     const docsItem = entry.original.startsWith(docs) && /^[^/]+(?:\.ttl|\/)$/.test(documentPath);
+    const sheets = new URL("sheets/", client.storageUrl).href;
+    const sheetsItem =
+      entry.original.startsWith(sheets) && /^[^/]+\/$/.test(entry.original.slice(sheets.length));
     if (
       original.href !== entry.original ||
       original.search ||
       original.hash ||
-      (!entry.original.startsWith(driveRoot) && !docsItem) ||
+      (!entry.original.startsWith(driveRoot) && !docsItem && !sheetsItem) ||
       entry.original === driveRoot ||
       entry.original.startsWith(trashFolderOf(driveRoot)) ||
       /%2f|%5c/i.test(original.pathname) ||
@@ -1380,6 +1405,15 @@ async function restoreEntriesUnlocked(
       if (restoredLocation)
         validateOriginal(client, driveRoot, { ...entry, original: restoredLocation });
       const occupied = status !== "partial" && (await exists(client, entry.original));
+      // Workbook RDF contains absolute internal links. Restoring to a different slug
+      // would leave them pointing at the occupied workbook, so retain the trash copy.
+      // Recorded restores instead resume through the identity/content checks below.
+      if (
+        restoredLocation === undefined &&
+        occupied &&
+        entry.original.startsWith(new URL("sheets/", client.storageUrl).href)
+      )
+        throw new DriveError("conflict", 409, entry.original);
       const folder = entry.original.endsWith("/");
       const merge =
         status === "partial" ||
@@ -1740,7 +1774,7 @@ export async function recentFiles(
       for (const item of items) {
         if (isHidden(item) || seen.has(item.url)) continue;
         seen.add(item.url);
-        if (item.kind === "folder") {
+        if (item.kind === "folder" && !item.workbook) {
           if (depth + 1 <= maxDepth) next.push({ url: item.url, depth: depth + 1 });
         } else if (item.modified) {
           files.push({ ...item, folder: url, modified: item.modified });
@@ -1776,7 +1810,7 @@ export async function searchByName(
     for (const { url, items } of listings) {
       for (const item of items) {
         if (isHidden(item)) continue;
-        if (item.kind === "folder") frontier.push(item.url);
+        if (item.kind === "folder" && !item.workbook) frontier.push(item.url);
         if (item.name.toLocaleLowerCase().includes(needle)) out.push({ ...item, folder: url });
       }
     }

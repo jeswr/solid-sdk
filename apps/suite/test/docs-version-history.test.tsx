@@ -17,7 +17,7 @@ import {
 import { VersionAction, VersionHistory } from "../src/apps/docs/components/version-history";
 import { baseExtensions, editorExtensions } from "../src/apps/docs/editor/extensions";
 import type { DocumentPersistence } from "../src/apps/docs/editor/persistence";
-import { suggestionKey } from "../src/apps/docs/lib/editor/suggestions";
+import { suggestionKey, suggestions } from "../src/apps/docs/lib/editor/suggestions";
 import { ResourceReadError } from "../src/apps/docs/lib/model/errors";
 import { type DocumentVersion, DocumentVersionStore } from "../src/apps/docs/lib/model/versions";
 
@@ -311,7 +311,7 @@ it.each([
 it("retains cached rows on offline failure, reports access errors and closes with Escape or Back", async () => {
   render(<Harness />);
   await screen.findByText("Unknown author");
-  expect(screen.getByText("https://bob.example/#me")).toBeTruthy();
+  expect(screen.getByText("bob.example")).toBeTruthy();
   fireEvent.keyDown(window, { key: "Escape" });
   list.mockRejectedValueOnce(new ResourceReadError(resource, 403));
   fireEvent.click(button("History"));
@@ -485,5 +485,17 @@ it("restores a version as-is while suggesting mode is on (never blocked or turne
   fireEvent.click(button("Restore this version"));
   fireEvent.click(button("Restore"));
   await waitFor(() => expect(editor.getText()).toBe("Old content"));
-  expect(JSON.stringify(editor.getJSON())).not.toContain("suggestion");
+  expect(suggestions(editor.state.doc)).toEqual([]);
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("exposes each version author's WebID to assistive technology, not only on hover", async () => {
+  render(<Harness />);
+  await screen.findByText("First draft");
+  const bob = "https://bob.example/#me";
+  const label = document.querySelector(`[title="${bob}"]`) as HTMLElement;
+  expect(label.getAttribute("aria-description")).toBe(bob);
+  expect(document.querySelector(`[title="${webId}"]`)?.getAttribute("aria-description")).toBe(
+    webId,
+  );
 });

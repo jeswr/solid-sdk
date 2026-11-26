@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
@@ -40,6 +41,7 @@ import { unconfirmedIdentityMessage } from "../lib/client/commit";
 import { DriveDeletePendingError } from "../lib/client/deletion";
 import { isOwnStorage } from "../lib/client/ownership";
 import { DriveOperationInProgressError } from "../lib/client/source-operations";
+import { isWorkbookLike } from "../lib/client/workbook";
 import { hrefFor } from "../lib/files/urls";
 import { docsHref, isDocsDocument } from "../lib/open-with/docs";
 import {
@@ -60,6 +62,7 @@ import type { TrashEntry } from "../lib/operations/trash-index";
 import { loadSharing } from "../lib/sharing/adapter";
 import { accessSummary } from "./access";
 import { useDrive } from "./drive-context";
+import { useDriveOutbox } from "./outbox";
 import { pruneDeleted } from "./prefs";
 import { moveWithValidator } from "./undo";
 
@@ -509,6 +512,7 @@ export function useDriveActions() {
     [setDetailsItems],
   );
   const { client, driveRoot, session, updatePrefs, prefs, invalidate } = useDrive();
+  const storage = useDriveOutbox(session);
   const router = useRouter();
 
   const starred = useMemo(() => new Set(prefs.starred), [prefs.starred]);
@@ -619,7 +623,7 @@ export function useDriveActions() {
     async (items: readonly DriveItem[], target: string, { undoable = true } = {}) => {
       if (
         !isOwnStorage(target, session.storageUrl) ||
-        items.some((item) => !isOwnStorage(item.url, session.storageUrl))
+        items.some((item) => isWorkbookLike(item) || !isOwnStorage(item.url, session.storageUrl))
       )
         return;
       const pending = toast.loading(
@@ -731,7 +735,7 @@ export function useDriveActions() {
 
   const rename = useCallback(
     async (item: DriveItem, name: string) => {
-      if (!isOwnStorage(item.url, session.storageUrl)) return;
+      if (isWorkbookLike(item) || !isOwnStorage(item.url, session.storageUrl)) return;
       try {
         const url = await refreshAfter(
           client,
@@ -758,7 +762,7 @@ export function useDriveActions() {
 
   const makeCopy = useCallback(
     async (item: DriveItem) => {
-      if (!isOwnStorage(item.url, session.storageUrl)) return;
+      if (item.workbook || !isOwnStorage(item.url, session.storageUrl)) return;
       try {
         const url = await refreshAfter(client, invalidate, [item.url], (tracked) =>
           copyItem(tracked, item),
@@ -777,16 +781,32 @@ export function useDriveActions() {
     async (parent: string, name: string) => {
       if (!isOwnStorage(parent, session.storageUrl)) return;
       try {
-        const url = await createFolder(client, parent, name);
-        invalidate(url);
-        toast.success(`Created ${nameOf(url)}`);
+        let queued = false;
+        const url = await createFolder(
+          client,
+          parent,
+          name,
+          storage
+            ? {
+                storage,
+                onQueued: () => {
+                  queued = true;
+                },
+              }
+            : undefined,
+        );
+        if (queued) toast.success("Saved on this device. It will sync when you're back online.");
+        else {
+          invalidate(url);
+          toast.success(`Created ${nameOf(url)}`);
+        }
         return url;
       } catch (error) {
         reportFailure(error, "Couldn't create the folder", client, invalidate);
         return undefined;
       }
     },
-    [client, invalidate, session.storageUrl],
+    [client, invalidate, session.storageUrl, storage],
   );
 
   const restore = useCallback(

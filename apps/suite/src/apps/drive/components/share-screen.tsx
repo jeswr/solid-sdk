@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
@@ -15,6 +16,7 @@ import { useOptionalAccounts } from "@/shell/session/accounts-context";
 import { ReauthDialog } from "@/shell/session/reauth-dialog";
 import { nativeShareIntake, type ShareIntake } from "@/shell/share/intake";
 import { nameOf, parentOf } from "../lib/client/client";
+import { isWorkbookLike } from "../lib/client/workbook";
 import { DriveProvider, useDrive, useFolder } from "../state/drive-context";
 import { createShareActions } from "../state/share-actions";
 import type { UploadQueue } from "../state/uploads";
@@ -252,7 +254,10 @@ function DriveShareBatch({
           ) : null}
           {listing.status === "ready" ? (
             listing.items
-              .filter((item) => item.kind === "folder" && !item.name.startsWith("."))
+              .filter(
+                (item) =>
+                  item.kind === "folder" && !isWorkbookLike(item) && !item.name.startsWith("."),
+              )
               .map((item) => (
                 <Button variant="outline" key={item.url} onClick={() => setChosen(item.url)}>
                   Open folder {item.name}

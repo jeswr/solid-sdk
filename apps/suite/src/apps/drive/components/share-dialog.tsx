@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import {
@@ -20,6 +21,7 @@ import type { DriveItem } from "../lib/client/client";
 import {
   applySharing,
   CONTENTS_DIFFER,
+  isPartialScope,
   loadSharing,
   SharingConflictError,
   SharingIncompleteError,
@@ -28,6 +30,7 @@ import {
   type SharingSnapshot,
 } from "../lib/sharing/adapter";
 import type { SharingRole, SharingSelection, SharingState } from "../lib/sharing/types";
+import { ScopedSharing } from "./share-scoped";
 
 const profile = () => ({ loading: false });
 const COMMENT_REASON = "Commenter is not available for this item yet. Choose Viewer or Editor.";
@@ -76,6 +79,10 @@ export function ShareDialog({
   onCloseAutoFocus,
   notice,
   disabledReason,
+  load = loadSharing,
+  apply = applySharing,
+  scopedEditor = true,
+  groupTargets,
 }: {
   item: Pick<DriveItem, "name" | "url">;
   session: SharingSession;
@@ -85,6 +92,16 @@ export function ShareDialog({
   onCloseAutoFocus?: (event: Event) => void;
   notice?: string;
   disabledReason?: string | undefined;
+  load?: typeof loadSharing;
+  apply?: typeof applySharing;
+  /**
+   * Open the scope-aware editor for a Drive folder whose own and contents access differ.
+   * Off for an item whose sharing an app coordinates (a Docs document's companions, a Sheets
+   * workbook), where per-scope rules would bypass that app's model.
+   */
+  scopedEditor?: boolean;
+  /** Every resource a group grant must cover, from the loaded snapshot; the item by default. */
+  groupTargets?: (snapshot: SharingSnapshot) => string[];
 }) {
   const [snapshot, setSnapshot] = useState<SharingSnapshot>();
   const [error, setError] = useState("");
@@ -95,7 +112,15 @@ export function ShareDialog({
   const [role, setRole] = useState<SharingRole>("viewer");
   const [announcement, setAnnouncement] = useState("");
   const [retry, setRetry] = useState(0);
+  // Counts finished loads; React may batch a load's start and end into one render.
+  const [loads, setLoads] = useState(0);
+  // A folder whose own and contents access differ opens the scope-aware editor.
+  const [scoped, setScoped] = useState(false);
   const focusAfterSave = useRef<HTMLElement | null>(null);
+  // What the scope-aware editor announced as it handed back to this dialog.
+  const matched = useRef("");
+  // Focus to place once the dialog reloads after the scope-aware editor hands back.
+  const handBack = useRef(false);
   const done = useRef<HTMLButtonElement>(null);
   const generalId = useId();
   const generalRoleId = useId();
@@ -108,25 +133,42 @@ export function ShareDialog({
     setLoading(true);
     setSnapshot(undefined);
     setError("");
-    loadSharing(session, item.url).then(
+    setScoped(false);
+    load(session, item.url).then(
       (value) => {
         if (live) {
           setSnapshot(value);
           setLoading(false);
-          setAnnouncement("");
+          setAnnouncement(matched.current);
+          matched.current = "";
+          setLoads((n) => n + 1);
         }
       },
       (reason: unknown) => {
         if (live) {
-          setError(reason instanceof Error ? reason.message : "Couldn't load sharing");
+          matched.current = "";
+          // Only a Drive folder has scopes to edit; anything else keeps the load's message.
+          if (scopedEditor && item.url.endsWith("/") && isPartialScope(reason)) {
+            setScoped(true);
+            setAnnouncement("");
+          } else setError(reason instanceof Error ? reason.message : "Couldn't load sharing");
           setLoading(false);
+          setLoads((n) => n + 1);
         }
       },
     );
     return () => {
       live = false;
     };
-  }, [session, item.url, retry]);
+  }, [session, item.url, retry, load, scopedEditor]);
+
+  // The scope-aware editor's controls are gone once it hands back, so focus lands on Done.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per finished load
+  useEffect(() => {
+    if (!handBack.current) return;
+    handBack.current = false;
+    done.current?.focus();
+  }, [loads]);
 
   useEffect(() => {
     if (saving) return;
@@ -155,7 +197,7 @@ export function ShareDialog({
     setSaving(true);
     setError("");
     try {
-      setSnapshot(await applySharing(session, snapshot, selection));
+      setSnapshot(await apply(session, snapshot, selection));
       setPeople([]);
       setQuery("");
       setAnnouncement("Sharing saved");
@@ -233,8 +275,32 @@ export function ShareDialog({
             )}
           </div>
         )}
+        {scoped && (
+          <ScopedSharing
+            session={session}
+            resource={item.url}
+            disabledReason={disabledReason}
+            onSaved={onSaved}
+            onMatched={(message) => {
+              matched.current = message;
+              handBack.current = true;
+              setRetry((n) => n + 1);
+            }}
+            onSavingChange={setSaving}
+          />
+        )}
         {!loading && state && (
           <div className="su-stack" aria-busy={saving}>
+            {snapshot.notice && (
+              <p className="su-muted" role="note">
+                {snapshot.notice}
+              </p>
+            )}
+            {snapshot.needsSave && (
+              <Button disabled={blocked} onClick={() => void save(state)}>
+                Save
+              </Button>
+            )}
             {!snapshot.canManage && (
               <p className="su-muted" role="status">
                 {snapshot.readOnly ??
@@ -331,6 +397,7 @@ export function ShareDialog({
             <GroupSharing
               session={session}
               url={item.url}
+              targets={groupTargets?.(snapshot)}
               disabled={blocked}
               onSaved={() => {
                 setRetry((value) => value + 1);
@@ -398,8 +465,9 @@ export function ShareDialog({
             </p>
           </div>
         )}
+        {/* The scope-aware editor announces its own saves; footer actions still announce here. */}
         <p role="status" className="su-muted">
-          {saving ? "Saving sharing…" : announcement}
+          {saving && !scoped ? "Saving sharing…" : announcement}
         </p>
         <DialogFooter>
           <Button

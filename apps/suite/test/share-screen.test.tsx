@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { createShareInbox, type ShareBatch, type ShareIntakePlugin } from "@jeswr/suite-native";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ShareBatchView, ShareScreen } from "../src/apps/drive/components/share-screen";
+import type { DriveItem } from "../src/apps/drive/lib/client/client";
 import type { UploadQueue, UploadTask } from "../src/apps/drive/state/uploads";
 import type { PodSession } from "../src/lib/session/types";
 import { AccountsContext } from "../src/shell/session/accounts-context";
@@ -24,11 +25,13 @@ const session = vi.hoisted(() => ({
   session: undefined as PodSession | undefined,
 }));
 const drive = vi.hoisted(() => vi.fn());
+const folders = vi.hoisted(() => vi.fn<() => { status: "ready"; items: DriveItem[] }>());
 const actions = vi.hoisted(() => ({ saveLink: vi.fn(), saveText: vi.fn() }));
 beforeEach(() => {
   session.status = "signed-out";
   session.session = undefined;
   vi.clearAllMocks();
+  folders.mockReturnValue({ status: "ready", items: [] });
 });
 vi.mock("../src/lib/session/pod-session", () => ({
   PodSessionProvider: ({ children }: { children: React.ReactNode }) => children,
@@ -37,7 +40,7 @@ vi.mock("../src/lib/session/pod-session", () => ({
 vi.mock("../src/apps/drive/state/drive-context", () => ({
   DriveProvider: ({ children }: { children: React.ReactNode }) => children,
   useDrive: drive,
-  useFolder: () => ({ status: "ready", items: [] }),
+  useFolder: folders,
 }));
 vi.mock("../src/apps/drive/state/share-actions", () => ({ createShareActions: () => actions }));
 const file: ShareBatch["items"][number] = {
@@ -262,6 +265,34 @@ it("keeps shares pending when signed out, and shows an empty state on the web", 
   render(h(ShareScreen, { intake: test.intake }));
   expect(screen.getByText("Nothing to save")).toBeTruthy();
   expect(test.plugin.getPending).not.toHaveBeenCalled();
+});
+
+it("only offers ordinary folders as destinations when workbook metadata is unreadable", async () => {
+  const test = await fixture();
+  vi.stubGlobal("Capacitor", { isNativePlatform: () => true, getPlatform: () => "ios" });
+  const root = "https://pod.example/";
+  session.status = "ready";
+  session.session = {
+    mode: "solid",
+    displayName: "Alice",
+    webId: `${root}profile#me`,
+    storageUrl: root,
+    fetch: vi.fn(),
+    publicFetch: vi.fn(),
+    subscribe: () => () => {},
+  };
+  drive.mockReturnValue({ driveRoot: `${root}sheets/`, uploads: test.uploads });
+  folders.mockReturnValue({
+    status: "ready",
+    items: [
+      { kind: "folder", url: `${root}sheets/files/`, name: "Files" },
+      { kind: "folder", url: `${root}sheets/budget/`, name: "Budget", workbook: true },
+      { kind: "folder", url: `${root}sheets/unread/`, name: "Unread", workbookUnknown: true },
+    ],
+  });
+  render(h(ShareScreen, { intake: test.intake }));
+  const destinations = await screen.findAllByRole("button", { name: /^Open folder / });
+  expect(destinations.map((button) => button.textContent)).toEqual(["Open folder Files"]);
 });
 
 it("makes an expired share inert, offers shell reauthentication, and keeps the pending batch and progress", async () => {
