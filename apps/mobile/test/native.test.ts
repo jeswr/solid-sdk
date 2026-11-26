@@ -298,9 +298,9 @@ describe("iOS project", () => {
     expect(ui).not.toMatch(/evaluateJavaScript|@testable import/);
     // Safari can take the foreground after an immediate activate(); wait for it, then reactivate.
     const tap = ui.indexOf("foreign.tap()");
-    expect(ui.indexOf('safari.wait(for: .runningForeground', tap)).toBeGreaterThan(tap);
+    expect(ui.indexOf("safari.wait(for: .runningForeground", tap)).toBeGreaterThan(tap);
     expect(ui.indexOf("app.activate()", tap)).toBeGreaterThan(
-      ui.indexOf('safari.wait(for: .runningForeground', tap),
+      ui.indexOf("safari.wait(for: .runningForeground", tap),
     );
     expect(ui).toMatch(/step: "initial fixture", timeout: 120\)/);
     for (const file of ["MainViewController.swift", "BridgeOriginGuard.swift"]) {
