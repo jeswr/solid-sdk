@@ -1,16 +1,23 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { addGrant } from "@jeswr/pod-access/roles";
 // AUTHORED-BY Claude Opus 5.5
 import { serialize } from "@jeswr/rdf-serialize";
 import { AclResource } from "@solid/object";
 import { DataFactory } from "n3";
 import { expect, it, vi } from "vitest";
+import { buildDocument } from "../src/apps/docs/lib/model/document";
 import { docContainerUrls } from "../src/apps/docs/lib/model/layout";
 import {
   applyDocumentSharing,
+  checkDocumentSharing,
+  DOCUMENT_GROUPS_DIFFER,
   DOCUMENT_PARTS_DIFFER,
+  documentGroupTargets,
   loadDocumentSharing,
   MAX_DOCUMENT_PARTS,
+  NOT_A_COMPANION,
+  REPAIR_FIRST,
   TOO_MANY_PARTS,
 } from "../src/apps/docs/lib/sharing/document-sharing";
 import {
@@ -36,6 +43,19 @@ const ROOT = "https://example.org/";
 const DOC = `${ROOT}docs/plan.ttl`;
 const layout = docContainerUrls(DOC);
 const parts = [layout.container, layout.updateLog, layout.assets, layout.comments, layout.versions];
+/** A Docs document whose own links name its companion folder, as Docs writes it. */
+async function writeDocument(
+  pod: { fetch: typeof globalThis.fetch },
+  links: Partial<Record<"updateLog" | "assets" | "comments", string>> = layout,
+) {
+  const { updateLog, assets, comments } = links;
+  const dataset = buildDocument(DOC, { title: "Plan", updateLog, assets, comments });
+  await pod.fetch(DOC, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: await serialize([...dataset]),
+  });
+}
 async function setup(model: "wac" | "acp" = "wac", ownChildren = false) {
   const pod = createDemoPod({ root: ROOT });
   const suffix = model === "wac" ? ".acl" : ".acr";
@@ -61,7 +81,8 @@ async function setup(model: "wac" | "acp" = "wac", ownChildren = false) {
     });
     return doc;
   }
-  for (const url of [DOC, ...parts]) await pod.fetch(url, { method: "PUT", body: "" });
+  for (const url of parts) await pod.fetch(url, { method: "PUT", body: "" });
+  await writeDocument(pod);
   await access(DOC);
   await access(layout.container);
   if (ownChildren) for (const url of parts.slice(1)) await access(url);
@@ -80,7 +101,17 @@ async function setup(model: "wac" | "acp" = "wac", ownChildren = false) {
     const state = (await loadSharing(session, url)).state;
     return [state.people.map(({ webId, role }) => [webId, role]), state.link];
   };
-  return { pod, session, fetch, load, access, writes, roles, suffix };
+  return {
+    pod,
+    session,
+    fetch,
+    load,
+    access,
+    writes,
+    roles,
+    suffix,
+    writeDocument: (links?: Parameters<typeof writeDocument>[1]) => writeDocument(pod, links),
+  };
 }
 const select = (state: SharingSelection, role: SharingRole = "viewer"): SharingSelection => ({
   ...state,
@@ -144,7 +175,10 @@ it.each([
     [PUBLIC, ["Read"]],
   ]);
   const snapshot = await env.load();
-  expect(snapshot).toMatchObject({ notice: DOCUMENT_PARTS_DIFFER, needsSave: true });
+  expect(snapshot).toMatchObject({
+    notice: expect.stringContaining(DOCUMENT_PARTS_DIFFER),
+    needsSave: true,
+  });
   expect(snapshot.state.people.find((p) => p.webId === BOB)?.role).toBe("editor");
   env.fetch.mockClear();
   const result = await applyDocumentSharing(env.session, snapshot, snapshot.state);
@@ -223,8 +257,15 @@ it.each([
     direction === "grant" ? "companion access matches" : "document access reduced",
   );
   expect((error as Error).message).toContain("Retry");
+  // A grant whose document write failed reverts the companion it already widened.
+  if (direction === "grant") {
+    expect((error as Error).message).toContain(
+      "Access added to the document's other parts was reverted.",
+    );
+    expect(await env.roles(layout.container)).toEqual([[[ALICE, "owner"]], "none"]);
+  }
   const fresh = await env.load();
-  expect(fresh.needsSave).toBe(true);
+  expect(fresh.needsSave).toBe(direction === "grant" ? undefined : true);
   // Revoke already reduced the doc; grant needs the original selection again.
   const repaired = await applyDocumentSharing(env.session, fresh, selection);
   expect(repaired.needsSave).toBeUndefined();
@@ -539,7 +580,10 @@ it("treats a member with its own policy as a document part", async () => {
   // A member that only inherits is not a separate part.
   await env.pod.fetch(`${layout.comments}inherits.ttl`, { method: "PUT", body: "" });
   const snapshot = await env.load();
-  expect(snapshot).toMatchObject({ notice: DOCUMENT_PARTS_DIFFER, needsSave: true });
+  expect(snapshot).toMatchObject({
+    notice: expect.stringContaining(DOCUMENT_PARTS_DIFFER),
+    needsSave: true,
+  });
   expect(snapshot.companions.map((part) => part.resource)).toEqual([...parts, image]);
   const result = await applyDocumentSharing(env.session, snapshot, snapshot.state);
   expect(result.notice).toBeUndefined();
@@ -592,6 +636,188 @@ it("fails closed when a listed member cannot be checked", async () => {
 it("refuses to check a companion tree with too many members", async () => {
   const env = await setup();
   for (let index = 0; index <= MAX_DOCUMENT_PARTS; index++)
-    await env.pod.fetch(`${layout.updateLog}${index}.bin`, { method: "PUT", body: "" });
+    await env.pod.fetch(`${layout.assets}${index}.bin`, { method: "PUT", body: "" });
   await expect(env.load()).rejects.toThrow(TOO_MANY_PARTS);
+});
+
+// AUTHORED-BY Claude Opus 5.5
+it("keeps sharing for a long-lived document whose update logs exceed the part cap", async () => {
+  const env = await setup();
+  const recovery = `${layout.container}updates-1700000000000/`;
+  await env.pod.fetch(recovery, { method: "PUT", body: "" });
+  for (let index = 0; index <= MAX_DOCUMENT_PARTS; index++)
+    await env.pod.fetch(`${index % 2 ? layout.updateLog : recovery}${index}.bin`, {
+      method: "PUT",
+      body: "",
+    });
+  // Log entries are still checked one by one: a shared entry is still a part.
+  const entry = `${layout.updateLog}7.bin`;
+  await env.access(entry, [[BOB, ["Read"]]]);
+  const snapshot = await env.load();
+  expect(snapshot.companions.map((part) => part.resource)).toContain(entry);
+  expect(snapshot.needsSave).toBe(true);
+});
+
+it("checks the companion tree's members concurrently, at most eight at a time", async () => {
+  const env = await setup();
+  for (let index = 0; index < 40; index++)
+    await env.pod.fetch(`${layout.comments}${index}.ttl`, { method: "PUT", body: "" });
+  let active = 0;
+  let peak = 0;
+  const fetch: typeof globalThis.fetch = async (url, init) => {
+    if (init?.method !== "HEAD") return env.session.fetch(url, init);
+    peak = Math.max(peak, ++active);
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    try {
+      return await env.session.fetch(url, init);
+    } finally {
+      active--;
+    }
+  };
+  await loadDocumentSharing({ ...env.session, fetch }, DOC);
+  expect(peak).toBeGreaterThan(1);
+  expect(peak).toBeLessThanOrEqual(8);
+});
+
+it("decides the Share button from the entry point and companion root without walking the tree", async () => {
+  const env = await setup();
+  for (let index = 0; index < 20; index++)
+    await env.pod.fetch(`${layout.updateLog}${index}.bin`, { method: "PUT", body: "" });
+  env.fetch.mockClear();
+  expect(await checkDocumentSharing(env.session, DOC)).toEqual({ canManage: true });
+  const urls = env.fetch.mock.calls.map(([url]) => String(url));
+  expect(urls.some((url) => url.startsWith(layout.updateLog))).toBe(false);
+  expect(await checkDocumentSharing({ ...env.session, webId: BOB }, DOC)).toMatchObject({
+    canManage: false,
+  });
+  await env.access(layout.container, [[CAROL, ["Read", "Write", "Control"]]]);
+  const other = await checkDocumentSharing({ ...env.session, webId: CAROL }, DOC);
+  expect(other).toEqual({ canManage: false });
+});
+
+const GROUP = "https://example.org/groups/team.ttl#group";
+async function shareWithGroup(env: Awaited<ReturnType<typeof setup>>, url: string) {
+  const result = await addGrant(
+    [url],
+    { agent: { type: "group", id: GROUP }, role: "viewer", inherited: false, source: "" },
+    {
+      fetch: env.session.fetch,
+      root: ROOT,
+      webId: ALICE,
+      model: "wac",
+      kind: url.endsWith("/") ? "folder" : "resource",
+    },
+  );
+  expect(result.failed).toEqual([]);
+}
+
+it("reports group grants that differ between the document and its companion", async () => {
+  const env = await setup();
+  expect((await env.load()).notice).toBeUndefined();
+  await shareWithGroup(env, layout.container);
+  const snapshot = await env.load();
+  expect(snapshot.notice).toContain(DOCUMENT_GROUPS_DIFFER);
+  expect(snapshot.notice).toContain("Shared differently: the document folder");
+  // Group differences are repaired from the Groups panel, not by the people Save.
+  expect(snapshot.needsSave).toBeUndefined();
+  await shareWithGroup(env, DOC);
+  expect((await env.load()).notice).toBeUndefined();
+  // People changes keep group rows on every part.
+  const result = await applyDocumentSharing(env.session, await env.load(), select(snapshot.state));
+  expect(result.notice).toBeUndefined();
+});
+
+it("names every document part as a group target, the entry point first", async () => {
+  const env = await setup("wac", true);
+  const snapshot = await env.load();
+  expect(documentGroupTargets(snapshot)).toEqual([DOC, ...parts]);
+  expect(documentGroupTargets({ ...snapshot, companions: undefined } as never)).toEqual([DOC]);
+});
+
+it.each([
+  ["moved without its folder", { updateLog: `${ROOT}elsewhere/updates/` }],
+  ["linking a part outside its folder", { ...layout, comments: `${ROOT}docs/comments/` }],
+] as const)("refuses companion sharing for a document %s", async (_case, links) => {
+  const env = await setup();
+  await env.writeDocument(links);
+  env.fetch.mockClear();
+  await expect(env.load()).rejects.toThrow(NOT_A_COMPANION);
+  expect(env.writes()).toEqual([]);
+});
+
+it("refuses companion sharing for a .ttl that is not a Docs document", async () => {
+  const env = await setup();
+  await env.pod.fetch(DOC, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: '<#it> <http://purl.org/dc/terms/title> "Not a document".',
+  });
+  await expect(env.load()).rejects.toThrow(NOT_A_COMPANION);
+});
+
+it("accepts a legacy Docs document that records no companion links", async () => {
+  const env = await setup();
+  await env.writeDocument({});
+  expect((await env.load()).needsSave).toBeUndefined();
+});
+
+it("requires the repair Save before rewriting a member that was given its own access", async () => {
+  const env = await setup();
+  const image = `${layout.assets}image.png`;
+  await env.pod.fetch(image, {
+    method: "PUT",
+    body: "png",
+    headers: { "content-type": "image/png" },
+  });
+  await env.access(image, [[CAROL, ["Read"]]]);
+  const snapshot = await env.load();
+  expect(snapshot.notice).toContain("Shared differently: assets/image.png.");
+  env.fetch.mockClear();
+  await expect(applyDocumentSharing(env.session, snapshot, select(snapshot.state))).rejects.toThrow(
+    REPAIR_FIRST,
+  );
+  expect(env.writes()).toEqual([]);
+  expect((await env.roles(image))[0]).toContainEqual([CAROL, "viewer"]);
+  // The explicit repair, then the change.
+  const repaired = await applyDocumentSharing(env.session, snapshot, snapshot.state);
+  const shared = await applyDocumentSharing(env.session, repaired, select(repaired.state));
+  expect(shared.needsSave).toBeUndefined();
+});
+
+it("reverts a widened companion grant when the document write fails", async () => {
+  const env = await setup("wac", true);
+  const snapshot = await env.load();
+  const fetch: typeof globalThis.fetch = (url, init) =>
+    init?.method === "PUT" && url === `${DOC}.acl`
+      ? Promise.resolve(new Response(null, { status: 412 }))
+      : env.session.fetch(url, init);
+  const error = await applyDocumentSharing(
+    { ...env.session, fetch },
+    snapshot,
+    select(snapshot.state, "editor"),
+  ).catch((e: unknown) => e);
+  expect((error as Error).message).toContain("was reverted");
+  for (const url of [DOC, ...parts])
+    expect(await env.roles(url)).toEqual([[[ALICE, "owner"]], "none"]);
+});
+
+it("reports a companion grant it could not revert", async () => {
+  const env = await setup();
+  const snapshot = await env.load();
+  let companionWrites = 0;
+  const fetch: typeof globalThis.fetch = (url, init) => {
+    if (init?.method === "PUT" && url === `${DOC}.acl`)
+      return Promise.resolve(new Response(null, { status: 503 }));
+    if (init?.method === "PUT" && url === `${layout.container}.acl` && ++companionWrites > 1)
+      return Promise.resolve(new Response(null, { status: 503 }));
+    return env.session.fetch(url, init);
+  };
+  const error = await applyDocumentSharing(
+    { ...env.session, fetch },
+    snapshot,
+    select(snapshot.state),
+  ).catch((e: unknown) => e);
+  expect((error as Error).message).toContain(
+    `Access added to ${layout.container} could not be reverted; review it in Drive.`,
+  );
 });

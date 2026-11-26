@@ -81,6 +81,7 @@ export function ShareDialog({
   disabledReason,
   load = loadSharing,
   apply = applySharing,
+  groupTargets,
 }: {
   item: Pick<DriveItem, "name" | "url">;
   session: SharingSession;
@@ -92,6 +93,8 @@ export function ShareDialog({
   disabledReason?: string | undefined;
   load?: typeof loadSharing;
   apply?: typeof applySharing;
+  /** Every resource a group grant must cover, from the loaded snapshot; the item by default. */
+  groupTargets?: (snapshot: SharingSnapshot) => string[];
 }) {
   const [snapshot, setSnapshot] = useState<SharingSnapshot>();
   const [error, setError] = useState("");
@@ -369,6 +372,7 @@ export function ShareDialog({
             <GroupSharing
               session={session}
               url={item.url}
+              targets={groupTargets?.(snapshot)}
               disabled={blocked}
               onSaved={() => {
                 setRetry((value) => value + 1);
