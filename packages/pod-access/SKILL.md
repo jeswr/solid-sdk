@@ -208,7 +208,13 @@ roles refuse with the inferred role in the error, in both `decide` and `previewD
 Different choices refuse. Approval results include `choices`
 with the actual granted types, strongest applied `role`, exact roles per target URL in
 `targetRoles`, and recorded expiry (`Date`), including on
-completed replays that ignore new choices. A lost pin or CAS reports the request's re-read status
+completed replays that ignore new choices. Snapshot validation requires sorted, unique
+chosen/granted type lists, chosen within the request, granted within chosen, and an end date that
+is exactly the ISO instant `decide` writes. `listRequests` attaches `recorded: RecordedChoices`
+(`{ dataTypes (chosen), grantedTypes, role? (only when chosen), expiresAt? }`, the passback form
+`decide` resumes) to pending/Approving entries with an owner-pinned approval: read-only via
+`recordsKey(..., expected, readOnly = true)` on WAC and ACP, at most four lookups at once,
+fail-closed (any refusal attaches nothing), cancellation propagates. A lost pin or CAS reports the request's re-read status
 in `RequestConflictError`.
 
 For ACP records, use the roles layer's raw bounded ACR discovery, preserving all triples rather

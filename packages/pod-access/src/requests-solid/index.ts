@@ -7,6 +7,7 @@ export type {
   DecisionPreview,
   DecisionResult,
   DecisionTarget,
+  RecordedChoices,
   RequestDecision,
 } from "./approval.js";
 export { decide, deriveGrantId, previewDecision } from "./approval.js";
@@ -19,5 +20,5 @@ export type {
   RequestMode,
   RequestStatus,
 } from "./inbox.js";
-export { listRequests } from "./inbox.js";
+export { listRequests } from "./listing.js";
 export { ACCM, ACL, DCT, DPV, FOAF, LDP, ODRL, PIM, PROV, RDF, RDFS, SOLID, XSD } from "./vocab.js";

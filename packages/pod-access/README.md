@@ -761,8 +761,19 @@ missing, or non-request member becomes `{ id, status: "unreadable" }`; container
 Other statuses are `pending`, `approving`, `approved`, and `denied`. Entries carry `requester`,
 notification-local `requesterName?`, `purpose?` (IRI or label), `dataTypes`, `modes`
 (`read`, `write`, `append`), `modesByType` (a rule targeting a data type applies to that type
-only; a rule with any other target applies to every requested type), `requestedDuration?`, `expiresAt?`, `created?`, and `decidedAt?`.
-Foreign dates and durations retain lexical strings. Listing never dereferences requesters or purposes.
+only; a rule with any other target applies to every requested type), `requestedDuration?`, `expiresAt?`, `created?`, `decidedAt?`,
+and `recorded?`. Foreign dates and durations retain lexical strings. Listing never dereferences requesters or purposes.
+A pending or Approving entry carries `recorded: RecordedChoices` (`{ dataTypes, grantedTypes,
+role?, expiresAt? }`) when the owner's own records already pin an approval of it, for example one
+another tab started and did not finish. `dataTypes` are the owner's chosen types, sorted (the
+request's own when none were chosen); `grantedTypes` are those that were granted a mode (name these
+when saying what was shared); `role` is present only when the owner chose one; `expiresAt` is absent
+for access until revoked. The lookup reads only, on WAC and CSS ACP records alike: it writes nothing
+(not even sealing the records folder), runs at most four record lookups at once, attaches nothing
+while the records folder is missing, unsealed, shared or lacking the owner's full control, and
+leaves out a record that can't be read, names another request or doesn't validate. Cancellation
+propagates. Passing the recorded `dataTypes`, `role` and `expiresAt` back to `decide` (or
+`previewDecision`) resumes that approval; `decide` validates the record again before using it.
 Discovery/listing failures and cancellation propagate; an individual bad notification does not.
 
 `decide(entry, { approve, role?, expiresAt?, dataTypes? }, options)` re-reads `entry.id`.
@@ -806,7 +817,9 @@ either is a mismatch. Legacy records that stored only `chosen.viewer` infer the 
 from their pinned modes; omit `role` or repeat that inferred role to resume them. An explicit
 different role is refused with the recorded role in the error. Different choices fail with an error saying an earlier approval is still
 finishing, rather than silently granting something other than what the owner just chose.
-Completed decisions are idempotent; reversing
+A pinned snapshot is refused as invalid unless its chosen and granted data types are sorted, unique
+strings, the chosen ones are all requested, every granted one was chosen, and its end date is exactly
+the instant `decide` wrote. Completed decisions are idempotent; reversing
 approval/denial is rejected. Denial receipt writes can also be retried. Requester-supplied grant/receipt
 references never select write locations.
 
