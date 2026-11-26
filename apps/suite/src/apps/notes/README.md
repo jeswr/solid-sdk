@@ -43,9 +43,12 @@ Notes, keeping its pin and colour at that address.
 Shared links follow Sheets' origin boundary: a canonical note URL on another pod
 on the current storage's origin opens through anonymous, redirect-refusing reads.
 The view never acquires a writer or consumes another account's pending drafts.
-Public notes work without credentials. Private foreign notes explain that access
-from the owner's pod is needed and that opening private notes shared from another
-pod is not supported yet (sst-imb.57.1). Cross-origin, auxiliary and ambiguous URLs
+Public notes work without credentials. A private foreign note (401 or 403) says so and,
+for a Solid account, offers "Open with your account" (sst-imb.57.1). That click is the
+consent: it names the note's address and grants the account that one note through pod-auth's
+resource grants until sign-out, then reads it through the session, still view-only with
+redirects refused. Without access the reader is told to ask the owner. Images in a granted
+note still load anonymously. Cross-origin, auxiliary and ambiguous URLs
 are refused with an explanation for foreign links. Owned notes use the existing
 Notes scope rules, including extensionless note URLs.
 

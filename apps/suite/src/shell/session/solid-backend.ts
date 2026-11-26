@@ -537,6 +537,35 @@ export class SolidBackend implements SessionBackend {
     };
   }
 
+  async grantResource(account: SuiteAccount, url: string): Promise<void> {
+    const version = this.#sessionVersion;
+    // The same account check as fetchFor: the exact account this backend signed in.
+    const usable = () =>
+      !this.#expired &&
+      account.kind === "solid" &&
+      this.#account?.id === account.id &&
+      this.#account.webId === account.webId &&
+      this.#account.issuer === account.issuer &&
+      version === this.#sessionVersion;
+    if (!usable()) throw new Error("Sign in to continue");
+    const core = this.#core();
+    if (!core.grantResource) throw new Error("Opening shared resources isn't available here");
+    // pod-auth checks the click, the signed-in account and the address before recording it,
+    // so nothing is awaited before it: the click's activation must still be live.
+    const grant = await core.grantResource(url);
+    // Another tab may have replaced the core's session; a grant must belong to this account.
+    const identity = usable() ? await core.identity() : null;
+    if (
+      !usable() ||
+      !identity ||
+      identity.webId !== account.webId ||
+      identity.issuer !== account.issuer
+    ) {
+      core.revokeResource?.(grant);
+      throw new Error("Sign in to continue");
+    }
+  }
+
   onExpired(cb: () => void): () => void {
     this.#listeners.add(cb);
     return () => {

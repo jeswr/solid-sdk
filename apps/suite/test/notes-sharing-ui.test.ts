@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { ResourceGrantError } from "@jeswr/pod-auth";
 import type { ReactNode } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { serializeTurtle } from "../src/apps/docs/lib/model/rdf-io";
@@ -371,12 +373,79 @@ it("keeps shared link errors clear and fences a replaced or unmounted read", asy
   const ui = await mount(h(SharedNote, { reference: encodeRef(url), podRoot: session.storageUrl }));
   expect(document.body.textContent).toContain("Opening shared note");
   await ui.render(h(SharedNote, { reference: encodeRef(second), podRoot: session.storageUrl }));
-  await vi.waitFor(() => expect(document.body.textContent).toContain("not supported yet"));
+  await vi.waitFor(() => expect(document.body.textContent).toContain("This note is private"));
+  expect(document.body.textContent).not.toContain("Open with your account");
   await act(() =>
     first.resolve(new Response(body, { headers: { "content-type": "text/turtle" } })),
   );
   expect(document.body.textContent).not.toContain("Old");
   await ui.unmount();
+});
+
+it("opens a private shared note with the account only after the consent click", async () => {
+  const url = "https://pod.example/bob/notes/private.ttl";
+  const body = await serializeTurtle(buildNote(url, { title: "Secret", body: "<p>Hi</p>" }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, { status: 401 })),
+  );
+  const accountFetch = vi.fn(
+    async () => new Response(body, { headers: { "content-type": "text/turtle" } }),
+  );
+  const grant = vi
+    .fn<(url: string) => Promise<void>>()
+    .mockRejectedValueOnce(new Error("no"))
+    .mockRejectedValueOnce(new ResourceGrantError("no-user-activation"))
+    .mockResolvedValue(undefined);
+  await mount(
+    h(SharedNote, {
+      reference: encodeRef(url),
+      podRoot: session.storageUrl,
+      account: { fetch: accountFetch, grant },
+    }),
+  );
+  await vi.waitFor(() => expect(document.body.textContent).toContain("This note is private"));
+  expect(document.body.textContent).toContain("pod.example/bob/notes/private.ttl only");
+  expect(accountFetch).not.toHaveBeenCalled();
+  const button = () =>
+    [...document.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Open with your account"),
+    ) as HTMLButtonElement;
+  await click(button());
+  await vi.waitFor(() =>
+    expect(document.body.textContent).toContain("Couldn't open this note with your account."),
+  );
+  expect(accountFetch).not.toHaveBeenCalled();
+  await click(button());
+  await vi.waitFor(() =>
+    expect(document.body.textContent).toContain("Click the button again to open it"),
+  );
+  await click(button());
+  await vi.waitFor(() => expect(document.body.textContent).toContain("Secret"));
+  expect(grant).toHaveBeenLastCalledWith(url);
+  expect(accountFetch).toHaveBeenCalledWith(url, expect.objectContaining({ redirect: "manual" }));
+  expect(document.body.textContent).toContain("View only");
+});
+
+it("tells a granted reader without access to ask the owner", async () => {
+  const url = "https://pod.example/bob/notes/denied.ttl";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(null, { status: 403 })),
+  );
+  const accountFetch = vi.fn(async () => new Response(null, { status: 403 }));
+  const grant = vi.fn(async () => {});
+  await mount(
+    h(SharedNote, {
+      reference: encodeRef(url),
+      podRoot: session.storageUrl,
+      account: { fetch: accountFetch, grant },
+    }),
+  );
+  await vi.waitFor(() => expect(document.querySelectorAll("button")).toHaveLength(1));
+  await click(document.querySelector("button") as HTMLButtonElement);
+  await vi.waitFor(() => expect(document.body.textContent).toContain("Ask its owner"));
+  expect(document.querySelectorAll("button")).toHaveLength(0);
 });
 
 it("renders an untitled shared note and ignores a failed read after unmount", async () => {
