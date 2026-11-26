@@ -75,6 +75,7 @@ it("counts only fetch failures as network failures, through Drive's wrapping", (
     "Failed to fetch",
     "NetworkError when attempting to fetch resource.",
     "Load failed",
+    "fetch failed",
   ]) {
     expect(isNetworkFailure(new TypeError(message))).toBe(true);
     expect(isNetworkFailure(new DriveAccessError(new TypeError(message)))).toBe(true);
@@ -83,6 +84,14 @@ it("counts only fetch failures as network failures, through Drive's wrapping", (
   expect(isNetworkFailure(new TypeError("The private Type Index needs a strong ETag."))).toBe(
     false,
   );
+  // Drive's own TypeErrors that merely mention fetching or the network are not lost requests.
+  for (const message of [
+    "Could not parse the fetched document",
+    "Failed to fetch-rdf: unexpected token",
+    "Invalid network address in link header",
+    "Load failed: bad Turtle",
+  ])
+    expect(isNetworkFailure(new TypeError(message))).toBe(false);
   expect(isNetworkFailure(new DriveAccessError(new Error("denied")))).toBe(false);
   expect(isNetworkFailure(undefined)).toBe(false);
   const loop: { cause?: unknown } = {};

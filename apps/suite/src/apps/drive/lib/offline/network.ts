@@ -1,7 +1,9 @@
 // AUTHORED-BY Claude Opus 5.5
 import { StorageError } from "@jeswr/storage-client";
 
-const FETCH_FAILURE = /fetch|network|load failed/i;
+/** fetch's own messages, whole: Drive's own TypeErrors may mention "fetch" or "network". */
+const FETCH_FAILURE =
+  /^(?:Failed to fetch|NetworkError when attempting to fetch resource\.?|Load failed|fetch failed|network error)$/i;
 
 /**
  * Whether a failure means the request never got an HTTP answer. Drive wraps the first failed
