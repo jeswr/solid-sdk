@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
@@ -9,6 +10,7 @@ import {
   ImageCleanupBlockedError,
   NoteImageCleanup,
   planUnusedNoteImages,
+  storedDraftTexts,
 } from "../src/apps/notes/lib/image-cleanup";
 import { buildNote, type Note, parseNote } from "../src/apps/notes/lib/model/note";
 import { createNotesStore } from "../src/apps/notes/lib/model/store";
@@ -635,6 +637,38 @@ it("fails closed when unsaved drafts cannot be read", async () => {
   }
 });
 
+it("returns no stored draft texts when localStorage is unavailable", () => {
+  const storage = localStorage;
+  try {
+    vi.stubGlobal("localStorage", undefined);
+    expect(storedDraftTexts()).toEqual([]);
+  } finally {
+    vi.stubGlobal("localStorage", storage);
+  }
+});
+
+it("reads only draft keys and skips a draft removed since enumeration", () => {
+  const removed = "suite.notes.pending-drafts.removed";
+  const unrelated = "suite.settings";
+  localStorage.setItem(removed, "old draft");
+  localStorage.setItem(unrelated, "preferences");
+  localStorage.setItem("notes-capture-draft:tab", "capture text");
+  const getItem = localStorage.getItem.bind(localStorage);
+  const read = vi
+    .spyOn(Object.getPrototypeOf(localStorage) as Storage, "getItem")
+    .mockImplementation((key: string) => {
+      if (key === removed) localStorage.removeItem(key);
+      return getItem(key);
+    });
+  try {
+    expect(storedDraftTexts()).toEqual(["capture text"]);
+    expect(read).not.toHaveBeenCalledWith(unrelated);
+  } finally {
+    read.mockRestore();
+    localStorage.clear();
+  }
+});
+
 it("re-checks drafts and age immediately before each delete (C1c)", async () => {
   const { store, put, http, override } = await fixture();
   await put(`${MEDIA}second.png`);
@@ -674,6 +708,18 @@ it("treats a missing notes/ folder next to existing media as a fault, not as no 
   await expect(store.imageCleanup.scan()).rejects.toBeInstanceOf(ImageCleanupBlockedError);
 });
 
+it("keeps the image when the pre-delete HEAD fails", async () => {
+  const { store, override, http } = await fixture();
+  const plan = await store.imageCleanup.scan();
+  http.mockClear();
+  override.mockImplementation(async (url, init) =>
+    url === IMAGE && init?.method === "HEAD" ? new Response(null, { status: 403 }) : undefined,
+  );
+  expect(await store.imageCleanup.delete(plan)).toEqual({ deleted: 0, kept: 1, failed: 0 });
+  expect(http).toHaveBeenCalledWith(IMAGE, expect.objectContaining({ method: "HEAD" }));
+  expect(deletes(http)).toEqual([]);
+});
+
 it("names the file that blocks clean-up when a note cannot be read (C4)", async () => {
   const { pod } = await fixture();
   const cleanup = new NoteImageCleanup({
@@ -698,6 +744,74 @@ async function withDocsHistory(path: string, body: string) {
   });
   return f;
 }
+
+async function listingBody(url: string, members: readonly string[]) {
+  const dataset = new Store();
+  const container = new Container(url, dataset, DataFactory);
+  for (const member of members) container.contains.add(new Resource(member, dataset, DataFactory));
+  return serializeTurtle(dataset);
+}
+
+it("checks shared history folders only once and keeps images named there", async () => {
+  const { store, pod, override, put, http } = await fixture();
+  const docs = `${POD}docs/`;
+  // These two listed identifiers resolve to the same history layout.
+  const documents = [`${docs}history.ttl?`, `${docs}history..ttl`];
+  for (const url of documents) {
+    await writeRdf(url, buildDocument(url, { title: "History", body: "" }), {
+      createOnly: true,
+      fetchImpl: pod.fetch,
+    });
+  }
+  const versions = `${docs}history./versions/`;
+  const snapshot = `${versions}v1.bin`;
+  await put(snapshot, "bird.png", "application/octet-stream");
+  const listing = await listingBody(docs, documents);
+  override.mockImplementation(async (url) =>
+    url === docs
+      ? new Response(listing, { headers: { "content-type": "text/turtle" } })
+      : undefined,
+  );
+  expect(urls(await store.imageCleanup.scan())).toEqual([]);
+  for (const url of [...documents, versions, snapshot])
+    expect(http.mock.calls.filter(([input]) => input === url)).toHaveLength(1);
+});
+
+it("stops before reading a 2,001st history file", async () => {
+  const { store, override, http } = await fixture();
+  const trash = `${POD}.trash/`;
+  const files = Array.from({ length: 2001 }, (_, index) => `${trash}entry-${index}`);
+  const listing = await listingBody(trash, files);
+  override.mockImplementation(async (url) => {
+    if (url === trash) return new Response(listing, { headers: { "content-type": "text/turtle" } });
+    if (url.startsWith(trash)) return new Response(null);
+    return undefined;
+  });
+  await expect(store.imageCleanup.scan()).rejects.toThrow("too much Docs history");
+  expect(http.mock.calls.filter(([url]) => String(url).startsWith(`${trash}entry-`))).toHaveLength(
+    2000,
+  );
+});
+
+it("blocks cleanup when individually allowed history files exceed 64 MiB together", async () => {
+  const { store, override, http } = await fixture();
+  const trash = `${POD}.trash/`;
+  const files = Array.from({ length: 9 }, (_, index) => `${trash}entry-${index}`);
+  const listing = await listingBody(trash, files);
+  const chunk = new Blob([new Uint8Array(8 * 1024 * 1024)]);
+  override.mockImplementation(async (url) => {
+    if (url === trash) return new Response(listing, { headers: { "content-type": "text/turtle" } });
+    if (url.startsWith(trash)) return new Response(url === files[8] ? "x" : chunk);
+    return undefined;
+  });
+  await expect(store.imageCleanup.scan()).rejects.toMatchObject({
+    name: "ImageCleanupBlockedError",
+    message: expect.stringContaining("too much Docs history"),
+  });
+  expect(http.mock.calls.filter(([url]) => String(url).startsWith(`${trash}entry-`))).toHaveLength(
+    9,
+  );
+});
 
 it.each([
   ["a Docs version snapshot", `${POD}docs/history/versions/v1.bin`],
