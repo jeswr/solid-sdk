@@ -223,6 +223,7 @@ async function trustedRun(tlsDir) {
   let seed;
   const forwards = [];
   let reversed = false;
+  const share = { amClean: null, grantRecorded: null };
   const login = {
     customTab: false,
     passwordSubmitted: false,
@@ -257,7 +258,7 @@ async function trustedRun(tlsDir) {
       entry.pages = await pageDiagnostics();
       // CI artifacts are not always reachable, so print the same fixed-label summary.
       console.log(
-        `MOB-07 diagnostics: ${JSON.stringify({ lastWait, login, serverEvidence, pages: entry.pages })}`,
+        `MOB-07 diagnostics: ${JSON.stringify({ lastWait, login, share, serverEvidence, pages: entry.pages })}`,
       );
       throw new Error(entry.error);
     }
@@ -687,7 +688,14 @@ async function trustedRun(tlsDir) {
     );
     assert(Buffer.from(encoded, "base64").equals(bytes), "Source file must be readable and exact");
     lastWait = "file share intent";
-    await shell(...sendIntent(undefined, mediaUri));
+    // Share the row through the Downloads collection, as a downloads or files app would.
+    const sharedUri = mediaUri.replace("/external/file/", "/external/downloads/");
+    const started = await shell(...sendIntent(undefined, sharedUri));
+    // Booleans only: whether `am` reported a problem and whether the grant reached the app.
+    share.amClean = !/error|warning|denial|exception/iu.test(started);
+    share.grantRecorded = (await shell("dumpsys", "activity", "permissions"))
+      .split("\n")
+      .some((line) => line.includes(sharedUri));
     const observed = await assertShare(`${name}\napplication/pdf · ${bytes.length} bytes`);
     await clickText(app, "Discard batch");
     await poll("file batch discarded", () =>

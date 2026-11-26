@@ -31,7 +31,7 @@ export function checkPrivateRead(
 }
 
 export function sendIntent(text: string | undefined, stream?: string): string[] {
-  if (stream && !/^content:\/\/media\/external\/file\/\d+$/.test(stream))
+  if (stream && !/^content:\/\/media\/external\/(?:file|downloads)\/\d+$/.test(stream))
     throw new Error("Expected an external MediaStore content URI");
   if (text === undefined && !stream) throw new Error("Share needs an item");
   return [
