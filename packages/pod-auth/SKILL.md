@@ -144,16 +144,24 @@ first; storage failures are harmless. Providers use monograms by default; host-s
   `selfIdentifiedSolidRoot` and `parseLinks` helpers; never trust a profile-linked description alone.
 - Only when the profile has no `pim:storage` about the WebID (CSS 7 default profiles), learn at most
   one root from the server that served the WebID document, failing closed (nothing learned) on any
-  doubt. Read the document response's single same-origin `solid:storageDescription` first; a failed
-  description (transient: `discovery-failed`) or one claiming no container holding the document learns
-  nothing and never falls back to the walk. Then HEAD the document's ancestors (at most ten), nearest
-  first: the first self-identified `pim:Storage` wins even over a broader claimed root (CSS
-  `default.json` claims `/`; Alice must get `/alice/`); a claimed container answering 401/403 is the
-  private storage; a readable claimed untyped container contradicts the whole description; readable
-  unclaimed untyped containers are passed; an unclaimed 401/403 container is passed only when it is
-  the document's own container and never on the way to the origin root; any 404, redirect, 5xx, 429
-  or network failure stops with nothing. Skip it after any redirect hop via another origin, or a
-  browser-hidden redirect. Never widen to another origin, a sibling, a descendant, or a readable
+  doubt: evidence may narrow, never widen. Skip it after any profile redirect, same-origin included,
+  or a browser-hidden one (`profile-redirected`), and when the profile response does not describe the
+  document or has several or a cross-origin `solid:storageDescription` link (`storage-unconfirmed`).
+  Read the single same-origin description first; a failed description (transient:
+  `discovery-failed`) or one claiming no container holding the document learns nothing and never
+  falls back to the walk. Then HEAD the document's ancestors that hold the WebID document (at most
+  ten), nearest first. Before any container is passed: a self-identified `pim:Storage` (2xx/401/403)
+  wins; a claimed container answering 401/403 is the private storage; a readable claimed untyped
+  container contradicts the whole description; readable unclaimed untyped containers are passed; an
+  unclaimed 401/403 container is passed only when it is the document's own container and not the
+  origin root; any 404, redirect, 5xx, 429 or network failure stops with nothing. After any container
+  is passed, accept only a nested pod: self-identified on a 2xx, not itself claimed, not the origin
+  root, strictly inside a claimed container (CSS `default.json` claims `/`; Alice must get `/alice/`,
+  and `/solid/alice/` behind `-b .../solid/`). Any claimed container, typed `/`, typed 401, or typed
+  container without a description past a passed one learns nothing (a claimed `/solid/` above a
+  private `/solid/alice/card` pod root must never be learned; pod-location configs like `file.json`
+  with a `/profile/` sub-container therefore learn nothing). Never widen to another origin, a
+  sibling, a descendant, or a readable
   container that does not self-identify. Report the outcome in `Identity.storageDiscovery`
   (`profile`, `storage-description`, `storage-type`, or `none` with `no-storage-declared`,
   `profile-redirected`, `storage-unconfirmed`, `discovery-failed` or `storage-ineligible` plus

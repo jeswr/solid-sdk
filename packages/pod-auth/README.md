@@ -144,9 +144,13 @@ When the profile has no `pim:storage` statement about the WebID at all (Communit
 default profiles have none), the server that served the WebID document may declare the storage that
 holds it. Only one container can be learned this way, and only one that holds the WebID document on
 the WebID's own origin. Every request omits credentials and redirects are not followed. Learning
-nothing is always the fallback; a root broader than the user's own storage never is.
+nothing is always the fallback: server evidence can narrow a root, never widen one.
 
-If the document's own response carries exactly one same-origin
+Nothing is learned (`profile-redirected`) if the profile fetch was redirected at all, same-origin
+included (every hop is counted, and a redirect the browser hid counts as one). Nothing is learned
+(`storage-unconfirmed`) if the profile response does not describe the WebID document itself, or
+carries more than one `solid:storageDescription` link, or a cross-origin one. If the document's
+response carries exactly one same-origin
 `Link: <…>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`, that description is read
 first. Its `pim:Storage` subjects that hold the document are the server's claims. A description that
 cannot be read (network error, 5xx or 429: reason `discovery-failed`; 404, redirect or unparseable:
@@ -154,29 +158,43 @@ cannot be read (network error, 5xx or 429: reason `discovery-failed`; 404, redir
 never falls back from a failed description to the walk below.
 
 Then the document's ancestor containers (at most ten) are probed by HEAD, nearest first, and the
-first decisive answer ends the walk:
+first decisive answer ends the walk. While no container has been passed:
 
 - A container whose HEAD (2xx, 401 or 403) carries `Link: <http://www.w3.org/ns/pim/space#Storage>; rel="type"`
-  is the storage (`storage-description` if the description claimed it, else `storage-type`), even
-  when the description claims a broader root. CSS's own `default.json` claims the origin root `/` in
-  `/.well-known/solid` while each pod root self-identifies, so Alice learns `/alice/`, never `/`. A
+  is the storage (`storage-description` if the description claimed it, else `storage-type`). A
   self-identified container naming a different storage description contradicts the description.
-- A claimed container answering 401/403 without a type Link (a private CSS pod root) is the storage.
-  A claimed container that is readable but does not self-identify contradicts the description, and
-  nothing is learned even if a broader container is also claimed.
+- A claimed container answering 401/403 without a type Link (a private pod root holding the
+  document directly) is the storage. A claimed container that is readable but does not
+  self-identify contradicts the description, and nothing is learned even if a broader container is
+  also claimed.
 - A readable, unclaimed container that does not self-identify is passed.
 - A 401/403 unclaimed container might itself be the storage (CSS sends no type Link on 401). Only the
-  document's own container (CSS profile containers are private) is passed, and the origin root is
-  never accepted past it. Any other such container ends the walk with nothing learned.
+  document's own container (CSS profile containers are private) is passed, never the origin root.
+  Any other such container ends the walk with nothing learned.
 - Anything else (404, redirect, 5xx, 429, network failure) ends the walk with nothing learned.
 
-Nothing is learned if the WebID document was reached through a redirect via another origin (every
-hop is checked, and a redirect the browser hid counts as one), if the profile lists any
-`pim:storage` (even only ineligible ones), or if `boundary.automatic` is `false`. It never reaches
-another origin, a sibling or a descendant of the document's container. The server that serves the
+Once any container has been passed, the walk may already be above the user's own storage: a private
+pod root and a broader server storage look the same from outside. Past that point only a nested pod
+under a server storage is accepted (`storage-type`): a container that self-identifies on a 2xx
+response, is not itself claimed, is not the origin root, and lies strictly inside a container the
+description does claim. CSS's own `default.json` claims the origin root `/` in `/.well-known/solid`
+while each public pod root self-identifies, so Alice (`/alice/profile/card`, private `/alice/profile/`)
+learns `/alice/`, never `/`; the same holds behind a path prefix (`-b https://host/solid/` gives
+`/solid/alice/`). Everything else past a passed container learns nothing (`no-storage-declared`):
+any claimed container (typed or 401; e.g. `/solid/` when the WebID document sits in a private pod
+root `/solid/alice/card`), any typed origin root, any typed container answering 401/403, and any
+typed container when the profile advertises no description. The trade-off: on a CSS configuration
+that claims each pod root itself (pod-location storage descriptions, such as `file.json`), a profile
+in a `/profile/` sub-container learns nothing, because its claimed pod root is indistinguishable from
+a claimed server storage above a private pod root. Those users add `pim:storage` to their profile,
+or the app configures `boundary.roots`.
+
+Nothing is learned if the profile lists any `pim:storage` (even only ineligible ones), or if
+`boundary.automatic` is `false`. It never reaches another origin, a sibling or a descendant of the
+document's container, and every candidate holds the WebID document. The server that serves the
 WebID document could already add `pim:storage` to it, but the claimed root comes from server
-configuration, which can nest storages (CSS `default.json` does): hence the nearest-storage and
-stop-at-unreadable rules. `Identity.storageDiscovery` reports where the automatic roots came from:
+configuration, which can nest storages (CSS `default.json` does): hence the nearest-storage,
+stop-at-unreadable and no-claim-past-a-passed-container rules. `Identity.storageDiscovery` reports where the automatic roots came from:
 `{ source: "profile" }`, `{ source: "storage-description" | "storage-type", root }`, or
 `{ source: "none", reason }` with `reason` one of `"no-storage-declared"`, `"profile-redirected"`,
 `"storage-unconfirmed"`, `"discovery-failed"` (transient; the next login or restore tries again) or

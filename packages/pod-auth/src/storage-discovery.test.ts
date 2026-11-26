@@ -75,14 +75,66 @@ function expectAnonymous(requests: Request[]) {
   }
 }
 
-test("a CSS 7.2 profile without pim:storage gets its storage from the advertised description", async () => {
-  const { boundary, requests } = await learn(css);
+/** CSS 7.2.0 `default.json`: a storage at the origin root claimed by the description, typed pods. */
+const cssDefault: Handler = (request) => {
+  const serverDescription = "https://pod.example/.well-known/solid";
+  if (request.url === document) return profile(`<${serverDescription}>; rel="${DESCRIPTION_REL}"`);
+  if (request.url === serverDescription) return describesStorages("../");
+  if (request.url === root || request.url === "https://pod.example/")
+    return new Response(null, {
+      headers: { link: `${STORAGE_TYPE}, <${serverDescription}>; rel="${DESCRIPTION_REL}"` },
+    });
+  return request.url === `${root}profile/` ? unauthorized() : undefined;
+};
+
+test("a CSS 7.2 default-config profile without pim:storage learns its pod, nested in the claimed server storage", async () => {
+  const { boundary, requests } = await learn(cssDefault);
   expect(boundary.storages()).toEqual([root]);
-  expect(boundary.discovery()).toEqual({ source: "storage-description", root });
+  expect(boundary.discovery()).toEqual({ source: "storage-type", root });
   expect(boundary.allows(`${root}private/image.png`)).toBe(true);
   expect(boundary.allows("https://pod.example/bob/x")).toBe(false);
   expect(boundary.allows("https://pod.example/")).toBe(false);
   expect(boundary.allows(`${attacker}alice/`)).toBe(false);
+  expectAnonymous(requests);
+});
+
+test("a claimed private container holding the document directly is the storage", async () => {
+  const card = `${root}card`;
+  const s = server((request) => {
+    if (request.url === card)
+      return turtle([], { link: `<${description}>; rel="${DESCRIPTION_REL}"` });
+    if (request.url === description) return describesStorages("../");
+    return request.url === root ? unauthorized() : undefined;
+  });
+  const boundary = createBoundary({}, { fetch: s.fetch });
+  await boundary.learn(`${card}#me`, new AbortController().signal);
+  expect(boundary.discovery()).toEqual({ source: "storage-description", root });
+  expect(boundary.allows(`${root}x`)).toBe(true);
+  expect(boundary.allows("https://pod.example/bob/x")).toBe(false);
+});
+
+test("a claimed, self-identifying container holding the document directly is the storage", async () => {
+  const card = `${root}card`;
+  const s = server((request) => {
+    if (request.url === card)
+      return turtle([], { link: `<${description}>; rel="${DESCRIPTION_REL}"` });
+    if (request.url === description) return describesStorages("../");
+    return request.url === root
+      ? new Response(null, {
+          headers: { link: `${STORAGE_TYPE}, <${description}>; rel="${DESCRIPTION_REL}"` },
+        })
+      : undefined;
+  });
+  const boundary = createBoundary({}, { fetch: s.fetch });
+  await boundary.learn(`${card}#me`, new AbortController().signal);
+  expect(boundary.discovery()).toEqual({ source: "storage-description", root });
+});
+
+test("a CSS 7.2 pod-location profile whose private pod root is claimed past the profile container learns nothing", async () => {
+  // Indistinguishable from a claimed broader server storage past a private pod root (N1).
+  const { boundary, requests } = await learn(css);
+  expect(boundary.storages()).toEqual([]);
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "no-storage-declared" });
   // Profile GET, description GET, then every ancestor up to the claimed root; nothing else.
   expect(requests.map((r) => `${r.method} ${r.url}`)).toEqual([
     `GET ${document}`,
@@ -93,7 +145,7 @@ test("a CSS 7.2 profile without pim:storage gets its storage from the advertised
   expectAnonymous(requests);
 });
 
-test("a public root that self-identifies confirms the description", async () => {
+test("a public claimed root past the private profile container is refused", async () => {
   const { boundary } = await learn((request) =>
     request.url === root
       ? new Response(null, {
@@ -101,7 +153,7 @@ test("a public root that self-identifies confirms the description", async () => 
         })
       : css(request),
   );
-  expect(boundary.discovery()).toEqual({ source: "storage-description", root });
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "no-storage-declared" });
 });
 
 test("a readable root that does not self-identify contradicts the description", async () => {
@@ -229,11 +281,11 @@ test("of nested claimed storages a contradicted inner claim fails them all", asy
   expect(boundary.discovery()).toEqual({ source: "none", reason: "storage-unconfirmed" });
 });
 
-test("of nested claimed storages the nearest one wins", async () => {
+test("of nested claimed storages none is accepted past the private profile container", async () => {
   const { boundary } = await learn((request) =>
     request.url === description ? describesStorages("https://pod.example/", root) : css(request),
   );
-  expect(boundary.discovery()).toEqual({ source: "storage-description", root });
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "no-storage-declared" });
 });
 
 test.each([
@@ -268,7 +320,7 @@ test("a redirected storage description is not followed", async () => {
   expect(requests.some((r) => r.url.startsWith(attacker))).toBe(false);
 });
 
-test("without a description, the nearest self-identifying ancestor is the storage", async () => {
+test("without a description, a typed ancestor past the document's container is refused", async () => {
   const { boundary, requests } = await learn((request) => {
     if (request.url === document) return profile();
     if (request.method === "HEAD" && request.url === root)
@@ -277,8 +329,8 @@ test("without a description, the nearest self-identifying ancestor is the storag
       return new Response(null, { headers: { link: STORAGE_TYPE } });
     return unauthorized();
   });
-  expect(boundary.storages()).toEqual([root]);
-  expect(boundary.discovery()).toEqual({ source: "storage-type", root });
+  expect(boundary.storages()).toEqual([]);
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "no-storage-declared" });
   expect(requests.map((r) => `${r.method} ${r.url}`)).toEqual([
     `GET ${document}`,
     `HEAD ${root}profile/`,
@@ -347,7 +399,7 @@ test("a WebID document served from another origin after a redirect gets no fallb
   ]);
 });
 
-test("a same-origin redirect discovers from the document actually served", async () => {
+test("a same-origin profile redirect learns nothing", async () => {
   const s = server((request) =>
     request.url === "https://pod.example/alice/me"
       ? new Response(null, { status: 303, headers: { location: document } })
@@ -355,7 +407,9 @@ test("a same-origin redirect discovers from the document actually served", async
   );
   const boundary = createBoundary({}, { fetch: s.fetch });
   await boundary.learn("https://pod.example/alice/me#i", new AbortController().signal);
-  expect(boundary.storages()).toEqual([root]);
+  expect(boundary.storages()).toEqual([]);
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "profile-redirected" });
+  expect(s.requests.filter((r) => r.method === "HEAD")).toEqual([]);
 });
 
 test("a profile with pim:storage never falls back to server discovery", async () => {
@@ -389,7 +443,7 @@ test("a profile whose pim:storage is ineligible reports it and does not fall bac
 });
 
 test("the eligibility policy applies to discovered storages", async () => {
-  const { boundary } = await learn(css, { boundary: { eligible: () => false } });
+  const { boundary } = await learn(cssDefault, { boundary: { eligible: () => false } });
   expect(boundary.storages()).toEqual([]);
   expect(boundary.discovery()).toEqual({
     source: "none",
@@ -405,7 +459,8 @@ test("automatic: false performs no discovery and reports none", async () => {
 });
 
 test("logout clears the discovered storage and its provenance", async () => {
-  const { boundary } = await learn(css);
+  const { boundary } = await learn(cssDefault);
+  expect(boundary.storages()).toEqual([root]);
   boundary.clear();
   expect(boundary.storages()).toEqual([]);
   expect(boundary.discovery()).toBeUndefined();
@@ -421,7 +476,10 @@ function cssLogin(advertise: boolean) {
         [[webId, `${SOLID}oidcIssuer`, op.issuer]],
         advertise ? { link: `<${description}>; rel="${DESCRIPTION_REL}"` } : {},
       );
-    if (request.url === description) return describesStorages("../");
+    // CSS 7.2 default config: a server storage at the origin root, and typed, public pod roots.
+    if (request.url === description) return describesStorages("https://pod.example/");
+    if (request.method === "HEAD" && request.url === root && advertise)
+      return new Response(null, { headers: { link: STORAGE_TYPE } });
     // CSS 7.2 answers anonymous requests for a private container with a bare 401.
     if (request.method === "HEAD" && !request.headers.has("authorization")) return unauthorized();
     return op.fetch(request);
@@ -440,7 +498,7 @@ test("end to end: a CSS-style pod receives DPoP credentials after login", async 
   const { op, auth } = cssLogin(true);
   const identity = await auth.login({ webId });
   expect(identity.storages).toEqual([root]);
-  expect(identity.storageDiscovery).toEqual({ source: "storage-description", root });
+  expect(identity.storageDiscovery).toEqual({ source: "storage-type", root });
   expect(await auth.identity()).toEqual(identity);
   const response = await auth.fetch(`${root}private`);
   expect(await response.text()).toBe("protected Solid");
@@ -533,5 +591,5 @@ test("a claimed origin root is not confirmed by a 401 past the document's unread
   const boundary = createBoundary({}, { fetch: s.fetch });
   await boundary.learn(`${root}card#me`, new AbortController().signal);
   expect(boundary.storages()).toEqual([]);
-  expect(boundary.discovery()).toEqual({ source: "none", reason: "storage-unconfirmed" });
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "no-storage-declared" });
 });

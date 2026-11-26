@@ -179,8 +179,11 @@ export function createBoundary(
   /**
    * The storage the server that served the WebID document declares for it, for profiles without
    * `pim:storage`. Every request is credential-free and unredirected, and learning nothing is
-   * always the fallback. The ancestor containers of the document (at most ten, on the WebID's
-   * origin) are probed nearest first, and the first decisive answer ends the walk:
+   * always the fallback: evidence may narrow a root, never widen one. Nothing is learned after any
+   * redirect of the profile fetch (same-origin included), or when the profile response is not a
+   * plain description of the document with at most one same-origin storage description link.
+   * The ancestor containers of the document (at most ten, on the WebID's origin, each holding the
+   * WebID document) are probed nearest first, and the first decisive answer ends the walk:
    * - a container whose HEAD (2xx, 401 or 403) self-identifies as `pim:Storage` is the storage,
    *   so a nearer storage always wins over a broader one the description claims;
    * - a container the document's single same-origin Solid storage description claims as
@@ -188,47 +191,62 @@ export function createBoundary(
    *   a readable claimed container that does not self-identify contradicts the description;
    * - a readable container that neither self-identifies nor is claimed is passed;
    * - an unreadable (401/403) unclaimed container may itself be the storage: only the document's
-   *   own container is passed, and never on the way to the origin root;
+   *   own container is passed;
    * - anything else (404, redirect, 5xx, 429, network failure) ends the walk with nothing.
+   * Once any container has been passed, the walk may be above the user's own storage, so it
+   * accepts only a nested pod under a server storage (CSS 7 `default.json`): a container that
+   * self-identifies on a 2xx response, is not itself claimed, is not the origin root, and lies
+   * strictly inside a container the description does claim. Any claimed container or typed
+   * origin root past a passed one fails closed.
    * A description that cannot be read, claims no container holding the document, or contradicts
    * itself learns nothing; discovery never falls back from a failed description to the walk.
-   * Nothing is learned after a redirect through another origin, or one the platform hid.
    */
   const serverDeclaredStorage = async (
     webId: URL,
     document: URL,
     response: Response,
-    crossedOrigin: boolean,
+    redirected: boolean,
     signal: AbortSignal,
   ): Promise<ServerDeclared> => {
-    if (crossedOrigin || response.redirected || document.origin !== webId.origin)
+    const webIdDocument = new URL(webId);
+    webIdDocument.hash = "";
+    if (
+      redirected ||
+      response.redirected ||
+      document.origin !== webId.origin ||
+      document.href !== webIdDocument.href
+    )
       return none("profile-redirected");
+    // Every candidate holds the WebID document itself, not just the document that was served.
     const ancestors = ancestorContainers(document)
-      .filter((root) => isWithin(document, root))
+      .filter((root) => isWithin(document, root) && isWithin(webIdDocument, root))
       .slice(0, MAX_ANCESTORS);
-    let description: string | undefined;
+    // Ambiguous description evidence is reported rather than silently ignored.
+    if (!describes(response, document.href)) return none("storage-unconfirmed");
+    const descriptions = parseLinks(response.headers.get("link"), document.href).filter(
+      (link) => link.rel === SOLID_STORAGE_DESCRIPTION,
+    );
+    if (
+      descriptions.length > 1 ||
+      descriptions.some((link) => new URL(link.href).origin !== document.origin)
+    )
+      return none("storage-unconfirmed");
+    const description = descriptions[0]?.href;
     let claimed = new Set<string>();
-    if (describes(response, document.href)) {
-      const descriptions = parseLinks(response.headers.get("link"), document.href).filter(
-        (link) => link.rel === SOLID_STORAGE_DESCRIPTION,
-      );
-      const only = descriptions.length === 1 ? descriptions[0]!.href : undefined;
-      if (only !== undefined && new URL(only).origin === document.origin) {
-        description = only;
-        const roots = await readStorageDescription(description, http, {
-          allowInsecureLoopback: insecure,
-          signal,
-        });
-        signal.throwIfAborted();
-        if (roots === "transient") return none("discovery-failed");
-        if (roots === "invalid") return none("storage-unconfirmed");
-        claimed = new Set(roots.map(containerOf).filter((root) => root !== undefined));
-        // The description names storages, but none of them holds the document.
-        if (!ancestors.some((root) => claimed.has(root))) return none("storage-unconfirmed");
-      }
+    if (description !== undefined) {
+      const roots = await readStorageDescription(description, http, {
+        allowInsecureLoopback: insecure,
+        signal,
+      });
+      signal.throwIfAborted();
+      if (roots === "transient") return none("discovery-failed");
+      if (roots === "invalid") return none("storage-unconfirmed");
+      claimed = new Set(roots.map(containerOf).filter((root) => root !== undefined));
+      // The description names storages, but none of them holds the document.
+      if (!ancestors.some((root) => claimed.has(root))) return none("storage-unconfirmed");
     }
     const origin = `${document.origin}/`;
-    let passedUnreadable = false;
+    let passed = false;
     for (const [index, root] of ancestors.entries()) {
       const confirmation = await head(root, { http, signal });
       signal.throwIfAborted();
@@ -238,24 +256,28 @@ export function createBoundary(
       if (!describes(confirmation, root) || !(confirmation.ok || unreadable))
         return none("storage-unconfirmed");
       const isClaimed = claimed.has(root);
-      // Past a container that might itself be the storage, the origin root is never accepted.
-      const widening = passedUnreadable && root === origin;
       if (selfIdentifiedSolidRoot(root, confirmation) !== undefined) {
         const named = parseLinks(confirmation.headers.get("link"), root).filter(
           (link) => link.rel === SOLID_STORAGE_DESCRIPTION,
         );
-        if (widening || (description !== undefined && named.some((l) => l.href !== description)))
+        if (description !== undefined && named.some((l) => l.href !== description))
           return none("storage-unconfirmed");
-        return { source: isClaimed ? "storage-description" : "storage-type", root };
+        if (!passed) return { source: isClaimed ? "storage-description" : "storage-type", root };
+        // Past a container that might itself be (or sit inside) the user's storage, only a
+        // nested pod under a broader claimed server storage is accepted.
+        const nestedPod =
+          confirmation.ok &&
+          !isClaimed &&
+          root !== origin &&
+          ancestors.slice(index + 1).some((broader) => claimed.has(broader));
+        return nestedPod ? { source: "storage-type", root } : none("no-storage-declared");
       }
       if (isClaimed) {
-        if (!unreadable || widening) return none("storage-unconfirmed");
-        return { source: "storage-description", root };
+        if (!unreadable) return none("storage-unconfirmed");
+        return passed ? none("no-storage-declared") : { source: "storage-description", root };
       }
-      if (unreadable) {
-        if (index !== 0 || root === origin) return none("no-storage-declared");
-        passedUnreadable = true;
-      }
+      if (unreadable && (index !== 0 || root === origin)) return none("no-storage-declared");
+      passed = true;
     }
     return none("no-storage-declared");
   };
@@ -325,13 +347,12 @@ export function createBoundary(
       }
       if (learnedWebId === webId) return;
       const started = epoch;
-      const webIdOrigin = new URL(webId).origin;
-      let crossedOrigin = false;
-      // secureDocumentFetch follows redirects itself; record every hop it requests.
+      let hops = 0;
+      // secureDocumentFetch follows redirects itself; count every hop it requests.
       const { response, url } = await secureDocumentFetch(new URL(webId), "text/turtle", signal, {
         ...http,
         fetch: (input, init) => {
-          if (new URL(new Request(input).url).origin !== webIdOrigin) crossedOrigin = true;
+          ++hops;
           return http.fetch!(input, init);
         },
       });
@@ -355,7 +376,7 @@ export function createBoundary(
           new URL(webId),
           url,
           response,
-          crossedOrigin,
+          hops > 1,
           signal,
         );
         discovery = declared;

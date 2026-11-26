@@ -89,11 +89,13 @@ export interface Identity {
  * container on the WebID's origin that holds the document, preferring the nearest:
  * `storage-description` (claimed by the document's Solid storage description link) or
  * `storage-type` (an ancestor container whose HEAD carries `Link: <pim:Storage>; rel="type"`).
- * Reasons for `none`: `no-storage-declared` (no such evidence, or an unreadable container that
- * might itself be the storage stopped the search), `profile-redirected` (the WebID document was
- * reached through a redirect via another origin, or one the platform hid), `storage-unconfirmed`
- * (the server's evidence contradicted itself, e.g. a claimed container is readable and untyped,
- * or a probe got a 404 or redirect), `discovery-failed` (a transient failure: network error, 5xx
+ * Reasons for `none`: `no-storage-declared` (no such evidence, an unreadable container that might
+ * itself be the storage stopped the search, or past a passed container the only candidate was not
+ * a typed, unclaimed pod nested in a claimed server storage), `profile-redirected` (the WebID
+ * document was reached through any redirect, same-origin included, or one the platform hid),
+ * `storage-unconfirmed` (the server's evidence was ambiguous or contradicted itself, e.g. the
+ * profile response carries several or a cross-origin storage description link, a claimed
+ * container is readable and untyped, or a probe got a 404 or redirect), `discovery-failed` (a transient failure: network error, 5xx
  * or 429; the next login or restore tries again), `storage-ineligible` (declared storages failed
  * the scheme or `boundary.eligible` policy; `declaredBy` says whether the profile or the server
  * declared them). `none` means no automatic root: requests outside the configured

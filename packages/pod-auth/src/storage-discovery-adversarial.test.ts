@@ -1,6 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // Adversarial review of the login-time storage fallback (review of 14143e09b, findings F1-F4):
 // learning nothing is always acceptable; a root broader than the user's own storage never is.
+// Re-review of 7c09caa78 (N1-N3, I1) cases follow at the end.
 import { DataFactory, Writer } from "n3";
 import { expect, test } from "vitest";
 import { createBoundary } from "./boundary.js";
@@ -89,13 +90,16 @@ test("CSS default config: alice learns her pod, never the server root or a co-te
   expect(other.boundary.allows(`${alice}x`)).toBe(false);
 });
 
-test("F1: a typed storage nearer than the claimed root wins, even when the root is claimed and typed", async () => {
-  // Same shape as CSS default, but the pod root is checked against a description that names it too.
+test("F1/N1: a claimed pod root past the private profile container is refused, never widened", async () => {
+  // Same shape as CSS default, but the description also claims the pod root. Past a container that
+  // might itself be the storage, a claimed container is indistinguishable from a broader server
+  // storage (N1), so nothing is learned.
   const { boundary } = await learn(`${card(alice)}#me`, (request) =>
     request.url === description ? describesStorages(origin, alice) : cssDefault(request),
   );
-  expect(boundary.storages()).toEqual([alice]);
+  expect(boundary.storages()).toEqual([]);
   expect(boundary.allows(`${mallory}x`)).toBe(false);
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "no-storage-declared" });
 });
 
 test("F2: an unreadable pod root that does not self-identify stops the walk below a typed server root", async () => {
@@ -194,4 +198,152 @@ test("F4: a profile redirect through another origin learns nothing, even back to
   expect(boundary.allows(`${mallory}x`)).toBe(false);
   expect(boundary.discovery()).toEqual({ source: "none", reason: "profile-redirected" });
   expect(requests.filter((r) => r.startsWith("HEAD"))).toEqual([]);
+});
+
+// Re-review of 7c09caa78 (findings N1-N3, I1): each case widened, or silently ignored evidence,
+// before the fix.
+
+/** CSS 7.2.0 `default.json` behind a path prefix (`-b https://pod.example/solid/`), captured live. */
+const prefixed = `${origin}solid/`;
+const prefixedDescription = `${prefixed}.well-known/solid`;
+const prefixedCard = `${prefixed}alice/card`;
+const prefixedAdvertising = `, <${prefixedDescription}>; rel="${DESCRIPTION_REL}"`;
+const subPathServer =
+  (root: () => Response): Handler =>
+  (request) => {
+    if (request.url === prefixedCard)
+      return profile(`${prefixedCard}#me`, `<${prefixedDescription}>; rel="${DESCRIPTION_REL}"`);
+    if (request.url === prefixedDescription) return describesStorages("../");
+    if (request.url === prefixed) return root();
+    // Alice's pod root holds her WebID document; it is private and untyped on 401.
+    if (request.url === `${prefixed}alice/`) return unauthorized();
+    return undefined;
+  };
+
+test("N1 (A): a typed, claimed sub-path server storage past a private pod root is refused", async () => {
+  const { boundary } = await learn(
+    `${prefixedCard}#me`,
+    subPathServer(() => typed(prefixedAdvertising)),
+  );
+  expect(boundary.storages()).toEqual([]);
+  expect(boundary.allows(`${prefixed}mallory/x`)).toBe(false);
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "no-storage-declared" });
+});
+
+test("N1 (A2): a claimed sub-path server storage answering 401 past a private pod root is refused", async () => {
+  const { boundary } = await learn(`${prefixedCard}#me`, subPathServer(unauthorized));
+  expect(boundary.storages()).toEqual([]);
+  expect(boundary.allows(`${prefixed}mallory/x`)).toBe(false);
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "no-storage-declared" });
+});
+
+test("N1 (A3): without a description, a typed container past a private one is refused", async () => {
+  const webId = `${origin}a/b/card#me`;
+  const { boundary } = await learn(webId, (request) => {
+    if (request.url === `${origin}a/b/card`) return profile(webId);
+    if (request.url === `${origin}a/b/`) return unauthorized();
+    return request.url === `${origin}a/` ? typed() : undefined;
+  });
+  expect(boundary.storages()).toEqual([]);
+  expect(boundary.allows(`${origin}a/other/x`)).toBe(false);
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "no-storage-declared" });
+});
+
+test("N1: CSS default behind a path prefix still learns the nested pod, never the server storage", async () => {
+  const webId = `${prefixed}alice/profile/card#me`;
+  const { boundary } = await learn(webId, (request) => {
+    if (request.url === `${prefixed}alice/profile/card`)
+      return profile(webId, `<${prefixedDescription}>; rel="${DESCRIPTION_REL}"`);
+    if (request.url === prefixedDescription) return describesStorages("../");
+    if (request.url === `${prefixed}alice/profile/`) return unauthorized();
+    if (request.url === `${prefixed}alice/` || request.url === prefixed)
+      return typed(prefixedAdvertising);
+    return undefined;
+  });
+  expect(boundary.discovery()).toEqual({ source: "storage-type", root: `${prefixed}alice/` });
+  expect(boundary.allows(`${prefixed}mallory/x`)).toBe(false);
+});
+
+test("N1: a typed pod past the document's container must answer 2xx and not be claimed itself", async () => {
+  // A typed 401 pod root under the claimed server storage is not accepted past a passed container.
+  const { boundary } = await learn(`${card(alice)}#me`, (request) =>
+    request.url === alice
+      ? new Response(null, { status: 401, headers: { link: `<${PIM}Storage>; rel="type"` } })
+      : cssDefault(request),
+  );
+  expect(boundary.storages()).toEqual([]);
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "no-storage-declared" });
+});
+
+test("N2 (B): a typed origin root past readable, untyped containers is refused", async () => {
+  const { boundary } = await learn(`${card(alice)}#me`, (request) => {
+    if (request.url === card(alice)) return profile(`${card(alice)}#me`);
+    if (request.url === `${alice}profile/` || request.url === alice) return readable();
+    return request.url === origin ? typed() : undefined;
+  });
+  expect(boundary.storages()).toEqual([]);
+  expect(boundary.allows(`${mallory}x`)).toBe(false);
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "no-storage-declared" });
+});
+
+test("N2: a claimed root past a readable, untyped container is refused", async () => {
+  const { boundary } = await learn(`${card(alice)}#me`, (request) => {
+    if (request.url === `${alice}profile/`) return readable();
+    if (request.url === description) return describesStorages(alice);
+    return request.url === alice ? unauthorized() : cssDefault(request);
+  });
+  expect(boundary.storages()).toEqual([]);
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "no-storage-declared" });
+});
+
+test("N3 (C): a same-origin profile redirect to another user's document learns nothing", async () => {
+  const { boundary, requests } = await learn(`${card(alice)}#me`, (request) => {
+    if (request.url === card(alice))
+      return new Response(null, { status: 302, headers: { location: card(mallory) } });
+    return cssDefault(request);
+  });
+  expect(boundary.storages()).toEqual([]);
+  expect(boundary.allows(`${mallory}x`)).toBe(false);
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "profile-redirected" });
+  expect(requests.filter((r) => r.startsWith("HEAD"))).toEqual([]);
+});
+
+test("N3: a document served for another URL without a visible redirect learns nothing", async () => {
+  const { boundary } = await learn(`${card(alice)}#me`, (request) => {
+    const response = cssDefault(request);
+    if (request.url === card(alice) && response !== undefined)
+      Object.defineProperty(response, "url", { value: card(mallory) });
+    return response;
+  });
+  expect(boundary.storages()).toEqual([]);
+});
+
+test.each([
+  [
+    "two description links",
+    `<${description}>; rel="${DESCRIPTION_REL}", <${alice}.well-known/solid>; rel="${DESCRIPTION_REL}"`,
+  ],
+  [
+    "a cross-origin description link",
+    `<https://elsewhere.example/solid>; rel="${DESCRIPTION_REL}"`,
+  ],
+])("I1 (D): %s on the profile is reported and learns nothing", async (_name, link) => {
+  const { boundary, requests } = await learn(`${card(alice)}#me`, (request) =>
+    request.url === card(alice) ? profile(`${card(alice)}#me`, link) : cssDefault(request),
+  );
+  expect(boundary.storages()).toEqual([]);
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "storage-unconfirmed" });
+  expect(requests).toEqual([`GET ${card(alice)}`]);
+});
+
+test("I1: a profile response that does not describe the document is reported and learns nothing", async () => {
+  const { boundary, requests } = await learn(`${card(alice)}#me`, (request) => {
+    const response = cssDefault(request);
+    if (request.url === card(alice) && response !== undefined)
+      Object.defineProperty(response, "url", { value: `${card(alice)}?v=2` });
+    return response;
+  });
+  expect(boundary.storages()).toEqual([]);
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "storage-unconfirmed" });
+  expect(requests).toEqual([`GET ${card(alice)}`]);
 });
