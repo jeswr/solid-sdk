@@ -1,4 +1,5 @@
 # AUTHORED-BY Codex (GPT-6.1 Sol)
+# AUTHORED-BY Codex GPT-6.2-Astra
 # Minimal declaration projection of existing standard classes; no new vocabulary.
 @prefix schema: <https://schema.org/> .
 @prefix exif: <http://www.w3.org/2003/12/exif/ns#> .
@@ -27,3 +28,6 @@ prov:Entity a owl:Class ; rdfs:label "Trash"@en ;
 
 schema:ImageObject a owl:Class ; rdfs:label "ImageObject"@en ;
     skos:definition "A photograph imported by the Pod Manager connector."@en .
+
+schema:VideoObject a owl:Class ; rdfs:label "VideoObject"@en ;
+    skos:definition "A video in the Suite photos library."@en .

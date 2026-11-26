@@ -1,5 +1,20 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2-Astra
+import {
+  buildPhoto,
+  formatDuration,
+  PHOTOGRAPH_CLASS,
+  type Photo,
+  PhotographDoc,
+  parseDuration,
+  parsePhoto,
+  parsePhotos,
+  RDF_TYPE,
+  SCHEMA,
+  VIDEO_CLASS,
+  XSD,
+} from "@jeswr/solid-photos";
 import { DataFactory } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { listLibrary, searchPhotos } from "../src/apps/photos/lib/data/library";
@@ -8,26 +23,12 @@ import { planTakeout } from "../src/apps/photos/lib/data/takeout";
 import { importTakeoutPlan, takeoutFailure } from "../src/apps/photos/lib/data/takeout-import";
 import { uploadFiles } from "../src/apps/photos/lib/data/upload";
 import {
-  buildPhoto,
-  formatDuration,
   type ImageEncoder,
-  type Photo,
-  PhotographDoc,
-  parseDuration,
-  parsePhoto,
-  parsePhotos,
   preparePhoto,
   readVideoMetadata,
   stripVideoLocation,
   VideoLocationError,
 } from "../src/apps/photos/lib/model";
-import {
-  PHOTOGRAPH_CLASS,
-  RDF_TYPE,
-  SCHEMA,
-  VIDEO_CLASS,
-  XSD,
-} from "../src/apps/photos/lib/model/vocab";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 
 const ROOT = "https://alice.demo.pod/";

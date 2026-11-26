@@ -1,8 +1,9 @@
 ---
 name: solid-photos
-description: Use when reading or writing photographs, EXIF, ordered photo albums or trash provenance through @jeswr/solid-photos, or regenerating its model and maintaining the Suite photos compatibility facade.
+description: Use when reading or writing photographs, videos, EXIF, ordered photo albums or trash provenance through @jeswr/solid-photos, or regenerating its model and maintaining the Suite photos compatibility facade.
 ---
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Codex GPT-6.2-Astra -->
 
 # Solid photos model
 
@@ -16,8 +17,15 @@ Use `buildPhoto`/`parsePhoto`, `buildAlbum`/`parseAlbum`, `buildTrash`/`parseTra
 and `serializePhotos`. The facades preserve the original app's IRIs, subject
 fragments, EXIF normalization, ordered membership and trash state validation.
 Vocabulary constants already owned by `@jeswr/suite-vocab` are imported from it.
-`schema:ImageObject` has its own generated read projection; it is not a migrating
-type alias. New photo writes always use `schema:Photograph`.
+`schema:ImageObject` has its own generated read projection. New stills use
+`schema:Photograph`. Set `Photo.kind` to `"video"` for `schema:VideoObject`.
+The video reader skips subjects without a usable content URL.
+
+Use `durationSeconds` on `Photo` or `PhotographDoc`. The generated projections
+validate the `schema:duration` datatype. The facade's `parseDuration` restricts
+it to fixed-length days, hours, minutes and seconds, and `formatDuration`
+writes seconds only. The media sector's CreativeWork/Track decimal duration
+constraints remain outside this profile.
 
 `src/views.ts` contains only generated-wrapper adapters and minimal typed views
 for generator gaps: blank-node references/subjects, repeated ListItem children,

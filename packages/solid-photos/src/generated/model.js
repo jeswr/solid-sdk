@@ -276,6 +276,14 @@ const manifest = {
           }
         },
         {
+          "name": "duration",
+          "predicate": "https://schema.org/duration",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#duration",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
           "name": "height",
           "predicate": "https://schema.org/height",
           "kind": "literal",
@@ -472,6 +480,194 @@ const manifest = {
           "guards": {
             "sanitizeText": false
           }
+        },
+        {
+          "name": "duration",
+          "predicate": "https://schema.org/duration",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#duration",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "height",
+          "predicate": "https://schema.org/height",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "keywords",
+          "predicate": "https://schema.org/keywords",
+          "kind": "literal",
+          "collection": "set",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "name",
+          "predicate": "https://schema.org/name",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "thumbnailUrl",
+          "predicate": "https://schema.org/thumbnailUrl",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "width",
+          "predicate": "https://schema.org/width",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "VideoObject",
+      "typeIris": [
+        "https://schema.org/VideoObject"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "created",
+          "predicate": "http://purl.org/dc/terms/created",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "modified",
+          "predicate": "http://purl.org/dc/terms/modified",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "exifExposureTime",
+          "predicate": "http://www.w3.org/2003/12/exif/ns#exposureTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "exifFNumber",
+          "predicate": "http://www.w3.org/2003/12/exif/ns#fNumber",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "exifFocalLength",
+          "predicate": "http://www.w3.org/2003/12/exif/ns#focalLength",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#double",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "exifIso",
+          "predicate": "http://www.w3.org/2003/12/exif/ns#isoSpeedRatings",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "exifLensModel",
+          "predicate": "http://www.w3.org/2003/12/exif/ns#lensModel",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "exifMake",
+          "predicate": "http://www.w3.org/2003/12/exif/ns#make",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "exifModel",
+          "predicate": "http://www.w3.org/2003/12/exif/ns#model",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "exifOrientation",
+          "predicate": "http://www.w3.org/2003/12/exif/ns#orientation",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "restoreActivity",
+          "predicate": "http://www.w3.org/ns/prov#wasGeneratedBy",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "contentUrl",
+          "predicate": "https://schema.org/contentUrl",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "dateCreated",
+          "predicate": "https://schema.org/dateCreated",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "description",
+          "predicate": "https://schema.org/description",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "duration",
+          "predicate": "https://schema.org/duration",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#duration",
+          "maxCount": 1,
+          "guards": {}
         },
         {
           "name": "height",

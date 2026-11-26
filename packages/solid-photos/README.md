@@ -1,7 +1,8 @@
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
+<!-- AUTHORED-BY Codex GPT-6.2-Astra -->
 # @jeswr/solid-photos
 
-Generated RDF models for photographs, EXIF metadata, ordered albums and trash
+Generated RDF models for photographs, videos, EXIF metadata, ordered albums and trash
 provenance. The Suite photos app consumes this shared package through
 `workspace:*`. The package is browser-safe and performs no storage or image I/O.
 
@@ -21,10 +22,26 @@ The root exports `Photo`, `Album`, `ExifMetadata`, `TrashRecord`, their build/pa
 helpers, `parsePhotos` for multi-subject connector documents, keyword and membership
 helpers, EXIF normalization, URL validation, vocabulary constants and
 `serializePhotos` (the shared serializer backed by `n3.Writer`). Focused entries are
-`/photograph`, `/album`, `/exif`, `/trash`, `/validation` and `/vocab`.
+`/photograph`, `/duration`, `/album`, `/exif`, `/trash`, `/validation` and `/vocab`.
 `PhotographDoc`, `ImageGalleryDoc`, `ListItemDoc`, `RestoreReceipt` and `TrashDoc`
 retain the app's typed accessor API. Reusable namespace constants come from
 `@jeswr/suite-vocab`; only the standard EXIF base is defined locally.
+
+Set `Photo.kind` to `"video"` to write a `schema:VideoObject` (`VIDEO_CLASS`).
+Omitting `kind` writes a `schema:Photograph`. Both use the same descriptive,
+dimension, date, EXIF and location fields. A video needs a usable `schema:contentUrl`
+to appear in `parsePhoto`, `parseStoredPhoto` or a mixed `parsePhotos` result.
+If a subject has both video and still-image types, the video rule applies.
+
+`Photo.durationSeconds` and `PhotographDoc.durationSeconds` expose an optional
+number. The generated field validates `schema:duration` as an `xsd:duration` literal.
+The facade's `parseDuration` accepts unsigned days, hours, minutes and seconds,
+including fractional seconds. Calendar years and months, malformed values and
+durations above `Number.MAX_SAFE_INTEGER` seconds drop on read. `formatDuration(62.5)`
+returns `"PT62.5S"`, which the generated writer stores as `"PT62.5S"^^xsd:duration`.
+The formatter uses seconds only and throws on negative, non-finite or out-of-range
+input. Both helpers are available at the root and at `/duration`. The reader also
+preserves explicit durations on photographs and imported images.
 
 ## Generated core and facade
 
@@ -39,9 +56,10 @@ The media-sector profile was inspected first. It describes music, playback and
 licensing, with no photographs, EXIF, WGS84 capture points, schema.org galleries or
 PROV trash records. The input header lists every omitted sector shape and field;
 the package profile preserves the existing photo wire contract without changing
-sector conformance or minting replacement data IRIs. New photos remain
-`https://schema.org/Photograph`; imported `schema:ImageObject` data has a separate
-generated read projection, so accessor edits preserve its type.
+sector conformance or minting replacement data IRIs. The omitted CreativeWork and
+Track shapes use `media:durationSeconds` with `xsd:decimal`. The photos profile
+projects `schema:duration` independently on Photograph, ImageObject and VideoObject.
+Each class has its own generated projection, so accessor edits preserve its type.
 
 The facades retain EXIF normalization, paired-coordinate policy, ISO strings,
 case-insensitive keyword deduplication, ordered unique membership and the trash
@@ -70,7 +88,8 @@ model module paths are compatibility re-exports, with no RDF accessor classes.
 ## Exact divergences
 
 The original photograph, album and EXIF tests are copied verbatim into `test/`
-with only import paths changed. All existing Suite tests remain unchanged.
+with only import paths changed. The Suite video tests exercise the package through
+its public exports, and `test/video.test.ts` preserves their model-level assertions.
 Additional differences outside that oracle are pinned in
 `test/compatibility.test.ts`:
 
@@ -96,7 +115,9 @@ Additional differences outside that oracle are pinned in
   integer fields (ISO, orientation, width, height); a zoneless dateTime reads as UTC. When the strict generated reader
   drops a field, these fall back to the first literal's lexical value (language-tagged
   text, decimal numbers, `xsd:date`, the first value of a repeated singleton, every
-  literal keyword), as the hand-written model did; IRIs and blank nodes never become
+  literal keyword), as the hand-written model did. For a repeated duration, the
+  first object must itself be a fixed-length `xsd:duration` literal.
+  IRIs and blank nodes never become
   text or numbers. `parsePhoto` stays strict. Still lost on rebuild, as before the
   port: the second and later values of a repeated singleton, language tags (written
   back as plain strings), numbers written back as `xsd:integer`/`xsd:double`, `xsd:date`

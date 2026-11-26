@@ -122,6 +122,7 @@ export interface ImageObjectData {
   "contentUrl"?: string;
   "dateCreated"?: Date;
   "description"?: string;
+  "duration"?: string;
   "height"?: number;
   "keywords"?: string[];
   "name"?: string;
@@ -144,6 +145,7 @@ export interface ImageObjectWrapper extends EntityWrapper {
   "contentUrl"?: string;
   "dateCreated"?: Date;
   "description"?: string;
+  "duration"?: string;
   "height"?: number;
   readonly "keywords": Set<string>;
   "name"?: string;
@@ -216,6 +218,7 @@ export interface PhotographData {
   "contentUrl"?: string;
   "dateCreated"?: Date;
   "description"?: string;
+  "duration"?: string;
   "height"?: number;
   "keywords"?: string[];
   "name"?: string;
@@ -238,6 +241,7 @@ export interface PhotographWrapper extends EntityWrapper {
   "contentUrl"?: string;
   "dateCreated"?: Date;
   "description"?: string;
+  "duration"?: string;
   "height"?: number;
   readonly "keywords": Set<string>;
   "name"?: string;
@@ -265,6 +269,72 @@ export interface PhotographEntity {
   ): Promise<PhotographData | undefined>;
 }
 
+export interface VideoObjectData {
+  "created"?: Date;
+  "modified"?: Date;
+  "exifExposureTime"?: number;
+  "exifFNumber"?: number;
+  "exifFocalLength"?: number;
+  "exifIso"?: number;
+  "exifLensModel"?: string;
+  "exifMake"?: string;
+  "exifModel"?: string;
+  "exifOrientation"?: number;
+  "restoreActivity"?: string;
+  "contentUrl"?: string;
+  "dateCreated"?: Date;
+  "description"?: string;
+  "duration"?: string;
+  "height"?: number;
+  "keywords"?: string[];
+  "name"?: string;
+  "thumbnailUrl"?: string;
+  "width"?: number;
+}
+
+export interface VideoObjectWrapper extends EntityWrapper {
+  "created"?: Date;
+  "modified"?: Date;
+  "exifExposureTime"?: number;
+  "exifFNumber"?: number;
+  "exifFocalLength"?: number;
+  "exifIso"?: number;
+  "exifLensModel"?: string;
+  "exifMake"?: string;
+  "exifModel"?: string;
+  "exifOrientation"?: number;
+  "restoreActivity"?: string;
+  "contentUrl"?: string;
+  "dateCreated"?: Date;
+  "description"?: string;
+  "duration"?: string;
+  "height"?: number;
+  readonly "keywords": Set<string>;
+  "name"?: string;
+  "thumbnailUrl"?: string;
+  "width"?: number;
+}
+
+export interface VideoObjectEntity {
+  readonly name: "VideoObject";
+  readonly typeIri: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => VideoObjectWrapper;
+  subject(resourceUrl: string): string;
+  build(resourceUrl: string, data: VideoObjectData): Store;
+  parse(resourceUrl: string, dataset: DatasetCore, options?: ParseOptions): VideoObjectData | undefined;
+  serialize(resourceUrl: string, data: VideoObjectData): Promise<string>;
+  storeToTurtle(store: Store): Promise<string>;
+  parseDocument(
+    resourceUrl: string,
+    body: string,
+    contentType?: string | null,
+  ): Promise<VideoObjectData | undefined>;
+}
+
 export declare const nodes: Readonly<Record<string, never>>;
 
 export interface GeneratedModel {
@@ -277,6 +347,7 @@ export interface GeneratedModel {
   readonly ImageObject: ImageObjectEntity;
   readonly ListItem: ListItemEntity;
   readonly Photograph: PhotographEntity;
+  readonly VideoObject: VideoObjectEntity;
   };
 }
 

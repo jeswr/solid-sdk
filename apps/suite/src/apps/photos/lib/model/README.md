@@ -1,10 +1,11 @@
 <!-- AUTHORED-BY Codex (GPT-6.1 Sol) -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Codex GPT-6.2-Astra -->
 # Photos model (PHO-00)
 
 The RDF model is generated in [`@jeswr/solid-photos`](../../../../../../../packages/solid-photos/README.md).
-The local `album`, `exif`, `photograph`, `validation` and `vocab` modules only re-export
+The local `album`, `duration`, `exif`, `photograph`, `validation` and `vocab` modules only re-export
 that shared package. It owns photo/EXIF, album and trash build/parse/serialization;
 its minimal typed views preserve blank-node capture points and ListItems.
 This directory keeps app I/O, upload preparation, timeline grouping and trash orchestration.
