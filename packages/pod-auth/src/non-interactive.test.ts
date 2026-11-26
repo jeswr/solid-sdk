@@ -4,6 +4,7 @@ import { createAccountManager } from "./accounts.js";
 import {
   createPodAuth,
   InteractionRequiredError,
+  type KvStore,
   type PodAuthOptions,
   ReplayBodyTooLargeError,
 } from "./index.js";
@@ -318,4 +319,90 @@ test("the replay cap rejects with the typed ReplayBodyTooLargeError, also for un
   expect(pulled).toBeLessThanOrEqual(4);
   expect(f.op.requests.length).toBe(sent);
   expect(InteractionRequiredError).toBeTypeOf("function");
+});
+
+/**
+ * A login that is cancelled, then restarted without a hint, while a non-interactive upgrade is
+ * between its picker check and the engine's account lookup. The engine re-wraps the request, so
+ * that lookup must not read the live login hint (now empty) and open, or join, a WebID picker.
+ */
+async function concurrentLoginRace(url: (f: ReturnType<typeof fixture>) => string, uma = false) {
+  const f = fixture();
+  let armed = 0;
+  let held: (() => void) | undefined;
+  const hit = Promise.withResolvers<void>();
+  const gate = (store: KvStore): KvStore => ({
+    setItem: (key, value) => store.setItem(key, value),
+    removeItem: (key) => store.removeItem(key),
+    getItem: async (key) => {
+      if (armed > 0 && --armed === 0) {
+        const release = Promise.withResolvers<void>();
+        held = release.resolve;
+        hit.resolve();
+        await release.promise;
+      }
+      return await store.getItem(key);
+    },
+  });
+  const storage = {
+    sessions: gate(createMemoryStore()),
+    caches: gate(createMemoryStore()),
+  };
+  if (uma) installUma();
+  const picker = Promise.withResolvers<string>();
+  f.ui.getWebId.mockImplementation(() => picker.promise);
+  const firstCode = Promise.withResolvers<string>();
+  f.ui.getCode.mockImplementationOnce(async (_url: URL, signal: AbortSignal) => {
+    signal.addEventListener("abort", () => firstCode.reject(signal.reason), { once: true });
+    return await firstCode.promise;
+  });
+  const auth = createPodAuth({ ...f.options, storage });
+  try {
+    // A login with an issuer hint is waiting for the user: the hint is {issuer} meanwhile.
+    const cancel = new AbortController();
+    const first = auth.login({ issuer: f.op.issuer }, { signal: cancel.signal });
+    first.catch(() => undefined);
+    await vi.waitFor(() => expect(f.ui.getCode).toHaveBeenCalledOnce());
+
+    // The background read's challenge arms the gate. The engine reads the fence generation twice
+    // before calling the provider; the third store read is inside the provider's upgrade, after the
+    // picker check passed with the {issuer} hint and before the engine resolves the account.
+    auth.on("challenge", () => {
+      armed = 3;
+    });
+    const background = auth.nonInteractiveFetch(url(f));
+    await hit.promise;
+
+    // The user cancels and signs in with another account: the hint becomes {} and a picker opens.
+    cancel.abort();
+    await expect(first).rejects.toThrow();
+    const second = auth.login();
+    second.catch(() => undefined);
+    await vi.waitFor(() => expect(f.ui.getWebId).toHaveBeenCalledOnce());
+
+    held!();
+    const response = await Promise.race([
+      background,
+      new Promise<"blocked">((resolve) => setTimeout(() => resolve("blocked"), 500)),
+    ]);
+    expect(response).not.toBe("blocked");
+    expect((response as Response).status).toBe(401);
+    // Only the login asked for a WebID.
+    expect(f.ui.getWebId).toHaveBeenCalledOnce();
+    expect(f.ui.chooseIssuer).not.toHaveBeenCalled();
+  } finally {
+    auth.dispose?.();
+  }
+}
+
+test("a concurrent login without a hint never opens or joins a picker for a non-interactive upgrade", async () => {
+  // Another storage root: a different credential context from the login's, so a second picker.
+  await concurrentLoginRace(() => other + "doc");
+  // The login's own root: the same credential context, so it would join the login's picker.
+  await concurrentLoginRace((f) => f.op.root + "private");
+});
+
+test("UMA: a concurrent login without a hint never opens or joins a picker for a non-interactive upgrade", async () => {
+  await concurrentLoginRace(() => other + "uma", true);
+  await concurrentLoginRace((f) => f.op.root + "uma", true);
 });

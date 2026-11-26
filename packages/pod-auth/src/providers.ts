@@ -5,6 +5,7 @@ import {
   CachingAuthorizationServerProvider,
   CachingClientProvider,
   CachingIssuerProvider,
+  type ChallengeContext,
   type Identity as Claims,
   ClientCredentialsTokenProvider,
   ClientIdClientProvider,
@@ -388,12 +389,24 @@ export function createProviders(
       return loginContext.context;
     return JSON.stringify([key, selected.webId ?? null, selected.issuer ?? null]);
   };
-  const sessionContext: ContextKey = async (request) =>
-    await contextFor(request, await selectionFor(request));
+  /**
+   * The selection a non-interactive upgrade passed its picker check with, keyed by the challenge
+   * object. The engine re-wraps the request before resolving the account, but passes the challenge
+   * through unchanged, so the account lookup for that upgrade never reads a later (possibly empty)
+   * login hint and never opens or joins a WebID picker.
+   */
+  const pinnedSelections = new WeakMap<ChallengeContext, LoginHint>();
+  const upgradeSelection = (request: Request, challenge?: ChallengeContext) =>
+    selectionFor(request, (challenge && pinnedSelections.get(challenge)) ?? hint);
+  const sessionContext: ContextKey = async (request, challenge) =>
+    await contextFor(request, await upgradeSelection(request, challenge));
   // RPTs remain storage-scoped even when restore aliases every request to one OIDC session.
   // Retain the captured account selection so the shared-session read cannot adopt a later hint.
-  const umaContext: ContextKey = async (request) =>
-    JSON.stringify([await boundary.contextKey(request), await selectionFor(request)]);
+  const umaContext: ContextKey = async (request, challenge) =>
+    JSON.stringify([
+      await boundary.contextKey(request),
+      await upgradeSelection(request, challenge),
+    ]);
   const authorizationServers = new Map<string, CachingAuthorizationServerProvider>();
   // Each selection's issuer cache, keyed by credential context; read by non-interactive upgrades.
   const issuerCaches = new Map<string, KvStore<string>>();
@@ -462,8 +475,11 @@ export function createProviders(
   const asProvider = {
     getAuthorizationServer: async (
       request: Request,
+      challenge?: ChallengeContext,
     ): Promise<RefreshSessionRecord["authorizationServer"]> =>
-      es256(await asFor(await selectionFor(request)).getAuthorizationServer(request)),
+      es256(
+        await asFor(await upgradeSelection(request, challenge)).getAuthorizationServer(request),
+      ),
   };
   // Client registrations can contain secrets and always stay in memory.
   const clientProvider = new CachingClientProvider(
@@ -665,15 +681,29 @@ export function createProviders(
     upgrade: async (request, challenge, upgradeOptions) => {
       // UMA performs its trust check before resolving the selected account or requesting credentials.
       const attemptHint = hint;
-      // Reads caches only: no network, picker or credential use before UMA's trust check.
-      if (upgradeOptions?.interactive === false) await assertNoPicker(request, attemptHint);
+      const interactive = upgradeOptions?.interactive !== false;
+      let attemptChallenge = challenge;
+      if (!interactive) {
+        // Reads caches only: no network, picker or credential use before UMA's trust check.
+        await assertNoPicker(request, attemptHint);
+        // Pin the checked selection for the rest of this upgrade: a concurrent login may reset the
+        // hint to {} at any await below. A pre-emptive upgrade has no challenge, so it gets an empty
+        // one (no challenges, no DPoP-Nonce: what the engine reads from an absent challenge).
+        attemptChallenge ??= { response: new Response(null), challenges: [] };
+        pinnedSelections.set(attemptChallenge, attemptHint);
+      }
       const selected = solid ? await selectionFor(request, attemptHint) : undefined;
-      const upgraded = await provider.upgrade(request, challenge, upgradeOptions);
+      const upgraded = await provider.upgrade(request, attemptChallenge, upgradeOptions);
       if (solid && hint !== attemptHint)
         throw new Error("Login selection changed during authentication");
       const claims = await solidProvider.identity(request);
       if (claims === undefined) throw new Error("Authentication did not establish an identity");
-      await hooks.session(request, claims, protocol, selected ?? (await selectionFor(request)));
+      await hooks.session(
+        request,
+        claims,
+        protocol,
+        selected ?? (await selectionFor(request, interactive ? hint : attemptHint)),
+      );
       sessionRequest = request;
       return upgraded;
     },
