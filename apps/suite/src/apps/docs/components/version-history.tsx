@@ -11,8 +11,8 @@ import {
 import { type Editor, EditorContent, type JSONContent, useEditor } from "@tiptap/react";
 import { ySyncPluginKey, yUndoPluginKey, yXmlFragmentToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
-import { documentScopedFetch } from "../editor/document-fetch";
 import { useDisplayNames } from "@/lib/profile/use-display-names";
+import { documentScopedFetch } from "../editor/document-fetch";
 import { baseExtensions } from "../editor/extensions";
 import type { DocumentPersistence } from "../editor/persistence";
 import { useDialogFocus } from "../hooks/use-dialog-focus";

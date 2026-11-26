@@ -4,9 +4,9 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import { expect, type Page, test } from "@playwright/test";
 import { AclResource } from "@solid/object";
 import { DataFactory } from "n3";
-import { seedDemoSession } from "../demo-session";
 import { docContainerUrls } from "../../src/apps/docs/lib/model/layout";
 import { decodeRef } from "../../src/lib/refs";
+import { seedDemoSession } from "../demo-session";
 
 async function companionGrants(page: Page, person: string) {
   const resource = decodeRef(new URL(page.url()).pathname.split("/").at(-1) as string);
