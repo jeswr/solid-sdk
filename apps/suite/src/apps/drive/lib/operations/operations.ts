@@ -9,6 +9,7 @@
  */
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
+import type { QueueingStorageClient } from "@jeswr/suite-sdk/offline";
 import { Store } from "n3";
 import { mapConcurrent } from "../../../../lib/parallel";
 import { relocateDocument, writeRestoreSnapshot } from "../../../docs/editor/relocate";
@@ -37,6 +38,8 @@ import { DriveDeletePendingError, rethrowPendingDeletion } from "../client/delet
 import { containerData, containsGraph, relocate, sameGraph } from "../client/rdf";
 import { DriveOperationInProgressError } from "../client/source-operations";
 import { guessContentType } from "../files";
+import { folderGuard } from "../offline/guards";
+import { isNetworkFailure } from "../offline/network";
 import { keepBothName, normalizeUploadName } from "../upload";
 import {
   addTrashRecord,
@@ -209,11 +212,29 @@ export async function createFolder(
   client: DriveClient,
   parentUrl: string,
   rawName: string,
+  /** Offline, queue the create; replay runs this same inherit-verified create (sst-8xm.74.1). */
+  outbox?: { storage: QueueingStorageClient; onQueued: () => void },
 ): Promise<string> {
   const name = normalizeUploadName(rawName, "folder");
   const url = childUrl(parentUrl, name, true);
-  await client.createFolder(url, { kind: "inherit-verified" });
-  return url;
+  if (!outbox || navigator.onLine !== false) {
+    try {
+      await client.createFolder(url, { kind: "inherit-verified" });
+      return url;
+    } catch (error) {
+      // Only a request that never got an HTTP answer may be queued.
+      if (!outbox || !isNetworkFailure(error)) throw error;
+    }
+  }
+  // A named container create is create-only (If-None-Match: * on Solid).
+  const result = await outbox.storage.create(parentUrl, null, {
+    name,
+    kind: "container",
+    offline: "queue",
+    guard: folderGuard,
+  });
+  if (result.queued) outbox.onQueued();
+  return result.url;
 }
 
 /** Whether a rename changes the extension chain (04-drive §2.9 prompt). */

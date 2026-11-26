@@ -60,6 +60,7 @@ import type { TrashEntry } from "../lib/operations/trash-index";
 import { loadSharing } from "../lib/sharing/adapter";
 import { accessSummary } from "./access";
 import { useDrive } from "./drive-context";
+import { useDriveOutbox } from "./outbox";
 import { pruneDeleted } from "./prefs";
 import { moveWithValidator } from "./undo";
 
@@ -509,6 +510,7 @@ export function useDriveActions() {
     [setDetailsItems],
   );
   const { client, driveRoot, session, updatePrefs, prefs, invalidate } = useDrive();
+  const storage = useDriveOutbox(session);
   const router = useRouter();
 
   const starred = useMemo(() => new Set(prefs.starred), [prefs.starred]);
@@ -777,16 +779,32 @@ export function useDriveActions() {
     async (parent: string, name: string) => {
       if (!isOwnStorage(parent, session.storageUrl)) return;
       try {
-        const url = await createFolder(client, parent, name);
-        invalidate(url);
-        toast.success(`Created ${nameOf(url)}`);
+        let queued = false;
+        const url = await createFolder(
+          client,
+          parent,
+          name,
+          storage
+            ? {
+                storage,
+                onQueued: () => {
+                  queued = true;
+                },
+              }
+            : undefined,
+        );
+        if (queued) toast.success("Saved on this device. It will sync when you're back online.");
+        else {
+          invalidate(url);
+          toast.success(`Created ${nameOf(url)}`);
+        }
         return url;
       } catch (error) {
         reportFailure(error, "Couldn't create the folder", client, invalidate);
         return undefined;
       }
     },
-    [client, invalidate, session.storageUrl],
+    [client, invalidate, session.storageUrl, storage],
   );
 
   const restore = useCallback(
