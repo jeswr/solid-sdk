@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6
 import { getOrientationTransform } from "../library/orientation";
 import { type ImageEncoder, readExif, type ThumbnailPlan } from "../model";
+import { stripVideoLocation } from "../model/mp4";
+import { videoDimensions, videoThumbnail } from "./video";
 
 async function decode(blob: Blob) {
   return createImageBitmap(blob, { imageOrientation: "none" });
@@ -198,6 +200,7 @@ function assertStaticPng(buffer: ArrayBuffer) {
 }
 export const browserEncoder: ImageEncoder = {
   async dimensions(original) {
+    if (original.type.startsWith("video/")) return videoDimensions(original);
     const image = await decode(original);
     try {
       return { width: image.width, height: image.height };
@@ -205,8 +208,15 @@ export const browserEncoder: ImageEncoder = {
       image.close();
     }
   },
-  thumbnail: (original, plan) => render(original, plan),
+  thumbnail: (original, plan) =>
+    original.type.startsWith("video/") ? videoThumbnail(original, plan) : render(original, plan),
   async stripLocation(original) {
+    if (original.type === "video/mp4" || original.type === "video/quicktime")
+      return new Blob([stripVideoLocation(await original.arrayBuffer())], { type: original.type });
+    if (original.type.startsWith("video/"))
+      throw new LocationStripError(
+        "Location cannot be removed safely from WebM videos here. Turn off Remove location for this video.",
+      );
     if (original.type === "image/jpeg") return stripJpeg(original);
     if (original.type === "image/webp") return stripWebp(original);
     // PNG encoding is lossless and drops ancillary metadata. Reject other formats

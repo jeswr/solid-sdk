@@ -465,7 +465,11 @@ it("seeds a small realistic demo through the adapters once and preserves a user'
   };
   await Promise.all([ensureSample(session), ensureSample(session)]);
   const library = await listLibrary(io);
-  expect(library.items).toHaveLength(12);
+  expect(library.items).toHaveLength(13);
+  expect(library.items.find((item) => item.kind === "video")).toMatchObject({
+    name: "Lake breeze",
+    durationSeconds: 62.5,
+  });
   expect((await listAlbums(io)).items.map((album) => album.name).sort()).toEqual([
     "Garden",
     "Ghent trip",
@@ -473,7 +477,7 @@ it("seeds a small realistic demo through the adapters once and preserves a user'
   expect((await preferenceStore(fetch, ROOT).read()).favourites).toHaveLength(2);
   expect(library.items.some((item) => item.exif.location)).toBe(true);
   await ensureSample({ ...session });
-  expect((await listLibrary(io)).items).toHaveLength(12);
+  expect((await listLibrary(io)).items).toHaveLength(13);
   const total = pod
     .snapshot()
     .resources.reduce((sum, [, resource]) => sum + resource.body.byteLength, 0);
