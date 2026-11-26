@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it, vi } from "vitest";
 import { MAX_IMPORT_BYTES } from "../src/apps/docs/lib/convert/import-file";
 import type { DriveItem } from "../src/apps/drive/lib/client/client";
@@ -10,6 +11,7 @@ import {
   SHEETS_READ_ONLY_REASON,
   SHEETS_TOO_LARGE_REASON,
 } from "../src/apps/drive/lib/open-with/sheets";
+import { csvToWorkbook } from "../src/apps/sheets/lib/univer-spike";
 import { encodeRef } from "../src/lib/refs";
 
 const ROOT = "https://pod.test/alice/";
@@ -209,5 +211,54 @@ describe("Open with Sheets", () => {
       importer,
     );
     expect(importer.createFromCsv).toHaveBeenCalledWith({ title: "Budget", csv: "Name\nCafé" });
+  });
+
+  it("reports an oversized or malformed CSV as a plain, user-facing error", async () => {
+    // The real converter, so the limits Sheets enforces are the ones Drive reports.
+    const importer = {
+      createFromCsv: vi.fn(async ({ title, csv }: { title: string; csv: string }) => {
+        csvToWorkbook("new", title, [{ id: "sheet1", name: "Sheet1", csv }]);
+        return { container: `${ROOT}sheets/budget/` };
+      }),
+    };
+    const download = (body: string) =>
+      session(async (_url, init) =>
+        init?.method === "HEAD" ? new Response(null) : new Response(body),
+      );
+    const failure = async (body: string) => {
+      try {
+        await openWithSheets(csv, download(body), importer);
+      } catch (error) {
+        return error as Error;
+      }
+      throw new Error("expected the import to fail");
+    };
+    for (const [body, message] of [
+      ["1\n".repeat(200_000), "Sheets can open CSV files with up to 100,000 rows"],
+      [",".repeat(1_000_000), "Sheets can open CSV files with up to 16,384 columns"],
+      ['Name\n"open', "This file isn't valid CSV, so Sheets can't open it"],
+    ] as const) {
+      const error = await failure(body);
+      // The Drive controller shows only plain Errors' messages; anything else says "connection".
+      expect(error.constructor).toBe(Error);
+      expect(error.message).toBe(message);
+    }
+    await expect(openWithSheets(csv, download("a,b\n1,2\n"), importer)).resolves.toEqual({
+      container: `${ROOT}sheets/budget/`,
+    });
+  });
+
+  it("keeps storage failures out of the user-facing message", async () => {
+    const storage = new TypeError("PUT https://pod.test/alice/sheets/budget/ failed");
+    const importer = { createFromCsv: vi.fn().mockRejectedValue(storage) };
+    await expect(
+      openWithSheets(
+        csv,
+        session(async (_url, init) =>
+          init?.method === "HEAD" ? new Response(null) : new Response("a\n"),
+        ),
+        importer,
+      ),
+    ).rejects.toBe(storage);
   });
 });
