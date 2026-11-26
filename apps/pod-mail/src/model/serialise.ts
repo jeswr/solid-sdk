@@ -1,29 +1,21 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 /**
  * Serialisation for the mail data layer. We serialise via `n3.Writer` only —
  * never by hand-concatenating Turtle. The resulting Turtle is what the store
  * layer conditional-PUTs back to the pod.
  */
+import { MailPrefixes } from "@jeswr/solid-mail";
 import type { DatasetCore } from "@rdfjs/types";
 import { Writer } from "n3";
-import { DCT, FOAF, LDP, RDF, RDFS, SCHEMA, SIOC, SOLID, XSD } from "./vocab.js";
 
-/** Prefixes emitted in serialised mail documents (for human-readable Turtle). */
-export const MailPrefixes: Record<string, string> = {
-  rdf: RDF,
-  rdfs: RDFS,
-  xsd: XSD,
-  schema: SCHEMA,
-  sioc: SIOC,
-  dct: DCT,
-  foaf: FOAF,
-  solid: SOLID,
-  ldp: LDP,
-};
+export { MailPrefixes };
 
 /**
  * Serialise every quad in a dataset to a complete Turtle document, including
  * the `@prefix` declarations.
+ * Pod Mail historically passes named graphs to N3 Writer (emitting TriG);
+ * keep this local because the shared package's Turtle serializer rejects them.
  *
  * NB: `n3.Writer.quadsToString` emits prefixed *names* but NOT the prefix
  * *declarations*, so its output does not round-trip. The `addQuads` + `end`

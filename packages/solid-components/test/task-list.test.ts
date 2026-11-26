@@ -5,6 +5,7 @@
 // (an untrusted title renders as TEXT, never live markup).
 
 import "../src/index.js";
+import { DataFactory } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JeswrTaskList } from "../src/index.js";
 import { mount, parseTurtle, TASKS_TTL, waitFor, XSS_TASK_TTL } from "./fixtures.js";
@@ -78,5 +79,32 @@ describe("<jeswr-task-list>", () => {
     // The literal must be present as TEXT, and must NOT have created a real <img>.
     expect(title?.textContent).toContain("<img src=x onerror=alert(1)>");
     expect(el.querySelector("img")).toBeNull();
+  });
+  it("skips a blank-node or unsafe-IRI wf:Task subject instead of failing the whole list", async () => {
+    const el = await mount<JeswrTaskList>("jeswr-task-list");
+    const store = parseTurtle(
+      `${TASKS_TTL}
+@prefix wf: <http://www.w3.org/2005/01/wf/flow#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+[] a wf:Task ; dct:title "anonymous" .`,
+    );
+    const { namedNode, quad } = DataFactory;
+    // A NamedNode the n3 parser would reject but a programmatic store can hold.
+    store.addQuad(
+      quad(
+        namedNode("https://pod.example/bad task"),
+        namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+        namedNode("http://www.w3.org/2005/01/wf/flow#Task"),
+      ),
+    );
+    el.store = store;
+    await waitFor(
+      el,
+      (e) => e.querySelectorAll('[part="task"]').length === 2,
+      "valid tasks render",
+    );
+    const titles = [...el.querySelectorAll('[part="title"]')].map((n) => n.textContent?.trim());
+    expect(titles.sort()).toEqual(["Ship it", "Write the spec"]);
+    expect(el.querySelector('[part="error"]')).toBeNull();
   });
 });

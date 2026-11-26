@@ -7,7 +7,10 @@
     "foaf": "http://xmlns.com/foaf/0.1/",
     "dcterms": "http://purl.org/dc/terms/",
     "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
-    "xsd": "http://www.w3.org/2001/XMLSchema#"
+    "xsd": "http://www.w3.org/2001/XMLSchema#",
+    "jmedia": "https://jeswr.org/ns/sectors/media#",
+    "jcore": "https://jeswr.org/ns/core#",
+    "schema": "https://schema.org/"
   },
   "entities": [
     {
@@ -47,6 +50,40 @@
           "fields": { "title": { "rename": "albumTitle" } }
         }
       }
+    },
+    {
+      "name": "LibraryTrack",
+      "targetClass": "https://jeswr.org/ns/sectors/media#Track",
+      "subject": { "convention": "self" },
+      "fields": {
+        "title": { "sanitizeText": false },
+        "name": { "sanitizeText": false },
+        "duration": { "sanitizeText": false },
+        "isrc": { "sanitizeText": false }
+      }
+    },
+    {
+      "name": "LibraryArtist",
+      "targetClass": "https://jeswr.org/ns/sectors/media#Artist",
+      "subject": { "convention": "self" },
+      "fields": { "foafName": { "sanitizeText": false }, "name": { "sanitizeText": false } }
+    },
+    {
+      "name": "LibraryAlbum",
+      "targetClass": "https://jeswr.org/ns/sectors/media#Album",
+      "subject": { "convention": "self" },
+      "fields": { "title": { "sanitizeText": false }, "name": { "sanitizeText": false } }
+    },
+    {
+      "name": "LibraryPlaylist",
+      "targetClass": "https://jeswr.org/ns/sectors/media#Playlist",
+      "subject": { "convention": "self" },
+      "fields": { "title": { "sanitizeText": false }, "name": { "sanitizeText": false } }
+    },
+    {
+      "name": "Listen",
+      "targetClass": "https://jeswr.org/ns/sectors/media#PlaybackEvent",
+      "subject": { "convention": "self" }
     }
   ]
 }

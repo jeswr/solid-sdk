@@ -46,6 +46,7 @@
     "@jeswr/solid-community-feeds",
     "@jeswr/solid-components",
     "@jeswr/solid-dav-bridge",
+    "@jeswr/solid-docs",
     "@jeswr/solid-dpop",
     "@jeswr/solid-drawing",
     "@jeswr/solid-elements",
@@ -102,6 +103,7 @@
     "@jeswr/pod-type-index",
     "@jeswr/federation-codegen",
     "@jeswr/model-runtime",
+    "@jeswr/shacl-forms",
     "@jeswr/solid-listening",
     "@jeswr/solid-scheduling",
     "@jeswr/solid-sheets",
@@ -121,7 +123,9 @@
     "@jeswr/solid-events",
     "@jeswr/solid-trips",
     "@jeswr/excalidraw-scene",
-    "@jeswr/pod-ask"
+    "@jeswr/pod-ask",
+    "@jeswr/solid-mail",
+    "@jeswr/solid-photos"
   ],
   "applications": [
     {

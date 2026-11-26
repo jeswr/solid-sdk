@@ -5,10 +5,10 @@
  * original stays untouched. Pure decisions plus the Docs-folder access probe.
  */
 
+import { DOCS_SLUG, isDirectChild, LEGACY_DOCS_SLUG } from "@jeswr/solid-docs/layout";
 import { encodeRef } from "../../../../lib/refs";
 import { isImportableName, MAX_IMPORT_BYTES } from "../../../docs/lib/convert/import-file";
 import { DOCX_FORMATTING_WARNING, type SkippedItem } from "../../../docs/lib/convert/skipped";
-import { DOCS_SLUG, isDirectChild, LEGACY_DOCS_SLUG } from "../../../docs/lib/model/layout";
 
 export const FOREIGN_FILE_REASON = "Only files in your pod can be opened with Docs";
 export const TOO_LARGE_REASON = "Docs can open files of 50 MB or less";

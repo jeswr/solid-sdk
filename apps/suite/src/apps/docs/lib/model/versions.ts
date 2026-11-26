@@ -1,67 +1,19 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { isDirectChild } from "@jeswr/solid-docs/layout";
+import { NS } from "@jeswr/solid-docs/vocab";
 import type { DatasetCore } from "@rdfjs/types";
-import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  OptionalAs,
-  OptionalFrom,
-  SetFrom,
-  TermAs,
-  TermFrom,
-  TermWrapper,
-} from "@rdfjs/wrapper";
+import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { ResourceReadError, ResourceWriteError } from "./errors";
-import { isDirectChild } from "./layout";
 import { readRdf, writeRdf } from "./rdf-io";
 import { assertUpdateIdentities } from "./update-store";
-import { DCT, NS, RDFS_LABEL } from "./vocab";
 
-export interface DocumentVersion {
-  url: string;
-  snapshot: string;
-  created: string;
-  creator?: string | undefined;
-  name?: string | undefined;
-  kind: "named" | "automatic";
-}
-const KIND = `${NS.PD}versionKind`;
-const SNAPSHOT = `${NS.PD}snapshot`;
+export type { DocumentVersion } from "@jeswr/solid-docs/versions";
 
-/** Small typed RDF facade; malformed children are isolated by the listing boundary. */
-class VersionMetadata extends TermWrapper {
-  read(): Omit<DocumentVersion, "url"> {
-    const created = OptionalFrom.subjectPredicate(this, DCT.created, LiteralAs.date);
-    const snapshot = OptionalFrom.subjectPredicate(this, SNAPSHOT, NamedNodeAs.string);
-    const kind = OptionalFrom.subjectPredicate(this, KIND, LiteralAs.string);
-    if (
-      !created ||
-      !Number.isFinite(created.getTime()) ||
-      !snapshot ||
-      (kind !== "named" && kind !== "automatic")
-    )
-      throw new Error("Malformed document version");
-    return {
-      created: created.toISOString(),
-      snapshot,
-      kind,
-      creator: OptionalFrom.subjectPredicate(this, DCT.creator, NamedNodeAs.string),
-      name: OptionalFrom.subjectPredicate(this, RDFS_LABEL, LiteralAs.string),
-    };
-  }
-  write(version: Omit<DocumentVersion, "url">) {
-    OptionalAs.object(this, DCT.created, new Date(version.created), LiteralFrom.dateTime);
-    OptionalAs.object(this, DCT.creator, version.creator, NamedNodeFrom.string);
-    OptionalAs.object(this, RDFS_LABEL, version.name, LiteralFrom.string);
-    OptionalAs.object(this, KIND, version.kind, LiteralFrom.string);
-    OptionalAs.object(this, SNAPSHOT, version.snapshot, NamedNodeFrom.string);
-  }
-}
+import { buildVersion, type DocumentVersion, readVersion } from "@jeswr/solid-docs/versions";
 
 /** Immutable full-state snapshots, independent of the compactable collaborative log. */
 export class DocumentVersionStore {
@@ -90,7 +42,7 @@ export class DocumentVersionStore {
       if (!isDirectChild(url, this.container) || !url.endsWith(".ttl")) continue;
       try {
         const { dataset } = await readRdf(url, this.http);
-        const entry = new VersionMetadata(url, dataset, DataFactory).read();
+        const entry = readVersion(url, dataset);
         if (
           !isDirectChild(entry.snapshot, this.container) ||
           !entry.snapshot.endsWith(".bin") ||
@@ -150,8 +102,7 @@ export class DocumentVersionStore {
     // 412: a retried copy already published this snapshot under the same name.
     if (!response.ok && response.status !== 412)
       throw new ResourceWriteError(version.snapshot, response.status);
-    const metadata = new Store();
-    new VersionMetadata(version.url, metadata, DataFactory).write(version);
+    const metadata = buildVersion(version);
     try {
       await writeRdf(version.url, metadata, { fetchImpl: this.http, createOnly: true });
     } catch (error) {

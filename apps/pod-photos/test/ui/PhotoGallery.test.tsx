@@ -144,6 +144,22 @@ describe('PhotoGallery', () => {
     expect(await screen.findByRole('img', { name: 'Sunset over the bay' })).toBeInTheDocument();
   });
 
+  it.each(['javascript:alert(1)', 'data:text/html,x', 'file:///etc/passwd'])(
+    'never renders a non-http(s) contentUrl (%s) as an image source',
+    async (bad) => {
+      const fetch = routerFetch({
+        'https://pod.example/photos/': NO_BINARY_ROOT,
+        'https://pod.example/photos/draft.ttl': `
+@prefix schema: <https://schema.org/> .
+<https://pod.example/photos/draft.ttl#it> a schema:Photograph ;
+  schema:name "Hostile" ; schema:contentUrl <${bad}> .`,
+      });
+      render(<PhotoGallery rootUrl="https://pod.example/photos/" fetch={fetch} />);
+      expect(await screen.findByText('Hostile')).toBeInTheDocument();
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    },
+  );
+
   it('shows the empty state for a container with no children', async () => {
     const fetch = routerFetch({ 'https://pod.example/photos/empty/': EMPTY });
     render(<PhotoGallery rootUrl="https://pod.example/photos/empty/" fetch={fetch} />);

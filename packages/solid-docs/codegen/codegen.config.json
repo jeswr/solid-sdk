@@ -1,0 +1,93 @@
+{
+  "shapesBase": "https://jeswr.org/ns/pod-docs#shapes/",
+  "prefixes": {
+    "pd": "https://jeswr.org/ns/pod-docs#",
+    "dct": "http://purl.org/dc/terms/",
+    "prov": "http://www.w3.org/ns/prov#",
+    "oa": "http://www.w3.org/ns/oa#",
+    "schema": "https://schema.org/",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "name": "Document",
+      "targetClass": "https://jeswr.org/ns/pod-docs#Document",
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": {
+        "instanceId": {
+          "sanitizeText": false
+        },
+        "title": {
+          "sanitizeText": false
+        },
+        "body": {
+          "sanitizeText": false
+        },
+        "format": {
+          "sanitizeText": false
+        }
+      }
+    },
+    {
+      "name": "Revision",
+      "targetClass": "http://www.w3.org/ns/prov#Entity",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "body": {
+          "sanitizeText": false
+        },
+        "format": {
+          "sanitizeText": false
+        },
+        "label": {
+          "sanitizeText": false
+        },
+        "kind": {
+          "sanitizeText": false
+        }
+      }
+    },
+    {
+      "name": "Annotation",
+      "targetClass": "http://www.w3.org/ns/oa#Annotation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "text": {
+          "sanitizeText": false
+        },
+        "start": {
+          "sanitizeText": false
+        },
+        "end": {
+          "sanitizeText": false
+        }
+      }
+    },
+    {
+      "name": "Quote",
+      "targetClass": "http://www.w3.org/ns/oa#TextQuoteSelector",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {
+        "exact": {
+          "sanitizeText": false
+        },
+        "prefix": {
+          "sanitizeText": false
+        },
+        "suffix": {
+          "sanitizeText": false
+        }
+      }
+    }
+  ]
+}

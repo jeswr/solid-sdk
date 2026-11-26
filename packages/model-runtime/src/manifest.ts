@@ -16,8 +16,19 @@
  * different runtime major is rejected rather than mis-interpreted.
  */
 
-import { literalMapper } from "./datatypes.js";
-import { httpIriOrUndefined, isSafeAbsoluteIri, isTurtlePrefixName } from "./guards.js";
+import {
+  type DecimalMapping,
+  expandDatatype,
+  fieldLiteralMapper,
+  isExactDecimalLexical,
+  XSD,
+} from "./datatypes.js";
+import {
+  httpIriOrUndefined,
+  isSafeAbsoluteIri,
+  isTurtlePrefixName,
+  type StringPattern,
+} from "./guards.js";
 import {
   type EntityInvariant,
   type HasValueConstraint,
@@ -75,6 +86,11 @@ export interface ManifestFieldGuards {
   minLength?: number;
   /** Singleton non-blank string: a blank (whitespace-only / empty) value is dropped. */
   nonBlank?: boolean;
+  /**
+   * Closed string pattern projected from a reviewed `sh:pattern` (`upper-alpha-3` ⇐
+   * exactly `^[A-Z]{3}$`) on an `xsd:string` literal field. A value outside it is dropped.
+   */
+  stringPattern?: StringPattern;
 }
 
 /** A literal scalar a manifest may carry (default value / `sh:in` member). */
@@ -121,6 +137,12 @@ export interface ManifestField {
   ordered?: ManifestOrdered;
   /** Datatype IRI (or `xsd:` shorthand) — required for a literal field. */
   datatype?: string;
+  /**
+   * Opt-in literal mapping. `"exact"` (only on an `xsd:decimal` field) surfaces the
+   * value as its exact lexical STRING instead of a JS number; absent ⇒ the default
+   * number mapping.
+   */
+  decimal?: DecimalMapping;
   minCount?: number;
   maxCount?: number;
   /** A literal default value applied on read/build (data, never computed). */
@@ -300,6 +322,7 @@ const GUARD_KEYS = new Set<string>([
   "maxInclusive",
   "minLength",
   "nonBlank",
+  "stringPattern",
 ]);
 const FIELD_KEYS = new Set<string>([
   "hasValue",
@@ -313,6 +336,7 @@ const FIELD_KEYS = new Set<string>([
   "collection",
   "ordered",
   "datatype",
+  "decimal",
   "minCount",
   "maxCount",
   "default",
@@ -410,6 +434,11 @@ function validateGuards(raw: unknown): ManifestFieldGuards {
   if (raw.minLength !== undefined)
     g.minLength = checkCount(raw.minLength, "field.guards.minLength");
   if (raw.nonBlank !== undefined) g.nonBlank = checkBoolean(raw.nonBlank, "field.guards.nonBlank");
+  if (raw.stringPattern !== undefined) {
+    if (raw.stringPattern !== "upper-alpha-3")
+      fail('field.guards.stringPattern must be "upper-alpha-3"');
+    g.stringPattern = raw.stringPattern;
+  }
   return g;
 }
 
@@ -432,6 +461,7 @@ function validateNestedField(
     "hasValue",
     "aliasPredicates",
     "datatype",
+    "decimal",
     "collection",
     "ordered",
     "maxCount",
@@ -550,6 +580,12 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
       if (raw[key] !== undefined) fail(`ordered field cannot carry ${key}`);
   }
   if (datatype) field.datatype = datatype;
+  if (raw.decimal !== undefined) {
+    if (raw.decimal !== "exact") fail('field.decimal must be "exact" when present');
+    if (kind !== "literal" || expandDatatype(datatype as string) !== `${XSD}decimal`)
+      fail("field.decimal requires an xsd:decimal literal field");
+    field.decimal = "exact";
+  }
 
   if (raw.minCount !== undefined) field.minCount = checkCount(raw.minCount, "field.minCount");
   if (raw.maxCount !== undefined) field.maxCount = checkCount(raw.maxCount, "field.maxCount");
@@ -604,7 +640,8 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
           fail("iriEnum members must satisfy the iriScheme guard");
       }
   }
-  const datatypeMapper = kind === "literal" ? literalMapper(datatype as string) : undefined;
+  const datatypeMapper =
+    kind === "literal" ? fieldLiteralMapper(datatype as string, field.decimal) : undefined;
   const jsType = datatypeMapper?.jsType ?? "string";
   if (g.iriScheme !== undefined && kind !== "iri") fail("iriScheme requires an IRI field");
   if (g.iriPattern !== undefined && kind !== "iri") fail("iriPattern requires an IRI field");
@@ -624,6 +661,43 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   }
   if (g.sanitizeText !== undefined && datatypeMapper?.lexicalValid !== undefined) {
     fail("sanitizeText is not applied to a datatype with strict lexical validation");
+  }
+  if (
+    g.stringPattern !== undefined &&
+    (kind !== "literal" ||
+      field.decimal !== undefined ||
+      expandDatatype(datatype as string) !== `${XSD}string`)
+  )
+    fail("stringPattern requires an xsd:string literal field");
+  // The pattern validates the raw value: a guard that rewrites it first (trim, blank
+  // dropping, sanitization) would make build accept what a read of the same pod term rejects.
+  if (g.stringPattern !== undefined) {
+    for (const key of ["trim", "dropBlank", "sanitizeText"] as const) {
+      if (g[key] !== undefined) fail(`stringPattern cannot be combined with ${key}`);
+    }
+  }
+  if (field.decimal !== undefined) {
+    // The exact mapping has no reviewed exact enum / text-guard projection: fail closed
+    // rather than interpret a numeric member or a text guard against a decimal lexical.
+    if (field.in !== undefined) fail("field.in is not supported on an exact decimal field");
+    // hasValue and ordered collections (added independently of the exact mapping) compare
+    // and rewrite values through the default number mapper: reject the combination until
+    // an exact projection for them is reviewed.
+    if (raw.hasValue !== undefined) fail("hasValue is not supported on an exact decimal field");
+    if (collection === "ordered")
+      fail("an ordered collection is not supported on an exact decimal field");
+    for (const key of [
+      "minLength",
+      "nonBlank",
+      "trim",
+      "dropBlank",
+      "emptyStringDrop",
+      "sanitizeText",
+    ] as const) {
+      if (g[key] !== undefined) fail(`${key} is not supported on an exact decimal field`);
+    }
+    if (field.default !== undefined && !isExactDecimalLexical(field.default))
+      fail("an exact decimal field.default must be an exact decimal lexical string");
   }
   if (g.emptyStringDrop !== undefined && collection === "set")
     fail("emptyStringDrop requires a singleton");

@@ -1,6 +1,11 @@
 // AUTHORED-BY Claude Opus 5.5
 
-import { type Category, putTransaction, type Transaction } from "@jeswr/solid-money";
+import {
+  type Category,
+  isTransactionWritable,
+  putTransaction,
+  type Transaction,
+} from "@jeswr/solid-money";
 import { type CategoryRule, categoriseTransactions } from "../import";
 import { MoneyIoError } from "../model";
 import { type MoneyClient, storeOf } from "./container";
@@ -211,9 +216,7 @@ export function ruleMatches(
   transactions: readonly Transaction[],
 ): Map<string, string[]> {
   const rules = ownRules(saved, categories);
-  const candidates = transactions.filter(
-    (row) => !row.category && !row.debitAccount && !row.creditAccount,
-  );
+  const candidates = transactions.filter(stillUncategorised);
   const filed = categoriseTransactions(
     candidates.map((row) => ({
       date: row.postingTime.slice(0, 10),
@@ -232,9 +235,15 @@ export function ruleMatches(
   return groups;
 }
 
-/** True while a row is still there, uncategorised and not a transfer leg. */
+/**
+ * True while a row is still there, uncategorised, not a transfer leg and writable. A row
+ * holding an unreadable link (a literal category lists as uncategorised) is skipped, so one
+ * bad record cannot stop the run on every retry.
+ */
 export function stillUncategorised(row: Transaction | undefined): row is Transaction {
-  return !!row && !row.category && !row.debitAccount && !row.creditAccount;
+  return (
+    !!row && !row.category && !row.debitAccount && !row.creditAccount && isTransactionWritable(row)
+  );
 }
 
 /**

@@ -39,6 +39,7 @@ import {
   isFailClosedSeverity,
   isHttpPattern,
   linkTargetConforms,
+  stringPatternGuard,
 } from "./compile.js";
 import { propertyHasValue, shapeInvariants } from "./invariants.js";
 import { orderedItemTargets, orderedScalar, resolveOrdered } from "./ordered.js";
@@ -289,6 +290,10 @@ function guardIsShapeDerived(
   if (guard === "minLength")
     return constraint.minLength !== undefined && guards.minLength === constraint.minLength;
   if (guard === "nonBlank") return guards.nonBlank === true && constraint.pattern === "\\S";
+  if (guard === "stringPattern")
+    return (
+      guards.stringPattern !== undefined && guards.stringPattern === stringPatternGuard(constraint)
+    );
   return false;
 }
 
@@ -309,6 +314,8 @@ function requiredShapeGuards(c: ShapeConstraint): ManifestFieldGuards {
   if (stringValue && c.pattern === "\\S") {
     required.nonBlank = true;
   }
+  const stringPattern = stringPatternGuard(c);
+  if (stringPattern !== undefined) required.stringPattern = stringPattern;
   return required;
 }
 
@@ -365,6 +372,9 @@ function assertFieldGuardsTraceable(
   }
   if (field.defaultNow !== undefined && !configGuards.has("defaultNow")) {
     throw new FidelityError(`${where} field ${field.name} defaultNow is not config-declared`);
+  }
+  if (field.decimal !== undefined && !configGuards.has("decimal")) {
+    throw new FidelityError(`${where} field ${field.name} decimal mapping is not config-declared`);
   }
   if (field.materializeDefault !== undefined && !configGuards.has("materializeDefault")) {
     throw new FidelityError(

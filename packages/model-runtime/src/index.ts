@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 4.8
@@ -24,8 +25,13 @@
 
 export {
   type DatatypeMapper,
+  type DecimalMapping,
+  EXACT_DECIMAL_MAX_LENGTH,
+  exactDecimalMapper,
   expandDatatype,
+  fieldLiteralMapper,
   iriMapper,
+  isExactDecimalLexical,
   isKnownDatatype,
   isXsdDate,
   isXsdDateTime,
@@ -42,6 +48,9 @@ export {
   isHttpIri,
   isSafeAbsoluteIri,
   isTurtlePrefixName,
+  isUpperAlpha3,
+  matchesStringPattern,
+  type StringPattern,
   sanitizeText,
   subjectIri,
   tryRead,
@@ -73,11 +82,14 @@ export {
   validateManifest,
 } from "./manifest.js";
 export {
+  applyScalarGuards,
+  type ClassWalkBudget,
   type DefineModelOptions,
   defineModel,
   type EntityData,
   type EntityWrapper,
   type EntityWrapperConstructor,
+  hasDatasetClassForSchema as hasDatasetClass,
   MigrationError,
   type Model,
   type ModelEntity,
