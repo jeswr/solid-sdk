@@ -82,6 +82,9 @@
   margin: 12px 0;
   border-top: 1px solid var(--border);
 }
+.notes-image-cleanup {
+  max-width: 32rem;
+}
 .notes-workspace {
   padding: 24px 28px 56px;
   max-width: 1400px;
