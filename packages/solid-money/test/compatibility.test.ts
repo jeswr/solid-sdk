@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { NS } from "@jeswr/suite-vocab";
 import { DataFactory } from "n3";
 import { expect, it } from "vitest";

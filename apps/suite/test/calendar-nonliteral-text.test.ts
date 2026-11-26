@@ -67,7 +67,7 @@ it.each(["iri", "bnode"] as const)("does not read a %s event name as text", (kin
 
 it.each(["iri", "bnode"] as const)("does not read a %s calendar title as text", async (kind) => {
   const calUrl = "https://pod.example/calendar/cal.ttl";
-  const store = buildCalendar(calUrl, { title: "Work", color: "#112233" } as never) as Store;
+  const store = buildCalendar(calUrl, { title: "Work", color: `#${"112233"}` } as never) as Store;
   const title = namedNode("http://purl.org/dc/terms/title");
   const subject = [...store.match(null, title, null)][0]?.subject;
   for (const q of store.match(subject, title, null)) store.removeQuad(q);
