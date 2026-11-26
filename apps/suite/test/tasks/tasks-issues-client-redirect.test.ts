@@ -4,6 +4,10 @@ import { h, mount } from "../drive-ui-dom";
 
 const route = vi.hoisted(() => ({ pathname: "/" }));
 vi.mock("next/navigation", () => ({ usePathname: () => route.pathname }));
+// Issues resolves its own Next instance (its dev peers differ from the suite's), so mock that copy too.
+vi.mock("../../../issues/node_modules/next/navigation", () => ({
+  usePathname: () => route.pathname,
+}));
 
 import { SuiteRedirect } from "../../../issues/src/components/suite-redirect";
 
