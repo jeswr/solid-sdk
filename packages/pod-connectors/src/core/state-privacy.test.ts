@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 import { describe, expect, it, vi } from "vitest";
 import { createStateStore } from "../node/state.js";
 import { createConnectionStore } from "./connections-store.js";
@@ -100,17 +101,21 @@ describe("private connector state writes (scheduler path)", () => {
     expect(h.requests).toEqual([]);
   });
 
-  it("fails a scheduler run closed when its state store has no verifier: no claim, token or import", async () => {
+  it.each([
+    "spotify",
+    "fitbit",
+  ])("refuses all scheduling writes for %s without a private state verifier", async (connectorId) => {
     const h = fixture();
-    const s = scheduler((adapterId, signal) =>
-      createConnectorStateStore({ ...h.options, adapterId, signal }),
+    const s = scheduler(
+      (adapterId, signal) => createConnectorStateStore({ ...h.options, adapterId, signal }),
+      { connections: [{ connectorId, account: "fixture", enabled: true }] },
     );
     await s.scheduler.tick();
     expect(h.requests).toEqual([]);
     expect(s.tokenSource.accessToken).not.toHaveBeenCalled();
     expect(s.runner).not.toHaveBeenCalled();
     expect(s.onRunError).toHaveBeenCalledOnce();
-    expect(h.pod.get(SPOTIFY_STATE)).toBeUndefined();
+    expect(h.pod.get(connectorStateLocation(TEST_POD_ROOT, connectorId).url)).toBeUndefined();
   });
 
   it("verifies the exact state URL before the ACL install and before each write", async () => {

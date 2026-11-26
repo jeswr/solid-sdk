@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 /**
  * The integration adapter contract (docs/integrations-catalog.md §"The common
  * adapter shape"). An adapter pulls a user's data from a platform API,
@@ -353,6 +354,7 @@ export interface ConnectorRunCounts {
 }
 
 export type ConnectorErrorClass =
+  | "deprecated"
   | "reauthorise"
   | "rate-limited"
   | "unauthorised"
@@ -370,10 +372,12 @@ export interface ConnectorRunHealth {
   readonly outcome: "ok" | "partial" | "failed" | "needs-reauth";
   readonly counts: ConnectorRunCounts;
   readonly errorClass?: ConnectorErrorClass;
+  /** Static adapter guidance for a deprecated connection. */
+  readonly message?: string;
   readonly consecutiveFailures: number;
   readonly nextRunAt?: string;
   /**
-   * needs-reauth only: the connection row's `enabledAt` this latch was set against, or ""
+   * For needs-reauth or deprecated: the connection row's `enabledAt` this latch was set against, or ""
    * when the row had none. The latch clears when the row's value differs (string compare).
    */
   readonly latchedEnabledAt?: string;

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 import type {
   ConnectorAccountState,
   ConnectorErrorClass,
@@ -12,6 +13,7 @@ export const MAX_CONNECTIONS = 1_000;
 export const MIN_INTERVAL_MINUTES = 15;
 export const MAX_INTERVAL_MINUTES = 525_600;
 export const CONNECTOR_ERROR_CLASSES: readonly ConnectorErrorClass[] = [
+  "deprecated",
   "reauthorise",
   "rate-limited",
   "unauthorised",
@@ -77,6 +79,9 @@ function health(value: unknown): ConnectorRunHealth {
       skipped: count(counts.skipped),
     },
     ...(h.errorClass === undefined ? {} : { errorClass: h.errorClass as ConnectorErrorClass }),
+    ...(h.errorClass === "deprecated" && typeof h.message === "string"
+      ? { message: h.message.slice(0, 1_024) }
+      : {}),
     consecutiveFailures: count(h.consecutiveFailures),
     ...(h.nextRunAt === undefined ? {} : { nextRunAt: date(h.nextRunAt) }),
     ...(h.latchedEnabledAt === undefined
