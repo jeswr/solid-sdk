@@ -17,7 +17,8 @@ final class FixtureTests: XCTestCase {
 
     // The fixture is ordinary remote content in the real app's WKWebView. Only accessibility
     // is used here: the application has no test-only JavaScript or launch-argument hooks.
-    private func readResult(_ app: XCUIApplication, page: String, done: Bool, step: String) throws -> (String, [String: Any]) {
+    private func readResult(_ app: XCUIApplication, page: String, done: Bool, step: String,
+                            timeout: TimeInterval = 60) throws -> (String, [String: Any]) {
         // WKWebView exposes aria-label as the accessibility label; the HTML id is not an identifier.
         let element = app.webViews.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier == %@ OR label == %@", "e2e-result", "e2e-result"))
@@ -33,7 +34,7 @@ final class FixtureTests: XCTestCase {
         let present = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
             foreground() && element.exists
         }, object: element)
-        guard XCTWaiter.wait(for: [present], timeout: 30) == .completed else {
+        guard XCTWaiter.wait(for: [present], timeout: timeout) == .completed else {
             attachDebug(app, page: page, done: done, step: step, reason: "Missing fixture result element")
             throw FixtureFailure(message: "Missing fixture result element")
         }
@@ -57,7 +58,7 @@ final class FixtureTests: XCTestCase {
         }
         let ready = NSPredicate { _, _ in current() != nil }
         let expectation = XCTNSPredicateExpectation(predicate: ready, object: element)
-        guard XCTWaiter.wait(for: [expectation], timeout: 30) == .completed, let result = current() else {
+        guard XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed, let result = current() else {
             // The element may have vanished or its WebContent process may be unreachable. Only
             // cached values belong here: querying value/debugDescription can abort XCTest before
             // the attachment is written (continueAfterFailure is false).
@@ -88,7 +89,9 @@ final class FixtureTests: XCTestCase {
         let app = XCUIApplication(bundleIdentifier: "org.jeswr.suite")
         app.launch()
         defer { app.terminate() }
-        let (fixture, _) = try readResult(app, page: "index", done: true, step: "initial fixture")
+        // A cold simulator can take 45 s or more before the app is idle and WebKit exposes the page
+        // (main run 45774465275 missed a 30 s window), so the first read waits longer.
+        let (fixture, _) = try readResult(app, page: "index", done: true, step: "initial fixture", timeout: 120)
         attach(fixture, name: "e2e-result.json")
 
         let navigation = app.webViews.links["Test foreign navigation"]
@@ -106,7 +109,13 @@ final class FixtureTests: XCTestCase {
         foreign.tap()
         // SuiteNavigationPlugin may open Safari; bring the same application back to observe
         // its bounded refusal window. activate() preserves the existing WebView document.
+        // UIApplication.open is queued, and on a loaded simulator Safari can take the foreground
+        // after an immediate activate() (train run 45776835289 ended with the app in the
+        // background and its WebContent unreachable). Let Safari arrive first when it does open.
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        _ = safari.wait(for: .runningForeground, timeout: 15)
         app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30), "The app must return to the foreground")
         let (_, after) = try readResult(app, page: "navigation", done: true, step: "after foreign navigation")
         XCUIDevice.shared.press(.home)
         app.activate()
