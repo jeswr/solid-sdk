@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { CellValueType, type IWorkbookData } from "@univerjs/core";
 import { describe, expect, it } from "vitest";
 import { openWithSheets } from "../src/apps/drive/lib/open-with/sheets";
@@ -46,7 +47,7 @@ describe("Drive CSV import through WorkbookService", () => {
         { fetch: h.fetch, storageUrl: POD, webId: WEBID },
         h.service,
       ),
-    ).rejects.toThrow("Unterminated CSV field");
+    ).rejects.toThrow("This file isn't valid CSV, so Sheets can't open it");
     expect(await h.service.list()).toEqual([]);
     expect(await (await h.pod.fetch(url)).text()).toBe('"Unclosed');
   });
