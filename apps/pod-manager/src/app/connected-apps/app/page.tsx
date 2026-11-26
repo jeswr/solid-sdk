@@ -24,10 +24,20 @@ import {
   usePermissionsBackend,
   useConnectedApp,
 } from "@/components/use-permissions";
+import { SharingError } from "@/lib/errors";
 import {
+  ALL_DATA,
   describeModes,
+  roleForModes,
   type CategoryAccess,
 } from "@/lib/permissions";
+
+/** A refusal explains itself; anything else is most likely the network. */
+function revokeFailure(error: unknown): string {
+  return error instanceof SharingError
+    ? error.message
+    : "Nothing was changed. Check your connection and try again.";
+}
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -70,11 +80,17 @@ function ConnectedAppDetail() {
       const fresh = await getFreshModel();
       const grants = freshGrantsForCategory(fresh, app.agentId, categoryId);
       await permissionsBackend.revokeGrants(app.agentId, grants);
+      // Undo re-grants the same access, which is only possible when the
+      // revoked modes were exactly a role (never widened to the nearest one),
+      // and not for whole-pod access: a stock CSS root's own ACL has a
+      // partial scope that role writes refuse, so the restore would fail.
+      const canRestore =
+        roleForModes(access.modes) !== undefined && categoryId !== ALL_DATA.id;
       toast.success(
         `${app.name} can no longer ${describeModes(access.modes)} your ${label}.`,
         {
           description: "You can grant access again anytime.",
-          action: {
+          action: canRestore ? {
             label: "Undo",
             onClick: () => {
               // Re-grant against a FRESH context too (the owner WebID / pod
@@ -97,18 +113,18 @@ function ConnectedAppDetail() {
                   toast.error(`Couldn't restore access to your ${label}.`);
                 });
             },
-          },
+          } : undefined,
         },
       );
       reload();
-    } catch {
+    } catch (e) {
       setRemovedCategories((r) => {
         const next = new Set(r);
         next.delete(categoryId);
         return next;
       });
       toast.error(`Couldn't revoke access to your ${label}.`, {
-        description: "Nothing was changed. Check your connection and try again.",
+        description: revokeFailure(e),
       });
     }
   }
@@ -125,9 +141,9 @@ function ConnectedAppDetail() {
         description: "You can grant access again anytime.",
       });
       router.push("/connected-apps");
-    } catch {
+    } catch (e) {
       toast.error(`Couldn't remove ${app.name}'s access.`, {
-        description: "Nothing was changed. Check your connection and try again.",
+        description: revokeFailure(e),
       });
       setBusy(false);
     }
