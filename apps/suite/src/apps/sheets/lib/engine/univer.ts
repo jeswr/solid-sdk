@@ -20,6 +20,12 @@ import {
 } from "@univerjs/preset-sheets-find-replace";
 import UniverPresetSheetsFindReplaceEnUS from "@univerjs/preset-sheets-find-replace/locales/en-US";
 import {
+  InsertHyperLinkOperation,
+  OpenHyperLinkEditPanelOperation,
+  UniverSheetsHyperLinkPreset,
+} from "@univerjs/preset-sheets-hyper-link";
+import UniverPresetSheetsHyperLinkEnUS from "@univerjs/preset-sheets-hyper-link/locales/en-US";
+import {
   SheetsSortService,
   SortRangeCommand,
   SortType,
@@ -29,6 +35,7 @@ import UniverPresetSheetsSortEnUS from "@univerjs/preset-sheets-sort/locales/en-
 import {
   CommandType,
   createUniver,
+  type ICellData,
   type IWorkbookData,
   LocaleType,
   mergeLocales,
@@ -39,6 +46,12 @@ import { type ChartSpec, readCharts, withCharts } from "../charts/spec";
 import { type AnchorDeletions, WorkbookCommentAnchors } from "../comments/anchors";
 import { type CellAnchor, commentStructuralEdit, shiftCellAnchor } from "../comments/selector";
 import type { MountEngine, Snapshot } from "../contract";
+import {
+  presetLinkTarget,
+  sanitizeCellLinks,
+  sanitizeWorkbookLinks,
+  validLink,
+} from "../hyperlinks";
 import { serializeSnapshot } from "../model/snapshot";
 import type { StructuralEdit } from "../refs/model";
 import { indexToColumn } from "../refs/notation";
@@ -112,6 +125,7 @@ export const mountUniver: MountEngine = async (container, options) => {
         UniverPresetSheetsSortEnUS,
         UniverPresetSheetsFilterEnUS,
         UniverPresetSheetsFindReplaceEnUS,
+        UniverPresetSheetsHyperLinkEnUS,
       ),
     },
     darkMode: options.dark,
@@ -133,9 +147,19 @@ export const mountUniver: MountEngine = async (container, options) => {
       UniverSheetsSortPreset(),
       UniverSheetsFilterPreset(),
       UniverSheetsFindReplacePreset(),
+      UniverSheetsHyperLinkPreset({
+        urlHandler: {
+          navigateToOtherWebsite(url) {
+            const safe = validLink(url);
+            if (safe) window.open(safe, "_blank", "noopener,noreferrer");
+          },
+        },
+      }),
     ],
   });
-  let workbook = univerAPI.createWorkbook(options.snapshot as Partial<IWorkbookData>);
+  let workbook = univerAPI.createWorkbook(
+    sanitizeWorkbookLinks(options.snapshot) as Partial<IWorkbookData>,
+  );
   let charts = options.snapshot.charts;
   // Only manual source edits (including deletion/recreation) advance revisions.
   const chartRevisions = new Map<string, number>();
@@ -207,6 +231,35 @@ export const mountUniver: MountEngine = async (container, options) => {
   // they can mutate the workbook or consume undo/redo history while anchors load.
   // Navigation operations/commands and background calculation mutations can still run.
   const loadingGuard = commands.beforeCommandExecuted((command) => {
+    // Native toolbar/context-menu operations bypass the app menu. Guard these
+    // too, including a permission change while the link panel is already open.
+    if (
+      /^sheets\.(command|mutation)\..*hyper-link/.test(command.id) ||
+      /^sheet\.operation\.(insert-hyper-link|open-hyper-link-edit-panel)/.test(command.id)
+    ) {
+      if (readOnly || commentsLoading) throw new CanceledError();
+      const params = command.params as
+        | { link?: { payload: string }; payload?: { payload?: string }; url?: string }
+        | undefined;
+      const url = params?.link?.payload ?? params?.payload?.payload ?? params?.url;
+      if (url !== undefined) {
+        const safe = presetLinkTarget(url);
+        if (!safe) throw new CanceledError();
+        if (params?.link) params.link.payload = safe;
+        if (params?.payload) params.payload.payload = safe;
+        if (params?.url !== undefined) params.url = safe;
+      }
+    }
+    // Clipboard HTML and formula results both reach the cell mutation. Sanitize
+    // here, before the canvas or hyperlink popup can observe an unsafe target.
+    if (command.id === "sheet.mutation.set-range-values") {
+      const params = command.params as {
+        cellValue: Record<number, Record<number, ICellData | null>>;
+      };
+      for (const row of Object.values(params.cellValue))
+        for (const [column, cell] of Object.entries(row))
+          if (cell) row[Number(column)] = sanitizeCellLinks(cell);
+    }
     if (command.type !== CommandType.COMMAND) return;
     if (commentsLoading && !isFilterCommand(command.id) && !NAVIGATION_COMMANDS.has(command.id))
       throw new CanceledError();
@@ -394,7 +447,7 @@ export const mountUniver: MountEngine = async (container, options) => {
     queued = false;
     try {
       univerAPI.disposeUnit(workbook.getId());
-      workbook = univerAPI.createWorkbook(data as Partial<IWorkbookData>);
+      workbook = univerAPI.createWorkbook(sanitizeWorkbookLinks(data) as Partial<IWorkbookData>);
       setEditable();
       anchors.load(data);
       if (newerSnapshot) {
@@ -412,6 +465,21 @@ export const mountUniver: MountEngine = async (container, options) => {
     }
   };
   return {
+    async editLink() {
+      if (readOnly || commentsLoading) return;
+      const cell = workbook.getActiveCell();
+      const link = cell?.getHyperLinks()[0];
+      if (cell && link) {
+        await commands.executeCommand(OpenHyperLinkEditPanelOperation.id, {
+          unitId: workbook.getId(),
+          subUnitId: workbook.getActiveSheet().getSheetId(),
+          row: cell.getRow(),
+          col: cell.getColumn(),
+          customRangeId: link.id,
+          type: "viewing",
+        });
+      } else await commands.executeCommand(InsertHyperLinkOperation.id);
+    },
     sortRange(config) {
       if (readOnly) return { status: "blocked", reason: "This spreadsheet is view only." };
       if (commentsLoading)
