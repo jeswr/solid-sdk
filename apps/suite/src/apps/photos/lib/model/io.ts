@@ -9,8 +9,8 @@ import {
   documentUrl,
   httpIri,
   type Photo,
-  parseAlbum,
   parsePhotos,
+  parseStoredAlbum,
   parseStoredPhoto,
   RestoreReceipt,
   serializePhotos,
@@ -144,7 +144,7 @@ export function photoStorage(fetch: typeof globalThis.fetch, storage: string) {
     },
     async loadAlbum(url: string) {
       const { dataset, etag } = await read(url);
-      return { album: parseAlbum(url, dataset), etag };
+      return { album: parseStoredAlbum(url, dataset), etag };
     },
     async saveAlbum(url: string, album: Album, precondition: Precondition) {
       return write(url, buildAlbum(url, album), precondition);

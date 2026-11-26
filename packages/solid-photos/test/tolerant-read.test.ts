@@ -1,7 +1,16 @@
 // AUTHORED-BY Claude Sonnet 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { expect, it } from "vitest";
-import { buildPhoto, parseAlbum, parsePhoto, parsePhotos, parseStoredPhoto } from "../src/index.js";
+import {
+  addMember,
+  buildAlbum,
+  buildPhoto,
+  parseAlbum,
+  parsePhoto,
+  parsePhotos,
+  parseStoredAlbum,
+  parseStoredPhoto,
+} from "../src/index.js";
 
 const url = "https://pod.example/photos/items/a.ttl";
 const albumUrl = "https://pod.example/photos/albums/a.ttl";
@@ -69,4 +78,40 @@ it.each([
   }
   const gallery = await rdf(`<#it> a s:ImageGallery; s:image <${bad}>.`);
   expect(parseAlbum(albumUrl, gallery)?.coverUrl).toBeUndefined();
+});
+
+it("keeps a language-tagged album name, description and xsd:date across a membership edit", async () => {
+  const dataset = await parseRdf(
+    `@prefix s: <https://schema.org/>. @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+    <#it> a s:ImageGallery; s:name "Holiday"@en; s:description "Trip"@fr; s:dateCreated "2026-02-03"^^xsd:date.`,
+    "text/turtle",
+    { baseIRI: albumUrl },
+  );
+  expect(parseAlbum(albumUrl, dataset)?.name).toBe("");
+  const stored = parseStoredAlbum(albumUrl, dataset);
+  expect(stored).toMatchObject({
+    name: "Holiday",
+    description: "Trip",
+    dateCreated: "2026-02-03T00:00:00.000Z",
+  });
+  if (!stored) throw new Error("expected an album");
+  const edited = addMember(stored, "https://pod.example/photos/items/a.ttl#it");
+  expect(parseAlbum(albumUrl, buildAlbum(albumUrl, edited))).toEqual(edited);
+});
+
+it("reads lenient numbers as finite, non-empty and whole for integer fields, dates as UTC", async () => {
+  const dataset = await rdf(
+    `<#it> a s:Photograph; s:contentUrl <https://pod.example/photos/originals/a.jpg>;
+      s:width ""^^xsd:integer; s:height "INF"^^xsd:double; e:isoSpeedRatings 100.5;
+      e:fNumber "INF"^^xsd:double; e:orientation 6.0;
+      dct:created "2026-01-01T10:00:00"^^xsd:dateTime.`,
+  );
+  const photo = parseStoredPhoto(url, dataset);
+  expect(photo?.exif.pixelWidth).toBeUndefined();
+  expect(photo?.exif.pixelHeight).toBeUndefined();
+  expect(photo?.exif.iso).toBeUndefined();
+  expect(photo?.exif.fNumber).toBeUndefined();
+  expect(photo?.exif.orientation).toBe(6);
+  // A zoneless dateTime is UTC regardless of the runner's TZ, as in the strict reader.
+  expect(photo?.created).toBe("2026-01-01T10:00:00.000Z");
 });

@@ -4,7 +4,7 @@ import { DataFactory, type Store } from "n3";
 import { entities } from "./generated/model.js";
 import { orderedStore } from "./order.js";
 import { documentUrl, httpIri, isoDate, optionalHttpIri } from "./validation.js";
-import { ImageGalleryDoc, ListItemDoc } from "./views.js";
+import { ImageGalleryDoc, ListItemDoc, lenientPhoto } from "./views.js";
 import { RDF_TYPE, SCHEMA } from "./vocab.js";
 
 export { ImageGalleryDoc, ListItemDoc };
@@ -48,11 +48,27 @@ export function buildAlbum(url: string, album: Album): Store {
 }
 
 export function parseAlbum(url: string, dataset: DatasetCore): Album | undefined {
+  return readAlbum(url, dataset, false);
+}
+
+/**
+ * Read an album for write-back. Like {@link parseAlbum}, but name, description,
+ * creation date and cover fall back to the first literal/IRI the strict generated reader
+ * drops (language-tagged text, `xsd:date`, repeated singletons). Use before rebuilding.
+ */
+export function parseStoredAlbum(url: string, dataset: DatasetCore): Album | undefined {
+  return readAlbum(url, dataset, true);
+}
+
+function readAlbum(url: string, dataset: DatasetCore, tolerant: boolean): Album | undefined {
   const subject = `${documentUrl(url)}#it`;
   const core = entities.ImageGallery.parse(subject, dataset);
   if (!core) return undefined;
   const doc = new ImageGalleryDoc(subject, dataset, DataFactory);
-  const cover = optionalHttpIri(core.coverUrl);
+  const lenient = tolerant ? lenientPhoto(subject, dataset) : undefined;
+  const cover = optionalHttpIri(core.coverUrl ?? lenient?.iri(`${SCHEMA}image`));
+  const description = core.description ?? lenient?.text(`${SCHEMA}description`);
+  const created = (core.dateCreated ?? lenient?.date(`${SCHEMA}dateCreated`))?.toISOString();
   const elements = [...doc.elements].map((ref) => new ListItemDoc(ref, dataset, DataFactory));
   const members = elements.length
     ? elements
@@ -71,9 +87,9 @@ export function parseAlbum(url: string, dataset: DatasetCore): Album | undefined
         .map(({ item }) => item)
     : [...(core.legacyMembers ?? [])].sort();
   return {
-    name: core.name ?? "",
-    ...(core.description !== undefined ? { description: core.description } : {}),
-    ...(core.dateCreated ? { dateCreated: core.dateCreated.toISOString() } : {}),
+    name: core.name ?? lenient?.text(`${SCHEMA}name`) ?? "",
+    ...(description !== undefined ? { description } : {}),
+    ...(created ? { dateCreated: created } : {}),
     ...(cover !== undefined ? { coverUrl: cover } : {}),
     members: normaliseMembers(members),
   };

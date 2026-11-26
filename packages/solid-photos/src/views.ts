@@ -213,23 +213,29 @@ export class LenientPhoto extends TermWrapper {
   textSet(predicate: string): string[] {
     return this.literals(predicate);
   }
-  /** First object that is a numeric literal of any numeric datatype. */
-  number(predicate: string): number | undefined {
+  /**
+   * First object that is a finite numeric literal of any numeric datatype with a
+   * non-empty lexical form; `integer` also requires a whole number.
+   */
+  number(predicate: string, integer = false): number | undefined {
     for (const term of this.terms(predicate)) {
       const value = optionalNumber(term, this);
-      if (value !== undefined) return value;
+      if (value !== undefined && (!integer || Number.isInteger(value))) return value;
     }
     return undefined;
   }
-  /** First object that is a valid date or dateTime literal (`xsd:date` included). */
+  /**
+   * First object that is a valid date or dateTime literal (`xsd:date` included). A zoneless
+   * value reads as UTC, like the strict reader.
+   */
   date(predicate: string): Date | undefined {
     for (const term of this.terms(predicate)) {
-      try {
-        const value = LiteralAs.date(new TermWrapper(term, this.dataset, this.factory));
-        if (Number.isFinite(value.getTime())) return value;
-      } catch {
-        // Not a date literal: try the next value.
-      }
+      if (term.termType !== "Literal") continue;
+      const lexical = term.value.trim();
+      if (!lexical) continue;
+      const zoneless = /^\d{4}-\d{2}-\d{2}(T[\d:.]+)?$/.test(lexical);
+      const value = new Date(zoneless && lexical.includes("T") ? `${lexical}Z` : lexical);
+      if (Number.isFinite(value.getTime())) return value;
     }
     return undefined;
   }
@@ -239,9 +245,10 @@ export class LenientPhoto extends TermWrapper {
   }
 }
 function optionalNumber(term: Term, anchor: TermWrapper): number | undefined {
+  if (term.termType !== "Literal" || !term.value.trim()) return undefined;
   try {
     const value = LiteralAs.number(new TermWrapper(term, anchor.dataset, anchor.factory));
-    return Number.isNaN(value) ? undefined : value;
+    return Number.isFinite(value) ? value : undefined;
   } catch {
     return undefined;
   }

@@ -89,7 +89,11 @@ Additional differences outside that oracle are pinned in
   blank ListItem reads retain their original datatype handling as documented above.
 - **Write-back keeps what the strict reads drop:** editing or trashing a photo rebuilds
   the whole document, so the Suite reads through `parseStoredPhoto` /
-  `parsePhotos(url, dataset, { tolerant: true })`. When the strict generated reader
+  `parsePhotos(url, dataset, { tolerant: true })`, and albums through `parseStoredAlbum`
+  (name, description, `dateCreated` and cover fall back the same way, so adding a photo
+  to an album from another tool keeps its language-tagged name and `xsd:date`;
+  `parseAlbum` stays strict). Lenient numbers must be finite, non-empty, and whole for
+  integer fields (ISO, orientation, width, height); a zoneless dateTime reads as UTC. When the strict generated reader
   drops a field, these fall back to the first literal's lexical value (language-tagged
   text, decimal numbers, `xsd:date`, the first value of a repeated singleton, every
   literal keyword), as the hand-written model did; IRIs and blank nodes never become
