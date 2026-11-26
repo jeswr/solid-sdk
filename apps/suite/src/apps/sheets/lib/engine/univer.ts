@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
-import { CanceledError, ICommandService, Rectangle } from "@univerjs/core";
+import { CanceledError, ICommandService, IUndoRedoService, Rectangle } from "@univerjs/core";
 import { UniverSheetsConditionalFormattingPreset } from "@univerjs/preset-sheets-conditional-formatting";
 import UniverPresetSheetsConditionalFormattingEnUS from "@univerjs/preset-sheets-conditional-formatting/locales/en-US";
 import { UniverSheetsCorePreset } from "@univerjs/preset-sheets-core";
@@ -20,6 +20,12 @@ import {
 } from "@univerjs/preset-sheets-find-replace";
 import UniverPresetSheetsFindReplaceEnUS from "@univerjs/preset-sheets-find-replace/locales/en-US";
 import {
+  InsertHyperLinkOperation,
+  OpenHyperLinkEditPanelOperation,
+  UniverSheetsHyperLinkPreset,
+} from "@univerjs/preset-sheets-hyper-link";
+import UniverPresetSheetsHyperLinkEnUS from "@univerjs/preset-sheets-hyper-link/locales/en-US";
+import {
   SheetsSortService,
   SortRangeCommand,
   SortType,
@@ -29,6 +35,7 @@ import UniverPresetSheetsSortEnUS from "@univerjs/preset-sheets-sort/locales/en-
 import {
   CommandType,
   createUniver,
+  type ICellData,
   type IWorkbookData,
   LocaleType,
   mergeLocales,
@@ -36,12 +43,26 @@ import {
 import { SheetInterceptorService, SheetsSelectionsService } from "@univerjs/sheets";
 import { shiftChartRanges } from "../charts/range";
 import { type ChartSpec, readCharts, withCharts } from "../charts/spec";
+import { CollaborationBridge } from "../collaboration/bridge";
+import { type Axes, axes, checkpoint, sheetStates } from "../collaboration/model";
+import {
+  captureAnchorIdentities,
+  identityRange,
+  rangeIdentity,
+  restoreAnchorIdentities,
+} from "../collaboration/ranges";
 import { type AnchorDeletions, WorkbookCommentAnchors } from "../comments/anchors";
 import { type CellAnchor, commentStructuralEdit, shiftCellAnchor } from "../comments/selector";
 import type { MountEngine, Snapshot } from "../contract";
+import {
+  presetLinkTarget,
+  sanitizeCellLinks,
+  sanitizeWorkbookLinks,
+  validLink,
+} from "../hyperlinks";
 import { serializeSnapshot } from "../model/snapshot";
-import type { StructuralEdit } from "../refs/model";
-import { indexToColumn } from "../refs/notation";
+import type { AxisRange, StructuralEdit } from "../refs/model";
+import { indexToColumn, parseA1 } from "../refs/notation";
 import { parseCsv } from "../univer-spike/csv";
 import { workbookToCsv } from "../univer-spike/workbook";
 
@@ -89,7 +110,13 @@ const NAVIGATION_COMMANDS = new Set([
 interface StructuralOperation {
   chartSources?: {
     sheetId: string;
-    sources: { id: string; sheetId: string; range: ChartSpec["range"]; revision: number }[];
+    sources: {
+      id: string;
+      sheetId: string;
+      range: ChartSpec["range"];
+      revision: number;
+      identity?: Axes | undefined;
+    }[];
   };
   redo: AnchorDeletions[];
   undo: AnchorDeletions[];
@@ -112,13 +139,15 @@ export const mountUniver: MountEngine = async (container, options) => {
         UniverPresetSheetsSortEnUS,
         UniverPresetSheetsFilterEnUS,
         UniverPresetSheetsFindReplaceEnUS,
+        UniverPresetSheetsHyperLinkEnUS,
       ),
     },
     darkMode: options.dark,
     presets: [
       UniverSheetsCorePreset({
         container,
-        header: !options.compact,
+        // Univer 1.2 renders the formula bar inside the header; compact hides only the ribbon.
+        header: true,
         toolbar: !options.compact,
         formulaBar: true,
         footer: {
@@ -133,9 +162,19 @@ export const mountUniver: MountEngine = async (container, options) => {
       UniverSheetsSortPreset(),
       UniverSheetsFilterPreset(),
       UniverSheetsFindReplacePreset(),
+      UniverSheetsHyperLinkPreset({
+        urlHandler: {
+          navigateToOtherWebsite(url) {
+            const safe = validLink(url);
+            if (safe) window.open(safe, "_blank", "noopener,noreferrer");
+          },
+        },
+      }),
     ],
   });
-  let workbook = univerAPI.createWorkbook(options.snapshot as Partial<IWorkbookData>);
+  let workbook = univerAPI.createWorkbook(
+    sanitizeWorkbookLinks(options.snapshot) as Partial<IWorkbookData>,
+  );
   let charts = options.snapshot.charts;
   // Only manual source edits (including deletion/recreation) advance revisions.
   const chartRevisions = new Map<string, number>();
@@ -170,6 +209,105 @@ export const mountUniver: MountEngine = async (container, options) => {
   const listeners = new Set<() => void>();
   const valueListeners = new Set<() => void>();
   const anchors = new WorkbookCommentAnchors(options.snapshot);
+  type Identity = { sheetId: string; rowId: string; colId: string };
+  const identities = { anchors: new Map<string, Identity>(), drafts: new Map<string, Identity>() };
+  let identityRevision = -1;
+  const chartIdentities = new Map<
+    string,
+    { sheetId: string; rowIds: string[]; colIds: string[]; revision: number; lost: boolean }
+  >();
+  let beforePositions: Map<string, Axes> | undefined;
+  const metadata = (phase: "before" | "after", positions: Map<string, Axes>) => {
+    if (phase === "before")
+      beforePositions = new Map(
+        [...positions].map(([id, position]) => [
+          id,
+          { rowIds: [...position.rowIds], colIds: [...position.colIds] },
+        ]),
+      );
+    const checkpoint = anchors.identitySnapshot();
+    if (checkpoint.revision !== identityRevision) {
+      identities.anchors.clear();
+      identities.drafts.clear();
+      chartIdentities.clear();
+      identityRevision = checkpoint.revision;
+    }
+    const restore: AnchorDeletions = { revision: checkpoint.revision, anchors: {}, drafts: {} };
+    for (const kind of ["anchors", "drafts"] as const) {
+      if (phase === "before") {
+        for (const [id, anchor] of Object.entries(checkpoint[kind])) {
+          const axes = positions.get(anchor.sheetId);
+          const ref = parseA1(anchor.cell);
+          const rowId = axes?.rowIds[(ref.rows as AxisRange).start.index - 1];
+          const colId = axes?.colIds[(ref.columns as AxisRange).start.index - 1];
+          if (rowId && colId) identities[kind].set(id, { sheetId: anchor.sheetId, rowId, colId });
+        }
+      } else {
+        for (const [id, identity] of identities[kind]) {
+          const axes = positions.get(identity.sheetId) as Axes;
+          const row = axes.rowIds.indexOf(identity.rowId);
+          const col = axes.colIds.indexOf(identity.colId);
+          if (row >= 0 && col >= 0) {
+            const anchor = {
+              sheetId: identity.sheetId,
+              cell: `${indexToColumn(col + 1)}${row + 1}`,
+              deleted: false,
+            };
+            if (kind === "drafts") restore.drafts[id] = anchor;
+            else restore.anchors[id] = { sheetId: anchor.sheetId, cell: anchor.cell };
+          }
+        }
+      }
+    }
+    if (phase === "after") anchors.revive(restore);
+    const current = readCharts({ charts } as Snapshot).charts;
+    charts =
+      charts === undefined
+        ? charts
+        : withCharts(
+            {},
+            current.map((chart) => {
+              let identity = chartIdentities.get(chart.id);
+              const revision = chartRevisions.get(chart.id) ?? 0;
+              if (identity?.revision !== revision) {
+                chartIdentities.delete(chart.id);
+                identity = undefined;
+              }
+              const axes = positions.get(chart.sheetId);
+              if (!axes) return chart;
+              if (phase === "before" && !identity?.lost && chart.range !== null) {
+                const ref = parseA1(chart.range);
+                identity = {
+                  sheetId: chart.sheetId,
+                  rowIds: [
+                    axes.rowIds[(ref.rows as AxisRange).start.index - 1] as string,
+                    axes.rowIds[(ref.rows as AxisRange).end.index - 1] as string,
+                  ],
+                  colIds: [
+                    axes.colIds[(ref.columns as AxisRange).start.index - 1] as string,
+                    axes.colIds[(ref.columns as AxisRange).end.index - 1] as string,
+                  ],
+                  revision,
+                  lost: false,
+                };
+                chartIdentities.set(chart.id, identity);
+              }
+              if (phase === "after" && identity) {
+                const rows = identity.rowIds.map((id) => axes.rowIds.indexOf(id));
+                const cols = identity.colIds.map((id) => axes.colIds.indexOf(id));
+                if ([...rows, ...cols].some((index) => index < 0)) identity.lost = true;
+                else if (identity.lost) {
+                  identity.lost = false;
+                  return {
+                    ...chart,
+                    range: `${indexToColumn(Math.min(...cols) + 1)}${Math.min(...rows) + 1}:${indexToColumn(Math.max(...cols) + 1)}${Math.max(...rows) + 1}`,
+                  };
+                }
+              }
+              return chart;
+            }),
+          ).charts;
+  };
   // Keep the actual deletion records carried by native undo/redo. Late discovery
   // fills those same records so a future inverse can revive the newly found root.
   let savedRevision = options.workbookRevision;
@@ -185,6 +323,7 @@ export const mountUniver: MountEngine = async (container, options) => {
     edit: StructuralEdit;
     deleted: AnchorDeletions;
     inverse: AnchorDeletions | undefined;
+    beforeAxes: Axes | undefined;
   }[] = [];
   let disposed = false;
   let loading = false;
@@ -203,10 +342,59 @@ export const mountUniver: MountEngine = async (container, options) => {
     });
   };
   const commands = injector.get(ICommandService);
+  const positionOf = (sheetId: string): Axes | undefined => {
+    const state = options.collaboration && sheetStates(options.collaboration.doc).get(sheetId);
+    return state ? axes(state) : undefined;
+  };
+  const stableRange = (sheetId: string, range: string | null) =>
+    rangeIdentity(positionOf(sheetId), range);
+  const resolveRange = (sheetId: string, identity: Axes) =>
+    identityRange(positionOf(sheetId), identity);
+  const anchorCheckpoints = new WeakMap<AnchorDeletions, Map<string, Axes>>();
+  const captureAnchors = (deleted: AnchorDeletions, fromCollab = false) => {
+    if (!options.collaboration) return;
+    const known = (kind: "anchors" | "drafts", id: string) =>
+      fromCollab ? identities[kind].get(id) : undefined;
+    anchorCheckpoints.set(deleted, captureAnchorIdentities(deleted, known, positionOf));
+  };
+  const restoreAnchors = (deleted: AnchorDeletions) => {
+    const stable = anchorCheckpoints.get(deleted);
+    return stable ? restoreAnchorIdentities(deleted, stable, positionOf) : deleted;
+  };
+  let collaboration: CollaborationBridge | undefined;
   // setEditable does not guard native history replay. Cancel user commands before
   // they can mutate the workbook or consume undo/redo history while anchors load.
   // Navigation operations/commands and background calculation mutations can still run.
   const loadingGuard = commands.beforeCommandExecuted((command) => {
+    // Native toolbar/context-menu operations bypass the app menu. Guard these
+    // too, including a permission change while the link panel is already open.
+    if (
+      /^sheets\.(command|mutation)\..*hyper-link/.test(command.id) ||
+      /^sheet\.operation\.(insert-hyper-link|open-hyper-link-edit-panel)/.test(command.id)
+    ) {
+      if (readOnly || commentsLoading) throw new CanceledError();
+      const params = command.params as
+        | { link?: { payload: string }; payload?: { payload?: string }; url?: string }
+        | undefined;
+      const url = params?.link?.payload ?? params?.payload?.payload ?? params?.url;
+      if (url !== undefined) {
+        const safe = presetLinkTarget(url);
+        if (!safe) throw new CanceledError();
+        if (params?.link) params.link.payload = safe;
+        if (params?.payload) params.payload.payload = safe;
+        if (params?.url !== undefined) params.url = safe;
+      }
+    }
+    // Clipboard HTML and formula results both reach the cell mutation. Sanitize
+    // here, before the canvas or hyperlink popup can observe an unsafe target.
+    if (command.id === "sheet.mutation.set-range-values") {
+      const params = command.params as {
+        cellValue: Record<number, Record<number, ICellData | null>>;
+      };
+      for (const row of Object.values(params.cellValue ?? {}))
+        for (const [column, cell] of Object.entries(row))
+          if (cell) row[Number(column)] = sanitizeCellLinks(cell);
+    }
     if (command.type !== CommandType.COMMAND) return;
     if (commentsLoading && !isFilterCommand(command.id) && !NAVIGATION_COMMANDS.has(command.id))
       throw new CanceledError();
@@ -239,6 +427,7 @@ export const mountUniver: MountEngine = async (container, options) => {
               sheetId: chart.sheetId,
               range: chart.range,
               revision: chartRevisions.get(chart.id) ?? 0,
+              identity: stableRange(chart.sheetId, chart.range),
             }));
         }
       } else {
@@ -253,7 +442,12 @@ export const mountUniver: MountEngine = async (container, options) => {
               const source = sources.get(chart.id);
               return source?.sheetId === chart.sheetId &&
                 source.revision === (chartRevisions.get(chart.id) ?? 0)
-                ? { ...chart, range: source.range }
+                ? {
+                    ...chart,
+                    range: source.identity
+                      ? resolveRange(source.sheetId, source.identity)
+                      : source.range,
+                  }
                 : chart;
             }),
           ).charts;
@@ -322,7 +516,7 @@ export const mountUniver: MountEngine = async (container, options) => {
     }
     if (
       event.type !== CommandType.MUTATION ||
-      readOnly ||
+      (readOnly && !event.options?.fromCollab) ||
       loading ||
       event.options?.fromChangeset ||
       RECOMPUTE_MUTATIONS.has(event.id) ||
@@ -334,21 +528,55 @@ export const mountUniver: MountEngine = async (container, options) => {
     if (event.options?.fromFormula && !editedSinceLoad) return;
     const edit = commentStructuralEdit(event.id, event.params);
     if (edit) {
+      // Filters stay in workbook.json, outside Yjs: collaborators choose their
+      // own hidden rows. Remote mutations bypass Univer's filter command
+      // interceptors, so clear this sheet's local filter rather than retain a
+      // stale range/criteria after row or column insertion, removal or movement.
+      if (event.options?.fromCollab && commands.hasCommand("sheet.mutation.remove-filter")) {
+        // View-only exports/unlock use the saved baseline, so invalidate its
+        // affected sheet too while preserving saved filters on other sheets.
+        if (readOnly && Array.isArray(filterBaseline))
+          filterBaseline = filterBaseline.map((resource) => {
+            if (
+              !resource ||
+              typeof resource !== "object" ||
+              Array.isArray(resource) ||
+              resource.name !== SHEET_FILTER_SNAPSHOT_ID ||
+              typeof resource.data !== "string"
+            )
+              return resource;
+            const filters = JSON.parse(resource.data) as Record<string, unknown>;
+            delete filters[edit.sheet];
+            return { ...resource, data: JSON.stringify(filters) };
+          });
+        commands.syncExecuteCommand(
+          "sheet.mutation.remove-filter",
+          { unitId: workbook.getId(), subUnitId: edit.sheet },
+          { fromCollab: true },
+        );
+      }
       if (charts !== undefined) {
         charts = withCharts(
           {},
           shiftChartRanges(readCharts({ charts }).charts, edit.sheet, edit),
         ).charts;
       }
+      const state = options.collaboration && sheetStates(options.collaboration.doc).get(edit.sheet);
+      const beforeAxes = event.options?.fromCollab
+        ? beforePositions?.get(edit.sheet)
+        : state
+          ? axes(state)
+          : undefined;
       const deleted = anchors.shift(edit);
+      captureAnchors(deleted, event.options?.fromCollab);
       let inverse: AnchorDeletions | undefined;
       if (activeOperation) {
         const { operation, direction } = activeOperation;
         operation[direction].push(deleted);
         inverse = operation[direction === "undo" ? "redo" : "undo"].pop();
-        if (inverse) anchors.revive(inverse);
+        if (inverse) anchors.revive(restoreAnchors(inverse));
       }
-      structuralLog.push({ revision: savedRevision, edit, deleted, inverse });
+      structuralLog.push({ revision: savedRevision, edit, deleted, inverse, beforeAxes });
       for (const listener of structures) listener(edit);
     }
     editedSinceLoad = true;
@@ -380,6 +608,9 @@ export const mountUniver: MountEngine = async (container, options) => {
     Object.assign(data, anchors.snapshot());
     // Univer drops unknown top-level metadata when saving its canvas model.
     if (charts !== undefined) data.charts = JSON.parse(JSON.stringify(charts));
+    if (options.collaboration)
+      data.collaboration =
+        options.collaboration.checkpoint?.() ?? checkpoint(options.collaboration.doc);
     serializeSnapshot(data);
     snapshotCursors.set(data, { generation: logGeneration, cursor: structuralLog.length });
     return data;
@@ -394,7 +625,7 @@ export const mountUniver: MountEngine = async (container, options) => {
     queued = false;
     try {
       univerAPI.disposeUnit(workbook.getId());
-      workbook = univerAPI.createWorkbook(data as Partial<IWorkbookData>);
+      workbook = univerAPI.createWorkbook(sanitizeWorkbookLinks(data) as Partial<IWorkbookData>);
       setEditable();
       anchors.load(data);
       if (newerSnapshot) {
@@ -410,8 +641,39 @@ export const mountUniver: MountEngine = async (container, options) => {
     } finally {
       loading = false;
     }
+    if (newerSnapshot) collaboration?.reset(data);
   };
+  if (options.collaboration) {
+    collaboration = new CollaborationBridge(
+      options.collaboration.doc,
+      commands,
+      injector.get(IUndoRedoService),
+      snapshot,
+      () => !readOnly && !commentsLoading,
+      options.snapshot,
+      (styles) => {
+        for (const [id, style] of styles)
+          workbook.getWorkbook().getStyles().addCustomStyle(id, style);
+      },
+      metadata,
+    );
+  }
   return {
+    async editLink() {
+      if (readOnly || commentsLoading) return;
+      const cell = workbook.getActiveCell();
+      const link = cell?.getHyperLinks()[0];
+      if (cell && link) {
+        await commands.executeCommand(OpenHyperLinkEditPanelOperation.id, {
+          unitId: workbook.getId(),
+          subUnitId: workbook.getActiveSheet().getSheetId(),
+          row: cell.getRow(),
+          col: cell.getColumn(),
+          customRangeId: link.id,
+          type: "viewing",
+        });
+      } else await commands.executeCommand(InsertHyperLinkOperation.id);
+    },
     sortRange(config) {
       if (readOnly) return { status: "blocked", reason: "This spreadsheet is view only." };
       if (commentsLoading)
@@ -540,10 +802,25 @@ export const mountUniver: MountEngine = async (container, options) => {
           ? (savedCursors.get(revision) ?? (revision === mountRevision ? 0 : -1))
           : -1;
         if (position === "snapshot" && start >= 0) {
-          for (const { edit, deleted, inverse } of structuralLog.slice(start)) {
+          for (const { edit, deleted, inverse, beforeAxes } of structuralLog.slice(start)) {
             const next = shiftCellAnchor(anchor, edit);
-            if (!anchor.deleted && next.deleted)
+            if (!anchor.deleted && next.deleted) {
               deleted.anchors[id] = { sheetId: anchor.sheetId, cell: anchor.cell };
+              // Discovery may follow a failed initial list. Fill the native history
+              // record with the identities at deletion time, including removed IDs.
+              const ref = parseA1(anchor.cell);
+              const rowId = beforeAxes?.rowIds[(ref.rows as AxisRange).start.index - 1];
+              const colId = beforeAxes?.colIds[(ref.columns as AxisRange).start.index - 1];
+              if (rowId && colId) {
+                anchorCheckpoints.get(deleted)?.set(`anchors:${id}`, {
+                  rowIds: [rowId],
+                  colIds: [colId],
+                });
+                // Remote undo restores by identity, including roots discovered
+                // only after their row/column was removed on another replica.
+                identities.anchors.set(id, { sheetId: anchor.sheetId, rowId, colId });
+              }
+            }
             anchor = next;
             const revived = inverse?.anchors[id];
             if (anchor.deleted && revived) anchor = { ...revived, deleted: false };
@@ -626,6 +903,7 @@ export const mountUniver: MountEngine = async (container, options) => {
       // CSV import replaces canvas state, but unseen selectors still refer to
       // the mounted snapshot. Only an external snapshot reload resets the log.
       load(data as unknown as Snapshot, false);
+      collaboration?.importSheet(data as unknown as Snapshot, id);
       workbook.setActiveSheet(id);
       editedSinceLoad = true;
       notify();
@@ -634,10 +912,11 @@ export const mountUniver: MountEngine = async (container, options) => {
     setDark(dark) {
       univerAPI.toggleDarkMode(dark);
     },
-    setReadOnly(value) {
+    setReadOnly(value, collaborationReadOnly = value) {
       const previous = readOnly;
       const data = snapshot();
       readOnly = value;
+      if (options.collaboration) options.collaboration.readOnly = collaborationReadOnly;
       if (!previous && value) filterBaseline = data.resources;
       if (previous && !value) load(data, false);
       ++generation;
@@ -646,6 +925,7 @@ export const mountUniver: MountEngine = async (container, options) => {
     },
     dispose() {
       disposed = true;
+      collaboration?.dispose();
       ++generation;
       subscription.dispose();
       calculation.dispose();

@@ -1,7 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { refuseRedirects } from "@jeswr/guarded-fetch";
 import {
   Button,
   Dialog,
@@ -13,6 +12,7 @@ import {
   Popover,
   PopoverAnchor,
   PopoverContent,
+  PopoverTrigger,
   Toolbar,
   toast,
 } from "@jeswr/suite-ui";
@@ -21,44 +21,41 @@ import {
   Archive,
   ArchiveRestore,
   Bold,
-  FileText,
   Heading,
   ImagePlus,
   Italic,
   Link as LinkIcon,
   List,
   ListTodo,
+  MoreHorizontal,
   Pin,
   PinOff,
   Share2,
   Trash2,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ImageUpload } from "@/apps/docs/components/image-upload";
 import { imageTransfer, type RichImageTransfer } from "@/apps/docs/editor/image-transfer";
 import { validateImage, validLink } from "@/apps/docs/lib/editor/logic";
-import { buildDocument, parseDocument } from "@/apps/docs/lib/model/document";
-import { ResourceWriteError } from "@/apps/docs/lib/model/errors";
-import { writeRdf } from "@/apps/docs/lib/model/rdf-io";
-import { createDocsStore, type StoredDocument } from "@/apps/docs/lib/model/store";
-import { PREFIXES } from "@/apps/docs/lib/model/vocab";
 import { ChipEditorTools, suiteChipExtension } from "@/components/chips";
 import { SaveTemplateDialog } from "@/components/templates/save-template-dialog";
-import { encodeRef } from "@/lib/refs";
 import { notesExtensions } from "../editor/extensions";
 import { notesMediaContainer } from "../lib/images";
 import { NoteMoveBlockedError } from "../lib/model/errors";
+import type { NoteRevision } from "../lib/model/note";
 import type { StoredNote } from "../lib/model/store";
 import { checklistItems } from "../lib/ui/checklist";
 import { getPendingDrafts } from "../state/draft-registry";
 import { useNotesContext } from "../state/notes-context";
 import { offerReminderPermission } from "../state/reminders";
 import { useNoteDraft } from "../state/use-note-draft";
-import { ColourPicker, ConfirmDialog, LabelChips, LabelPicker } from "./controls";
+import { ColourPicker, LabelChips, LabelPicker } from "./controls";
+import { NoteDocsActions } from "./note-docs-actions";
+import { NotesAvailability } from "./notes-states";
 import { ReminderChip, ReminderPicker } from "./reminder-picker";
 import { hasOpenItems, SendToTasksDialog } from "./send-to-tasks";
 import { ShareNote } from "./share-note";
+import { NoteVersionHistory, restoredTitle } from "./version-history";
 
 export function NoteDialog({ note }: { note: StoredNote }) {
   const {
@@ -84,13 +81,11 @@ export function NoteDialog({ note }: { note: StoredNote }) {
   const [, selectionChanged] = useState(0);
   const [busy, setBusy] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreButton = useRef<HTMLButtonElement>(null);
   const actionPending = useRef(false);
-  // Keep the destination across failed moves and dismissed confirmations.
-  const conversions = useRef(
-    new Map<string, { document: StoredDocument; title: string; body: string }>(),
-  );
   const [sharing, setSharing] = useState<StoredNote>();
-  const [confirmDocs, setConfirmDocs] = useState(false);
   const [sendingTasks, setSendingTasks] = useState(false);
   const checklist = useMemo(() => checklistItems(draft.body), [draft.body]);
   const [image, setImage] = useState<{ file: File | null; transfer?: RichImageTransfer }>();
@@ -101,9 +96,10 @@ export function NoteDialog({ note }: { note: StoredNote }) {
   const [linkError, setLinkError] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const titleInput = useRef<HTMLInputElement>(null);
-  const router = useRouter();
   const trashed = note.location === "trashed";
-  const readOnly = trashed || busy || !!viewOnly;
+  const readOnly = trashed || busy || !!viewOnly || historyOpen;
+  const canRestore = useRef(false);
+  canRestore.current = !trashed && !viewOnly;
   const handler = useRef(change);
   handler.current = change;
   const editor = useEditor(
@@ -185,6 +181,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
     actionPending.current = false;
     const locked =
       trashed ||
+      historyOpen ||
       note.readOnly ||
       getPendingDrafts(session.webId).get(note.url)?.status === "read-only";
     if (titleInput.current) titleInput.current.readOnly = !!locked;
@@ -228,6 +225,36 @@ export function NoteDialog({ note }: { note: StoredNote }) {
       unlock();
     }
   };
+  const restoreVersion = async (revision: NoteRevision) => {
+    if (!canRestore.current || !lock()) throw new Error("This note can't be restored.");
+    try {
+      // Flush through the shared registry before replacing the local draft. Its
+      // writer preserves normal ETag conflicts, permission changes and retry recovery.
+      const saved = await flush();
+      if (!canRestore.current || saved.readOnly) throw new Error("This note is view only.");
+      change({
+        title: restoredTitle(revision.title, saved.title),
+        body: revision.body,
+        preserveCurrent: true,
+      });
+      await flush();
+      setHistoryOpen(false);
+    } finally {
+      unlock();
+    }
+  };
+  const versionHistoryButton = (
+    <Button
+      variant="ghost"
+      disabled={trashed || busy}
+      onClick={() => {
+        setHistoryOpen(true);
+        setMoreOpen(false);
+      }}
+    >
+      Version history
+    </Button>
+  );
   const age = Math.max(0, Math.floor((now - Date.parse(modified ?? "")) / 60_000));
   const relative =
     !Number.isFinite(age) || age < 1
@@ -323,6 +350,7 @@ export function NoteDialog({ note }: { note: StoredNote }) {
     >
       <DialogContent
         className="notes-dialog"
+        aria-hidden={historyOpen || undefined}
         data-note-colour={prefs.colours[note.url] ?? "default"}
         showCloseButton={false}
         onOpenAutoFocus={(event) => {
@@ -340,10 +368,13 @@ export function NoteDialog({ note }: { note: StoredNote }) {
       >
         <DialogTitle className="sr-only">{viewOnly ? "View note" : "Edit note"}</DialogTitle>
         <DialogDescription className="sr-only">
-          {viewOnly
-            ? "View only. Your local changes remain recoverable."
-            : "Your changes save automatically to your pod."}
+          {trashed
+            ? "Restore this note to edit it."
+            : viewOnly
+              ? "View only. Your local changes remain recoverable."
+              : "Your changes save automatically to your pod."}
         </DialogDescription>
+        <NotesAvailability trashed={trashed} />
         <Input
           ref={titleInput}
           className="notes-title-input"
@@ -479,6 +510,29 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           <LabelChips links={false} labels={draft.labels} />
           <ReminderChip value={note.reminder} now={new Date(now)} />
           <div className="notes-dialog-actions">
+            {(viewOnly || trashed) && (
+              <Popover open={moreOpen} onOpenChange={setMoreOpen}>
+                <PopoverTrigger asChild>
+                  <IconButton
+                    ref={moreButton}
+                    label="More note actions"
+                    variant="ghost"
+                    disabled={busy}
+                  >
+                    <MoreHorizontal size={18} aria-hidden="true" />
+                  </IconButton>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="notes-popover notes-more-menu"
+                  aria-label="More note actions"
+                  onCloseAutoFocus={(event) => {
+                    if (historyOpen) event.preventDefault();
+                  }}
+                >
+                  {versionHistoryButton}
+                </PopoverContent>
+              </Popover>
+            )}
             {viewOnly ? null : trashed ? (
               <Button
                 variant="outline"
@@ -562,15 +616,19 @@ export function NoteDialog({ note }: { note: StoredNote }) {
                 >
                   <Trash2 size={18} aria-hidden="true" />
                 </IconButton>
-                <Button
-                  className="notes-open-docs"
-                  variant="ghost"
+                <NoteDocsActions
                   disabled={busy}
-                  onClick={() => setConfirmDocs(true)}
+                  run={act}
+                  onCopied={unlock}
+                  open={moreOpen}
+                  onOpenChange={setMoreOpen}
+                  triggerRef={moreButton}
+                  onCloseAutoFocus={(event) => {
+                    if (historyOpen) event.preventDefault();
+                  }}
                 >
-                  <FileText size={16} aria-hidden="true" />
-                  Open in Docs
-                </Button>
+                  {versionHistoryButton}
+                </NoteDocsActions>
                 {hasOpenItems(checklist) && (
                   <Button variant="ghost" disabled={busy} onClick={() => setSendingTasks(true)}>
                     <ListTodo size={16} aria-hidden="true" />
@@ -617,6 +675,18 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           </div>
         </footer>
       </DialogContent>
+      {historyOpen && (
+        <NoteVersionHistory
+          revisions={note.revisions}
+          current={draft}
+          readOnly={!!viewOnly || trashed}
+          restore={restoreVersion}
+          close={() => setHistoryOpen(false)}
+          menu={moreButton}
+          http={session.fetch}
+          podRoot={session.storageUrl}
+        />
+      )}
       {sharing && (
         <ShareNote
           note={sharing}
@@ -633,72 +703,6 @@ export function NoteDialog({ note }: { note: StoredNote }) {
           noteKey={note.created ?? note.url}
           session={session}
           close={() => setSendingTasks(false)}
-        />
-      )}
-      {confirmDocs && (
-        <ConfirmDialog
-          title="Open in Docs?"
-          description="This note moves to Trash in Notes, and you can restore it from there."
-          close={() => setConfirmDocs(false)}
-          confirm={() =>
-            act(async (saved) => {
-              await store.assertMovable(saved);
-              let conversion = conversions.current.get(saved.url);
-              const input = {
-                title: saved.title || "Untitled document",
-                body: saved.body,
-                format: "text/html",
-              };
-              if (
-                conversion &&
-                (conversion.title !== saved.title || conversion.body !== saved.body)
-              ) {
-                const { document } = conversion;
-                const dataset = buildDocument(document.url, {
-                  ...document.data,
-                  ...input,
-                  priorRevisions: document.data.revisions,
-                  editor: session.webId,
-                });
-                try {
-                  const { etag } = await writeRdf(document.url, dataset, {
-                    etag: document.etag,
-                    fetchImpl: refuseRedirects(session.fetch),
-                    prefixes: PREFIXES,
-                  });
-                  conversion = {
-                    document: {
-                      url: document.url,
-                      etag,
-                      data: parseDocument(document.url, dataset) as StoredDocument["data"],
-                    },
-                    title: saved.title,
-                    body: saved.body,
-                  };
-                } catch (error) {
-                  if (!(error instanceof ResourceWriteError && error.status === 412)) throw error;
-                  // Someone edited the created document. Preserve it and allocate a fresh one.
-                  conversion = undefined;
-                }
-              }
-              if (!conversion) {
-                const docs = createDocsStore({
-                  fetchImpl: session.fetch,
-                  podRoot: session.storageUrl,
-                  webId: session.webId,
-                });
-                conversion = {
-                  document: await docs.create(input),
-                  title: saved.title,
-                  body: saved.body,
-                };
-              }
-              conversions.current.set(saved.url, conversion);
-              await move(saved, "trash");
-              router.push(`/docs/d/${encodeRef(conversion.document.url)}`);
-              conversions.current.delete(saved.url);
-            })
-          }
         />
       )}
       {savingTemplate && (

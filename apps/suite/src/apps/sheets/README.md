@@ -22,11 +22,27 @@ and discarded when Write is restored. That transition also clears local undo his
 The initial comments-loading lock blocks sort and replacement; find and filter remain
 available.
 
+Edit → Insert or edit link and Ctrl/Cmd+K in the grid open the cell link editor.
+The ribbon and a linked cell's popup also offer link editing and removal. Links display
+their label inside the cell and remain clickable in view-only workbooks. Editing and
+removal are blocked while comments load or Write access is unavailable, including native
+commands issued from an already-open popup.
+
+Sheets reuses Docs' `validLink` policy: only absolute HTTP, HTTPS and mailto URLs without
+credentials or embedded controls are allowed. Links open in a new tab with
+`noopener,noreferrer`, including links to other suite documents. Unsafe link targets on
+insert/update are refused; pasted rich text and stored snapshots with unsafe links become
+plain cell text before rendering. A cell containing any unsafe rich-text link is flattened
+as a unit, keeping its visible label. Workbook snapshots retain safe links through normal
+save, reload and copy. CSV exports use link URL text instead of its label; CSV imports keep
+all fields as text, including formula-looking fields. XLSX import/export keeps visible
+labels but omits hyperlink relationships, as documented in `lib/xlsx/README.md`.
+
 The editor and list menu open the shell's sharing dialog for the workbook container.
 WAC grants update both `acl:accessTo` and `acl:default`, covering metadata, the engine
 snapshot, sheet projections and versions that inherit this policy. Existing member ACLs
-remain authoritative. Sharing supports viewers, editors and public links; it adds no
-realtime collaboration. Unsupported ACL shapes and ACP fail closed. A missing own ACL
+remain authoritative. Sharing supports viewers, editors and public links.
+Unsupported ACL shapes and ACP fail closed. A missing own ACL
 is created conditionally only after verifying owner-only inherited access, or for the
 isolated demo pod. Inherited policies with other collaborators must be managed at their source.
 Verification includes both `acl:default` and legacy `acl:defaultForNew` grants. ACP discovery
@@ -57,14 +73,22 @@ truncates long titles and save messages to leave room for Share.
 
 The list and editor chrome use native links, labelled controls and suite dialogs. The grid
 is engine-rendered: canvas cell contents and cell navigation are not fully exposed to screen
-readers. Its labelled region includes a hidden explanation. The browser accessibility tests
-cover the list and editor chrome, excluding the Univer container; they do not certify grid
-accessibility. CSV export provides a text representation of the active sheet's values.
+readers. Its labelled region includes a hidden explanation. The browser accessibility specs
+audit the rendered list, editor and dialog DOM at 375, 768 and 1280 px in light and dark
+themes, failing on serious or critical axe violations. Automated DOM audits do not certify
+canvas cell navigation. CSV export provides a text representation of the active sheet's values.
+
+The list searches spreadsheet names without changing stored data. First-run, empty search,
+load-error and missing-workbook views use the suite's shared state components. Retry repeats
+the failed read; clearing search restores the list. Offline and view-only notices explain
+when a connection or Write access is needed. The Playwright flows live in `e2e/sheets/`,
+use the remembered demo session and persistent demo pod, and import `e2e/fixtures/sheets-import.csv`.
 
 Autosave serializes all writes, debounces edits for one second, holds edits offline, retries
-on reconnection, and stops on conflicts until a version is chosen. Visibility/pagehide and
-unmount flushes are best effort under the current service contract; browser termination is
-not a durable offline queue, and the contract has no keepalive option.
+on reconnection, and stops on conflicts until a version is chosen. Collaborative edits also
+have a durable IndexedDB mirror scoped to the signed-in WebID and workbook URL. Reopening
+merges that mirror with the pod log and re-sends unconfirmed edits. Snapshot metadata and
+other snapshot-only features retain best-effort teardown saves; the contract has no keepalive option.
 
 `window.__sheetsEngine` exists only in builds with `NEXT_PUBLIC_DEV_FIXTURES=1` for browser
 round-trip tests. The list route never imports the Univer preset or its facade at runtime.
@@ -146,8 +170,65 @@ Anyone with inherited Write can modify or delete resources directly, including
 another creator's comments. Servers enforce resource permissions, not this client
 policy. This implementation does not add signatures.
 
-Comments refresh when the window gains focus or via Refresh comments. Unsupported
-structural operations such as cut/move are outside the row/column mutation bridge.
+Comments refresh when the window gains focus or via Refresh comments. Cutting
+rectangular cell ranges remains outside the row/column mutation bridge.
+
+## Collaboration
+
+Cell values, formulas and styles, and whole-row/column insertions, removals and moves
+merge through a Yjs document. Each sheet has ordered `Y.Array<string>` row and column
+IDs and a cell `Y.Map` keyed by `${rowId}|${colId}`. IDs are random and remain attached
+to their cells through structural edits. Concurrent inserts use Yjs order; concurrent
+writes to one cell converge to Yjs' deterministic winner. Formula references, including
+range endpoints, absolute/mixed references and references to other workbook sheets, store
+stable sheet/row/column IDs. They resolve to A1 against the merged structure; deleted targets
+resolve to `#REF!`. String literals and function names remain unchanged. Style definitions
+travel with their IDs so another editor can render them.
+
+`@jeswr/y-solid` persists binary updates in an append-only `<workbook>/collab/` container
+beside `workbook.json`, within the workbook's existing scope and inherited access policy.
+The log hydrates before the grid mounts. An empty log is initialized from `workbook.json`
+in one transaction; a create-only canonical seed lets racing first-openers share the same
+IDs. Later loads use Yjs for cells and row/column structure. A viewer with an empty log
+renders the legacy snapshot and never seeds or appends updates.
+
+Saves record only a pod-confirmed `collaboration.stateVector` (base64) and each sheet's row/column IDs in
+`workbook.json`. The IDs locate snapshot coordinates when the vector is behind the log,
+allowing chart sources and comment anchors to follow the missing structural edits.
+CSV and JSON-LD projections continue to come from the merged engine snapshot.
+The snapshot and other metadata retain their existing If-Match/412 conflict flow.
+
+Remote changes run as `fromCollab` Univer mutations, through the same chart/comment
+structural pipeline, without adding undo entries or echoing updates. Local collaborative
+history uses `Y.UndoManager` tracking only the local command origin. Univer retains its
+history controls, command order and structural metadata checkpoints; its coordinate-based
+cell/row patches are replaced by references to each command's Yjs undo item. This keeps
+undo attached to the original rows after remote insertions and prevents undo of a remotely
+replaced edit from consuming an earlier command. Sheet-list and other snapshot operations
+retain their native history. Chart and comment undo checkpoints also retain stable row/column
+IDs and resolve them against the current merged structure. CSV import retains its existing replacement behavior.
+
+Scoped pod notifications, window focus, reconnection and a 30-second poll while visible
+call `sync()`. View-only grids receive and render updates without writing the log or snapshot.
+The existing shared-link credential and origin boundaries still apply.
+The current authenticated session feed forwards focus events; the demo feed also forwards
+resource changes. Dedicated Solid push is not exposed by that session feed, and
+`@jeswr/pod-notifications` is not an installed Suite dependency. Under this slice's no-new-
+dependencies constraint, those pods use focus/reconnection and visible polling.
+
+Sheet add, rename, delete and reorder are outside collaboration in this slice, as are
+merges, chart creation/editing, data validation, conditional formatting and comment-anchor
+metadata edits. They retain the existing snapshot behavior and 412 conflict choices.
+Chart sources and comment anchors still follow collaborative row/column changes; their
+coordinates are saved with the guarded snapshot. Presence and cursors are out of scope:
+pods provide no ephemeral channel.
+
+Sorts share the reordered cells at their existing row/column IDs in one collaborative
+undo step; undo and redo also reach other editors. Find and replace shares ordinary
+cell mutations. Filter definitions and criteria remain in `workbook.json`, outside Yjs,
+so each editor can choose hidden rows independently. A remote row/column insertion,
+removal or move clears the affected sheet's local filter to avoid stale ranges and
+criteria; editors can reapply it against the updated structure.
 
 Charts (SHT-05) are app-owned SVGs in a scrollable strip below the grid. This avoids
 coupling their position and keyboard controls to Univer's canvas coordinates or its Pro
@@ -179,3 +260,23 @@ independent of the rendering budget: ranges above 10,000 cells remain saved and 
 Chart controls and the adapter also block chart changes while comments load.
 Charts follow the existing guarded autosave and conflict flow. XLSX import/export behavior
 is unchanged: charts are **not exported to XLSX**, and imported Excel charts are not read.
+
+
+Version history (SHT-13) stores immutable copies of `workbook.json` under the workbook's
+`versions/` container, with JSON sidecars for creation time, claimed author WebID and an
+optional name. It inherits workbook sharing without adding RDF fields or child ACLs.
+The first accepted save after opening preserves the previous stored snapshot; later saves
+capture at most once per 30 minutes. Failed saves retain their safety snapshot for retry.
+Automatic capture failures allow the save to continue and retry capture on the next save;
+baseline conflicts still stop the save. After a captured version is acknowledged, cleanup
+conditionally deletes older automatic versions, keeping the newest 50. Naming a
+version protects it from cleanup. Interrupted uploads or cleanup may leave unlisted JSON
+files; cleanup is best effort and never fails a published workbook save.
+
+File > Version history opens a side panel (a dialog on phones) with independent read-only engine previews.
+Viewers can browse and copy into a new spreadsheet. Editors can name current or earlier
+versions and restore after confirmation. Restore flushes pending edits, captures the current
+stored workbook even inside the automatic interval, and uses the normal ETag-guarded save
+queue and conflict reload path, including comment anchors and charts. A failed restore safety
+snapshot aborts the workbook write. Public shared history uses the same anonymous, redirect-refusing
+transport as the shared workbook. Author metadata is a claim, not verified provenance.

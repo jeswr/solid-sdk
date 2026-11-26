@@ -8,8 +8,9 @@
  * - `WorkbookService`: all pod I/O for spreadsheets under `<storage>/sheets/`.
  *   One workbook is a container `<storage>/sheets/<slug>/` holding `index.ttl`
  *   (metadata, `schema:SpreadsheetDigitalDocument` + `schema:Dataset`), the
- *   engine snapshot `workbook.json` (authoritative: formulas, formats, sheet
- *   order) and, per sheet, a derived canonical `sheets/<n>.csv` plus a
+ *   engine snapshot `workbook.json` (metadata, sheet list and a cell checkpoint),
+ *   an append-only Yjs `collab/<instanceId>/` log (authoritative cells and row/column order),
+ *   and, per sheet, a derived canonical `sheets/<n>.csv` plus a
  *   `sheets/<n>.jsonld` column descriptor (`n` is the 1-based sheet position,
  *   see `model/rdf.ts` `workbookLayout`). CSVs and descriptors are rewritten
  *   from the snapshot on every save; they are never read back into the engine.
@@ -21,6 +22,7 @@
  */
 
 import type { WorkbookMetadata } from "@jeswr/solid-sheets";
+import type { WorkbookCollaboration } from "./collaboration/persistence";
 import type { DraftAnchor } from "./comments/anchors";
 import type { CellAnchor } from "./comments/selector";
 import type { Snapshot } from "./model/snapshot";
@@ -129,6 +131,14 @@ export interface CreateFromCsvInput {
 }
 
 export interface WorkbookService {
+  /** Pod-backed JSON snapshots, independent of the workbook RDF model. */
+  versions?(container: string): import("./versions").VersionHistory;
+  /** Hydrate the append-only cell log before mounting a grid. */
+  collaborate?(
+    container: string,
+    snapshot: Snapshot,
+    readOnly: boolean,
+  ): Promise<WorkbookCollaboration>;
   /** `<storage>/sheets/` */
   readonly root: string;
   /** Workbooks in `root` (direct child containers with a readable index), newest first. */
@@ -159,7 +169,7 @@ export interface WorkbookService {
     container: string,
     snapshot: Snapshot,
     base: WorkbookVersion,
-    options?: { force?: boolean; title?: string },
+    options?: { force?: boolean; title?: string; snapshotCurrent?: boolean },
   ): Promise<SaveResult>;
   /** Updates only the title in `index.ttl` (If-Match). */
   rename(container: string, title: string, base: WorkbookVersion): Promise<SaveResult>;
@@ -170,6 +180,7 @@ export interface WorkbookService {
 }
 
 export interface WorkbookServiceOptions {
+  readonly subscribe?: (listener: (url: string) => void) => () => void;
   readonly fetch: typeof globalThis.fetch;
   /** Pristine, credential-free transport for public shared workbooks. Defaults to global fetch. */
   readonly publicFetch?: typeof globalThis.fetch;
@@ -193,6 +204,8 @@ export type CsvImportResult =
 export type SortResult = { status: "sorted" } | { status: "blocked"; reason: string };
 
 export interface SheetEngine {
+  /** Open the native cell link editor (also edits/removes an existing link). */
+  editLink?(): Promise<void>;
   sortRange?(options: {
     scope: "range" | "sheet";
     column: number;
@@ -242,11 +255,16 @@ export interface SheetEngine {
     options: { mode: "new-sheet" | "replace-active"; name?: string },
   ): CsvImportResult;
   setDark(dark: boolean): void;
-  setReadOnly(readOnly: boolean): void;
+  /**
+   * Locks editing. `collaborationReadOnly` is the workbook's real access (default: `readOnly`);
+   * pass it separately for a UI-only lock such as viewing version history.
+   */
+  setReadOnly(readOnly: boolean, collaborationReadOnly?: boolean): void;
   dispose(): void;
 }
 
 export interface MountEngineOptions {
+  readonly collaboration?: WorkbookCollaboration | undefined;
   readonly workbookRevision?: string;
   readonly commentsLoading?: boolean;
   readonly readOnly?: boolean;

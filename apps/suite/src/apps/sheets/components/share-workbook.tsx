@@ -6,6 +6,10 @@ import { ShareDialog, wacShareCapabilities } from "../../../shell/share";
 import { WorkbookSharingAdapter } from "../lib/sharing";
 import { workbookHref } from "./sheets-sidebar";
 
+/** Snapshots and the edit log live inside the shared container, so they share its audience. */
+export const SHARE_HISTORY_NOTICE =
+  "People with access can also see earlier versions and past edits of this spreadsheet, including content that has since been deleted.";
+
 export function ShareWorkbook({
   container,
   title,
@@ -30,6 +34,7 @@ export function ShareWorkbook({
       name={title}
       kind="folder"
       adapter={adapter}
+      notice={SHARE_HISTORY_NOTICE}
       caps={wacShareCapabilities}
       suiteHref={new URL(workbookHref(container), window.location.href).href}
     />
