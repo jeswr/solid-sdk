@@ -632,7 +632,8 @@ async function trustedRun(tlsDir) {
   async function fileShareScenario() {
     const name = `mob07-${randomUUID()}.pdf`;
     const bytes = Buffer.from("%PDF-1.4\nMOB-07 incoming file\n%%EOF\n");
-    const inserted = await shell(
+    lastWait = "MediaStore insert";
+    await shell(
       "content",
       "insert",
       "--uri",
@@ -644,8 +645,22 @@ async function trustedRun(tlsDir) {
       "--bind",
       "relative_path:s:Download/",
     );
-    mediaUri = inserted.match(/content:\/\/media\/external\/file\/\d+/)?.[0];
-    assert(mediaUri, "MediaStore insert must return a URI");
+    // `content insert` prints nothing on current Android, so find the row by its unique name.
+    lastWait = "MediaStore row lookup";
+    const rows = await shell(
+      "content",
+      "query",
+      "--uri",
+      "content://media/external/file",
+      "--projection",
+      "_id",
+      "--where",
+      `_display_name='${name}'`,
+    );
+    const ids = [...rows.matchAll(/\b_id=(\d+)/gu)].map((match) => match[1]);
+    assert.equal(ids.length, 1, "MediaStore must hold exactly one row for the shared file");
+    mediaUri = `content://media/external/file/${ids[0]}`;
+    lastWait = "MediaStore write";
     await new Promise((resolve, reject) => {
       const writer = spawn(
         "adb",
@@ -664,12 +679,14 @@ async function trustedRun(tlsDir) {
       writer.stdin.on("error", reject);
       writer.stdin.end(bytes);
     });
+    lastWait = "MediaStore read-back";
     const encoded = await shell(
       "sh",
       "-c",
       `content read --uri ${quoteAndroidShell(mediaUri)} | base64 -w 0`,
     );
     assert(Buffer.from(encoded, "base64").equals(bytes), "Source file must be readable and exact");
+    lastWait = "file share intent";
     await shell(...sendIntent(undefined, mediaUri));
     const observed = await assertShare(`${name}\napplication/pdf · ${bytes.length} bytes`);
     await clickText(app, "Discard batch");
