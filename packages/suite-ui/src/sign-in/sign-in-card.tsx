@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { useT } from "@jeswr/suite-i18n/react";
 
 import { ArrowLeft, Globe, LoaderCircle, UserPlus } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
@@ -43,10 +44,11 @@ function Spinner() {
 }
 
 function Progress({ active, children }: { active: boolean; children: ReactNode }) {
+  const t = useT();
   return active ? (
     <span className="su-sign-in-progress">
       <Spinner />
-      <span>Signing in…</span>
+      <span>{t("signin.signingIn")}</span>
     </span>
   ) : (
     children
@@ -55,7 +57,7 @@ function Progress({ active, children }: { active: boolean; children: ReactNode }
 
 export function SignInCard({
   title,
-  accountsTitle = "Choose an account",
+  accountsTitle,
   subtitle,
   defaultView,
   recentAccounts = [],
@@ -73,6 +75,7 @@ export function SignInCard({
   footer,
   webIdHelpHref,
 }: SignInCardProps) {
+  const t = useT();
   const id = useId();
   const [selectedView, setView] = useState<View>(
     defaultView ?? (recentAccounts.length ? "accounts" : "sign-in"),
@@ -141,7 +144,7 @@ export function SignInCard({
                 className="su-sign-in-back"
                 variant="outline"
                 size="icon"
-                aria-label="Back to accounts"
+                aria-label={t("signin.back")}
                 disabled={busy}
                 onClick={() => {
                   if (busy) return;
@@ -149,16 +152,18 @@ export function SignInCard({
                   setView("accounts");
                 }}
               >
-                <ArrowLeft size={20} aria-hidden="true" />
+                <ArrowLeft size={20} className="suite-rtl-mirror" aria-hidden="true" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Back to accounts</TooltipContent>
+            <TooltipContent>{t("signin.back")}</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       )}
       <header className="su-sign-in-stack su-sign-in-header">
         <h2 className="su-sign-in-title" id={`${id}-title`} tabIndex={-1} ref={headingRef}>
-          {view === "accounts" ? accountsTitle : (title ?? "Sign in")}
+          {view === "accounts"
+            ? (accountsTitle ?? t("signin.choose"))
+            : (title ?? t("signin.signIn"))}
         </h2>
         {subtitle && <p className="su-sign-in-muted">{subtitle}</p>}
       </header>
@@ -166,9 +171,9 @@ export function SignInCard({
       {view === "accounts" ? (
         <>
           {errorAction === "account" && errorAlert}
-          <ul className="su-sign-in-accounts" aria-label="Recent accounts">
+          <ul className="su-sign-in-accounts" aria-label={t("signin.recent")}>
             {recentAccounts.map((account) => {
-              const name = account.name?.trim() || hostOf(account.webId) || "Your account";
+              const name = account.name?.trim() || hostOf(account.webId) || t("signin.yourAccount");
               const initials = name.split(/\s+/).slice(0, 2).map(monogramFor).join("");
               const active = pending?.kind === "account" && pending.key === account.webId;
               const photoUrl = safeHref(account.photoUrl);
@@ -192,7 +197,7 @@ export function SignInCard({
                     <span className="su-sign-in-account-copy">
                       <span className="su-sign-in-account-name">{name}</span>
                       <span className="su-sign-in-muted">
-                        {active ? "Signing in…" : hostOf(account.webId)}
+                        {active ? t("signin.signingIn") : hostOf(account.webId)}
                       </span>
                     </span>
                     {active && <Spinner />}
@@ -215,7 +220,7 @@ export function SignInCard({
                 <span className="su-sign-in-avatar su-sign-in-user" aria-hidden="true">
                   <UserPlus size={20} />
                 </span>
-                <span className="su-sign-in-account-name">Use another account</span>
+                <span className="su-sign-in-account-name">{t("signin.another")}</span>
               </Button>
             </li>
           </ul>
@@ -224,7 +229,7 @@ export function SignInCard({
         <>
           <form
             className="su-sign-in-stack"
-            aria-label="Sign in with your WebID"
+            aria-label={t("signin.webIdForm")}
             noValidate
             onSubmit={(event) => {
               event.preventDefault();
@@ -254,18 +259,18 @@ export function SignInCard({
               disabled={busy || !webId.trim()}
               aria-busy={pending?.kind === "webid" || undefined}
             >
-              <Progress active={pending?.kind === "webid"}>Continue</Progress>
+              <Progress active={pending?.kind === "webid"}>{t("signin.continue")}</Progress>
             </Button>
           </form>
 
           <div className="su-sign-in-divider">
             <Separator />
-            <span className="su-sign-in-muted">or</span>
+            <span className="su-sign-in-muted">{t("signin.or")}</span>
             <Separator />
           </div>
 
           {errorAction === "provider" && errorAlert}
-          <ul className="su-sign-in-stack su-sign-in-providers" aria-label="Providers">
+          <ul className="su-sign-in-stack su-sign-in-providers" aria-label={t("signin.providers")}>
             {providers.map((provider) => {
               const active =
                 pending?.kind === "provider" &&
@@ -307,7 +312,7 @@ export function SignInCard({
                     </span>
                     <span>
                       {active
-                        ? `Signing in with ${provider.label ?? provider.name}…`
+                        ? t("signin.signingProvider", { name: provider.label ?? provider.name })
                         : (provider.label ?? provider.name)}
                     </span>
                   </Button>
@@ -329,13 +334,13 @@ export function SignInCard({
               <CollapsibleTrigger asChild>
                 <Button className="su-sign-in-other" variant="outline" disabled={busy}>
                   <Globe size={20} aria-hidden="true" />
-                  Other provider
+                  {t("signin.other")}
                 </Button>
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <form
                   className="su-sign-in-stack"
-                  aria-label="Sign in with another provider"
+                  aria-label={t("signin.otherForm")}
                   noValidate
                   onSubmit={(event) => {
                     event.preventDefault();
@@ -345,7 +350,7 @@ export function SignInCard({
                     onCustomProvider(value);
                   }}
                 >
-                  <Label htmlFor={`${id}-provider`}>Provider address</Label>
+                  <Label htmlFor={`${id}-provider`}>{t("signin.providerAddress")}</Label>
                   <Input
                     ref={customRef}
                     id={`${id}-provider`}
@@ -372,7 +377,7 @@ export function SignInCard({
                     disabled={busy || !customProvider.trim()}
                     aria-busy={pending?.kind === "custom" || undefined}
                   >
-                    <Progress active={pending?.kind === "custom"}>Continue</Progress>
+                    <Progress active={pending?.kind === "custom"}>{t("signin.continue")}</Progress>
                   </Button>
                 </form>
               </CollapsibleContent>
@@ -383,14 +388,14 @@ export function SignInCard({
 
       {busy && onCancel && (
         <Button variant="outline" onClick={onCancel}>
-          Cancel
+          {t("signin.cancel")}
         </Button>
       )}
 
       <footer className="su-sign-in-stack su-sign-in-footer">
         {signUp && (
           <p>
-            New to Solid?{" "}
+            {t("signin.newSolid")}{" "}
             <a
               href={busy ? undefined : signUp}
               aria-disabled={busy || undefined}
@@ -398,7 +403,7 @@ export function SignInCard({
               target="_blank"
               rel="noopener noreferrer"
             >
-              Get a pod
+              {t("signin.getPod")}
             </a>
           </p>
         )}
@@ -409,25 +414,22 @@ export function SignInCard({
             tabIndex={busy ? -1 : undefined}
             rel="noopener noreferrer"
           >
-            What is a WebID?
+            {t("signin.webIdQuestion")}
           </a>
         ) : (
           <Sheet open={helpOpen && !busy} onOpenChange={setHelpOpen}>
             <SheetTrigger asChild>
               <Button variant="link" disabled={busy}>
-                What is a WebID?
+                {t("signin.webIdQuestion")}
               </Button>
             </SheetTrigger>
             <SheetContent className="su-sign-in-help" showCloseButton={false}>
               <SheetHeader>
-                <SheetTitle>What is a WebID?</SheetTitle>
-                <SheetDescription>
-                  A WebID is a web address that identifies you. Your provider gave you one when you
-                  made your account. You can sign in by choosing your provider instead.
-                </SheetDescription>
+                <SheetTitle>{t("signin.webIdQuestion")}</SheetTitle>
+                <SheetDescription>{t("signin.webIdDescription")}</SheetDescription>
               </SheetHeader>
               <SheetClose asChild>
-                <Button variant="outline">Close</Button>
+                <Button variant="outline">{t("common.close")}</Button>
               </SheetClose>
             </SheetContent>
           </Sheet>

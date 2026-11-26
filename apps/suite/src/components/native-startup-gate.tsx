@@ -1,5 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 "use client";
+import { dir, negotiateLocale, readDeviceLocale } from "@jeswr/suite-i18n";
+import { I18nProvider, useT } from "@jeswr/suite-i18n/react";
 import { type ReactNode, useSyncExternalStore } from "react";
 import { missingPlatformFeatures, type StartupScope } from "@/lib/native/startup-check";
 
@@ -21,13 +23,27 @@ export function NativeStartupGate({ children }: { children: ReactNode }) {
   const missing = useSyncExternalStore(noSubscription, clientSnapshot, serverSnapshot);
   if (missing === null) return null;
   if (missing === "") return children;
+  // No preference provider runs yet: use the device's language choice, then the browser's.
+  const locale = negotiateLocale(readDeviceLocale(), globalThis.navigator?.languages ?? []);
   return (
-    <main id="main-content" className="native-update" data-missing={missing}>
-      <h1>Update needed</h1>
-      <p>
-        This device's web view is missing features Solid Suite needs to keep your sign-in safe.
-        Update the system (and, on Android, Android System WebView), then open the app again.
-      </p>
+    <I18nProvider locale={locale}>
+      <UpdateNeeded missing={missing} locale={locale} />
+    </I18nProvider>
+  );
+}
+
+function UpdateNeeded({ missing, locale }: { missing: string; locale: string }) {
+  const t = useT();
+  return (
+    <main
+      id="main-content"
+      className="native-update"
+      data-missing={missing}
+      lang={locale}
+      dir={dir(locale)}
+    >
+      <h1>{t("startup.title")}</h1>
+      <p>{t("startup.body")}</p>
     </main>
   );
 }

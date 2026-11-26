@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { useT } from "@jeswr/suite-i18n/react";
 import {
   Button,
   Dialog,
@@ -22,6 +23,7 @@ import { ShortcutHelpSheet } from "../shortcuts/help-sheet";
 import { AccountAvatar, AccountCard } from "./account-card";
 
 export function AccountMenu() {
+  const t = useT();
   const { active, accounts, switchTo, signOut, signOutAll } = useAccounts();
   const pathname = usePathname();
   const router = useRouter();
@@ -36,7 +38,7 @@ export function AccountMenu() {
     try {
       await (all ? signOutAll() : signOut(active.id));
     } catch {
-      toast.error("Signed out here. Your provider couldn't finish signing out.");
+      toast.error(t("account.signOutError"));
     } finally {
       if (all || accounts.length === 1) router.replace("/welcome");
     }
@@ -48,7 +50,7 @@ export function AccountMenu() {
           {/* No aria-label: the sr-only sentence names it, so the name and its text agree
               (axe label-content-name-mismatch, WCAG 2.5.3). */}
           <Button ref={trigger} className="suite-shell-icon-button" variant="ghost">
-            <span className="suite-sr-only">Account: {active.name}</span>
+            <span className="suite-sr-only">{t("account.trigger", { name: active.name })}</span>
             {/* Initials are decoration; the name is the sentence above (WCAG 2.5.3). */}
             <span aria-hidden="true">
               <AccountAvatar account={active} />
@@ -57,7 +59,7 @@ export function AccountMenu() {
         </PopoverTrigger>
         <PopoverContent
           align="start"
-          aria-label="Account menu"
+          aria-label={t("account.menu")}
           className="w-80 max-w-[calc(100vw-2rem)] max-h-[85dvh] overflow-y-auto shadow-(--shadow-2)"
           onCloseAutoFocus={(event) => {
             const dialog = nextDialog.current;
@@ -74,8 +76,8 @@ export function AccountMenu() {
             <AccountCard account={active} />
             <Separator />
             {accounts.some((account) => account.id !== active.id) && (
-              <section aria-label="Switch account">
-                <h2 className="text-sm font-semibold">Switch account</h2>
+              <section aria-label={t("account.switch")}>
+                <h2 className="text-sm font-semibold">{t("account.switch")}</h2>
                 {accounts
                   .filter((account) => account.id !== active.id)
                   .map((account) => (
@@ -89,7 +91,7 @@ export function AccountMenu() {
                         switchTo(account.id);
                         const destination = routeAfterSwitch(current);
                         if (destination !== current) router.push(destination);
-                        toast(`Now using ${account.name}`);
+                        toast(t("account.nowUsing", { name: account.name }));
                       }}
                     >
                       <AccountAvatar account={account} />
@@ -107,25 +109,25 @@ export function AccountMenu() {
               <a
                 href={`/signin?add=1&next=${encodeURIComponent(typeof location === "undefined" ? pathname : location.pathname + location.search + location.hash)}`}
               >
-                Add another account
+                {t("account.add")}
               </a>
             </Button>
             {active.kind !== "extension" && (
               <>
                 <Button asChild variant="ghost" className="justify-start">
-                  <a href="/settings/account">Manage your account</a>
+                  <a href="/settings/account">{t("account.manage")}</a>
                 </Button>
                 <Button
                   variant="ghost"
                   className="justify-start"
                   onClick={() => void signout(false)}
                 >
-                  Sign out
+                  {t("account.signOut")}
                 </Button>
               </>
             )}
             <Button variant="ghost" className="justify-start" onClick={() => void signout(true)}>
-              Sign out of all accounts
+              {t("account.signOutAll")}
             </Button>
             <Separator />
             <Button
@@ -136,7 +138,7 @@ export function AccountMenu() {
                 setOpen(false);
               }}
             >
-              Keyboard shortcuts
+              {t("account.shortcuts")}
             </Button>
             <Button asChild variant="ghost" className="justify-start">
               <a
@@ -147,7 +149,7 @@ export function AccountMenu() {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Report a problem
+                {t("account.report")}
               </a>
             </Button>
             <Button
@@ -158,7 +160,7 @@ export function AccountMenu() {
                 setOpen(false);
               }}
             >
-              About Solid Suite
+              {t("account.about")}
             </Button>
           </div>
         </PopoverContent>
@@ -170,18 +172,18 @@ export function AccountMenu() {
             trigger.current?.focus();
           }}
         >
-          <DialogTitle>About Solid Suite</DialogTitle>
-          <DialogDescription>
-            Your documents, files and tasks, in storage you control.
-          </DialogDescription>
-          <p>Version {process.env.NEXT_PUBLIC_SUITE_VERSION ?? "preview"}</p>
-          <p>Solid Suite is available under the MIT licence.</p>
+          <DialogTitle>{t("account.about")}</DialogTitle>
+          <DialogDescription>{t("account.description")}</DialogDescription>
+          <p>
+            {t("account.version", { version: process.env.NEXT_PUBLIC_SUITE_VERSION ?? "preview" })}
+          </p>
+          <p>{t("account.licence")}</p>
           <a
             href="https://github.com/jeswr/solid-sdk/blob/main/LICENSE"
             target="_blank"
             rel="noopener noreferrer"
           >
-            Read the Solid Suite licence
+            {t("account.readLicence")}
           </a>
         </DialogContent>
       </Dialog>

@@ -40,6 +40,22 @@ limits match [pod-access](../pod-access/README.md). No read-state writes are per
 `./testing` re-exports `createNotify` for fixture-fetch tests. Run this package's `lint`, `build`,
 `typecheck` and `test` scripts; tests enforce 100% coverage.
 
+## PWA installation
+
+Import `installPrompt` and `useInstallPrompt` from `@jeswr/suite-sdk/pwa`.
+Start capture in a root provider effect with `useEffect(() => installPrompt.start(window), [])`.
+In Settings, show an Install button for `status === 'available'`, disable it while `prompting`,
+show “Use Share, then Add to Home Screen” for `ios`, and hide the row for `installed`.
+`unavailable` means no browser prompt is available. Standalone mode includes iOS and
+window controls overlay. No UI is injected by the SDK.
+
+Call `installPrompt.install()` directly from the button's click handler. It returns
+`'accepted' | 'dismissed' | null`, propagates browser errors, and consumes each browser
+prompt once. A later browser event can enable installation again after dismissal or failure.
+Capture survives Settings navigation, and root listeners are reference counted and cleaned
+up after the last provider unmounts. SSR has a stable unavailable snapshot and no browser I/O.
+`createInstallPromptStore()` creates an isolated store, accepted by `useInstallPrompt(store)`.
+
 ## Accounts (`SDK-APP-02`)
 
 ```tsx
@@ -411,3 +427,76 @@ entries per WebID, validate with `isHiddenSharedItem`, and clear them when the u
 resource. Tasks removal must forget its cache entry and remove its preference entry. Reject
 stale callbacks on session replacement. `removeSharedItem` and `isSharedUrlEntry` remain generic
 URL-list helpers. Only `shareNotificationUrls` performs I/O.
+
+## Undo (`./undo`, UX-6)
+
+`createUndoStack({ limit = 50, now = Date.now, isRetryable = () => false })` creates
+framework-independent, in-memory history. Import `UndoEntry`, `UndoStack`, `UndoItem`,
+`UndoResult` and `UndoStackOptions` from `@jeswr/suite-sdk/undo`.
+
+- `push({ label, scope, undo, redo?, expiresAt? })` returns a unique ID and clears only
+  that scope's redo history. `undo(scope)` selects the latest live entry;
+  `undoById(id)` selects the exact entry offered by a toast; `redo(scope)` reapplies it.
+- All callbacks receive an `AbortSignal`. One callback runs at a time across the stack;
+  concurrent requests resolve `{ status: 'busy' }`. Results are `{ status: 'done', id,
+  label }` (the entry that ran), `nothing`, `busy`, `expired`, or `{ status: 'failed', error }`. Expiry uses milliseconds since
+  epoch; entries with `expiresAt <= now()` are dropped without running.
+- Failed operations are consumed unless `isRetryable(error)` returns true. Retryable
+  entries stay in their original position. A new push during undo prevents its redo
+  from becoming available; a redo that was running when a push retired it is kept as an
+  undo entry below the push. Undo-only entries are consumed on success.
+- `canUndo(scope)` and `canRedo(scope)` say whether a live entry exists, so a shortcut can
+  leave the key alone when there is nothing to do. Subscribers are notified when an
+  entry with `expiresAt` expires.
+- At most `limit` entries, counting undo and redo history, are retained per scope;
+  oldest entries are dropped. `limit` must be a positive integer.
+- `entries(scope?)` returns pending undo entries oldest first, with `{ id, label,
+  scope, canRedo }`; `canRedo` indicates that the entry supplies a redo callback.
+  `subscribe(listener)` returns an unsubscribe function. The unfiltered snapshot is
+  stable between changes; `useUndoStack(stack)` from `@jeswr/suite-sdk` subscribes with
+  `useSyncExternalStore` and supplies an empty snapshot during server rendering.
+- `clear()` removes all history and aborts the running callback. Late settlements
+  cannot restore cleared entries. The callback must pass the signal into its I/O
+  and check it before changing local state. An ignored abort cannot cancel a write
+  already performed by a transport.
+
+### Adopting the undo stack
+
+In the suite shell, call `useUndo()` from `shell/undo/provider` and push the inverse
+**after a successful reversible change**. The shell supplies the current route's app
+scope, an Undo toast, Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z. Native undo in editable controls
+is preserved. The shell retires history and toast actions on account replacement or
+sign-out. Standalone clients own a stack per session and call `clear()` on teardown.
+
+For an ordinary Tasks completion, capture the open/closed state and completion
+timestamp before writing, then register both transitions through the app's adapter:
+
+```ts
+import { createUndoStack } from '@jeswr/suite-sdk/undo';
+
+const stack = createUndoStack(); // owned by the authenticated session
+async function completeTask(task: Task) {
+  const previous = { state: task.state, endedAt: task.endedAt };
+  const next = { state: 'closed' as const, endedAt: new Date() };
+  await writeCompletion(task.url, next);
+  stack.push({
+    label: `Completed ${task.title}`,
+    scope: 'tasks',
+    undo: (signal) => writeCompletion(task.url, previous, { signal }),
+    redo: (signal) => writeCompletion(task.url, next, { signal }),
+  });
+}
+```
+
+`writeCompletion` is the app's existing persistence adapter; it updates its local
+completion state and writes the same fields. In a shell component, use `push` from
+`useUndo()` in place of `stack.push` and omit `scope`. Capture values rather than
+closing over a mutable task, preserve unrelated fields, and supply redo only when
+repeating the operation is supported. Tasks' repeating completion also retains its
+`CompletionPlan.previous` snapshot and reserved `copyUrl`: undo restores due date,
+all-day and reminder fields and removes that completed occurrence. Preserve that
+existing `undoCompletion(stored, result)` behavior in the migration adapter; only
+provide redo if it can reuse the same occurrence identity. Delayed deletion entries
+should set `expiresAt`
+to the point when restoring the resource stops being possible. Tasks and Drive's
+existing flows are migrated separately.

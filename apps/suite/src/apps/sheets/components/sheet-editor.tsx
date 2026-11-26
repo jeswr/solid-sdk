@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 "use client";
 import {
@@ -253,6 +254,7 @@ function Grid({
   return (
     <section
       className="sht-grid-region"
+      data-undo-scope="native"
       aria-label="Spreadsheet grid"
       aria-describedby="sht-grid-note"
     >
@@ -475,7 +477,7 @@ export function SheetEditor({ container }: { container: string }) {
       context={
         <div className="sht-context">
           <Link className="sht-back" href="/sheets" aria-label="Back to spreadsheets">
-            <ArrowLeft size={20} aria-hidden="true" />
+            <ArrowLeft size={20} className="suite-rtl-mirror" aria-hidden="true" />
           </Link>
           <Table2 className="sht-icon sht-title-icon" size={24} aria-hidden="true" />
           <div className="sht-title">

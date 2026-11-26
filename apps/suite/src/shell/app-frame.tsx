@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { type AppSlug, suiteApps } from "@jeswr/suite-ui";
+import { useT } from "@jeswr/suite-i18n/react";
+import type { AppSlug } from "@jeswr/suite-ui";
 import { type ComponentProps, lazy, type ReactNode, Suspense } from "react";
 import {
   SearchBox,
@@ -67,9 +68,10 @@ export function AppFrame({
   pageTitle,
   ...props
 }: Omit<SuiteFrameProps, "app"> & { app: AppSlug; pageTitle?: string | undefined }) {
+  const t = useT();
   const accounts = useShellAccounts();
   if (!accounts) return <SuiteFrame {...props} />;
-  const title = pageTitle ?? suiteApps.find((app) => app.slug === props.app)?.name ?? props.app;
+  const title = pageTitle ?? t(`apps.${props.app}`);
   return (
     <Suspense>
       <Shell
@@ -78,7 +80,11 @@ export function AppFrame({
         sidebar={
           props.sidebar === null
             ? null
-            : { label: `${title} navigation`, sections: [], header: props.sidebar }
+            : {
+                label: t("shell.appNavigation", { name: title }),
+                sections: [],
+                header: props.sidebar,
+              }
         }
         context={props.context}
         actions={props.actions}
@@ -86,7 +92,7 @@ export function AppFrame({
         {...(props.details
           ? {
               details: {
-                title: "Details",
+                title: t("shell.details"),
                 children: props.details,
                 open: true,
                 onOpenChange: (open: boolean) => !open && props.onDetailsClose?.(),

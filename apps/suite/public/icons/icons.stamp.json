@@ -1,0 +1,10 @@
+{
+  "inputs": "cefa31eefa108bb292d053a13e20199597b75fc6c9088f784eab1666d7cf6592",
+  "icons": {
+    "apple-touch-icon.png": "bb032a8ceb1f3664d0b998d56d7d6300b5e14d51fb265a8a2f3930c07880ef66",
+    "icon-192.png": "8e1d29349d52637156ff595ce35c34cbefcba593eafb8929c13e958127f6ffab",
+    "icon-512.png": "0a229ae385e9ec7b4d431c1ff73b5c8cbb549684f88b73785838ce14a7fb5fc7",
+    "icon-maskable-512.png": "9ab1878b74524059a1cae2a3beef99689129783ff819ddbbc2cbdddca9ad5b2a",
+    "icon-monochrome.svg": "e82cfed4313e1ed44862f6d314146935a23ac3a243d7c787ec011925d3c4cb23"
+  }
+}

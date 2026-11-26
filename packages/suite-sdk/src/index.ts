@@ -41,6 +41,7 @@ export type {
   UsernameAvailability,
 } from "./use-registration.js";
 export { RegistrationError, useRegistration } from "./use-registration.js";
+export { useUndoStack } from "./use-undo-stack.js";
 
 /** Deliver a template as the session user; an explicit actor must match that WebID. */
 export type NotifyAction = (

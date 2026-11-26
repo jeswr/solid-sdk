@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6
-import { expect, test } from "./fixtures";
+import { accessible, expect, test } from "./fixtures";
 
 test("Drive keeps its search route and details state in the authenticated shell", async ({
   page,
@@ -14,9 +14,11 @@ test("Drive keeps its search route and details state in the authenticated shell"
     timeout: 30_000,
   });
   // A shell/app heading can render before discovery finishes. Require a real listing.
-  await expect(page.getByRole("heading", { name: "Your Drive is empty", exact: true })).toBeVisible(
-    { timeout: 30_000 },
-  );
+  await expect(
+    page
+      .getByRole("grid", { name: "My Drive", exact: true })
+      .or(page.getByRole("heading", { name: "Your Drive is empty", exact: true })),
+  ).toBeVisible({ timeout: 30_000 });
   const search = page.getByRole("searchbox", { name: "Search in Drive", exact: true });
   await search.fill("report");
   await search.press("Enter");
@@ -41,4 +43,5 @@ test("Drive keeps its search route and details state in the authenticated shell"
     page.getByRole("button", { name: "Close details", exact: true }).first(),
   ).toBeVisible();
   await expect(page).toHaveURL("/drive/search?q=report");
+  await accessible(page);
 });

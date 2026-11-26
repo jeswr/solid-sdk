@@ -16,10 +16,23 @@
  * `Request`, `Promise`, `Set`), never module-level values.
  */
 
+/**
+ * Routes precached at install. `/home` is where `/` redirects to, and the manifest's
+ * `start_url` and shortcuts must all be listed here so an installed app opens offline
+ * (a test pins this). Sub-app pages are account-independent HTML shells.
+ */
 export const SHELL_ROUTES = [
   "/offline",
   "/",
+  "/home",
+  // Where a signed-out launch lands: `/home` -> `/signin?next=` (session guard) and `/` -> `/welcome`.
+  "/signin",
+  "/welcome",
   "/drive/my",
+  "/docs",
+  "/mail",
+  "/calendar",
+  "/tasks",
   "/search",
   "/notifications",
   "/settings/account",
@@ -29,6 +42,8 @@ export const SHELL_CACHE_PREFIX = "app-shell-";
 export const PAGES_CACHE_PREFIX = "suite-pages-";
 export const PAGES_LIMIT = 30;
 export const REMEMBER_PAGE = "remember-page";
+/** Sign-out or account change: the worker discards remembered pages and in-flight writes. */
+export const FORGET_PAGES = "forget-pages";
 
 interface ExtendableEventLike {
   waitUntil(promise: Promise<unknown>): void;
@@ -99,15 +114,40 @@ export function installServiceWorker(
     !path.startsWith("/_next/") &&
     !path.startsWith("/api/");
 
-  async function storePage(cacheName: string, path: string): Promise<boolean> {
-    const response = await sw.fetch(absolute(path));
-    if (!isPage(response)) return false;
-    const html = await response.clone().text();
-    const cache = await sw.caches.open(cacheName);
-    await cache.put(absolute(path), response);
+  /** Bumped by "forget-pages"; a write that began under an older value is discarded. */
+  let generation = 0;
+  const pageNames = async () =>
+    (await sw.caches.keys()).filter((name) => name.startsWith("suite-pages-"));
+
+  /**
+   * Fetch pages, store them, then fetch each distinct asset they load once. Resolves to one
+   * boolean per path: whether that page was stored. `gen` (when given) guards the page writes.
+   */
+  async function storePages(
+    cacheName: string,
+    paths: readonly string[],
+    gen?: number,
+  ): Promise<boolean[]> {
+    const wanted = new Set<string>();
+    const stored = await Promise.all(
+      paths.map(async (path) => {
+        try {
+          const response = await sw.fetch(absolute(path));
+          if (!isPage(response)) return false;
+          const html = await response.clone().text();
+          const cache = await sw.caches.open(cacheName);
+          if (gen !== undefined && gen !== generation) return false;
+          await cache.put(absolute(path), response);
+          for (const found of assetsIn(html)) wanted.add(found);
+          return true;
+        } catch {
+          return false;
+        }
+      }),
+    );
     const shell = await sw.caches.open(shellName);
     await Promise.all(
-      assetsIn(html).map(async (asset) => {
+      [...wanted].map(async (asset) => {
         if (await shell.match(absolute(asset))) return;
         try {
           const file = await sw.fetch(absolute(asset));
@@ -117,7 +157,7 @@ export function installServiceWorker(
         }
       }),
     );
-    return true;
+    return stored;
   }
   async function asset(event: FetchEventLike): Promise<Response> {
     const { request } = event;
@@ -160,21 +200,47 @@ export function installServiceWorker(
     }
   }
   async function remember(path: string): Promise<void> {
-    if (!(await storePage(pagesName, path).catch(() => false))) return;
+    const gen = generation;
+    if (!(await storePages(pagesName, [path], gen))[0]) return;
+    if (gen !== generation) return;
     const pages = await sw.caches.open(pagesName);
     const keys = await pages.keys();
     await Promise.all(
       keys.slice(0, Math.max(0, keys.length - pagesLimit)).map((key) => pages.delete(key)),
     );
   }
+  /** Paths remembered by earlier builds, oldest first, validated and de-duplicated. */
+  async function rememberedPaths(): Promise<string[]> {
+    const found: string[] = [];
+    for (const name of (await pageNames()).filter((item) => item !== pagesName)) {
+      try {
+        for (const key of await (await sw.caches.open(name)).keys()) {
+          const url = new URL(key.url);
+          if (url.origin === origin && isPagePath(url.pathname) && !url.search)
+            found.push(url.pathname);
+        }
+      } catch {
+        /* Unreadable old cache: those pages are visited again. */
+      }
+    }
+    return [...new Set(found)].slice(-pagesLimit);
+  }
 
   sw.addEventListener("install", (event) => {
     event.waitUntil(
       (async () => {
+        const gen = generation;
         const [fallback = "/offline", ...rest] = routes;
         // The fallback page is required; the other shell routes are best effort.
-        if (!(await storePage(shellName, fallback))) throw new Error("Offline page unavailable");
-        await Promise.all(rest.map((route) => storePage(shellName, route).catch(() => false)));
+        const [stored] = await storePages(shellName, [fallback, ...rest]);
+        if (!stored) throw new Error("Offline page unavailable");
+        // Warm remembered pages while the previous worker still serves; activate never waits on
+        // the network, and the old caches stay until these exist.
+        try {
+          await storePages(pagesName, await rememberedPaths(), gen);
+        } catch {
+          /* Best effort: those pages are visited again. */
+        }
         await sw.skipWaiting();
       })(),
     );
@@ -210,6 +276,15 @@ export function installServiceWorker(
   });
   sw.addEventListener("message", (event) => {
     const data = event.data as { type?: unknown; path?: unknown } | null;
+    if (data?.type === "forget-pages") {
+      generation += 1;
+      event.waitUntil(
+        pageNames()
+          .then((names) => Promise.all(names.map((name) => sw.caches.delete(name))))
+          .then(() => {}),
+      );
+      return;
+    }
     if (data?.type !== "remember-page" || !isPagePath(data.path) || !sw.navigator.onLine) return;
     event.waitUntil(remember(data.path));
   });

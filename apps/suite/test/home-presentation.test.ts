@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { NS } from "@jeswr/suite-vocab";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -12,7 +13,8 @@ import {
   cardView,
   connectedSources,
   connectorsForDomain,
-  greeting,
+  firstName,
+  greetingPeriod,
   itemActions,
   itemTitle,
   parseTypes,
@@ -83,12 +85,9 @@ describe("Home presentation", () => {
     [18, 0, "evening"],
     [0, 0, "evening"],
   ])("greets at %i:%i", (hour, minute, period) => {
-    expect(greeting(new Date(2026, 0, 1, Number(hour), Number(minute)), " Alice Wilder ")).toBe(
-      `Good ${period}, Alice`,
-    );
-    expect(greeting(new Date(2026, 0, 1, Number(hour), Number(minute)), "  ")).toBe(
-      `Good ${period}`,
-    );
+    expect(greetingPeriod(new Date(2026, 0, 1, Number(hour), Number(minute)))).toBe(period);
+    expect(firstName(" Alice Wilder ")).toBe("Alice");
+    expect(firstName("  ")).toBe("");
   });
   it("parses and serializes URL filters in taxonomy order, preserving an empty selection", () => {
     expect(parseTypes(null, documents)).toEqual(["files", "docs", "notes", "bookmarks"]);

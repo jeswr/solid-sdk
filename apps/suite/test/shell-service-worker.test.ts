@@ -120,7 +120,7 @@ describe("service worker source", () => {
   it("is self-contained and carries the version and routes", async () => {
     const source = serviceWorkerSource("abc");
     expect(source.startsWith('"use strict";\n(function installServiceWorker(')).toBe(true);
-    expect(source).toContain('"abc", ["/offline","/","/drive/my"');
+    expect(source).toContain('"abc", ["/offline","/","/home","/signin","/welcome","/drive/my"');
     const context = scope();
     new Function("self", source)(context.sw);
     expect([...context.listeners.keys()]).toEqual(["install", "activate", "fetch", "message"]);
@@ -161,7 +161,7 @@ describe("install and activate", () => {
   it("fails install without the offline page and tolerates other missing routes", async () => {
     const missing = scope({ ...assets });
     installServiceWorker(missing.sw as unknown as WorkerScope, "v2", SHELL_ROUTES);
-    await expect(missing.dispatch("install")).rejects.toThrow("Failed to fetch");
+    await expect(missing.dispatch("install")).rejects.toThrow("Offline page unavailable");
     const partial = scope({ "/offline": () => page("offline") });
     installServiceWorker(partial.sw as unknown as WorkerScope, "v2", ["/offline", "/missing"]);
     await partial.dispatch("install");
@@ -193,6 +193,112 @@ describe("install and activate", () => {
       ["app-shell-v2", "other-app", "suite-pages-v2"].sort(),
     );
     expect(context.sw.clients.claim).toHaveBeenCalledOnce();
+  });
+
+  it("precaches the launch and shortcut routes so an installed app opens offline", async () => {
+    const { stores } = await installed();
+    const shell = stores.get("app-shell-v2") as FakeCache;
+    for (const route of ["/home", "/docs", "/mail", "/calendar", "/tasks", "/drive/my"])
+      expect(shell.entries.has(`${origin}${route}`), route).toBe(true);
+    // Launched offline, /home and a shortcut open their own precached page, not /offline.
+    let online = true;
+    const launch = await installed(
+      Object.fromEntries(
+        ["/home", "/docs"].map((route) => [
+          route,
+          () => {
+            if (!online) throw new TypeError("Failed to fetch");
+            return page(route.slice(1));
+          },
+        ]),
+      ),
+    );
+    online = false;
+    for (const route of ["/home", "/docs"]) {
+      const served = await launch.dispatch("fetch", { request: navigate(route) });
+      expect(await served?.text()).toContain(`<h1>${route.slice(1)}</h1>`);
+    }
+  });
+
+  /** A scope with an earlier build's remembered pages, before this build installs. */
+  async function upgrading(
+    responses: Record<string, () => Response | Promise<Response>>,
+    remembered: (string | [string, Response])[],
+  ) {
+    const context = scope({ ...shellRoutes, ...assets, ...responses });
+    const old = await context.sw.caches.open("suite-pages-v1");
+    await context.sw.caches.open("app-shell-v1");
+    for (const entry of remembered) {
+      const [url, response] =
+        typeof entry === "string" ? [`${origin}${entry}`, page("old")] : entry;
+      await old.put(url, response);
+    }
+    installServiceWorker(context.sw as unknown as WorkerScope, "v2", SHELL_ROUTES);
+    return context;
+  }
+
+  it("warms remembered pages during install and keeps the old caches until activate", async () => {
+    const context = await upgrading({ "/notes/a": () => page("notes a fresh") }, [
+      "/notes/a",
+      "/notes/gone",
+    ]);
+    await context.dispatch("install");
+    const saved = context.stores.get("suite-pages-v2") as FakeCache;
+    expect(await (await saved.match(`${origin}/notes/a`))?.text()).toContain("notes a fresh");
+    // A path that no longer serves a page is not kept.
+    expect(saved.entries.has(`${origin}/notes/gone`)).toBe(false);
+    // The previous worker still serves from its caches until the new one activates.
+    expect(context.stores.has("suite-pages-v1")).toBe(true);
+    expect(context.stores.has("app-shell-v1")).toBe(true);
+    const calls = context.fetcher.mock.calls.length;
+    await context.dispatch("activate");
+    // Activation does no network work and only then removes the old caches.
+    expect(context.fetcher.mock.calls.length).toBe(calls);
+    expect(context.stores.has("suite-pages-v1")).toBe(false);
+    expect(context.stores.has("app-shell-v1")).toBe(false);
+    expect(context.stores.has("suite-pages-v2")).toBe(true);
+  });
+
+  it("caps warmed pages and fetches each shared asset once", async () => {
+    const paths = Array.from({ length: PAGES_LIMIT + 5 }, (_, i) => `/p/${i}`);
+    const context = await upgrading(
+      Object.fromEntries(paths.map((path) => [path, () => page(path)])),
+      paths,
+    );
+    await context.dispatch("install");
+    const saved = context.stores.get("suite-pages-v2") as FakeCache;
+    expect(saved.entries.size).toBe(PAGES_LIMIT);
+    expect(saved.entries.has(`${origin}/p/4`)).toBe(false);
+    expect(saved.entries.has(`${origin}/p/${PAGES_LIMIT + 4}`)).toBe(true);
+    const sharedFetches = context.fetcher.mock.calls.filter(
+      ([url]) => url === `${origin}/_next/static/chunks/shared.js`,
+    );
+    expect(sharedFetches).toHaveLength(1);
+  });
+
+  it("never warms an unsafe path from an old cache", async () => {
+    const context = await upgrading({}, [
+      "/search?q=secret",
+      "/api/session",
+      ["https://evil.example/x", page("x")],
+    ]);
+    await context.dispatch("install");
+    const fetched = context.fetcher.mock.calls.map(([url]) => String(url));
+    expect(fetched.some((url) => /secret|api|evil/.test(url))).toBe(false);
+  });
+
+  it("still installs when reading the old caches fails", async () => {
+    const context = await upgrading({}, ["/notes/a"]);
+    const open = context.sw.caches.open.bind(context.sw.caches);
+    context.sw.caches.open = async (name: string) => {
+      if (name === "suite-pages-v1") throw new Error("unreadable");
+      return open(name);
+    };
+    await context.dispatch("install");
+    expect(context.sw.skipWaiting).toHaveBeenCalledOnce();
+    expect((context.stores.get("suite-pages-v2") as FakeCache | undefined)?.entries.size ?? 0).toBe(
+      0,
+    );
   });
 
   it.each([false, true])("enables supported navigation preload (failure: %s)", async (fails) => {
@@ -423,5 +529,44 @@ describe("remember-page", () => {
     // A page that fails to load is not remembered and keeps nothing stale.
     await dispatch("message", { data: { type: REMEMBER_PAGE, path: "/missing" } });
     expect(saved.entries.has(`${origin}/missing`)).toBe(false);
+  });
+
+  it("forget-pages deletes remembered pages and discards a remember still in flight", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const { dispatch, stores, sw, listeners } = await installed({
+      "/slow": async () => {
+        await gate;
+        return page("slow");
+      },
+      "/fast": () => page("fast"),
+    });
+    await dispatch("message", { data: { type: REMEMBER_PAGE, path: "/fast" } });
+    const saved = stores.get("suite-pages-v2") as FakeCache;
+    expect(saved.entries.has(`${origin}/fast`)).toBe(true);
+    const waits: Promise<unknown>[] = [];
+    (listeners.get("message") as (event: unknown) => void)({
+      data: { type: REMEMBER_PAGE, path: "/slow" },
+      waitUntil: (promise: Promise<unknown>) => waits.push(promise),
+    });
+    await dispatch("message", { data: { type: "forget-pages" } });
+    expect(stores.has("suite-pages-v2")).toBe(false);
+    expect(sw.caches.keys).toBeTypeOf("function");
+    release();
+    await Promise.all(waits);
+    // The write that started before the clear never lands.
+    const after = stores.get("suite-pages-v2") as FakeCache | undefined;
+    expect(after?.entries.has(`${origin}/slow`) ?? false).toBe(false);
+    // Later remembers work again.
+    await dispatch("message", { data: { type: REMEMBER_PAGE, path: "/fast" } });
+    expect((stores.get("suite-pages-v2") as FakeCache).entries.has(`${origin}/fast`)).toBe(true);
+  });
+
+  it("forget-pages leaves the app shell alone", async () => {
+    const { dispatch, stores } = await installed();
+    await dispatch("message", { data: { type: "forget-pages" } });
+    expect(stores.has("app-shell-v2")).toBe(true);
   });
 });

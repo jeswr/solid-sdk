@@ -1,11 +1,39 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { Button, Input, Label, Textarea } from "@jeswr/suite-ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  Button,
+  Input,
+  Label,
+  Textarea,
+} from "@jeswr/suite-ui";
 import { Mic, Square } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { publicBaseUrl } from "@/lib/public-url";
+import { useOptionalAccounts } from "@/shell/session/accounts-context";
+import { asFailure, FeedbackFailure, failureMessage, feedbackResponse } from "./client-errors";
 import { feedbackArchive, saveFeedbackArchive } from "./download";
+import {
+  allowDrafts,
+  audioIndices,
+  loadDraft,
+  lostRecordings,
+  MAX_RECORDINGS,
+  ownerOf,
+  purgeDrafts,
+  receiptUsable,
+  clearDraft as removeDraft,
+  type StoredDraft,
+  saveDraft as storeDraft,
+  withoutRecordings,
+} from "./draft";
 import {
   type Answer,
   type Answers,
@@ -19,7 +47,7 @@ import {
 } from "./guide";
 import type { AudioReceipt } from "./receipts";
 import { useVoice, type VoiceClip, voiceInThisBuild } from "./speech";
-import { type Message, type Submission, validateAnswers } from "./validation";
+import { type Message, type Submission, validateAnswers, validateSubmission } from "./validation";
 
 type TranscriptMessage = Message & { audio?: number[] };
 export function feedbackApiBase(): string {
@@ -32,15 +60,18 @@ export function feedbackApiBase(): string {
     return "";
   }
 }
-/** Platform errors may be HTML or plain text; never display upstream error bodies. */
-async function feedbackResponse(response: Response) {
-  if (!response.ok || !response.headers.get("content-type")?.includes("application/json"))
-    throw new Error("Feedback request failed.");
-  const value = await response.json().catch(() => undefined);
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("Feedback response is unavailable.");
-  return value;
-}
+/** Focus after React has removed the control that held it. */
+const focusSoon = (target: () => HTMLElement | null | undefined) =>
+  setTimeout(() => target()?.focus(), 0);
+const browserStorage = (): Storage | undefined => {
+  try {
+    return localStorage;
+  } catch {
+    return undefined;
+  }
+};
+const recordingsLostMessage = (maybeSaved: boolean) =>
+  `Your recordings can no longer be sent: audio only stays while this page is open, and the saved copies have expired or were never kept. You can submit your answers without the recordings, or remove them and record again.${maybeSaved ? " If an earlier attempt already reached the team, they may receive this feedback twice." : ""}`;
 function Controls({
   question: q,
   onAnswer,
@@ -144,7 +175,34 @@ function localSummary(answers: Answers): string {
     "• You shared the answers recorded above. You can add anything else before submitting."
   );
 }
+/** Drafts belong to the active account; switching account remounts the form and restores nothing. */
 export function FeedbackPage() {
+  const accounts = useOptionalAccounts();
+  if (accounts?.status === "loading")
+    return (
+      <main id="main-content" className="mx-auto max-w-3xl px-4 py-10">
+        <p role="status">Loading your account...</p>
+      </main>
+    );
+  // An account whose session is not live (expired, or any state but ready) is locked: its draft
+  // is neither offered, shown, downloaded nor submitted until the person signs in again.
+  if (accounts?.active && accounts.status !== "ready")
+    return (
+      <main id="main-content" className="mx-auto max-w-3xl space-y-3 px-4 py-10">
+        <h1 className="text-3xl font-semibold">Give feedback</h1>
+        <p role="status">
+          Your session has ended. Sign in again to give feedback. Anything you saved for this
+          account stays private until you do.
+        </p>
+        <Link href="/welcome" className="text-sm underline">
+          Back to welcome
+        </Link>
+      </main>
+    );
+  const owner = ownerOf(accounts?.active?.id);
+  return <FeedbackForm key={owner} owner={owner} />;
+}
+function FeedbackForm({ owner }: { owner: string }) {
   const [hosted, setHosted] = useState<boolean | null>(null);
   const [pathway, setPathway] = useState<Pathway>();
   const [answers, setAnswers] = useState<Answers>({});
@@ -160,6 +218,8 @@ export function FeedbackPage() {
   const [clips, setClips] = useState<VoiceClip[]>([]);
   const clipsRef = useRef<VoiceClip[]>([]);
   const receipts = useRef<(AudioReceipt | undefined)[]>([]);
+  const submissionId = useRef("");
+  const [frozenRecord, setFrozenRecord] = useState<string>();
   const [savingRecordings, setSavingRecordings] = useState(0);
   const uploading = useRef(0);
   const [pending, setPending] = useState<number[]>([]);
@@ -167,10 +227,25 @@ export function FeedbackPage() {
   const voiceBase = useRef("");
   const transcriptEnd = useRef<HTMLDivElement>(null);
   const sending = useRef(false);
+  // Set once an attempt may have reached storage (a failed save or a restored draft).
+  // After that, a rejection must not unfreeze a record GitHub may already hold.
+  const uncertain = useRef(false);
+  const [pendingDraft, setPendingDraft] = useState<StoredDraft>();
+  // Why the recordings can no longer be sent; empty while they can.
+  const [goneReason, setGoneReason] = useState("");
+  const [confirmingNew, setConfirmingNew] = useState(false);
+  const [notice, setNotice] = useState("");
+  const draftHeading = useRef<HTMLHeadingElement>(null);
+  const startNewButton = useRef<HTMLButtonElement>(null);
+  const goneHeading = useRef<HTMLHeadingElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const logRef = useRef<HTMLDivElement>(null);
+  const answerRef = useRef<HTMLTextAreaElement>(null);
+  const startedNew = useRef(false);
   const voice = useVoice(
     (text) => setInput([voiceBase.current, text].filter(Boolean).join(" ").slice(0, 4000)),
     (clip) => {
-      if (clipsRef.current.length >= 10 || clip.blob.size > 3 * 1024 * 1024) {
+      if (clipsRef.current.length >= MAX_RECORDINGS || clip.blob.size > 3 * 1024 * 1024) {
         setError("You can attach up to ten recordings of 3 MB each. Please use a shorter answer.");
         return;
       }
@@ -178,14 +253,16 @@ export function FeedbackPage() {
       clipsRef.current = [...clipsRef.current, clip];
       setClips(clipsRef.current);
       setPending((current) => [...current, index]);
-      void uploadRecording(clip, index).catch(() =>
-        setError(
-          "We couldn't save that recording. Your audio is still here. Try submitting again, or use Download my feedback.",
-        ),
+      void uploadRecording(clip, index).catch((error) =>
+        setError(failureMessage(asFailure(error).kind, { recordingsHere: true, stage: "upload" })),
       );
     },
   );
   useEffect(() => {
+    // Drafts are offered, never restored silently, and only ever to the account that saved them.
+    allowDrafts(owner);
+    purgeDrafts(browserStorage());
+    setPendingDraft(loadDraft(browserStorage(), owner));
     try {
       setWalkthrough(readWalkthrough(localStorage.getItem("suite.walkthrough.v1")));
     } catch {
@@ -205,7 +282,42 @@ export function FeedbackPage() {
       controller.abort();
       clearTimeout(timer);
     };
-  }, []);
+  }, [owner]);
+  useEffect(() => {
+    if (pendingDraft) draftHeading.current?.focus();
+  }, [pendingDraft]);
+  useEffect(() => {
+    // Submit is disabled while recordings are lost, so focus must land on the explanation.
+    if (goneReason) goneHeading.current?.focus();
+  }, [goneReason]);
+  function restoreDraft(draft: StoredDraft) {
+    setPendingDraft(undefined);
+    try {
+      const saved = validateSubmission(JSON.parse(draft.record));
+      submissionId.current = draft.submissionId;
+      receipts.current = draft.receipts.map((receipt) => receipt ?? undefined);
+      uncertain.current = draft.uncertain;
+      setFrozenRecord(draft.record);
+      setPathway(saved.pathway);
+      setAnswers(saved.answers);
+      setMessages(saved.transcript.map(({ audio, ...m }) => (audio ? { ...m, audio } : m)));
+      setName(saved.contact.name);
+      setEmail(saved.contact.email);
+      setDone(true);
+      // Audio never survives a reload, so only receipts that are still valid can be sent.
+      if (lostRecordings(saved, draft.receipts, () => false).length)
+        setGoneReason(recordingsLostMessage(draft.uncertain));
+    } catch {
+      /* An invalid local draft must not prevent a new interview. */
+      removeDraft(browserStorage(), owner);
+      setNotice("That saved draft couldn't be restored and was discarded.");
+    }
+  }
+  function discardDraft() {
+    removeDraft(browserStorage(), owner);
+    setPendingDraft(undefined);
+    focusSoon(() => titleRef.current);
+  }
   useEffect(() => {
     if (messages.length) transcriptEnd.current?.scrollIntoView?.({ block: "nearest" });
   }, [messages.length]);
@@ -215,15 +327,19 @@ export function FeedbackPage() {
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const response = await fetch(`${feedbackApiBase()}/api/feedback/audio`, {
-            method: "POST",
-            credentials: "omit",
-            signal: AbortSignal.timeout(45_000),
-            headers: { "Content-Type": clip.blob.type },
-            body: clip.blob,
-          });
+          const response = await fetch(
+            `${feedbackApiBase()}/api/feedback/audio?submissionId=${submissionId.current}`,
+            {
+              method: "POST",
+              credentials: "omit",
+              signal: AbortSignal.timeout(45_000),
+              headers: { "Content-Type": clip.blob.type },
+              body: clip.blob,
+            },
+          );
           const receipt = await feedbackResponse(response);
           if (
+            receipt.submissionId !== submissionId.current ||
             typeof receipt.sha !== "string" ||
             !/^[a-f0-9]{40,64}$/.test(receipt.sha) ||
             receipt.size !== clip.blob.size ||
@@ -234,7 +350,10 @@ export function FeedbackPage() {
             throw new Error("Recording receipt is unavailable.");
           receipts.current[index] = receipt;
           return receipt;
-        } catch {
+        } catch (error) {
+          // A definite answer (rejected, too large, limited) will not change on a second try.
+          if (error instanceof FeedbackFailure && !error.mayHaveStored) throw error;
+          if (error instanceof FeedbackFailure && error.kind === "retry-later") throw error;
           if (attempt === 1) throw new Error("Recording could not be saved.");
           await new Promise((resolve) => setTimeout(resolve, 300));
         }
@@ -246,6 +365,22 @@ export function FeedbackPage() {
     }
   }
   function start(p: Pathway) {
+    submissionId.current = crypto.randomUUID();
+    uncertain.current = false;
+    setFrozenRecord(undefined);
+    clearDraft();
+    setGoneReason("");
+    setConfirmingNew(false);
+    setNotice("");
+    setInput("");
+    setName("");
+    setEmail("");
+    setDone(false);
+    setError("");
+    setClips([]);
+    clipsRef.current = [];
+    receipts.current = [];
+    setPending([]);
     const q = questionById(p === "quick" ? "general" : "context_work");
     setPathway(p);
     setQuestion(q);
@@ -303,6 +438,7 @@ export function FeedbackPage() {
     if (
       !pathway ||
       !question ||
+      frozenRecord !== undefined ||
       sending.current ||
       voice.listening ||
       voice.starting ||
@@ -404,48 +540,149 @@ export function FeedbackPage() {
       },
     };
   }
-  async function submit() {
+  const clipHere = (index: number) => index < clipsRef.current.length;
+  async function submit(override?: string) {
     if (sending.current || voice.listening || voice.starting || uploading.current) return;
     setError("");
+    setNotice("");
     sending.current = true;
     setBusy(true);
+    let stage: "upload" | "submit" = "upload";
+    let serialized = "";
     try {
-      const saved: AudioReceipt[] = [];
-      for (const [i, clip] of clipsRef.current.entries()) {
-        const receipt = receipts.current[i];
-        // Re-upload ten minutes early, so a device clock running slow cannot send expired receipts.
-        const expires = Number(receipt?.sig.split(".")[0] ?? 0);
-        saved.push(
-          receipt && expires - 10 * 60_000 > Date.now() ? receipt : await uploadRecording(clip, i),
-        );
+      // The ID reserves this exact record, even if GitHub commits it but issue creation fails.
+      serialized = override ?? frozenRecord ?? JSON.stringify(record());
+      const parsed = JSON.parse(serialized) as Submission;
+      setFrozenRecord(serialized);
+      saveDraft(serialized);
+      // Recordings that cannot be renewed (the audio is gone) fail before any request.
+      if (lostRecordings(parsed, receipts.current, clipHere).length) {
+        setGoneReason(recordingsLostMessage(uncertain.current));
+        return;
       }
+      const count = Math.max(clipsRef.current.length, Math.max(-1, ...audioIndices(parsed)) + 1);
+      for (let i = 0; i < count; i++) {
+        const clip = clipsRef.current[i];
+        if (clip && !receiptUsable(receipts.current[i], Date.now()))
+          receipts.current[i] = await uploadRecording(clip, i);
+      }
+      // Receipts go by position: a gap would shift every later recording on the server. The
+      // check above guarantees each slot has a usable receipt or a clip just uploaded.
+      const saved = Array.from({ length: count }, (_, i) => receipts.current[i]).filter(
+        (receipt): receipt is AudioReceipt => !!receipt,
+      );
+      saveDraft(serialized);
+      stage = "submit";
       const r = await fetch(`${feedbackApiBase()}/api/feedback/submit`, {
         method: "POST",
         signal: AbortSignal.timeout(75_000),
         credentials: "omit",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ record: record(), receipts: saved }),
+        body: `{"submissionId":${JSON.stringify(submissionId.current)},"record":${serialized},"receipts":${JSON.stringify(saved)}}`,
       });
       const result = await feedbackResponse(r);
       if (!Number.isSafeInteger(result.reference) || result.reference < 1)
         throw new Error("Feedback reference is unavailable.");
       setReference(result.reference);
-    } catch {
-      setError(
-        "We couldn't submit your feedback. Your answers and recordings are still here. Try again, or use Download my feedback to keep a copy.",
-      );
+      clearDraft();
+    } catch (error) {
+      const failure = asFailure(error);
+      // Only an answer that may have reached storage makes the record uncertain; a limiter
+      // refusal or a rejected upload never did.
+      if (stage === "submit" && failure.mayHaveStored) uncertain.current = true;
+      // The saved draft must remember that an attempt may have reached storage.
+      if (uncertain.current && serialized) saveDraft(serialized);
+      let parsed: Submission | undefined;
+      try {
+        parsed = JSON.parse(serialized) as Submission;
+      } catch {
+        parsed = undefined;
+      }
+      const here = !parsed || audioIndices(parsed).every(clipHere);
+      if (failure.kind === "receipts") receipts.current = []; // Stale: never resend them.
+      if (failure.kind === "receipts" && parsed && lostRecordings(parsed, [], clipHere).length)
+        setGoneReason(recordingsLostMessage(uncertain.current));
+      else if (stage === "upload" && ["invalid", "too-large", "unsupported"].includes(failure.kind))
+        setGoneReason(failureMessage(failure.kind, { recordingsHere: here, stage }));
+      else
+        setError(
+          failureMessage(failure.kind, { recordingsHere: here, stage, frozen: uncertain.current }),
+        );
+      // The server validates before it writes anything, so a rejected first attempt can be edited.
+      if (
+        stage === "submit" &&
+        !uncertain.current &&
+        ["invalid", "too-large", "unsupported", "receipts"].includes(failure.kind)
+      ) {
+        setFrozenRecord(undefined);
+        clearDraft();
+      }
     } finally {
       sending.current = false;
       setBusy(false);
     }
   }
+  /** A new submission ID with every recording reference removed; nothing is sent yet. */
+  function removeRecordings(): string {
+    const current: Submission = frozenRecord ? JSON.parse(frozenRecord) : record();
+    const stripped = withoutRecordings(current);
+    submissionId.current = crypto.randomUUID();
+    clipsRef.current = [];
+    setClips([]);
+    receipts.current = [];
+    setPending([]);
+    // The unsent text is now in the transcript; leaving it in the box would send it twice.
+    setInput("");
+    uncertain.current = false;
+    setGoneReason("");
+    setError("");
+    clearDraft();
+    setMessages(stripped.transcript as TranscriptMessage[]);
+    return JSON.stringify(stripped);
+  }
+  async function submitWithoutRecordings() {
+    await submit(removeRecordings());
+  }
+  function recordAgain() {
+    removeRecordings();
+    setFrozenRecord(undefined);
+    setDone(false);
+    setQuestion(questionById("confirmed"));
+    setNotice(
+      "Recordings removed. Type or record what you'd like to add, press Send answer, then Submit.",
+    );
+  }
+  function saveDraft(serialized: string) {
+    storeDraft(browserStorage(), owner, {
+      submissionId: submissionId.current,
+      record: serialized,
+      uncertain: uncertain.current,
+      receipts: Array.from(
+        { length: receipts.current.length },
+        (_, i) => receipts.current[i] ?? null,
+      ),
+    });
+  }
+  function clearDraft() {
+    removeDraft(browserStorage(), owner);
+  }
   async function download() {
     setError("");
+    setNotice("");
     setBusy(true);
     try {
-      const bytes = await feedbackArchive(record(), clips);
-      if (!(await saveFeedbackArchive(bytes)))
+      const current: Submission = frozenRecord ? JSON.parse(frozenRecord) : record();
+      const bytes = await feedbackArchive(current, clips);
+      if (!(await saveFeedbackArchive(bytes))) {
         setError("The save was cancelled. Your feedback is still here.");
+      } else {
+        // Audio never survives a reload, so say so rather than imply the archive holds it.
+        const missing = audioIndices(current).filter((i) => !clips[i]);
+        if (missing.length)
+          setNotice(
+            `Downloaded your answers without ${missing.length === 1 ? "recording" : "recordings"} ${missing.map((i) => i + 1).join(", ")}: the audio is no longer in this browser.`,
+          );
+      }
     } catch {
       setError("The download couldn't be created. Please try again before leaving this page.");
     } finally {
@@ -459,7 +696,9 @@ export function FeedbackPage() {
         Back to welcome
       </Link>
       <header className="space-y-3">
-        <h1 className="text-3xl font-semibold">Give feedback</h1>
+        <h1 ref={titleRef} tabIndex={-1} className="text-3xl font-semibold">
+          Give feedback
+        </h1>
         <p>Tell us honestly what worked and what got in the way. Type or talk.</p>
       </header>
       <aside className="rounded-xl border bg-muted p-4 text-sm space-y-2">
@@ -482,16 +721,58 @@ export function FeedbackPage() {
           it. The guide is available as a plain form.
         </p>
       )}
+      {pendingDraft && !pathway && (
+        <section
+          aria-labelledby="feedback-draft-heading"
+          className="space-y-3 rounded-xl border p-4"
+        >
+          <h2
+            id="feedback-draft-heading"
+            tabIndex={-1}
+            ref={draftHeading}
+            className="text-lg font-semibold"
+          >
+            Restore your unsent feedback?
+          </h2>
+          <p>
+            You have feedback from {new Date(pendingDraft.savedAt).toLocaleString()} that wasn't
+            sent. It includes your answers and any name or email you entered, and is kept in this
+            browser for this account only. Recordings are not kept across a reload.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              onClick={() => {
+                restoreDraft(pendingDraft);
+                focusSoon(() => goneHeading.current ?? logRef.current);
+              }}
+            >
+              Restore it
+            </Button>
+            <Button variant="outline" onClick={discardDraft}>
+              Discard it
+            </Button>
+          </div>
+        </section>
+      )}
+      {notice && (
+        <p role="status" className="rounded-lg border p-3">
+          {notice}
+        </p>
+      )}
       {reference ? (
         <div role="status" className="rounded-xl border p-6 text-lg">
           Thanks, your reference is #{reference}.
         </div>
       ) : !pathway ? (
         <div className="flex flex-wrap gap-3">
-          <Button disabled={hosted === null} onClick={() => start("guided")}>
+          <Button disabled={hosted === null || !!pendingDraft} onClick={() => start("guided")}>
             Guided interview
           </Button>
-          <Button disabled={hosted === null} variant="outline" onClick={() => start("quick")}>
+          <Button
+            disabled={hosted === null || !!pendingDraft}
+            variant="outline"
+            onClick={() => start("quick")}
+          >
             Just tell us
           </Button>
           <p className="w-full text-sm text-muted-foreground">
@@ -513,6 +794,8 @@ export function FeedbackPage() {
             />
           </div>
           <div
+            ref={logRef}
+            tabIndex={-1}
             role="log"
             aria-label="Feedback conversation"
             aria-live="polite"
@@ -540,23 +823,27 @@ export function FeedbackPage() {
               <Controls
                 key={question.id}
                 question={question}
-                disabled={locked}
+                disabled={locked || frozenRecord !== undefined}
                 selected={question.id === "apps" ? walkthrough : []}
                 onAnswer={(text, value) => void send(text, value)}
               />
               <Label htmlFor="feedback-answer">Your answer</Label>
               <Textarea
                 id="feedback-answer"
+                ref={answerRef}
                 maxLength={4000}
                 rows={4}
                 value={input}
                 disabled={locked}
+                readOnly={frozenRecord !== undefined}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Type here, or use the microphone"
               />
               <div className="flex flex-wrap items-center gap-2">
                 <Button
-                  disabled={locked || (!input.trim() && !pending.length)}
+                  disabled={
+                    locked || frozenRecord !== undefined || (!input.trim() && !pending.length)
+                  }
                   onClick={() => void send()}
                 >
                   Send answer
@@ -566,6 +853,7 @@ export function FeedbackPage() {
                     variant="outline"
                     disabled={
                       busy ||
+                      frozenRecord !== undefined ||
                       savingRecordings > 0 ||
                       voice.starting ||
                       (!voice.listening && (!voice.supported || clips.length >= 10))
@@ -586,7 +874,7 @@ export function FeedbackPage() {
                 )}
                 <Button
                   variant="ghost"
-                  disabled={locked}
+                  disabled={locked || frozenRecord !== undefined}
                   onClick={() => void send("Skip", "(skipped)")}
                 >
                   Skip
@@ -621,6 +909,8 @@ export function FeedbackPage() {
                 id="feedback-name"
                 value={name}
                 maxLength={120}
+                disabled={busy}
+                readOnly={frozenRecord !== undefined}
                 onChange={(e) => setName(e.target.value)}
               />
             </div>
@@ -631,21 +921,88 @@ export function FeedbackPage() {
                 type="email"
                 maxLength={254}
                 value={email}
+                disabled={busy}
+                readOnly={frozenRecord !== undefined}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
             <p className="text-sm text-muted-foreground">Leave both blank to stay anonymous.</p>
           </div>
+          {frozenRecord !== undefined && (
+            <p className="text-sm text-muted-foreground">
+              This submission is saved for retry. Answers and contact details are read-only until it
+              finishes. Start a new submission to give different feedback.
+            </p>
+          )}
           {error && (
             <p role="alert" className="rounded-lg border p-3">
               {error}
             </p>
           )}
+          {goneReason && (
+            <section
+              aria-labelledby="feedback-recordings-heading"
+              className="space-y-3 rounded-lg border p-3"
+            >
+              <h2
+                id="feedback-recordings-heading"
+                tabIndex={-1}
+                ref={goneHeading}
+                className="font-semibold"
+              >
+                Recordings can't be sent
+              </h2>
+              <p>{goneReason}</p>
+              <div className="flex flex-wrap gap-3">
+                <Button disabled={locked} onClick={() => void submitWithoutRecordings()}>
+                  Submit without recordings
+                </Button>
+                <Button variant="outline" disabled={locked} onClick={recordAgain}>
+                  Remove recordings and record again
+                </Button>
+              </div>
+            </section>
+          )}
+          <AlertDialog open={confirmingNew} onOpenChange={setConfirmingNew}>
+            <AlertDialogContent
+              onCloseAutoFocus={(event) => {
+                event.preventDefault();
+                const started = startedNew.current;
+                startedNew.current = false;
+                focusSoon(() =>
+                  started ? (answerRef.current ?? titleRef.current) : startNewButton.current,
+                );
+              }}
+            >
+              <AlertDialogTitle>Discard this submission?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Starting a new submission permanently removes your answers, contact details and
+                recordings from this page. If it may already have reached the team, they keep that
+                copy. Download first if you want your own.
+              </AlertDialogDescription>
+              <AlertDialogFooter>
+                <Button variant="outline" disabled={locked} onClick={() => void download()}>
+                  Download my feedback first
+                </Button>
+                <AlertDialogAction
+                  disabled={locked}
+                  onClick={() => {
+                    startedNew.current = true;
+                    start(pathway);
+                  }}
+                >
+                  Discard and start a new submission
+                </AlertDialogAction>
+                <AlertDialogCancel>Keep this submission</AlertDialogCancel>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <div className="flex flex-wrap gap-3">
             <Button
               disabled={
                 locked ||
                 savingRecordings > 0 ||
+                !!goneReason ||
                 (messages.length < 2 && !input.trim() && !pending.length)
               }
               onClick={() => void submit()}
@@ -659,6 +1016,16 @@ export function FeedbackPage() {
             >
               Download my feedback
             </Button>
+            {frozenRecord !== undefined && (
+              <Button
+                ref={startNewButton}
+                variant="outline"
+                disabled={locked || savingRecordings > 0}
+                onClick={() => setConfirmingNew(true)}
+              >
+                Start a new submission
+              </Button>
+            )}
           </div>
         </>
       )}
