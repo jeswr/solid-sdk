@@ -57,6 +57,57 @@ function ancestorContainers(document: URL): string[] {
   }
 }
 
+/** Why a storage description gave no roots: `transient` (network, 5xx, 429) or anything else. */
+type DescriptionFailure = "transient" | "invalid";
+
+/** A status that says nothing about the resource and may succeed later. */
+const transientStatus = (status: number) => status >= 500 || status === 429;
+
+/** {@link storageDescriptionRoots}, but reporting why nothing could be read. */
+async function readStorageDescription(
+  storage: string,
+  http: Pick<HttpOptions, "fetch">,
+  options: { allowInsecureLoopback?: boolean; signal: AbortSignal },
+): Promise<string[] | DescriptionFailure> {
+  let response: Response;
+  try {
+    const url = secureUrl(storage, options.allowInsecureLoopback === true, "storage description");
+    response = await http.fetch!(url, {
+      headers: { accept: "application/lws+cid, text/turtle;q=0.9" },
+      credentials: "omit",
+      redirect: "error",
+      signal: options.signal,
+    });
+    if (transientStatus(response.status)) return "transient";
+    if (!response.ok || !describes(response, url.href)) return "invalid";
+  } catch {
+    // Network failures (and redirects refused by `redirect: "error"`) may succeed later.
+    return "transient";
+  }
+  try {
+    if (
+      response.headers.get("content-type")?.includes("json") ||
+      response.headers.get("content-type")?.includes("application/lws+cid")
+    ) {
+      const document = await response.json();
+      const includes = (value: unknown, type: string) =>
+        value === type || (Array.isArray(value) && value.includes(type));
+      if (document?.id !== storage || !includes(document.type, "Storage")) return "invalid";
+      return (Array.isArray(document.service) ? document.service : [])
+        .filter((service: { type?: unknown } | null) => includes(service?.type, "StorageRoot"))
+        .map((service: { serviceEndpoint?: unknown }) => service.serviceEndpoint)
+        .filter((root: unknown): root is string => typeof root === "string");
+    }
+    const dataset = new Store(new Parser({ baseIRI: storage }).parse(await response.text()));
+    return dataset
+      .getSubjects(DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${PIM}Storage`), null)
+      .filter((subject) => subject.termType === "NamedNode")
+      .map((subject) => subject.value);
+  } catch {
+    return "invalid";
+  }
+}
+
 /**
  * The storage roots a storage description advertises, read without credentials or redirects:
  * an LWS (`application/lws+cid`) description's `StorageRoot` services, or a Turtle description's
@@ -69,36 +120,8 @@ export async function storageDescriptionRoots(
   http: Pick<HttpOptions, "fetch">,
   options: { allowInsecureLoopback?: boolean; signal: AbortSignal },
 ): Promise<string[]> {
-  try {
-    const url = secureUrl(storage, options.allowInsecureLoopback === true, "storage description");
-    const response = await http.fetch!(url, {
-      headers: { accept: "application/lws+cid, text/turtle;q=0.9" },
-      credentials: "omit",
-      redirect: "error",
-      signal: options.signal,
-    });
-    if (!response.ok || !describes(response, url.href)) return [];
-    if (
-      response.headers.get("content-type")?.includes("json") ||
-      response.headers.get("content-type")?.includes("application/lws+cid")
-    ) {
-      const document = await response.json();
-      const includes = (value: unknown, type: string) =>
-        value === type || (Array.isArray(value) && value.includes(type));
-      if (document?.id !== storage || !includes(document.type, "Storage")) return [];
-      return (Array.isArray(document.service) ? document.service : [])
-        .filter((service: { type?: unknown } | null) => includes(service?.type, "StorageRoot"))
-        .map((service: { serviceEndpoint?: unknown }) => service.serviceEndpoint)
-        .filter((root: unknown): root is string => typeof root === "string");
-    }
-    const dataset = new Store(new Parser({ baseIRI: storage }).parse(await response.text()));
-    return dataset
-      .getSubjects(DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${PIM}Storage`), null)
-      .filter((subject) => subject.termType === "NamedNode")
-      .map((subject) => subject.value);
-  } catch {
-    return [];
-  }
+  const roots = await readStorageDescription(storage, http, options);
+  return typeof roots === "string" ? [] : roots;
 }
 
 /** Identity assertions authorize roots. Resource responses can only narrow that authority. */
@@ -149,66 +172,92 @@ export function createBoundary(
   };
   const descriptionRoots = (storage: string, signal: AbortSignal) =>
     storageDescriptionRoots(storage, http, { allowInsecureLoopback: insecure, signal });
+  type ServerDeclared = Exclude<StorageDiscovery, { source: "profile" }>;
+  const none = (
+    reason: Exclude<Extract<StorageDiscovery, { source: "none" }>["reason"], "storage-ineligible">,
+  ): ServerDeclared => ({ source: "none", reason });
   /**
    * The storage the server that served the WebID document declares for it, for profiles without
-   * `pim:storage`. Every request is credential-free and unredirected. Evidence, in order:
-   * 1. the document's own response links exactly one same-origin Solid storage description whose
-   *    `pim:Storage` is a container holding the document, and that container's HEAD either
-   *    self-identifies as `pim:Storage` (naming no other description) or withholds metadata
-   *    (401/403, a private root);
-   * 2. the nearest ancestor container of the document whose HEAD self-identifies as `pim:Storage`
-   *    (Solid Protocol storage discovery).
-   * Nothing on another origin, outside the document's ancestors, or after a redirect qualifies.
+   * `pim:storage`. Every request is credential-free and unredirected, and learning nothing is
+   * always the fallback. The ancestor containers of the document (at most ten, on the WebID's
+   * origin) are probed nearest first, and the first decisive answer ends the walk:
+   * - a container whose HEAD (2xx, 401 or 403) self-identifies as `pim:Storage` is the storage,
+   *   so a nearer storage always wins over a broader one the description claims;
+   * - a container the document's single same-origin Solid storage description claims as
+   *   `pim:Storage` is the storage when its HEAD withholds metadata (401/403, a private root);
+   *   a readable claimed container that does not self-identify contradicts the description;
+   * - a readable container that neither self-identifies nor is claimed is passed;
+   * - an unreadable (401/403) unclaimed container may itself be the storage: only the document's
+   *   own container is passed, and never on the way to the origin root;
+   * - anything else (404, redirect, 5xx, 429, network failure) ends the walk with nothing.
+   * A description that cannot be read, claims no container holding the document, or contradicts
+   * itself learns nothing; discovery never falls back from a failed description to the walk.
+   * Nothing is learned after a redirect through another origin, or one the platform hid.
    */
   const serverDeclaredStorage = async (
     webId: URL,
     document: URL,
     response: Response,
+    crossedOrigin: boolean,
     signal: AbortSignal,
-  ): Promise<Exclude<StorageDiscovery, { source: "profile" }>> => {
-    if (document.origin !== webId.origin) return { source: "none", reason: "profile-redirected" };
-    const ancestors = ancestorContainers(document).filter((root) => isWithin(document, root));
+  ): Promise<ServerDeclared> => {
+    if (crossedOrigin || response.redirected || document.origin !== webId.origin)
+      return none("profile-redirected");
+    const ancestors = ancestorContainers(document)
+      .filter((root) => isWithin(document, root))
+      .slice(0, MAX_ANCESTORS);
+    let description: string | undefined;
+    let claimed = new Set<string>();
     if (describes(response, document.href)) {
       const descriptions = parseLinks(response.headers.get("link"), document.href).filter(
         (link) => link.rel === SOLID_STORAGE_DESCRIPTION,
       );
-      const description = descriptions.length === 1 ? descriptions[0]!.href : undefined;
-      if (description !== undefined && new URL(description).origin === document.origin) {
-        const claimed = new Set(
-          (await descriptionRoots(description, signal)).map(containerOf).filter((root) => root),
-        );
+      const only = descriptions.length === 1 ? descriptions[0]!.href : undefined;
+      if (only !== undefined && new URL(only).origin === document.origin) {
+        description = only;
+        const roots = await readStorageDescription(description, http, {
+          allowInsecureLoopback: insecure,
+          signal,
+        });
         signal.throwIfAborted();
-        // Most specific first: of nested storages, the one holding the document directly wins.
-        for (const root of ancestors.filter((root) => claimed.has(root)).slice(0, MAX_ANCESTORS)) {
-          const confirmation = await head(root, { http, signal });
-          signal.throwIfAborted();
-          if (confirmation === undefined || !describes(confirmation, root)) continue;
-          const named = parseLinks(confirmation.headers.get("link"), root).filter(
-            (link) => link.rel === SOLID_STORAGE_DESCRIPTION,
-          );
-          const typed =
-            selfIdentifiedSolidRoot(root, confirmation) !== undefined &&
-            named.every((link) => link.href === description);
-          if (
-            (typed && confirmation.ok) ||
-            confirmation.status === 401 ||
-            confirmation.status === 403
-          )
-            return { source: "storage-description", root };
-        }
+        if (roots === "transient") return none("discovery-failed");
+        if (roots === "invalid") return none("storage-unconfirmed");
+        claimed = new Set(roots.map(containerOf).filter((root) => root !== undefined));
+        // The description names storages, but none of them holds the document.
+        if (!ancestors.some((root) => claimed.has(root))) return none("storage-unconfirmed");
       }
     }
-    for (const root of ancestors.slice(0, MAX_ANCESTORS)) {
+    const origin = `${document.origin}/`;
+    let passedUnreadable = false;
+    for (const [index, root] of ancestors.entries()) {
       const confirmation = await head(root, { http, signal });
       signal.throwIfAborted();
-      if (
-        confirmation !== undefined &&
-        (confirmation.ok || confirmation.status === 401 || confirmation.status === 403) &&
-        selfIdentifiedSolidRoot(root, confirmation) !== undefined
-      )
-        return { source: "storage-type", root };
+      if (confirmation === undefined || transientStatus(confirmation.status))
+        return none("discovery-failed");
+      const unreadable = confirmation.status === 401 || confirmation.status === 403;
+      if (!describes(confirmation, root) || !(confirmation.ok || unreadable))
+        return none("storage-unconfirmed");
+      const isClaimed = claimed.has(root);
+      // Past a container that might itself be the storage, the origin root is never accepted.
+      const widening = passedUnreadable && root === origin;
+      if (selfIdentifiedSolidRoot(root, confirmation) !== undefined) {
+        const named = parseLinks(confirmation.headers.get("link"), root).filter(
+          (link) => link.rel === SOLID_STORAGE_DESCRIPTION,
+        );
+        if (widening || (description !== undefined && named.some((l) => l.href !== description)))
+          return none("storage-unconfirmed");
+        return { source: isClaimed ? "storage-description" : "storage-type", root };
+      }
+      if (isClaimed) {
+        if (!unreadable || widening) return none("storage-unconfirmed");
+        return { source: "storage-description", root };
+      }
+      if (unreadable) {
+        if (index !== 0 || root === origin) return none("no-storage-declared");
+        passedUnreadable = true;
+      }
     }
-    return { source: "none", reason: "no-storage-declared" };
+    return none("no-storage-declared");
   };
   const trustAuthorizationServer = ({
     authorizationServer,
@@ -276,12 +325,16 @@ export function createBoundary(
       }
       if (learnedWebId === webId) return;
       const started = epoch;
-      const { response, url } = await secureDocumentFetch(
-        new URL(webId),
-        "text/turtle",
-        signal,
-        http,
-      );
+      const webIdOrigin = new URL(webId).origin;
+      let crossedOrigin = false;
+      // secureDocumentFetch follows redirects itself; record every hop it requests.
+      const { response, url } = await secureDocumentFetch(new URL(webId), "text/turtle", signal, {
+        ...http,
+        fetch: (input, init) => {
+          if (new URL(new Request(input).url).origin !== webIdOrigin) crossedOrigin = true;
+          return http.fetch!(input, init);
+        },
+      });
       if (!response.ok) throw new Error("WebID storage discovery failed");
       const dataset = new Store(new Parser({ baseIRI: url.href }).parse(await response.text()));
       const agent = new TermWrapper(webId, dataset, DataFactory);
@@ -298,12 +351,18 @@ export function createBoundary(
       if (storages.length === 0) {
         // The profile names no storage (CSS 7 default profiles): only the server that served the
         // WebID document may declare one, and only a container that holds that document.
-        const declared = await serverDeclaredStorage(new URL(webId), url, response, signal);
+        const declared = await serverDeclaredStorage(
+          new URL(webId),
+          url,
+          response,
+          crossedOrigin,
+          signal,
+        );
         discovery = declared;
         if (declared.source !== "none") {
           add(next, declared.root);
           if (!next.allows(declared.root))
-            discovery = { source: "none", reason: "storage-ineligible" };
+            discovery = { source: "none", reason: "storage-ineligible", declaredBy: "server" };
         }
       }
       for (const storage of storages) {
@@ -337,7 +396,7 @@ export function createBoundary(
         }
       }
       if (discovery.source === "profile" && next.entries.length === 0)
-        discovery = { source: "none", reason: "storage-ineligible" };
+        discovery = { source: "none", reason: "storage-ineligible", declaredBy: "profile" };
       const nextEndpoints = new Map<string, string>();
       const verified = [...next.entries];
       for (const root of verified)

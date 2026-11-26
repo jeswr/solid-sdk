@@ -86,20 +86,32 @@ export interface Identity {
 /**
  * Provenance of the automatic credential roots. `profile`: the profile's `pim:storage`.
  * Otherwise only the server that served the WebID document can declare the storage, and only a
- * container on the WebID's origin that holds the document: `storage-description` (the document's
- * Solid storage description link) or `storage-type` (an ancestor container whose HEAD carries
- * `Link: <pim:Storage>; rel="type"`). Reasons for `none`: `no-storage-declared` (no such
- * evidence), `profile-redirected` (the WebID document was served from another origin),
- * `storage-ineligible` (declared storages failed the scheme or `boundary.eligible` policy).
- * Absent when no WebID was learned or `boundary.automatic` is false.
+ * container on the WebID's origin that holds the document, preferring the nearest:
+ * `storage-description` (claimed by the document's Solid storage description link) or
+ * `storage-type` (an ancestor container whose HEAD carries `Link: <pim:Storage>; rel="type"`).
+ * Reasons for `none`: `no-storage-declared` (no such evidence, or an unreadable container that
+ * might itself be the storage stopped the search), `profile-redirected` (the WebID document was
+ * reached through a redirect via another origin, or one the platform hid), `storage-unconfirmed`
+ * (the server's evidence contradicted itself, e.g. a claimed container is readable and untyped,
+ * or a probe got a 404 or redirect), `discovery-failed` (a transient failure: network error, 5xx
+ * or 429; the next login or restore tries again), `storage-ineligible` (declared storages failed
+ * the scheme or `boundary.eligible` policy; `declaredBy` says whether the profile or the server
+ * declared them). `none` means no automatic root: requests outside the configured
+ * `boundary.roots` go out anonymous. Absent when no WebID was learned or `boundary.automatic` is
+ * false.
  */
 export type StorageDiscovery =
   | { source: "profile" }
   | { source: "storage-description" | "storage-type"; root: string }
   | {
       source: "none";
-      reason: "no-storage-declared" | "profile-redirected" | "storage-ineligible";
-    };
+      reason:
+        | "no-storage-declared"
+        | "profile-redirected"
+        | "storage-unconfirmed"
+        | "discovery-failed";
+    }
+  | { source: "none"; reason: "storage-ineligible"; declaredBy: "profile" | "server" };
 
 /** Credential-free ownership snapshot from a pod-auth Identity. Missing identifiers fail closed. */
 export type GrantOwner = Pick<Identity, "webId" | "issuer" | "grantId">;

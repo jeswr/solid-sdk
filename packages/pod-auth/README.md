@@ -143,29 +143,48 @@ document; assertions must still name the original WebID. Invalid assertions gran
 When the profile has no `pim:storage` statement about the WebID at all (Community Solid Server 7
 default profiles have none), the server that served the WebID document may declare the storage that
 holds it. Only one container can be learned this way, and only one that holds the WebID document on
-the WebID's own origin. Every request omits credentials and redirects are not followed. Two kinds of
-evidence count, tried in this order:
+the WebID's own origin. Every request omits credentials and redirects are not followed. Learning
+nothing is always the fallback; a root broader than the user's own storage never is.
 
-1. The WebID document's own response carries exactly one same-origin
-   `Link: <…>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`, that description names a
-   `pim:Storage` container that holds the document, and that container's HEAD either self-identifies
-   as `pim:Storage` (naming no other description) or withholds metadata with 401/403, as a private CSS
-   pod root does. If several claimed containers hold the document, the most specific one is tried first.
-   A readable container that does not self-identify, a redirect, a 404 or a 5xx contradicts the claim.
-2. Solid Protocol storage discovery: the nearest of up to ten ancestor containers of the document whose
-   HEAD (2xx, 401 or 403, not redirected) carries `Link: <http://www.w3.org/ns/pim/space#Storage>; rel="type"`.
+If the document's own response carries exactly one same-origin
+`Link: <…>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`, that description is read
+first. Its `pim:Storage` subjects that hold the document are the server's claims. A description that
+cannot be read (network error, 5xx or 429: reason `discovery-failed`; 404, redirect or unparseable:
+`storage-unconfirmed`) or that claims no container holding the document learns nothing; discovery
+never falls back from a failed description to the walk below.
 
-Nothing is learned if the WebID document was served from another origin after a redirect, if the
-profile lists any `pim:storage` (even only ineligible ones), or if `boundary.automatic` is `false`.
-The server that serves the WebID document could already add `pim:storage` to it, so this fallback
-trusts no new party. It never reaches another origin, a sibling or a descendant of the document's
-container. `Identity.storageDiscovery` reports where the automatic roots came from:
+Then the document's ancestor containers (at most ten) are probed by HEAD, nearest first, and the
+first decisive answer ends the walk:
+
+- A container whose HEAD (2xx, 401 or 403) carries `Link: <http://www.w3.org/ns/pim/space#Storage>; rel="type"`
+  is the storage (`storage-description` if the description claimed it, else `storage-type`), even
+  when the description claims a broader root. CSS's own `default.json` claims the origin root `/` in
+  `/.well-known/solid` while each pod root self-identifies, so Alice learns `/alice/`, never `/`. A
+  self-identified container naming a different storage description contradicts the description.
+- A claimed container answering 401/403 without a type Link (a private CSS pod root) is the storage.
+  A claimed container that is readable but does not self-identify contradicts the description, and
+  nothing is learned even if a broader container is also claimed.
+- A readable, unclaimed container that does not self-identify is passed.
+- A 401/403 unclaimed container might itself be the storage (CSS sends no type Link on 401). Only the
+  document's own container (CSS profile containers are private) is passed, and the origin root is
+  never accepted past it. Any other such container ends the walk with nothing learned.
+- Anything else (404, redirect, 5xx, 429, network failure) ends the walk with nothing learned.
+
+Nothing is learned if the WebID document was reached through a redirect via another origin (every
+hop is checked, and a redirect the browser hid counts as one), if the profile lists any
+`pim:storage` (even only ineligible ones), or if `boundary.automatic` is `false`. It never reaches
+another origin, a sibling or a descendant of the document's container. The server that serves the
+WebID document could already add `pim:storage` to it, but the claimed root comes from server
+configuration, which can nest storages (CSS `default.json` does): hence the nearest-storage and
+stop-at-unreadable rules. `Identity.storageDiscovery` reports where the automatic roots came from:
 `{ source: "profile" }`, `{ source: "storage-description" | "storage-type", root }`, or
-`{ source: "none", reason }` with `reason` one of `"no-storage-declared"`, `"profile-redirected"` or
-`"storage-ineligible"` (declared storages failed the scheme or `boundary.eligible` policy). It is
-absent without a WebID or with `automatic: false`. With `source: "none"` every pod request goes out
-anonymous, so a private pod looks unreadable: tell the user to add `pim:storage` to their profile, or
-configure `boundary.roots`.
+`{ source: "none", reason }` with `reason` one of `"no-storage-declared"`, `"profile-redirected"`,
+`"storage-unconfirmed"`, `"discovery-failed"` (transient; the next login or restore tries again) or
+`"storage-ineligible"` (declared storages failed the scheme or `boundary.eligible` policy; such a
+value also has `declaredBy: "profile" | "server"`). It is absent without a WebID or with
+`automatic: false`. `source: "none"` means no automatic root: requests outside configured
+`boundary.roots` go out anonymous, so a private pod looks unreadable. Tell the user to add
+`pim:storage` to their profile, or configure `boundary.roots`.
 
 Apart from that login-time WebID-document fallback, a target's `Link` headers, `pim:Storage` type,
 ancestor responses, storage description, or `WWW-Authenticate` challenge never adds a credential root. UMA authorization servers must be on the
