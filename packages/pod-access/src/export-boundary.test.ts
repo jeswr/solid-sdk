@@ -78,9 +78,10 @@ describe("public export boundary", () => {
       assert.deepEqual(Object.keys(roles).sort(),
         [
           "addGrant", "ensurePrivateContainerAccess", "grantsWithRoles", "isGrantableTarget",
-          "isRoleError", "isSealed", "modesToRole", "movePreservingAccess", "readAccessModes",
-          "readGrants", "readScopedGrants", "removeGrant", "rolesToModes", "sealAccess", "sealDataset",
-          "setGrants", "setScopedGrants", "unsealAccess", "verifyPrivateDemoAccess",
+          "isRoleError", "isSealed", "isSecuring", "modesToRole", "movePreservingAccess",
+          "readAccessModes", "readGrants", "readScopedGrants", "removeGrant", "rolesToModes",
+          "sealAccess", "sealDataset", "setGrants", "setScopedGrants", "unsealAccess",
+          "verifyPrivateDemoAccess",
         ].sort());
       assert.equal(roles.modesToRole(["read"], "resource"), "viewer");
       const requests = await load("@jeswr/pod-access/requests-solid");
