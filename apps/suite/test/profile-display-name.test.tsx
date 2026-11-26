@@ -188,3 +188,17 @@ it("strips bidirectional and invisible characters and caps long names", async ()
   const invisible = session(`<${webId}> <${foaf}> "\u200b\u200f", "Visible" .`);
   expect(await resolveDisplayName(invisible, webId)).toBe("Visible");
 });
+it("publishes each name as it resolves, without waiting for a slow profile", async () => {
+  const slow = "https://slow.example/profile#me";
+  const account = {
+    ...session(),
+    publicFetch: vi.fn(async (input: RequestInfo | URL) =>
+      String(input).startsWith("https://slow.example/")
+        ? new Promise<Response>(() => {})
+        : response(`<${webId}> <${foaf}> "Alice" .`),
+    ),
+  } satisfies PodSession;
+  const hook = renderHook(() => useDisplayNames([slow, webId], account));
+  await waitFor(() => expect(hook.result.current(webId)).toBe("Alice"));
+  expect(hook.result.current(slow)).toBe("slow.example");
+});

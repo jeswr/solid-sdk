@@ -488,3 +488,35 @@ it.each([
   expect(screen.getByRole("dialog").textContent).not.toContain(author);
   expect(http).toHaveBeenCalledTimes(own ? 0 : 1);
 });
+
+// AUTHORED-BY Claude Opus 5.5
+it("names the author with the document's own account, not the shell's, and exposes the WebID", async () => {
+  insert();
+  const account = (webId: string) =>
+    ({
+      mode: "solid",
+      webId,
+      displayName: "Account",
+      storageUrl: "https://pod.example/",
+      fetch: vi.fn(async () => new Response(null, { status: 404 })),
+      publicFetch: vi.fn(async () => new Response(null, { status: 404 })),
+      subscribe: () => () => {},
+    }) satisfies PodSession;
+  render(
+    <SessionContext.Provider
+      value={{
+        status: "ready",
+        session: account("https://shell.example/#me"),
+        extension: ABSENT,
+        connectExtension: async () => {},
+      }}
+    >
+      <EditorContent editor={editor} />
+      <SuggestionPopover editor={editor} session={account(author)} />
+    </SessionContext.Provider>,
+  );
+  const popup = await screen.findByRole("dialog", { name: "Review suggestion" });
+  const name = popup.querySelector(`[title="${author}"]`) as HTMLElement;
+  expect(name.textContent).toBe("You");
+  expect(name.getAttribute("aria-description")).toBe(author);
+});
