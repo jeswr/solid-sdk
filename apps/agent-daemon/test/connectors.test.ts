@@ -4,6 +4,8 @@ import {
   createConnectionStore,
   IntegrationSyncError,
   NoVaultError,
+  type PodWriter,
+  PrivateDestinationError,
   ReauthoriseError,
 } from "@jeswr/pod-connectors";
 import { expect, it, vi } from "vitest";
@@ -19,6 +21,11 @@ import { createMemoryPod } from "../src/testing.js";
 const ROOT = "https://pod.example/",
   OWNER = `${ROOT}profile#me`,
   AT = Date.parse("2026-11-01T12:00:00.000Z");
+/** Owner-only checks for the in-memory pod, where no other principal exists. */
+const ownerOnly = {
+  verifyPrivateDestination: async () => true,
+  confirmPrivateWrite: async () => true,
+};
 function fixture() {
   const pod = createMemoryPod();
   const io: ConnectorsJobOptions["podFetch"] = async (input, init) => {
@@ -52,12 +59,18 @@ function fixture() {
       podFetch: io,
       profileDocumentUrl: `${ROOT}profile`,
       now: () => AT,
+      privateDestination: () => ownerOnly,
     },
   };
 }
 it("wires owner-only connection loading, durable needs-reauth and safe health listing", async () => {
   const h = fixture(),
-    config = createConnectionStore({ podRoot: ROOT, webId: OWNER, fetch: h.io });
+    config = createConnectionStore({
+      podRoot: ROOT,
+      webId: OWNER,
+      fetch: h.io,
+      privateDestination: ownerOnly,
+    });
   await config.read();
   await config.write([{ connectorId: "spotify", account: "fixture", enabled: true }]);
   const runner = vi.fn(),
@@ -86,7 +99,12 @@ it("wires owner-only connection loading, durable needs-reauth and safe health li
 });
 it("skips every run on a host without a vault, leaving shared settings and state untouched", async () => {
   const h = fixture(),
-    config = createConnectionStore({ podRoot: ROOT, webId: OWNER, fetch: h.io });
+    config = createConnectionStore({
+      podRoot: ROOT,
+      webId: OWNER,
+      fetch: h.io,
+      privateDestination: ownerOnly,
+    });
   await config.read();
   const rows = [{ connectorId: "spotify", account: "fixture", enabled: true }];
   await config.write(rows);
@@ -114,7 +132,12 @@ it("skips every run on a host without a vault, leaving shared settings and state
 });
 it("refreshes settings and executes the existing runner seam with a source token and cancellation signal", async () => {
   const h = fixture(),
-    config = createConnectionStore({ podRoot: ROOT, webId: OWNER, fetch: h.io });
+    config = createConnectionStore({
+      podRoot: ROOT,
+      webId: OWNER,
+      fetch: h.io,
+      privateDestination: ownerOnly,
+    });
   await config.read();
   await config.write([{ connectorId: "spotify", account: "fixture", enabled: true }]);
   const tokenSource = { accessToken: vi.fn(async () => "synthetic") };
@@ -188,7 +211,12 @@ it("lists only validated opaque connection fields through awp connectors and scr
 });
 
 const settings = (h: ReturnType<typeof fixture>) =>
-  createConnectionStore({ podRoot: ROOT, webId: OWNER, fetch: h.io });
+  createConnectionStore({
+    podRoot: ROOT,
+    webId: OWNER,
+    fetch: h.io,
+    privateDestination: ownerOnly,
+  });
 async function seed(h: ReturnType<typeof fixture>, rows: readonly unknown[]) {
   const config = settings(h);
   await config.read();
@@ -418,4 +446,72 @@ it("keeps an owner's mid-run re-enable when the run's second 401 latches", async
   ]);
   expect(runner).toHaveBeenCalledTimes(3);
   expect((await job.list())[0]).toMatchObject({ enabled: true, health: "ok" });
+});
+
+it("fails closed by default when the pod's owner-only policy cannot be established", async () => {
+  const h = fixture();
+  await seed(h, [{ connectorId: "spotify", account: "fixture", enabled: true }]);
+  const mutations = () => h.pod.requests.filter((r) => !["GET", "HEAD"].includes(r.method)).length;
+  const before = mutations();
+  const runner = vi.fn(okRun);
+  const tokenSource = { accessToken: vi.fn(async () => "synthetic") };
+  // No privateDestination option: the default session checks cannot verify this fake pod.
+  const { privateDestination: _checks, ...defaults } = h.options;
+  const job = createConnectorsJob({ ...defaults, runner, tokenSource });
+  await expect(job.tick()).rejects.toBeInstanceOf(PrivateDestinationError);
+  expect(mutations()).toBe(before);
+  expect(tokenSource.accessToken).not.toHaveBeenCalled();
+  expect(runner).not.toHaveBeenCalled();
+  expect(h.pod.resources.get(`${ROOT}integrations/spotify/state.json`)).toBeUndefined();
+});
+
+it("passes the host's private-destination checks to settings, state and every run's PodWriter", async () => {
+  const h = fixture();
+  await seed(h, [{ connectorId: "spotify", account: "fixture", enabled: true }]);
+  const verify = vi.fn(async (_url: string) => true);
+  const confirm = vi.fn(async (_url: string) => true);
+  const checks = vi.fn((_signal?: AbortSignal) => ({
+    verifyPrivateDestination: verify,
+    confirmPrivateWrite: confirm,
+  }));
+  let writer: PodWriter | undefined;
+  const runner = vi.fn(async (o: { podWriter: PodWriter }) => {
+    writer = o.podWriter;
+    return okRun();
+  });
+  const job = createConnectorsJob({
+    ...h.options,
+    privateDestination: checks,
+    runner,
+    tokenSource: { accessToken: async () => "synthetic" },
+  });
+  await job.tick();
+  expect(runner).toHaveBeenCalledOnce();
+  const state = `${ROOT}integrations/spotify/state.json`;
+  expect(verify).toHaveBeenCalledWith(`${ROOT}integrations/connections.json`);
+  expect(verify).toHaveBeenCalledWith(state);
+  expect(confirm).toHaveBeenCalledWith(state, expect.anything(), expect.any(Function));
+  // The run's writer carries the per-run checks, bound to the run's signal.
+  expect(checks).toHaveBeenCalledWith(expect.any(AbortSignal));
+  expect(writer?.verifyPrivateDestination).toBe(verify);
+  expect(writer?.confirmPrivateWrite).toBe(confirm);
+});
+
+it("refuses every state write when the host's checks refuse, before any state mutation", async () => {
+  const h = fixture();
+  await seed(h, [{ connectorId: "spotify", account: "fixture", enabled: true }]);
+  const state = `${ROOT}integrations/spotify/state.json`;
+  const runner = vi.fn(okRun);
+  const job = createConnectorsJob({
+    ...h.options,
+    privateDestination: () => ({
+      verifyPrivateDestination: async (url: string) => url !== state,
+      confirmPrivateWrite: async () => true,
+    }),
+    runner,
+    tokenSource: { accessToken: async () => "synthetic" },
+  });
+  await job.tick();
+  expect(runner).not.toHaveBeenCalled();
+  expect(h.pod.requests.filter((r) => r.url.startsWith(state) && r.method !== "GET")).toEqual([]);
 });

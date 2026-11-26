@@ -183,6 +183,13 @@ export interface ConnectorSchedulerOptions {
     connection: ConnectorConnection,
     signal: AbortSignal,
   ) => PodWriter | Promise<PodWriter>;
+  /**
+   * The connector's checkpoint store. Its Pod mutations are private writes: build it with
+   * `createConnectorStateStore({ ..., privateDestination })`, passing the same
+   * verifyPrivateDestination/confirmPrivateWrite ports as `podWriter`; without them a
+   * private connector's store refuses before its first mutation and the run fails closed.
+   * A host-built store must enforce the same before/after-write checks itself.
+   */
   readonly stateStore: (connectorId: string, signal: AbortSignal) => ConnectorStateStore;
   /**
    * Persist only this connection's change, merging host config on conflict. Throw
@@ -338,6 +345,15 @@ function bounded<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<
       },
     );
   });
+}
+/**
+ * The root checkpoint as its owner (the CLI) wrote it: every validated root field except
+ * the scheduler's own health, accounts and claims, so `fileCursor` and two-way `sync`
+ * health survive a scheduler write.
+ */
+function rootCheckpoint(state: ConnectorState): ConnectorAccountState {
+  const { accounts: _accounts, claims: _claims, health: _health, ...root } = state;
+  return root;
 }
 function withoutClaim(state: ConnectorState, account: string): ConnectorState {
   const { claims, ...rest } = state;
@@ -916,13 +932,7 @@ export class ConnectorScheduler {
             lastOutcome: account.lastOutcome,
             counts: account.counts,
           }
-        : {
-            connectedAt: current.connectedAt,
-            ...(current.lastSync === undefined ? {} : { lastSync: current.lastSync }),
-            ...(current.cursor === undefined ? {} : { cursor: current.cursor }),
-            lastOutcome: current.lastOutcome,
-            counts: current.counts,
-          };
+        : rootCheckpoint(current);
       return {
         ...root,
         ...(rootHealth ? { health: rootHealth } : {}),

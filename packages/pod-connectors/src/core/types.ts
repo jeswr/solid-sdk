@@ -310,6 +310,8 @@ export interface ConnectorState {
   readonly connectedAt: string;
   readonly lastSync?: string;
   readonly cursor?: string;
+  /** CLI file-import progress beside the API `cursor`, so neither path misreads the other. */
+  readonly fileCursor?: string;
   readonly lastOutcome: "success" | "error";
   readonly counts: { readonly documents: number; readonly items: number; readonly skipped: number };
   /** Two-way health; details remain in the owner-only sync links and manifest. */

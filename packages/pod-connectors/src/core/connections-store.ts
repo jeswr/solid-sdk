@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
-import { createOwnerJsonStore } from "./owner-json.js";
+import { createOwnerJsonStore, type PrivateDestinationChecks } from "./owner-json.js";
 import {
   type ConnectionSaveResult,
   type ConnectorConnection,
@@ -29,24 +29,34 @@ function normalisedEnabledAt(value: unknown): string | undefined | null {
 const isRow = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 
-/** Host-owned opaque connection settings, never credentials or arbitrary OAuth configuration. */
+/** Refusals of the settings document name this id (it is not a registered connector). */
+export const CONNECTIONS_PRIVACY_ID = "connections";
+
+/**
+ * Host-owned opaque connection settings, never credentials or arbitrary OAuth configuration.
+ * The rows name which private services the owner connected, so the document is always
+ * private: every mutation (first-read ACL install, write, update) needs `privateDestination`
+ * (the host's verifyPrivateDestination/confirmPrivateWrite ports) or refuses with
+ * PrivateDestinationError before any request. `peek` stays read-only and ungated.
+ */
 export function createConnectionStore(options: {
   readonly podRoot: string;
   readonly webId: string;
   readonly fetch: typeof fetch;
   readonly signal?: AbortSignal;
+  readonly privateDestination?: PrivateDestinationChecks;
 }) {
-  const root = assertWithinPodScope(
-    options.podRoot,
-    new URL("integrations/", options.podRoot).href,
-    { allowRoot: false },
-  );
+  const { privateDestination: checks, ...rest } = options;
+  const root = assertWithinPodScope(rest.podRoot, new URL("integrations/", rest.podRoot).href, {
+    allowRoot: false,
+  });
   const store = createOwnerJsonStore({
-    ...options,
+    ...rest,
     root,
     url: new URL("connections.json", root).href,
     parse: connectionRows,
     maxBytes: 262_144,
+    privateDestination: { id: CONNECTIONS_PRIVACY_ID, checks },
   });
   return {
     url: store.url,

@@ -728,7 +728,13 @@ Mail markup re-scan releases listing/message reads immediately, and the markup w
 skipped stale updates and protected verified records. Never release a read whose precondition
 is still needed for a subsequent write; this port prevents mailbox-sized dataset retention.
 CON-A2 adds root-exported ConnectorScheduler and owner-only JSON settings/state ports.
-Read the README's Scheduled connectors contract before changing them. Preserve the
+Read the README's Scheduled connectors contract before changing them. Those stores are
+private writes: pass `privateDestination` (the PodWriter's verify/confirm ports) to
+`createConnectorStateStore` and `createConnectionStore`, or every mutation refuses with
+`PrivateDestinationError` before any request; never add a bypass. The CLI and scheduler
+share one checkpoint file (`connectorStateLocation`) and one `connectorState` parser, and
+each must keep the other's validated fields (`fileCursor`, `sync` / `accounts`, `claims`,
+`health`). Preserve the
 whole-container run claim even for different accounts, the continuous worker pool
 (single-flight, cap, drain on stop), bounded connection/concurrency/JSON/retry limits,
 transport cancellation, allowlisted health codes and legacy checkpoint projection.

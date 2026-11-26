@@ -4,9 +4,16 @@ import { assertWithinPodScope, refuseRedirects } from "@jeswr/guarded-fetch";
 import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { writeResource } from "../pod/resource.js";
+import { isCompletedPut, writeResource } from "../pod/resource.js";
 import { readJson } from "./budget.js";
+import { PrivateDestinationError } from "./errors.js";
+import {
+  cleanupPrivateResource,
+  requirePrivateDestination,
+  requirePrivateWriteConfirmation,
+} from "./pod-writer-policy.js";
 import { StateConflictError } from "./state.js";
+import type { MutationGuard, PodWriter } from "./types.js";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
 class OwnerAuthorization extends Authorization {
@@ -22,7 +29,24 @@ export interface OwnerJsonOptions<T> {
   readonly parse: (value: unknown) => T;
   readonly maxBytes?: number;
   readonly signal?: AbortSignal;
+  /**
+   * Private-write gate (the PodWriter contract). When set, every mutation (ACL install and
+   * JSON PUT) first needs `checks.verifyPrivateDestination` to return true for the JSON URL,
+   * and every JSON PUT then needs `checks.confirmPrivateWrite`; a refused create is deleted
+   * (`If-Match` its write ETag) and checked for absence. Missing checks refuse before any
+   * request. Refusals are sticky for the store instance. `peek` is read-only and ungated.
+   */
+  readonly privateDestination?: {
+    /** Connector id named by refusals (`PrivateDestinationError.adapterId`). */
+    readonly id: string;
+    readonly checks?: PrivateDestinationChecks;
+  };
 }
+/** Host-verified owner-only destination ports, the same ones a private PodWriter carries. */
+export type PrivateDestinationChecks = Pick<
+  PodWriter,
+  "verifyPrivateDestination" | "confirmPrivateWrite"
+>;
 function strongValidator(response: Response): string {
   const validator = response.headers.get("etag");
   if (!response.ok || !validator || validator.length > 1_024 || !/^"[^"\r\n]*"$/.test(validator))
@@ -56,6 +80,54 @@ export function createOwnerJsonStore<T>(o: OwnerJsonOptions<T>) {
   let protectedOnce = false;
   let cached: { readonly etag: string; readonly value: T } | undefined;
   let revision = 0;
+  const gate = o.privateDestination;
+  const file = new URL(url).pathname.split("/").pop() as string;
+  let refused: PrivateDestinationError | undefined;
+  const guard: MutationGuard = () => (refused ? Promise.reject(refused) : undefined);
+  /** Before every mutation of a private resource; sticky once refused. */
+  async function verifyDestination(signal?: AbortSignal): Promise<void> {
+    if (!gate) return;
+    if (refused) throw refused;
+    const checks = gate.checks;
+    try {
+      // Both ports are required up front: a write that could never be confirmed never starts.
+      if (!checks?.verifyPrivateDestination || !checks.confirmPrivateWrite)
+        throw new PrivateDestinationError(gate.id);
+      await requirePrivateDestination(gate.id, checks, url, guard);
+    } catch (error) {
+      // Cancellation is not a policy refusal: it must not poison a long-lived store.
+      const cancelled = signal?.aborted ? signal : o.signal?.aborted ? o.signal : undefined;
+      if (cancelled) throw cancelled.reason;
+      refused ??=
+        error instanceof PrivateDestinationError ? error : new PrivateDestinationError(gate.id);
+      throw refused;
+    }
+    signal?.throwIfAborted();
+    o.signal?.throwIfAborted();
+  }
+  /** After every JSON PUT of a private resource; a refused create is removed. */
+  async function confirmWrite(created: boolean, writeEtag: string | null): Promise<void> {
+    if (!gate) return;
+    const checks = gate.checks as Required<PrivateDestinationChecks>;
+    try {
+      await requirePrivateWriteConfirmation(
+        gate.id,
+        {
+          confirmPrivateWrite: (target, version, observe) =>
+            checks.confirmPrivateWrite(target, version, observe),
+          // Cleanup observes only its own deadline, never the (possibly aborted) run signal.
+          cleanupPrivateWrite: (_slug, options) => cleanupPrivateResource(safe, url, options),
+        },
+        file,
+        url,
+        created,
+        writeEtag,
+      );
+    } catch (error) {
+      refused ??= error as PrivateDestinationError;
+      throw error;
+    }
+  }
   async function discoverAcl(signal?: AbortSignal): Promise<string> {
     if (aclUrl) return aclUrl;
     const head = await io(url, { method: "HEAD" }, signal);
@@ -116,7 +188,11 @@ export function createOwnerJsonStore<T>(o: OwnerJsonOptions<T>) {
     },
     async read(signal?: AbortSignal): Promise<T | undefined> {
       loaded = false;
-      if (!protectedOnce) await protect(signal);
+      if (!protectedOnce) {
+        // The ACL install is a mutation (and can create ancestors): gate it like a write.
+        await verifyDestination(signal);
+        await protect(signal);
+      }
       const headers = new Headers({ accept: "application/json" });
       if (cached) headers.set("if-none-match", cached.etag);
       const response = await io(url, { headers }, signal);
@@ -181,13 +257,16 @@ export function createOwnerJsonStore<T>(o: OwnerJsonOptions<T>) {
       if (exists) headers.set("if-match", etag as string);
       else headers.set("if-none-match", "*");
       loaded = false;
+      const creating = !exists;
+      await verifyDestination(signal);
       // Creation re-installs owner-only protection before any content exists.
-      if (!exists) await protect(signal);
+      if (creating) await protect(signal);
       cached = undefined;
       const response = await io(url, { method: "PUT", headers, body }, signal);
       await response.body?.cancel();
       if (response.status === 412) throw new StateConflictError();
       if (!response.ok) throw new Error("Private resource write failed");
+      await confirmWrite(creating && isCompletedPut(response.status), response.headers.get("etag"));
     },
   };
 }
