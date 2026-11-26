@@ -4,6 +4,7 @@
 import { Button, formatBytes, Input, Progress, toast } from "@jeswr/suite-ui";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { AppHeading } from "@/shell/app-frame";
 import {
   fileChunks,
   type ImportProgress,
@@ -152,7 +153,7 @@ export function ImportWizard() {
   };
   return (
     <div className="mail-page mail-import">
-      <h1>Import mail</h1>
+      <AppHeading>Import mail</AppHeading>
       <ol className="mail-steps" aria-label="Import steps">
         <li aria-current={step === "choose" ? "step" : undefined}>1. Choose mailbox</li>
         <li aria-current={step === "importing" ? "step" : undefined}>2. Import</li>
@@ -250,7 +251,7 @@ export function ImportWizard() {
       )}
       {step === "importing" && (
         <section className="mail-form" aria-label="Import progress">
-          <h2>Importing {file?.name}</h2>
+          <AppHeading level={2}>Importing {file?.name}</AppHeading>
           <Progress
             value={file?.size ? Math.min(100, (progress.bytes / file.size) * 100) : 0}
             aria-label="Mailbox bytes processed"
@@ -267,7 +268,9 @@ export function ImportWizard() {
       )}
       {step === "done" && result && (
         <section className="mail-form" aria-label="Import summary">
-          <h2>{result.aborted ? "Import cancelled" : "Import complete"}</h2>
+          <AppHeading level={2}>
+            {result.aborted ? "Import cancelled" : "Import complete"}
+          </AppHeading>
           <p>
             {result.messages} messages imported · {result.attachments} attachments · {result.failed}{" "}
             failed

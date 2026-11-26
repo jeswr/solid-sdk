@@ -86,6 +86,7 @@ export function CreateCalendar() {
           <form
             onSubmit={async (event) => {
               event.preventDefault();
+              event.stopPropagation();
               setSaving(true);
               setError("");
               try {
@@ -238,7 +239,7 @@ function Details() {
       )}
       <h3>Reminders</h3>
       {event.reminders?.length ? (
-        <ul>
+        <ul aria-label="Reminders">
           {event.reminders.map((reminder, index) => (
             <li key={String(index)}>{reminderSummary(reminder)}</li>
           ))}

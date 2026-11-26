@@ -137,6 +137,31 @@ failure. They run outside the hook watchdog and do not queue export snapshots;
 after an interrupted/failed upload, re-run the same export to complete it safely.
 The library accepts an `AbortSignal` to cancel file reads and requests.
 
+## Repairing chats stored before redaction (sst-5ax.39)
+
+```sh
+solid-capture redact-archive --dry-run   # count what would change; read-only config is enough
+solid-capture redact-archive             # fix it; needs the writable owner configuration
+```
+
+Runs `ChatWriter.migrateRedaction` over every conversation in the pod's chat archive with
+the same MCP configuration and DPoP login as imports. It re-redacts titles and messages
+stored before every save path redacted (or before a newer rule), and deletes the
+unredacted originals that a later replay duplicated. Every write and delete uses
+`If-Match`. It prints one JSON line of counts (`conversations`, `titles`,
+`messagesRewritten`, `messagesReplaced`, `conflicts`, `failed`) and nothing from the chats.
+A conflict (a resource changed between read and write, or a server whose weak ETags make every
+`If-Match` fail) leaves that resource unredacted. One chat that cannot be read or fixed does not
+stop the run; it is counted in `failed`. Exit status is **0** only when the whole archive was
+repaired. It is **1**, with a fixed, content-free line on stderr saying the archive is NOT fully
+redacted, when `failed` or `conflicts` is above 0, or **1** with a fixed "Check the owner MCP
+configuration" line when the run could not start; run it again. A failed write stops its own
+chat (the rest of it is counted in `conflicts`) so the next run can finish it. The chat
+interop README states what the repair does and does not guarantee, including equal
+timestamps and replay IDs. A chat with more than 64 messages sharing one timestamp cannot be
+proven repaired: it is counted in `failed` and `unverified` on every run, and a second line
+asks you to review it by hand.
+
 ## Content and opt-out
 
 Capture retains user/assistant text and tool names. Claude Code `tool_result`,

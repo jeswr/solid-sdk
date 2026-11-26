@@ -23,6 +23,8 @@ export interface InboxReaderOptions extends ClientTransportOptions {
   clock?: () => number;
   /** Maximum direct children to read, in listing order (default 50). */
   maxItems?: number;
+  /** Called when a listing holds more eligible children than `maxItems`, so the rest were not read. */
+  onTruncated?: (listed: number, read: number) => void;
   /** Preserve readable documents with no identifiable activity subject. */
   includeUnknownActivities?: boolean;
 }
@@ -101,6 +103,7 @@ export function createInboxReader(options: InboxReaderOptions): InboxReader {
     const allMembers = containerMembers(inboxUrl, container.dataset);
     const eligible = allMembers.filter((member) => !isReadMarker(member));
     const members = eligible.slice(0, maxItems);
+    if (eligible.length > members.length) options.onTruncated?.(eligible.length, members.length);
     const items: InboxNotification[] = [];
     let next = 0;
     await Promise.all(
