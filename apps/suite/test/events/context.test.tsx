@@ -167,7 +167,29 @@ it("suppresses subscription refresh during saves, reports a failed write, and ch
     reject(new Error("write failed"));
     await value.controller.settled();
   });
-  expect(failure).toHaveBeenCalled();
+  expect(failure).toHaveBeenLastCalledWith(
+    "Couldn't save your invitation. Please reconnect or refresh and try again.",
+  );
+  // A publication failure explains itself, including when sharing could not be confirmed withdrawn.
+  const { PublicationError } = await import("@jeswr/solid-events");
+  const unsure = new PublicationError(false, new Error("offline"));
+  vi.spyOn(value.controller.repository, "create").mockRejectedValueOnce(unsure);
+  await act(async () => {
+    value.controller.save({
+      name: "Again",
+      startDate: new Date(),
+      organizer: session.webId,
+      eventStatus: EVENT_STATUS.scheduled,
+      visibility: "link",
+      guestListVisible: false,
+      publication: "published",
+      created: new Date(),
+      modified: new Date(),
+    });
+    await value.controller.settled();
+  });
+  expect(failure).toHaveBeenLastCalledWith(unsure.message);
+  expect(unsure.message).toContain("Check its sharing settings");
   const liveSession: PodSession = {
     ...session,
     mode: "solid",
@@ -206,5 +228,19 @@ it("reports unreadable invitations while still showing the readable ones", async
   );
   expect(value.events).toEqual([]);
   failure.mockRestore();
+  await view.unmount();
+});
+
+it("shows a Type Index registration warning from the controller as a warning toast", async () => {
+  vi.mocked(ensureEventsSample).mockResolvedValue(undefined);
+  const warning = vi.spyOn((await import("@jeswr/suite-ui")).toast, "warning");
+  const view = await mount(h(EventsProvider, { session: fixture(), children: h(Probe) }));
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(view.host.textContent).toBe("Ready");
+  });
+  value.controller.onWarning("Not in your Type Index");
+  expect(warning).toHaveBeenCalledWith("Not in your Type Index");
+  warning.mockRestore();
   await view.unmount();
 });

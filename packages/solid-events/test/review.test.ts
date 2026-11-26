@@ -8,9 +8,10 @@ import {
   createEventsRepository,
   entities,
   guestListAvailable,
+  type Invitation,
   PublicationError,
 } from "../src/index.js";
-import { eventData, harness, ROOT } from "./harness.js";
+import { eventData, harness, OWNER, ROOT } from "./harness.js";
 
 vi.mock("@jeswr/storage-client", async (original) => ({
   ...(await original<typeof import("@jeswr/storage-client")>()),
@@ -150,8 +151,143 @@ it("reports when it cannot confirm that sharing was withdrawn, and survives a fa
   };
   const error = await repository.create(eventData(), [], "stuck").catch((e: unknown) => e);
   expect(error).toBeInstanceOf(PublicationError);
-  expect(error).toMatchObject({ sharingWithdrawn: false });
+  expect(error).toMatchObject({ sharingWithdrawn: false, draftRestored: false });
   expect((error as Error).message).toContain("Check its sharing settings");
+  expect((error as Error).message).toContain("couldn't be set back to a private draft");
+  expect((error as Error).message).not.toContain("it is a private draft");
+});
+it("asks to check sharing, without claiming a failed restore, when only the withdrawal is unconfirmed", async () => {
+  const { repository, storage } = harness();
+  breakAccessAt(storage, "/events/unsure/index.ttl", true);
+  const error = await repository.create(eventData(), [], "unsure").catch((e: unknown) => e);
+  expect(error).toMatchObject({ sharingWithdrawn: false, draftRestored: true });
+  expect((error as Error).message).toContain("Check its sharing settings");
+  expect((error as Error).message).not.toContain("set back");
+});
+it("tells the truth when sharing was withdrawn but the private draft could not be restored, and can share again", async () => {
+  const { repository, storage } = harness();
+  const heal = breakAccessAt(storage, "/events/limbo/index.ttl");
+  const write = storage.write.bind(storage);
+  let restoring = true;
+  storage.write = async (url, body, opts) => {
+    if (restoring && url.endsWith("limbo/index.ttl") && String(body).includes("draft"))
+      throw new Error("offline");
+    return write(url, body, opts);
+  };
+  const error = await repository.create(eventData(), [], "limbo").catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(PublicationError);
+  expect(error).toMatchObject({ sharingWithdrawn: true, draftRestored: false });
+  expect((error as Error).message).toContain("still marked published");
+  expect((error as Error).message).not.toContain("it is a private draft");
+  const url = `${ROOT}events/limbo/index.ttl`;
+  // The stored state really is published, with nothing shared.
+  expect(await stateOf(storage, url)).toBe("published");
+  expect(publicGrants(await aclPolicy(storage, url))).toEqual([]);
+  // Once the fault is gone, the organiser can share it again explicitly.
+  heal();
+  restoring = false;
+  const [stored] = await repository.list();
+  const shared = await repository.reshare(stored as Invitation);
+  expect(shared.publication).toBe("published");
+  expect(publicModes(await aclPolicy(storage, url))).toEqual(["read"]);
+  expect(publicGrants(await aclPolicy(storage, `${ROOT}events/limbo/rsvps/`))).toHaveLength(1);
+});
+it("reshare is explicit, organiser-only and limited to published invitations", async () => {
+  const { repository } = harness();
+  const draft = await repository.create({ ...eventData(), publication: "draft" }, [], "rs");
+  await expect(repository.reshare(draft)).rejects.toThrow("Only a published invitation");
+  const published = await repository.create(eventData(), [], "rs2");
+  await expect(repository.reshare({ ...published, organizer: CLEO })).rejects.toBeInstanceOf(
+    TypeError,
+  );
+  await expect(
+    repository.reshare({ ...published, url: "https://other.example/e/index.ttl" }),
+  ).rejects.toThrow("escapes pod origin");
+});
+const writesTo = (storage: StorageClient, suffix: string) => {
+  const log: string[] = [];
+  const write = storage.write.bind(storage);
+  storage.write = async (url, ...rest) => {
+    if (url.endsWith(suffix)) log.push(url);
+    return write(url, ...rest);
+  };
+  return log;
+};
+it("reshare decides from the stored invitation: a stale 'published' snapshot of a draft is refused", async () => {
+  const { repository, storage } = harness();
+  const draft = await repository.create({ ...eventData(), publication: "draft" }, [], "stale");
+  const writes = writesTo(storage, "");
+  await expect(repository.reshare({ ...draft, publication: "published" })).rejects.toThrow(
+    "Only a published invitation",
+  );
+  expect(writes).toEqual([]);
+  expect(await stateOf(storage, draft.url)).toBe("draft");
+  expect(publicGrants(await aclPolicy(storage, draft.url))).toEqual([]);
+});
+it("reshare refuses a concurrently modified invitation and never overwrites it", async () => {
+  const { repository, storage } = harness();
+  const published = await repository.create(eventData(), [], "race");
+  const newer = { ...published, name: "Newer name" };
+  await storage.write(published.url, await entities.Event.serialize(published.url, newer), {
+    contentType: "text/turtle",
+    ifMatch: published.etag as string,
+  });
+  await expect(repository.reshare({ ...published, etag: null })).rejects.toThrow(
+    "A version is required",
+  );
+  const writes = writesTo(storage, "");
+  await expect(repository.reshare(published)).rejects.toMatchObject({
+    code: "precondition-failed",
+  });
+  expect(writes).toEqual([]);
+  expect((await repository.list())[0]?.name).toBe("Newer name");
+});
+it("a failed reshare revokes access but leaves the stored document untouched", async () => {
+  const { repository, storage } = harness();
+  const published = await repository.create(eventData(), [], "flaky");
+  const [stored] = await repository.list();
+  const heal = breakAccessAt(storage, "/events/flaky/index.ttl");
+  const writes = writesTo(storage, "/events/flaky/index.ttl");
+  const error = await repository.reshare(stored as Invitation).catch((e: unknown) => e);
+  heal();
+  expect(error).toBeInstanceOf(PublicationError);
+  expect(writes).toEqual([]);
+  expect(await stateOf(storage, published.url)).toBe("published");
+});
+it("reshare refuses an invitation whose stored organiser is someone else", async () => {
+  const { repository, storage } = harness();
+  const published = await repository.create(eventData(), [], "foreign");
+  await storage.write(
+    published.url,
+    await entities.Event.serialize(published.url, { ...published, organizer: CLEO }),
+    { contentType: "text/turtle", ifMatch: published.etag as string },
+  );
+  const [stored] = await repository.list();
+  await expect(
+    repository.reshare({ ...(stored as Invitation), organizer: OWNER }),
+  ).rejects.toBeInstanceOf(TypeError);
+});
+it("reshare fails closed, without overwriting, when the invitation changes while access is widened", async () => {
+  const { repository, storage } = harness();
+  const published = await repository.create(eventData(), [], "moving");
+  const [stored] = await repository.list();
+  const write = storage.write.bind(storage);
+  let changed = false;
+  storage.write = async (url, ...rest) => {
+    if (url.endsWith(".acl") && !changed) {
+      changed = true;
+      await write(
+        published.url,
+        await entities.Event.serialize(published.url, { ...published, name: "Edited meanwhile" }),
+        { contentType: "text/turtle", ifMatch: (await storage.head(published.url)).etag as string },
+      );
+    }
+    return write(url, ...rest);
+  };
+  await expect(repository.reshare(stored as Invitation)).rejects.toBeInstanceOf(PublicationError);
+  storage.write = write;
+  expect((await repository.list())[0]?.name).toBe("Edited meanwhile");
+  expect(publicGrants(await aclPolicy(storage, published.url))).toEqual([]);
 });
 it("fails closed when publishing a saved draft fails after widening", async () => {
   const { repository, storage } = harness();
@@ -214,7 +350,7 @@ it("surfaces a failed Type Index registration as a recoverable state, and retrie
   );
   await expect(
     repository.registerInTypeIndex({ ...event, url: "https://other.example/e/index.ttl" }),
-  ).rejects.toThrow();
+  ).rejects.toThrow("escapes pod origin");
   expect((await repository.create(eventData(), [], "indexed")).registrationWarning).toBeUndefined();
 });
 
@@ -244,7 +380,9 @@ it("refuses a server-assigned location that is not a plain document in the folde
       const result = await create(parent, body, opts);
       return opts?.name === "index.ttl" ? { ...result, url: new URL(bad, parent).href } : result;
     };
-    await expect(repository.create(eventData(), [], `bad-${n++}`)).rejects.toThrow();
+    await expect(repository.create(eventData(), [], `bad-${n++}`)).rejects.toThrow(
+      /invalid document location|escapes pod path/,
+    );
   }
 });
 it("needs a version to finish saving a document the server renamed", async () => {

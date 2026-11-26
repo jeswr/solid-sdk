@@ -5,6 +5,7 @@ import { createFetchPodWriter } from "../core/pod-writer.js";
 import {
   createMemoryPod,
   demoImport,
+  ownerOnlyFixtureChecks,
   sparseImport,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
@@ -89,6 +90,7 @@ describe("GitHub pagination bounds", () => {
           profileDocumentUrl: TEST_PROFILE_DOC,
           podRoot: TEST_POD_ROOT,
           fetch: pod.fetch,
+          ...ownerOnlyFixtureChecks,
         }),
       }),
     ).rejects.toThrow(error);

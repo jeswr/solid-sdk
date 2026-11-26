@@ -80,7 +80,8 @@ Public output is `public/sites/<site>/index.html`, `<slug>/index.html` and `feed
 Publishing requires first-time confirmation, saves the owner-only RDF source, rebuilds
 published pages/navigation/index/feed, then grants public **Read only** on that site's
 container and its members via pod-access. It never grants public access to ancestors or
-source RDF. Saving a private draft writes no public bytes. `savePage` refuses a page that
+source RDF. Saving a private draft writes no public bytes. `createPage` always creates a draft
+and refuses a `published` status with a `PublicationError`; only `publish` makes a page public. `savePage` refuses a page that
 is, or would become, published (a `PublicationError` telling the caller to use `publish`
 or `unpublish`), judged against the stored page rather than the caller's copy, so
 `refreshPublic` can only ever re-render what an explicit `publish` call published. The one

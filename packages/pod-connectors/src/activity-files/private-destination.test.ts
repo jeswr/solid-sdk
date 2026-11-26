@@ -164,6 +164,38 @@ describe("activity-files private-destination contract", () => {
     expect(new Headers(deletion?.[1]?.headers).get("if-match")).toMatch(/^"/);
   });
 
+  it("lets an after-write refusal outrank a cancellation that arrives mid-run", async () => {
+    const pod = createMemoryPod();
+    const fetch = vi.fn<typeof globalThis.fetch>((input, init) => pod.fetch(input, init));
+    const controller = new AbortController();
+    let confirmed = 0;
+    await expect(
+      runFileImport({
+        adapter: activityFilesAdapter,
+        file: fitFile(),
+        signal: controller.signal,
+        podWriter: createFetchPodWriter({
+          adapterId: ID,
+          webId: TEST_WEBID,
+          profileDocumentUrl: TEST_PROFILE_DOC,
+          podRoot: TEST_POD_ROOT,
+          fetch,
+          signal: controller.signal,
+          verifyPrivateDestination: async () => true,
+          // The write has been dispatched; the user cancels while it is being confirmed.
+          confirmPrivateWrite: async () => {
+            confirmed++;
+            controller.abort(new Error("cancelled"));
+            return false;
+          },
+        }),
+      }),
+    ).rejects.toMatchObject({ name: "PrivateDestinationError" });
+    expect(confirmed).toBeGreaterThan(0);
+    // The refused create is cleaned up even though the run was cancelled.
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(true);
+  });
+
   it("lets cancellation win over a refusal and sends no write", async () => {
     const pod = createMemoryPod();
     const signal = AbortSignal.abort(new Error("cancelled"));

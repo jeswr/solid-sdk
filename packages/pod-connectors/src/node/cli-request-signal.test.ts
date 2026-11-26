@@ -85,6 +85,9 @@ it.each([
       sourceTransport,
       stdout: vi.fn(),
       stderr: vi.fn(),
+      // GitHub imports are private; the fixture Pod has no other principal.
+      verifyPrivateDestination: async () => true,
+      confirmPrivateWrite: async () => true,
     }),
   ).toBe(EXIT_CODES.import);
 
