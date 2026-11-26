@@ -200,19 +200,24 @@ it("stores a kept copy as a new file next to the file it keeps", async () => {
     container: PUBLIC,
     contentType: "text/plain",
     body: encode("kept"),
-    createOptions: { name: "placeholder (copy).txt", contentType: "text/plain" },
+    createOptions: { name: "placeholder-conflict-1000", contentType: "text/plain" },
     assertions: assertions ?? null,
     purpose: "resolve-both",
     ...overrides,
   });
   const result = await delegate(copy(), ctx());
-  expect(result).toMatchObject({ url: `${PUBLIC}placeholder%20(copy).txt`, created: true });
-  expect(await (await f.pod.fetch(`${PUBLIC}placeholder%20(copy).txt`)).text()).toBe("kept");
+  expect(result).toMatchObject({ url: `${PUBLIC}placeholder-conflict-1000`, created: true });
+  expect(await (await f.pod.fetch(`${PUBLIC}placeholder-conflict-1000`)).text()).toBe("kept");
   // The file inherits the public folder's access, and so does its copy.
-  expect((await f.anonymous(`${PUBLIC}placeholder%20(copy).txt`)).status).toBe(200);
+  expect((await f.anonymous(`${PUBLIC}placeholder-conflict-1000`)).status).toBe(200);
   const discovery = (assertions as { discovery: unknown }).discovery;
   for (const delivery of [
     copy({ createOptions: {} }),
+    // Only the outbox's keep-both name for this file is accepted.
+    copy({ createOptions: { name: "placeholder (copy).txt" } }),
+    copy({ createOptions: { name: "other-conflict-1000" } }),
+    copy({ createOptions: { name: "placeholder-conflict-x" } }),
+    copy({ createOptions: { name: "placeholder-conflict-" } }),
     // Without the file it keeps, the copy's access can't be chosen.
     copy({ assertions: { kind: "text" } }),
     copy({ assertions: { kind: "text", discovery } }),
@@ -424,4 +429,35 @@ it("gives a kept copy the source file's own access, not its looser folder's", as
   expect(result).toMatchObject({ url: copy, created: true });
   expect(await (await f.pod.fetch(copy)).text()).toBe("private offline text");
   expect((await f.anonymous(copy)).status).toBe(403);
+});
+
+it("keeps the conflict suffix when a long name has to be shortened", async () => {
+  const f = await wacPod();
+  const long = `${PUBLIC}${"a".repeat(176)}.txt`;
+  await f.pod.fetch(long, {
+    method: "PUT",
+    body: "theirs",
+    headers: { "content-type": "text/plain" },
+  });
+  const { version } = await opened(f, long);
+  const delegate = driveReplayDelegate()(session(f));
+  const result = await delegate(
+    {
+      op: "create",
+      url: PUBLIC,
+      container: PUBLIC,
+      contentType: "text/plain",
+      body: encode("mine"),
+      createOptions: { name: `${"a".repeat(176)}-conflict-1000.txt`, contentType: "text/plain" },
+      assertions: textGuard(version.discovery as never, long).assertions,
+      purpose: "resolve-both",
+    },
+    ctx(),
+  );
+  // 180 characters: the stem gives way, the suffix and extension stay.
+  const copy = `${PUBLIC}${"a".repeat(162)}-conflict-1000.txt`;
+  expect(copy.slice(PUBLIC.length)).toHaveLength(180);
+  expect(result).toMatchObject({ url: copy, created: true });
+  expect(await (await f.pod.fetch(copy)).text()).toBe("mine");
+  expect(await (await f.pod.fetch(long)).text()).toBe("theirs");
 });

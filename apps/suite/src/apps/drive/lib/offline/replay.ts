@@ -9,9 +9,15 @@
 import { StorageError, type StorageErrorCode } from "@jeswr/storage-client";
 import type { GuardedDelivery, ReplayDelegate } from "@jeswr/suite-sdk/offline";
 import { isEndpointCapture } from "../client/access";
-import { createSolidDriveClient, type DriveClient, DriveError, parentOf } from "../client/client";
+import {
+  createSolidDriveClient,
+  type DriveClient,
+  DriveError,
+  nameOf,
+  parentOf,
+} from "../client/client";
 import { childUrl, createFolder } from "../operations/operations";
-import { normalizeUploadName } from "../upload";
+import { normalizeUploadName, suffixedName } from "../upload";
 import { type DriveGuardKind, inside, isPolicyDocument } from "./guards";
 import { isNetworkFailure } from "./network";
 
@@ -68,6 +74,27 @@ function assertions(delivery: GuardedDelivery): {
 } {
   const value = delivery.assertions;
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+/**
+ * The suffix of the outbox's "keep both" name for `source` (`<stem>-conflict-<ms><ext>`), or
+ * none when `name` is not one. Drive re-applies it to the file's own name, so a long name is
+ * shortened before the suffix rather than after it.
+ */
+function conflictSuffix(source: string, name: string): string | undefined {
+  let original: string;
+  try {
+    original = decodeURIComponent(new URL(source).pathname.split("/").pop() ?? "");
+  } catch {
+    return undefined;
+  }
+  const dot = original.lastIndexOf(".");
+  const stem = dot > 0 ? original.slice(0, dot) : original;
+  const ext = dot > 0 ? original.slice(dot) : "";
+  const prefix = `${stem}-conflict-`;
+  if (!original || !name.startsWith(prefix) || !name.endsWith(ext)) return undefined;
+  const stamp = name.slice(prefix.length, name.length - ext.length);
+  return /^\d{1,16}$/.test(stamp) ? `-conflict-${stamp}` : undefined;
 }
 
 /** The delivery shapes Drive queues; anything else is refused before any request. */
@@ -134,7 +161,9 @@ export function driveReplayDelegate(
           parentOf(source) !== container
         )
           refuse(delivery, "This queued copy doesn't name the file it keeps.");
-        const url = childUrl(container, normalizeUploadName(name));
+        const suffix = conflictSuffix(source, name);
+        if (!suffix) refuse(delivery, "This queued copy's name isn't one Drive keeps.");
+        const url = childUrl(container, suffixedName(nameOf(source), suffix));
         // "Keep both" copies the file, so the copy keeps the file's own access, as Drive's
         // "Make a copy" does (preserve-source). A plain upload would inherit the folder's
         // access, which can be wider than a file with its own ACL.
