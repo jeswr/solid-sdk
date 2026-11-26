@@ -241,3 +241,15 @@ it("refreshes a remounted controller when an old controller's save settles, fenc
   remounted.dispose();
   other.controller.dispose();
 });
+it("confirms a saved invitation whose registration warning has no listener", async () => {
+  const { repository } = fixture();
+  const controller = new EventsController(repository, vi.fn());
+  await controller.refresh();
+  repository.create.mockResolvedValueOnce({
+    ...event,
+    registrationWarning: "Not in your Type Index",
+  });
+  controller.save(event);
+  await controller.settled();
+  expect(controller.snapshot()).toMatchObject({ saving: 0, error: false });
+});
