@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
@@ -58,6 +59,7 @@ import { DriveDeletePendingError, deletionControl, isDeletionFailure } from "./d
 import { protectionLedger } from "./protection-ledger";
 import { containerData, containsGraph, isomorphicGraph, relocate, sameGraph } from "./rdf";
 import { sourceOperation } from "./source-operations";
+import { withWorkbook } from "./workbook";
 
 export type { ContainerPolicy } from "./ancestors";
 export { policyArchiveOf } from "./ancestors";
@@ -78,6 +80,8 @@ export interface DriveItem {
   readonly url: string;
   readonly name: string;
   readonly kind: "folder" | "file";
+  /** A validated Sheets workbook; still a folder for whole-container operations. */
+  readonly workbook?: true;
   readonly contentType?: string;
   readonly size?: number;
   readonly modified?: Date;
@@ -679,7 +683,7 @@ export function createSolidDriveClient(options: {
     await provision.check(url, false, options.provision !== false);
     return Promise.all(
       (await listing(url, opts)).items.map(async (item) => ({
-        ...item,
+        ...(await withWorkbook(item, storageUrl, http)),
         ...(await protection(item.url)),
       })),
     );
@@ -3088,7 +3092,11 @@ export function createSolidDriveClient(options: {
       bindRecoveryPolicy(url, captured, scopeFor(this));
     },
     list,
-    stat,
+    async stat(url, opts) {
+      const item = await stat(url, opts);
+      // Conditional operation checks retain the raw HEAD boundary.
+      return opts ? item : withWorkbook(item, storageUrl, http);
+    },
     read,
     readLimited,
     readVersion,
