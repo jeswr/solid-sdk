@@ -209,6 +209,7 @@ const networkFailure = (error: unknown) =>
 class MissingDelegateError extends Error {}
 class GuardRequiredError extends Error {}
 class InvalidRequestError extends TypeError {}
+const invalidDestination = '[solid-offline] invalid stored request destination';
 
 function canonicalTarget(url: string, storage?: StorageClient): string {
   // Match storage-client's http.scoped / mutation target normalization. isWithinStorage
@@ -340,26 +341,49 @@ function storedOptions(record: StoredItem): DispatchOptions {
   return options;
 }
 
-function storedRequest(record: StoredItem, storage?: StorageClient): RequestDescription {
+function storedRequest(
+  record: StoredItem,
+  storage?: StorageClient,
+  hydrating = false,
+): RequestDescription {
   try {
+    const operation = recordOperation(record);
     const request = describeRequest(
-      recordOperation(record),
+      operation,
       storage,
       record.createMode ?? (record.request ? 'solid' : 'container'),
     );
-    if (record.request !== undefined) {
-      const keys = ['op', 'url', 'container', 'name', 'kind'] as const;
+    const bound = record.request;
+    if (bound !== undefined) {
+      const keys = ['op', 'container', 'name', 'kind'] as const;
       if (
-        !record.request ||
-        keys.some((key) => request[key] !== record.request?.[key]) ||
-        record.item.url !== request.url ||
+        !bound ||
+        keys.some((key) => request[key] !== bound[key]) ||
+        record.item.url !== bound.url ||
         (request.op === 'create' && record.item.name !== request.name)
       )
         throw new TypeError('destination mismatch');
+      const exactUrl = operation.createOptions?.exactUrl;
+      if (request.op === 'create' && bound.url === request.container && exactUrl !== undefined) {
+        // Older exact creates bound both URLs to the parent. canonicalTarget already checked
+        // the URL syntax and scope; mirror storage-client's exactCreateSegment child checks.
+        const container = request.kind === 'container';
+        if (
+          !hydrating ||
+          record.createMode !== 'container' ||
+          record.item.container !== bound.url ||
+          request.name !== undefined ||
+          exactUrl !== request.url ||
+          request.url === bound.url ||
+          request.url.endsWith('/') !== container ||
+          new URL(container ? '../' : '.', request.url).href !== bound.url
+        )
+          throw new TypeError('invalid legacy exact create');
+      } else if (bound.url !== request.url) throw new TypeError('destination mismatch');
     }
     return request;
   } catch {
-    throw new InvalidRequestError('[solid-offline] invalid stored request destination');
+    throw new InvalidRequestError(invalidDestination);
   }
 }
 
@@ -850,10 +874,19 @@ export function createOutbox(options: {
             assertStoredItem(record);
             storedOptions(record);
             const storage = clients.get(outbox);
-            const description = storedRequest(record, storage);
+            const description = storedRequest(record, storage, true);
             const guard = storedGuard(record);
-            // Legacy records acquire a destination binding once a client is available.
-            if (record.request === undefined && storage) {
+            const rebindExact =
+              record.request !== undefined && record.request.url !== description.url;
+            if (rebindExact || (record.request === undefined && storage)) {
+              if (rebindExact) {
+                if (record.conflict?.url === record.item.url) record.conflict.url = description.url;
+                // An earlier hydration may already have failed this legacy binding.
+                if (record.item.status === 'failed' && record.item.error === invalidDestination) {
+                  record.item.status = record.conflict ? 'conflict' : 'waiting';
+                  delete record.item.error;
+                }
+              }
               record.request = description;
               record.createMode = description.url === description.container ? 'container' : 'solid';
               record.item.url = description.url;

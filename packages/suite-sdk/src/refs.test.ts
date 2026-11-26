@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   decodeIdentifierRef,
@@ -107,6 +108,11 @@ describe("encodeIdentifierRef / decodeIdentifierRef", () => {
     const iri = "https://alice.pod/chat#naïve";
     expect(decodeIdentifierRef(encodeIdentifierRef(iri))).toBe(iri);
     expect(decodeRef(encodeRef(iri))).not.toBe(iri);
+  });
+
+  it("preserves a non-breaking space in a subject IRI", () => {
+    const iri = "https://alice.pod/chat#message\u00a01";
+    expect(decodeIdentifierRef(encodeIdentifierRef(iri))).toBe(iri);
   });
 
   it("round-trips random http(s) IRIs verbatim", () => {

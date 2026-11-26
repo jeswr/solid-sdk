@@ -29,8 +29,8 @@ search); `./react` keeps re-exporting the same bindings.
   (non-zero trailing bits are rejected, so each URL has exactly one ref) and the URL
   (`new URL(href).href === href`). `encodeIdentifierRef` / `decodeIdentifierRef` keep an RDF
   identifier verbatim (no URL normalisation) for subject IRIs; decoding rejects aliases and any
-  identifier containing control characters, whitespace or `\`. A decoded ref may name any
-  http(s) origin: routes must still scope it to the user's storage before fetching or linking.
+  identifier containing control characters, ASCII space or `\`. Unicode spaces are preserved.
+  A decoded ref may name any http(s) origin: routes must still scope it to the user's storage before fetching or linking.
 - `classifyError(error, online = navigator.onLine)` maps errors to the 01-§9 UI categories that
   suite-ui's `errorStateCopy` renders (A-7). The mapping table:
   - every `StorageErrorCode` by code: `network` becomes `offline` when offline, else `unreachable`;

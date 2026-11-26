@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2-Astra
 /**
  * Route references (00-sdk-assumptions A-18): base64url (no padding) of an absolute http(s) URL,
  * used for every resource-addressing route segment such as `/drive/f/[ref]`.
@@ -74,15 +75,14 @@ export function encodeIdentifierRef(iri: string): string {
 }
 
 /**
- * Reverses `encodeIdentifierRef`, returning the identifier exactly as encoded. Because the IRI is
- * not normalised, values the lenient URL parser would repair (control characters, whitespace,
- * backslashes) are rejected rather than returned: none of them can appear in an IRI.
+ * Reverses `encodeIdentifierRef`, returning the identifier exactly as encoded. Rejects control
+ * characters, ASCII space and backslash. Unicode spaces in an IRI are preserved verbatim.
  * @throws {RefError} For anything that is not a canonically encoded http(s) IRI.
  */
 export function decodeIdentifierRef(ref: string): string {
   try {
     const iri = fromBase64Url(ref);
-    if (/[\s\\\p{Cc}]/u.test(iri)) throw new RefError(ref);
+    if (/[\p{Cc} \\]/u.test(iri)) throw new RefError(ref);
     assertHttpUrl(iri);
     return iri;
   } catch {

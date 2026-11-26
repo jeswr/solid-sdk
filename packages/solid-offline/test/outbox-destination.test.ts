@@ -63,24 +63,27 @@ interface Stored {
   request?: { op: string; url: string; container?: string; name?: string; kind?: string };
   createOptions?: CreateOptions;
   createMode?: 'solid' | 'container';
+  conflict?: ReturnType<Outbox['conflicts']>[number];
 }
-async function edit(change: (record: Stored) => void) {
+async function storedRecord(change?: (record: Stored) => void) {
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
     const request = idb.open(`solid-offline-outbox:${encodeURIComponent(webId)}`, 1);
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
   try {
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction('items', 'readwrite');
+    return await new Promise<Stored>((resolve, reject) => {
+      const tx = db.transaction('items', change ? 'readwrite' : 'readonly');
       const store = tx.objectStore('items');
       const request = store.getAll();
       request.onsuccess = () => {
-        const record = request.result[0] as Stored;
-        change(record);
-        store.put(record);
+        if (change) {
+          const record = request.result[0] as Stored;
+          change(record);
+          store.put(record);
+        }
       };
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => resolve(request.result[0] as Stored);
       tx.onabort = () => reject(tx.error);
     });
   } finally {
@@ -180,7 +183,7 @@ describe('persisted dispatch destinations', () => {
         : {}),
       guard: { tag },
     });
-    await edit(change);
+    await storedRecord(change);
     original.close();
     const outbox = box();
     const delegate = vi.fn<ReplayDelegate>().mockResolvedValue(undefined);
@@ -201,7 +204,7 @@ describe('persisted dispatch destinations', () => {
     const client = storage();
     withOutbox(client.client, original);
     await original.enqueue({ op: 'write', url, body: 'bytes', ...options, guard: { tag } });
-    await edit((r) => {
+    await storedRecord((r) => {
       Object.assign(r.item, { op: 'patch' });
     });
     original.close();
@@ -211,11 +214,7 @@ describe('persisted dispatch destinations', () => {
     await outbox.ready;
     // An item without a valid op cannot be shown as an OutboxItem; hydration fails it.
     expect(outbox.pending()).toEqual([]);
-    let persisted: Stored | undefined;
-    await edit((r) => {
-      persisted = structuredClone(r);
-    });
-    expect(persisted?.item).toMatchObject({
+    expect((await storedRecord()).item).toMatchObject({
       status: 'failed',
       error: expect.stringContaining('invalid stored item'),
     });
@@ -242,7 +241,7 @@ describe('persisted dispatch destinations', () => {
     outbox.registerDelegate(tag, delegate);
     await outbox.replay(client.client);
     const conflict = outbox.conflicts()[0];
-    await edit((r) => {
+    await storedRecord((r) => {
       r.item.url = `${root}other`;
     });
     await expect(outbox.resolve(conflict?.id as string, strategy)).rejects.toThrow(
@@ -257,7 +256,7 @@ describe('persisted dispatch destinations', () => {
   it('adopts a legacy record using the active backend and checks the recomputed scope', async () => {
     const outbox = box();
     await outbox.enqueue({ op: 'write', url: `${root}a/../b`, body: 'bytes', ...options });
-    await edit((r) => {
+    await storedRecord((r) => {
       delete r.request;
       delete r.createMode;
     });
@@ -309,6 +308,177 @@ describe('persisted dispatch destinations', () => {
   });
 });
 
+describe('legacy container-bound exact creates', () => {
+  const exact = `${root}entry:1`;
+  const destinationError = '[solid-offline] invalid stored request destination';
+
+  async function queueLegacy(exactUrl: string, kind: CreateOptions['kind'] = 'resource') {
+    const original = box();
+    // An unnamed create has the pre-fix request, item URL and createMode. The old record
+    // carried the intended child only in its dispatch options.
+    await original.enqueue({
+      op: 'create',
+      url: root,
+      container: root,
+      body: 'bytes',
+      createOptions: { kind, contentType: 'text/plain' },
+    });
+    original.close();
+    await storedRecord((record) => {
+      record.createOptions = { ...record.createOptions, exactUrl };
+    });
+  }
+
+  it.each([
+    ['resource', exact],
+    ['container', `${root}folder/`],
+  ] as const)('persists the exact %s binding and delivers to it after reopening', async (kind, exactUrl) => {
+    await queueLegacy(exactUrl, kind);
+    const outbox = box();
+    const client = storage();
+    outbox.registerGuardPolicy(tag, (request) => request.url === exactUrl);
+    await outbox.ready;
+    expect(await storedRecord()).toMatchObject({
+      request: { op: 'create', url: exactUrl, container: root, kind },
+      item: { url: exactUrl, container: root },
+      createMode: 'solid',
+    });
+    await outbox.replay(client.client);
+    expect(outbox.pending()).toMatchObject([
+      { url: exactUrl, status: 'waiting', blocked: 'guard-required' },
+    ]);
+    noStorage(client);
+    outbox.close();
+
+    const reopened = box();
+    await reopened.replay(client.client);
+    expect(client.fetch.mock.calls.map(([target, init]) => [init?.method, target])).toEqual([
+      ['PUT', exactUrl],
+    ]);
+    expect(reopened.pending()).toEqual([]);
+  });
+
+  it('recovers a legacy binding already marked failed by the previous release', async () => {
+    await queueLegacy(exact);
+    await storedRecord(({ item }) => {
+      item.status = 'failed';
+      item.error = destinationError;
+    });
+    const outbox = box();
+    const client = storage();
+    await outbox.replay(client.client);
+    expect(client.fetch.mock.calls[0]?.[0]).toBe(exact);
+    expect(outbox.pending()).toEqual([]);
+  });
+
+  it('rejects a changed exact URL after persisting the new binding', async () => {
+    await queueLegacy(exact);
+    const outbox = box();
+    await outbox.ready;
+    await storedRecord((record) => {
+      record.createOptions = { ...record.createOptions, exactUrl: `${root}different` };
+    });
+    const client = storage();
+    await outbox.replay(client.client);
+    expect(outbox.pending()).toMatchObject([
+      { url: exact, status: 'failed', error: destinationError },
+    ]);
+    noStorage(client);
+  });
+
+  it('keeps a legacy conflict on the rebound URL', async () => {
+    await queueLegacy(exact);
+    await storedRecord((record) => {
+      record.item.status = 'failed';
+      record.item.error = destinationError;
+      record.conflict = {
+        id: 'conflict',
+        itemId: record.item.id,
+        url: root,
+        kind: 'binary',
+        localEtag: null,
+        remoteEtag: '"remote"',
+        contentType: 'text/plain',
+      };
+    });
+    const outbox = box();
+    const client = storage();
+    await outbox.replay(client.client);
+    expect(outbox.pending()).toMatchObject([{ status: 'conflict', url: exact }]);
+    expect(outbox.conflicts()).toMatchObject([{ url: exact }]);
+    noStorage(client);
+  });
+
+  const inconsistent: [string, (record: Stored) => void][] = [
+    [
+      'create mode',
+      (record) => {
+        record.createMode = 'solid';
+      },
+    ],
+    [
+      'item URL',
+      (record) => {
+        record.item.url = exact;
+      },
+    ],
+    [
+      'item container spelling',
+      (record) => {
+        record.item.container = `${root}sub/../`;
+      },
+    ],
+    [
+      'bound kind',
+      (record) => {
+        Object.assign(record.request as object, { kind: 'container' });
+      },
+    ],
+    [
+      'exact URL with a name',
+      (record) => {
+        record.item.name = 'hint';
+        Object.assign(record.request as object, { name: 'hint' });
+        record.createOptions = { ...record.createOptions, name: 'hint' };
+      },
+    ],
+  ];
+  it.each(inconsistent)('refuses to rebind an inconsistent %s', async (_, change) => {
+    await queueLegacy(exact);
+    await storedRecord(change);
+    const outbox = box();
+    const client = storage();
+    await outbox.replay(client.client);
+    expect(outbox.pending()).toMatchObject([{ status: 'failed', error: destinationError }]);
+    noStorage(client);
+  });
+
+  it.each([
+    ['grandchild', `${root}nested/file`, 'resource'],
+    ['foreign origin', 'https://other.example/store/file', 'resource'],
+    ['noncanonical host', 'https://POD.example/store/file', 'resource'],
+    ['dot segments', `${root}sub/../file`, 'resource'],
+    ['trailing slash on resource', `${root}file/`, 'resource'],
+    ['missing slash on container', `${root}folder`, 'container'],
+    ['container itself', root, 'container'],
+    ['query', `${exact}?`, 'resource'],
+    ['fragment', `${exact}#`, 'resource'],
+    ['encoded delimiter', `${root}folder%2Ffile`, 'resource'],
+  ] as const)('leaves a legacy create with %s failed across replay and retry', async (_, target, kind) => {
+    await queueLegacy(target, kind);
+    const outbox = box();
+    const client = storage();
+    await outbox.ready;
+    const failed = [{ url: root, status: 'failed', error: destinationError }];
+    expect(outbox.pending()).toMatchObject(failed);
+    await outbox.replay(client.client);
+    await outbox.retry();
+    expect(outbox.pending()).toMatchObject(failed);
+    expect(await storedRecord()).toMatchObject({ request: { url: root }, createMode: 'container' });
+    noStorage(client);
+  });
+});
+
 describe('canonical policy matching and delivery', () => {
   it('delivers an ordinary opted-in online create using its snapshotted arguments', async () => {
     const outbox = box();
@@ -351,7 +521,7 @@ describe('canonical policy matching and delivery', () => {
       ...options,
       guard: { tag },
     });
-    await edit((record) => {
+    await storedRecord((record) => {
       delete record.request;
       delete record.createMode;
       delete record.createOptions;
@@ -452,7 +622,7 @@ describe('canonical policy matching and delivery', () => {
     const client = storage();
     withOutbox(client.client, outbox);
     await outbox.enqueue({ op: 'write', url, body: 'bytes', ...options });
-    await edit((record) => {
+    await storedRecord((record) => {
       record.item.url = `${root}other`;
     });
     if (action === 'replay') await outbox.replay(client.client);
