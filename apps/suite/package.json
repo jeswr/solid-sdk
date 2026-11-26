@@ -79,6 +79,7 @@
     "@jeswr/suite-ui": "workspace:*",
     "@jeswr/suite-vocab": "workspace:*",
     "@jeswr/y-solid": "workspace:*",
+    "@noble/hashes": "2.4.0",
     "@rdfjs/wrapper": "0.34.0",
     "@solid/object": "0.6.0",
     "@tiptap/extension-collaboration": "3.31.4",

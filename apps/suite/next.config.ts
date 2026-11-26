@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6.2-Sol
 import { resolve } from "node:path";
 import type { NextConfig } from "next";
 
@@ -34,20 +35,18 @@ const config: NextConfig = {
     // initialization uses its emitted WASM URL and never enters that branch.
     if (!isServer) {
       config.plugins.push(new webpack.IgnorePlugin({ resourceRegExp: /^node:fs\/promises$/ }));
-      // pkg-memory's hash and URL helpers use Node-prefixed imports. Webpack's
-      // scheme reader runs before aliases, so normalize just these two imports
-      // to Next's existing browser fallbacks. Server imports stay native.
+      // Webpack's scheme reader runs before aliases for Node-prefixed imports.
+      const browserCrypto = resolve(config.context, "src/lib/browser-node-crypto.ts");
       config.plugins.push(
         new webpack.NormalModuleReplacementPlugin(
           /^node:(crypto|url)$/,
           (resource: { request: string }) => {
-            resource.request = resource.request.slice(5);
+            resource.request = resource.request === "node:crypto" ? browserCrypto : "url";
           },
         ),
       );
       config.resolve.alias = {
         ...config.resolve.alias,
-        "node:crypto": "crypto",
         "node:url": "url",
       };
     }
