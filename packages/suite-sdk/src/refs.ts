@@ -24,11 +24,17 @@ function toBase64Url(text: string): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+/**
+ * Decodes only the canonical encoding: `atob` ignores non-zero trailing bits, so several refs
+ * would otherwise decode to the same text. Re-encoding and comparing rejects the aliases.
+ */
 function fromBase64Url(ref: string): string {
   if (!/^[A-Za-z0-9_-]+$/.test(ref)) throw new RefError(ref);
   const binary = atob(ref.replace(/-/g, "+").replace(/_/g, "/"));
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  if (toBase64Url(text) !== ref) throw new RefError(ref);
+  return text;
 }
 
 /**
@@ -40,8 +46,10 @@ export function encodeRef(url: string): string {
 }
 
 /**
- * Reverses `encodeRef`. Only canonical references decode: the URL must already be in its
- * normalised form, so each resource has exactly one reference.
+ * Reverses `encodeRef`. Only canonical references decode: the base64url must be the canonical
+ * encoding and the URL must already be in its normalised form, so each resource has exactly one
+ * reference. A decoded URL can name any http(s) origin; scoping it to the user's storage is the
+ * route's job.
  * @throws {RefError} For anything else; routes render their 404 page.
  */
 export function decodeRef(ref: string): string {
@@ -66,12 +74,15 @@ export function encodeIdentifierRef(iri: string): string {
 }
 
 /**
- * Reverses `encodeIdentifierRef`, returning the identifier exactly as encoded.
- * @throws {RefError} For anything that is not an encoded http(s) IRI.
+ * Reverses `encodeIdentifierRef`, returning the identifier exactly as encoded. Because the IRI is
+ * not normalised, values the lenient URL parser would repair (control characters, whitespace,
+ * backslashes) are rejected rather than returned: none of them can appear in an IRI.
+ * @throws {RefError} For anything that is not a canonically encoded http(s) IRI.
  */
 export function decodeIdentifierRef(ref: string): string {
   try {
     const iri = fromBase64Url(ref);
+    if (/[\s\\\p{Cc}]/u.test(iri)) throw new RefError(ref);
     assertHttpUrl(iri);
     return iri;
   } catch {

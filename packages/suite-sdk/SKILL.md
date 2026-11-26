@@ -18,11 +18,19 @@ Apps import `@jeswr/suite-sdk/react` (A-1). It re-exports the root, `./offline`,
 `./preferences`, plus the pure helpers below. It has no `"use client"` directive, so server routes
 can call `decodeRef` and `classifyError`. The hook modules it re-exports keep their own directive.
 Keep new hooks in modules that carry `"use client"`, and keep pure helpers free of React.
+The pure helpers also have their own subpaths, `@jeswr/suite-sdk/refs` (the ref codecs and
+`RefError`) and `@jeswr/suite-sdk/errors` (`classifyError`, `ErrorCategory`). Server components
+and framework-free models import those, so they do not load the whole façade (offline, accounts,
+search); `./react` keeps re-exporting the same bindings.
 
 - `encodeRef(url)` / `decodeRef(ref)` (A-18): base64url without padding of `new URL(url).href`.
   Only http(s) URLs encode (`TypeError` otherwise). `decodeRef` accepts only canonical refs and
-  throws `RefError` for anything else; routes render 404. `encodeIdentifierRef` /
-  `decodeIdentifierRef` keep an RDF identifier verbatim (no URL normalisation) for subject IRIs.
+  throws `RefError` for anything else; routes render 404. Canonical means both the base64url
+  (non-zero trailing bits are rejected, so each URL has exactly one ref) and the URL
+  (`new URL(href).href === href`). `encodeIdentifierRef` / `decodeIdentifierRef` keep an RDF
+  identifier verbatim (no URL normalisation) for subject IRIs; decoding rejects aliases and any
+  identifier containing control characters, whitespace or `\`. A decoded ref may name any
+  http(s) origin: routes must still scope it to the user's storage before fetching or linking.
 - `classifyError(error, online = navigator.onLine)` maps errors to the 01-§9 UI categories that
   suite-ui's `errorStateCopy` renders (A-7). The mapping table:
   - every `StorageErrorCode` by code: `network` becomes `offline` when offline, else `unreachable`;
@@ -35,13 +43,16 @@ Keep new hooks in modules that carry `"use client"`, and keep pure helpers free 
     `unknown`.
   Never inspect raw errors in UI code.
 - `deriveSuiteCaps(features, { hasInbox?, selfRegistration? })` is the pure boolean view of the
-  ADR-002 `Features`. Every boolean is `state === "available"` (unknown and unavailable are false):
+  ADR-002 `Features`. Every feature-backed boolean is `state === "available"` (unknown and
+  unavailable are false):
   - `accessControl` is the model when available, else `none`;
   - `publicLinks` and `authenticatedAgentGrants` require WAC or ACP; `grantExpiry` and
     `grantPurpose` require ODRL grants;
   - `move` requires native move;
   - `notifyAgents` means Solid;
-  - `accessRequests` is the feature, or Solid with `hasInbox`;
+  - `accessRequests` is the one composite: the LWS service feature, or Solid with `hasInbox`.
+    `features.accessRequests` describes only the LWS service, so its `unavailable` (normal for an
+    authoritative Solid description) does not disable inbox (LDN) requests;
   - `quota` is always false;
   - `patchMediaTypes` is the de-duplicated union of the patch formats.
 

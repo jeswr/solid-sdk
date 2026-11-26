@@ -8,6 +8,7 @@ export interface SuiteCaps {
   realtimeCollab: boolean;
   liveUpdates: boolean;
   serverSearch: boolean;
+  /** The LWS access-request service is available, or Solid with `hasInbox` (inbox requests). */
   accessRequests: boolean;
   versioning: boolean;
   trash: boolean;
@@ -44,8 +45,11 @@ function available(feature: Feature<unknown>): boolean {
 }
 
 /**
- * Derives the boolean `SuiteCaps` from the tri-state `Features` (ADR-002). Every boolean is
- * `state === "available"`; unknown and unavailable are both false (fail closed, A-6).
+ * Derives the boolean `SuiteCaps` from the tri-state `Features` (ADR-002). Every feature-backed
+ * boolean is `state === "available"`; unknown and unavailable are both false (fail closed, A-6).
+ * The one composite is `accessRequests`: the LWS access-request service, or Solid with an inbox.
+ * `features.accessRequests` describes only the LWS service, so its `unavailable` (the usual state
+ * for an authoritative Solid description) does not rule out inbox (LDN) requests.
  */
 export function deriveSuiteCaps(features: Features, context: SuiteCapsContext = {}): SuiteCaps {
   const model = available(features.accessControl) ? features.accessControl.detail.model : "none";

@@ -21,8 +21,20 @@ function mulberry32(seed: number): () => number {
 
 const alphabet = ["a", "Z", "0", "-", "_", ".", "~", "é", "ü", "日", "😀", " ", "%", "+", "=", "?"];
 
-function randomUrl(next: () => number): string {
-  const pick = () => alphabet[Math.floor(next() * alphabet.length)];
+/** Base64url aliases of `ref`: the same bytes with different (ignored) trailing bits. */
+function aliases(ref: string): string[] {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  const last = chars.indexOf(ref.at(-1) as string);
+  const unused = ref.length % 4 === 2 ? 4 : ref.length % 4 === 3 ? 2 : 0;
+  const base = last & ~((1 << unused) - 1);
+  return Array.from(
+    { length: 1 << unused },
+    (_, i) => `${ref.slice(0, -1)}${chars[base + i]}`,
+  ).filter((alias) => alias !== ref);
+}
+
+function randomUrl(next: () => number, letters = alphabet): string {
+  const pick = () => letters[Math.floor(next() * letters.length)];
   const segment = () => Array.from({ length: 1 + Math.floor(next() * 8) }, pick).join("");
   const scheme = next() < 0.5 ? "https" : "http";
   const port = next() < 0.2 ? `:${1 + Math.floor(next() * 65534)}` : "";
@@ -42,6 +54,14 @@ describe("encodeRef / decodeRef", () => {
       expect(decodeRef(ref)).toBe(new URL(url).href);
       expect(encodeRef(decodeRef(ref))).toBe(ref);
     }
+  });
+
+  it("rejects every non-canonical alias of a ref", () => {
+    const ref = encodeRef("https://pod.example/ab");
+    const others = aliases(ref);
+    expect(others).toHaveLength(15);
+    for (const alias of others) expect(() => decodeRef(alias)).toThrow(RefError);
+    expect(decodeRef(ref)).toBe("https://pod.example/ab");
   });
 
   it("matches the encoding apps already link with", () => {
@@ -91,8 +111,9 @@ describe("encodeIdentifierRef / decodeIdentifierRef", () => {
 
   it("round-trips random http(s) IRIs verbatim", () => {
     const next = mulberry32(0xc0ffee);
+    const iriLetters = alphabet.filter((letter) => letter !== " ");
     for (let i = 0; i < 200; i++) {
-      const iri = randomUrl(next);
+      const iri = randomUrl(next, iriLetters);
       expect(decodeIdentifierRef(encodeIdentifierRef(iri))).toBe(iri);
     }
   });
@@ -101,5 +122,29 @@ describe("encodeIdentifierRef / decodeIdentifierRef", () => {
     expect(() => encodeIdentifierRef("urn:uuid:1")).toThrow(TypeError);
     expect(() => decodeIdentifierRef(btoa("urn:uuid:1").replace(/=+$/, ""))).toThrow(RefError);
     expect(() => decodeIdentifierRef("**")).toThrow(RefError);
+  });
+
+  it("rejects non-canonical aliases", () => {
+    const ref = encodeIdentifierRef("https://pod.example/chat#m12");
+    const others = aliases(ref);
+    expect(others).toHaveLength(15);
+    for (const alias of others) expect(() => decodeIdentifierRef(alias)).toThrow(RefError);
+  });
+
+  it.each([
+    ["a backslash", "https:\\\\evil.example/"],
+    ["a tab", "https://pod.example/chat#m\t1"],
+    ["a newline", "https://pod.example/chat\n#m1"],
+    ["a space", "https://pod.example/chat#m 1"],
+    ["leading whitespace", " https://pod.example/chat#m1"],
+    ["trailing whitespace", "https://pod.example/chat#m1 "],
+    ["a NUL", "https://pod.example/chat#m\u00001"],
+    ["a DEL", "https://pod.example/chat#m\u007f"],
+    ["a C1 control", "https://pod.example/chat#m\u0085"],
+  ])("rejects an identifier containing %s", (_label, iri) => {
+    let binary = "";
+    for (const byte of new TextEncoder().encode(iri)) binary += String.fromCharCode(byte);
+    const ref = btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    expect(() => decodeIdentifierRef(ref)).toThrow(RefError);
   });
 });

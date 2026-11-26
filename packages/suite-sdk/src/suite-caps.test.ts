@@ -116,6 +116,14 @@ describe("deriveSuiteCaps", () => {
     );
   });
 
+  it("treats an unavailable LWS access-request service as no bar to Solid inbox requests", () => {
+    // features.accessRequests describes the LWS service only; an authoritative Solid description
+    // without one reports it unavailable, while inbox (LDN) requests remain possible.
+    const lwsServiceAbsent = features({ accessRequests: off({ profiles: [] }) });
+    expect(deriveSuiteCaps(lwsServiceAbsent).accessRequests).toBe(false);
+    expect(deriveSuiteCaps(lwsServiceAbsent, { hasInbox: true }).accessRequests).toBe(true);
+  });
+
   it("separates grant models", () => {
     const wac = deriveSuiteCaps(features({ accessControl: on({ model: "wac" }) }));
     expect([wac.grantExpiry, wac.grantPurpose, wac.authenticatedAgentGrants]).toEqual([

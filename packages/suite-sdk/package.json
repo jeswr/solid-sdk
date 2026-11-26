@@ -16,6 +16,14 @@
       "types": "./dist/react.d.ts",
       "default": "./dist/react.js"
     },
+    "./refs": {
+      "types": "./dist/refs.d.ts",
+      "default": "./dist/refs.js"
+    },
+    "./errors": {
+      "types": "./dist/errors.d.ts",
+      "default": "./dist/errors.js"
+    },
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
