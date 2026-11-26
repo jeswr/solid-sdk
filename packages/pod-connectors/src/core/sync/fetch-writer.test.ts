@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6.2
 import { NS } from "@jeswr/suite-vocab";
 import { LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, SetFrom } from "@rdfjs/wrapper";
 import { Authorization, Container, Resource } from "@solid/object";
 import { DataFactory, Store, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
+import { writeResource } from "../../pod/resource.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "../testing.js";
 import { PodThing } from "../vocab.js";
 import { createFetchSyncPodWriter } from "./fetch-writer.js";
@@ -48,10 +50,14 @@ async function listingWriter(page: boolean) {
 }
 function fixture(link?: (url: string) => string) {
   const pod = createMemoryPod();
-  const calls: { url: string; method: string }[] = [];
+  const calls: { url: string; method: string; ifNoneMatch: string | null }[] = [];
   const transport: typeof fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    calls.push({ url, method: init?.method ?? "GET" });
+    calls.push({
+      url,
+      method: init?.method ?? "GET",
+      ifNoneMatch: new Headers(init?.headers).get("if-none-match"),
+    });
     const response = await pod.fetch(input, init);
     if (init?.method === "HEAD" && link) response.headers.set("link", link(url));
     return response;
@@ -105,12 +111,13 @@ describe("fetch sync host security", () => {
     const f = fixture((url) => `<${url}.acl>; rel="acl"`);
     await createLinkStore(f.writer, "account").load();
     expect(f.calls[0]?.method).toBe("HEAD");
-    expect(f.calls[1]?.method).toBe("PUT");
+    const url = f.writer.resolve("account/links/manifest.ttl");
+    const aclUrl = `${url}.acl`;
+    expect(f.calls[1]).toEqual({ url: aclUrl, method: "PUT", ifNoneMatch: "*" });
     expect(f.calls[2]?.method).toBe("GET");
-    const aclUrl = f.calls[1]?.url;
-    expect(aclUrl).toBeDefined();
-    const dataset = f.pod.dataset(aclUrl as string);
+    const dataset = f.pod.dataset(aclUrl);
     const rule = new OwnerRule(`${aclUrl}#owner`, dataset, DataFactory);
+    expect(rule.accessTo).toBe(url);
     expect([...rule.agents]).toEqual([TEST_WEBID]);
     expect(rule.canRead).toBe(true);
     expect(rule.canWrite).toBe(true);
@@ -121,6 +128,30 @@ describe("fetch sync host security", () => {
           q.predicate.value === `${NS.ACL}agentClass` || q.predicate.value === `${NS.ACL}default`,
       ),
     ).toBe(false);
+  });
+  it("preserves grants the owner added to an existing shard ACL", async () => {
+    const f = fixture((url) => `<${url}.acl>; rel="acl"`);
+    const slug = "account/links/00.ttl";
+    const aclUrl = `${f.writer.resolve(slug)}.acl`;
+    await f.writer.ensureOwnerOnly(slug);
+    const dataset = f.pod.dataset(aclUrl);
+    new OwnerRule(`${aclUrl}#owner`, dataset, DataFactory).agents.add("https://bob.test/#me");
+    await writeResource(aclUrl, dataset, { fetchImpl: f.pod.fetch });
+    const existing = f.pod.get(aclUrl);
+    const puts = f.pod.putCount;
+
+    await f.writer.ensureOwnerOnly(slug);
+    expect(f.pod.get(aclUrl)).toBe(existing);
+    expect(f.pod.putCount).toBe(puts);
+  });
+  it("propagates a forbidden ACL PUT", async () => {
+    const f = fixture((url) => `<${url}.acl>; rel="acl"`);
+    vi.spyOn(f.pod, "fetch")
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, { status: 403 }));
+    await expect(f.writer.ensureOwnerOnly("account/links/00.ttl")).rejects.toMatchObject({
+      status: 403,
+    });
   });
   it.each([
     undefined,

@@ -1,6 +1,7 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- // AUTHORED-BY Codex GPT-6.2 -->
 # @jeswr/pod-connectors
 
 > Experimental — AI-agent-generated. Security-critical; private until conformance is gate-green.
@@ -523,8 +524,9 @@ The fetch implementation reads listings through `@solid/object`, consumes advert
 `solid:etag` values, flags members typed `ldp:NonRDFSource`, and falls back to resource reads
 when an ETag is missing. A listing entry is skipped as unchanged only when both its ETag and
 the link's are known and equal. The fetch writer requires an advertised WAC ACL at the exact
-resource URL plus `.acl`, then installs owner-only grants **before** link/snapshot bodies are
-read or created; unsupported ACL discovery fails closed. Hosts with other permission systems
+resource URL plus `.acl`. Before loading link documents or creating snapshots, it creates the
+owner-only ACL with `If-None-Match: *`. A 412 preserves existing grants. Reading a stored
+snapshot leaves its ACL untouched. Unsupported ACL discovery fails closed. Other permission systems
 supply an equally strict protection port. Both owner protection and full listing completeness
 are security contracts for custom hosts. The fetch implementation refuses partial responses
 and advertised pagination; hosts needing paged containers supply a bounded complete listing

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 import type { DatasetCore } from "@rdfjs/types";
 import type { RunLimits } from "../budget.js";
 import type {
@@ -145,7 +146,7 @@ export interface SyncListingEntry {
 export interface SyncPodWriter extends PodWriter {
   /** Finite, complete direct-child listing; errors MUST throw, never yield a partial success. */
   list(container: string): AsyncIterable<SyncListingEntry>;
-  /** Install owner-only access BEFORE reading or creating sensitive document bodies. */
+  /** Create an owner-only ACL if absent, preserving any existing grants. */
   ensureOwnerOnly(slug: string): Promise<void>;
 }
 export interface SyncNotificationSource {

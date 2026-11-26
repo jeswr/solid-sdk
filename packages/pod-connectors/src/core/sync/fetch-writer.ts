@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { NS } from "@jeswr/suite-vocab";
@@ -7,7 +8,7 @@ import { LiteralAs, NamedNodeAs, NamedNodeFrom, OptionalFrom, SetFrom } from "@r
 import { Authorization, Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { freshRdf } from "../../pod/rdf-read.js";
-import { writeResource } from "../../pod/resource.js";
+import { ResourceWriteError, writeResource } from "../../pod/resource.js";
 import { abortableFetch } from "../abort.js";
 import { createFetchPodWriter, type FetchPodWriterOptions } from "../pod-writer.js";
 import { datasetBytes } from "./hash.js";
@@ -69,7 +70,12 @@ export function createFetchSyncPodWriter(options: FetchPodWriterOptions): SyncPo
       rule.canRead = true;
       rule.canWrite = true;
       rule.canReadWriteAcl = true;
-      await writeResource(aclUrl, dataset, { fetchImpl: scoped });
+      try {
+        await writeResource(aclUrl, dataset, { fetchImpl: scoped, createOnly: true });
+      } catch (error) {
+        // A create-only PUT returns 412 when the resource already has its own ACL.
+        if (!(error instanceof ResourceWriteError && error.status === 412)) throw error;
+      }
     },
     async *list(container) {
       const url = base.resolve(container);
