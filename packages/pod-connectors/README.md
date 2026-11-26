@@ -1,6 +1,7 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6.2 -->
 # @jeswr/pod-connectors
 
 > Experimental — AI-agent-generated. Security-critical; private until conformance is gate-green.
@@ -2823,8 +2824,13 @@ Stores refuse redirects and bound response bytes; read/write accept a per-call s
 One store instance serves one read→write sequence at a time. Incidental
 fields, provider messages, URLs and tokens are never copied into health. Error
 codes are `reauthorise`, `rate-limited`, `unauthorised` (401), `forbidden` (403),
-`conflict`, `source-or-pod`,
-`unexpected` and `aborted` (reserved; cancelled runs start no health writes).
+`conflict`, `source-or-pod`, `deprecated`, `timeout`, `unexpected` and `aborted`
+(reserved; cancelled runs start no health writes).
+
+A retired adapter records `deprecated` and copies its catalog guidance into `health.message`
+before claiming a run or fetching a token. The connection stays recorded and has no next run
+until its effective interval or `enabledAt` changes. For Fitbit, the guidance directs the
+owner to connect Google Health (`google-health`) separately.
 
 `connectorHealthSummary(states, now)` returns counts `{ ok, stale, failing,
 'needs-reauth', 'invalid-config', total }`. Inputs may be checkpoints directly or

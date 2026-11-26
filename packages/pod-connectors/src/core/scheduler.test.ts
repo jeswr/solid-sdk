@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { createRegistry } from "../registry.js";
@@ -207,6 +208,70 @@ describe("connection validation and due computation", () => {
 });
 
 describe("scheduler execution", () => {
+  it("records Fitbit's successor before a claim or token fetch, even during legacy back-off", async () => {
+    const row = connection("fitbit");
+    const podWriter = vi.fn();
+    const h = harness([row], { podWriter });
+    const lastHealth: ConnectorRunHealth = {
+      lastRunStartedAt: iso(),
+      lastRunEndedAt: iso(),
+      outcome: "failed",
+      errorClass: "source-or-pod",
+      counts: { created: 1, updated: 0, unchanged: 0, skipped: 0 },
+      consecutiveFailures: 4,
+      intervalMinutes: 60,
+      nextRunAt: iso(AT + MAX_CONNECTOR_BACKOFF_MS),
+    };
+    const claims = { other: { holder: "another-host", expiresAt: iso(AT + 60_000) } };
+    h.states.set("fitbit", { ...legacy, health: lastHealth, claims });
+    await h.scheduler.tick();
+
+    expect(h.writes).toHaveBeenCalledTimes(1);
+    const stored = connectorState(h.states.get("fitbit"));
+    expect(stored.claims).toEqual(claims);
+    const health = stored.accounts?.fixture?.health;
+    expect(health).toMatchObject({
+      outcome: "failed",
+      errorClass: "deprecated",
+      message: expect.stringContaining("Google Health"),
+      counts: { created: 0, updated: 0, unchanged: 0, skipped: 0 },
+    });
+    expect(health?.nextRunAt).toBeUndefined();
+    expect(stored).toMatchObject({
+      ...legacy,
+      health,
+      accounts: { fixture: { ...legacy, health } },
+    });
+    expect(h.scheduler.list()).toEqual([row]);
+    expect(h.saveConnection).not.toHaveBeenCalled();
+    expect(h.tokenSource.accessToken).not.toHaveBeenCalled();
+    expect(h.options.sourceFetch).not.toHaveBeenCalled();
+    expect(podWriter).not.toHaveBeenCalled();
+    expect(h.runner).not.toHaveBeenCalled();
+  });
+  it("parks a deprecated connection across restarts until its settings change", async () => {
+    const row = connection("fitbit");
+    const h = harness([row]);
+    await h.scheduler.tick();
+    h.setNow(AT + 2 * MAX_CONNECTOR_BACKOFF_MS);
+    await h.scheduler.tick();
+    const restarted = new ConnectorScheduler(h.options);
+    await restarted.tick();
+    expect(h.writes).toHaveBeenCalledTimes(1);
+
+    await restarted.setConnections([{ ...row, intervalMinutes: 30 }]);
+    await restarted.tick();
+    expect(h.writes).toHaveBeenCalledTimes(2);
+    expect(h.states.get("fitbit")?.health).toMatchObject({
+      errorClass: "deprecated",
+      intervalMinutes: 30,
+    });
+    await restarted.setEnabled("fitbit", "fixture", true);
+    await restarted.tick();
+    await restarted.tick();
+    expect(h.writes).toHaveBeenCalledTimes(3);
+    expect(h.tokenSource.accessToken).not.toHaveBeenCalled();
+  });
   it("joins overlapping ticks and serializes different accounts in one connector container", async () => {
     const gate = deferred(),
       entered = deferred();
@@ -525,6 +590,7 @@ it("loads legacy state and projects scheduler fields without incidental secrets"
       nextRunAt: iso(AT + 900_000),
       intervalMinutes: 15,
       token: "never",
+      message: "never",
     },
   });
   expect(JSON.stringify(next)).not.toContain("never");

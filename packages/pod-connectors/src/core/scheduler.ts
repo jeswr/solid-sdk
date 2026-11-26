@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 import { createRegistry, DEFAULT_CONNECTOR_INTERVAL_MINUTES } from "../registry.js";
 import { abortableFetch, unlessAborted } from "./abort.js";
 import { IntegrationSyncError, RateLimitedError } from "./errors.js";
@@ -15,6 +16,7 @@ import {
   type ConnectorStateStore,
   connectorAccountState,
   connectorCheckpoint,
+  connectorState,
   intervalMinutes,
   MAX_CONNECTIONS,
   MAX_FUTURE_SKEW_MS,
@@ -255,6 +257,11 @@ export function connectorNextRunAt(
   const interval = intervalMinutes(connection.intervalMinutes ?? effectiveInterval);
   const horizon = now + Math.max(interval * 60_000, MAX_CONNECTOR_BACKOFF_MS);
   const health = state?.health;
+  if (health?.errorClass === "deprecated") {
+    const configChanged =
+      interval !== health.intervalMinutes || connectorReenabled(connection.enabledAt, health, now);
+    return configChanged ? 0 : undefined;
+  }
   // The auth latch is a durable owner decision, independent of any clock.
   if (health?.outcome === "needs-reauth" && !health.nextRunAt)
     return connectorReenabled(connection.enabledAt, health, now) ? 0 : undefined;
@@ -346,14 +353,23 @@ function bounded<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<
     );
   });
 }
-/**
- * The root checkpoint as its owner (the CLI) wrote it: every validated root field except
- * the scheduler's own health, accounts and claims, so `fileCursor` and two-way `sync`
- * health survive a scheduler write.
- */
-function rootCheckpoint(state: ConnectorState): ConnectorAccountState {
-  const { accounts: _accounts, claims: _claims, health: _health, ...root } = state;
-  return root;
+/** Update one account and the root health summary, preserving other accounts, claims and CLI state. */
+function withAccount(
+  state: ConnectorState,
+  id: string,
+  account: ConnectorAccountState,
+  now: number,
+): ConnectorState {
+  const rootHealth =
+    state.health &&
+    trustedTime(state.health.lastRunEndedAt, now) > trustedTime(account.health?.lastRunEndedAt, now)
+      ? state.health
+      : (account.health ?? state.health);
+  return {
+    ...state,
+    ...(rootHealth ? { health: rootHealth } : {}),
+    accounts: { ...state.accounts, [id]: account },
+  };
 }
 function withoutClaim(state: ConnectorState, account: string): ConnectorState {
   const { claims, ...rest } = state;
@@ -434,12 +450,16 @@ export class ConnectorScheduler {
     if (!adapter) throw new Error("Connector cannot be scheduled");
     return adapter;
   }
-  private interval(c: ConnectorConnection): number {
-    return intervalMinutes(
-      c.intervalMinutes ??
-        this.adapter(c).metadata.defaultIntervalMinutes ??
-        DEFAULT_CONNECTOR_INTERVAL_MINUTES,
-    );
+  private nextRunAt(
+    c: ConnectorConnection,
+    account: ConnectorAccountState | undefined,
+    now: number,
+    adapter = this.adapter(c),
+  ): number | undefined {
+    // A change in the adapter's retirement status supersedes the old schedule or latch.
+    if (Boolean(adapter.metadata.deprecated) !== (account?.health?.errorClass === "deprecated"))
+      return 0;
+    return connectorNextRunAt(c, account, adapter.metadata.defaultIntervalMinutes, now);
   }
   private find(c: ConnectorConnection): ConnectorConnection | undefined {
     return this.connections.find(
@@ -462,12 +482,7 @@ export class ConnectorScheduler {
     if (!this.snapshots.has(c.connectorId)) due = 0;
     else {
       try {
-        due = connectorNextRunAt(
-          c,
-          this.account(c, this.snapshots.get(c.connectorId)),
-          this.interval(c),
-          now,
-        );
+        due = this.nextRunAt(c, this.account(c, this.snapshots.get(c.connectorId)), now);
       } catch {
         due = undefined;
       }
@@ -562,33 +577,61 @@ export class ConnectorScheduler {
     const state = await bounded(store.read(), timeout);
     signal.throwIfAborted();
     this.snapshots.set(c.connectorId, state);
-    const previous = this.account(c, state),
-      interval = this.interval(c);
-    const due = connectorNextRunAt(c, previous, interval, this.now());
+    const previous = this.account(c, state);
+    const adapter = this.adapter(c);
+    const due = this.nextRunAt(c, previous, this.now(), adapter);
     if (due === undefined || due > this.now()) return false;
     // Another host (or tab) holds an unexpired claim: skip quietly, writing nothing.
     if (this.claimedElsewhere(c, state, this.now())) return false;
-    const holder = globalThis.crypto.randomUUID();
-    this.holders.set(key(c), holder);
     const started = new Date(this.now()).toISOString();
-    const claimed = this.withClaim(c, state, {
-      holder,
-      expiresAt: new Date(this.now() + this.claimTtlMs).toISOString(),
-    });
-    try {
-      await bounded(store.write(claimed), timeout);
-    } catch (error) {
-      // A concurrent writer won the conditional write: re-read before deciding again.
-      if (!(error instanceof StateConflictError) || signal.aborted) throw error;
-      this.snapshots.delete(c.connectorId);
-      return false;
-    }
-    this.snapshots.set(c.connectorId, claimed);
     const fresh: ConnectorAccountState = previous ?? {
       connectedAt: started,
       lastOutcome: "error",
       counts: { documents: 0, items: 0, skipped: 0 },
     };
+    const interval = intervalMinutes(
+      c.intervalMinutes ??
+        adapter.metadata.defaultIntervalMinutes ??
+        DEFAULT_CONNECTOR_INTERVAL_MINUTES,
+    );
+    const writeIfCurrent = async (next: ConnectorState) => {
+      try {
+        await bounded(store.write(next), timeout);
+      } catch (error) {
+        // A concurrent writer won the conditional write: re-read before deciding again.
+        if (!(error instanceof StateConflictError) || signal.aborted) throw error;
+        this.snapshots.delete(c.connectorId);
+        return false;
+      }
+      this.snapshots.set(c.connectorId, next);
+      return true;
+    };
+    if (adapter.metadata.deprecated) {
+      const health: ConnectorRunHealth = {
+        lastRunStartedAt: started,
+        lastRunEndedAt: started,
+        outcome: "failed",
+        errorClass: "deprecated",
+        message: adapter.metadata.deprecated,
+        counts: emptyCounts(),
+        consecutiveFailures: Math.min(
+          Number.MAX_SAFE_INTEGER,
+          (previous?.health?.consecutiveFailures ?? 0) + 1,
+        ),
+        latchedEnabledAt: c.enabledAt ?? "",
+        intervalMinutes: interval,
+      };
+      return writeIfCurrent(
+        connectorState(withAccount(state ?? fresh, c.account, { ...fresh, health }, this.now())),
+      );
+    }
+    const holder = globalThis.crypto.randomUUID();
+    this.holders.set(key(c), holder);
+    const claimed = this.withClaim(c, state, {
+      holder,
+      expiresAt: new Date(this.now() + this.claimTtlMs).toISOString(),
+    });
+    if (!(await writeIfCurrent(claimed))) return false;
     let checkpoint = fresh;
     let counts = emptyCounts();
     let outcome: ConnectorRunHealth["outcome"] = "failed";
@@ -602,7 +645,6 @@ export class ConnectorScheduler {
       run.throwIfAborted();
       if (!token || token.length > 65_536 || !/^[\x21-\x7e]+$/.test(token))
         throw new Error("Invalid source credential");
-      const adapter = this.adapter(c);
       const tokens = { accessToken: token, tokenType: "Bearer" };
       const sourceFetch = abortableFetch(this.options.sourceFetch, run);
       const sourceAuth =
@@ -908,17 +950,7 @@ export class ConnectorScheduler {
           ? withoutClaim(stored, c.account)
           : stored;
       const account = mergeAccountState(this.account(c, current), next, { now, base });
-      const accounts: Record<string, ConnectorAccountState> = { ...current?.accounts };
-      accounts[c.account] = account;
-      // Root checkpoint fields stay as written by their owner (legacy CLI); only creation
-      // (or a claim's placeholder root) writes them. The root health summarises the most
-      // recent trusted attempt.
-      const rootHealth =
-        current?.health &&
-        trustedTime(current.health.lastRunEndedAt, now) >
-          trustedTime(account.health?.lastRunEndedAt, now)
-          ? current.health
-          : (account.health ?? current?.health);
+      // Only creation or a claim's placeholder root initializes the root checkpoint fields.
       const placeholder =
         !current ||
         (!current.health &&
@@ -926,19 +958,15 @@ export class ConnectorScheduler {
           current.cursor === undefined &&
           current.accounts !== undefined &&
           Object.keys(current.accounts).length === 0);
-      const root: ConnectorAccountState = placeholder
+      const root = placeholder
         ? {
+            ...current,
             connectedAt: account.connectedAt,
             lastOutcome: account.lastOutcome,
             counts: account.counts,
           }
-        : rootCheckpoint(current);
-      return {
-        ...root,
-        ...(rootHealth ? { health: rootHealth } : {}),
-        ...(current?.claims ? { claims: current.claims } : {}),
-        accounts,
-      };
+        : current;
+      return withAccount(root, c.account, account, now);
     });
     this.snapshots.set(c.connectorId, result);
     return result;
