@@ -1100,6 +1100,49 @@ describe("Solid shell over pod-auth", () => {
     expect(await h.auth.identity()).toEqual(alice);
   });
 
+  it("grants a shared address to the live account only, and drops a grant that outlives it", async () => {
+    const h = harness();
+    const shared = "https://pod.example/bob/sheets/budget/";
+    const account = await h.backend.signIn({ issuer: alice.issuer });
+    await expect(h.backend.grantResource(account, shared)).rejects.toThrow("isn't available");
+    const grant = { root: shared, origin: "https://pod.example", created: 1 };
+    const grantResource = vi.fn<NonNullable<PodAuth["grantResource"]>>(async () => grant);
+    const revokeResource = vi.fn<NonNullable<PodAuth["revokeResource"]>>(() => true);
+    Object.assign(h.auth, { grantResource, revokeResource });
+    await h.backend.grantResource(account, shared);
+    expect(grantResource).toHaveBeenCalledExactlyOnceWith(shared);
+    for (const other of [
+      { ...account, id: "solid:other" },
+      { ...account, kind: "demo" as const },
+    ])
+      await expect(h.backend.grantResource(other, shared)).rejects.toThrow("Sign in to continue");
+    expect(grantResource).toHaveBeenCalledOnce();
+    const gate = deferred<typeof grant>();
+    grantResource.mockReturnValueOnce(gate.promise);
+    const pending = h.backend.grantResource(account, shared);
+    await h.backend.signOut(account);
+    gate.resolve(grant);
+    await expect(pending).rejects.toThrow("Sign in to continue");
+    expect(revokeResource).toHaveBeenCalledExactlyOnceWith(grant);
+    await expect(h.backend.grantResource(account, shared)).rejects.toThrow("Sign in to continue");
+  });
+
+  it("drops a grant recorded after another tab replaced the core's session", async () => {
+    const h = harness();
+    const shared = "https://pod.example/carol/notes/n1.ttl";
+    const account = await h.backend.signIn({ issuer: alice.issuer });
+    const grant = { root: shared, origin: "https://pod.example", created: 1 };
+    const grantResource = vi.fn<NonNullable<PodAuth["grantResource"]>>(async () => {
+      // Another tab signed in as Bob while the grant was being checked.
+      h.setIdentity({ ...alice, webId: bob.webId, subject: "bob", storages: [bob.storageUrl] });
+      return grant;
+    });
+    const revokeResource = vi.fn<NonNullable<PodAuth["revokeResource"]>>(() => true);
+    Object.assign(h.auth, { grantResource, revokeResource });
+    await expect(h.backend.grantResource(account, shared)).rejects.toThrow("Sign in to continue");
+    expect(revokeResource).toHaveBeenCalledExactlyOnceWith(grant);
+  });
+
   it("preserves a remembered account after reload without an accepted grant snapshot", async () => {
     const h = harness();
     h.auth.remembered.mockResolvedValue([{ webId: bob.webId, issuer: bob.issuer }]);
