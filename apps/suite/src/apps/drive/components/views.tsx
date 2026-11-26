@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
@@ -8,12 +9,13 @@
 import { visibleSharedItems } from "@jeswr/suite-sdk/shared";
 import { Alert, AlertDescription, Button, FileTypeIcon, IconButton } from "@jeswr/suite-ui";
 import { Clock, FolderOpen, HardDrive, Search, Star, Trash2, Users } from "lucide-react";
-import { notFound, useSearchParams } from "next/navigation";
+import { notFound, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { decodeRef, InvalidRefError } from "@/lib/refs";
 import { useHiddenSharedItems } from "@/lib/shared/hidden";
 import { AppHeading } from "@/shell/app-frame";
 import { usePageRouteParams } from "../../../lib/route-params";
+import { workbookHref } from "../../sheets/lib/routes";
 import {
   type DriveClient,
   DriveError,
@@ -110,6 +112,7 @@ export function FolderView({ url }: { url?: string }) {
 
 export function FolderRefView() {
   const url = useRefParam("/drive/f/[ref]");
+  const { session } = useDrive();
   if (!url)
     return (
       <div className="drv-boot" role="status">
@@ -117,6 +120,13 @@ export function FolderRefView() {
       </div>
     );
   if (!url.endsWith("/")) notFound();
+  // Resolve legacy Drive folder links through metadata before showing workbook internals.
+  if (parentOf(url) === new URL("sheets/", session.storageUrl).href)
+    return (
+      <ForeignPreviewScope url={url}>
+        <ResolvedPreviewRouteView url={url} />
+      </ForeignPreviewScope>
+    );
   return (
     <ForeignPreviewScope url={url}>
       <FolderView url={url} />
@@ -487,8 +497,15 @@ function ResolvedPreviewRouteView({ url }: { url: string }) {
         Loading…
       </div>
     );
+  if (item.workbook) return <WorkbookRedirect url={item.url} />;
   if (item.kind === "folder") return <FolderView url={url} />;
   return <PreviewPage item={item} parent={parentOf(url)} />;
+}
+
+function WorkbookRedirect({ url }: { url: string }) {
+  const router = useRouter();
+  useEffect(() => router.replace(workbookHref(url)), [router, url]);
+  return <a href={workbookHref(url)}>Open spreadsheet in Sheets</a>;
 }
 
 export function TrashView() {

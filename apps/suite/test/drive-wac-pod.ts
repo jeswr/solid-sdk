@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { Term } from "@rdfjs/types";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
@@ -19,11 +20,13 @@ export class WacFields extends TermWrapper {
     return SetFrom.subjectPredicate(this, predicate, NamedNodeAs.string, NamedNodeFrom.string);
   }
 }
-export async function aclBody(resource: string, publicRead = false, defaults = true) {
+/** In addition to the owner, grant Read to everyone (true) or to one named reader. */
+export async function aclBody(resource: string, reader: boolean | string = false, defaults = true) {
   const data = new Store();
   for (const [name, predicate, agent, modes] of [
     ["owner", "agent", OWNER, ["Read", "Write", "Control"]],
-    ...(publicRead ? [["public", "agentClass", EVERYONE, ["Read"]] as const] : []),
+    ...(reader === true ? [["public", "agentClass", EVERYONE, ["Read"]] as const] : []),
+    ...(typeof reader === "string" ? [["reader", "agent", reader, ["Read"]] as const] : []),
   ] as const) {
     const rule = new WacFields(`${resource}#${name}`, data, DataFactory);
     rule.iris("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").add(`${ACL}Authorization`);

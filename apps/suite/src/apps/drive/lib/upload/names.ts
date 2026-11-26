@@ -20,6 +20,14 @@ function fitName(name: string, suffix: string, entryKind: UploadKind): string {
   return [...stem].slice(0, available).join("") + suffix + extension;
 }
 
+/**
+ * `name` normalized, with `suffix` before its extension chain. The stem is shortened so the
+ * suffix survives the length cap: a suffix appended first would be cut off again.
+ */
+export function suffixedName(name: string, suffix: string): string {
+  return normalizeUploadName(fitName(normalizeUploadName(name), suffix, "file"));
+}
+
 /** Drive §4.1.3: preserve case/Unicode/spaces, replace reserved characters, trim, cap. */
 export function normalizeUploadName(name: string, entryKind: UploadKind = "file"): string {
   segment(name);

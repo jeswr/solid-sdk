@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 "use client";
 
@@ -39,7 +40,7 @@ const hydrated = new WeakMap<DriveClient, Map<string, DriveItem>>();
 export function withHydratedMetadata<T extends DriveItem>(client: DriveClient, item: T): T {
   const known = hydrated.get(client)?.get(item.url);
   return known && (item.etag === undefined || item.etag === known.etag)
-    ? { ...item, ...known, name: item.name }
+    ? { ...item, ...known, name: known.workbook ? known.name : item.name }
     : item;
 }
 

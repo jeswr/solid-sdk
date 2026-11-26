@@ -1,20 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { loadDisplayName, shortWebId } from "@/lib/profile/display-name";
 import type { PodSession } from "@/lib/session/types";
-import { loadProfileName } from "../../chat/lib/model/extras";
 import type { CommentThread } from "../lib/model/comments";
 
 const AUTHOR_CACHE_LIMIT = 128;
-
-function authorFallback(webId: string): string {
-  try {
-    return new URL(webId).host || "Unknown author";
-  } catch {
-    return "Unknown author";
-  }
-}
 
 export function useCommentAuthors(session: PodSession, threads: CommentThread[]) {
   // Completed names live in a bounded LRU; in-flight lookups are tracked separately so
@@ -23,7 +16,6 @@ export function useCommentAuthors(session: PodSession, threads: CommentThread[])
   const lookup = useMemo(() => {
     const cache = new Map<string, string>();
     const inflight = new Map<string, Promise<string>>();
-    const publicFetch = session.mode === "demo" ? globalThis.fetch : session.publicFetch;
     return (webId: string): Promise<string> => {
       const done = cache.get(webId);
       if (done !== undefined) {
@@ -33,9 +25,10 @@ export function useCommentAuthors(session: PodSession, threads: CommentThread[])
       }
       let pending = inflight.get(webId);
       if (!pending) {
-        const fallback = authorFallback(webId);
-        pending = loadProfileName(session.fetch, publicFetch, session.storageUrl, webId, fallback)
-          .catch(() => fallback)
+        // The same reader, name predicates, limits and fallback as version history and
+        // suggestions. Comments show the author's profile name for one's own entries too.
+        pending = loadDisplayName(session, webId)
+          .catch(() => shortWebId(webId))
           .then((name) => {
             inflight.delete(webId);
             cache.set(webId, name);
@@ -91,5 +84,5 @@ export function useCommentAuthors(session: PodSession, threads: CommentThread[])
     };
   }, [lookup, threads]);
   return (webId: string) =>
-    (resolved?.lookup === lookup ? resolved.names.get(webId) : undefined) ?? authorFallback(webId);
+    (resolved?.lookup === lookup ? resolved.names.get(webId) : undefined) ?? shortWebId(webId);
 }

@@ -12,6 +12,7 @@ import {
 import { type Editor, EditorContent, type JSONContent, useEditor } from "@tiptap/react";
 import { ySyncPluginKey, yUndoPluginKey, yXmlFragmentToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useDisplayNames } from "@/lib/profile/use-display-names";
 import { DocumentVersionPanel } from "../../../components/document-version-panel";
 import { documentScopedFetch } from "../editor/document-fetch";
 import { baseExtensions } from "../editor/extensions";
@@ -111,6 +112,10 @@ export function VersionHistory({
     [resource, http],
   );
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
+  const displayName = useDisplayNames(
+    versions.map((version) => version.creator),
+    runtime.session,
+  );
   const [selected, setSelected] = useState<DocumentVersion>();
   const [preview, setPreview] = useState<JSONContent>();
   const [error, setError] = useState<string>();
@@ -290,10 +295,8 @@ export function VersionHistory({
             id: version.url,
             created: version.created,
             label: version.name,
-            author:
-              version.creator === runtime.session.webId
-                ? runtime.session.displayName
-                : version.creator,
+            author: displayName(version.creator),
+            authorId: version.creator,
           }))}
           choose={(id) => {
             const version = versions.find((version) => version.url === id);

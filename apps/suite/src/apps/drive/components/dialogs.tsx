@@ -1,6 +1,9 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 "use client";
+
 /**
  * Drive dialogs (04-drive §2.9): New folder, Rename (with the extension
  * prompt), Move to… (lazy folder tree), Delete for ever, Empty trash and the
@@ -40,6 +43,7 @@ import {
   useState,
 } from "react";
 import { type DriveItem, nameOf, parentOf } from "../lib/client/client";
+import { isWorkbookLike } from "../lib/client/workbook";
 import { formatFileSize } from "../lib/files";
 import { getMoveValidity } from "../lib/list";
 import { extensionChange, isHidden, validateName } from "../lib/operations/operations";
@@ -87,6 +91,8 @@ export function DriveDialogs() {
           onClose={closeDialog}
           onSaved={() => invalidate(dialog.item.url)}
           onCloseAutoFocus={restoreDialogFocus}
+          // Sheets coordinates a workbook's folder and contents sharing as one.
+          scopedEditor={!isWorkbookLike(dialog.item)}
         />
       )}
       <UploadConflictDialog />
@@ -262,7 +268,9 @@ function MoveDialog({
         setNodes((current) => ({
           ...current,
           [url]: children
-            .filter((child) => child.kind === "folder" && !isHidden(child))
+            .filter(
+              (child) => child.kind === "folder" && !isWorkbookLike(child) && !isHidden(child),
+            )
             .sort((a, b) => a.name.localeCompare(b.name))
             .map((child) => ({ url: child.url, name: child.name })),
         }));

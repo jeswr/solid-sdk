@@ -757,7 +757,9 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             image={opens.image}
           />
         )}
-        {editor && !runtime.readOnly && !history && <SuggestionPopover editor={editor} />}
+        {editor && !runtime.readOnly && !history && (
+          <SuggestionPopover editor={editor} session={runtime.session} />
+        )}
         {editor && resolveAll !== null && !runtime.readOnly && !history && (
           <ResolveAllSuggestions
             editor={editor}

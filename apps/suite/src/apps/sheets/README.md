@@ -280,3 +280,11 @@ stored workbook even inside the automatic interval, and uses the normal ETag-gua
 queue and conflict reload path, including comment anchors and charts. A failed restore safety
 snapshot aborts the workbook write. Public shared history uses the same anonymous, redirect-refusing
 transport as the shared workbook. Author metadata is a claim, not verified provenance.
+
+Drive’s **Open with Sheets** creates a new workbook from a pod CSV through
+`WorkbookService.createFromCsv`, the same parser used by Sheets’ CSV import.
+The source file stays untouched; its filename without `.csv` supplies the title.
+Drive bounds downloads to 50 MB and refuses redirects and URLs outside the active pod.
+In Drive, a workbook container appears as one Spreadsheet using its metadata title
+and opens in Sheets. Drive keeps recursive trash/delete, but hides folder rename/move
+because those operations cannot safely preserve the workbook’s title and editor scope.

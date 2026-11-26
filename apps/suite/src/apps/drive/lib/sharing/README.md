@@ -114,8 +114,13 @@ Owners can edit folder roles for people and general access. The SDK writes both 
 and member scope and removes both on revocation. Every folder dialog shows `CONTENTS_DIFFER`
 before saving: items inside with their own sharing keep it, and users must open an item's
 sharing to change it. The existing `contentsDiffer` signal also keeps this notice visible.
-No descendant access document is rewritten. Partial-scope folders fail closed with copy
-explaining that separate folder/contents permissions need a scope-aware tool.
+No descendant access document is rewritten. A Drive folder whose own and contents access
+differ (`partial-scope`) opens the scope-aware editor (`share-scoped.tsx`): people and general
+access per scope, each scope's group access read-only, and "Make … match" buttons that first
+preview every change. A match never gives Owner (Control) to anyone but the signed-in owner,
+and keeps other owners' and inherited rows; group access counts when comparing scopes and in
+the post-save check. Items whose sharing an app coordinates (a Docs document, a Sheets
+workbook) pass `scopedEditor={false}` and keep the fail-closed `partial-scope` copy.
 Commenter stays disabled until Drive has a separate comments resource.
 
 The ACP dialect is the SDK default (CSS: managers hold resource Control); no
@@ -124,3 +129,76 @@ closed without writes, with `UNSUPPORTED_SYSTEM` copy: the SDK refuses ESS's que
 URL (`?ext=acr`) for every implementation, and rejects acp:* modes under the CSS dialect. Passing `"ess"` needs both
 that SDK work and a trusted implementation signal, which the session does not provide;
 see the comment above `options` in `adapter.ts`.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Docs companion sharing
+
+Docs injects `loadDocumentSharing` / `applyDocumentSharing` into `ShareDialog`; Drive's
+file/folder adapter and behavior are unchanged. One selection covers the `.ttl` resource
+(resource scope) and its sibling `<slug>/` (folder scope). Viewer is Read on both;
+Editor is Read+Write on both, with Write also permitting Append. Public Viewer/Editor
+uses the same mapping. Folder grants cover existing and future updates, assets, comments
+and version history through WAC defaults / ACP member access.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+
+<!-- AUTHORED-BY Codex GPT-6.2-Astra -->
+
+The companion is named only by the URL (`<slug>.ttl` → `<slug>/`), so loading first reads the
+`.ttl` and requires a Docs document whose recorded `pd:updateLog`, `pd:assets` and
+`pd:comments` links all lie inside `<slug>/`. For a legacy document with no recorded links,
+the folder listing must include `updates/`. Its other entries may be `assets/`, `comments/`,
+`versions/`, recovery logs (`updates-*/`) or the folder's own access document. When Docs
+cannot confirm the companion, the dialog directs the owner to Drive.
+
+`DocsStore.createContainer` creates container RDF without ACLs or ACRs, so new companion
+sub-containers already inherit. Versions are created lazily the same way. Loading walks the
+companion tree breadth-first and always includes the existing `updates/`, `assets/`,
+`comments/` and `versions/`; only 404 counts as absent. Any other member, container or
+file, that has its own access document is an additional target. Inheriting members keep
+inheriting. Each level's listings and member checks (a HEAD on the member and one on its
+policy document) run concurrently, at most eight at a time. A tree with more than 2000
+members fails closed, except that entries of `updates/` and `updates-*/` logs count against
+a separate cap of 20000, so a long-lived document keeps its sharing. The Share button
+checks only that the caller owns the `.ttl` and the companion root; the tree is walked
+when the dialog opens. Every target goes through Drive's SDK adapter and independent
+`verify.ts` checks. Unsupported rules and `partial-scope` still fail closed; this coordinator
+never writes access RDF itself or changes permissions outside this document's tree.
+
+The dialog shows the main document's roles. Effective roles are compared without source
+or inherited/explicit presentation differences. A mismatch displays “Some parts of this
+document are shared differently. Saving will make them match.”, followed by the differing
+parts, and an explicit Save action repairs the companions even when the document selection
+is unchanged. When a child has its own, differing access, the owner must make that repair
+before changing who has access. This includes standard containers such as `assets/` and
+individual files shared from Drive.
+
+The Groups panel grants and removes access on the `.ttl`, the companion root and each child
+with its own grants. Children that inherit follow their governing folder when a group is
+added or removed. The document receives the grant first and loses it last. If group access
+differs across parts, the dialog names the parts and asks the owner to remove the group and
+share with it again. The people Save keeps group rows. Every part must recognise the caller
+as an owner. Other owners and external inherited rules remain locked.
+
+Saving first applies only removals/downgrades to the document, then the full selection to
+the companion root and its explicit sub-containers, then grants/upgrades to the document.
+This also orders mixed grant/revoke plans safely. ACP child contributions can be changed
+once the coordinated parent's effective sharing matches the selection; external inheritance
+remains immutable. Descendant snapshots are refreshed after our parent write, with all
+access-document GETs pinned to their original status/ETag. Only accepted conditional PUTs
+advance those pins, so the refresh cannot silently overwrite concurrent edits. CSS answers
+a PUT without an ETag (or with a weak one): the next GET of that access document is then
+let through unpinned and its validator adopted. That GET is the adapter's own verified
+reload, which must still match the selection, and every later read is pinned to it.
+
+A failure stops the plan. `SharingRefreshError` names the confirmed targets, the unconfirmed
+step, and steps not attempted; the dialog never announces success. If the plan added access
+and failed before the document's own grant was written, the companion parts it already
+wrote are brought back to the document's reduced access, deepest first and still pinned, so
+nobody keeps the content (`versions/` holds full copies) without the document. That revert
+is best effort; the message says whether it succeeded or which part to review in Drive. Retry reloads the whole
+plan for review, and Save repairs any remaining differences. It does not automatically retry
+a conflict or overwrite a newer selection. Final verification reloads every existing part,
+including inheriting children. Multiple access documents are not a transaction: readers can
+observe intermediate permissions, and a change after the final check remains possible.

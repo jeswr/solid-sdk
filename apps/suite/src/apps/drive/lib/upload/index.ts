@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 export { MAX_UPLOAD_CHUNKS, planChunks } from "./chunks";
-export { encodeUploadPath, keepBothName, normalizeUploadName } from "./names";
+export { encodeUploadPath, keepBothName, normalizeUploadName, suffixedName } from "./names";
 export { planUploads } from "./planner";
 export { diffFolderTree } from "./tree";
 export type {

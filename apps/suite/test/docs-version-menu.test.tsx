@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
-import type { Editor } from "@tiptap/react";
+import { Editor } from "@tiptap/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   act,
@@ -12,12 +12,17 @@ import {
 } from "../../../packages/suite-ui/node_modules/@testing-library/react";
 import { EditorMenubar } from "../src/apps/docs/components/editor-menubar";
 import { FileMenu } from "../src/apps/docs/components/file-menu";
+import { baseExtensions } from "../src/apps/docs/editor/extensions";
+
+let editor: Editor;
 
 afterEach(() => {
   cleanup();
+  editor.destroy();
   vi.unstubAllGlobals();
 });
 beforeEach(() => {
+  editor = new Editor({ extensions: baseExtensions(fetch), content: "<p></p>" });
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -45,7 +50,7 @@ it("offers accessible history and naming from the File submenu and preserves foc
     nameVersion = vi.fn();
   render(
     <EditorMenubar
-      editor={{} as Editor}
+      editor={editor}
       actions={[]}
       mac={false}
       online

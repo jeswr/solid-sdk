@@ -1,9 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 // biome-ignore-all lint/style/noNonNullAssertion: Synthetic fixtures define these sheets and cells explicitly.
 import { CellValueType, type IWorkbookData } from "@univerjs/core";
 import { describe, expect, it } from "vitest";
 import {
+  CSV_IMPORT_LIMITS,
+  CsvLimitError,
+  CsvSyntaxError,
+  csvImportFailure,
   csvToWorkbook,
   inferColumns,
   loadWorkbook,
@@ -88,6 +93,73 @@ describe("CSV fields", () => {
       csvToWorkbook("bom", "Unicode", [{ id: "s", name: "Sheet", csv: input }]),
     );
     expect(workbookToCsv(snapshot, "s")).toBe(input);
+  });
+});
+
+describe("CSV import limits", () => {
+  const convert = (csv: string) => csvToWorkbook("big", "Big", [{ id: "s", name: "s", csv }]);
+
+  it("uses the Excel import's row, column, cell and text limits", () => {
+    expect(CSV_IMPORT_LIMITS).toEqual({
+      rows: 100_000,
+      columns: 16_384,
+      cells: 2_000_000,
+      text: 20_000_000,
+    });
+  });
+
+  it("accepts each limit exactly and refuses one more", () => {
+    const limits = { rows: 2, columns: 2, cells: 4, text: 4 };
+    expect(parseCsv("ab,c\nd,\n", limits)).toEqual([
+      ["ab", "c"],
+      ["d", ""],
+    ]);
+    expect(() => parseCsv("a\nb\nc\n", limits)).toThrow("up to 2 rows");
+    expect(() => parseCsv("a,b,c\n", limits)).toThrow("up to 2 columns");
+    expect(() => parseCsv("a,b\nc,d\ne\n", { ...limits, rows: 3 })).toThrow("up to 4 cells");
+    expect(() => parseCsv("ab,cd\ne\n", limits)).toThrow("too much text");
+    expect(() => parseCsv('"abcde"', limits)).toThrow(CsvLimitError);
+  });
+
+  it("refuses a 200,000-row CSV with a row-limit error instead of overflowing the stack", () => {
+    const csv = "1\n".repeat(200_000);
+    expect(() => convert(csv)).toThrow(CsvLimitError);
+    expect(() => convert(csv)).toThrow("Sheets can open CSV files with up to 100,000 rows");
+  });
+
+  it("converts a CSV at the row limit and counts columns without spreading rows", () => {
+    const sheet = convert(`${"a,b\n".repeat(99_999)}a,b,c\n`).sheets.s!;
+    expect(sheet.rowCount).toBe(100_000);
+    expect(sheet.columnCount).toBe(3);
+  });
+
+  it("refuses CSVs with too many cells, columns or characters", () => {
+    const row = `${Array.from({ length: 200 }, () => "x").join(",")}\n`;
+    expect(() => convert(row.repeat(10_001))).toThrow(
+      "Sheets can open CSV files with up to 2,000,000 cells",
+    );
+    // A file of separators stops at the column limit, long before it builds the row.
+    expect(() => convert(",".repeat(5_000_000))).toThrow(
+      "Sheets can open CSV files with up to 16,384 columns",
+    );
+    expect(() => convert(`${"x".repeat(1_000_000)}\n`.repeat(21))).toThrow(
+      "This CSV file has too much text for Sheets",
+    );
+  });
+
+  it("gives a user-facing reason only for CSV problems", () => {
+    expect(csvImportFailure(new CsvLimitError("Too big"))).toBe("Too big");
+    let syntax: unknown;
+    try {
+      parseCsv('"open');
+    } catch (error) {
+      syntax = error;
+    }
+    expect(syntax).toBeInstanceOf(CsvSyntaxError);
+    expect(csvImportFailure(syntax)).toBe("This file isn't valid CSV, so Sheets can't open it");
+    expect(csvImportFailure(new SyntaxError("Unexpected token < in JSON"))).toBeUndefined();
+    expect(csvImportFailure(new RangeError("Maximum call stack size exceeded"))).toBeUndefined();
+    expect(csvImportFailure(new TypeError("Failed to fetch"))).toBeUndefined();
   });
 });
 

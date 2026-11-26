@@ -26,6 +26,8 @@ export function DocumentVersionPanel({
     created: string;
     label?: string | undefined;
     author?: string | undefined;
+    /** The claimed author WebID, offered as the author label's tooltip. */
+    authorId?: string | undefined;
   }[];
   selectedId: string | undefined;
   choose: (id: string | undefined) => void;
@@ -73,7 +75,9 @@ export function DocumentVersionPanel({
             >
               {entry.label && <span>{entry.label}</span>}
               <time dateTime={entry.created}>{new Date(entry.created).toLocaleString()}</time>
-              <small>{entry.author || "Unknown author"}</small>
+              <small title={entry.authorId} aria-description={entry.authorId}>
+                {entry.author || "Unknown author"}
+              </small>
             </button>
           </li>
         ))}

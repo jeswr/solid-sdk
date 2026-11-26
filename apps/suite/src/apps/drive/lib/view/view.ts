@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 /**
@@ -36,12 +37,15 @@ const DAY = 86_400_000;
 export function toListEntry(item: DriveItem): ListEntry & { item: DriveItem } {
   return {
     url: item.url,
-    kind: item.kind === "folder" ? "container" : "resource",
+    kind: item.kind === "folder" && !item.workbook ? "container" : "resource",
     displayName: item.name,
     size: item.size ?? null,
     modified: item.modified ?? null,
-    contentType:
-      item.kind === "folder" ? null : (resolveContentType(item.name, item.contentType) ?? null),
+    contentType: item.workbook
+      ? "text/csv"
+      : item.kind === "folder"
+        ? null
+        : (resolveContentType(item.name, item.contentType) ?? null),
     item,
   };
 }
@@ -124,7 +128,10 @@ export function formatSize(item: Pick<DriveItem, "kind" | "size">, locale = "en"
 }
 
 /** Friendly type label for the details pane. */
-export function friendlyType(item: Pick<DriveItem, "kind" | "contentType" | "name">): string {
+export function friendlyType(
+  item: Pick<DriveItem, "kind" | "contentType" | "name" | "workbook">,
+): string {
+  if (item.workbook) return "Spreadsheet";
   if (item.kind === "folder") return "Folder";
   const type = resolveContentType(item.name, item.contentType) ?? "";
   if (type === "application/pdf") return "PDF document";
