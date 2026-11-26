@@ -13,12 +13,17 @@ import type {
 import { DataFactory, Store } from "n3";
 import { abortablePodWriter } from "../abort.js";
 import { RunBudget, RunBudgetExceededError } from "../budget.js";
-import { IntegrationAuthError, IntegrationSyncError, RateLimitedError } from "../errors.js";
+import {
+  IntegrationAuthError,
+  IntegrationSyncError,
+  PrivateDestinationError,
+  RateLimitedError,
+} from "../errors.js";
 import type { ImportReport } from "../import-runner.js";
 import { createImportSession, MAX_RUN_SOURCES } from "../import-session.js";
 import { copyDataset } from "../incremental.js";
 import { Provenance } from "../provenance.js";
-import type { BinaryDoc, NormalisedDoc, PodWriter, WrittenDoc } from "../types.js";
+import type { BinaryDoc, MutationGuard, NormalisedDoc, PodWriter, WrittenDoc } from "../types.js";
 import { resolveConflict } from "./conflict.js";
 import { scanWriteBack } from "./detection.js";
 import {
@@ -99,10 +104,15 @@ const NOT_FAILURES: ReadonlySet<SyncSkipReason> = new Set<SyncSkipReason>([
   "unsupported-resource",
 ]);
 
-/** Abort, budget, rate-limit and authorization failures end the run; anything else is per item. */
+/**
+ * Abort, budget, rate-limit, authorization and private-destination failures end the run;
+ * anything else is per item. A privacy refusal is never an item skip: the session refuses
+ * every later mutation anyway, and an after-write refusal must surface as the run's error.
+ */
 function runLevel(error: unknown, signal: AbortSignal | undefined): boolean {
   if (signal?.aborted) return true;
   if (
+    error instanceof PrivateDestinationError ||
     error instanceof RunBudgetExceededError ||
     error instanceof LinkManifestLostError ||
     error instanceof RateLimitedError ||
@@ -194,21 +204,22 @@ export async function runTwoWaySync<Op>(
       if (stored) budget.bytes(datasetBytes(stored.dataset));
       return stored;
     },
-    async write(doc, conditions) {
+    // The session's mutation guard is forwarded so the host checks it at dispatch.
+    async write(doc, conditions, ...guard) {
       request();
       budget.bytes(datasetBytes(doc.dataset));
-      return base.write(doc, conditions);
+      return base.write(doc, conditions, ...guard);
     },
-    async remove(slug, conditions) {
+    async remove(slug, conditions, ...guard) {
       request();
       if (!base.remove) throw new Error("Sync host cannot delete resources.");
-      return base.remove(slug, conditions);
+      return base.remove(slug, conditions, ...guard);
     },
     ...(writeBinary && {
-      async writeBinary(doc: BinaryDoc) {
+      async writeBinary(doc: BinaryDoc, ...guard: [] | [MutationGuard]) {
         request();
         budget.bytes(doc.body.byteLength);
-        return writeBinary(doc);
+        return writeBinary(doc, ...guard);
       },
     }),
     async ensureOwnerOnly(slug) {
@@ -223,9 +234,9 @@ export async function runTwoWaySync<Op>(
         yield entry;
       }
     },
-    async registerType(registrations) {
+    async registerType(registrations, ...guard) {
       request();
-      return base.registerType(registrations);
+      return base.registerType(registrations, ...guard);
     },
   };
   const api = syncSourceFetch(ports.sourceAuth.fetch, id, budget, signal);
@@ -247,7 +258,34 @@ export async function runTwoWaySync<Op>(
       (c) => url.startsWith(c) && !url.slice(c.length).includes("/") && url !== c,
     );
   }
-  const links = createLinkStore(writer, account, id, { maxLinks: ports.maxLinks });
+  const session = createImportSession(
+    writer,
+    id,
+    `urn:solid:connector:${encodeURIComponent(id)}:source`,
+    ports,
+  );
+  /**
+   * The only port for the runner's and link store's direct Pod mutations. It shares the
+   * session's private-destination contract (verify before, confirm and clean up after, sticky
+   * refusal, pending-write tracking) without the session's vocabulary remapping or provenance,
+   * which mapped items, link records and snapshots must not receive.
+   *
+   * `ensureOwnerOnly` writes the auxiliary `<item>.acl`. That ACL carries no imported data,
+   * only narrows access, and is not itself a data destination the host verifier judges, so it
+   * is not separately verified or confirmed. It is still a Pod mutation: it runs only after the
+   * protected resource's own destination is verified, never after a refusal, and the data
+   * write that follows is verified and confirmed in its own right.
+   */
+  const pod: SyncPodWriter = {
+    ...writer,
+    write: session.raw.write,
+    remove: session.raw.remove,
+    async ensureOwnerOnly(slug) {
+      await session.raw.beforeMutation(writer.resolve(slug));
+      return writer.ensureOwnerOnly(slug);
+    },
+  };
+  const links = createLinkStore(pod, account, id, { maxLinks: ports.maxLinks });
   let linksLoaded = false;
   const now = ports.now ?? (() => new Date());
 
@@ -320,12 +358,6 @@ export async function runTwoWaySync<Op>(
     deferred: h.deferred,
   });
 
-  const session = createImportSession(
-    writer,
-    id,
-    `urn:solid:connector:${encodeURIComponent(id)}:source`,
-    ports,
-  );
   const importSource = `urn:solid:connector:${encodeURIComponent(id)}:source`;
   const runPrefix = `${writer.resolve("_provenance.ttl")}#run-`;
   /** This connector's import provenance (source derivation or a connector run Activity). */
@@ -371,7 +403,7 @@ export async function runTwoWaySync<Op>(
     activity.endedAt = now();
     activity.associatedWith = `urn:solid:connector:${encodeURIComponent(id)}`;
     for (const source of outboundSources) activity.used.add(source);
-    await writer.ensureOwnerOnly(outboundSlug);
+    await pod.ensureOwnerOnly(outboundSlug);
     await session.write(
       {
         slug: outboundSlug,
@@ -532,7 +564,7 @@ export async function runTwoWaySync<Op>(
     for (const quad of dataset)
       if (quad.subject.termType === "NamedNode" && quad.subject.value === snapshotUrl)
         throw new Error("Reserved snapshot metadata subject.");
-    await writer.ensureOwnerOnly(target);
+    await pod.ensureOwnerOnly(target);
     const existing = await writer.read(target);
     if (!existing) {
       const copy = copyDataset(dataset);
@@ -561,7 +593,7 @@ export async function runTwoWaySync<Op>(
     return snapshotUrl;
   }
   async function readSnapshot(snapshotUrl: string, url: string): Promise<DatasetCore> {
-    await writer.ensureOwnerOnly(slug(snapshotUrl));
+    await pod.ensureOwnerOnly(slug(snapshotUrl));
     const stored = await writer.read(slug(snapshotUrl));
     if (!stored) throw new Error("Missing sync snapshot.");
     return snapshotPayload(stored.dataset, snapshotUrl, url);
@@ -783,7 +815,7 @@ export async function runTwoWaySync<Op>(
       if (resolution !== "remote") {
         const copy = copyDataset(stored.dataset);
         new SyncMetadata(url, copy, DataFactory).snapshots.add(snapshotUrl);
-        await writer.write({ ...document, dataset: copy }, { ifMatch: strongEtag(stored.etag) });
+        await pod.write({ ...document, dataset: copy }, { ifMatch: strongEtag(stored.etag) });
         // Without write-back, a pod win adopts the remote state as the baseline so the item
         // is not re-conflicted every run; the pod's edit stays pending outbound. The stale
         // podEtag keeps it detectable once write-back is enabled.
@@ -852,7 +884,7 @@ export async function runTwoWaySync<Op>(
         needsInbound: undefined,
       };
       await links.put(link);
-      await writer.remove?.(slug(link.podUrl), { ifMatch: strongEtag(stored.etag) });
+      await pod.remove?.(slug(link.podUrl), { ifMatch: strongEtag(stored.etag) });
       await links.put({ ...link, status: "trashed", pendingDelete: false, deletedAt });
     });
     if (ok && id) succeeded(id);
@@ -899,7 +931,7 @@ export async function runTwoWaySync<Op>(
     stage.value = "write-failed";
     const merged = mergeMapped(stored.dataset, payload, link.podUrl, localHash !== payloadHash);
     if (merged.lossy) await trash(link.podUrl, stored);
-    const written = await writer.write(
+    const written = await pod.write(
       {
         slug: slug(link.podUrl),
         dataset: merged.dataset,
@@ -1148,7 +1180,7 @@ export async function runTwoWaySync<Op>(
             ? rebaseDocument(target.stored.dataset, old.podUrl, target.url)
             : undefined;
           if (rebased) {
-            const written = await writer.write(
+            const written = await pod.write(
               {
                 slug: slug(target.url),
                 dataset: rebased,
@@ -1553,15 +1585,27 @@ export async function runTwoWaySync<Op>(
       skippedItems: finalHealth.pending.slice(0, MAX_REPORTED_SKIPS),
     };
   } catch (error) {
+    // As runImport: settle dispatched private writes first; an after-write refusal (data may
+    // be visible) wins over the original failure, and no further Pod I/O is attempted.
+    try {
+      await session.waitForPrivateWrites();
+    } catch (refusal) {
+      session.release();
+      throw refusal;
+    }
     if (signal?.aborted) session.release();
     else
       try {
         await recordOutbound();
         await session.finish();
-      } catch {
-        /* Retain the original failure. */
+      } catch (finishError) {
         session.release();
+        // A refused outbound or provenance write can expose data even though the run failed.
+        if (finishError instanceof PrivateDestinationError && finishError.phase === "after-write")
+          throw finishError;
+        /* Otherwise retain the original failure. */
       }
+    if (error instanceof PrivateDestinationError && error.phase === "after-write") throw error;
     const failedHealth = linksLoaded ? health() : undefined;
     ports.onState?.({
       ...session.state(),

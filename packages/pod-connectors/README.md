@@ -335,6 +335,16 @@ const report = await runTwoWaySync(adapter, {
 });
 ```
 
+Sync hosts must meet the private-write contract: every connector id is private unless
+classified `public-ok` (none is), so `podWriter` must supply `verifyPrivateDestination` and
+`confirmPrivateWrite` (pass them to `createFetchSyncPodWriter`, for example from
+`createSessionPrivateDestinationChecks`). Without a verifier the run refuses before any Pod
+mutation. Every mutation the runner makes (mapped items, link shards and manifest,
+conflict/trash snapshots, outbound records, provenance) is verified before and confirmed
+after through the import session; the `<item>.acl` owner-only install runs only after its
+resource is verified. A refusal ends the run and blocks every later mutation; a refused
+create is cleaned up, and an after-write refusal is the error the run rejects with.
+
 Hosts obtain incremental consent for `adapter.requiredWriteScopes` before turning on
 write-back; the runner checks explicit grants before any I/O. `TwoWayAdapter<Op>` extends
 `IntegrationAdapter` with `fieldsForHash`, account-relative leaf `writeBackContainers`,
@@ -562,7 +572,9 @@ the key lookup forced to miss, stale-`ifMatch` update and delete rejection, echo
 all conflict policies, skew, delete opt-in, remote deletion leaving a trash snapshot and
 tombstone, and the one-way-import adoption migration. `createFakeTwoWayAdapter(account,
 { delta?, deduplicatesCreateKeys? })`, `createMemorySyncPod()` and `fakeOneWayImport()`
-provide the reference implementation; the package runs the suite over the full-listing,
+provide the reference implementation (the memory pod models an owner-only pod with
+private-destination checks, refusable through its `privacy` controls, so the suite runs
+through the privacy gate); the package runs the suite over the full-listing,
 delta-only and non-deduplicating variants. Targeted framework tests exercise validators,
 bounds, abort, shard races and hostile inputs. No production provider APIs are used.
 

@@ -178,6 +178,11 @@ interface StoredDoc {
  * spills into overflow documents up to the hard link cap. A 412 re-reads the document and
  * reapplies only this record; a concurrent change of this same record fails closed. Hosts
  * still serialize runs across processes, as for imports.
+ *
+ * Every shard, manifest and ACL mutation goes through `writer`. `runTwoWaySync` passes its
+ * session-guarded port, so a private connector's link writes are destination-verified,
+ * confirmed and stop after a refusal like any other import write. A raw host writer is only
+ * appropriate for read-only inspection (tests, health tooling).
  */
 export function createLinkStore(
   writer: SyncPodWriter,
