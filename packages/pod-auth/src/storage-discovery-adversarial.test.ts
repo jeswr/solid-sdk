@@ -347,3 +347,31 @@ test("I1: a profile response that does not describe the document is reported and
   expect(boundary.discovery()).toEqual({ source: "none", reason: "storage-unconfirmed" });
   expect(requests).toEqual([`GET ${card(alice)}`]);
 });
+
+// Review of c86c6eab7 (L1): a WebID document stored directly in a shared storage at the origin
+// root must never make the whole origin the user's boundary.
+test("L1: a WebID document directly in a typed origin-root storage learns nothing", async () => {
+  const doc = `${origin}alice-card`;
+  const { boundary } = await learn(`${doc}#me`, (request) => {
+    if (request.url === doc)
+      return profile(`${doc}#me`, `<${description}>; rel="${DESCRIPTION_REL}"`);
+    if (request.url === description) return describesStorages("../");
+    if (request.url === origin) return typed(advertising);
+    return undefined;
+  });
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "no-storage-declared" });
+  expect(boundary.allows(`${mallory}x`)).toBe(false);
+});
+
+test("L1: a WebID document directly in a claimed, private origin root learns nothing", async () => {
+  const doc = `${origin}alice-card`;
+  const { boundary } = await learn(`${doc}#me`, (request) => {
+    if (request.url === doc)
+      return profile(`${doc}#me`, `<${description}>; rel="${DESCRIPTION_REL}"`);
+    if (request.url === description) return describesStorages("../");
+    if (request.url === origin) return unauthorized();
+    return undefined;
+  });
+  expect(boundary.discovery()).toEqual({ source: "none", reason: "no-storage-declared" });
+  expect(boundary.allows(`${mallory}x`)).toBe(false);
+});

@@ -262,6 +262,8 @@ export function createBoundary(
         );
         if (description !== undefined && named.some((l) => l.href !== description))
           return none("storage-unconfirmed");
+        // The origin root is a shared server storage, never learned as one user's boundary.
+        if (root === origin) return none("no-storage-declared");
         if (!passed) return { source: isClaimed ? "storage-description" : "storage-type", root };
         // Past a container that might itself be (or sit inside) the user's storage, only a
         // nested pod under a broader claimed server storage is accepted.
@@ -274,7 +276,9 @@ export function createBoundary(
       }
       if (isClaimed) {
         if (!unreadable) return none("storage-unconfirmed");
-        return passed ? none("no-storage-declared") : { source: "storage-description", root };
+        return passed || root === origin
+          ? none("no-storage-declared")
+          : { source: "storage-description", root };
       }
       if (unreadable && (index !== 0 || root === origin)) return none("no-storage-declared");
       passed = true;

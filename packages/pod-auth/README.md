@@ -172,6 +172,8 @@ first decisive answer ends the walk. While no container has been passed:
   document's own container (CSS profile containers are private) is passed, never the origin root.
   Any other such container ends the walk with nothing learned.
 - Anything else (404, redirect, 5xx, 429, network failure) ends the walk with nothing learned.
+- The origin root is never learned, even when the WebID document sits directly in it: an
+  origin-root storage is a shared server storage, not one user's.
 
 Once any container has been passed, the walk may already be above the user's own storage: a private
 pod root and a broader server storage look the same from outside. Past that point only a nested pod
