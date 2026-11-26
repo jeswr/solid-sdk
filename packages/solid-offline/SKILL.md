@@ -156,8 +156,11 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
   against the remaining node budget before enumeration; reject hidden/symbol properties.
   Reject lossy values, accessors, sparse arrays, class instances and cycles before enqueue/online
   delivery. Snapshot assertions before asynchronous work and serialize the validated copy once
-  at enqueue into a canonical JSON string for IndexedDB. On every hydration, check the stored
-  string's UTF-8 byte length (at most 16 KiB) before `JSON.parse`, then revalidate the parsed value
+  at enqueue into a canonical JSON string for IndexedDB. On every hydration, read only the stored
+  envelope's `tag` and `assertions` by name (never enumerate its keys), reject a tag longer than
+  64 characters before the pattern runs (defence in depth; the anchored pattern already stops by
+  the 65th character), and check the stored assertion string's UTF-8 byte
+  length (at most 16 KiB) before `JSON.parse`, then revalidate the parsed value
   with the same depth, value-count and byte budgets. Fail closed on legacy object-valued
   assertions, since no guarded records have shipped. Invalid records become failed and cannot
   be delivered by retry or resolution.
@@ -202,7 +205,15 @@ separate IndexedDB queue; `localBody(conflictId)` (or item ID) asynchronously re
   ETag or generated create-only copy name. Delegate context is `{ storage, signal }`, using the
   underlying client and a signal cancelled on close. Use that raw client to avoid recursive
   delivery. Delegate replay failures follow storage classification; failed resolution retains
-  its conflict. `pending()` exposes only a defensive read-only `guard.tag`, never assertions.
+  its conflict. `pending()` exposes only a defensive read-only `guard.tag`, never assertions,
+  and omits an invalid stored tag. `pending()` and `conflicts()` copy the documented
+  `OutboxItem` and `ConflictRecord` fields by name and type, never enumerating (or exposing other
+  keys of) a stored record, and omit an optional value of an unexpected type rather than return
+  it. Hydration (and every send) fails an item whose required field (`id`, `op`, `url`,
+  `status`, finite non-negative `size`/`createdAt`) is invalid, with `invalid stored item`; an
+  unknown status becomes `failed` and stays listed, and any other such item is withheld from
+  `pending()`. `resolve(id, 'mine' | 'both')` refuses such an item (`'theirs'` discards it). A
+  conflict with any invalid field, or whose item is invalid, is withheld from `conflicts()`.
 - Queued RDF keeps the requested Turtle or expanded, context-free JSON-LD format; named
   graphs require JSON-LD. Rebuild validated RDF/JS fields before N3 Writer; never trust private
   IDs, unsafe IRIs, language tags or prefix mappings. Omit queued Turtle prefixes. Generated create names stay stable for replay. Use named StorageClient
