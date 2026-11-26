@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import { toast } from "@jeswr/suite-ui";
@@ -91,6 +92,9 @@ export function createOpenWithController(target: OpenWithTarget) {
       base?.kind === "convert" && base.disabledReason === undefined && !connection.disabled,
     );
     const busy = useRef(false);
+    // The account at completion, which may differ from the one the import started in.
+    const current = useRef(session);
+    current.current = session;
     const [pending, setPending] = useState(false);
     if (!item) return undefined;
     const state = target.state(item, {
@@ -109,8 +113,16 @@ export function createOpenWithController(target: OpenWithTarget) {
       busy.current = true;
       setPending(true);
       const loading = toast.loading(`Opening ${item.name} with ${target.name}…`);
+      const started = session;
       try {
-        const result = await target.convert(item, session);
+        const result = await target.convert(item, started);
+        if (current.current !== started) {
+          // The account changed while importing: the new item belongs to the previous
+          // account, so neither refresh this Drive's listings nor open it here.
+          toast.dismiss(loading);
+          toast.success(`Opened ${item.name} with ${target.name} in your previous account`);
+          return;
+        }
         invalidate(result.url);
         toast.dismiss(loading);
         if (result.warning)

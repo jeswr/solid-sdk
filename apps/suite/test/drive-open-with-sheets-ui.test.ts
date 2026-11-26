@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DriveItem } from "../src/apps/drive/lib/client/client";
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
@@ -174,6 +175,30 @@ describe("Drive Sheets conversion control", () => {
     expect(mocks.toast.dismiss).toHaveBeenCalledWith("loading");
     expect(invalidate).toHaveBeenCalledWith(BOOK.url);
     expect(mocks.router.push).toHaveBeenCalledWith(`/sheets/s/${encodeRef(BOOK.url)}`);
+  });
+
+  it("neither refreshes nor opens the new workbook when the account changes mid-import", async () => {
+    const result = deferred<{ container: string }>();
+    mocks.create.mockReturnValue(result.promise);
+    const view = await mount(h(Hook, { item: CSV }));
+    let pending: Promise<void> | undefined;
+    await act(() => {
+      pending = control?.run();
+    });
+    const Bob = "https://pod.example/bob/";
+    session = { storageUrl: Bob, webId: `${Bob}profile#me`, fetch: mocks.fetch };
+    await view.render(h(Hook, { item: CSV }));
+    await act(async () => {
+      result.resolve({ container: BOOK.url });
+      await pending;
+    });
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(mocks.router.push).not.toHaveBeenCalled();
+    expect(mocks.toast.dismiss).toHaveBeenCalledWith("loading");
+    expect(mocks.toast.success).toHaveBeenCalledWith(
+      "Opened Budget.csv with Sheets in your previous account",
+    );
+    expect(control?.pending).toBe(false);
   });
 
   it("disables offline and read-only conversions and rechecks Write at activation", async () => {
