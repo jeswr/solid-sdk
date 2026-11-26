@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6.2
 // AUTHORED-BY Claude Opus 5.5
 import { DataFactory, Store } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -889,6 +890,12 @@ describe("Google Health successor", () => {
     "x",
     checkpoint({ "heart-rate": "invalid" }),
     checkpoint({ steps: "2999-01-01T00:00:00Z" }),
+    checkpoint({ steps: "2026-06-10T00:05:00.001Z" }),
+    JSON.stringify({
+      version: 3,
+      cursors: { steps: "2026-06-10T00:03:00Z" },
+      fetchedAt: { steps: "2026-06-10T00:02:00Z" },
+    }),
     JSON.stringify({ version: 3, cursors: { unknown: "2026-01-01T00:00:00Z" }, fetchedAt: {} }),
     JSON.stringify({ version: 3, cursors: { calories: "2026-06-09T00:00:00Z" }, fetchedAt: {} }),
     JSON.stringify({
@@ -903,6 +910,48 @@ describe("Google Health successor", () => {
     const r = run(undefined, { cursor });
     await expect(r.result).rejects.toThrow(/checkpoint/);
     expect(r.api).not.toHaveBeenCalled();
+  });
+
+  it("clamps a fast checkpoint before computing the 48-hour overlap across midnight", async () => {
+    const now = "2026-06-09T23:58:00.000Z";
+    const ahead = "2026-06-10T00:03:00.000Z";
+    const onWarning = vi.fn();
+    const r = run(syntheticHealthApi({}), {
+      cursor: checkpoint({ "heart-rate": ahead, sleep: ahead }),
+      adapter: adapterAt(now, { lookbackDays: 1, onWarning }),
+    });
+    const report = await r.result;
+    expect(requests(r.api, "heart-rate")[0]?.searchParams.get("filter")).toContain(
+      '>= "2026-06-07T00:00:00Z"',
+    );
+    expect(JSON.parse(report.cursor ?? "{}")).toMatchObject({
+      cursors: { "heart-rate": now, sleep: now },
+      fetchedAt: { "heart-rate": now, sleep: now },
+    });
+    expect(onWarning).toHaveBeenCalledExactlyOnceWith(expect.stringMatching(/checkpoint.*clamped/));
+  });
+
+  it("repairs the read times of unvisited types without advancing their windows", async () => {
+    const through = "2026-06-07T00:00:00.000Z";
+    const ahead = "2026-06-10T00:01:00.000Z";
+    const r = run(syntheticHealthApi({}), {
+      cursor: JSON.stringify({
+        version: 3,
+        cursors: { sleep: through, weight: ahead },
+        fetchedAt: { sleep: ahead, weight: ahead },
+      }),
+      adapter: adapterAt(FIXTURE_NOW, {
+        lookbackDays: 1,
+        runLimits: { maxRequests: 1, maxItems: 10 },
+      }),
+    });
+    const report = await r.result;
+    expect(requests(r.api, "sleep")).toHaveLength(0);
+    expect(requests(r.api, "weight")).toHaveLength(0);
+    expect(JSON.parse(report.cursor ?? "{}")).toMatchObject({
+      cursors: { sleep: through, weight: UNTIL },
+      fetchedAt: { sleep: UNTIL, weight: UNTIL },
+    });
   });
 
   it.each([
@@ -1008,11 +1057,21 @@ describe("Google Health successor", () => {
     ).toBeUndefined();
   });
 
-  it("requires all scopes before starting requests", async () => {
+  it.each([
+    { scopes: [], missing: [...GOOGLE_HEALTH_SCOPES] },
+    { scopes: [ACTIVITY_SCOPE, "openid"], missing: [SLEEP_SCOPE, METRICS_SCOPE] },
+    ...GOOGLE_HEALTH_SCOPES.map((missing) => ({
+      scopes: GOOGLE_HEALTH_SCOPES.filter((scope) => scope !== missing),
+      missing: [missing],
+    })),
+  ])("names exactly the missing scopes $missing before starting requests", async ({
+    scopes,
+    missing,
+  }) => {
     const api = vi.fn<typeof fetch>();
-    await expect(gh.import({ scopes: [], api } as unknown as ImportContext)).rejects.toThrow(
-      /permissions/,
-    );
+    await expect(gh.import({ scopes, api } as unknown as ImportContext)).rejects.toMatchObject({
+      message: `Re-authorize Google Health to grant ${missing.join(", ")}.`,
+    });
     expect(api).not.toHaveBeenCalled();
   });
 
@@ -1191,6 +1250,7 @@ describe("Google Health successor", () => {
     const r = run(async () => new Response("", { status }), { state: prior });
     const error = await r.result.catch((e: unknown) => e);
     expect(error).toBeInstanceOf(IntegrationAuthError);
+    expect(error).toMatchObject({ reason: "reauthorise" });
     expect((error as Error).message).toMatch(/Re-authorize Google Health/);
     expect(r.api).toHaveBeenCalledOnce();
     expect(r.onState).toHaveBeenLastCalledWith({ ...prior, lastOutcome: "error" });
