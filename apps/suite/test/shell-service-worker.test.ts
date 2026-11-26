@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { describe, expect, it, vi } from "vitest";
 import {
   installServiceWorker,
@@ -562,6 +563,26 @@ describe("remember-page", () => {
     // Later remembers work again.
     await dispatch("message", { data: { type: REMEMBER_PAGE, path: "/fast" } });
     expect((stores.get("suite-pages-v2") as FakeCache).entries.has(`${origin}/fast`)).toBe(true);
+  });
+
+  it("keeps the pages cache deleted when a remembered page's asset finishes after forget-pages", async () => {
+    const assetRequested = Promise.withResolvers<void>();
+    const assetResponse = Promise.withResolvers<Response>();
+    const { dispatch, stores } = await installed({
+      "/notes": () => page("notes"),
+      "/_next/static/chunks/notes.js": () => {
+        assetRequested.resolve();
+        return assetResponse.promise;
+      },
+    });
+
+    const remember = dispatch("message", { data: { type: REMEMBER_PAGE, path: "/notes" } });
+    await assetRequested.promise;
+    expect(stores.get("suite-pages-v2")?.entries.has(`${origin}/notes`)).toBe(true);
+    await dispatch("message", { data: { type: "forget-pages" } });
+    assetResponse.resolve(basic("notes asset"));
+    await remember;
+    expect(stores.has("suite-pages-v2")).toBe(false);
   });
 
   it("forget-pages leaves the app shell alone", async () => {

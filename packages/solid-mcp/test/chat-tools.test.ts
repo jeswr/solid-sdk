@@ -69,6 +69,12 @@ function fakePod() {
       resources.set(url, { body, contentType: headers.get("content-type") ?? "text/turtle" });
       return new Response(null, { status: 201, headers: { etag: '"chat"' } });
     }
+    if (method === "DELETE") {
+      if (!resources.has(url)) return new Response(null, { status: 404 });
+      if (headers.get("if-match") !== '"chat"') return new Response(null, { status: 412 });
+      resources.delete(url);
+      return new Response(null, { status: 205 });
+    }
     const resource = resources.get(url);
     if (!resource) return new Response(null, { status: 404 });
     if (url.endsWith("/")) {
@@ -803,6 +809,98 @@ describe("MCP chat tools over the scoped fetch port", () => {
         {},
       ),
     ).rejects.toThrow(/read-only/);
+  });
+
+  // AUTHORED-BY Claude Opus 5.5
+  it("deletes only conditionally, in pod scope and when writable (sst-5ax.39)", async () => {
+    const pod = fakePod();
+    const config = { fetch: pod.fetch, podRoot: ROOT, webId: OWNER, readOnly: false };
+    const port = createChatPodPort(config);
+    const remove = port.delete?.bind(port);
+    if (!remove) throw new Error("chat port cannot delete");
+    const target = `${ROOT}private/chats/claude/thread-1/m-legacy.ttl`;
+    await port.write(target, new TextEncoder().encode(""), "text/turtle", {
+      ifNoneMatch: "*",
+    });
+    await expect(remove(target, { ifMatch: "" })).rejects.toThrow(/If-Match/);
+    await expect(remove(target, {} as { ifMatch: string })).rejects.toThrow(/If-Match/);
+    await expect(remove("https://evil.example/x", { ifMatch: '"chat"' })).rejects.toThrow(
+      /pod-scope/,
+    );
+    await expect(
+      createChatPodPort({ ...config, readOnly: true }).delete?.(target, { ifMatch: '"chat"' }),
+    ).rejects.toThrow(/read-only/);
+    await expect(remove(target, { ifMatch: '"stale"' })).rejects.toMatchObject({ status: 412 });
+    expect(pod.resources.has(target)).toBe(true);
+    await remove(target, { ifMatch: '"chat"' });
+    const sent = pod.requests.filter((r) => r.method === "DELETE");
+    expect(sent.map((r) => [r.url, r.headers.get("if-match")])).toEqual([
+      [target, '"stale"'],
+      [target, '"chat"'],
+    ]);
+    expect(pod.resources.has(target)).toBe(false);
+    await expect(remove(target, { ifMatch: '"chat"' })).rejects.toMatchObject({ status: 404 });
+  });
+
+  // AUTHORED-BY Claude Sonnet 5.5
+  it("deletes only chat message resources under the chat archive (sst-5ax.39)", async () => {
+    const pod = fakePod();
+    const config = { fetch: pod.fetch, podRoot: ROOT, webId: OWNER, readOnly: false };
+    const port = createChatPodPort(config);
+    const remove = port.delete?.bind(port);
+    if (!remove) throw new Error("chat port cannot delete");
+    const chats = `${ROOT}private/chats/`;
+    const message = `${chats}claude/thread-1/m-msg_1.ttl`;
+    const refused = [
+      // Other resources in the pod, including auxiliary documents.
+      `${ROOT}profile/card`,
+      `${ROOT}private/other/claude/thread-1/m-a.ttl`,
+      `${ROOT}private/chats`,
+      chats,
+      `${chats}claude/`,
+      `${chats}claude/thread-1/`,
+      `${chats}claude/thread-1/_conversation.ttl`,
+      `${chats}claude/thread-1/m-msg_1.ttl.acl`,
+      `${chats}claude/thread-1/.acl`,
+      `${chats}claude/thread-1/m-a.txt`,
+      `${chats}claude/thread-1/message.ttl`,
+      `${chats}claude/thread-1/m-.ttl`,
+      `${chats}claude/thread-1/m-a.ttl?x=1`,
+      `${chats}claude/thread-1/m-a.ttl#it`,
+      // Wrong depth or provider.
+      `${chats}claude/m-a.ttl`,
+      `${chats}claude/thread-1/nested/m-a.ttl`,
+      `${chats}unknown/thread-1/m-a.ttl`,
+      `${chats}m-a.ttl`,
+      // Traversal, in plain and encoded forms.
+      `${chats}claude/thread-1/../../../profile/card`,
+      `${chats}claude/thread-1/%2e%2e/%2e%2e/%2e%2e/profile/card`,
+      `${chats}claude/thread-1/..%2f..%2fm-a.ttl`,
+      `${chats}claude/thread%2f1/m-a.ttl`,
+      `${chats}claude/thread-1/m-a%2fb.ttl`,
+      `${chats}claude/thread-1/%6d-a.ttl`,
+      `${chats}claude/thread-1/m-${"a".repeat(201)}.ttl`,
+      // Another pod origin, another host and another scheme.
+      `https://evil.example/pod/private/chats/claude/thread-1/m-a.ttl`,
+      `https://alice.example/other/private/chats/claude/thread-1/m-a.ttl`,
+      `http://alice.example/pod/private/chats/claude/thread-1/m-a.ttl`,
+    ];
+    for (const url of refused) await expect(remove(url, { ifMatch: '"x"' }), url).rejects.toThrow();
+    expect(pod.requests.filter((r) => r.method === "DELETE")).toEqual([]);
+    for (const provider of ["claude", "chatgpt", "codex"]) {
+      const target = `${chats}${provider}/thread-1/m-${"f".repeat(64)}.ttl`;
+      await port.write(target, new TextEncoder().encode(""), "text/turtle", { ifNoneMatch: "*" });
+      await remove(target, { ifMatch: '"chat"' });
+      expect(pod.resources.has(target)).toBe(false);
+    }
+    await port.write(message, new TextEncoder().encode(""), "text/turtle", { ifNoneMatch: "*" });
+    await remove(message, { ifMatch: '"chat"' });
+    expect(pod.resources.has(message)).toBe(false);
+    // A resource the guard refuses is untouched even when it exists.
+    const metadata = `${chats}claude/thread-1/_conversation.ttl`;
+    await port.write(metadata, new TextEncoder().encode(""), "text/turtle", { ifNoneMatch: "*" });
+    await expect(remove(metadata, { ifMatch: '"chat"' })).rejects.toThrow(/chat message/);
+    expect(pod.resources.has(metadata)).toBe(true);
   });
 
   it("discovers relative nonstandard ACL links on absent and existing containers", async () => {

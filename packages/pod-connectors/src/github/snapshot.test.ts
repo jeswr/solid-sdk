@@ -6,6 +6,7 @@ import { runImport } from "../core/import-runner.js";
 import { createFetchPodWriter } from "../core/pod-writer.js";
 import {
   type MemoryPod,
+  ownerOnlyFixtureChecks,
   sparseImport,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
@@ -26,6 +27,7 @@ const writer = (pod: MemoryPod) =>
     profileDocumentUrl: TEST_PROFILE_DOC,
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
+    ...ownerOnlyFixtureChecks,
   });
 
 describe("GitHub snapshot verification", () => {

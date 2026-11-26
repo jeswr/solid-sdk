@@ -169,6 +169,20 @@ There is no mark-read/delete API. `notificationKind(n)` maps Announce share summ
 Announce targets, then Create targets, then Offer to share/assignment/mention/invitation;
 every other shape is other. Keep wrapper and builder round-trip coverage at 100%.
 
+`readInvitations<T>({ reader, webId, kind?, normalise, exclude?, limit?, signal? })` owns
+shared inbox discovery/filter/projection/de-duplication/capping. A projection returns `{ key,
+value }` or null; validation exceptions and empty keys are skipped. Reader order decides the
+newest duplicate; excluded keys are omitted. Omit kind for a generic mixed-tray projection
+(the name reflects Chat's first use). A throwing `normalise` drops the item by design, even for
+programming errors. Limits are non-negative safe integers, default 50; zero performs no I/O.
+Missing inboxes are empty. With `createInboxReader`, discovery never rejects: network, 401/403,
+5xx and unparseable profiles all read as no inbox (empty), so callers cannot tell an outage from
+a missing inbox. Listing 401/403/404 is empty; listing 5xx/network rejects. A custom reader's
+rejection propagates. Abort checks fence every await and projection. Reuse the reader.
+`withAbortSignal(fetch, signalOrGetter)` preserves both request deadlines and caller lifetimes,
+checks before I/O and after responses, and supports dynamic committed-session signal getters.
+Use it for discovery cancellation instead of copying transport wrappers into consumers.
+
 For `./requests-solid`, preserve resolve-once target pinning before the Approving CAS, deterministic
 grant IDs, create-only records/receipts, ACL writes after the CAS, and forward-only snapshot recovery.
 On 412 re-read and observe the winner. Require strong ETags for request updates; grant through
@@ -429,7 +443,10 @@ check for the isolated demo backend, and `ensurePrivateContainerAccess(session, 
 { created, storage, acpDialect? })`. The target must be a container below the storage root.
 Provisioning (owner manager grants for resource and members, `setGrants` with `ownOnly`) runs
 only when `created` is true for a container the caller just made; never pass `created` for an
-adopted container, because `ownOnly` replaces every existing grant. Every call then returns
+adopted container, because `ownOnly` replaces every existing grant. A WAC seal keeps only the
+selected principals in every rule (public/authenticated Append included) and drops rules left
+without one, so the result verifies owner-only; conditional or conjoined rules are refused unchanged.
+Every call then returns
 `checkOwnerOnly`'s verdict on the effective policy, so inherited owner-only ACP member policies
 pass and any other grant, untyped rule or unknown model refuses. Existing members keep their
 own ACL/ACR: write only new member names. The dialect defaults to CSS (ESS fails closed).

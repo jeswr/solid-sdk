@@ -5,17 +5,37 @@
 # Chat client
 
 `new ChatClient(fetch, storageUrl, webId, publicFetch = globalThis.fetch, displayName?)` is the framework-free application facade.
-All RDF operations delegate to `../model`. The authenticated transport permanently stays inside
-the storage origin and path; room and day fetches refuse redirects;
+All RDF operations delegate to `../model`. Room and day transport stays inside
+the storage origin and path and refuses redirects. LDN discovery/delivery uses the session fetch
+through pod-access’s public-HTTPS, redirect-refusing guard;
 preference transport is isolated in `preferences-store.ts` until the SDK preference API lands.
 
 - Joined room failures remain navigable error rows. Day pages retain tombstone placeholders
   and expose the backwards UTC cursor. Authorship checks use the client's previously loaded
   messages; unknown subjects fail closed before any edit/delete request.
 - Appends use stable IDs and retry exactly one 412 after reading the winning document.
-  The React outbox serializes sends per room and retains failed drafts for Retry/Discard.
-  Pending sends and composer drafts persist in guarded localStorage envelopes keyed by WebID and
-  room. Remounting restores their stable IDs and timestamps; sends flush on mount and `online`.
+  The Chat outbox uses `@jeswr/solid-offline`'s IndexedDB queue in Chat's own namespace, one
+  per WebID and storage root (`chatOutboxNamespace`: its own database, BroadcastChannel and
+  Web Locks replay; each intent also records its storage URL, which decoding checks), so a
+  session on another storage of the same WebID never sees or fails these rows. Chat never
+  replays the shell's queued writes and the shell's sync sheet never lists chat intents. Its
+  guard policy covers only day documents under the pod's `chat/` container. Composer drafts
+  remain in guarded localStorage envelopes keyed by WebID and room. Restored entries retain
+  their stable IDs and timestamps; any active Chat tab flushes waiting sends after hydration on
+  mount, on `online`, and whenever the queue changes with entries waiting or left mid-send by a
+  closed tab. Offline failures stay "Sending…" until reconnection; any failure while online
+  (including 5xx, 429, fetch errors and pod discovery) fails the row, which waits for Retry or
+  Discard. The pod client is created once per connection. Without a working IndexedDB (no
+  factory, a failed open, or a failed enqueue) rows are kept in memory and sent directly, with
+  the same Retry and Discard. Legacy localStorage queues are imported once (including failed
+  status); a rejected entry is skipped, and every processed per-room key, including empty,
+  invalid or non-array ones, is removed. Successful and timeline-acknowledged entries are pruned
+  from IndexedDB.
+  A resend reporting `ChatModelError("duplicate")` confirms delivery. Web Locks serialize
+  replay across tabs; without them the SDK serializes within a realm, and the model's duplicate
+  check and conditional day writes protect stable message identities during competing replays.
+  Discard removes the queued intent across tabs. A request already in flight in another tab
+  may still post the message; discard does not retract a message from the room.
 - Messages expose `reactions` aggregated by distinct actor and emoji, with `reactedByMe`
   for the current WebID. `react(room, messageId, emoji)` reads the current day and toggles
   one Like on, or appends Undos for all matching active Likes by that WebID (re-reading the
@@ -26,6 +46,76 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
   joined DMs reopen. Colliding DM creators load and verify the winner's exact membership,
   with bounded retries while its index is being written; they never suffix a DM.
   Named rooms fold to ASCII slugs with collision suffixes.
+- Newly created rooms and DMs send a pod-access AS2 `Offer` to each distinct member except
+  the creator, after ACL, index and owner join succeed. The object is the room **container URL**,
+  matching `Room.url`, `inviteLink` and `join`; incoming `index.ttl#it` subjects normalize to that
+  container. `createRoom({ name, members, signal? })` and `createDirect(webId, { signal? })`
+  return `Room & { invitations: { webId, delivered, reason? }[] }`. Delivery uses the session
+  fetch, at most four active recipients, and no retries. Failures (including cancellation after
+  creation) are values. Once writes start, cancellation cannot interrupt ACL/index/join;
+  leaving the form lets delivery finish and failures still reach the global toast, while
+  late navigation is fenced. Copy-link fallback is offered only for recipients within this
+  pod's credential boundary. Reopened and competing DMs never re-invite; a resumed,
+  interrupted DM invites its peer after its index and owner join complete.
+- `invitations({ signal? })` reads the current WebID's LDN inbox through pod-access and the
+  session fetch and returns `{ invitations, truncated, ownUnchecked }`. It reads at most 300
+  inbox children (in listing order), keeps Offers with HTTP(S) room containers or canonical index
+  subjects, omits joined rooms and de-duplicates by room URL. The client applies no row cap: it
+  returns every candidate, each with an explicit `verified` flag, verified rows first. Verified
+  means an own-pod room that loaded and names a claimed sender as a member. Unverified rows
+  (foreign rooms, own rooms whose index could not be read, and own rooms the check budget did not
+  reach) follow, own-pod ones first, ordered by room URL, never by the poster-supplied
+  `as:published` date. The poster does choose room URLs, so they can influence which unverified
+  rows come first; nothing is hidden by that, because “Show all” reveals every row. Verified rows keep
+  inbox order, which is newest first by that poster-supplied date; that order is cosmetic. No
+  limit is keyed on a claimed sender or any other poster-chosen value. `truncated` means only
+  that the scan itself was cut off: the inbox held more children than were read, or more than 100
+  existing own rooms were claimed, so the check budget ran out. The UI shows a static notice then.
+  `ownUnchecked` is true when the own rooms listing failed.
+  Dismissals keep at most twice the scan limit (600) rooms and never evict a room the current scan still returns; only rooms the scan no longer returns are trimmed, oldest first. The invitations list applies local dismissals first, then shows every verified row and the
+  first 20 unverified rows; when more remain it shows a static notice with a “Show all” button
+  that reveals the rest in a bounded, scrollable list. With the pod-access
+  reader, a missing inbox and any profile discovery failure are empty; inbox listing 5xx/network
+  errors propagate. Concurrent callers (the sidebar and drawer copies) share one in-flight scan;
+  each keeps its own cancellation, and the scan is aborted only when every caller has left. Scans
+  run one at a time.
+  Own-pod claims are verified only for rooms that exist: the scan lists the user's own
+  `chat/rooms/` container once and checks, through `room()` (pod scope retained, at most four at
+  once, at most 100 rooms), only claimed rooms that appear in it, so forged claims for missing or
+  repeated rooms cost nothing. The listing is read through the pod-scoped fetch, capped at 1 MiB,
+  and its URL is built from the normalised storage root (trailing slash guaranteed). A listing
+  failure of any kind (403, 5xx, non-RDF, oversized) does not reject the scan: foreign rows stay,
+  own-pod claims come back unverified without any room check, `ownUnchecked` is true, and the UI
+  says “Invitations to rooms in your pod could not be checked.” Results are cached per room while the inbox still offers it, so
+  neither copy nor a focus refresh re-reads an index. Own-pod claims are kept per room and
+  sender before de-duplication: a room is listed with the newest claimed sender who is a loaded
+  member, and dropped when no claimed sender is. An own-pod room whose index fails with a 4xx
+  (other than 401, 408 and 429) or holds no room is dropped too, because the owner creates their
+  own rooms and is never invited to them. Unreachable and 5xx rooms stay listed under the
+  fallback “Room invitation (<slug>)” name with the newest claim. A scan makes at most 1
+  (joined rooms) + 1 (inbox listing) + 300 (inbox children) + 1 (own rooms listing) + 100 (room
+  indexes) requests, plus inbox discovery. The sidebar routes to the existing Join flow; Join
+  requires loaded room membership, and a non-member is told why.
+  Actors remain sender claims: labels say “Invitation claims to be from <host>”, with no
+  profile requests.
+  One normaliser (`apps/suite/src/lib/chat-invitation-room.ts`, wrapped by the model's
+  `invitationRoom`) accepts only HTTP(S) `chat/rooms/<slug>/` containers or their canonical
+  `index.ttl#it` subjects, with no query. Own-pod paths must be directly under the storage's
+  `chat/rooms/`. The shell tray uses the same module without loading Chat's model. The room
+  route keeps its earlier pod-scoped container check, so existing rooms elsewhere still open.
+  Foreign-pod invitations have no link or metadata fetch; they explain cross-pod support is
+  pending, and Dismiss names them by host and room slug. Own-pod and foreign lists each
+  collapse behind a count above three; above three shown invitations, “Dismiss all N
+  invitations” dismisses every shown row. The heading leaves with the last row once focus moves
+  off it, and stays whenever a notice is shown.
+  Dismissals use the shared account ID set with Chat's key prefix and an identity-checked
+  envelope, retaining at most 600 container URLs (twice the scan limit, never evicting rooms the current scan returns) in guarded localStorage keyed by WebID; inbox
+  resources are never deleted. Sidebar and drawer copies synchronize local dismissals.
+  A single reader per client retains profile/inbox discovery. Mount, explicit retry/join and
+  focus refreshes (30-second throttle)
+  expose failures as a small inline retry. A creation's delivery-failure toast is dropped when
+  the shell account or session changed while it ran. The demo inbox e2e seeds an Offer at
+  fixture level; two-user delivery belongs to sst-rn91.
 - `chat.lastRead` lives in `settings/chat-preferences.json`, with schema validation,
   conditional writes and one conflict merge using monotonic markers. Unread counts cover
   the newest seven-day page, excluding own messages, deletions and edit revisions. Rooms
@@ -77,3 +167,12 @@ preference transport is isolated in `preferences-store.ts` until the SDK prefere
 UTC midnight, competing writers and preference conflicts. The client and model retain
 100% per-file coverage. Hook, outbox and DOM behavior are covered by `chat-state`,
 `chat-outbox` and `chat-components` tests; `e2e/chat/chat.spec.ts` supplies all six browser projects.
+
+## Sending queue and the session fence
+
+Pending messages live in a per-account (WebID and storage) offline queue, `ChatOutbox`. Its
+`active()` fence is the shell session's liveness check: while the account is switched away,
+signed out or expired, no replay trigger (flush, kick, cross-tab change, `online`) does anything,
+rows stay waiting, and a cheap timer (no requests) retries them when the session is usable again.
+A send cut short by a same-account session rebuild stays pending, and a flush requested during a
+pass runs once that pass ends.

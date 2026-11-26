@@ -11,11 +11,16 @@ import { useWallet, WalletProvider } from "@/apps/wallet/state/wallet-context";
 import { ExtensionSessionError } from "@/lib/session/extension-pod-session";
 import type { PodSession } from "@/lib/session/pod-session";
 
-const seams = vi.hoisted(() => ({ open: vi.fn(), seed: vi.fn(), failure: vi.fn() }));
+const seams = vi.hoisted(() => ({
+  open: vi.fn(),
+  seed: vi.fn(),
+  failure: vi.fn(),
+  warning: vi.fn(),
+}));
 vi.mock("@/apps/wallet/lib/data/client", () => ({ openWallet: seams.open }));
 vi.mock("@/apps/wallet/demo/sample", () => ({ ensureWalletSample: seams.seed }));
 vi.mock("@jeswr/suite-ui", () => ({
-  toast: { error: seams.failure },
+  toast: { error: seams.failure, warning: seams.warning },
   LoadingSkeleton: () => createElement("p", { role: "status" }, "Loading"),
   ErrorState: ({
     children,
@@ -66,7 +71,11 @@ afterEach(async () => {
 it("boots, exposes its account state, subscribes and releases the subscription", async () => {
   const stopped = vi.fn();
   subscription.mockReturnValueOnce(stopped);
-  const repository = { initialise: vi.fn(async () => {}), list: vi.fn(async () => []) };
+  const repository = {
+    initialise: vi.fn(async () => {}),
+    registration: { state: "registered" },
+    list: vi.fn(async () => []),
+  };
   seams.open.mockResolvedValue({ repository });
   await act(async () => {
     root.render(
@@ -85,6 +94,7 @@ it("boots, exposes its account state, subscribes and releases the subscription",
 it("shows a privacy error and retries initialisation", async () => {
   const repository = {
     initialise: vi.fn().mockRejectedValueOnce(new Error("shared")).mockResolvedValue(undefined),
+    registration: { state: "registered" },
     list: vi.fn(async () => []),
   };
   seams.open.mockResolvedValue({ repository });
@@ -117,7 +127,9 @@ it("ignores a delayed boot after unmount and useWallet requires a provider", asy
   expect(container.textContent).toBe("Loading");
   await act(async () => root.unmount());
   root = createRoot(container);
-  seams.open.mockResolvedValue({ repository: { initialise: vi.fn(async () => {}) } });
+  seams.open.mockResolvedValue({
+    repository: { initialise: vi.fn(async () => {}), registration: { state: "registered" } },
+  });
   await act(async () => finish(undefined));
   expect(subscription).not.toHaveBeenCalled();
   await expect(
@@ -133,7 +145,11 @@ it("drops boot results at every async session boundary", async () => {
     const pending = new Promise((resolve) => {
       finish = resolve;
     });
-    const repository = { initialise: vi.fn(async () => {}), list: vi.fn(async () => []) };
+    const repository = {
+      initialise: vi.fn(async () => {}),
+      registration: { state: "registered" },
+      list: vi.fn(async () => []),
+    };
     if (stage === "open") seams.open.mockReturnValue(pending);
     else seams.open.mockResolvedValue({ repository });
     if (stage === "initialise") repository.initialise.mockReturnValue(pending as Promise<void>);
@@ -173,6 +189,7 @@ it("ignores late boot failures, refreshes notifications when idle and reports fa
   seams.seed.mockResolvedValue(undefined);
   const repository = {
     initialise: vi.fn(async () => {}),
+    registration: { state: "registered" },
     list: vi.fn(async () => []),
     save: vi.fn().mockRejectedValueOnce(new Error("write failed")),
   };
@@ -259,6 +276,7 @@ it("keeps delete failures account-neutral after session staleness or an account 
     const pendingDelete = Promise.withResolvers<never>();
     const repository = {
       initialise: vi.fn(async () => {}),
+      registration: { state: "registered" },
       list: vi.fn(async () => [item]),
       remove: vi
         .fn()
@@ -297,7 +315,11 @@ it("keeps delete failures account-neutral after session staleness or an account 
     });
     const nextSession = { ...session, webId: "https://other.example/profile#me" };
     seams.open.mockResolvedValue({
-      repository: { initialise: vi.fn(async () => {}), list: vi.fn(async () => []) },
+      repository: {
+        initialise: vi.fn(async () => {}),
+        registration: { state: "registered" },
+        list: vi.fn(async () => []),
+      },
     });
     await act(async () => {
       root.render(
@@ -317,4 +339,23 @@ it("keeps delete failures account-neutral after session staleness or an account 
   } finally {
     vi.useRealTimers();
   }
+});
+it("opens, and warns once, when the Type Index registration failed", async () => {
+  seams.warning.mockClear();
+  const repository = {
+    initialise: vi.fn(async () => {}),
+    registration: { state: "failed", reason: "shared" },
+    list: vi.fn(async () => []),
+  };
+  seams.open.mockResolvedValue({ repository });
+  await act(async () => {
+    root.render(
+      <WalletProvider session={session}>
+        <Content />
+      </WalletProvider>,
+    );
+  });
+  expect(container.textContent).toBe("ready:0");
+  expect(seams.warning).toHaveBeenCalledOnce();
+  expect(String(seams.warning.mock.calls[0]?.[0])).toMatch(/Wallet documents.*Type Index/);
 });

@@ -45,6 +45,7 @@ const repo = vi.hoisted(() => ({
   remove: vi.fn(),
   unreadable: [],
   truncated: false,
+  registration: { state: "registered" } as { state: string; reason?: string },
 }));
 const notices = vi.hoisted(() => Object.assign(vi.fn(), { error: vi.fn(), warning: vi.fn() }));
 vi.mock("@jeswr/suite-ui", () =>
@@ -394,6 +395,21 @@ it("clears a retained draft when deletion succeeds", async () => {
   deletion.resolve();
   await vi.waitFor(() => expect(readDrafts(localStorage, pod.webId, pod.storageUrl)).toEqual([]));
   expect(listOf(render()).boards).toEqual([]);
+});
+
+it("warns, without blocking the boards, when Type Index registration failed", async () => {
+  repo.registration = { state: "failed", reason: "forbidden" };
+  try {
+    await mount();
+    expect(notices.warning).toHaveBeenCalledOnce();
+    expect(String(notices.warning.mock.calls[0]?.[0])).toMatch(/Boards.*Type Index/);
+  } finally {
+    repo.registration = { state: "registered" };
+  }
+});
+it("stays quiet about registration when it succeeded", async () => {
+  await mount();
+  expect(notices.warning).not.toHaveBeenCalled();
 });
 
 it("keeps a writer registered when Strict Mode re-registers it before the first release runs", async () => {

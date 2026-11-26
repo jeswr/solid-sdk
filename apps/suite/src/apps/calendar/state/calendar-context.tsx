@@ -21,6 +21,7 @@ import { eventDocument } from "./editing";
 import { intentsKey } from "./intents";
 import { createEventOutbox } from "./outbox";
 import {
+  CalendarPrivacyError,
   compareOccurrences,
   createCalendar,
   discoverCalendars,
@@ -242,7 +243,11 @@ function SessionCalendarProvider({
         await createCalendar(session, title, colour);
         reload();
       } catch (error) {
-        toast.error("Couldn't create the calendar. Please retry.");
+        toast.error(
+          error instanceof CalendarPrivacyError
+            ? error.message
+            : "Couldn't create the calendar. Please retry.",
+        );
         throw error;
       }
     },
