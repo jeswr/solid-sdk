@@ -1,10 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// @vitest-environment jsdom
+import { createRequire } from "node:module";
 import { createRegistry } from "@jeswr/pod-connectors";
 import { Provenance } from "@jeswr/pod-connectors/core/provenance";
 import {
   createMemoryPod,
-  ownerOnlyFixtureChecks,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
   TEST_WEBID,
@@ -23,15 +22,17 @@ const current = vi.hoisted(() => ({
     | undefined,
 }));
 vi.mock("./session-provider", () => ({ useSession: () => current.session }));
-// The memory pod has no owner-only access documents, so the app's real destination check would
-// refuse the demo write. Stand in the verified owner-only checks; the app code is unchanged.
-vi.mock("@jeswr/pod-connectors", async (original) => ({
-  ...(await original<typeof import("@jeswr/pod-connectors")>()),
-  createSessionPrivateDestinationChecks: () => ownerOnlyFixtureChecks,
-}));
 afterEach(() => vi.unstubAllGlobals());
+const { JSDOM } = createRequire(import.meta.url)("jsdom") as {
+  JSDOM: new (html: string) => { window: Window & typeof globalThis };
+};
 
 it("marks Pod Manager demo imports through the runner's default agent", async () => {
+  // Mount React in a DOM while keeping fetch and the pod's byte streams in the Node realm, so the
+  // writer's real owner-only destination check can parse the memory pod's root ACL.
+  const { window } = new JSDOM("<!doctype html><html><body></body></html>");
+  vi.stubGlobal("window", window);
+  vi.stubGlobal("document", window.document);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const pod = createMemoryPod();
   const sourceFetch = vi.fn<typeof fetch>(async () => {
@@ -79,5 +80,6 @@ it("marks Pod Manager demo imports through the runner's default agent", async ()
     expect(sourceFetch).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
+    window.close();
   }
 });
