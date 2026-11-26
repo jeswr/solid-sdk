@@ -1262,7 +1262,11 @@ describe("CLI import", () => {
       ...spotifyAdapter,
       async import(ctx: Parameters<typeof spotifyAdapter.import>[0]) {
         seen.push(ctx.cursor);
-        return { ...(await spotifyAdapter.import(ctx)), cursor: "after:1700000000000" };
+        // This test is about the CLI's checkpoint handling, not Spotify's import. The full
+        // fixture import wrote about 500 DPoP-signed Pod requests per run (four runs took
+        // over 5 s under load). One source request keeps the failing-source path below real.
+        await ctx.api("https://api.spotify.com/v1/me");
+        return { cursor: "after:1700000000000" };
       },
     };
     vi.spyOn(registryModule, "createRegistry").mockReturnValue({
