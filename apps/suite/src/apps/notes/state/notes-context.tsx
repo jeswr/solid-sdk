@@ -44,6 +44,7 @@ function useNotesValue(session: PodSession) {
   );
   const [prefs, updatePrefs] = useNotesPreferences(session.webId);
   const [sharedNotes, setSharedNotes] = useState<Record<string, boolean>>({});
+  const [collaborators, setCollaborators] = useState<Record<string, string[]>>({});
   const [shareRevision, setShareRevision] = useState(0);
   const [sharing, setSharing] = useState<StoredNote>();
   const [batchFailures, setBatchFailures] = useState<NoteFailure[]>([]);
@@ -101,9 +102,16 @@ function useNotesValue(session: PodSession) {
   useEffect(() => {
     const controller = new AbortController();
     setSharedNotes({});
-    void discoverNoteShares(JSON.parse(shareUrls), session, controller.signal, (url, shared) => {
-      setSharedNotes((current) => ({ ...current, [url]: shared }));
-    });
+    setCollaborators({});
+    void discoverNoteShares(
+      JSON.parse(shareUrls),
+      session,
+      controller.signal,
+      (url, shared, people) => {
+        setSharedNotes((current) => ({ ...current, [url]: shared }));
+        setCollaborators((current) => ({ ...current, [url]: people }));
+      },
+    );
     return () => controller.abort();
   }, [shareUrls, session, shareRevision]);
   const router = useRouter();
@@ -245,6 +253,7 @@ function useNotesValue(session: PodSession) {
     },
     create,
     sharedNotes,
+    collaborators,
     refreshSharing: () => setShareRevision((value) => value + 1),
   };
 }

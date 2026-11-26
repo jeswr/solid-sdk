@@ -103,6 +103,62 @@
   color: var(--muted-foreground);
   overflow-wrap: anywhere;
 }
+.notes-search-filters {
+  margin-bottom: 24px;
+}
+.notes-search-chips,
+.notes-search-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.notes-search-chips a,
+.notes-search-tiles a {
+  min-height: 44px;
+  height: auto;
+  max-width: 100%;
+  padding: 10px 14px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+.notes-search-filters :is(a, button):focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+.notes-search-options {
+  display: grid;
+  gap: 28px;
+  margin-top: 24px;
+}
+.notes-search-options h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.notes-search-tiles .notes-search-tile {
+  display: flex;
+  flex-direction: column;
+  min-width: 108px;
+  min-height: 96px;
+  gap: 12px;
+  border-radius: 12px;
+}
+.notes-search-swatch {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+.notes-search-count,
+.notes-search-options p {
+  color: var(--muted-foreground);
+}
+.notes-search-count {
+  margin-bottom: 20px;
+}
 .notes-capture {
   max-width: 600px;
   margin: 0 auto 40px;
