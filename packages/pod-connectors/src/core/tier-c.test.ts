@@ -22,6 +22,7 @@ import { PROV, Provenance } from "./provenance.js";
 import {
   createMemoryPod,
   fileImport,
+  ownerOnlyFixtureChecks,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
   TEST_WEBID,
@@ -607,6 +608,7 @@ it.each([
     profileDocumentUrl: TEST_PROFILE_DOC,
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
+    ...ownerOnlyFixtureChecks,
   });
   const file = streamedFile("bank.csv", "Date,Description,Amount\n2026-01-01,Synthetic entry,1");
   await expect(
@@ -628,6 +630,7 @@ it.each([
     profileDocumentUrl: TEST_PROFILE_DOC,
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
+    ...ownerOnlyFixtureChecks,
   });
   const podWriter = { ...writer, webId };
   await expect(

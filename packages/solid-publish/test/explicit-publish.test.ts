@@ -76,6 +76,25 @@ describe("nothing becomes public without an explicit publish", () => {
     await pod.repo.publish(refreshed, published.page, edit, false);
     expect(await html(pod.storage, page)).toContain("Not yet for the world");
   });
+  it("createPage always creates a draft: a published status is refused and nothing is written", async () => {
+    const pod = await prepared();
+    const before = pod.calls.length;
+    const attempt = pod.repo.createPage(pod.site, "sneaky", {
+      ...pageData,
+      slug: "sneaky",
+      status: "published",
+      published: new Date("2026-01-01T00:00:00Z"),
+    });
+    await expect(attempt).rejects.toBeInstanceOf(PublicationError);
+    await expect(attempt).rejects.toThrow(/private draft/);
+    expect(
+      pod.calls.slice(before).filter((call) => call.method !== "GET" && call.method !== "HEAD"),
+    ).toEqual([]);
+    // A rebuild triggered by publishing another page does not publish it either.
+    await pod.repo.publish(pod.site, pod.first, pod.first.data, true);
+    const page = `${pod.repo.publicUrl(pod.site)}sneaky/index.html`;
+    await expect(pod.storage.head(page)).rejects.toMatchObject({ code: "not-found" });
+  });
   it("judges the stored page, not the caller's copy, and every status transition", async () => {
     const pod = await prepared();
     const published = await pod.repo.publish(pod.site, pod.first, pod.first.data, true);

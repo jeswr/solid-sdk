@@ -176,7 +176,7 @@ describe("sealing goes through pod-access", () => {
     const denied = vi.fn(async () => new Response(null, { status: 403 }));
     await expect(
       sealNewResource(storage, session(denied), target, { created: true }),
-    ).rejects.toThrow();
+    ).rejects.toThrow(/Couldn't protect the invitation storage|isn't owner-only/);
   });
   it.each(["unknown", "acp"])("refuses %s access control without any request", async (model) => {
     const { storage } = pod();
@@ -363,17 +363,20 @@ describe("withdrawReplyRead repairs an earlier public guest list", () => {
     await access.share(replies, { agent: CLEO, modes: ["read"] }, { inherit: true });
     return { storage, access, event: baseEvent(over) };
   }
-  it("removes public Read and keeps public Append, and keeps named readers for an invitee list", async () => {
+  const namedRead = (policy: EffectivePolicy, webId: string) =>
+    modesFor(policy, (kind, id) => kind === "agent" && id === webId).has("read");
+  it("removes public Read, keeps public Append and never touches a named reader", async () => {
     const { storage, event } = await legacy([["append"], ["read"]]);
     await withdrawReplyRead(storage, eventUrl, event);
     const policy = await policyOf(storage, replies);
     expect([...publicModes(policy)]).toEqual(["append"]);
-    // A link invitation has no guest list, so even the named agent's Read goes.
-    expect(modesFor(policy, (kind, webId) => kind === "agent" && webId === CLEO).has("read")).toBe(
-      false,
+    expect(namedRead(policy, CLEO)).toBe(true);
+    // The organiser's own access is untouched too.
+    expect(modesFor(policy, (kind, id) => kind === "agent" && id === OWNER).has("control")).toBe(
+      true,
     );
   });
-  it("keeps named readers when the invitation has a visible invitee guest list", async () => {
+  it("keeps named readers for an invitee list as well", async () => {
     const { storage, event } = await legacy([["append"], ["read"]], {
       visibility: "invitees",
       guestListVisible: true,
@@ -381,9 +384,7 @@ describe("withdrawReplyRead repairs an earlier public guest list", () => {
     await withdrawReplyRead(storage, eventUrl, event);
     const policy = await policyOf(storage, replies);
     expect([...publicModes(policy)]).toEqual(["append"]);
-    expect(modesFor(policy, (kind, webId) => kind === "agent" && webId === CLEO).has("read")).toBe(
-      true,
-    );
+    expect(namedRead(policy, CLEO)).toBe(true);
   });
   it("re-issues a mixed Append+Read rule as Append only while replies are open", async () => {
     const { storage, event } = await legacy([["append", "read"]]);
@@ -396,6 +397,29 @@ describe("withdrawReplyRead repairs an earlier public guest list", () => {
     });
     await withdrawReplyRead(storage, eventUrl, event);
     expect(publicModes(await policyOf(storage, replies)).size).toBe(0);
+  });
+  it("refuses, changing nothing, when a public Read rule also covers the organiser or another agent", async () => {
+    const { storage } = await layout();
+    const revoke = vi.fn();
+    const share = vi.fn();
+    const grants = vi.fn();
+    vi.mocked(createAccessClient).mockReturnValue({
+      model: () => "wac",
+      grants,
+      revoke,
+      share,
+    } as unknown as AccessClient);
+    for (const other of [OWNER, CLEO]) {
+      grants.mockResolvedValue([
+        { id: "#shared", agent: { public: true }, modes: ["read"] },
+        { id: "#shared", agent: other, modes: ["read", "control"] },
+      ]);
+      await expect(withdrawReplyRead(storage, eventUrl, baseEvent())).rejects.toThrow(
+        /shared with the owner or another agent/,
+      );
+    }
+    expect(revoke).not.toHaveBeenCalled();
+    expect(share).not.toHaveBeenCalled();
   });
   it("refuses to guess at rules it cannot identify, and fails when Read cannot be confirmed gone", async () => {
     const { storage } = await layout();
@@ -410,6 +434,18 @@ describe("withdrawReplyRead repairs an earlier public guest list", () => {
     await expect(withdrawReplyRead(storage, eventUrl, baseEvent())).rejects.toThrow("identify");
     grants.mockResolvedValue([{ id: "#r", agent: { public: true }, modes: ["read"] }]);
     await expect(withdrawReplyRead(storage, eventUrl, baseEvent())).rejects.toThrow("confirm");
+  });
+  it("is a no-op, with no writes, when only named agents or the owner hold access", async () => {
+    const { storage, writes } = await layout();
+    await createAccessClient({ storage }).share(
+      replies,
+      { agent: CLEO, modes: ["read", "write"] },
+      { inherit: true },
+    );
+    writes.length = 0;
+    await withdrawReplyRead(storage, eventUrl, baseEvent());
+    expect(writes).toEqual([]);
+    expect(namedRead(await policyOf(storage, replies), CLEO)).toBe(true);
   });
   it("leaves a clean container alone", async () => {
     const { storage, writes } = await layout();

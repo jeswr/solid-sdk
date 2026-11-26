@@ -9,10 +9,13 @@ import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { describe, expect, it, vi } from "vitest";
 import {
   createTripsStore,
+  deduplicate,
+  isTrusted,
   TripsPrivacyError,
   TypeIndexSetupError,
   verifiedOwnerOnly,
 } from "../src/index.js";
+import { serializeReservation, serializeTrip } from "../src/model.js";
 
 const POD = "https://pod.example/";
 const OWNER = "https://id.example/alice#me";
@@ -293,6 +296,297 @@ describe("solid pod", () => {
     await store.initialise();
     outage = true;
     await expect(store.retryRegistration()).rejects.toThrow("offline");
+  });
+});
+
+describe("manual bookings are trusted only from verified owner-only storage", () => {
+  const Manual = `${POD}trips/reservations/`;
+  async function plantedBooking() {
+    const { memory, storage, aclWrites } = await server("solid");
+    const sealed: string[] = [];
+    const { store } = open(storage, sealer(memory, sealed));
+    await store.initialise();
+    const booking = await store.addReservation({
+      kind: "TrainReservation",
+      title: "Planted",
+      trust: "verified",
+    });
+    return { memory, storage, store, booking, aclWrites, sealed };
+  }
+
+  it("trusts a verified owner-only folder's bookings as the user's own", async () => {
+    const { store, booking } = await plantedBooking();
+    const loaded = (await store.load()).reservations.find((item) => item.id === booking.id);
+    expect(loaded).toMatchObject({ origin: "manual", trust: "verified" });
+  });
+
+  it("re-verifies at load: a folder shared after opening downgrades its bookings, without rewriting it", async () => {
+    const { memory, store, booking, aclWrites } = await plantedBooking();
+    await rewriteAcl(
+      memory,
+      Manual,
+      `${ownerOnly(Manual)}\n${rule(Manual, BOB, "acl:Read, acl:Write", true)}`,
+    );
+    const before = await aclBody(memory, Manual);
+    aclWrites.length = 0;
+    const loaded = (await store.load()).reservations.find((item) => item.id === booking.id);
+    // A shared folder lets anyone with Write plant a "verified" booking: nothing here is trusted.
+    expect(loaded).toMatchObject({ trust: "unverified" });
+    expect(loaded?.origin).toBeUndefined();
+    expect(isTrusted(loaded as never)).toBe(false);
+    expect(store.sharedFolders).toContain(Manual);
+    expect(aclWrites).toEqual([]);
+    expect(await aclBody(memory, Manual)).toBe(before);
+  });
+
+  it("trusts a planted booking again once the folder is verified private", async () => {
+    const { memory, store, booking } = await plantedBooking();
+    const shared = `${ownerOnly(Manual)}\n${rule(Manual, BOB, "acl:Append", true)}`;
+    await rewriteAcl(memory, Manual, shared);
+    expect((await store.load()).reservations.find((item) => item.id === booking.id)?.trust).toBe(
+      "unverified",
+    );
+    await rewriteAcl(memory, Manual, ownerOnly(Manual));
+    const loaded = (await store.load()).reservations.find((item) => item.id === booking.id);
+    expect(loaded).toMatchObject({ origin: "manual", trust: "verified" });
+    expect(store.sharedFolders).toEqual([]);
+  });
+
+  it("distrusts a document that is shared individually inside a private folder", async () => {
+    const { memory, store, booking } = await plantedBooking();
+    const doc = booking.id.split("#")[0] as string;
+    await rewriteAcl(
+      memory,
+      doc,
+      `${ownerOnly(doc, false)}\n${rule(doc, BOB, "acl:Write", false)}`,
+    );
+    const loaded = (await store.load()).reservations.find((item) => item.id === booking.id);
+    expect(loaded).toMatchObject({ trust: "unverified" });
+    expect(loaded?.origin).toBeUndefined();
+    expect(store.sharedFolders).toEqual([]);
+  });
+
+  const planted = (url: string) =>
+    serializeReservation(url, { kind: "TrainReservation", title: "Planted", trust: "verified" });
+
+  it("never trusts a 'verified' booking linked from a trip in a shared trips/", async () => {
+    const { memory, storage } = await server("solid");
+    await memory.create(POD, null, { name: "trips", kind: "container" });
+    await memory.create(`${POD}trips/`, sharedWithBob(`${POD}trips/`), {
+      name: ".acl",
+      contentType: "text/turtle",
+    });
+    const { store } = open(storage, sealer(memory, []));
+    await store.initialise();
+    const linked = `${POD}trips/y.ttl`;
+    await memory.create(`${POD}trips/`, await planted(linked), {
+      name: "y.ttl",
+      contentType: "text/turtle",
+    });
+    await memory.create(
+      `${POD}trips/`,
+      await serializeTrip({
+        ...newTrip,
+        id: `${POD}trips/x.ttl#it`,
+        reservations: [`${linked}#it`],
+      }),
+      { name: "x.ttl", contentType: "text/turtle" },
+    );
+    const { reservations } = await store.load();
+    const loaded = reservations.find((item) => item.id === `${linked}#it`);
+    expect(loaded).toMatchObject({ trust: "unverified" });
+    expect(loaded?.origin).toBeUndefined();
+    expect(isTrusted(loaded as never)).toBe(false);
+  });
+
+  it("never trusts a 'verified' booking planted outside reservations/ in a private trips/", async () => {
+    const { memory, storage } = await server("solid");
+    const { store } = open(storage, sealer(memory, []));
+    await store.initialise();
+    const linked = `${POD}trips/y.ttl`;
+    await memory.create(`${POD}trips/`, await planted(linked), {
+      name: "y.ttl",
+      contentType: "text/turtle",
+    });
+    await memory.create(
+      `${POD}trips/`,
+      await serializeTrip({
+        ...newTrip,
+        id: `${POD}trips/x.ttl#it`,
+        reservations: [`${linked}#it`],
+      }),
+      { name: "x.ttl", contentType: "text/turtle" },
+    );
+    const loaded = (await store.load()).reservations.find((item) => item.id === `${linked}#it`);
+    expect(loaded).toMatchObject({ trust: "unverified" });
+    expect(isTrusted(loaded as never)).toBe(false);
+  });
+
+  /** A store whose Type Index reports the given documents as TrainReservation sources. */
+  async function scanning(
+    memory: Awaited<ReturnType<typeof server>>["memory"],
+    storage: StorageClient,
+    sources: string[],
+  ) {
+    const store = createTripsStore({
+      storage,
+      index: {
+        register: vi.fn<TypeIndex["register"]>(async () => undefined),
+        findAll: vi.fn(async () => new Map([["http://schema.org/TrainReservation", sources]])),
+      },
+      protect: verifiedOwnerOnly(storage, OWNER, sealer(memory, [])),
+    });
+    await store.initialise();
+    return store;
+  }
+  async function plant(
+    memory: Awaited<ReturnType<typeof server>>["memory"],
+    folder: string,
+    name: string,
+    input: Partial<Parameters<typeof serializeReservation>[1]> = {},
+    acl?: string,
+  ) {
+    await memory.create(POD, null, { name: folder.slice(POD.length, -1), kind: "container" });
+    if (acl) await memory.create(folder, acl, { name: ".acl", contentType: "text/turtle" });
+    await memory.create(
+      folder,
+      await serializeReservation(`${folder}${name}`, {
+        kind: "TrainReservation",
+        title: "Planted",
+        trust: "verified",
+        ...input,
+      }),
+      { name, contentType: "text/turtle" },
+    );
+    return `${folder}${name}`;
+  }
+
+  it("never trusts a 'verified' booking found by scan() in a shared container", async () => {
+    const { memory, storage } = await server("solid");
+    const url = await plant(memory, `${POD}other/`, "y.ttl", {}, sharedWithBob(`${POD}other/`));
+    const store = await scanning(memory, storage, [url]);
+    const { reservations } = await store.scan([]);
+    expect(reservations).toHaveLength(1);
+    expect(reservations[0]).toMatchObject({ trust: "unverified" });
+    expect(isTrusted(reservations[0] as never)).toBe(false);
+  });
+
+  it("keeps a connector booking in a verified owner-only container verified, and it wins deduplicate over a later spoof", async () => {
+    const { memory, storage } = await server("solid");
+    const key = { reservationNumber: "ABC123", provider: "Rail Co" };
+    const genuine = await plant(memory, `${POD}mail/`, "a.ttl", {
+      ...key,
+      modified: "2026-01-01T00:00:00Z",
+    });
+    const spoof = await plant(
+      memory,
+      `${POD}inbox/`,
+      "b.ttl",
+      { ...key, modified: "2026-02-01T00:00:00Z" },
+      sharedWithBob(`${POD}inbox/`),
+    );
+    const store = await scanning(memory, storage, [genuine, spoof]);
+    const { reservations } = await store.scan([]);
+    const byUrl = (url: string) => reservations.find((item) => item.id === `${url}#it`);
+    expect(byUrl(genuine)).toMatchObject({ trust: "verified" });
+    expect(byUrl(genuine)?.origin).toBeUndefined();
+    expect(byUrl(spoof)).toMatchObject({ trust: "unverified" });
+    expect(deduplicate(reservations).map((item) => item.id)).toEqual([`${genuine}#it`]);
+  });
+
+  it("treats a connector booking with a shared document ACL as unverified", async () => {
+    const { memory, storage } = await server("solid");
+    const url = await plant(memory, `${POD}mail/`, "a.ttl");
+    await memory.create(
+      `${POD}mail/`,
+      `${ownerOnly(url, false)}
+${rule(url, BOB, "acl:Write", false)}`,
+      { name: "a.ttl.acl", contentType: "text/turtle" },
+    );
+    const store = await scanning(memory, storage, [url]);
+    expect((await store.scan([])).reservations[0]).toMatchObject({ trust: "unverified" });
+  });
+
+  it("keeps a linked connector booking verified, and judges a sub-folder of reservations/ by its own container", async () => {
+    const { memory, storage } = await server("solid");
+    const good = await plant(memory, `${POD}mail/`, "a.ttl");
+    const sub = `${POD}trips/reservations/sub/`;
+    const { store } = open(storage, sealer(memory, []));
+    await store.initialise();
+    await memory.create(`${POD}trips/reservations/`, null, { name: "sub", kind: "container" });
+    await memory.create(sub, sharedWithBob(sub), { name: ".acl", contentType: "text/turtle" });
+    await memory.create(
+      sub,
+      await serializeReservation(`${sub}s.ttl`, {
+        kind: "TrainReservation",
+        title: "Sub",
+        trust: "verified",
+      }),
+      { name: "s.ttl", contentType: "text/turtle" },
+    );
+    const own = `${POD}trips/reservations/own/`;
+    await memory.create(`${POD}trips/reservations/`, null, { name: "own", kind: "container" });
+    await memory.create(own, ownerOnly(own), { name: ".acl", contentType: "text/turtle" });
+    await memory.create(
+      own,
+      await serializeReservation(`${own}o.ttl`, {
+        kind: "TrainReservation",
+        title: "Own",
+        trust: "verified",
+      }),
+      { name: "o.ttl", contentType: "text/turtle" },
+    );
+    await memory.create(
+      `${POD}trips/`,
+      await serializeTrip({
+        ...newTrip,
+        id: `${POD}trips/x.ttl#it`,
+        reservations: [`${good}#it`, `${sub}s.ttl#it`, `${own}o.ttl#it`],
+      }),
+      { name: "x.ttl", contentType: "text/turtle" },
+    );
+    const { reservations } = await store.load();
+    const loaded = (url: string) => reservations.find((item) => item.id === `${url}#it`);
+    expect(loaded(good)).toMatchObject({ trust: "verified" });
+    expect(loaded(good)?.origin).toBeUndefined();
+    expect(loaded(`${sub}s.ttl`)).toMatchObject({ trust: "unverified" });
+    expect(loaded(`${sub}s.ttl`)?.origin).toBeUndefined();
+    // Not a direct child of reservations/: verified by its own container, never "manual".
+    expect(loaded(`${own}o.ttl`)).toMatchObject({ trust: "verified" });
+    expect(loaded(`${own}o.ttl`)?.origin).toBeUndefined();
+  });
+
+  it("clears a folder from sharedFolders once a later write verifies it private", async () => {
+    const { memory, storage } = await server("solid");
+    await memory.create(POD, null, { name: "trips", kind: "container" });
+    await memory.create(`${POD}trips/`, sharedWithBob(`${POD}trips/`), {
+      name: ".acl",
+      contentType: "text/turtle",
+    });
+    const { store, register } = open(storage, sealer(memory, []));
+    await store.initialise();
+    expect(store.sharedFolders).toEqual([`${POD}trips/`]);
+    await rewriteAcl(memory, `${POD}trips/`, ownerOnly(`${POD}trips/`));
+    await store.saveTrip(newTrip);
+    expect(store.sharedFolders).toEqual([]);
+    // Registration was skipped while shared; the next retry no longer needs to re-verify.
+    expect(await store.retryRegistration()).toEqual({ status: "registered" });
+    expect(register).toHaveBeenCalledOnce();
+  });
+
+  it("verifies an existing trip's own document before editing it", async () => {
+    const { memory, storage } = await server("solid");
+    const { store } = open(storage, sealer(memory, []));
+    await store.initialise();
+    const saved = await store.saveTrip(newTrip);
+    const doc = saved.id.split("#")[0] as string;
+    // The user later shares this one trip document; its folder is still private.
+    await rewriteAcl(memory, doc, `${ownerOnly(doc, false)}\n${rule(doc, BOB, "acl:Read", false)}`);
+    await expect(store.saveTrip({ ...saved, name: "Renamed" })).rejects.toMatchObject({
+      reason: "shared",
+    });
+    const unchanged = (await store.load()).trips.find((trip) => trip.id === saved.id);
+    expect(unchanged?.name).toBe(newTrip.name);
   });
 });
 

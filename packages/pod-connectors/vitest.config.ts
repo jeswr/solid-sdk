@@ -5,6 +5,7 @@ export default defineConfig({
     environment: "node",
     maxWorkers: 2,
     include: ["src/**/*.test.ts"],
+    setupFiles: ["test/fixture-connectors.setup.ts"],
     coverage: { thresholds: { branches: 100 } },
   },
 });

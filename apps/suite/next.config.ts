@@ -34,6 +34,16 @@ const config: NextConfig = {
     // initialization uses its emitted WASM URL and never enters that branch.
     if (!isServer)
       config.plugins.push(new webpack.IgnorePlugin({ resourceRegExp: /^node:fs\/promises$/ }));
+    // Univer lazy-loads one hyphenation pattern chunk per language (134 chunks, 10.8 MB). The
+    // Suite never enables auto-hyphenation and Univer bundles en-us inline, so the bundled native
+    // export leaves the other languages out to stay inside its size budget.
+    if (!isServer && process.env.NEXT_PUBLIC_SUITE_TARGET === "native")
+      config.plugins.push(
+        new webpack.IgnorePlugin({
+          resourceRegExp: /^\.\/(?!en-us-)[a-z0-9-]+-[A-Za-z0-9_-]{8}\.js$/,
+          contextRegExp: /@univerjs[\\/]engine-render[\\/]lib[\\/]es$/,
+        }),
+      );
     // Imported model files use Node-style .js specifiers for their TypeScript sources.
     config.resolve.extensionAlias = {
       ...config.resolve.extensionAlias,
