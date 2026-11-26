@@ -402,7 +402,8 @@
   "files": [
     "dist",
     "README.md",
-    "SKILL.md"
+    "SKILL.md",
+    "references"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
