@@ -25,6 +25,8 @@ export {
   createWacImportStorage,
   type StoragePodWriterOptions,
 } from "./core/storage-pod-writer.js";
+/** Opt-in two-way sync contracts, host ports and runner. */
+export * from "./core/sync/index.js";
 export * from "./core/types.js";
 /** File adapter registry. */
 export * from "./file-adapters.js";

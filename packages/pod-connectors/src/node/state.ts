@@ -55,6 +55,12 @@ export function connectorState(value: unknown): CliConnectorState {
       throw new Error("Invalid state count");
     return value;
   };
+  const optionalCounts = (sync: Record<string, unknown>) =>
+    Object.fromEntries(
+      (["failed", "unlinkedImports", "deferred"] as const)
+        .filter((key) => sync[key] !== undefined)
+        .map((key) => [key, count(sync[key])]),
+    );
   if (state.lastOutcome !== "success" && state.lastOutcome !== "error")
     throw new Error("Invalid state outcome");
   return {
@@ -63,6 +69,15 @@ export function connectorState(value: unknown): CliConnectorState {
     ...(state.cursor === undefined ? {} : { cursor: textValue(state.cursor) }),
     ...(state.fileCursor === undefined ? {} : { fileCursor: textValue(state.fileCursor) }),
     lastOutcome: state.lastOutcome,
+    ...(state.sync === undefined
+      ? {}
+      : {
+          sync: {
+            conflicts: count(object(state.sync).conflicts),
+            pendingDeletes: count(object(state.sync).pendingDeletes),
+            ...optionalCounts(object(state.sync)),
+          },
+        }),
     counts: {
       documents: count(counts.documents),
       items: count(counts.items),

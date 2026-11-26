@@ -169,6 +169,8 @@ export interface WrittenDoc {
   readonly writeCreated?: boolean;
   /** ETag from the write response, when available for private-destination cleanup. */
   readonly writeEtag?: string;
+  /** Validator returned by this write, when available (never a later read's validator). */
+  readonly etag?: string | null;
   readonly category: string;
   readonly forClass: string;
   /** Further classes registered for the same container as `forClass`. */
@@ -293,6 +295,17 @@ export interface ConnectorState {
   readonly cursor?: string;
   readonly lastOutcome: "success" | "error";
   readonly counts: { readonly documents: number; readonly items: number; readonly skipped: number };
+  /** Two-way health; details remain in the owner-only sync links and manifest. */
+  readonly sync?: {
+    readonly conflicts: number;
+    readonly pendingDeletes: number;
+    /** Items skipped this run with a fixed error class (retried or re-detected later). */
+    readonly failed?: number;
+    /** Imported items without a link; never created at the provider. */
+    readonly unlinkedImports?: number;
+    /** Items waiting on an unresolved create intent. */
+    readonly deferred?: number;
+  };
 }
 
 export interface ConnectorStateOptions {
@@ -364,7 +377,9 @@ export interface PodWriter {
     options: { etag: string; signal: AbortSignal },
   ): Promise<boolean>;
   /** Read existing RDF and its ETag; undefined only for a missing document. */
-  read(slug: string): Promise<{ dataset: DatasetCore; etag: string | null } | undefined>;
+  read(
+    slug: string,
+  ): Promise<{ dataset: DatasetCore; etag: string | null; lastModified?: string } | undefined>;
   /** Write RDF, preserving the caller's conditional-write precondition. */
   write(
     doc: NormalisedDoc,

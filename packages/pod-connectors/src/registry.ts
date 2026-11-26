@@ -14,6 +14,7 @@
  * it never changes catalog tiers, readiness, or the data written into a pod.
  */
 
+import type { TwoWayAdapter } from "./core/sync/types.js";
 import type { IntegrationAdapter, IntegrationMetadata } from "./core/types.js";
 import { discordAdapter } from "./discord/adapter.js";
 import { dropboxAdapter } from "./dropbox/adapter.js";
@@ -43,10 +44,40 @@ import { youtubeAdapter } from "./youtube/adapter.js";
 
 /** A renderable catalog row — metadata plus tier-specific honesty fields. */
 export interface CatalogEntry extends IntegrationMetadata {
+  /** Write-back capability only; the connection still defaults to writeBack=false. */
+  readonly twoWay?: {
+    readonly writeBackContainers: readonly string[];
+    readonly requiredWriteScopes: readonly string[];
+  };
   /** Tier B: why it isn't connectable yet. */
   readonly blocker?: string;
   /** Tier C: the official export users will be able to import. */
   readonly exportFormat?: string;
+}
+
+/** Public capability projection for host catalogs; no provider ships write-back in CON-A3.1. */
+export function catalogEntry(adapter: IntegrationAdapter): CatalogEntry {
+  const candidate = adapter as Partial<TwoWayAdapter>;
+  const twoWay =
+    typeof candidate.applyRemote === "function" &&
+    typeof candidate.findByIdempotencyKey === "function" &&
+    typeof candidate.deleteRemote === "function" &&
+    typeof candidate.toRemote === "function" &&
+    Array.isArray(candidate.fieldsForHash) &&
+    Array.isArray(candidate.writeBackContainers) &&
+    Array.isArray(candidate.requiredWriteScopes);
+  return {
+    ...adapter.metadata,
+    ...(adapter.metadata.id === "spotify" ? { exportFormat: "Streaming history ZIP / JSON" } : {}),
+    ...(twoWay
+      ? {
+          twoWay: {
+            writeBackContainers: [...(candidate.writeBackContainers ?? [])],
+            requiredWriteScopes: [...(candidate.requiredWriteScopes ?? [])],
+          },
+        }
+      : {}),
+  };
 }
 
 /** What the UI may render for an entry right now. */
@@ -147,7 +178,7 @@ const C = (
  * requirement, which each adapter states as its specific platform gate.
  */
 export const TIER_B: readonly CatalogEntry[] = TIER_B_ADAPTERS.map((a) => ({
-  ...a.metadata,
+  ...catalogEntry(a),
   blocker: a.metadata.requirements[0],
 }));
 
@@ -231,13 +262,6 @@ export function allCatalogEntries(): CatalogEntry[] {
   return [...ADAPTERS.map(catalogEntry), ...TIER_B, { ...vesyncAdapter.metadata }, ...TIER_C];
 }
 
-function catalogEntry(adapter: IntegrationAdapter): CatalogEntry {
-  return {
-    ...adapter.metadata,
-    ...(adapter.metadata.id === "spotify" ? { exportFormat: "Streaming history ZIP / JSON" } : {}),
-  };
-}
-
 /** Public per-source configuration supplied by the host. Tokens stay in SourceAuth. */
 export interface ConnectorConfig {
   readonly clientId?: string;
@@ -273,7 +297,7 @@ export function createRegistry(config: ConnectorConfigs = {}) {
     adapterById: (id: string) => byId.get(id),
     allCatalogEntries: (): CatalogEntry[] => [
       ...tierA.map(catalogEntry),
-      ...TIER_B,
+      ...tierB.map((a) => ({ ...catalogEntry(a), blocker: a.metadata.requirements[0] })),
       { ...vesyncAdapter.metadata },
       ...TIER_C,
     ],

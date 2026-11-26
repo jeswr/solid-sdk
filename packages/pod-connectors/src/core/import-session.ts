@@ -135,17 +135,25 @@ export function createImportSession(
     existing: Awaited<ReturnType<PodWriter["read"]>>,
   ): WriteConditions | undefined =>
     !existing ? { ifNoneMatch: "*" } : existing.etag ? { ifMatch: existing.etag } : undefined;
-  async function read(
+  /** Metadata-preserving canonical read; sync supplies explicit preconditions and need not cache. */
+  async function readResource(
     slug: string,
+    retainPrecondition = true,
     inspect?: (dataset: DatasetCore) => void,
-  ): Promise<DatasetCore | undefined> {
+  ) {
     const stored = await writer.read(slug);
     if (stored) inspect?.(stored.dataset);
     const existing = stored
       ? { ...stored, dataset: canonicalizeJeswrDataset(stored.dataset) }
       : undefined;
-    reads.set(writer.resolve(slug), existing);
-    return existing ? copyDataset(existing.dataset) : undefined;
+    if (retainPrecondition) reads.set(writer.resolve(slug), existing);
+    return existing ? { ...existing, dataset: copyDataset(existing.dataset) } : undefined;
+  }
+  async function read(
+    slug: string,
+    inspect?: (dataset: DatasetCore) => void,
+  ): Promise<DatasetCore | undefined> {
+    return (await readResource(slug, true, inspect))?.dataset;
   }
   async function write(input: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc> {
     const url = writer.resolve(input.slug);
@@ -236,8 +244,10 @@ export function createImportSession(
     itemCounts.set(url, itemCount);
     reads.delete(url);
     const index = written.findIndex((w) => w.url === result.url);
-    if (index === -1) written.push(registered);
-    else written[index] = registered;
+    // Write validators are for the immediate caller. Reports remain stable across re-imports.
+    const { etag: _writeEtag, ...reported } = registered;
+    if (index === -1) written.push(reported);
+    else written[index] = reported;
     writer.onWriteAccepted?.(result.url, output);
     return result;
   }
@@ -376,6 +386,7 @@ export function createImportSession(
   }
   return {
     read,
+    readResource,
     write: trackPrivateWrite(write),
     writeBinary: trackPrivateWrite(writeBinary),
     remove,
