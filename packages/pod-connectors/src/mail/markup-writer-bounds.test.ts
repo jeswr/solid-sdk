@@ -206,7 +206,8 @@ describe("markup write budget", () => {
     const legit = await writer.add({ messageIri: message("legit"), html: flight, ...verified });
     expect(legit).toHaveLength(1);
     expect(writes.map((doc) => doc.slug)).toEqual([messageSlug(account, "legit"), legit[0]?.slug]);
-  });
+    // Parses 2,000 oversized Orders: CPU-bound, so allow for loaded CI runners.
+  }, 30_000);
   it("charges unverified inventory and item PUTs to their own allowance within the total", async () => {
     const { ctx, writes } = memoryPorts();
     const writer = createMailMarkupWriter(ctx, account, {
