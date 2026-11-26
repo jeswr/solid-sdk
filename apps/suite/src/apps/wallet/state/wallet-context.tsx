@@ -12,6 +12,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+import { warnRegistrationFailed } from "@/lib/registration-notice";
 import { ExtensionSessionError } from "@/lib/session/extension-pod-session";
 import type { PodSession } from "@/lib/session/pod-session";
 import { WalletUnsupported } from "../components/wallet-unsupported";
@@ -42,6 +43,7 @@ export function WalletProvider({
       if (!live) return;
       await repository.initialise();
       if (!live) return;
+      if (repository.registration.state === "failed") warnRegistrationFailed("Wallet documents");
       controller = createWalletState(repository, (error, failure) =>
         toast.error(
           failure && (failure.sessionEnded || staleSession(error))

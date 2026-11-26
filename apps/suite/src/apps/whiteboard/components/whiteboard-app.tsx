@@ -17,6 +17,7 @@ import {
   toast,
 } from "@jeswr/suite-ui";
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { warnRegistrationFailed } from "@/lib/registration-notice";
 import { type PodSession, PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { AppFrame, AppHeading, AppSessionGuard } from "@/shell/app-frame";
 import { useOptionalAccounts } from "@/shell/session/accounts-context";
@@ -116,6 +117,7 @@ function Boards({ session }: { session: PodSession }) {
     void openWhiteboards(session)
       .then(async (repo) => {
         if (!active) return;
+        if (repo.registration.state === "failed") warnRegistrationFailed("Boards");
         if (session.mode === "demo") await seedSamples(repo, session.fetch);
         const loaded = await repo.list();
         if (active && repo.unreadable.length)

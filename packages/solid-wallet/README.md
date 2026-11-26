@@ -62,8 +62,13 @@ entirely about the access model (`unsupported-model`, `unrepresentable`,
 `not-storage-root`) throw `WalletUnsupportedError`; sharing and unknown access throw
 `WalletPrivacyError`. `initialise` checks support at the storage root before creating
 any folder on non-WAC storage, where ACP evaluation always reaches the root. Type Index
-registration is private and delegated to pod-type-index. Settings, linked
-preferences and custom private indexes must also have owner-only access.
+registration is private, best-effort and delegated to pod-type-index: the wallet folders
+are verified owner-only first (a failure there still refuses to open or write), and then
+`settings/`, linked preferences and custom private indexes must also be verified owner-only
+before anything is registered. A shared or unverifiable index, a failed index write or a
+WebID outside the storage never blocks the wallet: `registration` is
+`{ state: "pending" | "registered" | "unavailable" }` or `{ state: "failed", reason }`
+(`shared`, `unsupported` or the storage error code), and `retryRegistration()` tries again.
 WAC is supported. ACP requires the optional `acpDialect` from independently trusted
 deployment configuration. Suite supplies none and fails closed on ACP deployments. Access checks and writes are separate requests, so server-side access
 changes between them remain possible. The demo pod does not enforce permissions;

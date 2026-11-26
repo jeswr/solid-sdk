@@ -133,38 +133,37 @@ export async function revokeAccess(
       throw new Error("Couldn't confirm that sharing was withdrawn");
 }
 
-/** Remove any non-owner Read from the reply container, as an older version may have granted
- * the public a visible guest list. Append rules keep their own rule; mixed rules are re-issued
- * as Append only. Used to repair link invitations and on edit. */
+/** Remove public (and any signed-in) Read from the reply container, as an older version may
+ * have granted the public a visible guest list. Only those agents lose Read: the organiser and
+ * every named agent keep whatever access they have. Public Append keeps its own rule; a mixed
+ * rule is re-issued as Append only. A rule that also covers the organiser or another agent
+ * cannot be revoked by id without taking their access too, so the repair refuses. A no-op when
+ * nothing legacy is present. Used to repair link invitations on edit. */
 export async function withdrawReplyRead(
   storage: StorageClient,
   eventUrl: string,
-  event: Pick<EventData, "organizer" | "eventStatus" | "visibility" | "guestListVisible">,
+  event: Pick<EventData, "organizer" | "eventStatus">,
 ): Promise<void> {
   const access = createAccessClient({ storage });
   if (access.model() !== "wac") throw new Error("WAC sharing is required");
   const replies = new URL("rsvps/", eventUrl).href;
-  const allowed = guestListAvailable(event);
-  const rules = (await access.grants(replies)).filter(
-    (grant) =>
-      grant.agent !== event.organizer &&
-      grant.modes.includes("read") &&
-      !(allowed && typeof grant.agent === "string"),
-  );
+  const legacy = (grants: Awaited<ReturnType<typeof access.grants>>) =>
+    grants.filter((grant) => isPublic(grant.agent) && grant.modes.includes("read"));
+  const all = await access.grants(replies);
+  const rules = legacy(all);
+  if (!rules.length) return;
   if (rules.some((grant) => !grant.id)) throw new Error("Cannot safely identify reply grants");
+  const shared = new Set(
+    all.filter((grant) => !isPublic(grant.agent) && grant.id).map((grant) => grant.id),
+  );
+  if (rules.some((grant) => grant.id && shared.has(grant.id)))
+    throw new Error("Cannot safely withdraw reply Read shared with the owner or another agent");
   for (const grant of rules) {
     await access.revoke(replies, grant.id as string);
     if (grant.modes.includes("append") && event.eventStatus === EVENT_STATUS.scheduled)
       await access.share(replies, { agent: grant.agent, modes: ["append"] }, {});
   }
-  if (
-    (await access.grants(replies)).some(
-      (grant) =>
-        grant.agent !== event.organizer &&
-        grant.modes.includes("read") &&
-        !(allowed && typeof grant.agent === "string"),
-    )
-  )
+  if (legacy(await access.grants(replies)).length)
     throw new Error("Couldn't confirm that reply Read access was withdrawn");
 }
 

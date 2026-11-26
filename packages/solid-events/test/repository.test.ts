@@ -101,7 +101,9 @@ it("refuses bad organisers, unsafe IDs and unsupported storage without writing c
   await expect(
     repository.create({ ...eventData(), organizer: "https://other.example/me" }),
   ).rejects.toThrow("organiser");
-  await expect(repository.create(eventData(), [], "../escape")).rejects.toThrow();
+  await expect(repository.create(eventData(), [], "../escape")).rejects.toThrow(
+    "Use a simple container identifier",
+  );
   Object.defineProperty(storage, "protocol", { value: "lws" });
   await expect(repository.create(eventData())).rejects.toThrow("Solid pod");
 });
@@ -169,7 +171,9 @@ it("refuses replies for the wrong event, private anonymous guests, cancelled eve
 });
 it("uses the shared guard to refuse private network invitation fetches", async () => {
   const fetch = vi.fn();
-  await expect(publicEventFetch(fetch)("http://127.0.0.1/event")).rejects.toThrow();
+  await expect(publicEventFetch(fetch)("http://127.0.0.1/event")).rejects.toThrow(
+    "URL must be https",
+  );
   expect(fetch).not.toHaveBeenCalled();
 });
 it("requires advertised WAC and refuses existing public or unreadable access, sealing only through pod-access", async () => {
@@ -207,7 +211,7 @@ it("requires advertised WAC and refuses existing public or unreadable access, se
         created: true,
       },
     ),
-  ).rejects.toThrow();
+  ).rejects.toThrow("owner-only");
 });
 
 it("uses CSS container Append for POST, never inherited child Write for a creating PUT", async () => {
@@ -475,7 +479,7 @@ it.each([
       additionalGuests: 0,
       repliedAt: new Date(),
     }),
-  ).rejects.toThrow();
+  ).rejects.toThrow(/reply location|escapes pod|pod base itself/);
 });
 it("keeps container denial distinct from an empty list", async () => {
   harness();

@@ -476,7 +476,10 @@ check for the isolated demo backend, and `ensurePrivateContainerAccess(session, 
 { created, storage, acpDialect? })`. The target must be a container below the storage root.
 Provisioning (owner manager grants for resource and members, `setGrants` with `ownOnly`) runs
 only when `created` is true for a container the caller just made; never pass `created` for an
-adopted container, because `ownOnly` replaces every existing grant. Every call then returns
+adopted container, because `ownOnly` replaces every existing grant. A WAC seal keeps only the
+selected principals in every rule (public/authenticated Append included) and drops rules left
+without one, so the result verifies owner-only; conditional or conjoined rules are refused unchanged.
+Every call then returns
 `checkOwnerOnly`'s verdict on the effective policy, so inherited owner-only ACP member policies
 pass and any other grant, untyped rule or unknown model refuses. Existing members keep their
 own ACL/ACR: write only new member names. The dialect defaults to CSS (ESS fails closed).
