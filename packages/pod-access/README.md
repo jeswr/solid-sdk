@@ -449,7 +449,9 @@ caller's seal on the resource's own document (never an inherited one); `unsealAc
 (a no-op without an own document). Only an agent with Control on the resource can write the seal,
 so it records that its owner verified what the resource governs (for example that a folder was
 empty when it was made owner-only). Seal last, after that verification, so a failure part-way
-leaves the resource unsealed. Role edits keep the seal: unseal before widening access.
+leaves the resource unsealed. Role edits keep the seal: unseal before widening access. An editor
+that rewrites the access document without unknown statements drops the seal, so treat "unsealed"
+as "ask the owner", never as "delete".
 `sealDataset(dataset, documentUrl, webId, sealed?)` adds or removes the same statement in an
 access document built offline (such as a seeded demo pod).
 
@@ -461,7 +463,10 @@ resource from access others held and has not sealed it yet, so what the resource
 written, at least in part, by others. `isSecuring(url, options)` reads it like `isSealed` (the
 caller's mark on the resource's own document only). Sealing (`sealAccess`, `sealDataset`) removes
 the caller's mark in the same write; role edits and `unsealAccess` keep it. Only an agent with
-Control on the resource can write or remove it.
+Control on the resource can write or remove it. Like the seal, the mark is an unknown statement to
+other editors: an external ACL editor that rewrites the document without unknown statements drops
+it, and the resource then reads as unmarked (a caller such as suite-groups falls back to its
+generic "unverified, ask the owner" warning instead of refusing Keep).
 
 `isGrantableTarget(target, storage, reserved?)` is the shared check behind request approvals:
 false for anything outside storage, the storage root (with or without its slash), `settings/` and

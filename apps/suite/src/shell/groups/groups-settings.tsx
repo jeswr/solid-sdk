@@ -116,18 +116,17 @@ function GroupsPanel({
   /** The owner's decision on an unverified folder; focus then moves to what happened. */
   async function resolve(folder: GroupFolder, decision: "keep" | "discard") {
     setResolved("");
-    let done = false;
-    await act(async (directory) => {
-      await directory.verifyFolder(folder, decision);
-      done = true;
-    });
-    if (done) setResolved(RESOLVED[folder][decision]);
+    // Announced only when the decision and the refresh after it both succeeded: a failed refresh
+    // shows its error alone, never next to the outcome.
+    if (await act((directory) => directory.verifyFolder(folder, decision)))
+      setResolved(RESOLVED[folder][decision]);
     setOutcome((count) => count + 1);
   }
   /** A Family group's name when it is a listed (trusted) group, otherwise its address. */
   const familyName = (id: string) => groups.find((group) => group.id === id)?.name ?? id;
+  /** Runs `action`, then refreshes; true only when both succeeded. */
   async function act(action: (directory: GroupDirectory) => Promise<unknown>) {
-    if (!directory || writing.current || connection.disabled) return;
+    if (!directory || writing.current || connection.disabled) return false;
     writing.current = true;
     setBusy(true);
     setMessage("");
@@ -139,6 +138,7 @@ function GroupsPanel({
     try {
       await action(directory);
       await refresh();
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The group change could not be saved");
       try {
@@ -146,6 +146,7 @@ function GroupsPanel({
       } catch {
         /* Keep the last confirmed list while storage is unavailable. */
       }
+      return false;
     } finally {
       writing.current = false;
       setBusy(false);
@@ -354,7 +355,7 @@ function GroupCard({
   group: SharedGroup;
   contacts: SharingPerson[];
   busy: boolean;
-  act(action: (directory: GroupDirectory) => Promise<unknown>): Promise<void>;
+  act(action: (directory: GroupDirectory) => Promise<unknown>): Promise<unknown>;
   onDelete(): void;
   setup(directory: GroupDirectory): Promise<unknown>;
 }) {

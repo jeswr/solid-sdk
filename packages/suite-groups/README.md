@@ -89,7 +89,8 @@ refused, and nothing it holds is trusted until the owner decides.
   Deleting automatically would silently drop every group, and with it every `acl:agentGroup`
   grant, or re-send invitations. `unverified()` lists such folders and their documents, with a
   preview of what each says (`contents`, at most `PREVIEW_LIMIT` = 500): a group's name and member
-  WebIDs, or the settings' Family group and the space URLs they would grant it, read with the
+  WebIDs, or the settings' Family group and the space URLs they store, by the group each would be
+  granted to (`spaces`: `{ group, urls }`, `group` null for a key naming no group), read with the
   readers' own parsers but trusted for nothing else and with no side effects. A document that
   can't be read or parsed is `unreadable`; `inherits` says whether it inherits the folder's ACL.
   `keepable` is true only when the folder is not `planted` (below) and every document is
@@ -98,8 +99,8 @@ refused, and nothing it holds is trusted until the owner decides.
   with its own ACL is refused, never kept) and is readable (`UNVERIFIED_UNREADABLE`), then seals
   without deleting; `verifyFolder(folder, "discard")` deletes what the folder holds, then seals.
   Settings → Groups & family lists the contents and warns that Keep trusts what anyone with
-  earlier access could have written (and, for settings, that kept settings can grant the Family
-  group the spaces listed). Remove comes first; Keep (offered only when `keepable`) and Remove
+  earlier access could have written (and, for settings, that kept settings can grant each group
+  the spaces listed for it, naming the group per entry). Remove comes first; Keep (offered only when `keepable`) and Remove
   each open a confirmation that takes focus, and Remove's says that removing groups ends every
   share made through them. Cancel returns focus to its button; the outcome is announced in a
   focused `role="status"` (or the error in a focused alert).
@@ -107,8 +108,11 @@ refused, and nothing it holds is trusted until the owner decides.
   `setGrants` `securing`, read with `isSecuring`), and the seal removes the mark. A folder that is
   safe, unsealed and still marked was left by a pass that stopped part-way (a failed delete, a
   crash), so everything it holds was planted: `unverified()` reports it as `planted`, Keep is
-  refused, and the next provisioning pass deletes what it holds (readable documents first, past
-  failures), seals it and fails with `SECURING_RACE` (reload and retry), as does "discard". Only
+  refused, and the next provisioning pass deletes the readable documents it holds (past
+  failures), seals it and fails with `SECURING_RACE` (reload and retry); "discard" deletes
+  everything. Other leftovers stay, as on a first pass: what others added before the rewrite
+  can't be told apart from what the owner added after it (only the owner can write the folder
+  once it is marked), and nothing reads them. Only
   the owner's own mark on the folder's own ACL counts, and a sealed folder ignores it, so forcing
   that deletion needs Control on the folder: the same threat level as forging the seal (below).
 - Only documents that appear between the emptiness check and the permission rewrite (this pass's

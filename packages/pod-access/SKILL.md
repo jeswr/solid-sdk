@@ -316,7 +316,8 @@ role edits and unsealing keep it: "marked and unsealed" means "written by others
 owner's seal and then drop their own access (inherent to seals), and the owner widening then
 narrowing a sealed resource elsewhere keeps the seal. A seal can be dropped by any editor that
 rewrites the document without unknown statements, so treat "unsealed" as "ask the owner", never
-as "delete". Keep all of these documented in README.
+as "delete". Such an editor drops the securing mark the same way: an unmarked resource is not
+proof it was never being secured, so "unmarked" falls back to that generic "ask the owner" warning. Keep all of these documented in README.
 
 `readGrants` returns `{ url, grants, version }` as an opaque JSON-serialisable `GrantSnapshot`;
 `grantsWithRoles` remains `(await readGrants(url, options)).grants`. Preserve the version token

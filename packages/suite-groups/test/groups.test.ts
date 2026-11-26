@@ -1099,7 +1099,7 @@ describe("fail-safe cleanup of a folder being secured (review round 4)", () => {
             inherits: true,
             kind: "settings",
             family: group.id,
-            spaces: [privateFolder],
+            spaces: [{ group: group.id, urls: [privateFolder] }],
           },
         ],
         planted: true,
@@ -1152,12 +1152,16 @@ describe("fail-safe cleanup of a folder being secured (review round 4)", () => {
     expect(sealed.has(folder)).toBe(false);
     expect(securing.has(folder)).toBe(true);
     await expect(directory.list()).rejects.toThrow(SETTINGS_UNVERIFIED);
-    // The next pass resumes: everything the marked folder holds was planted, and goes.
+    // The owner adds a file through another app while the folder is owner-only and still marked.
+    await storage.create(folder, "mine", { name: "notes.txt", contentType: "text/plain" });
+    // The next pass resumes: the readable document the marked folder holds was planted, and goes.
     await expect(directory.setupFamily(group.id, [photos])).rejects.toThrow(SECURING_RACE);
     expect(privateGrants()).toEqual([]);
     expect(photos.create).not.toHaveBeenCalled();
-    for (const name of ["state.json", "0.txt"])
-      await expect(storage.read(`${folder}${name}`)).rejects.toMatchObject({ code: "not-found" });
+    await expect(storage.read(`${folder}state.json`)).rejects.toMatchObject({ code: "not-found" });
+    // What nobody reads is left alone, as on a first pass: it can't be told apart from the owner's.
+    for (const name of ["0.txt", "notes.txt"])
+      expect(await storage.read(`${folder}${name}`)).toBeDefined();
     expect(sealed.has(folder)).toBe(true);
     photos.create.mockResolvedValue([`${root}photos/family/`]);
     await directory.setupFamily(group.id, [photos]);
@@ -1491,8 +1495,20 @@ describe("previews of unverified folders (review round 6)", () => {
         contentType: "application/json",
         ifMatch: (await storage.head(state)).etag as string,
       });
+    // Spaces are shown by the group they would be granted to, never all as the Family group's.
     await write(
-      JSON.stringify({ notices: [], spaces: { a: [`${root}b/`, `${root}a/`], c: [`${root}a/`] } }),
+      JSON.stringify({
+        notices: [],
+        spaces: {
+          a: [`${root}b/`, `${root}a/`],
+          [JSON.stringify(["z", "photos"])]: [`${root}z/`],
+          [JSON.stringify([group.id, "calendar"])]: [`${root}c/`, `${root}a/`],
+          [JSON.stringify([group.id, "photos"])]: [`${root}c/`],
+          [JSON.stringify(["only"])]: [`${root}d/`],
+          [JSON.stringify(["y", 1])]: [`${root}e/`],
+          "1": [`${root}e/`],
+        },
+      }),
     );
     expect((await directory.unverified())[0]?.contents).toEqual([
       {
@@ -1500,7 +1516,11 @@ describe("previews of unverified folders (review round 6)", () => {
         inherits: true,
         kind: "settings",
         family: null,
-        spaces: [`${root}a/`, `${root}b/`],
+        spaces: [
+          { group: group.id, urls: [`${root}a/`, `${root}c/`] },
+          { group: "z", urls: [`${root}z/`] },
+          { group: null, urls: [`${root}a/`, `${root}b/`, `${root}d/`, `${root}e/`] },
+        ],
       },
     ]);
     await write("{");

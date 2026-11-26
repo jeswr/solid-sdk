@@ -123,7 +123,7 @@ const settingsFolder = (overrides: Partial<UnverifiedFolder> = {}): UnverifiedFo
       inherits: true,
       kind: "settings",
       family: `${root}groups/family.ttl#this`,
-      spaces: [`${root}private/`],
+      spaces: [{ group: `${root}groups/family.ttl#this`, urls: [`${root}private/`] }],
     },
   ],
   planted: false,
@@ -213,16 +213,18 @@ it("warns that removing groups ends their shares, and shows the settings' Family
   // The Family group is named from the listed groups; its spaces are listed.
   expect(within(settings).getByText("Family group: Family")).toBeTruthy();
   expect(
-    within(within(settings).getByRole("list", { name: "Family spaces" })).getByText(
-      `${root}private/`,
-    ),
+    within(
+      within(settings).getByRole("list", { name: "Spaces for your Family group, Family" }),
+    ).getByText(`${root}private/`),
   ).toBeTruthy();
   expect(
-    within(settings).getByText(/Kept settings can give your Family group access/),
+    within(settings).getByText(/Kept settings can give each group listed access to the spaces/),
   ).toBeTruthy();
   fireEvent.click(within(settings).getByRole("button", { name: "Keep" }));
   expect(
-    within(settings).getByText(`Your Family group can be given access to: ${root}private/.`),
+    within(settings).getByText(
+      `Groups that can be given access to spaces: your Family group, Family: ${root}private/.`,
+    ),
   ).toBeTruthy();
   fireEvent.click(within(settings).getByRole("button", { name: "Cancel" }));
   const remove = within(notice).getByRole("button", { name: "Remove" });
@@ -285,7 +287,7 @@ it("offers only removal for planted or unkeepable files, and focuses a failure",
   expect(within(notice).queryByRole("button", { name: "Keep" })).toBeNull();
   const settings = screen.getByRole("region", { name: "Group settings changed" });
   expect(within(settings).getByText(`Family group: ${root}groups/unknown.ttl#this`)).toBeTruthy();
-  expect(within(settings).getByText("No Family spaces")).toBeTruthy();
+  expect(within(settings).getByText("No spaces")).toBeTruthy();
   expect(within(settings).getByText(/added by someone else while this folder/)).toBeTruthy();
   expect(within(settings).queryByRole("button", { name: "Keep" })).toBeNull();
   fireEvent.click(within(settings).getByRole("button", { name: "Remove" }));
@@ -297,6 +299,58 @@ it("offers only removal for planted or unkeepable files, and focuses a failure",
   fireEvent.click(within(settings).getByRole("button", { name: "Remove files" }));
   const alert = await screen.findByRole("alert");
   expect(alert.textContent).toBe("Storage unavailable");
+  await waitFor(() => expect(document.activeElement).toBe(alert));
+  expect(screen.queryByText("Group settings removed.")).toBeNull();
+});
+it("names the group each stored space is for, never calling another group's the Family's", async () => {
+  const directory = setup();
+  const family = `${root}groups/family.ttl#this`;
+  const other = `${root}groups/other.ttl#this`;
+  directory.unverified.mockResolvedValueOnce([
+    settingsFolder({
+      contents: [
+        {
+          url: `${root}settings/group-sharing/state.json`,
+          inherits: true,
+          kind: "settings",
+          family,
+          spaces: [
+            { group: family, urls: [`${root}photos/`] },
+            { group: other, urls: [`${root}private/`, `${root}work/`] },
+            { group: null, urls: [`${root}stray/`] },
+          ],
+        },
+      ],
+    }),
+  ]);
+  renderSettings();
+  const settings = await screen.findByRole("region", { name: "Group settings changed" });
+  const byGroup = (name: string) =>
+    within(settings).getByRole("list", { name: `Spaces for ${name}` });
+  expect(within(byGroup("your Family group, Family")).getByText(`${root}photos/`)).toBeTruthy();
+  expect(
+    within(byGroup(`${other}, not your Family group`)).getByText(`${root}private/`),
+  ).toBeTruthy();
+  expect(within(byGroup("no group (never given access)")).getByText(`${root}stray/`)).toBeTruthy();
+  fireEvent.click(within(settings).getByRole("button", { name: "Keep" }));
+  expect(
+    within(settings).getByText(
+      `Groups that can be given access to spaces: your Family group, Family: ${root}photos/; ${other}, not your Family group: ${root}private/, ${root}work/.`,
+    ),
+  ).toBeTruthy();
+});
+it("shows only the error when the decision succeeds but the refresh after it fails", async () => {
+  const directory = setup();
+  directory.unverified
+    .mockResolvedValueOnce([settingsFolder()])
+    .mockRejectedValueOnce(new Error("Storage unavailable"));
+  renderSettings();
+  const settings = await screen.findByRole("region", { name: "Group settings changed" });
+  fireEvent.click(within(settings).getByRole("button", { name: "Remove" }));
+  fireEvent.click(within(settings).getByRole("button", { name: "Remove files" }));
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toBe("Storage unavailable");
+  expect(directory.verifyFolder).toHaveBeenCalledWith("settings", "discard");
   await waitFor(() => expect(document.activeElement).toBe(alert));
   expect(screen.queryByText("Group settings removed.")).toBeNull();
 });
@@ -320,7 +374,9 @@ it("keeps settings that list no spaces, and has no Family group", async () => {
   expect(within(settings).getByText("Family group: none")).toBeTruthy();
   fireEvent.click(within(settings).getByRole("button", { name: "Keep" }));
   expect(within(settings).getByRole("group", { name: "Keep these group settings as they are?" }));
-  expect(within(settings).getByText("These settings list no Family spaces.")).toBeTruthy();
+  expect(
+    within(settings).getByText("These settings give no group access to any space."),
+  ).toBeTruthy();
   fireEvent.click(within(settings).getByRole("button", { name: "Keep files" }));
   await waitFor(() => expect(directory.verifyFolder).toHaveBeenCalledWith("settings", "keep"));
   await waitFor(() => expect(document.activeElement?.textContent).toBe("Group settings kept."));

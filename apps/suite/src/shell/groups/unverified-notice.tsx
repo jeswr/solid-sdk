@@ -3,6 +3,7 @@
 import {
   type GroupFolder,
   SECURING_INTERRUPTED,
+  type SettingsSpaces,
   type UnverifiedContent,
   type UnverifiedFolder,
 } from "@jeswr/suite-groups";
@@ -30,6 +31,16 @@ export const RESOLVED: Record<GroupFolder, Record<Decision, string>> = {
   groups: { keep: "Group files kept.", discard: "Group files removed." },
   settings: { keep: "Group settings kept.", discard: "Group settings removed." },
 };
+
+/**
+ * Which group an entry of the settings' spaces would be granted to: stored spaces can name a group
+ * other than the settings' Family group, so each entry says whose it is.
+ */
+function spacesFor(entry: SettingsSpaces, familyId: string | null, family: (id: string) => string) {
+  if (entry.group === null) return "no group (never given access)";
+  const name = family(entry.group);
+  return entry.group === familyId ? `your Family group, ${name}` : `${name}, not your Family group`;
+}
 
 /** One unverified document, as the directory read it: shown to decide with, never trusted. */
 function Content({ content, family }: { content: UnverifiedContent; family(id: string): string }) {
@@ -67,17 +78,27 @@ function Content({ content, family }: { content: UnverifiedContent; family(id: s
       <p>Family group: {content.family === null ? "none" : family(content.family)}</p>
       {content.spaces.length ? (
         <>
-          <p>Spaces your Family group would be given access to:</p>
-          <ul aria-label="Family spaces">
-            {content.spaces.map((space) => (
-              <li key={space} className="su-account-id">
-                {space}
-              </li>
-            ))}
+          <p>Spaces these settings list, by the group each would be given access to:</p>
+          <ul aria-label="Spaces by group">
+            {content.spaces.map((entry) => {
+              const label = spacesFor(entry, content.family, family);
+              return (
+                <li key={String(entry.group)}>
+                  <p>For {label}:</p>
+                  <ul aria-label={`Spaces for ${label}`}>
+                    {entry.urls.map((space) => (
+                      <li key={space} className="su-account-id">
+                        {space}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              );
+            })}
           </ul>
         </>
       ) : (
-        <p>No Family spaces</p>
+        <p>No spaces</p>
       )}
       {own}
     </li>
@@ -120,11 +141,14 @@ export function UnverifiedNotice({
   const groups = folder.contents.flatMap((content) =>
     content.kind === "group" ? [content.name || "Unnamed group"] : [],
   );
-  const spaces = [
-    ...new Set(
-      folder.contents.flatMap((content) => (content.kind === "settings" ? content.spaces : [])),
-    ),
-  ];
+  // What kept settings could grant, per group; an entry naming no group is never granted.
+  const grants = folder.contents.flatMap((content) =>
+    content.kind === "settings"
+      ? content.spaces
+          .filter((entry) => entry.group !== null)
+          .map((entry) => `${spacesFor(entry, content.family, family)}: ${entry.urls.join(", ")}`)
+      : [],
+  );
   return (
     <section aria-labelledby={heading}>
       <h2 id={heading}>{TITLE[folder.folder]}</h2>
@@ -148,7 +172,7 @@ export function UnverifiedNotice({
           Keeping trusts these files as they are: anyone who could change this folder before could
           have written them.
           {folder.folder === "settings" &&
-            " Kept settings can give your Family group access to the spaces listed."}
+            " Kept settings can give each group listed access to the spaces listed for it."}
         </p>
       ) : (
         <p>Some of these files can't be kept. Remove them to continue.</p>
@@ -169,9 +193,9 @@ export function UnverifiedNotice({
               <p>Groups you keep: {groups.join(", ")}.</p>
             ) : (
               <p>
-                {spaces.length
-                  ? `Your Family group can be given access to: ${spaces.join(", ")}.`
-                  : "These settings list no Family spaces."}
+                {grants.length
+                  ? `Groups that can be given access to spaces: ${grants.join("; ")}.`
+                  : "These settings give no group access to any space."}
               </p>
             ))}
           <div className="settings-choice-row">

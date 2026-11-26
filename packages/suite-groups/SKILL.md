@@ -22,7 +22,8 @@ readable documents first, past failures (SECURING_RACE); a survivor withholds th
 *_UNVERIFIED and let the owner choose verifyFolder(folder, "keep" | "discard") (unverified()).
 Exception: securing an unsafe folder marks it (setGrants securing, isSecuring) in the same rewrite
 until the seal; a still-marked folder is planted, never kept (SECURING_INTERRUPTED), and its
-contents go on the next pass. Re-check the seal before deleting (another tab may have sealed it).
+readable documents go on the next pass (other leftovers stay: the owner may have added them).
+Re-check the seal before deleting (another tab may have sealed it).
 unverified() previews contents with the readers' parsers and no side effects; offer Keep only when
 keepable, after a confirmation showing the contents, and move focus with each step.
 Collections share references only; use extend(source, resources, { within }) for contents the
