@@ -85,6 +85,7 @@ function harness(options: SolidBackendOptions = {}) {
       return { retired: true };
     }),
     fetch: vi.fn<typeof fetch>(async () => new Response("private content")),
+    nonInteractiveFetch: vi.fn<typeof fetch>(async () => new Response("private content")),
     on: vi.fn<PodAuth["on"]>((type, listener) => {
       const handlers = listeners.get(type) ?? new Set();
       listeners.set(type, handlers);
