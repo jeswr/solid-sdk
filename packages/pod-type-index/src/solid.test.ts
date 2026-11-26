@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { NS } from "@jeswr/suite-vocab";
@@ -242,6 +243,21 @@ describe("Solid discovery and bootstrap adversarial cases", () => {
     expect(write.mock.calls[0]?.[2].ifMatch).not.toBe(write.mock.calls[1]?.[2].ifMatch);
     expect(await index.find("urn:concurrent")).toEqual([`${ROOT}concurrent`]);
     expect(await index.find(CLASS)).toEqual([LOCATION.container]);
+  });
+
+  it("reports an abort during a 412 as the abort, without retrying", async () => {
+    const { storage, index } = await setup();
+    await linkLegacy(storage, "");
+    const controller = new AbortController();
+    const reason = new Error("stop");
+    const write = vi.spyOn(storage, "writeRdf").mockImplementation(async () => {
+      controller.abort(reason);
+      throw fail("precondition-failed", 412);
+    });
+    await expect(
+      index.register(CLASS, LOCATION, { signal: controller.signal }),
+    ).rejects.toMatchObject({ code: "network", retryable: false, cause: reason });
+    expect(write).toHaveBeenCalledTimes(1);
   });
 
   it("reconciles concurrent creates without duplicate registrations", async () => {

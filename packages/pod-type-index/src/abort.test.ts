@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Sonnet 5.5
+// AUTHORED-BY Claude Opus 5.5
 import type { Features } from "@jeswr/storage-capabilities";
 import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
@@ -82,9 +83,11 @@ describe("Solid Type Index cancellation", () => {
       controller.abort(reason);
       throw new StorageError("conflict", { url: Root, method: "GET" });
     });
-    await expect(
+    // The abort is reported, not the conflict that would otherwise have been retried.
+    await expectAborted(
       index.register(CLASS, { container: `${Root}docs/` }, { signal: controller.signal }),
-    ).rejects.toBeInstanceOf(StorageError);
+      reason,
+    );
     expect(read).toHaveBeenCalledTimes(1);
   });
 });
