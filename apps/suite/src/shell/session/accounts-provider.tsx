@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 
@@ -50,6 +50,8 @@ export interface AccountsContextValue {
   status: SessionStatus;
   active: SuiteAccount | null;
   accounts: SuiteAccount[];
+  /** Read the selected account even if its session is unavailable or React has not committed. */
+  getActiveAccount?(): SuiteAccount | undefined;
   /** Check the live account by shell ID or by WebID and storage, even before React commits. */
   isActiveAccount(
     account: string | Pick<SuiteAccount, "webId" | "storageUrl">,
@@ -95,9 +97,13 @@ export function AccountsProvider({
   const generation = useRef(0);
   const signInAttempt = useRef(0);
   const sessionVersion = useRef(0);
+  const getActiveAccount = useCallback(() => {
+    const { activeId, accounts } = current.current;
+    return accounts.find((account) => account.id === activeId);
+  }, []);
   const isActiveAccount = useCallback(
     (account: string | Pick<SuiteAccount, "webId" | "storageUrl">, expected?: number) => {
-      const { activeId, accounts } = current.current;
+      const { activeId } = current.current;
       if (
         !activeId ||
         currentStatus.current !== "ready" ||
@@ -106,10 +112,10 @@ export function AccountsProvider({
       )
         return false;
       if (typeof account === "string") return activeId === account;
-      const active = accounts.find((candidate) => candidate.id === activeId);
+      const active = getActiveAccount();
       return active?.webId === account.webId && active.storageUrl === account.storageUrl;
     },
-    [],
+    [getActiveAccount],
   );
   const changeStatus = useCallback((value: SessionStatus) => {
     currentStatus.current = value;
@@ -321,6 +327,7 @@ export function AccountsProvider({
         status,
         active,
         accounts: state.accounts,
+        getActiveAccount,
         isActiveAccount,
         isSignedInAccount: (id) => sessions.current.has(id) && !retiring.current.has(id),
         fetchFor: (account, options) => {

@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2-Sol
 "use client";
 
 import { toast } from "@jeswr/suite-ui";
@@ -95,7 +96,7 @@ export function createOpenWithController(target: OpenWithTarget) {
       base?.kind === "convert" && base.disabledReason === undefined && !connection.disabled,
     );
     const busy = useRef(false);
-    const key = JSON.stringify([session.mode, session.webId, session.storageUrl]);
+    const key = JSON.stringify([session.webId, session.storageUrl]);
     const controller = useRef({ key, mounted: false });
     useLayoutEffect(() => {
       controller.current = { key, mounted: true };
@@ -107,6 +108,13 @@ export function createOpenWithController(target: OpenWithTarget) {
     // Standalone previews only have the session supplied by their keyed provider.
     const isActiveAccount = () =>
       accounts?.isActiveAccount(session) ?? controller.current.key === key;
+    const hasAccountChanged = () => {
+      if (!accounts) return controller.current.key !== key;
+      const active = accounts.getActiveAccount?.();
+      return (
+        !!active && (active.webId !== session.webId || active.storageUrl !== session.storageUrl)
+      );
+    };
     const [pending, setPending] = useState(false);
     if (!item) return undefined;
     const state = target.state(item, {
@@ -116,7 +124,12 @@ export function createOpenWithController(target: OpenWithTarget) {
     });
     if (!state) return undefined;
     const run = async () => {
-      if (!controller.current.mounted || !isActiveAccount() || !mayLeavePreview()) return;
+      if (!controller.current.mounted) return;
+      if (!isActiveAccount()) {
+        if (!hasAccountChanged()) toast.error("Sign in to open this file.");
+        return;
+      }
+      if (!mayLeavePreview()) return;
       if (state.kind === "open") {
         router.push(state.href);
         return;
@@ -128,18 +141,33 @@ export function createOpenWithController(target: OpenWithTarget) {
       try {
         const result = await target.convert(item, session);
         toast.dismiss(loading);
+        const imported = `Imported ${item.name} with ${target.name}`;
         if (!isActiveAccount()) {
-          toast.success(`Opened ${item.name} with ${target.name} in your previous account`);
+          if (hasAccountChanged()) {
+            toast.success(`Opened ${item.name} with ${target.name} in your previous account`);
+          } else {
+            toast.success(imported, { description: "Sign in again to open the imported file." });
+          }
           return;
         }
-        if (!controller.current.mounted) return;
         invalidate(result.url);
         if (result.warning)
           toast.warning("Some items weren't imported", {
             description: result.warning,
             duration: Number.POSITIVE_INFINITY,
           });
-        if (mayLeavePreview()) router.push(result.href);
+        if (controller.current.mounted) {
+          if (mayLeavePreview()) router.push(result.href);
+        } else {
+          toast.success(imported, {
+            action: {
+              label: "Open",
+              onClick: () => {
+                if (isActiveAccount() && mayLeavePreview()) router.push(result.href);
+              },
+            },
+          });
+        }
       } catch (error) {
         toast.dismiss(loading);
         toast.error(`Couldn't open ${item.name} with ${target.name}`, {
