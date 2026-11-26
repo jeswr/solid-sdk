@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import {
   type ChallengeBinding,
   CredentialBoundary,
@@ -13,6 +14,7 @@ import {
 } from "@jeswr/reactive-authentication";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Parser, Store } from "n3";
+import { type ResourceGrant, ResourceGrantError } from "./grants.js";
 import { isLoopback, secureUrl, storageEndpointPaths } from "./options.js";
 import type { PodAuthOptions } from "./types.js";
 
@@ -90,17 +92,96 @@ export function createBoundary(
   let learnedWebId: string | undefined;
   let learnedSignal: AbortSignal | undefined;
   let epoch = 0;
+  // Resources on other storages the user chose to open with this account (grantResource). They
+  // receive credentials like a storage, but are never roots: no AS trust, storages() or login context.
+  let consented = new CredentialBoundary([], { allowInsecureHttp: insecure });
+  let grants: readonly ResourceGrant[] = Object.freeze([]);
+  const grantListeners = new Set<() => void>();
+  const setGrants = (next: readonly ResourceGrant[]) => {
+    consented = new CredentialBoundary(
+      next.map((grant) => grant.root),
+      { allowInsecureHttp: insecure },
+    );
+    grants = Object.freeze([...next]);
+    for (const listener of [...grantListeners]) {
+      try {
+        listener();
+      } catch {
+        // Observers cannot interrupt credential policy or other observers.
+      }
+    }
+  };
+  // Grants end with the session generation they were made in, even when no roots were learned.
+  let grantLifetime: AbortSignal | undefined;
+  const endGrants = () => {
+    grantLifetime = undefined;
+    if (grants.length > 0) setGrants([]);
+  };
   const clear = () => {
     ++epoch;
+    grantLifetime?.removeEventListener("abort", endGrants);
+    grantLifetime = undefined;
     learnedSignal?.removeEventListener("abort", clear);
     learnedSignal = undefined;
     automatic = new CredentialBoundary([], { allowInsecureHttp: insecure });
     endpoints = new Map();
     learnedWebId = undefined;
+    if (grants.length > 0) setGrants([]);
   };
   const roots = () => [...new Set([...fixed.entries, ...automatic.entries])];
-  const allows = (url: string | URL) =>
-    eligible(url) && (fixed.allows(url) || automatic.allows(url));
+  const owns = (url: string | URL) => fixed.allows(url) || automatic.allows(url);
+  const allows = (url: string | URL) => eligible(url) && (owns(url) || consented.allows(url));
+  // Authorization-server trust and LWS audiences consider own storage only, never a grant: a
+  // grant's server must not relay a UMA ticket or LWS challenge for the user's own resources.
+  const allowsOwn = (url: string | URL) => eligible(url) && owns(url);
+  const withinGrants = (url: string | URL) => {
+    try {
+      return eligible(url) && consented.allows(url);
+    } catch {
+      return false;
+    }
+  };
+  /** Whether a root (container or exact resource) contains `url`. */
+  const contains = (root: string, url: string) => {
+    if (root.endsWith("/")) return isWithin(url, root);
+    const target = new URL(url);
+    const entry = new URL(root);
+    return target.origin === entry.origin && target.pathname === entry.pathname;
+  };
+  /** Validates a requested grant without network access; throws {@link ResourceGrantError}. */
+  const grantRoot = (value: string): string => {
+    let url: URL;
+    try {
+      if (typeof value !== "string") throw new TypeError("not a string");
+      url = new URL(value);
+    } catch {
+      throw new ResourceGrantError("invalid-url");
+    }
+    // Only the canonical spelling is accepted: no normalization, credentials, query or fragment.
+    if (
+      url.href !== value ||
+      /[?#\\]/.test(value) ||
+      url.username !== "" ||
+      url.password !== "" ||
+      url.pathname.includes("//") ||
+      !eligible(url)
+    )
+      throw new ResourceGrantError("invalid-url");
+    try {
+      // Rejects encoded separators and dots, exactly as the credential boundary does.
+      new CredentialBoundary([url], { allowInsecureHttp: insecure });
+    } catch {
+      throw new ResourceGrantError("invalid-url");
+    }
+    if (url.pathname === "/") throw new ResourceGrantError("origin-wide");
+    if (
+      owns(url) ||
+      (value.endsWith("/") &&
+        [...roots(), ...endpoints.keys()].some((root) => contains(value, root)))
+    )
+      throw new ResourceGrantError("own-storage");
+    return value;
+  };
   // Exchanges may use only origins already vouched for, including configured AS roots.
   const trustsOrigin = (url: string | URL) =>
     roots().some((root) => eligible(root) && new URL(root).origin === new URL(url).origin);
@@ -119,7 +200,7 @@ export function createBoundary(
   }: {
     authorizationServer: URL;
     resource: URL;
-  }) => allows(resource) && trustsOrigin(authorizationServer);
+  }) => allowsOwn(resource) && trustsOrigin(authorizationServer);
   const trustLws = async (
     { authorizationServer, realm, resource }: ChallengeBinding,
     signal: AbortSignal,
@@ -128,7 +209,7 @@ export function createBoundary(
     if (!trustAuthorizationServer({ authorizationServer, resource })) return false;
     if (
       (realm.href.endsWith("/") || realm.href === resource.href) &&
-      allows(realm) &&
+      allowsOwn(realm) &&
       isWithin(resource, realm)
     )
       return true;
@@ -137,7 +218,7 @@ export function createBoundary(
     const descriptions = await descriptionRoots(realm.href, signal);
     signal.throwIfAborted();
     return descriptions.some(
-      (root) => root.endsWith("/") && allows(root) && isWithin(resource, root),
+      (root) => root.endsWith("/") && allowsOwn(root) && isWithin(resource, root),
     );
   };
   return {
@@ -255,10 +336,70 @@ export function createBoundary(
       lifetime.addEventListener("abort", clear, { once: true });
     },
     clear,
+    /** Increments whenever learned roots and grants are cleared (logout, supersession). */
+    generation: () => epoch,
+    grantRoot,
+    /**
+     * Adds a consented grant after {@link grantRoot}'s checks pass again, unless the boundary was
+     * cleared since `started` or the session generation's `lifetime` ended (which later ends
+     * every grant). `protocol` names the issuer, its discovery documents and endpoints: a grant
+     * may not contain them, nor any dot-prefixed path segment (CSS's `.oidc`, `.account`,
+     * `.well-known`, at any depth) on the issuer's origin.
+     * A grant already covered by an existing one returns that grant unchanged.
+     */
+    consent: (
+      value: string,
+      created: number,
+      protocol: { issuer: string; endpoints: readonly string[] },
+      started: number,
+      lifetime: AbortSignal,
+    ): ResourceGrant => {
+      if (started !== epoch || lifetime.aborted) throw new ResourceGrantError("signed-out");
+      const root = grantRoot(value);
+      const url = new URL(root);
+      const issuer = new URL(protocol.issuer);
+      if (
+        [protocol.issuer, ...protocol.endpoints].some((endpoint) => contains(root, endpoint)) ||
+        (url.origin === issuer.origin && url.pathname.includes("/.")) ||
+        // Below a path-based issuer (Keycloak /realms/x/account/) is the identity provider's own.
+        (issuer.pathname !== "/" && isWithin(root, issuer.href.replace(/\/?$/, "/")))
+      )
+        throw new ResourceGrantError("protocol-endpoint");
+      const existing = grants.find(
+        (grant) => grant.root === root || (grant.root.endsWith("/") && isWithin(root, grant.root)),
+      );
+      if (existing !== undefined) return existing;
+      const grant = Object.freeze({ root, origin: url.origin, created });
+      if (grantLifetime !== lifetime) {
+        grantLifetime?.removeEventListener("abort", endGrants);
+        grantLifetime = lifetime;
+        lifetime.addEventListener("abort", endGrants, { once: true });
+      }
+      setGrants([...grants, grant]);
+      return grant;
+    },
+    /** Removes the grant with exactly this root; true when one was removed. */
+    revoke: (root: string) => {
+      if (!grants.some((grant) => grant.root === root)) return false;
+      setGrants(grants.filter((grant) => grant.root !== root));
+      return true;
+    },
+    grants: () => grants,
+    withinGrants,
+    /** Own storage (configured or verified roots), never a grant. Synchronous. */
+    allowsOwn,
+    /** Inside a grant and outside own storage: requests from here must not follow redirects. */
+    confined: (url: string | URL) => withinGrants(url) && !owns(url),
+    /** Whether a context key names a consented grant rather than a storage root. */
+    consented: (key: string) => grants.some((grant) => grant.root === key),
+    /** Observes grant changes for the life of this boundary. */
+    onGrants: (listener: () => void) => {
+      grantListeners.add(listener);
+    },
     contextKey: async (request: Request) => {
       const url = new URL(request.url);
       url.hash = "";
-      const best = roots()
+      const best = [...roots(), ...consented.entries]
         .filter((r) =>
           r.endsWith("/")
             ? isWithin(url, r)
