@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The shared end-user OAuth2 engine: authorization-code + PKCE (S256) in a
  * popup. Generic — adapters supply only endpoints/scopes/params via
@@ -259,6 +260,8 @@ async function tokenRequest(
     else if (Array.isArray(json.scope) && json.scope.every((item) => typeof item === "string"))
       scope = json.scope.join(" ");
     if (scope !== undefined && scope.length > 4096) throw new Error();
+    // A granted scope is RFC 6749 scope-token text; drop anything else rather than store it.
+    if (scope !== undefined && !/^[\x21-\x7e ]*$/.test(scope)) scope = undefined;
     token = {
       accessToken: json.access_token,
       tokenType: (json.token_type as string | undefined) ?? "Bearer",
@@ -332,6 +335,18 @@ async function revokeRefreshToken(
 }
 
 /** Code exchange; persistence completes before returning any access token. */
+/** The granted `scope` string of a token response, when it is a bounded plain string. */
+export function grantedScope(value: unknown): string | undefined {
+  return typeof value === "string" && value.length <= 8192 && /^[\x21-\x7e ]*$/.test(value)
+    ? value
+    : undefined;
+}
+
+/** Split a granted RFC 6749 `scope` string into scope tokens. */
+export function scopeList(scope: string | undefined): readonly string[] | undefined {
+  return scope === undefined ? undefined : scope.split(" ").filter(Boolean);
+}
+
 export async function exchangeCodeForToken(
   adapterId: string,
   cfg: OAuthAppConfig,

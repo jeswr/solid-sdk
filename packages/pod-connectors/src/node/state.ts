@@ -7,6 +7,7 @@ import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { readJson } from "../core/budget.js";
+import { connectorStorageId } from "../core/container.js";
 import { requirePrivateWriteConfirmation } from "../core/pod-writer-policy.js";
 import type { ConnectorState, PodWriter } from "../core/types.js";
 import { isCompletedPut, writeResource } from "../pod/resource.js";
@@ -86,7 +87,11 @@ export function connectorState(value: unknown): CliConnectorState {
   };
 }
 
-/** Owner-only JSON checkpoint bound to one connector; conditional writes reject lost updates. */
+/**
+ * Owner-only JSON checkpoint bound to one connector; conditional writes reject lost updates.
+ * Stored at `integrations/<container>/state.json`, or `state-<id>.json` for a successor
+ * connector writing into its predecessor's container (Google Health → `integrations/fitbit/`).
+ */
 export function createStateStore(options: {
   readonly podRoot: string;
   readonly adapterId: string;
@@ -96,9 +101,12 @@ export function createStateStore(options: {
 }) {
   if (!/^[a-z0-9-]+$/.test(options.adapterId))
     throw new NodeRuntimeError("config", "Invalid connector id.");
-  const root = new URL(`integrations/${options.adapterId}/`, options.podRoot).href;
+  // Successor connectors share their predecessor's container but keep their own checkpoint.
+  const storage = connectorStorageId(options.adapterId);
+  const root = new URL(`integrations/${storage}/`, options.podRoot).href;
   const webId = httpsUrl(options.webId, true);
-  const url = assertWithinPodScope(options.podRoot, new URL("state.json", root).href);
+  const file = storage === options.adapterId ? "state.json" : `state-${options.adapterId}.json`;
+  const url = assertWithinPodScope(options.podRoot, new URL(file, root).href);
   const fetchSafe = refuseRedirects(options.fetch);
   let etag: string | undefined;
   let loaded = false;
@@ -190,7 +198,7 @@ export function createStateStore(options: {
         await requirePrivateWriteConfirmation(
           options.adapterId,
           privacy,
-          "state.json",
+          file,
           url,
           created,
           writeEtag,

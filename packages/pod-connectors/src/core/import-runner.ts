@@ -15,9 +15,11 @@
 import { refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
 import { abortablePodWriter, unlessAborted } from "./abort.js";
 import { RunBudget, type RunLimits, stricterLimits } from "./budget.js";
+import { connectorStorageId } from "./container.js";
 import { IntegrationSyncError, PrivateDestinationError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createImportSession } from "./import-session.js";
+import { scopeList } from "./oauth.js";
 import { budgetedFetch } from "./source-budget.js";
 import type {
   ConnectorState,
@@ -68,7 +70,10 @@ export interface RunImportOptions extends ConnectorStateOptions {
    * then does not establish cancellation. The next rewrite links items to its own activity.
    */
   signal?: AbortSignal;
-  /** Granted source permissions when the user withheld some (`ImportContext.scopes`). */
+  /**
+   * Granted source permissions when the user withheld some (`ImportContext.scopes`). Defaults
+   * to the live `sourceAuth.scopes`, which `createSourceAuth` derives from `TokenSet.scope`.
+   */
   scopes?: readonly string[];
 }
 
@@ -96,12 +101,14 @@ export interface ImportReport {
 
 /** Root container for one adapter's documents. */
 export function adapterContainerUrl(podRoot: string, adapterId: string): string {
-  return new URL(`integrations/${adapterId}/`, podRoot).toString();
+  return new URL(`integrations/${connectorStorageId(adapterId)}/`, podRoot).toString();
 }
 
 export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
   const { adapter, mode } = opts;
   const id = adapter.metadata.id;
+  if (mode === "live" && adapter.metadata.deprecated)
+    throw new IntegrationSyncError(id, adapter.metadata.deprecated);
 
   const api = mode === "demo" ? fixtureFetch(id, adapter.fixtures()) : opts.sourceAuth?.fetch;
   if (!api)
@@ -171,7 +178,8 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       writeBinary: checked(session.writeBinary),
       remove: checked(session.remove),
       signal,
-      scopes: opts.scopes,
+      // Hosts may narrow explicitly; otherwise the token's granted scopes, when it listed them.
+      scopes: opts.scopes ?? (mode === "live" ? opts.sourceAuth?.scopes : undefined),
       limits,
     });
     imported = true;
@@ -291,5 +299,6 @@ export function createSourceAuth(
     const next: RequestInit = { ...snapshot.init, headers };
     return sourceFetch(snapshot.input, next);
   };
-  return { fetch: impl as typeof fetch };
+  const scopes = scopeList(token.scope);
+  return { fetch: impl as typeof fetch, ...(scopes && { scopes }) };
 }

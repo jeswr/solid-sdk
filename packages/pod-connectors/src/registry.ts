@@ -26,6 +26,7 @@ import { gmailAdapter } from "./gmail/adapter.js";
 import { googleCalendarAdapter } from "./google-calendar/adapter.js";
 import { googleContactsAdapter } from "./google-contacts/adapter.js";
 import { googleDriveAdapter } from "./google-drive/adapter.js";
+import { googleHealthAdapter } from "./google-health/adapter.js";
 import { googlePhotosAdapter } from "./google-photos/adapter.js";
 import { instagramAdapter } from "./instagram/adapter.js";
 import { linkedinAdapter } from "./linkedin/adapter.js";
@@ -110,7 +111,7 @@ export const TIER_B_ADAPTERS: readonly IntegrationAdapter[] = [
   googlePhotosAdapter,
   gmailAdapter,
   youtubeAdapter,
-  fitbitAdapter,
+  googleHealthAdapter,
   garminAdapter,
   instagramAdapter,
   facebookAdapter,
@@ -121,11 +122,15 @@ export const TIER_B_ADAPTERS: readonly IntegrationAdapter[] = [
   pinterestAdapter,
 ];
 
-/** All adapters, including the Node-only VeSync account adapter. */
+/**
+ * All runnable adapters: the Node-only VeSync account adapter and the retired Fitbit
+ * fixture/demo compatibility oracle are included, but are not new-connection catalog rows.
+ */
 export const ALL_ADAPTERS: readonly IntegrationAdapter[] = [
   ...ADAPTERS,
   ...TIER_B_ADAPTERS,
   vesyncAdapter,
+  fitbitAdapter,
 ];
 
 const byId = new Map(ALL_ADAPTERS.map((a) => [a.metadata.id, a]));
@@ -139,6 +144,7 @@ export function adapterById(id: string): IntegrationAdapter | undefined {
  * refuse secretless PKCE, the token proxy is too. Nothing else flips it.
  */
 export function isLive(adapter: IntegrationAdapter): boolean {
+  if (adapter.metadata.deprecated) return false;
   const oauth = adapter.oauth;
   if (!oauth?.clientId) return false;
   if (oauth.tokenExchange === "proxy" && !oauth.tokenProxyUrl) return false;
@@ -257,7 +263,7 @@ export const TIER_C: readonly CatalogEntry[] = [
   ),
 ];
 
-/** All catalog entries, A → B → C, in display order. */
+/** All new-connection catalog entries, A → B → C, in display order. */
 export function allCatalogEntries(): CatalogEntry[] {
   return [...ADAPTERS.map(catalogEntry), ...TIER_B, { ...vesyncAdapter.metadata }, ...TIER_C];
 }
@@ -288,7 +294,8 @@ export function createRegistry(config: ConnectorConfigs = {}) {
   const byId = new Map(configured.map((adapter) => [adapter.metadata.id, adapter]));
   const tierA = configured.filter((adapter) => adapter.metadata.tier === "A");
   const tierB = configured.filter(
-    (adapter) => adapter.metadata.tier === "B" && !adapter.metadata.cliOnly,
+    (adapter) =>
+      adapter.metadata.tier === "B" && !adapter.metadata.cliOnly && !adapter.metadata.deprecated,
   );
   return {
     ADAPTERS: tierA,
