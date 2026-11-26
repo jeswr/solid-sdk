@@ -127,6 +127,8 @@ export function createTripsStore(ports: StorePorts) {
   /** Re-verify (never repair) the container immediately before a private write. */
   async function requirePrivate(container: string) {
     await protect(container, true, false);
+    // A folder that was shared at open and is private now no longer blocks registration.
+    unprivate.delete(container);
   }
   async function register() {
     if (unprivate.has(base)) {
@@ -227,6 +229,45 @@ export function createTripsStore(ports: StorePorts) {
     } while (cursor);
     return [...urls];
   }
+  /** A direct child of `reservations/` (not a deeper or merely prefixed path). */
+  const isManualDocument = (url: string) =>
+    manualExists && url !== manual && new URL(".", url).href === manual;
+  /**
+   * A document's own trust claim is honoured only when the document and its immediate container
+   * are both verified owner-only (verify-only, never repaired); anyone with Write or Append on
+   * either could have planted it otherwise. Each container is verified once per load, and every
+   * check is bounded by the load signal. Trip documents' folder never holds trusted bookings.
+   */
+  function trustCheck(signal: AbortSignal) {
+    const containers = new Map<string, Promise<boolean>>();
+    const bounded = (check: Promise<void>) =>
+      Promise.race([
+        check.then(() => true),
+        new Promise<boolean>((_, reject) => {
+          if (signal.aborted) reject(signal.reason);
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+      ]).catch((error) => {
+        if (signal.aborted) throw error;
+        return false;
+      });
+    return async (url: string) => {
+      const container = new URL(".", url).href;
+      if (container === base) return false;
+      let ok = containers.get(container);
+      if (!ok) {
+        ok = bounded(protect(container, true, false));
+        containers.set(container, ok);
+      }
+      const containerOk = await ok;
+      if (container === manual) {
+        if (containerOk) unprivate.delete(manual);
+        else unprivate.add(manual);
+      }
+      if (!containerOk) return false;
+      return bounded(protect(url, false, false));
+    };
+  }
   async function load(): Promise<TripSnapshot> {
     const trips: Trip[] = [],
       reservations: Reservation[] = [];
@@ -248,14 +289,14 @@ export function createTripsStore(ports: StorePorts) {
         notice.capped ||= signal.aborted;
       }
     }
+    const trust = trustCheck(signal);
     for (const url of docs) {
       try {
-        // Only the owner-only manual container is user-entered; linked connector
-        // documents elsewhere keep their own email trust.
         const scoped = assertWithinPodScope(storage.root, url);
-        const isManual = scoped.startsWith(manual) && scoped !== manual;
+        const verified = await trust(scoped);
         const parsed = parseReservations((await read(scoped, signal)).dataset, scoped, {
-          manual: isManual,
+          manual: verified && isManualDocument(scoped),
+          untrusted: !verified,
         });
         reservations.push(...parsed);
         if (!parsed.length) notice.skipped++;
@@ -270,6 +311,8 @@ export function createTripsStore(ports: StorePorts) {
     if (trip.etag === null) throw new Error("A version is required to edit this trip safely");
     const creating = !trip.etag;
     await requirePrivate(base);
+    // An existing trip's own access policy may differ from its folder's (shared individually).
+    if (!creating) await protect(assertWithinPodScope(base, documentOf(trip.id)), false, false);
     const created = creating
       ? await storage.create(base, null, { contentType: "text/turtle" })
       : undefined;
@@ -367,10 +410,13 @@ export function createTripsStore(ports: StorePorts) {
         notice.capped ||= signal.aborted;
       }
     }
+    const trust = trustCheck(signal);
     for (const url of docs) {
       try {
         signal.throwIfAborted();
-        const parsed = parseReservations((await read(url, signal)).dataset, url);
+        const parsed = parseReservations((await read(url, signal)).dataset, url, {
+          untrusted: !(await trust(url)),
+        });
         const remaining = 200 - results.length;
         results.push(...parsed.slice(0, remaining));
         if (parsed.length > remaining) {

@@ -45,6 +45,23 @@ export class TemplateAccessError extends Error {
 function missing(error: unknown): boolean {
   return error instanceof StorageError && error.code === "not-found";
 }
+/** Definite "no usable index" outcomes. Anything else (network, timeout, 5xx, unknown) is
+ * transient: it must surface, never lead to creating or registering a second collection. */
+function indexUnusable(error: unknown): boolean {
+  return (
+    error instanceof StorageError &&
+    ["not-found", "scope", "forbidden", "unsupported", "invalid-response", "not-rdf"].includes(
+      error.code,
+    )
+  );
+}
+/** A lookup that may have missed an existing registration (an unreadable or malformed index). */
+function indexDegraded(error: unknown): boolean {
+  return (
+    error instanceof StorageError &&
+    ["forbidden", "invalid-response", "not-rdf"].includes(error.code)
+  );
+}
 function validator(etag: string | null): string {
   if (!etag || !/^"[\x21\x23-\x7e\x80-\xff]*"$/.test(etag))
     throw new Error("Templates require a strong ETag");
@@ -100,6 +117,9 @@ export function createTemplateStore(options: {
     }
     return registration;
   }
+  // Set when a lookup failed in a way that may hide an existing registration: nothing is
+  // registered until an explicit retry sees a clean lookup, so no second collection is indexed.
+  let degraded = false;
   let container: Promise<string> | undefined;
   let containerUrl: string | undefined;
   // A collection this store created; kept until access is established so a retry provisions.
@@ -121,9 +141,12 @@ export function createTemplateStore(options: {
     let untyped: string | undefined;
     try {
       registered = (await index?.find(TEMPLATE_CLASS)) ?? [];
-    } catch {
-      // An unreadable or malformed index only means there is no usable entry: the conventional
-      // folder is still adopted (after verification) rather than blocking Templates.
+    } catch (error) {
+      // An absent, out-of-scope, forbidden or malformed index only means there is no usable
+      // entry: the conventional folder is still adopted (after verification). A transient
+      // failure surfaces so a registered collection is never missed and duplicated.
+      if (!indexUnusable(error)) throw error;
+      if (indexDegraded(error)) degraded = true;
       registered = [];
     }
     for (const url of registered) {
@@ -191,7 +214,8 @@ export function createTemplateStore(options: {
         // Register first: Solid drops the type link, so the index is the only adoption path
         // back to a created collection. A failure is reported, not fatal; access is still
         // verified before every first write.
-        await register(url);
+        if (degraded) registration = { state: "unavailable" };
+        else await register(url);
         const created = url === createdUrl;
         if (!(await options.ensurePrivateAccess(url, { created })))
           throw new TemplateAccessError(created);
@@ -268,7 +292,18 @@ export function createTemplateStore(options: {
     /** Tries again to register the located collection; never throws. */
     async retryRegistration(): Promise<TemplateRegistration> {
       const url = await locate(false);
-      return url ? register(url) : registration;
+      if (!url) return registration;
+      if (degraded) {
+        // Only a clean lookup (empty, or already listing this collection) allows registering.
+        try {
+          const found = (await index?.find(TEMPLATE_CLASS)) ?? [];
+          if (found.length && !found.includes(url)) return registration;
+        } catch {
+          return registration;
+        }
+        degraded = false;
+      }
+      return register(url);
     },
     read: (url: string) => readCurrent(url),
     container: () => locate(false),

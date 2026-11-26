@@ -26,6 +26,7 @@ const adaptations = [
   "app sessions follow the native shell account, with signed-out fallback outside the shell",
   "shell demo account disabled; demo-pod modules replaced by inert stand-ins",
   "Drive preview interception uses the plain /drive/p/[ref] route on native",
+  "Univer hyphenation patterns for languages other than en-us are excluded (auto-hyphenation is never enabled)",
 ];
 await rm(stage, { recursive: true, force: true });
 await rm(www, { recursive: true, force: true });
