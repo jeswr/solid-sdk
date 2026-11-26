@@ -52,7 +52,7 @@ export const PARTIAL_REVOKE =
 export const REVOKE_FAILED = "The access couldn't be removed. Try again.";
 /** What a removal does and does not do, shown wherever removing is offered. */
 export const REVOKE_SCOPE =
-  "This removes only the access this approval gave. They may still have access to these places another way: through a parent folder, a group, public sharing, or a copy kept inside a subfolder.";
+  "This removes only the access this approval gave, including copies of it kept on items inside a shared folder. They may still have access to these places another way: through a parent folder, a group, public sharing, or something shared with them directly.";
 
 /** A WebID is the identity: shown whole, selectable, and wrapped rather than cut off. */
 function WebId({ id }: { id: string }) {
@@ -104,6 +104,10 @@ export function ActiveGrantRow({
         `Removed the access this approval gave ${name}. ${name} may still have access another way; check Permissions.${
           outcome.alreadyGone.length
             ? ` ${placesText(outcome.alreadyGone.length)} no longer exist, so there was nothing to remove there.`
+            : ""
+        }${
+          outcome.stillHeld.length
+            ? ` ${name} still has their own access to ${placesText(outcome.stillHeld.length)} inside: ${outcome.stillHeld.map((url) => relativePath(url, storage)).join(", ")}. Change it in Permissions.`
             : ""
         }`,
       );

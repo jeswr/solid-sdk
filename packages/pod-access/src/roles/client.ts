@@ -37,11 +37,12 @@ import type {
   SetGrantsResult,
 } from "./types.js";
 
-interface Row {
+export interface Row {
   agent: AgentRef;
   modes: Set<Mode>;
 }
-function rows(
+/** Internal: each principal's merged modes from `documents`, for the resource or its members. */
+export function rows(
   snapshot: Snapshot,
   documents = snapshot.documents,
   members = false,
@@ -185,7 +186,8 @@ export async function planMoveGrants(
     ownUrl: destination.ownUrl,
   });
 }
-function validators(snapshot: Snapshot) {
+/** Internal: what must be unchanged between planning a write and making it. */
+export function validators(snapshot: Snapshot) {
   return [
     snapshot.resource,
     snapshot.model,

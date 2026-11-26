@@ -9,7 +9,7 @@
  */
 
 import { ACCM, DCT, DPV as DPV_TERMS, requireStrongEtag } from "@jeswr/pod-access/requests-solid";
-import { grantsWithRoles, removeGrant } from "@jeswr/pod-access/roles";
+import { grantsWithRoles, removeCopiedGrants, removeGrant } from "@jeswr/pod-access/roles";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { LiteralFrom, NamedNodeFrom, RequiredAs } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
@@ -220,6 +220,25 @@ export interface RevokeOutcome {
   removed: readonly string[];
   /** Places that no longer exist (deleted), so there was nothing to remove. */
   alreadyGone: readonly string[];
+  /**
+   * Places inside a shared folder that had their own copy of the approval's access (WAC copies a
+   * folder's rules into an item when the item is first shared on its own); the copies are removed.
+   */
+  copiesRemoved: readonly string[];
+  /**
+   * Places inside a shared folder where the recipient still has access of their own, not from
+   * this approval (shared with them directly, say). The approval counts as revoked; this access is
+   * left for the owner to change in Permissions.
+   */
+  stillHeld: readonly string[];
+}
+
+/** A folder could not be checked all the way down, so copies of its access may be left. */
+export class IncompleteFolderCheckError extends Error {
+  override name = "IncompleteFolderCheckError";
+  constructor() {
+    super("Not everything inside this folder could be checked");
+  }
 }
 
 export interface RevokeHistoryOptions {
@@ -305,7 +324,11 @@ async function holdsDirectAccess(
  * no direct role any more has nothing to remove, and one that was deleted (404/410) counts as
  * already revoked. A place that can't be read is reported and left, while the others are still
  * removed. Then `removeGrant` takes the recipient's direct
- * role off the remaining places, and only once every place succeeded are the grant and receipt
+ * role off the remaining places, and for each shared folder `removeCopiedGrants` takes off the
+ * copies of that role kept in the access documents of items inside it (a WAC folder's rules are
+ * copied into an item when the item is first shared on its own). Access the recipient holds
+ * inside a folder in their own right is left and returned as `stillHeld`; a folder that could not
+ * be checked all the way down counts as a failure. Only once every place succeeded are the grant and receipt
  * marked. A partial failure (some place unreadable or not removable) leaves the grant active so
  * revoking can be tried again; the error names which places were removed, gone and not removed.
  */
@@ -331,6 +354,8 @@ export async function revokeHistoryGrant(
     throw new UnsupportedAccessError();
   const removed: string[] = [];
   const gone: string[] = [];
+  const copiesRemoved: string[] = [];
+  const stillHeld: string[] = [];
   if (current.revokedAt === undefined) {
     const records = await readRecordsDataset(options.fetch, storage);
     const unfinished = approvingGrantIds(records);
@@ -386,6 +411,27 @@ export async function revokeHistoryGrant(
       removed.push(...result.applied);
       failed.push(...result.failed);
     }
+    // On WAC, sharing an item inside a shared folder copies the folder's rules into the item's
+    // own access document, recipient included. Removing the folder's rule leaves those copies, so
+    // take them off every folder whose own rule is now gone. A folder whose removal failed keeps
+    // its rule, so its copies stay consistent and are left until revoking is tried again.
+    const unresolved = new Set(failed.map(({ url }) => url));
+    for (const url of current.targets) {
+      if (!url.endsWith("/") || gone.includes(url) || unresolved.has(url)) continue;
+      try {
+        const result = await removeCopiedGrants(
+          url,
+          { type: "webid", id: recipient },
+          { fetch: scoped, webId: options.webId, root: storage },
+        );
+        copiesRemoved.push(...result.removed);
+        stillHeld.push(...result.remaining);
+        failed.push(...result.failed);
+        if (result.incomplete) failed.push({ url, error: new IncompleteFolderCheckError() });
+      } catch (error) {
+        failed.push({ url, error });
+      }
+    }
     if (failed.length) throw new HistoryRevokeError(removed, failed, gone);
     await updateRecord(scoped, grant.url, (dataset) => {
       const node = subjectOf(dataset, grant.url);
@@ -406,7 +452,7 @@ export async function revokeHistoryGrant(
     RequiredAs.object(node, ACCM.revokedAt, when, LiteralFrom.dateTime);
     return true;
   });
-  return { removed, alreadyGone: gone };
+  return { removed, alreadyGone: gone, copiesRemoved, stillHeld };
 }
 
 const STATUS_TEXT: Readonly<Record<HistoryStatus, string>> = {

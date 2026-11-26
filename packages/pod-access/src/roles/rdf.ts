@@ -343,13 +343,8 @@ export function materialize(
   return result;
 }
 /** Split changed WAC principals from shared authorizations; preserve all other targets/defaults. */
-export function replaceWac(
-  dataset: Store,
-  resource: string,
-  agent: AgentRef,
-  modes: readonly Mode[],
-  members = false,
-): void {
+/** The WAC selector predicate (local name) and object IRI that name `agent`. */
+function wacPrincipal(agent: AgentRef): [string, string] {
   const selector =
     agent.type === "webid" ? "agent" : agent.type === "group" ? "agentGroup" : "agentClass";
   const principal =
@@ -358,6 +353,16 @@ export function replaceWac(
       : agent.type === "public"
         ? `${FOAF}Agent`
         : `${ACL}AuthenticatedAgent`;
+  return [selector, principal];
+}
+export function replaceWac(
+  dataset: Store,
+  resource: string,
+  agent: AgentRef,
+  modes: readonly Mode[],
+  members = false,
+): void {
+  const [selector, principal] = wacPrincipal(agent);
   for (const auth of [...new AclResource(dataset, DataFactory).authorizations]) {
     const rule = properties(auth as Term, dataset);
     const scopes = ["accessTo", ...(members ? ["default", "defaultForNew"] : [])].filter((name) =>
@@ -626,4 +631,32 @@ export function appendAcp(
     if (reachable.has(JSON.stringify([q.subject.termType, q.subject.value]))) continue;
     properties(q.subject, dataset).terms(q.predicate.value).clear();
   }
+}
+/**
+ * Take `agent` off every rule in a WAC document that the roles layer copied (`materializedFrom`)
+ * from one of `origins`. Other principals on the same rule keep it; a rule left with no principal
+ * is removed whole. Rules the agent holds directly (not copied) and copies from any other source
+ * are left alone. Returns whether anything changed.
+ */
+export function removeCopiedPrincipal(
+  dataset: Store,
+  agent: AgentRef,
+  origins: ReadonlySet<string>,
+): boolean {
+  const [selector, principal] = wacPrincipal(agent);
+  let changed = false;
+  for (const auth of [...new AclResource(dataset, DataFactory).authorizations]) {
+    const rule = properties(auth as Term, dataset);
+    if (!rule.iris(MATERIALIZED_FROM).some((origin) => origins.has(origin))) continue;
+    if (!rule.values(ACL + selector).has(principal)) continue;
+    rule.values(ACL + selector).delete(principal);
+    changed = true;
+    if (["agent", "agentGroup", "agentClass"].some((name) => rule.terms(ACL + name).size > 0))
+      continue;
+    for (const predicate of new Set(
+      [...dataset.match(auth as unknown as BlankNode)].map((q) => q.predicate.value),
+    ))
+      rule.terms(predicate).clear();
+  }
+  return changed;
 }

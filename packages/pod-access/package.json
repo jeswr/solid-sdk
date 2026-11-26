@@ -55,6 +55,7 @@
   "dependencies": {
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/ldp-container": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-odrl": "workspace:*",
     "@jeswr/storage-capabilities": "workspace:*",

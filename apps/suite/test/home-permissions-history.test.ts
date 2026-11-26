@@ -12,6 +12,7 @@ import {
   HistoryRevokeError,
   HistoryUnfinishedError,
   historyFrom,
+  IncompleteFolderCheckError,
   isActiveGrant,
   placesText,
   readAccessHistory,
@@ -129,6 +130,7 @@ function pod() {
     docs,
     fetch,
     put,
+    resource,
     fail(method: string, url: string, ...statuses: number[]) {
       failures.set(`${method} ${url}`, statuses);
     },
@@ -361,7 +363,12 @@ describe("revoking from the history", () => {
       const entry = await active(memory);
       memory.fail("HEAD", FILE, status);
       const outcome = await revokeHistoryGrant(entry, options(memory));
-      expect(outcome).toEqual({ removed: [FOLDER], alreadyGone: [FILE] });
+      expect(outcome).toEqual({
+        removed: [FOLDER],
+        alreadyGone: [FILE],
+        copiesRemoved: [],
+        stillHeld: [],
+      });
       expect(await agentsOn(memory, FOLDER)).toEqual([OWNER]);
       expect(await terms(memory, GRANT, "https://jeswr.org/ns/accm#revokedAt")).toEqual([
         NOW.toISOString(),
@@ -535,6 +542,98 @@ describe("revoking from the history", () => {
     await expect(
       revokeHistoryGrant(entry, { fetch: memory.fetch, webId: OWNER, storage: ROOT }),
     ).rejects.toThrow("A strong ETag is required");
+    expect(memory.writes()).not.toContain(GRANT);
+  });
+});
+
+// Int8 finding 610a-F1: on WAC, sharing an item inside a shared folder copies the folder's rules
+// (the recipient's included) into the item's own ACL. Revoking the folder alone left them there.
+describe("revoking a folder approval whose rules were copied into items inside it", () => {
+  const Run = `${FOLDER}run.ttl`;
+  const MaterializedFrom = "https://jeswr.org/ns/pod-access#materializedFrom";
+  const copied = (target: string, from: string) =>
+    `<#bob-copy> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${target}>; acl:mode acl:Read; <${MaterializedFrom}> <${from}>.`;
+  function withItem(rules: string, listing = "<run.ttl>") {
+    const memory = pod();
+    memory.put(FOLDER, `${PREFIXES} <> a ldp:Container; ldp:contains ${listing}.`);
+    memory.resource(
+      Run,
+      `${PREFIXES} <> dct:title "Run".`,
+      `${PREFIXES} ${ownerRule(Run, false)} ${carolRule(Run)} ${rules}`,
+    );
+    return memory;
+  }
+
+  it("removes the copies, keeps everyone else, and marks the approval revoked", async () => {
+    const memory = withItem(copied(Run, `${FOLDER}.acl`));
+    const outcome = await revokeHistoryGrant(await active(memory), options(memory));
+    expect(outcome).toEqual({
+      removed: [FOLDER, FILE],
+      alreadyGone: [],
+      copiesRemoved: [Run],
+      stillHeld: [],
+    });
+    expect((await agentsOn(memory, Run)).sort()).toEqual([CAROL, OWNER].sort());
+    expect(await terms(memory, GRANT, "https://jeswr.org/ns/accm#revokedAt")).toEqual([
+      NOW.toISOString(),
+    ]);
+  });
+
+  it("leaves access shared with the recipient directly, and names it", async () => {
+    const memory = withItem(bobRule(Run, false).replace("<#bob>", "<#bob-direct>"));
+    const outcome = await revokeHistoryGrant(await active(memory), options(memory));
+    expect(outcome.copiesRemoved).toEqual([]);
+    expect(outcome.stillHeld).toEqual([Run]);
+    expect(await agentsOn(memory, Run)).toContain(BOB);
+    expect(await terms(memory, GRANT, "https://jeswr.org/ns/accm#revokedAt")).toEqual([
+      NOW.toISOString(),
+    ]);
+  });
+
+  it("keeps the approval active when a copy can't be removed, and finishes on retry", async () => {
+    const memory = withItem(copied(Run, `${FOLDER}.acl`));
+    const entry = await active(memory);
+    memory.fail("PUT", `${Run}.acl`, 500);
+    const error = await revokeHistoryGrant(entry, options(memory)).catch((caught) => caught);
+    expect(error).toBeInstanceOf(HistoryRevokeError);
+    expect((error as HistoryRevokeError).failed.map(({ url }) => url)).toEqual([Run]);
+    expect(memory.writes()).not.toContain(GRANT);
+    expect(await agentsOn(memory, Run)).toContain(BOB);
+    const outcome = await revokeHistoryGrant(entry, options(memory));
+    expect(outcome).toMatchObject({ removed: [], copiesRemoved: [Run] });
+    expect(await agentsOn(memory, Run)).not.toContain(BOB);
+  });
+
+  it("does not mark the approval revoked when the folder can't be checked all the way down", async () => {
+    const memory = withItem(copied(Run, `${FOLDER}.acl`), "<run.ttl>, <https://elsewhere.test/x>");
+    const error = await revokeHistoryGrant(await active(memory), options(memory)).catch(
+      (caught) => caught,
+    );
+    expect(error).toBeInstanceOf(HistoryRevokeError);
+    const [failure] = (error as HistoryRevokeError).failed;
+    expect(failure?.url).toBe(FOLDER);
+    expect(failure?.error).toBeInstanceOf(IncompleteFolderCheckError);
+    // What could be reached was still cleaned up.
+    expect(await agentsOn(memory, Run)).not.toContain(BOB);
+    expect(memory.writes()).not.toContain(GRANT);
+  });
+
+  it("reports a folder whose copies can't be looked for at all", async () => {
+    const memory = withItem(copied(Run, `${FOLDER}.acl`));
+    const entry = await active(memory);
+    // The folder's own rule is removed; after that its access can't be read any more.
+    let cleared = false;
+    const inner = memory.fetch.getMockImplementation() as typeof globalThis.fetch;
+    memory.fetch.mockImplementation(async (input, init = {}) => {
+      if (cleared && String(input) === FOLDER && init.method === "HEAD")
+        return new Response(null, { status: 500 });
+      const response = await inner(input, init);
+      if (String(input) === `${FOLDER}.acl` && init.method === "PUT") cleared = true;
+      return response;
+    });
+    const error = await revokeHistoryGrant(entry, options(memory)).catch((caught) => caught);
+    expect(error).toBeInstanceOf(HistoryRevokeError);
+    expect((error as HistoryRevokeError).failed.map(({ url }) => url)).toContain(FOLDER);
     expect(memory.writes()).not.toContain(GRANT);
   });
 });

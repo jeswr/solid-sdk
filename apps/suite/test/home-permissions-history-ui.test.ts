@@ -104,7 +104,12 @@ beforeEach(() => {
     reset: async () => {},
   };
   mocks.read.mockResolvedValue([active, denied, removed]);
-  mocks.revoke.mockResolvedValue({ removed: [], alreadyGone: [] });
+  mocks.revoke.mockResolvedValue({
+    removed: [],
+    alreadyGone: [],
+    copiesRemoved: [],
+    stillHeld: [],
+  });
 });
 
 function button(root: ParentNode, name: string): HTMLButtonElement {
