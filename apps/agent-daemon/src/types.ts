@@ -7,8 +7,8 @@ import type { Gateway, ModelCall, ProposerContext } from "@jeswr/agent-model-gat
 import type { Interpreter } from "@jeswr/agentic-legacy-bridge";
 import type { PodAuth } from "@jeswr/pod-auth";
 import type { NotificationsClient, Timers } from "@jeswr/pod-notifications";
-import type { DaemonGatePort } from "./gate.js";
 import type { ConnectorsJob } from "./connectors.js";
+import type { DaemonGatePort } from "./gate.js";
 import type { PodWorkspace } from "./workspace.js";
 
 export interface DaemonAccount {
