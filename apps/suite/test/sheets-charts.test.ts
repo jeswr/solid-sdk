@@ -74,6 +74,7 @@ describe("chart A1 sources", () => {
     "",
     "A0",
     "B2:A1",
+    "B1:A2",
     "A1,B2",
     "A:A",
     "1:2",

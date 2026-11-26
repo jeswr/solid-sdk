@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
-import { Button, IconButton, Toaster, toast } from "@jeswr/suite-ui";
+import { IconButton, LoadingSkeleton, Toaster, toast } from "@jeswr/suite-ui";
 import { Grid2X2, List } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -10,22 +10,24 @@ import { TemplateLauncher } from "@/components/templates/template-picker";
 import { decodeRef } from "@/lib/refs";
 import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
+import { ShortcutsProvider } from "@/shell/shortcuts/provider";
 import type { NoteFailure, StoredNote } from "../lib/model/store";
+import { noteSearchHref, parseNoteSearch } from "../lib/search-filters";
 import { noteLink } from "../lib/shared-note";
 import { NotesProvider, useNotesContext } from "../state/notes-context";
 import { useNoteReminders } from "../state/reminders";
 import { NoteDialog } from "./note-dialog";
 import { NoteFailures } from "./note-failures";
 import { NotesGrid } from "./notes-grid";
+import { NotesLoadError, NotesMissingState } from "./notes-states";
 import { SharedNote } from "./shared-note";
 import { NotesSidebar } from "./sidebar";
 
 const purged = new Set<string>();
 function NotesRoutes() {
   const pathname = useRoutePathname();
-  const query = useSearchParams().get("q") ?? "";
-  const { notes, active, archived, trashed } = useNotesContext();
-  const router = useRouter();
+  const filters = parseNoteSearch(useSearchParams());
+  const { notes, active, archived, trashed, refresh } = useNotesContext();
   const reference = pathname.startsWith("/notes/n/")
     ? pathname.slice("/notes/n/".length)
     : undefined;
@@ -52,12 +54,18 @@ function NotesRoutes() {
     !active.error &&
     !archived.error &&
     !trashed.error;
-  useEffect(() => {
-    if (reference && (invalid || (ready && !selected))) {
-      toast.error("This note isn't here any more");
-      router.replace("/notes");
-    }
-  }, [reference, invalid, ready, selected, router]);
+  if (reference && (invalid || (ready && !selected))) return <NotesMissingState />;
+  if (reference && !selected)
+    return (
+      <div className="notes-workspace">
+        <h1>Note</h1>
+        {active.error || archived.error || trashed.error ? (
+          <NotesLoadError retry={() => void refresh()} />
+        ) : (
+          <LoadingSkeleton preset="list" />
+        )}
+      </div>
+    );
   let label: string | undefined;
   if (pathname.startsWith("/notes/label/")) {
     try {
@@ -83,13 +91,15 @@ function NotesRoutes() {
                     : "active"
         }
         {...(label === undefined ? {} : { label })}
-        query={query}
+        filters={filters}
       />
       {reference && selected && !invalid && <NoteDialog key={reference} note={selected} />}
     </>
   );
 }
 function NotesChrome({ children }: { children: ReactNode }) {
+  const filters = parseNoteSearch(useSearchParams());
+  const router = useRouter();
   const { store, session, refresh, prefs, updatePrefs, notes, openNote } = useNotesContext();
   const [purgeFailures, setPurgeFailures] = useState<NoteFailure[]>([]);
   useNoteReminders(
@@ -120,7 +130,13 @@ function NotesChrome({ children }: { children: ReactNode }) {
     <SuiteFrame
       app="notes"
       sidebar={<NotesSidebar />}
-      search={{ placeholder: "Search notes", action: "/notes/search", scopeLabel: "in Notes" }}
+      search={{
+        placeholder: "Search notes",
+        action: "/notes/search",
+        scopeLabel: "in Notes",
+        query: filters.q,
+        onSubmit: (q) => router.push(noteSearchHref({ ...filters, q })),
+      }}
       actions={
         <>
           <TemplateLauncher app="notes" session={session} beforeOpen={refresh} />
@@ -165,9 +181,9 @@ function SessionGate({ children }: { children: ReactNode }) {
         );
     } catch (error) {
       return (
-        <div className="notes-boot" role="alert">
-          {(error as Error).message}
-        </div>
+        <SuiteFrame app="notes" sidebar={null}>
+          <NotesMissingState detail={(error as Error).message} />
+        </SuiteFrame>
       );
     }
   }
@@ -179,12 +195,9 @@ function SessionGate({ children }: { children: ReactNode }) {
     );
   if (state.status === "error")
     return (
-      <div className="notes-boot" role="alert">
+      <div className="notes-boot">
         <h1>Can't open your Notes</h1>
-        <p>This browser couldn't open the demo pod's storage.</p>
-        <Button variant="outline" onClick={() => location.reload()}>
-          Retry
-        </Button>
+        <NotesLoadError retry={() => location.reload()} />
       </div>
     );
   // Native builds start signed out until native sign-in lands.
@@ -204,7 +217,9 @@ function SessionGate({ children }: { children: ReactNode }) {
 export function NotesApp({ children }: { children: ReactNode }) {
   return (
     <PodSessionProvider>
-      <SessionGate>{children}</SessionGate>
+      <ShortcutsProvider>
+        <SessionGate>{children}</SessionGate>
+      </ShortcutsProvider>
       <Toaster position="bottom-center" />
     </PodSessionProvider>
   );

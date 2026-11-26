@@ -12,12 +12,13 @@ import {
   Input,
   toast,
 } from "@jeswr/suite-ui";
-import { Archive, Bell, Import, Pencil, StickyNote, Tag, Trash2 } from "lucide-react";
+import { Archive, Bell, Import, Pencil, Search, StickyNote, Tag, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useRoutePathname } from "@/lib/route-params";
 import { useNotesContext } from "../state/notes-context";
 import { ConfirmDialog } from "./controls";
+import { ImageCleanup } from "./image-cleanup";
 import { KeepImportDialog } from "./keep-import";
 
 function LabelRow({ label }: { label: string }) {
@@ -98,6 +99,7 @@ export function NotesSidebar() {
   const [name, setName] = useState("");
   const destinations = [
     { href: "/notes", label: "Notes", icon: StickyNote },
+    { href: "/notes/search", label: "Search", icon: Search },
     { href: "/notes/reminders", label: "Reminders", icon: Bell },
     ...labels.map((label) => ({
       href: `/notes/label/${encodeURIComponent(label)}`,
@@ -144,6 +146,7 @@ export function NotesSidebar() {
           <Import size={18} aria-hidden="true" />
           Import from Keep
         </Button>
+        <ImageCleanup />
       </nav>
       {importing && <KeepImportDialog open close={() => setImporting(false)} />}
       <Dialog open={editing} onOpenChange={setEditing}>

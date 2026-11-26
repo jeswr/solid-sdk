@@ -9,7 +9,6 @@ import {
   WorkbookPartialSaveError,
   type WorkbookService,
 } from "./contract";
-import { hasStatus } from "./workbook/resources";
 
 /** Application-lifetime writers. Browser events and I/O enter through injected seams. */
 export function createPendingSaves() {
@@ -29,6 +28,9 @@ export function createPendingSaves() {
     let title = initial.metadata.title;
     let storedTitle = title;
     let dropped = false;
+    let snapshotCurrent = false;
+    let restoring = false;
+    let restorePublished = false;
     let local = initial.snapshot;
     let read = () => local;
     const savedListeners = new Set<SnapshotSaved>();
@@ -56,9 +58,14 @@ export function createPendingSaves() {
         try {
           const result = await service.save(initial.container, snapshot, opened.version, {
             force,
+            ...(snapshotCurrent ? { snapshotCurrent: true } : {}),
             ...(savingTitle === storedTitle ? {} : { title: savingTitle }),
           });
+          // The pod now holds the restored workbook, whatever the queue reports next
+          // (going offline, a lost response): the caller must remount onto it.
+          if (restoring) restorePublished = true;
           if (dropped) return;
+          snapshotCurrent = false;
           opened = { ...opened, ...result, snapshot };
           acknowledge(snapshot, result.version.snapshotEtag);
           storedTitle = result.metadata.title;
@@ -66,9 +73,10 @@ export function createPendingSaves() {
         } catch (error) {
           if (dropped) return;
           for (let cause = error; cause instanceof Error; cause = cause.cause) {
-            if (hasStatus(cause, 403)) opened = { ...opened, readOnly: true };
+            if ("status" in cause && cause.status === 403) opened = { ...opened, readOnly: true };
           }
           if (error instanceof WorkbookPartialSaveError) {
+            if (restoring) restorePublished = true;
             opened = { ...opened, version: error.version };
             // Verification failures can carry a previous write's ETag. Only a
             // confirmed snapshot write in this attempt acknowledges this value.
@@ -112,6 +120,33 @@ export function createPendingSaves() {
         };
       },
       schedule,
+      async restore(snapshot: Snapshot) {
+        await flush();
+        if (opened.readOnly || queue.status !== "saved")
+          throw new Error("Save your changes online before restoring a version");
+        const previousLocal = local;
+        const previousRead = read;
+        restoring = true;
+        restorePublished = false;
+        snapshotCurrent = true;
+        try {
+          schedule(() => snapshot);
+          await flush();
+          if (queue.status === "saved") return;
+          // A partial save already published the restored workbook.json; the caller's
+          // reload shows what is on the pod. Any other failure must not stay queued, or
+          // autosave would overwrite the workbook with this version later, unannounced.
+          if (!restorePublished) {
+            local = previousLocal;
+            read = previousRead;
+            throw new Error("Could not restore this version");
+          }
+        } finally {
+          restoring = false;
+          if (queue.status !== "saved") queue.reset();
+          snapshotCurrent = false;
+        }
+      },
       setReadOnly(readOnly = true) {
         if (!readOnly && !opened.readOnly) return;
         opened = { ...opened, readOnly };
@@ -129,6 +164,7 @@ export function createPendingSaves() {
         void flush();
       },
       reset(next: OpenedWorkbook) {
+        snapshotCurrent = false;
         opened = next;
         title = next.metadata.title;
         storedTitle = title;
@@ -138,6 +174,7 @@ export function createPendingSaves() {
         releaseIdle();
       },
       discard() {
+        snapshotCurrent = false;
         queue.reset();
         releaseIdle();
       },

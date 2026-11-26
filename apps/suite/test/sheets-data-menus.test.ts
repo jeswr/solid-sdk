@@ -71,6 +71,7 @@ function fixture() {
     dispose: vi.fn(),
     sortRange: vi.fn((): SortResult => ({ status: "sorted" })),
     findReplace: vi.fn(async () => {}),
+    editLink: vi.fn(async () => {}),
     hasFilter: () => filtered,
     toggleFilter: vi.fn(async () => {
       filtered = !filtered;
@@ -134,6 +135,9 @@ it("wires sorting, filter create/clear/remove and find to the engine", async () 
     header: false,
   });
   await key(button("Edit"), "ArrowDown");
+  await click(item("Insert or edit link"));
+  expect(f.engine.editLink).toHaveBeenCalledOnce();
+  await key(button("Edit"), "ArrowDown");
   await click(item("Find and replace"));
   expect(f.engine.findReplace).toHaveBeenCalledOnce();
   await act(() => {
@@ -170,6 +174,7 @@ it("validates sort input and respects a lock that arrives while the dialog is op
   expect(item("Create a filter").getAttribute("aria-disabled")).toBeNull();
   await key(item("Sort range"), "Escape");
   await key(button("Edit"), "ArrowDown");
+  expect(item("Insert or edit link").getAttribute("aria-disabled")).toBe("true");
   expect(item("Find and replace").getAttribute("aria-disabled")).toBeNull();
   await locked.unmount();
 });
@@ -238,6 +243,7 @@ it("handles unavailable engines and optional capabilities during loading and rel
   delete f.engine.toggleFilter;
   delete f.engine.clearFilter;
   delete f.engine.findReplace;
+  delete f.engine.editLink;
   delete f.engine.onValuesChange;
   delete f.engine.onSelection;
   delete f.engine.sortRange;
@@ -247,6 +253,8 @@ it("handles unavailable engines and optional capabilities during loading and rel
   await ui.render(h(DataMenus, { engine: f.engine, locked: false }));
   await open();
   await click(item("Create a filter"));
+  await key(button("Edit"), "ArrowDown");
+  await click(item("Insert or edit link"));
   await key(button("Edit"), "ArrowDown");
   await click(item("Find and replace"));
   await act(() => {
@@ -289,5 +297,42 @@ it("guards menu callbacks when an engine disappears while a menu is open", async
     .at(-1);
   if (!props) throw new Error("Missing find callback");
   await act(() => props.onSelect?.(new Event("select")));
+  const linkProps = vi
+    .mocked(DropdownMenuItem)
+    .mock.calls.map(([props]) => props)
+    .filter((props) => props.children === "Insert or edit link")
+    .at(-1);
+  if (!linkProps) throw new Error("Missing link callback");
+  await act(() => linkProps.onSelect?.(new Event("select")));
   await ui.unmount();
+});
+
+it("routes Ctrl/Cmd+K from the grid to cell links and blocks it while locked", async () => {
+  const f = fixture();
+  const ui = await mount(h(DataMenus, { engine: f.engine, locked: false }));
+  const grid = document.createElement("div");
+  grid.className = "sht-univer";
+  document.body.append(grid);
+  async function shortcut(target: EventTarget, metaKey = false) {
+    const event = new KeyboardEvent("keydown", {
+      key: "k",
+      ctrlKey: !metaKey,
+      metaKey,
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(() => target.dispatchEvent(event));
+    return event;
+  }
+  expect((await shortcut(document)).defaultPrevented).toBe(false);
+  for (const mac of [false, true]) expect((await shortcut(grid, mac)).defaultPrevented).toBe(true);
+  expect(f.engine.editLink).toHaveBeenCalledTimes(2);
+  await ui.render(h(DataMenus, { engine: f.engine, locked: true }));
+  expect((await shortcut(grid)).defaultPrevented).toBe(true);
+  expect(f.engine.editLink).toHaveBeenCalledTimes(2);
+  await ui.render(h(DataMenus, { engine: f.engine, locked: false }));
+  delete f.engine.editLink;
+  expect((await shortcut(grid)).defaultPrevented).toBe(true);
+  await ui.unmount();
+  grid.remove();
 });

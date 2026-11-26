@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // Reuse suite-ui's installed DOM harness without adding application dependencies.
 import { createRequire } from "node:module";
@@ -10,37 +11,48 @@ const requireUi = createRequire(
 const { JSDOM } = requireUi("jsdom") as {
   JSDOM: new (html: string, options: { url: string }) => { window: Window & typeof globalThis };
 };
-const { IDBFactory } = createRequire(
+const { IDBFactory, IDBKeyRange } = createRequire(
   new URL("../../../packages/solid-offline/package.json", import.meta.url),
-)("fake-indexeddb") as { IDBFactory: new () => IDBFactory };
+)("fake-indexeddb") as {
+  IDBFactory: new () => IDBFactory;
+  IDBKeyRange: typeof globalThis.IDBKeyRange;
+};
 const storageWork = new Set<Promise<void>>();
+function trackStorageWork() {
+  let finish!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  storageWork.add(pending);
+  return () => {
+    storageWork.delete(pending);
+    finish();
+  };
+}
 beforeEach(() => {
   sessionStorage.clear();
   const factory = new IDBFactory();
   const open = factory.open.bind(factory);
   vi.spyOn(factory, "open").mockImplementation((...args) => {
     const request = open(...args);
-    let finish!: () => void;
-    const pending = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
-    storageWork.add(pending);
-    const done = () => {
-      storageWork.delete(pending);
-      finish();
-    };
+    const done = trackStorageWork();
     request.addEventListener("error", done);
     request.addEventListener("success", () => {
       const db = request.result;
-      const close = db.close.bind(db);
-      db.close = () => {
-        close();
-        done();
+      const transaction = db.transaction.bind(db);
+      db.transaction = (...args) => {
+        const active = transaction(...args);
+        const complete = trackStorageWork();
+        active.addEventListener("complete", complete, { once: true });
+        active.addEventListener("abort", complete, { once: true });
+        return active;
       };
+      done();
     });
     return request;
   });
   vi.stubGlobal("indexedDB", factory);
+  vi.stubGlobal("IDBKeyRange", IDBKeyRange);
 });
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "https://suite.example/drive/my",

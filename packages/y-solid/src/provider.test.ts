@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
@@ -115,6 +116,39 @@ describe("SolidPersistence — append-log merge convergence", () => {
 });
 
 describe("SolidPersistence — sync() (the live-sync seam)", () => {
+  it("retries every unapplied update after the second resource read fails", async () => {
+    const pod = makePod(CONTAINER);
+    const source = new Y.Doc();
+    const writer = new SolidPersistence({
+      doc: source,
+      container: CONTAINER,
+      fetch: pod.fetchImpl,
+    });
+    const target = new Y.Doc();
+    const reader = new SolidPersistence({
+      doc: target,
+      container: CONTAINER,
+      fetch: pod.fetchImpl,
+    });
+    await Promise.all([writer.whenSynced, reader.whenSynced]);
+    source.getText("body").insert(0, "first");
+    source.getText("body").insert(5, " second");
+    await writer.flush();
+    const read = reader.store.readUpdate.bind(reader.store);
+    vi.spyOn(reader.store, "readUpdate")
+      .mockImplementationOnce(read)
+      .mockRejectedValueOnce(new Error("Unavailable"));
+    await expect(reader.sync()).rejects.toThrow("Unavailable");
+    expect(target.getText("body").toString()).toBe("");
+    expect(await reader.sync()).toBe(2);
+    expect(target.getText("body").toString()).toBe("first second");
+    expect(await reader.sync()).toBe(0);
+    reader.destroy();
+    writer.destroy();
+    source.destroy();
+    target.destroy();
+  });
+
   it("applies updates appended to the pod since load, without re-reading known ones", async () => {
     const pod = makePod(CONTAINER);
     const docA = new Y.Doc();

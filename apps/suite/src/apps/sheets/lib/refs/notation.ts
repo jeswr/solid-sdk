@@ -69,7 +69,11 @@ function parse(text: string, endpoint: (text: string) => Endpoint): Reference {
     );
   }
   const pair = (a: Axis | null, b: Axis | null): AxisRange | null =>
-    a === null ? null : { start: a, end: b as Axis };
+    a === null
+      ? null
+      : a.index > (b as Axis).index
+        ? { start: b as Axis, end: a, reversed: true }
+        : { start: a, end: b as Axis };
   const ref = {
     ...(sheet === undefined ? {} : { sheet }),
     rows: pair(start.row, end.row),
@@ -93,9 +97,11 @@ export function parseA1(text: string): Reference {
 
 function format(ref: Reference, axis: (axis: Axis, dimension: "row" | "column") => string): string {
   validateReference(ref);
+  const endpoint = (range: AxisRange, end: "start" | "end") =>
+    range[range.reversed ? (end === "start" ? "end" : "start") : end];
   const point = (end: "start" | "end") =>
-    (ref.columns === null ? "" : axis(ref.columns[end], "column")) +
-    (ref.rows === null ? "" : axis(ref.rows[end], "row"));
+    (ref.columns === null ? "" : axis(endpoint(ref.columns, end), "column")) +
+    (ref.rows === null ? "" : axis(endpoint(ref.rows, end), "row"));
   const start = point("start");
   const end = point("end");
   return (

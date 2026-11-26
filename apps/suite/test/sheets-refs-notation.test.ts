@@ -19,6 +19,9 @@ describe("spreadsheet notation", () => {
     ["$b$2", "$B$2", "R2C2"],
     ["$C3:D$4", "$C3:D$4", "R[-7]C3:R4C[-1]"],
     ["A1:A1", "A1", "R[-9]C[-4]"],
+    ["B2:$A$1", "B2:$A$1", "R[-8]C[-3]:R1C1"],
+    ["2:1", "2:1", "R[-8]:R[-9]"],
+    ["B:A", "B:A", "C[-3]:C[-4]"],
     ["$1:3", "$1:3", "R1:R[-7]"],
     ["A:$Z", "A:$Z", "C[-4]:C26"],
     ["Sheet1!E10", "'Sheet1'!E10", "'Sheet1'!RC"],
@@ -62,9 +65,6 @@ describe("spreadsheet notation", () => {
     "A:B1",
     "A:1",
     "A1:B2:C3",
-    "B2:A1",
-    "2:1",
-    "B:A",
     "A1#",
     "[book]S!A1",
     "S1:S2!A1",
@@ -92,7 +92,6 @@ describe("spreadsheet notation", () => {
     "R9007199254740992C1",
     "R[9007199254740992]C",
     "R[9007199254740991]C",
-    "R2C1:R1C2",
   ])("rejects invalid R1C1 %j", (text) =>
     expect(() => parseR1C1(text, origin)).toThrow(SheetReferenceError));
   it("rejects invalid models and origins with typed error codes", () => {

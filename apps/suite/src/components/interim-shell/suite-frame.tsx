@@ -25,6 +25,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { useSuiteEnvironment } from "@/shell/environment";
+import { characterShortcutsEnabled } from "@/shell/lib/shortcut-settings";
+import { isEditableTarget } from "@/shell/lib/shortcuts";
 import { appRegistry, visibleApps } from "@/shell/registry";
 import { WalkthroughDock } from "@/welcome/walkthrough";
 
@@ -39,7 +41,13 @@ export interface SuiteFrameProps {
   /** Top bar trailing actions. */
   actions?: ReactNode;
   /** Search placeholder and target (`?q=` is appended). */
-  search?: { placeholder: string; action: string; scopeLabel: string; query?: string };
+  search?: {
+    placeholder: string;
+    action: string;
+    scopeLabel: string;
+    query?: string;
+    onSubmit?: (query: string) => void;
+  };
   /** Details shown in a pane at ≥1024px and a modal Sheet below that. */
   details?: ReactNode;
   onDetailsClose?: () => void;
@@ -84,7 +92,8 @@ export function SearchBox({ search }: { search: NonNullable<SuiteFrameProps["sea
         onSubmit={(event) => {
           event.preventDefault();
           const q = value.trim();
-          router.push(q ? `${search.action}?q=${encodeURIComponent(q)}` : search.action);
+          if (search.onSubmit) search.onSubmit(q);
+          else router.push(q ? `${search.action}?q=${encodeURIComponent(q)}` : search.action);
         }}
       >
         <Search aria-hidden="true" size={18} strokeWidth={1.75} />
@@ -138,9 +147,13 @@ export function SuiteFrame({
   useEffect(() => setDrawer(false), [pathname]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
-      if (event.key === "/" && !event.metaKey && !event.ctrlKey) {
+      if (
+        event.defaultPrevented ||
+        isEditableTarget(event.target) ||
+        document.querySelector('[role="dialog"], [role="alertdialog"], dialog[open]')
+      )
+        return;
+      if (event.key === "/" && !event.metaKey && !event.ctrlKey && characterShortcutsEnabled()) {
         const input = document.querySelector<HTMLInputElement>("[data-global-search]");
         if (input) {
           event.preventDefault();
