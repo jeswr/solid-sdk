@@ -94,6 +94,8 @@ export interface TokenSet {
 
 /** One normalised document the adapter wants written into the pod. */
 export interface NormalisedDoc {
+  /** Optional hard UTF-8 Turtle cap, enforced after session provenance and vocabulary mapping. */
+  readonly maxSerializedBytes?: number;
   /**
    * Path under the adapter's root container, e.g. `"music/top-tracks.ttl"`.
    * Deterministic slugs ⇒ idempotent re-imports (overwrite, never duplicate).
@@ -209,6 +211,9 @@ export interface ImportContext {
    * An optional inspection can reject the stored dataset before the session retains a copy.
    */
   read(slug: string, inspect?: (dataset: DatasetCore) => void): Promise<DatasetCore | undefined>;
+  /** Release a read-only dataset/precondition when no write will follow. A later write re-reads.
+   * Hosts without retained read state may omit this port. It performs no Pod I/O. */
+  releaseRead?(slug: string): void;
   /** Write RDF; defaults to the precondition retained by a preceding read of this URL. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
   /**
@@ -249,6 +254,8 @@ export interface ImportOutcome {
   /** Actionable notices, including a successfully saved partial batch. Fixed adapter
    * strings only: never provider-supplied text (hosts print them). */
   readonly warnings?: readonly string[];
+  /** Stable, non-personal codes for recoverable failures. */
+  readonly errors?: readonly string[];
   /** Opaque incremental cursor for the next import, where the API supports it. */
   readonly cursor?: string;
   /**
