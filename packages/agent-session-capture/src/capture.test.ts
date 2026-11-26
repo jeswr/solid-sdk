@@ -40,6 +40,14 @@ const env = {
 };
 const fixture = (name: string) =>
   readFile(new URL(`./fixtures/${name}.jsonl`, import.meta.url), "utf8");
+// Every pod write through the real chat port re-verifies its ancestors and ACLs
+// fail-closed (about 80 HEAD/GET requests per message, each with a fresh DPoP
+// proof signed on the libuv threadpool). Uploading a conversation therefore issues
+// hundreds to thousands of in-memory requests: the heaviest tests below take about
+// 1.7-3.7s on an idle machine but exceed Vitest's 5s default on a loaded CI runner
+// with coverage. Capture's own hook budgets are asserted inside the tests with
+// injected clocks and stalled transports, so this ceiling only bounds runaway tests.
+const realPortTimeout = 30_000;
 let home: string;
 let cwd: string;
 let transcript: string;
@@ -87,7 +95,9 @@ afterEach(async () => {
   await rm(home, { recursive: true, force: true });
 });
 
-describe("capture with real ChatWriter and client credentials", () => {
+describe("capture with real ChatWriter and client credentials", {
+  timeout: realPortTimeout,
+}, () => {
   it.each([
     null,
     7,
