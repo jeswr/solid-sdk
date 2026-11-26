@@ -215,11 +215,13 @@ describe("Issues store boundaries", () => {
     await expect(
       store.createTask(project, { title: "Unsafe", state: "open" }, "../escape"),
     ).rejects.toThrow("Invalid task identifier");
-    await expect(
-      store.updateTask(updated, (task) => {
-        task.assignee = "javascript:alert(1)";
-      }),
-    ).rejects.toThrow();
+    // The generated Task accessor (@jeswr/solid-task-model) drops a non-HTTP(S) assignee on write,
+    // so an unsafe value never reaches the pod: the update is a no-op.
+    const unsafe = await store.updateTask(updated, (task) => {
+      task.assignee = "javascript:alert(1)";
+    });
+    expect(unsafe).toBe(updated);
+    expect(unsafe.task.assignee).toBeUndefined();
     expect((await store.listProjects()).map((project) => project.url)).toEqual([trackerUrl]);
   });
 });
