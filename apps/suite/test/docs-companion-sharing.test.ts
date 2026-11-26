@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { addGrant } from "@jeswr/pod-access/roles";
 // AUTHORED-BY Claude Opus 5.5
@@ -324,9 +325,9 @@ it("requires ownership of the entry point and every companion and preflights imm
     ),
   ).rejects.toThrow("Read only");
   await env.access(layout.comments, [[CAROL, ["Read", "Write", "Control"]]]);
-  await expect(
-    applyDocumentSharing(env.session, await env.load(), select(snapshot.state)),
-  ).rejects.toThrow("Owner rows are read-only");
+  await expect(applyDocumentSharing(env.session, await env.load(), snapshot.state)).rejects.toThrow(
+    "Owner rows are read-only",
+  );
   expect(env.writes()).toEqual([]);
   const other = await loadDocumentSharing({ ...env.session, webId: BOB }, DOC);
   expect(other).toMatchObject({
@@ -727,7 +728,7 @@ it("reports group grants that differ between the document and its companion", as
   expect(result.notice).toBeUndefined();
 });
 
-it("names every document part as a group target, the entry point first", async () => {
+it("includes every independently shared part as a group target, the entry point first", async () => {
   const env = await setup("wac", true);
   const snapshot = await env.load();
   expect(documentGroupTargets(snapshot)).toEqual([DOC, ...parts]);
@@ -759,27 +760,48 @@ it("accepts a legacy Docs document that records no companion links", async () =>
   const env = await setup();
   await env.writeDocument({});
   expect((await env.load()).needsSave).toBeUndefined();
+  // Versions are lazy and older recovery logs may still be present.
+  await env.pod.fetch(layout.versions, { method: "DELETE" });
+  await env.pod.fetch(`${layout.container}updates-1700000000000/`, { method: "PUT", body: "" });
+  expect((await env.load()).needsSave).toBeUndefined();
 });
 
-it("requires the repair Save before rewriting a member that was given its own access", async () => {
+it.each([
+  "missing update log",
+  "unrelated root member",
+])("refuses a linkless Docs document with an unconfirmed sibling folder (%s)", async (reason) => {
   const env = await setup();
-  const image = `${layout.assets}image.png`;
-  await env.pod.fetch(image, {
-    method: "PUT",
-    body: "png",
-    headers: { "content-type": "image/png" },
-  });
-  await env.access(image, [[CAROL, ["Read"]]]);
+  await env.writeDocument({});
+  if (reason === "missing update log") await env.pod.fetch(layout.updateLog, { method: "DELETE" });
+  else await env.pod.fetch(`${layout.container}budget.ttl`, { method: "PUT", body: "" });
+  await expect(env.load()).rejects.toThrow(NOT_A_COMPANION);
+  expect(env.writes()).toEqual([]);
+});
+
+it.each([
+  "assets/",
+  "assets/image.png",
+])("requires the repair Save before rewriting %s with its own access", async (path) => {
+  const env = await setup();
+  const part = `${layout.container}${path}`;
+  if (!part.endsWith("/"))
+    await env.pod.fetch(part, {
+      method: "PUT",
+      body: "png",
+      headers: { "content-type": "image/png" },
+    });
+  await env.access(part, [[CAROL, ["Read"]]]);
   const snapshot = await env.load();
-  expect(snapshot.notice).toContain("Shared differently: assets/image.png.");
+  expect(snapshot.notice).toContain(`Shared differently: ${path}.`);
   env.fetch.mockClear();
   await expect(applyDocumentSharing(env.session, snapshot, select(snapshot.state))).rejects.toThrow(
     REPAIR_FIRST,
   );
   expect(env.writes()).toEqual([]);
-  expect((await env.roles(image))[0]).toContainEqual([CAROL, "viewer"]);
+  expect((await env.roles(part))[0]).toContainEqual([CAROL, "viewer"]);
   // The explicit repair, then the change.
   const repaired = await applyDocumentSharing(env.session, snapshot, snapshot.state);
+  expect((await env.roles(part))[0]).not.toContainEqual([CAROL, "viewer"]);
   const shared = await applyDocumentSharing(env.session, repaired, select(repaired.state));
   expect(shared.needsSave).toBeUndefined();
 });

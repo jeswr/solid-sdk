@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
@@ -102,6 +103,14 @@ it("falls back on network failure and rejects URLs with unsafe schemes or creden
   expect(account.publicFetch).toHaveBeenCalledTimes(1);
   expect(shortWebId(undefined)).toBe("Unknown author");
   expect(shortWebId("file:///profile")).toBe("Unknown author");
+});
+it("distinguishes fallback author labels on different ports of the same host", async () => {
+  const account = session();
+  for (const port of [3000, 4000]) {
+    expect(await resolveDisplayName(account, `http://localhost:${port}/profile#me`)).toBe(
+      `localhost:${port}`,
+    );
+  }
 });
 it("authenticates only inside pod scope and refuses redirects on foreign public reads", async () => {
   const own = "https://pod.example/friend#me";

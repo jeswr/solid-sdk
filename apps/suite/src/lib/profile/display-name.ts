@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
@@ -42,7 +43,7 @@ class Profile extends Agent {
 
 export function shortWebId(webId: string | undefined): string {
   try {
-    return new URL(webId as string).hostname || "Unknown author";
+    return new URL(webId as string).host || "Unknown author";
   } catch {
     return "Unknown author";
   }
