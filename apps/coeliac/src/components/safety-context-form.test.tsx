@@ -1,8 +1,9 @@
 // AUTHORED-BY Claude Sonnet 5
+
+import type { SafetyContext } from "@jeswr/health-insights";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { SafetyContext } from "@/lib/inference/types";
 import { SafetyContextForm } from "./safety-context-form";
 
 describe("SafetyContextForm", () => {

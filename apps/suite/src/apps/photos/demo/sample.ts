@@ -2,6 +2,7 @@
 import type { PodSession } from "../../../lib/session/pod-session";
 import { changeMembers, coverAlbum, createAlbum, saveAlbum } from "../lib/data/albums";
 import { preferenceStore, setFavourites } from "../lib/data/favourites";
+import { destinationGuard } from "../lib/data/private-destination";
 import { statusOf } from "../lib/data/shared";
 import { photoDataStorage } from "../lib/data/storage";
 import { uploadFiles } from "../lib/data/upload";
@@ -44,22 +45,41 @@ async function seed(session: PodSession) {
     "Autumn garden",
     "Canal reflections",
     "Last light",
+    "Lake breeze",
   ];
   const refs: string[] = [];
   const now = Date.now();
   for (let index = 0; index < names.length; index++) {
     const scene = scenes[index % scenes.length] as readonly [string, string];
     const date = new Date(now - index * 3.5 * 86_400_000).toISOString();
+    const video = index === names.length - 1;
     const encoder: ImageEncoder = {
-      dimensions: async () => ({ width: 160, height: 100 }),
+      dimensions: async () => ({
+        width: 160,
+        height: 100,
+        ...(video ? { durationSeconds: 62.5 } : {}),
+      }),
       stripLocation: async (value) => value,
       thumbnail: async () => blob(scene[1], "image/webp"),
     };
     const result = (
       await uploadFiles(
         io,
-        [{ name: names[index] as string, original: blob(scene[0], "image/png") }],
-        { encoder, stripLocation: false, now: date, id: () => `sample-${index + 1}` },
+        [
+          {
+            name: names[index] as string,
+            original: video
+              ? new Blob(["Demo video unavailable offline"], { type: "video/mp4" })
+              : blob(scene[0], "image/png"),
+          },
+        ],
+        {
+          encoder,
+          stripLocation: false,
+          now: date,
+          id: () => `sample-${index + 1}`,
+          verifyDestination: destinationGuard(session),
+        },
       )
     )[0];
     if (!result?.ok) throw new Error("Couldn't create sample photos");

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 /**
  * The app-shell precache manifest (BUILD-PLAN Brief 4B — "instant offline load
@@ -19,7 +20,7 @@
  * set changes so `activate` evicts the stale generation. Mirrors the semantics
  * of `@jeswr/solid-offline`'s `shellCacheName(version)` (validated in tests).
  */
-export const SHELL_CACHE_VERSION = "v1";
+export const SHELL_CACHE_VERSION = "v2";
 
 /** The Cache API bucket name the worker writes the shell into. */
 export const SHELL_CACHE_NAME = `coeliac-shell-${SHELL_CACHE_VERSION}`;
@@ -34,7 +35,6 @@ export const SHELL_CACHE_PREFIX = "coeliac-shell-";
  * instantly instead of the browser's "no internet" error.
  */
 export const APP_SHELL_ROUTES: readonly string[] = Object.freeze([
-  "/",
   "/log",
   "/symptoms",
   "/insights",
@@ -50,7 +50,7 @@ export const APP_SHELL_ROUTES: readonly string[] = Object.freeze([
  * worker serves this shell document and the client router renders the target
  * page. It MUST be one of {@link APP_SHELL_ROUTES}.
  */
-export const SHELL_FALLBACK_ROUTE = "/";
+export const SHELL_FALLBACK_ROUTE = "/log";
 
 /**
  * The shape `@jeswr/solid-offline`'s `resolveAppShellConfig` accepts. Producing

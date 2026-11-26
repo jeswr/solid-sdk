@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   Button,
@@ -21,6 +22,7 @@ import {
 } from "../lib/data/usage";
 import { usePhotos } from "../state/photos-context";
 import { PhotoImage } from "./photo-image";
+import { mediaLabel, VideoBadge } from "./video-badge";
 
 /** Rows shown before "Show more"; the list is largest first. */
 const PAGE = 25;
@@ -149,13 +151,13 @@ export function StorageScreen() {
           <div>
             <dt>Library</dt>
             <dd>
-              {formatBytes(library.totalBytes)} · {plural(library.storedCount, "photo")}
+              {formatBytes(library.totalBytes)} · {plural(library.storedCount, "item")}
             </dd>
           </div>
           <div>
             <dt>Trash</dt>
             <dd>
-              {formatBytes(trash.totalBytes)} · {plural(trash.storedCount, "photo")}
+              {formatBytes(trash.totalBytes)} · {plural(trash.storedCount, "item")}
               {trash.storedCount > 0 && (
                 <>
                   {" · "}
@@ -174,19 +176,19 @@ export function StorageScreen() {
         )}
         {library.incompleteCount + trash.incompleteCount > 0 && (
           <p className="pho-storage-note" role="status">
-            Couldn't measure {plural(library.incompleteCount + trash.incompleteCount, "photo")}.
+            Couldn't measure {plural(library.incompleteCount + trash.incompleteCount, "item")}.
             Totals may be low.
           </p>
         )}
       </section>
       <section aria-labelledby="pho-largest" ref={list}>
         <h2 id="pho-largest" tabIndex={-1}>
-          Largest photos
+          Largest photos and videos
         </h2>
         {stored.length === 0 ? (
           <EmptyState
-            title="No photos in your pod yet"
-            body="Photos you upload appear here, largest first."
+            title="No photos or videos in your pod yet"
+            body="Photos and videos you upload appear here, largest first."
           />
         ) : (
           <>
@@ -199,9 +201,16 @@ export function StorageScreen() {
                     <Link
                       className="pho-storage-thumb"
                       href={`/photos/p/${encodeRef(photo.ref)}?from=%2Fphotos`}
-                      aria-label={`Open ${photo.name}`}
+                      aria-label={`Open ${mediaLabel(photo)}`}
                     >
-                      <PhotoImage url={photo.thumbnailUrl ?? photo.contentUrl} name={photo.name} />
+                      <PhotoImage
+                        url={
+                          photo.thumbnailUrl ??
+                          (photo.kind === "video" ? undefined : photo.contentUrl)
+                        }
+                        name={photo.name}
+                      />
+                      <VideoBadge photo={photo} />
                     </Link>
                     <div className="pho-storage-name">
                       <span>{photo.name}</span>

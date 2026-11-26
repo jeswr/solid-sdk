@@ -1,7 +1,8 @@
 // AUTHORED-BY Claude Sonnet 5
+
+import type { EvidencePairing } from "@jeswr/health-insights";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { EvidencePairing } from "@/lib/inference/types";
 import { EvidenceDrilldown } from "./evidence-drilldown";
 
 function pairing(over: Partial<EvidencePairing> = {}): EvidencePairing {
@@ -31,7 +32,11 @@ describe("EvidenceDrilldown", () => {
   });
 
   it("is a collapsed disclosure naming the exposure count, expandable to the tap-through detail", () => {
-    render(<EvidenceDrilldown evidence={[pairing(), pairing({ mealId: "https://alice.example/meals/2.ttl" })]} />);
+    render(
+      <EvidenceDrilldown
+        evidence={[pairing(), pairing({ mealId: "https://alice.example/meals/2.ttl" })]}
+      />,
+    );
     const details = screen.getByText(/see the 2 matched exposures/i).closest("details");
     expect(details).not.toBeNull();
     // Not shown as an expanded modal — a plain <details> is closed by default.

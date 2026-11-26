@@ -39,6 +39,8 @@ import { usePhotos } from "../state/photos-context";
 import { AlbumDialog } from "./album-dialogs";
 import { CollectionScreen, collectionPhotos } from "./collections";
 import { usePhotoUrl } from "./photo-image";
+import { videoDuration } from "./video-badge";
+import { VideoPlayer } from "./video-player";
 
 function safeFrom(value: string | null) {
   if (
@@ -205,6 +207,7 @@ function InfoPane({ photo }: { photo: LibraryPhoto }) {
   }));
   const albums = state.albums.filter((album) => album.members.includes(photo.ref));
   const details = [
+    ...(photo.kind === "video" ? [["Duration", videoDuration(photo.durationSeconds)]] : []),
     [
       "Date taken",
       exif.dateTimeOriginal
@@ -241,7 +244,10 @@ function InfoPane({ photo }: { photo: LibraryPhoto }) {
   ];
   const editable = !photo.readOnly;
   return (
-    <aside className="pho-info" aria-label="Photo information">
+    <aside
+      className="pho-info"
+      aria-label={photo.kind === "video" ? "Video information" : "Photo information"}
+    >
       <h2>Information</h2>
       <dl>
         {details.map(([label, value]) => (
@@ -362,7 +368,7 @@ export function LightboxScreen() {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       toast("Download started");
     } catch {
-      toast.error("Couldn't download this photo. Please try again.");
+      toast.error("Couldn't download this item. Please try again.");
     }
   }
   return (
@@ -393,7 +399,7 @@ export function LightboxScreen() {
           onCloseAutoFocus={(event) => event.preventDefault()}
           onKeyDown={(event) => {
             const target = event.target as HTMLElement;
-            if (target.closest("input, textarea, select, [role=combobox]")) return;
+            if (target.closest("input, textarea, select, video, [role=combobox]")) return;
             if (event.key === "ArrowLeft" && previous) {
               event.preventDefault();
               router.replace(route(previous), { scroll: false });
@@ -406,7 +412,7 @@ export function LightboxScreen() {
               event.preventDefault();
               setInfo((value) => !value);
             }
-            if (["+", "=", "-", "0"].includes(event.key)) {
+            if (photo?.kind !== "video" && ["+", "=", "-", "0"].includes(event.key)) {
               event.preventDefault();
               document
                 .querySelector<HTMLButtonElement>(
@@ -422,8 +428,9 @@ export function LightboxScreen() {
         >
           <DialogTitle className="sr-only">{photo?.name ?? "Photo"}</DialogTitle>
           <DialogDescription className="sr-only">
-            Photo viewer. Left and right arrows browse, i toggles information, plus and minus zoom,
-            Escape returns to your collection.
+            {photo?.kind === "video"
+              ? "Video viewer. Use the video controls to play, pause and seek. Outside the controls, left and right arrows browse and i toggles information. Escape returns to your collection."
+              : "Photo viewer. Left and right arrows browse, i toggles information, plus and minus zoom, Escape returns to your collection."}
           </DialogDescription>
           <header className="pho-lightbox-header">
             <IconButton label="Close photo" variant="ghost" onClick={close}>
@@ -506,7 +513,11 @@ export function LightboxScreen() {
               </div>
               <div className="pho-lightbox-body" data-info={info}>
                 <div className="pho-lightbox-image">
-                  <ZoomImage key={photo.ref} photo={photo} />
+                  {photo.kind === "video" ? (
+                    <VideoPlayer key={photo.ref} photo={photo} />
+                  ) : (
+                    <ZoomImage key={photo.ref} photo={photo} />
+                  )}
                   <div className="pho-prev-next">
                     {previous ? (
                       <Link href={route(previous)} replace aria-label="Previous photo">

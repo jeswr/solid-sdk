@@ -1,0 +1,34 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Hand-checked fictional legacy nanopub: health/core IRIs must remain byte-identical.
+@prefix health: <https://w3id.org/jeswr/sectors/health#> .
+@prefix core: <https://w3id.org/jeswr/core#> .
+@prefix np: <http://www.nanopub.org/nschema#> .
+@prefix pkg: <https://jeswr.org/ns/pkg#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix schema: <https://schema.org/> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix dpv: <https://w3id.org/dpv#> .
+@prefix pd: <https://w3id.org/dpv/pd#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+<https://example.org/nanopubs/legacy> {
+  <https://example.org/nanopubs/legacy> a np:Nanopublication ;
+    np:hasAssertion <https://example.org/assertions/legacy> ;
+    np:hasProvenance <https://example.org/nanopubs/legacy#provenance> ;
+    np:hasPublicationInfo <https://example.org/nanopubs/legacy#pubinfo> .
+}
+<https://example.org/assertions/legacy> {
+  <https://example.org/entities/legacy-condition> a health:Condition, schema:MedicalCondition ;
+    health:patient <https://example.org/people/avery#me> ; schema:name "Fictional legacy asthma" ;
+    health:hasCode <https://example.org/entities/legacy-code> ; schema:validFrom "2021-02"^^xsd:gYearMonth .
+  <https://example.org/entities/legacy-code> a health:CodeableConcept ; core:value "195967001" ;
+    skos:exactMatch <http://snomed.info/id/195967001> .
+}
+<https://example.org/nanopubs/legacy#provenance> {
+  <https://example.org/assertions/legacy> pkg:epistemicStatus pkg:SelfReportedExplicit ; pkg:validityStatus pkg:Current ;
+    dpv:hasPersonalData pd:MedicalHealth ; prov:wasAttributedTo <https://example.org/people/avery#me> .
+}
+<https://example.org/nanopubs/legacy#pubinfo> {
+  <https://example.org/nanopubs/legacy> prov:generatedAtTime "2026-11-01T10:00:00Z"^^xsd:dateTime ;
+    prov:wasAttributedTo <https://example.org/agents/legacy> ; pkg:batch "health-legacy" ; dct:identifier "health-legacy/condition" .
+}

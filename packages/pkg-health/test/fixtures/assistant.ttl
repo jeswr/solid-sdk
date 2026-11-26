@@ -1,0 +1,68 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Entirely fictional assistant export; no real health information.
+@prefix health: <https://jeswr.org/ns/sectors/health#> .
+@prefix schema1: <http://schema.org/> .
+@prefix schema: <https://schema.org/> .
+@prefix pkg: <https://w3id.org/jeswr/pkg#> .
+@prefix memory: <https://jeswr.org/ns/pkg#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix oa: <http://www.w3.org/ns/oa#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix ex: <https://example.org/assistant-export/2026-11-01/> .
+
+ex:source-a a schema1:CreativeWork ; schema1:name "Fictional health conversation" ;
+  schema1:dateCreated "2026-10-01T09:30:00Z"^^xsd:dateTime .
+ex:source-b a schema:CreativeWork ; schema:name "Fictional follow-up" ;
+  schema:dateCreated "2026-10-15T11:00:00Z"^^xsd:dateTime .
+
+ex:observation a health:Observation ; health:patient <https://example.org/people/avery#me> ;
+  schema1:name "Fictional ferritin" ; health:value "42.5"^^xsd:decimal ; health:hasUnit "ug/L" ;
+  health:effectiveTime "2026-10-01"^^xsd:date ; schema1:validFrom "2026-10-01"^^xsd:date ;
+  prov:wasDerivedFrom ex:source-a, ex:source-b ; oa:exact "My fictional result was 42.5.", "I confirmed the fictional result." ;
+  pkg:epistemicStatus "SelfReportedExplicit" ; pkg:validityStatus "Current" .
+ex:no-unit a health:Observation ; health:patient <https://example.org/people/avery#me> ;
+  schema:name "Fictional score" ; health:value "7"^^xsd:integer ;
+  health:effectiveTime "2026-10-15T12:00:00Z"^^xsd:dateTime ;
+  prov:wasDerivedFrom ex:source-b ; oa:exact "My fictional score was seven." ;
+  memory:epistemicStatus "Inferred" ; memory:validityStatus "Current" .
+ex:qualitative a health:Observation ; schema1:about <https://example.org/people/avery#me> ;
+  schema1:name "Fictional qualitative result" ; health:value "Unremarkable" ;
+  prov:wasDerivedFrom ex:source-a ; oa:exact "The fictional result was unremarkable." ;
+  pkg:epistemicStatus "Uncertain" ; pkg:validityStatus "Current" .
+ex:medication a health:MedicationStatement ; health:patient <https://example.org/people/avery#me> ;
+  schema1:name "Fictional medicine statement" ; health:medication ex:product ;
+  schema1:doseSchedule "One fictional tablet each evening" ;
+  schema1:validFrom "2026-10-03T18:00:00Z"^^xsd:dateTime ;
+  schema1:description "A fictional schedule; no treatment advice." ;
+  prov:wasDerivedFrom ex:source-a ; oa:exact "I reported a fictional medicine." ;
+  pkg:epistemicStatus "SelfReportedExplicit" ; pkg:validityStatus "Current" .
+ex:product a health:MedicinalProduct ; schema1:name "Fictionalium" .
+ex:condition a health:Condition ; health:patient <https://example.org/people/avery#me> ;
+  schema1:name "Fictional old ankle concern" ; schema1:validFrom "2025-06-01"^^xsd:date ;
+  schema:validThrough "2025-07-01"^^xsd:date ;
+  prov:wasDerivedFrom ex:source-a ; oa:exact "My fictional ankle concern is in the past." ;
+  pkg:epistemicStatus "SelfReportedExplicit" ; pkg:validityStatus "Past" .
+ex:encounter a health:Encounter ; schema:about <https://example.org/people/avery#me> ;
+  schema:name "Fictional review visit" ; schema:validFrom "2026-10-15"^^xsd:date ;
+  prov:wasDerivedFrom ex:source-b ; oa:exact "I attended a fictional review." ;
+  memory:epistemicStatus "SelfReportedExplicit" ; memory:validityStatus "Current" .
+ex:immunization a health:Immunization ; health:patient <https://example.org/people/avery#me> ;
+  schema1:name "Fictional seasonal immunization" ; health:effectiveTime "2026-09-15"^^xsd:date ;
+  prov:wasDerivedFrom ex:source-a ; oa:exact "I reported a fictional immunization." ;
+  pkg:epistemicStatus "SelfReportedExplicit" ; pkg:validityStatus "Current" .
+ex:note a schema1:PropertyValue ; health:patient <https://example.org/people/avery#me> ;
+  schema1:name "Fictional balance context" ; schema1:value "Comfortable on fictional walks" ;
+  prov:wasDerivedFrom ex:source-b ; oa:exact "I described fictional balance context." ;
+  pkg:epistemicStatus "Uncertain" ; pkg:validityStatus "Current" .
+ex:foreign a health:Condition ; health:patient <https://example.org/people/morgan#me> ;
+  schema1:name "Fictional foreign concern" ;
+  prov:wasDerivedFrom ex:source-a ; oa:exact "This fictional concern is someone else's." ;
+  pkg:epistemicStatus "SelfReportedExplicit" ; pkg:validityStatus "Current" .
+ex:unknown a health:Condition ; health:patient <https://example.org/people/avery#me> ;
+  schema1:name "Fictional unknown status" ;
+  prov:wasDerivedFrom ex:source-a ; oa:exact "This fictional status is unknown." ;
+  pkg:epistemicStatus "Probably" ; pkg:validityStatus "Current" .
+ex:invalid a health:Observation ; health:patient <https://example.org/people/avery#me> ;
+  schema1:name "Fictional invalid literal" ; health:value "not-a-number"^^xsd:decimal ;
+  prov:wasDerivedFrom ex:source-a ; oa:exact "This fictional value is invalid." ;
+  pkg:epistemicStatus "SelfReportedExplicit" ; pkg:validityStatus "Current" .

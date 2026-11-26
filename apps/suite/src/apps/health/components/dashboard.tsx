@@ -9,6 +9,7 @@ import { displayValue, formatMetric, summarizeMetric } from "../lib/data/metrics
 import { dueMedications } from "../lib/data/records";
 import { useHealth, useHealthResource, useRecords } from "../state/health-context";
 import { Sparkline } from "./charts";
+import { DiaryCard } from "./diary-card";
 import { useMeasurement } from "./health-app";
 
 const neverEmpty = () => false;
@@ -98,6 +99,7 @@ export function Dashboard() {
         </span>
       </header>
       <DueNow />
+      <DiaryCard />
       <div className="hlt-section-heading">
         <h2>Your metrics</h2>
         <span className="hlt-muted">Last 7 days · UTC</span>

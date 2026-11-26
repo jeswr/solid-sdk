@@ -109,8 +109,8 @@
       "locations": [
         {
           "file": "apps/issues/src/lib/session-context.tsx",
-          "startLine": 123,
-          "endLine": 157,
+          "startLine": 124,
+          "endLine": 158,
           "tokens": 120
         },
         {
@@ -700,8 +700,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 164,
-          "endLine": 183,
+          "startLine": 180,
+          "endLine": 199,
           "tokens": 121
         }
       ]
@@ -747,19 +747,19 @@
       ]
     },
     "130916df91d1a558f41968fa2281d16a5cb2d9adf45a0ad3217784c03f11ee9c": {
-      "tokens": 120,
+      "tokens": 126,
       "locations": [
         {
           "file": "apps/suite/src/apps/photos/lib/model/album.ts",
           "startLine": 29,
-          "endLine": 43,
-          "tokens": 120
+          "endLine": 45,
+          "tokens": 126
         },
         {
           "file": "packages/pod-connectors/src/core/vocab.ts",
           "startLine": 62,
-          "endLine": 77,
-          "tokens": 120
+          "endLine": 80,
+          "tokens": 126
         }
       ]
     },
@@ -1140,8 +1140,8 @@
         },
         {
           "file": "apps/issues/src/lib/session-context.tsx",
-          "startLine": 131,
-          "endLine": 166,
+          "startLine": 132,
+          "endLine": 167,
           "tokens": 127
         },
         {
@@ -1275,23 +1275,6 @@
         }
       ]
     },
-    "1f7718e37635a8f10671333e5830145e4b0b4d48b444574de590d033fe61774f": {
-      "tokens": 132,
-      "locations": [
-        {
-          "file": "apps/suite/src/apps/health/components/health-app.tsx",
-          "startLine": 132,
-          "endLine": 157,
-          "tokens": 132
-        },
-        {
-          "file": "apps/suite/src/apps/money/components/money-app.tsx",
-          "startLine": 102,
-          "endLine": 127,
-          "tokens": 132
-        }
-      ]
-    },
     "208d4b6ac3ec862a895bdc40ba44ccf71882ea8ea83c340b611cb1dc546f8f93": {
       "tokens": 120,
       "locations": [
@@ -1350,8 +1333,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 183,
-          "endLine": 199,
+          "startLine": 199,
+          "endLine": 215,
           "tokens": 136
         }
       ]
@@ -1557,8 +1540,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 177,
-          "endLine": 195,
+          "startLine": 193,
+          "endLine": 211,
           "tokens": 141
         }
       ]
@@ -1577,6 +1560,23 @@
           "startLine": 44,
           "endLine": 73,
           "tokens": 155
+        }
+      ]
+    },
+    "25c1f743b672f1e344ed73bf5bac7e125da0c5d696f3b703e152c604d141c755": {
+      "tokens": 120,
+      "locations": [
+        {
+          "file": "apps/suite/src/apps/docs/lib/model/type-index.ts",
+          "startLine": 67,
+          "endLine": 85,
+          "tokens": 120
+        },
+        {
+          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
+          "startLine": 107,
+          "endLine": 128,
+          "tokens": 120
         }
       ]
     },
@@ -1940,8 +1940,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 175,
-          "endLine": 191,
+          "startLine": 191,
+          "endLine": 207,
           "tokens": 125
         },
         {
@@ -2028,14 +2028,14 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 150,
-          "endLine": 169,
+          "startLine": 166,
+          "endLine": 185,
           "tokens": 120
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 208,
-          "endLine": 227,
+          "startLine": 224,
+          "endLine": 243,
           "tokens": 120
         }
       ]
@@ -2114,8 +2114,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 347,
-          "endLine": 367,
+          "startLine": 371,
+          "endLine": 391,
           "tokens": 143
         }
       ]
@@ -2320,29 +2320,6 @@
         }
       ]
     },
-    "3b33382f32cac8bfaa56282d856cb81acb20c931c9c4dfa2cae34a8912029dd5": {
-      "tokens": 125,
-      "locations": [
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/album.ts",
-          "startLine": 29,
-          "endLine": 45,
-          "tokens": 125
-        },
-        {
-          "file": "packages/pod-connectors/src/core/vocab.ts",
-          "startLine": 62,
-          "endLine": 80,
-          "tokens": 125
-        },
-        {
-          "file": "packages/solid-chat-interop/src/chat-writer.ts",
-          "startLine": 73,
-          "endLine": 89,
-          "tokens": 125
-        }
-      ]
-    },
     "3ba9569e43bf62e055e3f7b558bb971815763240f8a4fa8e06be592c3e378acc": {
       "tokens": 127,
       "locations": [
@@ -2500,8 +2477,8 @@
         },
         {
           "file": "packages/pod-connectors/src/google-drive/vocab.ts",
-          "startLine": 17,
-          "endLine": 37,
+          "startLine": 18,
+          "endLine": 38,
           "tokens": 123
         }
       ]
@@ -2597,14 +2574,14 @@
       "locations": [
         {
           "file": "apps/coeliac/src/lib/pod/type-index.ts",
-          "startLine": 40,
-          "endLine": 54,
+          "startLine": 42,
+          "endLine": 56,
           "tokens": 122
         },
         {
           "file": "packages/pod-connectors/src/google-drive/vocab.ts",
-          "startLine": 16,
-          "endLine": 34,
+          "startLine": 17,
+          "endLine": 35,
           "tokens": 122
         }
       ]
@@ -2661,8 +2638,8 @@
       "locations": [
         {
           "file": "apps/suite/src/apps/chat/components/chat-app.tsx",
-          "startLine": 249,
-          "endLine": 294,
+          "startLine": 285,
+          "endLine": 330,
           "tokens": 207
         },
         {
@@ -2855,8 +2832,8 @@
         },
         {
           "file": "packages/pod-connectors/src/google-drive/vocab.ts",
-          "startLine": 35,
-          "endLine": 56,
+          "startLine": 36,
+          "endLine": 57,
           "tokens": 122
         }
       ]
@@ -2981,8 +2958,8 @@
         },
         {
           "file": "apps/issues/src/lib/session-context.tsx",
-          "startLine": 134,
-          "endLine": 182,
+          "startLine": 135,
+          "endLine": 183,
           "tokens": 121
         },
         {
@@ -3305,8 +3282,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 184,
-          "endLine": 204,
+          "startLine": 200,
+          "endLine": 220,
           "tokens": 143
         },
         {
@@ -3368,8 +3345,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 189,
-          "endLine": 207,
+          "startLine": 205,
+          "endLine": 223,
           "tokens": 141
         }
       ]
@@ -3785,8 +3762,8 @@
       "locations": [
         {
           "file": "apps/issues/src/lib/session-context.tsx",
-          "startLine": 124,
-          "endLine": 158,
+          "startLine": 125,
+          "endLine": 159,
           "tokens": 120
         },
         {
@@ -3942,8 +3919,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 195,
-          "endLine": 219,
+          "startLine": 211,
+          "endLine": 235,
           "tokens": 187
         }
       ]
@@ -4091,8 +4068,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 184,
-          "endLine": 201,
+          "startLine": 200,
+          "endLine": 217,
           "tokens": 124
         },
         {
@@ -4194,12 +4171,6 @@
           "tokens": 122
         },
         {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 91,
-          "endLine": 112,
-          "tokens": 122
-        },
-        {
           "file": "packages/pod-connectors/src/core/vocab.ts",
           "startLine": 115,
           "endLine": 135,
@@ -4226,19 +4197,19 @@
       ]
     },
     "70266d47d03bc5c3cad33246de27ca8d7054df938901195037f960b90eb0cd47": {
-      "tokens": 120,
+      "tokens": 131,
       "locations": [
         {
           "file": "apps/suite/src/apps/contacts/lib/model/discovery.ts",
           "startLine": 33,
-          "endLine": 53,
-          "tokens": 120
+          "endLine": 56,
+          "tokens": 131
         },
         {
           "file": "packages/pod-connectors/src/google-drive/vocab.ts",
-          "startLine": 37,
-          "endLine": 57,
-          "tokens": 120
+          "startLine": 38,
+          "endLine": 67,
+          "tokens": 131
         }
       ]
     },
@@ -4474,14 +4445,14 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 92,
-          "endLine": 112,
+          "startLine": 108,
+          "endLine": 128,
           "tokens": 121
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 170,
-          "endLine": 189,
+          "startLine": 186,
+          "endLine": 205,
           "tokens": 121
         },
         {
@@ -5240,19 +5211,19 @@
       ]
     },
     "83d2fb03383a3de16934e8789d1fb1bb25a9c1d9c15e3841f39bed96d866b5f4": {
-      "tokens": 259,
+      "tokens": 172,
       "locations": [
         {
           "file": "apps/pod-photos/src/photos/photograph.ts",
           "startLine": 55,
-          "endLine": 97,
-          "tokens": 259
+          "endLine": 82,
+          "tokens": 172
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 63,
-          "endLine": 105,
-          "tokens": 259
+          "startLine": 66,
+          "endLine": 93,
+          "tokens": 172
         }
       ]
     },
@@ -5468,8 +5439,8 @@
         },
         {
           "file": "packages/pod-connectors/src/google-drive/vocab.ts",
-          "startLine": 27,
-          "endLine": 55,
+          "startLine": 28,
+          "endLine": 56,
           "tokens": 147
         }
       ]
@@ -5655,8 +5626,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 166,
-          "endLine": 185,
+          "startLine": 182,
+          "endLine": 201,
           "tokens": 138
         },
         {
@@ -5780,12 +5751,6 @@
           "file": "apps/pod-photos/src/photos/photograph.ts",
           "startLine": 78,
           "endLine": 101,
-          "tokens": 140
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 86,
-          "endLine": 109,
           "tokens": 140
         }
       ]
@@ -6000,79 +5965,79 @@
       ]
     },
     "93fa6c707b6be7fa9945c9c5afd89ed8d1856c52fd797f87674e60943d7593ce": {
-      "tokens": 213,
+      "tokens": 217,
       "locations": [
         {
           "file": "apps/access-manager/src/lib/records.ts",
           "startLine": 98,
-          "endLine": 115,
-          "tokens": 121
+          "endLine": 116,
+          "tokens": 125
         },
         {
           "file": "apps/access-manager/src/lib/records.ts",
           "startLine": 158,
-          "endLine": 189,
-          "tokens": 213
+          "endLine": 190,
+          "tokens": 217
         },
         {
           "file": "apps/pod-chat/src/message.ts",
           "startLine": 85,
-          "endLine": 100,
-          "tokens": 121
+          "endLine": 101,
+          "tokens": 125
         },
         {
           "file": "apps/pod-chat/src/message.ts",
           "startLine": 109,
-          "endLine": 132,
-          "tokens": 167
+          "endLine": 133,
+          "tokens": 171
         },
         {
           "file": "apps/pod-health/src/model.ts",
           "startLine": 153,
-          "endLine": 172,
-          "tokens": 121
+          "endLine": 173,
+          "tokens": 125
         },
         {
           "file": "apps/pod-mail/src/model/message.ts",
           "startLine": 40,
-          "endLine": 59,
-          "tokens": 121
+          "endLine": 60,
+          "tokens": 125
         },
         {
           "file": "apps/pod-money/src/model.ts",
           "startLine": 207,
-          "endLine": 226,
-          "tokens": 121
+          "endLine": 227,
+          "tokens": 125
         },
         {
           "file": "apps/pod-money/src/typeIndex.ts",
           "startLine": 37,
-          "endLine": 56,
-          "tokens": 121
+          "endLine": 57,
+          "tokens": 125
         },
         {
           "file": "apps/suite/src/apps/mail/lib/model/message.ts",
           "startLine": 42,
-          "endLine": 69,
-          "tokens": 167
+          "endLine": 70,
+          "tokens": 171
         },
         {
           "file": "apps/suite/src/apps/mail/lib/model/message.ts",
           "startLine": 144,
-          "endLine": 168,
-          "tokens": 167
+          "endLine": 169,
+          "tokens": 171
         },
         {
           "file": "packages/pod-connectors/src/mail/vocab.ts",
           "startLine": 34,
-          "endLine": 56,
-          "tokens": 167
+          "endLine": 57,
+          "tokens": 171
         },
         {
           "file": "packages/pod-connectors/src/mail/vocab.ts",
           "startLine": 87,
-          "endLine": 109,
-          "tokens": 167
+          "endLine": 110,
+          "tokens": 171
         }
       ]
     },
@@ -6201,8 +6166,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 233,
-          "endLine": 263,
+          "startLine": 249,
+          "endLine": 279,
           "tokens": 125
         }
       ]
@@ -6368,8 +6333,8 @@
       "locations": [
         {
           "file": "apps/issues/src/lib/session-context.tsx",
-          "startLine": 120,
-          "endLine": 157,
+          "startLine": 121,
+          "endLine": 158,
           "tokens": 127
         },
         {
@@ -6646,8 +6611,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 163,
-          "endLine": 183,
+          "startLine": 179,
+          "endLine": 199,
           "tokens": 136
         }
       ]
@@ -6980,12 +6945,6 @@
           "startLine": 78,
           "endLine": 97,
           "tokens": 120
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 86,
-          "endLine": 105,
-          "tokens": 120
         }
       ]
     },
@@ -7092,8 +7051,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 155,
-          "endLine": 181,
+          "startLine": 171,
+          "endLine": 197,
           "tokens": 173
         }
       ]
@@ -7483,14 +7442,14 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 96,
-          "endLine": 116,
+          "startLine": 112,
+          "endLine": 132,
           "tokens": 132
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 174,
-          "endLine": 190,
+          "startLine": 190,
+          "endLine": 206,
           "tokens": 132
         },
         {
@@ -7689,8 +7648,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 175,
-          "endLine": 192,
+          "startLine": 191,
+          "endLine": 208,
           "tokens": 122
         },
         {
@@ -7735,14 +7694,14 @@
       "locations": [
         {
           "file": "apps/suite/src/apps/docs/components/document-list.tsx",
-          "startLine": 227,
-          "endLine": 249,
+          "startLine": 229,
+          "endLine": 251,
           "tokens": 121
         },
         {
           "file": "apps/suite/src/apps/sheets/components/sheets-list.tsx",
-          "startLine": 115,
-          "endLine": 137,
+          "startLine": 117,
+          "endLine": 139,
           "tokens": 121
         }
       ]
@@ -7959,8 +7918,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 169,
-          "endLine": 189,
+          "startLine": 185,
+          "endLine": 205,
           "tokens": 141
         },
         {
@@ -8384,8 +8343,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 167,
-          "endLine": 186,
+          "startLine": 183,
+          "endLine": 202,
           "tokens": 122
         },
         {
@@ -8434,23 +8393,6 @@
           "startLine": 95,
           "endLine": 112,
           "tokens": 124
-        }
-      ]
-    },
-    "ce287b8debef1eb49870ec334a714be468ffd2d496117d0bb6af94087658957d": {
-      "tokens": 176,
-      "locations": [
-        {
-          "file": "apps/suite/src/apps/money/components/money-app.tsx",
-          "startLine": 112,
-          "endLine": 146,
-          "tokens": 176
-        },
-        {
-          "file": "apps/suite/src/apps/music/components/music-app.tsx",
-          "startLine": 136,
-          "endLine": 170,
-          "tokens": 176
         }
       ]
     },
@@ -8836,8 +8778,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 190,
-          "endLine": 224,
+          "startLine": 206,
+          "endLine": 240,
           "tokens": 235
         }
       ]
@@ -8956,12 +8898,6 @@
           "tokens": 120
         },
         {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 91,
-          "endLine": 111,
-          "tokens": 120
-        },
-        {
           "file": "packages/pod-connectors/src/core/vocab.ts",
           "startLine": 115,
           "endLine": 134,
@@ -9026,8 +8962,8 @@
         },
         {
           "file": "apps/issues/src/lib/session-context.tsx",
-          "startLine": 131,
-          "endLine": 171,
+          "startLine": 132,
+          "endLine": 172,
           "tokens": 145
         },
         {
@@ -9133,12 +9069,6 @@
           "file": "apps/pod-photos/src/photos/photograph.ts",
           "startLine": 80,
           "endLine": 102,
-          "tokens": 137
-        },
-        {
-          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 88,
-          "endLine": 110,
           "tokens": 137
         }
       ]
@@ -9690,8 +9620,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 178,
-          "endLine": 197,
+          "startLine": 194,
+          "endLine": 213,
           "tokens": 140
         },
         {
@@ -9951,8 +9881,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 151,
-          "endLine": 171,
+          "startLine": 167,
+          "endLine": 187,
           "tokens": 139
         }
       ]
@@ -10157,8 +10087,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 141,
-          "endLine": 169,
+          "startLine": 157,
+          "endLine": 185,
           "tokens": 147
         }
       ]
@@ -10191,8 +10121,8 @@
         },
         {
           "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
-          "startLine": 181,
-          "endLine": 198,
+          "startLine": 197,
+          "endLine": 214,
           "tokens": 122
         },
         {

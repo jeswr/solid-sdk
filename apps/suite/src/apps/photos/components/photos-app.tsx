@@ -7,6 +7,7 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropZoneOverlay,
@@ -21,6 +22,7 @@ import { createContext, type ReactNode, useContext, useEffect, useRef, useState 
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
+import { REMOVE_LOCATION_HELP } from "../lib/model/location-copy";
 import { PhotosProvider, usePhotos } from "../state/photos-context";
 
 const UploadContext = createContext<() => void>(() => {});
@@ -72,6 +74,9 @@ function Chrome({ children }: { children: ReactNode }) {
           >
             Remove location from uploads
           </DropdownMenuCheckboxItem>
+          <DropdownMenuLabel className="max-w-72 whitespace-normal text-xs font-normal">
+            {REMOVE_LOCATION_HELP}
+          </DropdownMenuLabel>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -132,10 +137,10 @@ function Chrome({ children }: { children: ReactNode }) {
         <input
           ref={picker}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           hidden
-          aria-label="Upload images"
+          aria-label="Upload photos and videos"
           onChange={(event) => {
             photos.upload(Array.from(event.target.files ?? []), strip);
             event.target.value = "";
@@ -144,18 +149,18 @@ function Chrome({ children }: { children: ReactNode }) {
         <input
           ref={folderPicker}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           multiple
           hidden
           {...{ webkitdirectory: "" }}
-          aria-label="Upload image folder"
+          aria-label="Upload photos and videos folder"
           onChange={(event) => {
             photos.upload(Array.from(event.target.files ?? []), strip);
             event.target.value = "";
           }}
         />
         <DropZoneOverlay
-          folderName="Photos"
+          folderName="photos and videos"
           onFiles={(files) => {
             photos.upload(
               files.files.map((entry) => entry.file),

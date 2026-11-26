@@ -1,5 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 "use client";
+import type { ProtocolSafetyContext } from "@jeswr/health-insights";
+import { emergencyTriggersFromDiary } from "@jeswr/health-insights";
 /**
  * Load the account's elimination protocols + tolerance conclusions from the durable
  * cache (cache-only reads — instant, offline-capable, UX invariant #3) and derive
@@ -11,8 +13,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { StoredConclusion, StoredProtocol } from "../cache/diary-store";
 import { diaryDataFromCache } from "../inference/from-cache";
-import type { ProtocolSafetyContext } from "../protocol/fsm";
-import { emergencyTriggersFromDiary } from "../protocol/safety-context";
 import { useSession } from "./context";
 
 /** What the caller can pin about the user's clinical status (safety-relevant). */

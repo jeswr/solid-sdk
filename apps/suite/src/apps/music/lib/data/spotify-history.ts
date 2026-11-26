@@ -9,6 +9,7 @@ import {
   type Playback,
   readHistory,
 } from "../model";
+import type { ReportMusicFailure } from "./library";
 
 /**
  * The Spotify connector's history documents, mirroring `spotifyHistorySlug` and
@@ -26,12 +27,14 @@ export function spotifyHistoryUrl(storage: string, month: string, part: number):
 /**
  * Plays imported from Spotify history files for the given months. Best effort: a month
  * stops at its first missing part, and a failed read keeps the parts read before it, so
- * imported history can never hide the user's own.
+ * imported history can never hide the user's own. Failures are
+ * passed to `report` when given (otherwise logged), never thrown.
  */
 export async function loadSpotifyHistory(
   fetch: typeof globalThis.fetch,
   storage: string,
   dates: readonly Date[],
+  report?: ReportMusicFailure,
 ): Promise<Playback[]> {
   const scoped = createPodScopedFetch(new URL("integrations/spotify/music/", storage).href, {
     fetch,
@@ -44,8 +47,11 @@ export async function loadSpotifyHistory(
           const doc = await loadMusic(scoped, spotifyHistoryUrl(storage, month, part));
           plays.push(...readHistory(doc.dataset));
         } catch (error) {
-          if (!(error instanceof RdfFetchError) || error.status !== 404)
-            console.warn("Couldn't read imported Spotify history", error);
+          if (!(error instanceof RdfFetchError) || error.status !== 404) {
+            if (report)
+              report({ url: spotifyHistoryUrl(storage, month, part), error, area: "history" });
+            else console.warn("Couldn't read imported Spotify history", error);
+          }
           break;
         }
       }
