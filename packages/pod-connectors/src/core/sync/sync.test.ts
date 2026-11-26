@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 import { LEGACY_NAMESPACES, NS } from "@jeswr/suite-vocab";
 import { DataFactory, Parser, Store, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
@@ -562,6 +563,31 @@ describe("two-way reference conformance", () => {
     f.adapter.applyRemote = apply;
     await f.run();
     expect(f.platform.calls.create).toBe(1);
+  });
+  it("completes type registration and provenance within the exact Pod request budget", async () => {
+    function withRegistration() {
+      const f = fixture();
+      f.platform.set("initial");
+      const { writer } = f.pod;
+      const register = vi.spyOn(writer, "registerType");
+      const operations = [
+        vi.spyOn(writer, "read"),
+        vi.spyOn(writer, "write"),
+        vi.spyOn(writer, "list"),
+        vi.spyOn(writer, "ensureOwnerOnly"),
+        register,
+      ];
+      return { ...f, register, operations };
+    }
+    const baseline = withRegistration();
+    await baseline.run();
+    const maxRequests = baseline.operations.reduce((total, op) => total + op.mock.calls.length, 0);
+
+    const f = withRegistration();
+    const report = await f.run({ limits: { maxRequests, maxItems: 100 } });
+    expect(f.register).toHaveBeenCalledTimes(1);
+    expect(report.indexUrl).toBeDefined();
+    expect(f.pod.documents.has(f.pod.writer.resolve("_provenance.ttl"))).toBe(true);
   });
   it("uses the existing one-run claim across both import and outbound", async () => {
     const f = fixture({ writeBack: true });
