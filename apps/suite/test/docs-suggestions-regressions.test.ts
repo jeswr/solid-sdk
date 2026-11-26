@@ -12,6 +12,7 @@ import {
   resolveSuggestions,
   type Suggestion,
   suggestionAction,
+  suggestionAt,
   suggestionKey,
   suggestions,
   suggestionUnsupported,
@@ -134,7 +135,7 @@ it.each([
       kind: "suggestionInsert",
       id: expect.not.stringMatching(/forged|deleted/),
     });
-  expect(JSON.stringify(importHtml(html).json)).not.toContain("suggestion");
+  expect(suggestions(editor.schema.nodeFromJSON(importHtml(html).json))).toEqual([]);
 });
 it("pasting next to one's own suggestion creates a fresh id", () => {
   const editor = make("<p></p>");
@@ -376,4 +377,156 @@ it("select-all multiline paste preserves the originals and marks every pasted pa
   editor.view.pasteText("one\ntwo", new Event("paste") as ClipboardEvent);
   expect(marked(editor, "suggestionInsert")).toBe("onetwo");
   expect(marked(editor, "suggestionDelete")).toBe("abcdef");
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+function paragraphs(editor: Editor) {
+  const result: string[] = [];
+  editor.state.doc.descendants((node) => {
+    if (node.isTextblock) result.push(node.textContent);
+  });
+  return result;
+}
+it.each([
+  true,
+  false,
+])("resolves a cross-paragraph replacement including only its selected breaks (accept %s)", (accept) => {
+  const editor = make("<p>abc</p><p>def</p><p>untouched</p>");
+  editor.view.dispatch(editor.state.tr.insertText("Q", 2, 7));
+  editor.view.dispatch(resolveSuggestions(editor.state, accept));
+  expect(paragraphs(editor)).toEqual(accept ? ["aQef", "untouched"] : ["abc", "def", "untouched"]);
+  expect(suggestions(editor.state.doc)).toEqual([]);
+});
+it.each([
+  true,
+  false,
+])("resolves a multiline paste without merging unselected paragraphs (accept %s)", (accept) => {
+  const editor = make("<p>hello world</p><p>untouched</p>");
+  editor.commands.setTextSelection(6);
+  editor.view.pasteText("one\ntwo", new Event("paste") as ClipboardEvent);
+  editor.view.dispatch(resolveSuggestions(editor.state, accept));
+  expect(paragraphs(editor)).toEqual(
+    accept ? ["helloone", "two world", "untouched"] : ["hello world", "untouched"],
+  );
+});
+it.each([
+  true,
+  false,
+])("resolves select-all multiline replacement without blank paragraphs (accept %s)", (accept) => {
+  const editor = make();
+  editor.view.dispatch(editor.state.tr.setSelection(new AllSelection(editor.state.doc)));
+  editor.view.pasteText("one\ntwo", new Event("paste") as ClipboardEvent);
+  editor.view.dispatch(resolveSuggestions(editor.state, accept));
+  expect(paragraphs(editor)).toEqual(accept ? ["one", "two"] : ["abc", "def"]);
+});
+it.each([
+  true,
+  false,
+])("resolves a selection through an empty paragraph after HTML reload (accept %s)", (accept) => {
+  const editor = make("<p>abc</p><p></p><p>def</p>");
+  editor.view.dispatch(editor.state.tr.delete(2, 9));
+  const reloaded = make(editor.getHTML());
+  reloaded.view.dispatch(resolveSuggestions(reloaded.state, accept));
+  expect(paragraphs(reloaded)).toEqual(accept ? ["aef"] : ["abc", "", "def"]);
+});
+it("continues to reject format changes atomically because the model only tracks insertions and deletions", () => {
+  const editor = make();
+  const blocked = vi.fn();
+  editor.view.dom.addEventListener(suggestionUnsupported, blocked);
+  editor.commands.setTextSelection({ from: 1, to: 3 });
+  const original = editor.getJSON();
+  editor.commands.toggleBold();
+  expect(editor.getJSON()).toEqual(original);
+  expect(blocked).toHaveBeenCalledOnce();
+});
+it.each([
+  [0, 5],
+  [0, 10],
+  [1, 8],
+  [2, 10],
+  [1, 10],
+  [0, 8],
+  [2, 8],
+])("matches native paragraph structure when replacing %i..%i", (from, to) => {
+  const editor = make();
+  const native = make();
+  native.view.dispatch(native.state.tr.setMeta(suggestionKey, { enabled: false, author: "alice" }));
+  editor.view.dispatch(editor.state.tr.insertText("Q", from, to));
+  native.view.dispatch(native.state.tr.insertText("Q", from, to));
+  editor.view.dispatch(resolveSuggestions(editor.state, true));
+  expect(paragraphs(editor)).toEqual(paragraphs(native));
+});
+it.each([
+  true,
+  false,
+])("keeps the original paragraphs when replacing a cross-paragraph selection and rejecting by id (accept %s)", (accept) => {
+  const editor = make("<p>abc</p><p>def</p><p>plain</p>");
+  editor.view.dispatch(editor.state.tr.insertText("Q", 2, 7));
+  const first = suggestions(editor.state.doc)[0] as Suggestion;
+  editor.view.dispatch(
+    editor.state.tr.insertText("Z", editor.state.doc.content.size - 1).setMeta("paste", true),
+  );
+  editor.view.dispatch(resolveSuggestions(editor.state, accept, first.id));
+  expect(paragraphs(editor)).toEqual(accept ? ["aQef", "plainZ"] : ["abc", "def", "plainZ"]);
+  expect(suggestions(editor.state.doc)).toHaveLength(1);
+});
+it("recognises paragraph-edge suggestions only at the corresponding caret boundary", () => {
+  const editor = make("<p>abcd</p>");
+  editor.commands.setTextSelection(3);
+  editor.commands.splitBlock();
+  const pending = suggestions(editor.state.doc)[0] as Suggestion;
+  editor.commands.setTextSelection(2);
+  expect(suggestionAt(editor.state)).toBeUndefined();
+  editor.commands.setTextSelection(3);
+  expect(suggestionAt(editor.state)).toEqual(pending);
+  editor.view.dispatch(resolveSuggestions(editor.state, false));
+  expect(paragraphs(editor)).toEqual(["abcd"]);
+});
+it("validates persisted paragraph-edge metadata and strips it at import and paste boundaries", () => {
+  const valid = { id: "break", author: "alice", created: "today", kind: "suggestionInsert" };
+  const entries = [
+    valid,
+    { ...valid, edge: "start" },
+    { ...valid, edge: "end" },
+    null,
+    {},
+    { ...valid, id: 1 },
+    { ...valid, author: 1 },
+    { ...valid, created: 1 },
+    { ...valid, kind: "unknown" },
+    { ...valid, edge: "unknown" },
+  ];
+  const html = document.createElement("p");
+  html.textContent = "plain";
+  for (const value of ["{", "42", JSON.stringify(entries)]) {
+    html.setAttribute("data-suggestion-breaks", value);
+    const editor = make(html.outerHTML);
+    expect(editor.state.doc.firstChild?.attrs.suggestionBreaks).toEqual(
+      value.startsWith("[") ? entries.slice(0, 3) : null,
+    );
+    if (value.startsWith("[")) {
+      editor.commands.setTextSelection(1);
+      expect(suggestionAt(editor.state)).toEqual(valid);
+      const imported = importHtml(html.outerHTML);
+      expect(suggestions(editor.schema.nodeFromJSON(imported.json))).toEqual([]);
+      editor.view.pasteHTML(html.outerHTML, new Event("paste") as ClipboardEvent);
+      expect(suggestions(editor.state.doc).filter((item) => item.id === "break")).toHaveLength(1);
+    }
+  }
+});
+it("removes one's own pending multiline insertion including its paragraph breaks", () => {
+  const editor = make("<p>before after</p>");
+  editor.commands.setTextSelection(8);
+  editor.view.pasteText("one\ntwo", new Event("paste") as ClipboardEvent);
+  editor.commands.setTextSelection({ from: 8, to: 16 });
+  editor.commands.deleteSelection();
+  expect(paragraphs(editor)).toEqual(["before after"]);
+  expect(suggestions(editor.state.doc)).toEqual([]);
+});
+it("finds the suggestion after the caret when the caret is inside marked text", () => {
+  const editor = make("<p>plain</p>");
+  editor.view.dispatch(editor.state.tr.insertText("new", 1));
+  const pending = suggestions(editor.state.doc)[0];
+  editor.commands.setTextSelection(2);
+  expect(suggestionAt(editor.state)).toEqual(pending);
 });

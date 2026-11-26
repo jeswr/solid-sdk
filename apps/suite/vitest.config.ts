@@ -24,6 +24,7 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       include: [
+        "src/lib/profile/**/*.ts",
         "src/apps/bookmarks/lib/**/*.ts",
         "src/apps/bookmarks/state/*.{ts,tsx}",
         "src/apps/forms/lib/**/*.ts",

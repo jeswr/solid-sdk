@@ -14,6 +14,7 @@ import {
 import type { Editor } from "@tiptap/react";
 import { Check, Pencil, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useDisplayNames } from "@/lib/profile/use-display-names";
 import { focusDocument } from "../editor/focus";
 import {
   resolveSuggestions,
@@ -56,6 +57,7 @@ function decide(editor: Editor, accept: boolean, id?: string) {
 export function SuggestionPopover({ editor }: { editor: Editor }) {
   const [active, setActive] = useState<Suggestion | undefined>(() => suggestionAt(editor.state));
   const [dismissed, setDismissed] = useState<string | undefined>();
+  const displayName = useDisplayNames([active?.author]);
   const acceptButton = useRef<HTMLButtonElement>(null);
   const keyboardReview = useRef(false);
   useEffect(() => {
@@ -112,9 +114,12 @@ export function SuggestionPopover({ editor }: { editor: Editor }) {
   }, [editor]);
   return (
     <>
-      <span role="status" aria-live="polite" className="su-sr-only">
-        {active &&
-          `${active.author} suggested ${active.kind === "suggestionInsert" ? "insertion" : "deletion"}`}
+      <span role="status" aria-live="polite" aria-atomic="true" className="su-sr-only">
+        {active && (
+          <span key={active.id}>
+            {`${displayName(active.author)} suggested ${active.kind === "suggestionInsert" ? "insertion" : "deletion"}`}
+          </span>
+        )}
       </span>
       {active && active.id !== dismissed && editor.isEditable && (
         <Popover open onOpenChange={() => setDismissed(active.id)}>
@@ -137,7 +142,7 @@ export function SuggestionPopover({ editor }: { editor: Editor }) {
               <strong>
                 {active.kind === "suggestionInsert" ? "Suggested addition" : "Suggested deletion"}
               </strong>
-              <span>{active.author}</span>
+              <span title={active.author}>{displayName(active.author)}</span>
               <time dateTime={active.created}>{active.created}</time>
               <small>Ctrl/Cmd+Alt+Shift+A to review; Escape to return to the document.</small>
               <div className="docs-suggestion-actions">

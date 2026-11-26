@@ -19,6 +19,9 @@ import {
 } from "../src/apps/docs/components/suggestion-controls";
 import { baseExtensions } from "../src/apps/docs/editor/extensions";
 import { suggestionKey, suggestions } from "../src/apps/docs/lib/editor/suggestions";
+import { ABSENT } from "../src/lib/session/extension-session";
+import { SessionContext } from "../src/lib/session/shell-pod-session";
+import type { PodSession } from "../src/lib/session/types";
 
 let editor: Editor;
 const author = "https://alice.example/#me";
@@ -80,7 +83,8 @@ it.each([
     </>,
   );
   const popup = await screen.findByRole("dialog", { name: "Review suggestion" });
-  expect(popup.textContent).toContain(author);
+  expect(popup.textContent).toContain("alice.example");
+  expect(popup.querySelector(`[title="${author}"]`)).toBeTruthy();
   expect(popup.querySelector("time")?.dateTime).toBe(suggestions(editor.state.doc)[0]?.created);
   expect(popup.textContent).toContain("Suggested addition");
   fireEvent.click(button(accept ? "Accept" : "Reject"));
@@ -257,7 +261,7 @@ it("announces the current suggestion and supports keyboard review with Escape re
     </>,
   );
   await screen.findByRole("dialog", { name: "Review suggestion" });
-  expect(screen.getByRole("status").textContent).toContain(`${author} suggested insertion`);
+  expect(screen.getByRole("status").textContent).toContain("alice.example suggested insertion");
   await act(async () => editor.view.focus());
   fireEvent.keyDown(editor.view.dom, {
     key: "A",
@@ -387,7 +391,8 @@ it("reviews the deletion over another author's insertion first and restores that
   );
   const popup = await screen.findByRole("dialog", { name: "Review suggestion" });
   expect(popup.textContent).toContain("Suggested deletion");
-  expect(popup.textContent).toContain(author);
+  expect(popup.textContent).toContain("alice.example");
+  expect(popup.querySelector(`[title="${author}"]`)).toBeTruthy();
   fireEvent.click(button("Reject"));
   expect(suggestions(editor.state.doc)).toMatchObject([
     { author: "bob", kind: "suggestionInsert" },
@@ -414,4 +419,72 @@ it("shows the unsupported-change toast when suggesting blocks a structural edit"
   } finally {
     error.mockRestore();
   }
+});
+
+it("disables Review current suggestion when the caret leaves a suggestion", async () => {
+  insert();
+  editor.commands.setTextSelection(2);
+  render(<EditorMenubar {...menuProps()} resolveSuggestions={() => {}} />);
+  await openMenu("Tools");
+  const item = await screen.findByRole("menuitem", { name: /Review current suggestion/ });
+  expect(item.getAttribute("aria-disabled")).toBe("true");
+  await act(async () => editor.commands.setTextSelection(5));
+  expect(item.getAttribute("aria-disabled")).toBeNull();
+  await act(async () => editor.commands.setTextSelection(2));
+  expect(item.getAttribute("aria-disabled")).toBe("true");
+});
+it("announces adjacent suggestions with identical author and kind as separate changes", async () => {
+  insert();
+  editor.view.pasteText("second", new Event("paste") as ClipboardEvent);
+  const pending = suggestions(editor.state.doc);
+  expect(pending).toHaveLength(2);
+  editor.commands.setTextSelection(5);
+  render(<SuggestionPopover editor={editor} />);
+  const status = screen.getByRole("status");
+  const first = status.firstChild;
+  expect(status.textContent).toBe("alice.example suggested insertion");
+  await act(async () => editor.commands.setTextSelection(8));
+  expect(status.textContent).toBe("alice.example suggested insertion");
+  expect(status.firstChild).not.toBe(first);
+});
+
+it.each([
+  true,
+  false,
+])("renders and announces a resolved author name or You (current user %s)", async (own) => {
+  insert();
+  const http = vi.fn(
+    async () =>
+      new Response(`<${author}> <http://xmlns.com/foaf/0.1/name> "Alice Writer" .`, {
+        headers: { "content-type": "text/turtle" },
+      }),
+  );
+  const account = {
+    mode: "solid",
+    webId: own ? author : "https://pod.example/#me",
+    storageUrl: "https://pod.example/",
+    displayName: "Me",
+    fetch: http,
+    publicFetch: http,
+    subscribe: () => () => {},
+  } satisfies PodSession;
+  render(
+    <SessionContext.Provider
+      value={{
+        status: "ready",
+        session: account,
+        extension: ABSENT,
+        connectExtension: async () => {},
+      }}
+    >
+      <SuggestionPopover editor={editor} />
+    </SessionContext.Provider>,
+  );
+  const name = own ? "You" : "Alice Writer";
+  await waitFor(() =>
+    expect(screen.getByRole("status").textContent).toBe(`${name} suggested insertion`),
+  );
+  expect(screen.getByText(name).title).toBe(author);
+  expect(screen.getByRole("dialog").textContent).not.toContain(author);
+  expect(http).toHaveBeenCalledTimes(own ? 0 : 1);
 });
