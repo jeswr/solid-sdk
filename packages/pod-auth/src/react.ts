@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // Ported from solid-auth-core/src/react/index.tsx (AUTHORED-BY Claude Fable 5).
 // React mirrors public identity/events. All credential handling remains in the core.
 import {
@@ -27,6 +28,8 @@ export interface PodAuthSession {
   identity: Identity | null;
   webId: string | null;
   fetch: typeof fetch;
+  /** The core's `nonInteractiveFetch`, for background reads that must never sign in. */
+  nonInteractiveFetch: typeof fetch;
   login(hint?: LoginHint): Promise<void>;
   logout(): Promise<void>;
   error: string | null;
@@ -108,6 +111,7 @@ export function PodAuthProvider(props: PodAuthProviderProps): ReactNode {
       identity,
       webId: identity?.webId ?? null,
       fetch: auth.fetch,
+      nonInteractiveFetch: auth.nonInteractiveFetch,
       ...handles,
       error,
       auth,

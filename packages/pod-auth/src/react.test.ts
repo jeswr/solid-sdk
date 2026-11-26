@@ -29,6 +29,7 @@ class FakeAuth implements PodAuth {
   deferred = Promise.withResolvers<Identity | null>();
   listeners = new Map<AuthEventType, Set<(event: AuthEvent) => void>>();
   fetch = vi.fn(async () => new Response("authenticated")) as typeof fetch;
+  nonInteractiveFetch = vi.fn(async () => new Response("background")) as typeof fetch;
   restore = vi.fn(() => this.deferred.promise);
   identity = async () => this.current;
   remembered = async () => [];
@@ -102,6 +103,7 @@ test("provider restores identity once in StrictMode, mirrors external lifecycle 
   expect(session.webId).toBe(identity.webId);
   const handles = { fetch: session.fetch, login: session.login, logout: session.logout };
   expect(await (await session.fetch("https://pod.example/private")).text()).toBe("authenticated");
+  expect(session.nonInteractiveFetch).toBe(auth.nonInteractiveFetch);
   await act(async () => {
     auth.emit("expired", null);
   });

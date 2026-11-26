@@ -530,7 +530,7 @@ React consumers mount one provider and read `usePodAuth()` from `@jeswr/pod-auth
 ```tsx
 <PodAuthProvider auth={auth}><App /></PodAuthProvider>
 // Or provide config={options} to construct the core once.
-const { status, identity, webId, fetch, login, logout, error } = usePodAuth();
+const { status, identity, webId, fetch, nonInteractiveFetch, login, logout, error } = usePodAuth();
 ```
 
 The provider silently restores once on mount, including StrictMode effect replay, and reports
