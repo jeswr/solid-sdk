@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2-Sol
 import { expect, it, vi } from "vitest";
 import { DriveProvider, useDrive } from "../src/apps/drive/state/drive-context";
 import { useOpenWithSheets } from "../src/apps/drive/state/open-with-sheets";
@@ -9,7 +9,15 @@ import { AccountsProvider, useAccounts } from "../src/shell/session/accounts-pro
 import type { SessionBackend, SuiteAccount } from "../src/shell/session/types";
 import { act, deferred, mount } from "./drive-ui-dom";
 
-const { push, create } = vi.hoisted(() => ({ push: vi.fn(), create: vi.fn() }));
+const { push, create, success } = vi.hoisted(() => ({
+  push: vi.fn(),
+  create: vi.fn(),
+  success: vi.fn(),
+}));
+vi.mock("@jeswr/suite-ui", async (original) => {
+  const ui = await original<typeof import("@jeswr/suite-ui")>();
+  return { ...ui, toast: Object.assign(vi.fn(), ui.toast, { success }) };
+});
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("../src/apps/sheets/lib/workbook", () => ({
   createWorkbookService: () => ({ createFromCsv: create }),
@@ -31,14 +39,19 @@ const workbook = `${alice.storageUrl}sheets/budget/`;
 async function startImport(next: SuiteAccount) {
   localStorage.clear();
   push.mockClear();
+  success.mockClear();
   const result = deferred<{ container: string }>();
   create.mockReset().mockReturnValue(result.promise);
+  let expire = () => {};
   const backend: SessionBackend = {
     kind: "solid",
     restore: async () => alice,
     signIn: async () => next,
     signOut: async () => {},
-    onExpired: () => () => {},
+    onExpired: (listener) => {
+      expire = listener;
+      return () => {};
+    },
     fetchFor: () => async () => new Response("a,b"),
   };
   let drive!: ReturnType<typeof useDrive>;
@@ -86,6 +99,8 @@ async function startImport(next: SuiteAccount) {
     current: () => drive,
     refreshed,
     switchAccount: () => accounts.signIn({ webId: next.webId }),
+    expire,
+    signOut: () => accounts.signOut(),
     finish: async () => {
       result.resolve({ container: workbook });
       await pending;
@@ -107,6 +122,7 @@ it("drops Alice's import after the Drive provider remounts for Bob", async () =>
   await act(run.finish);
   expect(push).not.toHaveBeenCalled();
   expect(run.refreshed).not.toHaveBeenCalled();
+  expect(success).toHaveBeenCalledWith("Opened budget.csv with Sheets in your previous account");
 });
 
 it.each([
@@ -121,6 +137,7 @@ it.each([
   });
   expect(push).not.toHaveBeenCalled();
   expect(run.refreshed).not.toHaveBeenCalled();
+  expect(success).toHaveBeenCalledWith("Opened budget.csv with Sheets in your previous account");
 });
 
 it("opens the workbook when the same account refreshes its session during the import", async () => {
@@ -131,4 +148,20 @@ it("opens the workbook when the same account refreshes its session during the im
   await act(run.finish);
   expect(push).toHaveBeenCalledExactlyOnceWith(workbookHref(workbook));
   expect(run.refreshed).toHaveBeenCalledOnce();
+});
+
+it.each([
+  "expire",
+  "signOut",
+] as const)("reports a completed import accurately when the session ends (%s)", async (endSession) => {
+  const run = await startImport(alice);
+  await act(async () => {
+    await run[endSession]();
+    await run.finish();
+  });
+  expect(push).not.toHaveBeenCalled();
+  expect(run.refreshed).not.toHaveBeenCalled();
+  expect(success).toHaveBeenCalledExactlyOnceWith("Imported budget.csv with Sheets", {
+    description: "Sign in again to open the imported file.",
+  });
 });

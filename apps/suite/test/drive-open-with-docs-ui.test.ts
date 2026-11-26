@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6.2-Sol
 import { FileText } from "lucide-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DriveItem } from "../src/apps/drive/lib/client/client";
@@ -181,22 +182,35 @@ describe("useOpenWithDocs", () => {
     expect(mocks.router.push).toHaveBeenCalledWith(docsHref(`${ROOT}docs/report.ttl`));
   });
 
-  it("dismisses progress without navigating after the controller unmounts during conversion", async () => {
-    const result = deferred<{ url: string; skipped: [] }>();
+  it("refreshes the listing and offers to open the import after the controller unmounts", async () => {
+    const url = `${ROOT}docs/notes.ttl`;
+    const result = deferred<{ url: string; skipped: { label: string; count: number }[] }>();
     mocks.convert.mockReturnValue(result.promise);
-    const view = await mount(h(Hook, { item: NOTES }));
+    const view = await mount(h(DriveUiProvider, null, h(DocsHook, { item: NOTES })));
     const run = control?.run;
     let pending: Promise<void> | undefined;
     await act(async () => {
       pending = run?.();
     });
-    await view.unmount();
-    result.resolve({ url: `${ROOT}docs/notes.ttl`, skipped: [] });
+    await view.render(h(DriveUiProvider));
+    result.resolve({ url, skipped: [{ label: "Footnotes", count: 1 }] });
     await pending;
     expect(mocks.toast.dismiss).toHaveBeenCalledWith("loading-id");
-    expect(mocks.toast.success).not.toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledExactlyOnceWith(url);
+    expect(mocks.toast.warning).toHaveBeenCalledWith("Some items weren't imported", {
+      description: "Footnotes (1).",
+      duration: Number.POSITIVE_INFINITY,
+    });
     expect(mocks.router.push).not.toHaveBeenCalled();
-    expect(invalidate).not.toHaveBeenCalled();
+    expect(mocks.toast.success).toHaveBeenCalledWith("Imported notes.md with Docs", {
+      action: { label: "Open", onClick: expect.any(Function) },
+    });
+    const [, options] = mocks.toast.success.mock.calls[0] as [
+      string,
+      { action: { onClick: () => void } },
+    ];
+    options.action.onClick();
+    expect(mocks.router.push).toHaveBeenCalledExactlyOnceWith(docsHref(url));
   });
 
   it.each([
