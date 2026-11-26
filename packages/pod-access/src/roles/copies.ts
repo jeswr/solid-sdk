@@ -7,13 +7,7 @@ import type { Mode } from "../types.js";
 import { validators } from "./client.js";
 import { roleError } from "./errors.js";
 import { type Document, load, request, requireOk, type Snapshot, scoped } from "./http.js";
-import {
-  agentKey,
-  type CopySource,
-  pruneCopiedPrincipal,
-  readPolicy,
-  subjectAgent,
-} from "./rdf.js";
+import { agentKey, pruneCopiedPrincipal, readPolicy, subjectAgent } from "./rdf.js";
 import type { AgentRef, GrantMutationOptions } from "./types.js";
 
 const LDP_CONTAINS = "http://www.w3.org/ns/ldp#contains";
@@ -123,15 +117,15 @@ function parent(url: string): string {
  *
  * The walk lists the folder breadth first, within `maxResources` and `maxDepth`. In each
  * descendant's own document it takes the agent off only rules copied from the folder's document
- * or from a document of a folder inside it, to what its nearest source document still gives the
- * agent on its members: a copy that source no longer grants is removed, one giving more than it
- * still does is narrowed to what it gives, and one it fully covers stays. A copy of a copy names
- * every document along its chain; only the deepest folder's document counts, because every ACL
- * below a folder cuts off that folder's grants. Rules the agent holds directly, and copies naming
- * a document outside the folder, are never touched; places where any access remains are listed
- * in `remaining`. Each change is planned from the document read, re-read before writing, and
- * saved with `If-Match`; a lost race or an unreadable place is listed in `failed` and the walk
- * goes on. A folder with no ACL of its own passes its parent's answer down. Only WebID agents are accepted, and never the caller's own, so the
+ * or from a document of a folder inside it, to what the place would inherit now with no document
+ * of its own (which may come from a folder ACL added after the copy was made): a copy that no
+ * longer grants is removed, one giving more is narrowed to what is still inherited, and one it
+ * fully covers stays. Copies below a folder whose access could not be read are kept. Rules the
+ * agent holds directly, and copies naming a document outside the folder, are never touched;
+ * places where any access remains are listed in `remaining`. Each change is planned from the
+ * document read, re-read before writing, and saved with `If-Match`; a lost race or an unreadable
+ * place is listed in `failed` and the walk goes on. A folder with no ACL of its own passes its
+ * parent's answer down. Only WebID agents are accepted, and never the caller's own, so the
  * caller's rules are never touched.
  */
 export async function removeCopiedGrants(
@@ -162,16 +156,14 @@ export async function removeCopiedGrants(
   const implementation = options.implementation ?? "css";
   const top = await load(folder, { ...options, root, kind: "folder" });
   if (top.model === "acp") return { ...result, model: "acp" };
-  // A source ACL → the modes it still gives the agent on its members (empty: stale). A folder
-  // with no ACL of its own takes its parent's answer: copies made from a deleted ACL keep only
-  // what the folder's inherited access still gives the agent. A source whose answer is unknown is
-  // left out, so copies made from it are kept.
-  const sources = new Map<string, CopySource>();
+  // The ACLs inside the walk whose answer is known (a folder with no ACL of its own stands in for
+  // the ACL it would have). Copies naming any other document are kept.
+  const sources = new Set<string>();
   // Folder URL → the modes its members' effective access gives the agent; null when unknown.
   const reaches = new Map<string, Set<Mode> | null>();
   const topReaches = holds(top, top.own ? [top.own] : top.documents, key, true);
   reaches.set(folder, topReaches);
-  sources.set(top.ownUrl, { folder, modes: topReaches });
+  sources.add(top.ownUrl);
   if (top.own && (holds(top, [top.own], key, false).size || topReaches.size))
     result.remaining.push(folder);
   // Each place is read on its own, without the model pin, so a place with no own document
@@ -211,13 +203,16 @@ export async function removeCopiedGrants(
           const inherited = reaches.get(container.url) as Set<Mode> | null;
           if (member.container) {
             reaches.set(member.url, inherited);
-            if (inherited) sources.set(snapshot.ownUrl, { folder: member.url, modes: inherited });
+            if (inherited) sources.add(snapshot.ownUrl);
           }
         } else {
           if (own.model !== "wac")
             throw roleError("unsupported", own.url, "A folder's places mix access models");
           const dataset = new Store([...own.dataset]);
-          if (pruneCopiedPrincipal(dataset, member.url, agent, sources)) {
+          // Copies are judged by what the place would inherit now; when that is unknown (the
+          // folder above could not be read) they are kept.
+          const inherited = reaches.get(container.url);
+          if (inherited && pruneCopiedPrincipal(dataset, member.url, agent, sources, inherited)) {
             // The edited document must still read under the same strict role policy.
             readPolicy(dataset, member.url, own.url, "wac", implementation);
             if (own.etag === null || !/^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/.test(own.etag))
@@ -246,14 +241,14 @@ export async function removeCopiedGrants(
           const left = holds(snapshot, [document], key, false).size > 0 || onMembers.size > 0;
           if (member.container) {
             reaches.set(member.url, onMembers);
-            sources.set(own.url, { folder: member.url, modes: onMembers });
+            sources.add(own.url);
           }
           if (left) result.remaining.push(member.url);
         }
       } catch (error) {
         result.failed.push({ url: member.url, error });
-        // A folder whose own access is unknown is still walked: its places may hold copies
-        // from the folder above it. Its own copies' source stays unknown, so they are kept.
+        // A folder whose own access is unknown is still walked: a place below it with an ACL of
+        // its own passes a known answer further down. Copies it would judge are kept.
         if (member.container && !reaches.has(member.url)) reaches.set(member.url, null);
       }
       if (member.container) {
