@@ -67,10 +67,13 @@ Pinned in `test/compatibility.test.ts` under `Exact divergences`:
   the generated getters drop such values, and the Suite rebuilds a whole resource on save,
   so the drop would erase body, revision bodies and the creation date written by another
   tool (review F3). `DocumentDoc` and `RevisionDoc` therefore read the first literal's
-  lexical value, as the hand-written model did, when the strict value is absent but a
-  literal is present: document `title`, `body`, `format`, `created`, `modified`, and
-  revision `body`, `format`, `generatedAt`. Non-literal objects, an `xsd:dateTime` that is
-  malformed, and unparseable dates still drop (defaults apply); a canonical body that is
+  lexical value (an empty fallback literal reads as absent, and an empty `pd:format` parses as the default format), as the hand-written model
+  did, when the strict value is absent but a literal is present: document `title`, `body`,
+  `format`; revision `body`, `format`. The date scalars `created`, `modified` and
+  `generatedAt` read the earliest well-formed `xsd:dateTime`, `xsd:dateTimeStamp`,
+  `xsd:date` or ISO-shaped plain string among duplicated values, so a second value never
+  resets the creation date. Non-literal objects, malformed `xsd:dateTime` values and other
+  datatypes (`dct:created 5`) still drop (defaults apply); a canonical body that is
   present but unreadable never falls back to stale legacy text. Other generated scalars
   (creator, word count, IRIs, `updateLog`) still drop multiple values, wrong term kinds
   and negative or non-integer counts; a dropped `updateLog` falls back to the default

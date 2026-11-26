@@ -1,7 +1,12 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
 
-import type { EntityWrapper } from "@jeswr/model-runtime";
+import {
+  type EntityWrapper,
+  isXsdDate,
+  isXsdDateTime,
+  isXsdDateTimeStamp,
+} from "@jeswr/model-runtime";
 import { LEGACY_NAMESPACES } from "@jeswr/suite-vocab";
 import type { Literal } from "@rdfjs/types";
 import {
@@ -36,26 +41,50 @@ function firstLiteral(view: TermWrapper, predicate: string): Literal | undefined
  * Tolerant read (review F3): the generated getters drop a language-tagged, duplicated or
  * differently-typed scalar, and the app rebuilds the whole resource on save, so the drop
  * would become permanent data loss. When the strict value is absent but a literal is
- * present, return the first literal's lexical form, as the hand-written model did.
+ * present, return the first non-empty literal's lexical form, as the hand-written model did.
+ * An empty lexical form reads as absent so callers apply their default.
  */
 function tolerantText(
   view: TermWrapper,
   predicate: string,
   value: string | undefined,
 ): string | undefined {
-  return value ?? firstLiteral(view, predicate)?.value;
+  if (value !== undefined) return value;
+  const lexical = firstLiteral(view, predicate)?.value;
+  return lexical === "" ? undefined : lexical;
 }
-/** As {@link tolerantText}; a malformed `xsd:dateTime` stays dropped, as the generated model pins. */
+const XSD = "http://www.w3.org/2001/XMLSchema#";
+const DATE_TYPES: Record<string, (lexical: string) => boolean> = {
+  [XSD_DATE_TIME]: isXsdDateTime,
+  [`${XSD}dateTimeStamp`]: isXsdDateTimeStamp,
+  [`${XSD}date`]: isXsdDate,
+  [`${XSD}string`]: (lexical) => isXsdDateTime(lexical) || isXsdDate(lexical),
+};
+function literalDate(literal: Literal): Date | undefined {
+  const valid = DATE_TYPES[literal.datatype.value];
+  if (!valid?.(literal.value)) return undefined;
+  const parsed = new Date(literal.value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+/**
+ * As {@link tolerantText}, for dates: the strict getter also yields undefined for several
+ * well-formed values, so every literal is checked and the first valid `xsd:dateTime`,
+ * `xsd:dateTimeStamp`, `xsd:date` or ISO-shaped plain string wins. Malformed dateTimes and
+ * other datatypes (`dct:created 5`) stay dropped, as the generated model pins.
+ */
 function tolerantDate(
   view: TermWrapper,
   predicate: string,
   value: Date | undefined,
 ): Date | undefined {
   if (value !== undefined) return value;
-  const literal = firstLiteral(view, predicate);
-  if (!literal || literal.datatype.value === XSD_DATE_TIME) return undefined;
-  const parsed = new Date(literal.value);
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  const dates: Date[] = [];
+  for (const term of SetFrom.subjectPredicate(view, predicate, TermAs.term, TermFrom.itself)) {
+    const date = term.termType === "Literal" ? literalDate(term) : undefined;
+    if (date) dates.push(date);
+  }
+  dates.sort((a, b) => a.getTime() - b.getTime());
+  return dates[0];
 }
 function legacyText(view: TermWrapper, predicate: string): string | undefined {
   for (const alias of aliases(predicate)) {

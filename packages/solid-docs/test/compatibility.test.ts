@@ -106,6 +106,29 @@ describe("Exact divergences", () => {
     expect(data?.modified).toBeUndefined();
     expect(data?.revisions[0]?.generatedAt).toBe(new Date(0).toISOString());
   });
+  it("reads a well-formed duplicated created/generatedAt tolerantly and drops malformed or non-date values", () => {
+    const data = parseDocument(
+      url,
+      graph(`<#it> a pd:Document ; dct:created "2024-03-01T00:00:00Z"^^xsd:dateTime,
+        "2024-01-01T00:00:00Z"^^xsd:dateTime ; dct:modified 5 ; pd:currentRevision <#rev-0> .
+      <#rev-0> a prov:Entity ; prov:generatedAtTime "2024-02-01T00:00:00Z"^^xsd:dateTime,
+        "2024-04-01T00:00:00Z"^^xsd:dateTime .`),
+    );
+    expect(data?.created).toBe("2024-01-01T00:00:00.000Z");
+    expect(data?.modified).toBeUndefined();
+    expect(data?.revisions[0]?.generatedAt).toBe("2024-02-01T00:00:00.000Z");
+    const mixed = parseDocument(
+      url,
+      graph(`<#it> a pd:Document ; dct:created "garbage"^^xsd:dateTime,
+        "2024-05-01T00:00:00Z"^^xsd:dateTime ; dct:modified 20010505 .`),
+    );
+    expect(mixed?.created).toBe("2024-05-01T00:00:00.000Z");
+    expect(mixed?.modified).toBeUndefined();
+  });
+  it("reads an empty pd:format literal as the default format", () => {
+    const data = parseDocument(url, graph(`<#it> a pd:Document ; pd:format "" .`));
+    expect(data?.format).toBe("text/html");
+  });
   it("drops an invalid supplied creation date instead of throwing during the write", () => {
     expect(
       parseDocument(url, buildDocument(url, { title: "x", created: "not a date" }))?.created,
