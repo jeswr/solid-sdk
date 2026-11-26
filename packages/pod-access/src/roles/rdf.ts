@@ -634,28 +634,47 @@ export function appendAcp(
   }
 }
 /**
- * Take `agent` off every rule in a WAC document that the roles layer copied (`materializedFrom`)
- * only from `origins` (every source it names). Other principals on the same rule keep it; a rule left with no principal
- * is removed whole. Rules the agent holds directly (not copied) and copies from any other source
- * are left alone. Returns whether anything changed.
+ * Prune `agent`'s copied rules in a WAC document. A rule the roles layer copied
+ * (`materializedFrom`) only from documents in `sources` keeps the agent while every mode it gives
+ * is still granted on members by one of those documents; otherwise the agent is taken off it, and
+ * the modes that are still granted are given back in a narrowed copy of the rule (same scopes and
+ * markers). Other principals on a rule keep it; a rule left with no principal is removed whole.
+ * Rules the agent holds directly, copies from documents not in `sources`, and rules that do not
+ * apply to `resource` are left alone. Returns whether anything changed.
  */
-export function removeCopiedPrincipal(
+export function pruneCopiedPrincipal(
   dataset: Store,
   resource: string,
   agent: AgentRef,
-  origins: ReadonlySet<string>,
+  sources: ReadonlyMap<string, ReadonlySet<Mode>>,
 ): boolean {
   const [selector, principal] = wacPrincipal(agent);
   let changed = false;
   for (const auth of [...new AclResource(dataset, DataFactory).authorizations]) {
     const rule = properties(auth as Term, dataset);
-    // A copy of a copy names every document it came from; any one still granting keeps it.
     // Only rules that apply here: role edits leave inert rules with no scope behind.
     if (![`${ACL}accessTo`, `${ACL}default`].some((scope) => rule.iris(scope).includes(resource)))
       continue;
+    // A copy of a copy names every document it came from; all must be known sources.
     const from = rule.iris(MATERIALIZED_FROM);
-    if (!from.length || !from.every((origin) => origins.has(origin))) continue;
+    if (!from.length || !from.every((origin) => sources.has(origin))) continue;
     if (!rule.values(ACL + selector).has(principal)) continue;
+    const granted = readModes(
+      from.flatMap((origin) => [...(sources.get(origin) as ReadonlySet<Mode>)].map(modeIri)),
+    );
+    const modes = readModes(rule.iris(`${ACL}mode`));
+    if ([...modes].every((mode) => granted.has(mode))) continue;
+    const kept = [...modes].filter((mode) => granted.has(mode));
+    if (kept.length) {
+      const narrowed = clone(auth as Term, dataset, dataset, [
+        `${ACL}agent`,
+        `${ACL}agentGroup`,
+        `${ACL}agentClass`,
+        `${ACL}mode`,
+      ]);
+      narrowed.add(ACL + selector, principal);
+      for (const mode of kept) narrowed.add(`${ACL}mode`, modeIri(mode));
+    }
     rule.values(ACL + selector).delete(principal);
     changed = true;
     if (["agent", "agentGroup", "agentClass"].some((name) => rule.terms(ACL + name).size > 0))

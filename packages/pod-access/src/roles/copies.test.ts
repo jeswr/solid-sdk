@@ -252,6 +252,61 @@ describe("removeCopiedGrants", () => {
     expect(await agentsOn(mem, nested)).toContain(bob);
   });
 
+  it("narrows a copy to what its sources still give after the agent's role was lowered", async () => {
+    const { mem, options } = setup(acl(ownerRule + rule("bob", [bob], "acl:Read, acl:Write")));
+    await shareWithCarol(options, sub);
+    await shareWithCarol(options, nested, dave);
+    const folderOptions = { ...options, kind: "folder" as const };
+    // Bob's role on sub/ is lowered to viewer, then the folder approval is revoked.
+    await removeGrant([sub], bobRef, folderOptions);
+    await addGrant(
+      [sub],
+      { agent: bobRef, role: "viewer", inherited: false, source: "" },
+      folderOptions,
+    );
+    await removeGrant([folder], bobRef, folderOptions);
+    const result = await removeCopiedGrants(folder, bobRef, options);
+    expect(result).toMatchObject({ removed: [nested], remaining: [sub, nested], failed: [] });
+    const nestedGrants = await readGrants(nested, options);
+    expect(
+      nestedGrants.grants.filter((g) => g.agent.type === "webid" && g.agent.id === bob),
+    ).toEqual([expect.objectContaining({ role: "viewer", inherited: false })]);
+    expect(await agentsOn(mem, nested)).toEqual([bob, owner, carol, dave].sort());
+  });
+
+  it("keeps copies made below a folder whose own access could not be read", async () => {
+    const { mem, options } = setup(acl(ownerRule));
+    const deeper = `${sub}deeper/`;
+    const leaf = `${deeper}y.ttl`;
+    mem.put(sub, listing("deeper/"));
+    mem.advertise(deeper);
+    mem.put(deeper, listing("y.ttl"));
+    mem.advertise(leaf);
+    mem.put(
+      `${leaf}.acl`,
+      acl(
+        `${rule("owner", [owner], "acl:Read, acl:Write, acl:Control", false, "y.ttl")}` +
+          `<#copy> a acl:Authorization; acl:agent <${bob}>; acl:accessTo <y.ttl>; acl:mode acl:Read; <${MATERIALIZED_FROM}> <${deeper}.acl>.\n`,
+      ),
+    );
+    mem.intercept((url, init) =>
+      url === sub && init.method === "HEAD" ? new Response(null, { status: 500 }) : undefined,
+    );
+    const result = await removeCopiedGrants(folder, bobRef, options);
+    expect(result.removed).toEqual([]);
+    expect(result.remaining).toEqual([leaf]);
+    expect(result.failed.map((f) => f.url)).toEqual([sub]);
+  });
+
+  it("counts a listing describing another container first as incomplete", async () => {
+    const { mem, options } = setup();
+    mem.put(
+      folder,
+      `<${root}other/> <http://www.w3.org/ns/ldp#contains> <${folder}b.ttl>.\n${listing("a.ttl")}`,
+    );
+    expect((await removeCopiedGrants(folder, bobRef, options)).incomplete).toBe(true);
+  });
+
   it("treats copies from a folder ACL that is gone as stale once nothing reaches the agent", async () => {
     const { mem, options } = setup();
     await shareWithCarol(options, sub);

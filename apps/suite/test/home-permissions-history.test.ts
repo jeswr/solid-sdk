@@ -633,7 +633,32 @@ describe("revoking a folder approval whose rules were copied into items inside i
     });
     const error = await revokeHistoryGrant(entry, options(memory)).catch((caught) => caught);
     expect(error).toBeInstanceOf(HistoryRevokeError);
-    expect((error as HistoryRevokeError).failed.map(({ url }) => url)).toContain(FOLDER);
+    const failures = (error as HistoryRevokeError).failed.filter(({ url }) => url === FOLDER);
+    expect(failures.length).toBeGreaterThan(0);
+    for (const { error: cause } of failures)
+      expect(cause).toBeInstanceOf(IncompleteFolderCheckError);
+    expect(memory.writes()).not.toContain(GRANT);
+  });
+
+  it("reports an unreadable folder listing as a folder not fully checked", async () => {
+    const memory = withItem(copied(Run, `${FOLDER}.acl`));
+    const entry = await active(memory);
+    // Once the folder's own rule is removed, its listing can't be read any more.
+    let cleared = false;
+    const inner = memory.fetch.getMockImplementation() as typeof globalThis.fetch;
+    memory.fetch.mockImplementation(async (input, init = {}) => {
+      if (cleared && String(input) === FOLDER && (init.method ?? "GET") === "GET")
+        return new Response(null, { status: 500 });
+      const response = await inner(input, init);
+      if (String(input) === `${FOLDER}.acl` && init.method === "PUT") cleared = true;
+      return response;
+    });
+    const error = await revokeHistoryGrant(entry, options(memory)).catch((caught) => caught);
+    expect(error).toBeInstanceOf(HistoryRevokeError);
+    const failures = (error as HistoryRevokeError).failed.filter(({ url }) => url === FOLDER);
+    expect(failures.length).toBeGreaterThan(0);
+    for (const { error: cause } of failures)
+      expect(cause).toBeInstanceOf(IncompleteFolderCheckError);
     expect(memory.writes()).not.toContain(GRANT);
   });
 });

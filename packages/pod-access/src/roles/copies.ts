@@ -3,10 +3,11 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import { parseContainerMembers } from "@jeswr/ldp-container";
 import { DataFactory, Store } from "n3";
 import { serialize } from "../rdf.js";
+import type { Mode } from "../types.js";
 import { validators } from "./client.js";
 import { roleError } from "./errors.js";
 import { type Document, load, request, requireOk, type Snapshot, scoped } from "./http.js";
-import { agentKey, readPolicy, removeCopiedPrincipal, subjectAgent } from "./rdf.js";
+import { agentKey, pruneCopiedPrincipal, readPolicy, subjectAgent } from "./rdf.js";
 import type { AgentRef, GrantMutationOptions } from "./types.js";
 
 const LDP_CONTAINS = "http://www.w3.org/ns/ldp#contains";
@@ -47,7 +48,7 @@ export interface RemoveCopiedGrantsResult {
  * whether it still grants them cannot be told.
  */
 function holds(snapshot: Snapshot, documents: Document[], key: string, members: boolean) {
-  let held = false;
+  const held = new Set<Mode>();
   for (const document of documents) {
     const scope = !members && document.resource === snapshot.resource ? "resource" : "members";
     for (const grant of document.policy.grants) {
@@ -63,7 +64,7 @@ function holds(snapshot: Snapshot, documents: Document[], key: string, members: 
         if (!named) continue;
         if (grant.except.length || clause.length !== 1)
           throw roleError("unsupported", document.url, "This person's access here is conditional");
-        held = true;
+        for (const mode of grant.modes) held.add(mode);
       }
     }
   }
@@ -116,9 +117,9 @@ function parent(url: string): string {
  *
  * The walk lists the folder breadth first, within `maxResources` and `maxDepth`. In each
  * descendant's own document it takes the agent off only rules copied from the folder's document
- * or from a document of a folder inside it, and only while that source document gives the agent
- * nothing on its members: a copy of access that is still granted at its source is consistent and
- * stays. Rules the agent holds directly, and copies from outside the folder, are never touched;
+ * or from a document of a folder inside it, to what those source documents still give the agent
+ * on their members: a copy no source grants any more is removed, one that gives more than its
+ * sources still do is narrowed to what they give, and one they fully cover stays. Rules the agent holds directly, and copies from outside the folder, are never touched;
  * places where any access remains are listed in `remaining`. Each change is planned from the
  * document read, re-read before writing, and saved with `If-Match`; a lost race or an unreadable
  * place is listed in `failed` and the walk goes on. A copy of a copy names every document it came
@@ -154,16 +155,18 @@ export async function removeCopiedGrants(
   const implementation = options.implementation ?? "css";
   const top = await load(folder, { ...options, root, kind: "folder" });
   if (top.model === "acp") return { ...result, model: "acp" };
-  // A source ACL → whether it still gives the agent access to its members. A folder with no ACL
-  // of its own takes its parent's answer: copies made from a deleted ACL are stale exactly when
-  // the folder's inherited access no longer reaches the agent.
-  const sources = new Map<string, boolean>();
-  // Folder URL → whether its members' effective access (own or inherited) still reaches the agent.
-  const reaches = new Map<string, boolean>();
+  // A source ACL → the modes it still gives the agent on its members (empty: stale). A folder
+  // with no ACL of its own takes its parent's answer: copies made from a deleted ACL keep only
+  // what the folder's inherited access still gives the agent. A source whose answer is unknown is
+  // left out, so copies made from it are kept.
+  const sources = new Map<string, Set<Mode>>();
+  // Folder URL → the modes its members' effective access gives the agent; null when unknown.
+  const reaches = new Map<string, Set<Mode> | null>();
   const topReaches = holds(top, top.own ? [top.own] : top.documents, key, true);
   reaches.set(folder, topReaches);
-  if (top.ownUrl) sources.set(top.ownUrl, topReaches);
-  if (top.own && (holds(top, [top.own], key, false) || topReaches)) result.remaining.push(folder);
+  sources.set(top.ownUrl, topReaches);
+  if (top.own && (holds(top, [top.own], key, false).size || topReaches.size))
+    result.remaining.push(folder);
   // Each place is read on its own, without the model pin, so a place with no own document
   // reads as inheriting rather than as a model mismatch.
   const { model: _pinned, ...unpinned } = options;
@@ -198,17 +201,16 @@ export async function removeCopiedGrants(
         const own = snapshot.own;
         if (!own) {
           // Inherits: its members see what the folder above passes down.
-          const inherited = reaches.get(container.url) as boolean;
+          const inherited = reaches.get(container.url) as Set<Mode> | null;
           if (member.container) {
             reaches.set(member.url, inherited);
-            sources.set(snapshot.ownUrl, inherited);
+            if (inherited) sources.set(snapshot.ownUrl, inherited);
           }
         } else {
           if (own.model !== "wac")
             throw roleError("unsupported", own.url, "A folder's places mix access models");
           const dataset = new Store([...own.dataset]);
-          const stale = new Set([...sources].filter(([, held]) => !held).map(([url]) => url));
-          if (removeCopiedPrincipal(dataset, member.url, agent, stale)) {
+          if (pruneCopiedPrincipal(dataset, member.url, agent, sources)) {
             // The edited document must still read under the same strict role policy.
             readPolicy(dataset, member.url, own.url, "wac", implementation);
             if (own.etag === null || !/^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/.test(own.etag))
@@ -234,7 +236,7 @@ export async function removeCopiedGrants(
           const after = readPolicy(dataset, member.url, own.url, "wac", implementation);
           const document = { ...own, dataset, policy: after, etag: null };
           const onMembers = holds(snapshot, [document], key, true);
-          const left = holds(snapshot, [document], key, false) || onMembers;
+          const left = holds(snapshot, [document], key, false).size > 0 || onMembers.size > 0;
           if (member.container) {
             reaches.set(member.url, onMembers);
             sources.set(own.url, onMembers);
@@ -245,7 +247,7 @@ export async function removeCopiedGrants(
         result.failed.push({ url: member.url, error });
         // A folder whose own access is unknown is still walked: its places may hold copies
         // from the folder above it. Its own copies' source stays unknown, so they are kept.
-        if (member.container && !reaches.has(member.url)) reaches.set(member.url, true);
+        if (member.container && !reaches.has(member.url)) reaches.set(member.url, null);
       }
       if (member.container) {
         if (container.depth + 1 > maxDepth) result.incomplete = true;

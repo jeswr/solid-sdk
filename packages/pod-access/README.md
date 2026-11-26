@@ -619,12 +619,13 @@ const copies = await removeCopiedGrants(folderUrl, agent, { fetch: authFetch, we
 
 It lists the folder breadth first (`maxResources` default 1000, `maxDepth` default 16; listings
 read through `@jeswr/ldp-container`, 4 MiB each) and, in each descendant's own ACL, takes the
-agent off rules copied from the folder's ACL or from the ACL of a folder inside it, but only
-while that source ACL gives the agent nothing on its members (a copy of access still granted at
-its source is consistent and stays). Other principals on a copied rule keep it; a rule left with
+agent's rules copied from the folder's ACL or from the ACL of a folder inside it down to what
+those source ACLs still give the agent on their members: a copy no source grants any more is
+removed, one giving more than its sources now do is narrowed to the modes they still give, and a
+copy they fully cover stays. Other principals on a copied rule keep it; a rule left with
 no principal is removed. Rules the agent holds directly and copies from outside the folder are
 never touched; any place where the agent still has some access is listed in `remaining`. A copy
-of a copy names every ACL it came from and is removed only when all of them are stale; a folder
+of a copy names every ACL it came from and keeps what any of them still gives; a folder
 with no ACL of its own passes its parent's answer down. Only rules naming the agent are read, so
 another principal's conditional rule (`acl:origin`) never blocks the sweep, while a conditional
 rule naming the agent fails that place. Each

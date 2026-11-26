@@ -426,7 +426,15 @@ export async function revokeHistoryGrant(
         );
         copiesRemoved.push(...result.removed);
         stillHeld.push(...result.remaining);
-        failed.push(...result.failed);
+        // The folder's own rule was handled above: a failure at the folder itself (its listing)
+        // means the look inside it did not finish.
+        failed.push(
+          ...result.failed.map((failure) =>
+            failure.url === url
+              ? { url, error: new IncompleteFolderCheckError(failure.error) }
+              : failure,
+          ),
+        );
         if (result.incomplete) failed.push({ url, error: new IncompleteFolderCheckError() });
       } catch (error) {
         // The folder's own rule was handled above; what failed is the look inside it.

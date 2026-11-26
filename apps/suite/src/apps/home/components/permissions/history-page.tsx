@@ -63,9 +63,13 @@ function placeList(urls: readonly string[], storage: string): string {
 
 /** What a partial revoke changed and what it left, without listing a place as both. */
 export function partialRevokeText(error: HistoryRevokeError, storage: string): string {
-  const unchecked = error.failed
-    .filter(({ error: cause }) => cause instanceof IncompleteFolderCheckError)
-    .map(({ url }) => url);
+  const unchecked = [
+    ...new Set(
+      error.failed
+        .filter(({ error: cause }) => cause instanceof IncompleteFolderCheckError)
+        .map(({ url }) => url),
+    ),
+  ];
   const notRemoved = [
     ...new Set(
       error.failed
