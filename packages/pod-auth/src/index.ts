@@ -3,6 +3,7 @@
 // AUTHORED-BY Claude Opus 5.5
 import { type Identity as Claims, sameIssuer } from "@jeswr/reactive-authentication";
 import { createAgentAuth } from "./agent.js";
+import { storageDiscoveryOf } from "./boundary.js";
 import { StorageFailure } from "./kv.js";
 import { secureUrl, validateOptions } from "./options.js";
 import { AmbiguousIssuerError, createProviders } from "./providers.js";
@@ -37,6 +38,7 @@ export type {
   LoginOptions,
   PodAuth,
   PodAuthOptions,
+  StorageDiscovery,
 } from "./types.js";
 export { AmbiguousIssuerError, OwnershipChangedError };
 
@@ -162,6 +164,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       clientId: claims.clientId ?? null,
       protocol,
       storages: providers.boundary.storages(),
+      ...storageDiscoveryOf(providers.boundary),
     };
     expired = false;
     if (first) emit(mode);

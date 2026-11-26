@@ -75,7 +75,31 @@ export interface Identity {
   clientId: string | null;
   protocol: "solid-oidc" | "lws";
   storages: readonly string[];
+  /**
+   * How the WebID's storages were found, or why none receives credentials automatically. Show
+   * `source: "none"` to the user: requests to their pod then go out anonymous (a private pod
+   * looks unreadable), and the fix is `pim:storage` in the profile or `boundary.roots`.
+   */
+  storageDiscovery?: StorageDiscovery;
 }
+
+/**
+ * Provenance of the automatic credential roots. `profile`: the profile's `pim:storage`.
+ * Otherwise only the server that served the WebID document can declare the storage, and only a
+ * container on the WebID's origin that holds the document: `storage-description` (the document's
+ * Solid storage description link) or `storage-type` (an ancestor container whose HEAD carries
+ * `Link: <pim:Storage>; rel="type"`). Reasons for `none`: `no-storage-declared` (no such
+ * evidence), `profile-redirected` (the WebID document was served from another origin),
+ * `storage-ineligible` (declared storages failed the scheme or `boundary.eligible` policy).
+ * Absent when no WebID was learned or `boundary.automatic` is false.
+ */
+export type StorageDiscovery =
+  | { source: "profile" }
+  | { source: "storage-description" | "storage-type"; root: string }
+  | {
+      source: "none";
+      reason: "no-storage-declared" | "profile-redirected" | "storage-ineligible";
+    };
 
 /** Credential-free ownership snapshot from a pod-auth Identity. Missing identifiers fail closed. */
 export type GrantOwner = Pick<Identity, "webId" | "issuer" | "grantId">;

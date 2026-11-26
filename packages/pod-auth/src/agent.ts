@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 import { sameIssuer } from "@jeswr/reactive-authentication";
+import { storageDiscoveryOf } from "./boundary.js";
 import { type AgentConfiguration, type AgentPolicy, createAgentProviders } from "./providers.js";
 import type { AuthEvent, AuthEventType, Identity, PodAuth } from "./types.js";
 
@@ -33,7 +34,11 @@ export function createAgentAuth(policy: AgentPolicy, config: AgentConfiguration)
       signal.throwIfAborted();
       if (loggingOut) throw new Error("Logout is in progress");
       const first = current === null;
-      current = { ...providers.identity, storages: providers.boundary.storages() };
+      current = {
+        ...providers.identity,
+        storages: providers.boundary.storages(),
+        ...storageDiscoveryOf(providers.boundary),
+      };
       if (first) emit("login");
     },
   });

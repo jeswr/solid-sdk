@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import {
   type ChallengeBinding,
   CredentialBoundary,
@@ -14,7 +15,7 @@ import {
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Parser, Store } from "n3";
 import { isLoopback, secureUrl, storageEndpointPaths } from "./options.js";
-import type { PodAuthOptions } from "./types.js";
+import type { PodAuthOptions, StorageDiscovery } from "./types.js";
 
 const PIM = "http://www.w3.org/ns/pim/space#";
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -22,6 +23,39 @@ const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 const MAX_DESCRIPTION_ROOTS = 8;
 const LWS_STORAGE = "https://www.w3.org/ns/lws#storage";
 const SOLID_STORAGE_DESCRIPTION = "http://www.w3.org/ns/solid/terms#storageDescription";
+/** At most this many ancestor containers of the WebID document are probed by HEAD. */
+const MAX_ANCESTORS = 10;
+
+/** A canonical container URL (path ends in "/", no query, fragment or credentials), else undefined. */
+function containerOf(candidate: string): string | undefined {
+  try {
+    const url = new URL(candidate);
+    if (
+      url.username !== "" ||
+      url.password !== "" ||
+      url.search !== "" ||
+      url.hash !== "" ||
+      !url.pathname.endsWith("/") ||
+      url.href !== candidate
+    )
+      return undefined;
+    return url.href;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The containers that hold `document` on its own origin, nearest first, ending at the origin root. */
+function ancestorContainers(document: URL): string[] {
+  const containers: string[] = [];
+  let path = document.pathname;
+  if (!path.endsWith("/")) path = path.slice(0, path.lastIndexOf("/") + 1);
+  for (;;) {
+    containers.push(document.origin + path);
+    if (path === "/") return containers;
+    path = path.slice(0, path.slice(0, -1).lastIndexOf("/") + 1);
+  }
+}
 
 /**
  * The storage roots a storage description advertises, read without credentials or redirects:
@@ -88,6 +122,7 @@ export function createBoundary(
   // Configured server endpoints on a verified storage's origin, mapped to that storage root.
   let endpoints = new Map<string, string>();
   let learnedWebId: string | undefined;
+  let learned: StorageDiscovery | undefined;
   let learnedSignal: AbortSignal | undefined;
   let epoch = 0;
   const clear = () => {
@@ -96,6 +131,7 @@ export function createBoundary(
     learnedSignal = undefined;
     automatic = new CredentialBoundary([], { allowInsecureHttp: insecure });
     endpoints = new Map();
+    learned = undefined;
     learnedWebId = undefined;
   };
   const roots = () => [...new Set([...fixed.entries, ...automatic.entries])];
@@ -113,6 +149,67 @@ export function createBoundary(
   };
   const descriptionRoots = (storage: string, signal: AbortSignal) =>
     storageDescriptionRoots(storage, http, { allowInsecureLoopback: insecure, signal });
+  /**
+   * The storage the server that served the WebID document declares for it, for profiles without
+   * `pim:storage`. Every request is credential-free and unredirected. Evidence, in order:
+   * 1. the document's own response links exactly one same-origin Solid storage description whose
+   *    `pim:Storage` is a container holding the document, and that container's HEAD either
+   *    self-identifies as `pim:Storage` (naming no other description) or withholds metadata
+   *    (401/403, a private root);
+   * 2. the nearest ancestor container of the document whose HEAD self-identifies as `pim:Storage`
+   *    (Solid Protocol storage discovery).
+   * Nothing on another origin, outside the document's ancestors, or after a redirect qualifies.
+   */
+  const serverDeclaredStorage = async (
+    webId: URL,
+    document: URL,
+    response: Response,
+    signal: AbortSignal,
+  ): Promise<Exclude<StorageDiscovery, { source: "profile" }>> => {
+    if (document.origin !== webId.origin) return { source: "none", reason: "profile-redirected" };
+    const ancestors = ancestorContainers(document).filter((root) => isWithin(document, root));
+    if (describes(response, document.href)) {
+      const descriptions = parseLinks(response.headers.get("link"), document.href).filter(
+        (link) => link.rel === SOLID_STORAGE_DESCRIPTION,
+      );
+      const description = descriptions.length === 1 ? descriptions[0]!.href : undefined;
+      if (description !== undefined && new URL(description).origin === document.origin) {
+        const claimed = new Set(
+          (await descriptionRoots(description, signal)).map(containerOf).filter((root) => root),
+        );
+        signal.throwIfAborted();
+        // Most specific first: of nested storages, the one holding the document directly wins.
+        for (const root of ancestors.filter((root) => claimed.has(root)).slice(0, MAX_ANCESTORS)) {
+          const confirmation = await head(root, { http, signal });
+          signal.throwIfAborted();
+          if (confirmation === undefined || !describes(confirmation, root)) continue;
+          const named = parseLinks(confirmation.headers.get("link"), root).filter(
+            (link) => link.rel === SOLID_STORAGE_DESCRIPTION,
+          );
+          const typed =
+            selfIdentifiedSolidRoot(root, confirmation) !== undefined &&
+            named.every((link) => link.href === description);
+          if (
+            (typed && confirmation.ok) ||
+            confirmation.status === 401 ||
+            confirmation.status === 403
+          )
+            return { source: "storage-description", root };
+        }
+      }
+    }
+    for (const root of ancestors.slice(0, MAX_ANCESTORS)) {
+      const confirmation = await head(root, { http, signal });
+      signal.throwIfAborted();
+      if (
+        confirmation !== undefined &&
+        (confirmation.ok || confirmation.status === 401 || confirmation.status === 403) &&
+        selfIdentifiedSolidRoot(root, confirmation) !== undefined
+      )
+        return { source: "storage-type", root };
+    }
+    return { source: "none", reason: "no-storage-declared" };
+  };
   const trustAuthorizationServer = ({
     authorizationServer,
     resource,
@@ -144,8 +241,11 @@ export function createBoundary(
     roots,
     /** Credential roots that are storages, without the configured server endpoints. */
     storages: () => roots().filter((root) => !endpoints.has(root)),
+    /** How the learned WebID's automatic roots were found, or why there are none; unset otherwise. */
+    discovery: (): StorageDiscovery | undefined => learned,
     allows,
-    // No response-driven discovery, including ancestor HEADs or self-asserted pim:Storage types.
+    // No per-request discovery, including ancestor HEADs or self-asserted pim:Storage types. The
+    // only discovery is learn()'s, anchored to the WebID document's origin and ancestors.
     isCandidate: (_url: string | URL) => false,
     trustAuthorizationServer,
     /**
@@ -185,13 +285,27 @@ export function createBoundary(
       if (!response.ok) throw new Error("WebID storage discovery failed");
       const dataset = new Store(new Parser({ baseIRI: url.href }).parse(await response.text()));
       const agent = new TermWrapper(webId, dataset, DataFactory);
-      const storages = SetFrom.subjectPredicate(
-        agent,
-        `${PIM}storage`,
-        NamedNodeAs.string,
-        NamedNodeFrom.string,
-      );
+      const storages = [
+        ...SetFrom.subjectPredicate(
+          agent,
+          `${PIM}storage`,
+          NamedNodeAs.string,
+          NamedNodeFrom.string,
+        ),
+      ];
       const next = new CredentialBoundary([], { allowInsecureHttp: insecure });
+      let discovery: StorageDiscovery = { source: "profile" };
+      if (storages.length === 0) {
+        // The profile names no storage (CSS 7 default profiles): only the server that served the
+        // WebID document may declare one, and only a container that holds that document.
+        const declared = await serverDeclaredStorage(new URL(webId), url, response, signal);
+        discovery = declared;
+        if (declared.source !== "none") {
+          add(next, declared.root);
+          if (!next.allows(declared.root))
+            discovery = { source: "none", reason: "storage-ineligible" };
+        }
+      }
       for (const storage of storages) {
         add(next, storage);
         // Solid roots are containers. Non-container identifiers may be LWS/Solid descriptions.
@@ -222,6 +336,8 @@ export function createBoundary(
           }
         }
       }
+      if (discovery.source === "profile" && next.entries.length === 0)
+        discovery = { source: "none", reason: "storage-ineligible" };
       const nextEndpoints = new Map<string, string>();
       const verified = [...next.entries];
       for (const root of verified)
@@ -250,6 +366,7 @@ export function createBoundary(
       learnedSignal?.removeEventListener("abort", clear);
       automatic = next;
       endpoints = nextEndpoints;
+      learned = discovery;
       learnedWebId = webId;
       learnedSignal = lifetime;
       lifetime.addEventListener("abort", clear, { once: true });
@@ -269,4 +386,12 @@ export function createBoundary(
       return best === undefined ? url.href : (endpoints.get(best) ?? best);
     },
   };
+}
+
+/** The `storageDiscovery` field of an identity snapshot, omitted when nothing was learned. */
+export function storageDiscoveryOf(boundary: { discovery(): StorageDiscovery | undefined }): {
+  storageDiscovery?: StorageDiscovery;
+} {
+  const discovery = boundary.discovery();
+  return discovery === undefined ? {} : { storageDiscovery: Object.freeze({ ...discovery }) };
 }

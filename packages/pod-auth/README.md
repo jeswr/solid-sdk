@@ -140,8 +140,35 @@ foreign-origin and non-container roots are silently dropped.
 Description requests omit credentials and reject redirects. Profile redirects locate the public
 document; assertions must still name the original WebID. Invalid assertions grant nothing.
 
-A target's `Link` headers, `pim:Storage` type, ancestor responses, storage description, or
-`WWW-Authenticate` challenge never adds a credential root. UMA authorization servers must be on the
+When the profile has no `pim:storage` statement about the WebID at all (Community Solid Server 7
+default profiles have none), the server that served the WebID document may declare the storage that
+holds it. Only one container can be learned this way, and only one that holds the WebID document on
+the WebID's own origin. Every request omits credentials and redirects are not followed. Two kinds of
+evidence count, tried in this order:
+
+1. The WebID document's own response carries exactly one same-origin
+   `Link: <…>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`, that description names a
+   `pim:Storage` container that holds the document, and that container's HEAD either self-identifies
+   as `pim:Storage` (naming no other description) or withholds metadata with 401/403, as a private CSS
+   pod root does. If several claimed containers hold the document, the most specific one is tried first.
+   A readable container that does not self-identify, a redirect, a 404 or a 5xx contradicts the claim.
+2. Solid Protocol storage discovery: the nearest of up to ten ancestor containers of the document whose
+   HEAD (2xx, 401 or 403, not redirected) carries `Link: <http://www.w3.org/ns/pim/space#Storage>; rel="type"`.
+
+Nothing is learned if the WebID document was served from another origin after a redirect, if the
+profile lists any `pim:storage` (even only ineligible ones), or if `boundary.automatic` is `false`.
+The server that serves the WebID document could already add `pim:storage` to it, so this fallback
+trusts no new party. It never reaches another origin, a sibling or a descendant of the document's
+container. `Identity.storageDiscovery` reports where the automatic roots came from:
+`{ source: "profile" }`, `{ source: "storage-description" | "storage-type", root }`, or
+`{ source: "none", reason }` with `reason` one of `"no-storage-declared"`, `"profile-redirected"` or
+`"storage-ineligible"` (declared storages failed the scheme or `boundary.eligible` policy). It is
+absent without a WebID or with `automatic: false`. With `source: "none"` every pod request goes out
+anonymous, so a private pod looks unreadable: tell the user to add `pim:storage` to their profile, or
+configure `boundary.roots`.
+
+Apart from that login-time WebID-document fallback, a target's `Link` headers, `pim:Storage` type,
+ancestor responses, storage description, or `WWW-Authenticate` challenge never adds a credential root. UMA authorization servers must be on the
 requested storage's origin or an explicitly configured root's origin (`boundary.roots`); a storage
 learned from the WebID never authorizes its AS for another storage. UMA RPTs
 are cached per storage and account selection, including after `restore()` reuses one OIDC session

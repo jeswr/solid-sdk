@@ -141,7 +141,17 @@ first; storage failures are harmless. Providers use monograms by default; host-s
   non-redirected HEAD confirming a Solid `pim:Storage` type Link or exactly one LWS storage Link back to
   that identifier. Even an ancestor containing the identifier needs confirmation. Drop invalid,
   foreign-origin, non-container and unconfirmed claims silently. Reuse the engine's `head`, `describes`,
-  `selfIdentifiedSolidRoot` and `parseLinks` helpers; never trust the description alone.
+  `selfIdentifiedSolidRoot` and `parseLinks` helpers; never trust a profile-linked description alone.
+- Only when the profile has no `pim:storage` about the WebID (CSS 7 default profiles), learn at most
+  one root from the server that served the WebID document: the document response's single same-origin
+  `solid:storageDescription` link naming a `pim:Storage` container that holds the document (accepted
+  when its HEAD self-identifies without naming another description, or answers 401/403 as a private
+  root does), else the nearest of ten ancestor containers whose HEAD carries the `pim:Storage` type
+  Link. Skip it after a cross-origin profile redirect. That server could already write `pim:storage`,
+  so no new party is trusted; never widen it to another origin, a sibling, a descendant, or a
+  readable container that does not self-identify. Report the outcome in `Identity.storageDiscovery`
+  (`profile`, `storage-description`, `storage-type`, or `none` with `no-storage-declared`,
+  `profile-redirected` or `storage-ineligible`) so apps can explain anonymous pod access.
   Never use `AutomaticCredentialBoundary` to authorize response-asserted roots: a target's type Link,
   storage Link/description, ancestor HEADs, challenge realm/AS or redirect destination is not a grant.
 - Require UMA `as_uri` to use the requested storage's origin or an explicitly configured root's
