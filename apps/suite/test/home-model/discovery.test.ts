@@ -6,6 +6,7 @@ import {
   capRecords,
   type DomainItem,
   discoverDomainItems,
+  documentRecords,
   domainItemKey,
   nameFromUrl,
   sortItems,
@@ -645,5 +646,22 @@ describe("domain discovery", () => {
     expect(nameFromUrl("https://pod.example/")).toBe("pod.example");
     expect(nameFromUrl("bad")).toBe("bad");
     expect(nameFromUrl(`${STORAGE}bad%ZZ`)).toBe(`${STORAGE}bad%ZZ`);
+  });
+
+  it("stops reading a document's records one past the limit", async () => {
+    const url = `${STORAGE}integrations/netflix/history.ttl`;
+    const dataset = await rdf(
+      [1, 2, 3, 4]
+        .map(
+          (record) =>
+            `<#record-${record}> a schema:WatchAction; schema:name "Item ${record}"; prov:wasGeneratedBy <runs.ttl#run>.`,
+        )
+        .join("\n"),
+      url,
+    );
+    expect(documentRecords(dataset, url, WEB_ID)).toHaveLength(4);
+    // One past the limit, so a caller can tell the list was cut.
+    expect(documentRecords(dataset, url, WEB_ID, 1)).toHaveLength(2);
+    expect(documentRecords(dataset, url, WEB_ID, 4)).toHaveLength(4);
   });
 });

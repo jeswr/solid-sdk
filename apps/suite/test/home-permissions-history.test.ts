@@ -15,11 +15,13 @@ import {
   isActiveGrant,
   placesText,
   readAccessHistory,
+  recipientHref,
   recipientLabel,
   revokeHistoryGrant,
   statusText,
 } from "../src/apps/home/lib/permissions/history";
 import { UnsupportedAccessError } from "../src/apps/home/lib/permissions/vocab";
+import { encodeRef } from "../src/lib/refs";
 
 const ROOT = "https://pod.test/alice/";
 const OWNER = `${ROOT}profile/card#me`;
@@ -277,6 +279,13 @@ describe("access history", () => {
     ]);
     expect(placesText(1)).toBe("1 place");
     expect(placesText(3)).toBe("3 places");
+  });
+
+  it("links a recipient to their Permissions view only when the WebID is a web address", () => {
+    expect(recipientHref({ recipient: BOB })).toBe(`/permissions/a/${encodeRef(BOB)}`);
+    expect(recipientHref({})).toBeUndefined();
+    expect(recipientHref({ recipient: "not a web address" })).toBeUndefined();
+    expect(recipientHref({ recipient: "mailto:bob@bob.test" })).toBeUndefined();
   });
 });
 
@@ -536,5 +545,36 @@ describe("revoking from the history", () => {
       revokeHistoryGrant(entry, { fetch: memory.fetch, webId: OWNER, storage: ROOT }),
     ).rejects.toThrow("A strong ETag is required");
     expect(memory.writes()).not.toContain(GRANT);
+  });
+
+  it("reports a place that cannot be reached at all as not removed", async () => {
+    const memory = pod();
+    const entry = await active(memory);
+    const offline: typeof globalThis.fetch = (input, init) =>
+      String(input) === FOLDER && init?.method === "HEAD"
+        ? Promise.reject(new TypeError("offline"))
+        : memory.fetch(input, init);
+    const error = await revokeHistoryGrant(entry, { ...options(memory), fetch: offline }).catch(
+      (caught) => caught,
+    );
+    expect(error).toBeInstanceOf(HistoryRevokeError);
+    expect((error as HistoryRevokeError).failed.map((failure) => failure.url)).toEqual([FOLDER]);
+    expect((error as HistoryRevokeError).removed).toEqual([FILE]);
+    expect(await agentsOn(memory, FOLDER)).toContain(BOB);
+    expect(memory.writes()).not.toContain(GRANT);
+    expect(memory.writes()).not.toContain(RECEIPT);
+  });
+
+  it("reports a place whose access cannot be read as not removed", async () => {
+    const memory = pod();
+    const entry = await active(memory);
+    memory.fail("GET", `${FOLDER}.acl`, 500, 500, 500, 500);
+    const error = await revokeHistoryGrant(entry, options(memory)).catch((caught) => caught);
+    expect(error).toBeInstanceOf(HistoryRevokeError);
+    expect((error as HistoryRevokeError).failed.map((failure) => failure.url)).toEqual([FOLDER]);
+    expect((error as HistoryRevokeError).removed).toEqual([FILE]);
+    expect(await agentsOn(memory, FOLDER)).toContain(BOB);
+    expect(memory.writes()).not.toContain(GRANT);
+    expect(memory.writes()).not.toContain(RECEIPT);
   });
 });
