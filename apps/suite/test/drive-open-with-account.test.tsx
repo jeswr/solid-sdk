@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.2-Sol
-import { expect, it, vi } from "vitest";
+import { assert, expect, it, vi } from "vitest";
 import { DriveProvider, useDrive } from "../src/apps/drive/state/drive-context";
 import { useOpenWithSheets } from "../src/apps/drive/state/open-with-sheets";
 import { DriveUiProvider } from "../src/apps/drive/state/ui";
@@ -9,14 +9,15 @@ import { AccountsProvider, useAccounts } from "../src/shell/session/accounts-pro
 import type { SessionBackend, SuiteAccount } from "../src/shell/session/types";
 import { act, deferred, mount } from "./drive-ui-dom";
 
-const { push, create, success } = vi.hoisted(() => ({
+const { push, create, error, success } = vi.hoisted(() => ({
   push: vi.fn(),
   create: vi.fn(),
+  error: vi.fn(),
   success: vi.fn(),
 }));
 vi.mock("@jeswr/suite-ui", async (original) => {
   const ui = await original<typeof import("@jeswr/suite-ui")>();
-  return { ...ui, toast: Object.assign(vi.fn(), ui.toast, { success }) };
+  return { ...ui, toast: Object.assign(vi.fn(), ui.toast, { error, success }) };
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("../src/apps/sheets/lib/workbook", () => ({
@@ -33,15 +34,21 @@ const alice: SuiteAccount = {
   webId: "https://pod.example/alice#me",
   storageUrl: "https://pod.example/alice/",
 };
+const bob: SuiteAccount = {
+  ...alice,
+  id: "bob",
+  webId: "https://pod.example/bob#me",
+  storageUrl: "https://pod.example/bob/",
+};
 const csv = { kind: "file" as const, url: `${alice.storageUrl}budget.csv`, name: "budget.csv" };
 const workbook = `${alice.storageUrl}sheets/budget/`;
 
-async function startImport(next: SuiteAccount) {
+async function mountOpenWith(next: SuiteAccount) {
   localStorage.clear();
   push.mockClear();
+  error.mockClear();
   success.mockClear();
-  const result = deferred<{ container: string }>();
-  create.mockReset().mockReturnValue(result.promise);
+  create.mockReset().mockResolvedValue({ container: workbook });
   let expire = () => {};
   const backend: SessionBackend = {
     kind: "solid",
@@ -86,21 +93,32 @@ async function startImport(next: SuiteAccount) {
       </PodSessionProvider>
     </AccountsProvider>,
   );
-  const started = drive;
-  const refreshed = vi.fn();
-  started.changes.subscribe(workbook, refreshed);
-  let pending: Promise<void> | undefined;
-  await act(() => {
-    pending = control?.run();
-  });
-  expect(create).toHaveBeenCalledOnce();
+  assert(control?.kind === "convert");
+  expect(control.disabledReason).toBeUndefined();
   return {
-    started,
+    started: drive,
     current: () => drive,
-    refreshed,
+    open: control.run,
     switchAccount: () => accounts.signIn({ webId: next.webId }),
     expire,
     signOut: () => accounts.signOut(),
+  };
+}
+
+async function startImport(next: SuiteAccount) {
+  const run = await mountOpenWith(next);
+  const result = deferred<{ container: string }>();
+  create.mockReturnValue(result.promise);
+  const refreshed = vi.fn();
+  run.started.changes.subscribe(workbook, refreshed);
+  let pending: Promise<void> | undefined;
+  await act(() => {
+    pending = run.open();
+  });
+  expect(create).toHaveBeenCalledOnce();
+  return {
+    ...run,
+    refreshed,
     finish: async () => {
       result.resolve({ container: workbook });
       await pending;
@@ -109,12 +127,6 @@ async function startImport(next: SuiteAccount) {
 }
 
 it("drops Alice's import after the Drive provider remounts for Bob", async () => {
-  const bob = {
-    ...alice,
-    id: "bob",
-    webId: "https://pod.example/bob#me",
-    storageUrl: "https://pod.example/bob/",
-  };
   const run = await startImport(bob);
   await act(run.switchAccount);
   expect(run.current().session.webId).toBe(bob.webId);
@@ -123,6 +135,30 @@ it("drops Alice's import after the Drive provider remounts for Bob", async () =>
   expect(push).not.toHaveBeenCalled();
   expect(run.refreshed).not.toHaveBeenCalled();
   expect(success).toHaveBeenCalledWith("Opened budget.csv with Sheets in your previous account");
+});
+
+it("prompts for sign-in when the selected account expires before React removes its control", async () => {
+  const run = await mountOpenWith(alice);
+  await act(async () => {
+    run.expire();
+    await run.open();
+  });
+  expect(error).toHaveBeenCalledExactlyOnceWith("Sign in to open this file.");
+  expect(create).not.toHaveBeenCalled();
+  expect(push).not.toHaveBeenCalled();
+});
+
+it("ignores Alice's open request while React is still rendering her view after a switch to Bob", async () => {
+  const run = await mountOpenWith(bob);
+  await act(async () => {
+    await run.switchAccount();
+    expect(run.current()).toBe(run.started);
+    await run.open();
+  });
+  expect(run.current().session.webId).toBe(bob.webId);
+  expect(error).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+  expect(push).not.toHaveBeenCalled();
 });
 
 it.each([

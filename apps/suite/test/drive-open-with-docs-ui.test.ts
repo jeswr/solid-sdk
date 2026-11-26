@@ -3,7 +3,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6.2-Sol
 import { FileText } from "lucide-react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useEffect } from "react";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DriveItem } from "../src/apps/drive/lib/client/client";
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 
@@ -126,6 +127,16 @@ describe("useOpenWithDocs", () => {
     expect(mocks.probe).not.toHaveBeenCalled();
   });
 
+  it("ignores an open request from a controller that has unmounted", async () => {
+    const view = await mount(h(Hook, { item: DOC }));
+    assert(control?.kind === "open");
+    const run = control.run;
+    await view.unmount();
+    await act(run);
+    expect(mocks.router.push).not.toHaveBeenCalled();
+    expect(mocks.toast.error).not.toHaveBeenCalled();
+  });
+
   it("converts into a new document, refreshes it and opens it", async () => {
     mocks.convert.mockResolvedValue({ url: `${ROOT}docs/notes.ttl`, skipped: [] });
     await mount(h(Hook, { item: NOTES }));
@@ -182,17 +193,24 @@ describe("useOpenWithDocs", () => {
     expect(mocks.router.push).toHaveBeenCalledWith(docsHref(`${ROOT}docs/report.ttl`));
   });
 
-  it("refreshes the listing and offers to open the import after the controller unmounts", async () => {
+  it("offers to open an import after unmount and respects the current preview's unsaved edit", async () => {
     const url = `${ROOT}docs/notes.ttl`;
     const result = deferred<{ url: string; skipped: { label: string; count: number }[] }>();
+    let allowLeave = false;
+    function PreviewWithUnsavedEdit() {
+      const { registerPreviewGuard } = useDriveUi();
+      useEffect(() => registerPreviewGuard(() => allowLeave), [registerPreviewGuard]);
+      return null;
+    }
     mocks.convert.mockReturnValue(result.promise);
     const view = await mount(h(DriveUiProvider, null, h(DocsHook, { item: NOTES })));
-    const run = control?.run;
+    assert(control?.kind === "convert");
+    const run = control.run;
     let pending: Promise<void> | undefined;
     await act(async () => {
-      pending = run?.();
+      pending = run();
     });
-    await view.render(h(DriveUiProvider));
+    await view.render(h(DriveUiProvider, null, h(PreviewWithUnsavedEdit)));
     result.resolve({ url, skipped: [{ label: "Footnotes", count: 1 }] });
     await pending;
     expect(mocks.toast.dismiss).toHaveBeenCalledWith("loading-id");
@@ -209,6 +227,9 @@ describe("useOpenWithDocs", () => {
       string,
       { action: { onClick: () => void } },
     ];
+    options.action.onClick();
+    expect(mocks.router.push).not.toHaveBeenCalled();
+    allowLeave = true;
     options.action.onClick();
     expect(mocks.router.push).toHaveBeenCalledExactlyOnceWith(docsHref(url));
   });
