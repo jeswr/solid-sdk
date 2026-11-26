@@ -82,7 +82,7 @@ export function ContactDetail({ contactRef, onClose }: { contactRef: string; onC
   return (
     <section className="con-detail" aria-label="Contact details">
       <Button variant="ghost" onClick={onClose} ref={back}>
-        <ArrowLeft size={18} aria-hidden="true" />
+        <ArrowLeft size={18} className="suite-rtl-mirror" aria-hidden="true" />
         Back to contacts
       </Button>
       {renderAsync({

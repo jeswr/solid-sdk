@@ -4,6 +4,8 @@ export interface AccountIdSet {
   load(): Set<string>;
   /** `keep` IDs are evicted last: trimming drops the oldest IDs outside it first. */
   save(ids: ReadonlySet<string>, keep?: ReadonlySet<string>): void;
+  /** Forget `ids`, e.g. when an undo restores notifications to unread. */
+  remove?(ids: ReadonlySet<string>): void;
 }
 
 /** The newest `max` IDs, except that IDs in `keep` outlast the others (oldest others go first). */
@@ -47,17 +49,26 @@ export function createAccountIdSet(
     }
     return new Set();
   };
+  const write = (ids: readonly string[]) =>
+    (storage ?? globalThis.localStorage).setItem(
+      key,
+      JSON.stringify({ version: 1, accountId, ids }),
+    );
   return {
     load,
+    remove(ids) {
+      if (!accountId) return;
+      try {
+        write([...load()].filter((id) => !ids.has(id)));
+      } catch {
+        // Callers retain intent in memory when storage is denied.
+      }
+    },
     save(ids, keep) {
       if (!accountId || !ids.size) return;
       try {
         const saved = [...load()].filter((id) => !ids.has(id));
-        const merged = trimIds([...saved, ...ids], max, keep);
-        (storage ?? globalThis.localStorage).setItem(
-          key,
-          JSON.stringify({ version: 1, accountId, ids: merged }),
-        );
+        write(trimIds([...saved, ...ids], max, keep));
       } catch {
         // Callers retain intent in memory when storage is denied.
       }

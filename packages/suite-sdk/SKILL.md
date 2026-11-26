@@ -1,6 +1,6 @@
 ---
 name: suite-sdk
-description: Use when working on @jeswr/suite-sdk accounts, registration, notifications, smart chips and mentions, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, pod-backed preferences and offline preference replay, or pure notification digests and scheduling.
+description: Use when working on @jeswr/suite-sdk accounts, PWA installation, registration, notifications, smart chips and mentions, server/local search, LocalIndex feeders, useSearch, useNotify, useInbox integration with PodAuthProvider, pod-backed preferences and offline preference replay, pure notification digests and scheduling, or scoped undo/redo history and useUndoStack.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- // AUTHORED-BY Codex GPT-6 -->
@@ -11,6 +11,20 @@ The root exposes SDK-APP-02's `AccountsProvider` / `useAccounts()`, SDK-APP-05's
 notification builders. SDK-APP-09's search facade lives at `@jeswr/suite-sdk/search`; SDK-APP-11's
 pod-backed preferences live at `@jeswr/suite-sdk/preferences`. Application shell wiring is separate.
 Do not infer that the other planned SDK facade APIs are implemented.
+
+## PWA installation (`./pwa`)
+
+`installPrompt` is a shared browser install-prompt store. Call `installPrompt.start(window)`
+in a root provider effect and return its cleanup. It captures `beforeinstallprompt` before
+Settings mounts and shares one listener set across roots. `useInstallPrompt()` exposes
+`status`: `unavailable`, `available`, `prompting`, `ios` (Safari Share instructions), or
+`installed` (standalone/iOS standalone/window controls overlay, or installation accepted).
+Call `installPrompt.install()` directly from a user gesture; it returns `accepted`,
+`dismissed`, or null when no prompt is available, and propagates browser errors. Prompts
+are consumed once, including dismissal or failure. `appinstalled` and display-mode changes
+clear deferred prompts. Render install controls only in Settings; installed apps hide them.
+`createInstallPromptStore()` provides isolated stores for tests or independent roots;
+`useInstallPrompt(store)` accepts one. No listeners or browser globals are used during SSR.
 
 ## Accounts (`SDK-APP-02`)
 
@@ -256,3 +270,36 @@ adapter. `createChipSearch` adapts shell results and known people without a new 
 skips self/nonpeople, isolates per-ref failures and never retries an ambiguous send. Receipts
 must be durable and account scoped. Browser receipts provide at-most-once attempts on that
 browser, without cross-device guarantees; distributed deduplication needs a shared receipt store.
+
+## Undo (`./undo`, UX-6)
+
+`createUndoStack({ limit?: number, now?: () => number, isRetryable?: (error) => boolean })`
+is framework-independent. Push `UndoEntry` (`label`, `scope`, async `undo(signal)`, optional
+`redo(signal)` and epoch-ms `expiresAt`) and retain its ID for the toast. `undo(scope)` and
+`redo(scope)` select latest live history; `undoById(id)` addresses one pending undo.
+Results: `done` (with the entry's `id` and `label`), `nothing`, `busy`, `expired`, or `failed` with `error`.
+`canUndo(scope)`/`canRedo(scope)` report live entries; subscribers are notified on expiry. One operation runs
+at a time across scopes. Failed entries are dropped unless explicitly retryable; retries
+keep their original position. Expired entries never run. Push clears only its scope's
+redo history, including a running undo's future redo. History defaults to 50 entries per
+scope (undo plus redo); the positive integer limit drops oldest entries.
+
+`entries(scope?)` lists pending undo entries oldest first; `canRedo` means a redo callback
+exists. Unfiltered snapshots are stable between changes. `subscribe` returns cleanup.
+`useUndoStack(stack)` is exported from the existing React root and uses
+`useSyncExternalStore`, with an empty server snapshot. Keep this hook and stack at 100%
+coverage. `UndoItem`, `UndoStackOptions`, `UndoEntry`, `UndoStack` and `UndoResult` are
+exported from `./undo`. There is no API report in this package.
+
+Own the stack per authenticated session; clear on replacement/sign-out. `clear()` aborts
+in-flight work and fences late settlements. Callbacks must pass/check the signal before
+I/O and local mutations. No auth, React, toast or app policy belongs in the stack module.
+The shell's `useUndo()` injects the current app scope and supplies the toast and shortcuts.
+Shell-level actions (notification tray) use `pushShell`, filed under the `shell` scope that
+Ctrl/Cmd+Z consults after the route's scope, with a short `expiresAt`. The shortcut only
+consumes the key when a live entry exists and the event is not already `defaultPrevented`;
+an app that owns undo marks the event handled (capture-phase listener) or declares
+`data-undo-scope="native"` on its surface (whiteboard, spreadsheet grid).
+Capture completion state before a Tasks change, push only after success, and undo/redo
+through the existing persistence adapter (see README). Do not duplicate app undo logic
+in this package. Update README and this skill together for public API changes.

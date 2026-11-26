@@ -19,6 +19,8 @@ const secondDemoAccount = {
   webId: "https://example.org/rowan/profile#me",
   storageUrl: "https://example.org/rowan/",
 };
+// A failed change stays unsent: the demo outbox treats any reconnect as syncing
+// "pending" items, which raced the active account's sign-out assertions.
 const pendingOutbox = JSON.stringify({
   pending: [
     {
@@ -26,7 +28,7 @@ const pendingOutbox = JSON.stringify({
       label: "Rename a file",
       where: "My Drive",
       queuedAt: "2026-11-01T12:00:00Z",
-      state: "pending",
+      state: "failed",
     },
   ],
   conflicts: [],
@@ -267,6 +269,7 @@ test("desktop notifications need the account's own opt-in, saved per account", a
 
 for (const [section, title] of [
   ["account", "Account"],
+  ["legacy", "Recovery & legacy"],
   ["appearance", "Appearance"],
   ["groups", "Groups & family"],
   ["storage", "Storage"],
@@ -282,13 +285,21 @@ for (const [section, title] of [
   }, info) => {
     await page.goto(`/settings/${section}`);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(title);
+    // The section's own controls load after its heading, and a scrollable main is keyboard
+    // reachable only through an enabled control: audit the loaded page, not its placeholder.
+    await expect(
+      page
+        .locator("#main-content")
+        .locator("a, button:enabled, input:enabled, select:enabled, textarea:enabled")
+        .first(),
+    ).toBeVisible();
     await capture(page, `settings-${section}`, info.project.name);
     if ((page.viewportSize()?.width ?? 1280) < 1024)
       await page.getByRole("button", { name: "Toggle sidebar", exact: true }).click();
     const sidebar = page
       .getByRole("navigation", { name: "Settings sections", exact: true })
       .filter({ visible: true });
-    await expect(sidebar.getByRole("link")).toHaveCount(8);
+    await expect(sidebar.getByRole("link")).toHaveCount(11);
     await expect(sidebar.getByRole("link", { name: title, exact: true })).toHaveAttribute(
       "aria-current",
       "page",

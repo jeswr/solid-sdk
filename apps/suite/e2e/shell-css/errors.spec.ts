@@ -29,9 +29,11 @@ test("scenario 10: Bob's private file shows a real 403 to Alice in Drive", async
   // Bootstrap Drive before introducing an unreadable member of the pod. New-folder
   // admission deliberately stops if it cannot inspect the complete storage namespace.
   await page.goto("/drive");
-  await expect(page.getByRole("heading", { name: "Your Drive is empty", exact: true })).toBeVisible(
-    { timeout: 30_000 },
-  );
+  await expect(
+    page
+      .getByRole("grid", { name: "My Drive", exact: true })
+      .or(page.getByRole("heading", { name: "Your Drive is empty", exact: true })),
+  ).toBeVisible({ timeout: 30_000 });
   const alice = await accountAuth("alice");
   const bob = await accountAuth("bob");
   // Alice can authenticate within her verified storage boundary. Give Bob sole read access
@@ -104,9 +106,11 @@ test("scenario 10: Bob's private file shows a real 403 to Alice in Drive", async
 
 test("scenario 10: storage down shows Retry and recovers when CSS returns", async ({ page }) => {
   await page.goto("/drive");
-  await expect(page.getByRole("heading", { name: "Your Drive is empty", exact: true })).toBeVisible(
-    { timeout: 30_000 },
-  );
+  await expect(
+    page
+      .getByRole("grid", { name: "My Drive", exact: true })
+      .or(page.getByRole("heading", { name: "Your Drive is empty", exact: true })),
+  ).toBeVisible({ timeout: 30_000 });
   const origin = new URL(cssAccount("alice").issuer).origin;
   const blocked = `${origin}/**`;
   await page.route(blocked, (route) => route.abort("connectionrefused"));
@@ -135,7 +139,9 @@ test("scenario 10: storage down shows Retry and recovers when CSS returns", asyn
     await alert.getByRole("button", { name: "Retry", exact: true }).click();
     await recovered;
     await expect(
-      page.getByRole("heading", { name: "Nothing recent yet", exact: true }),
+      page
+        .getByRole("grid", { name: "Recent", exact: true })
+        .or(page.getByRole("heading", { name: "Nothing recent yet", exact: true })),
     ).toBeVisible();
     await expect(alert).toHaveCount(0);
     await accessible(page);

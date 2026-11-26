@@ -2,7 +2,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // sst-2vvz: Community Solid Server answers both the empty placeholder PUT (201) and the
 // content PUT (205) without an ETag. A Drive upload must still finish against it.
-import { expect, test } from "./fixtures";
+import { randomUUID } from "node:crypto";
+import { accessible, expect, test } from "./fixtures";
 
 for (const { extension, mimeType, body } of [
   { extension: "txt", mimeType: "text/plain", body: "Meeting notes" },
@@ -16,7 +17,7 @@ for (const { extension, mimeType, body } of [
     page,
   }, testInfo) => {
     // Projects share one CSS account, so each uploads its own file.
-    const name = `upload-${testInfo.project.name}.${extension}`;
+    const name = `upload-${testInfo.project.name}-${randomUUID()}.${extension}`;
     await page.goto("/drive");
     await expect(
       page.getByRole("heading", { level: 2, name: "My Drive", exact: true }),
@@ -61,5 +62,6 @@ for (const { extension, mimeType, body } of [
     expect(puts[1]?.etag).toBeUndefined();
     await page.reload();
     await expect(page.getByText(name, { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+    await accessible(page);
   });
 }

@@ -58,6 +58,7 @@ export function WalletHome() {
     if (!undo || undo.token !== snapshot.undo?.token) return;
     const handleUndo = (event: KeyboardEvent) => {
       const target = event.target;
+      if (event.defaultPrevented) return;
       if (
         event.key.toLowerCase() !== "z" ||
         !(event.ctrlKey || event.metaKey) ||
@@ -70,12 +71,14 @@ export function WalletHome() {
         (target.closest("input, textarea, select") || target.isContentEditable)
       )
         return;
+      // Marking the event handled makes the shell's own Ctrl/Cmd+Z skip it: one press, one undo.
       event.preventDefault();
       undo.run();
       setUndo(undefined);
     };
-    document.addEventListener("keydown", handleUndo);
-    return () => document.removeEventListener("keydown", handleUndo);
+    // Capture phase runs before the shell's bubble listener, so the wallet's pending delete wins.
+    document.addEventListener("keydown", handleUndo, true);
+    return () => document.removeEventListener("keydown", handleUndo, true);
   }, [undo, snapshot.undo?.token]);
   return (
     <>

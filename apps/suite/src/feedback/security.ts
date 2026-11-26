@@ -2,12 +2,41 @@
 import { isIP } from "node:net";
 
 export type FeedbackEnv = Readonly<Record<string, string | undefined>>;
+/** Machine-readable reason sent as `code`, so the client never has to parse prose. */
+export type FeedbackCode =
+  | "invalid"
+  | "receipts_invalid"
+  | "too_large"
+  | "unsupported"
+  | "conflict"
+  | "unavailable"
+  | "rate_limited"
+  | "storage_busy"
+  | "upstream";
+export const defaultCode = (status: number): FeedbackCode =>
+  status === 400 || status === 422
+    ? "invalid"
+    : status === 409
+      ? "conflict"
+      : status === 413
+        ? "too_large"
+        : status === 415
+          ? "unsupported"
+          : status === 429
+            ? "rate_limited"
+            : status === 503
+              ? "unavailable"
+              : "upstream";
 export class FeedbackError extends Error {
+  readonly code: FeedbackCode;
   constructor(
     readonly status: number,
     message: string,
+    readonly retryAfter?: number,
+    code?: FeedbackCode,
   ) {
     super(message);
+    this.code = code ?? defaultCode(status);
   }
 }
 export const json = (value: unknown, status = 200, extra: Record<string, string> = {}) =>
@@ -66,13 +95,15 @@ export function visitorKey(address: string): string {
     .join(":")}::/64`;
 }
 export function visitorOf(request: Request): string {
-  // The deployment proxy must overwrite these headers; never expose the origin server directly.
+  // Trusted only because the deployment edge overwrites x-real-ip / x-forwarded-for; never expose
+  // the origin server directly. Limiter counters are per instance (in-memory), not shared.
   return visitorKey(
     request.headers.get("x-real-ip")?.trim() ||
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       "unknown",
   );
 }
+// Counters live in this instance's memory: allowances reset on restart and are not shared.
 const DAY = 86_400_000;
 export function createLimiter(
   now = Date.now,
@@ -143,3 +174,54 @@ export async function readBody(request: Request, max: number): Promise<Uint8Arra
   return bytes;
 }
 export const rateLimiter = createLimiter();
+
+// Shared by uploads and submissions, even though each request creates a fresh store.
+export function createGithubBackoff(now = () => Date.now()) {
+  const until = { core: 0, secondary: 0 };
+  // "secondary" is checked before every GitHub call, admitted submissions included.
+  function check(resource: keyof typeof until = "core") {
+    if (until[resource] > now())
+      throw new FeedbackError(
+        503,
+        "Feedback storage is busy. Please try again later, or download your feedback to keep a copy.",
+        Math.ceil((until[resource] - now()) / 1000),
+        "storage_busy",
+      );
+  }
+  return {
+    check,
+    async observe(response: Response) {
+      const resource = "core";
+      const remaining = response.headers.get("x-ratelimit-remaining");
+      const low = remaining !== null && /^\d+$/.test(remaining) && Number(remaining) < 50;
+      const retry = response.headers.get("retry-after");
+      let secondary = response.status === 429;
+      if (response.status === 403) {
+        const data = await response
+          .clone()
+          .json()
+          .catch(() => ({}));
+        secondary = retry !== null || /rate limit|abuse/i.test(String(data?.message ?? ""));
+      }
+      if (!low && !secondary) return;
+      const t = now();
+      const reset = Number(response.headers.get("x-ratelimit-reset")) * 1000;
+      const retryAt = retry
+        ? /^\d+$/.test(retry)
+          ? t + Number(retry) * 1000
+          : Date.parse(retry)
+        : 0;
+      const deadlines = [low ? reset : 0, retryAt].filter((at) => Number.isFinite(at) && at > t);
+      // GitHub asks for at least a minute when a secondary limit has no retry header.
+      const deadline = Math.max(...(deadlines.length ? deadlines : [t + 60_000]));
+      // A primary low budget is per resource; secondary limits can span endpoints,
+      // so they pause both buckets.
+      const buckets: (keyof typeof until)[] = secondary ? ["core", "secondary"] : [resource];
+      for (const bucket of buckets) until[bucket] = Math.max(until[bucket], deadline);
+      // Only an actual rate-limit failure interrupts an admitted submission;
+      // ordinary responses (including the label fallback) can still finish.
+      if (secondary || (response.status === 403 && low)) check(resource);
+    },
+  };
+}
+export const githubBackoff = createGithubBackoff();

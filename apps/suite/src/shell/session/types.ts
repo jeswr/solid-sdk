@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 import type { FetchForOptions } from "@jeswr/pod-auth";
+import { en } from "@jeswr/suite-i18n";
 export interface SuiteAccount {
   id: string;
   webId: string;
@@ -31,22 +32,8 @@ export interface SessionBackend {
   fetchFor(account: SuiteAccount, options?: FetchForOptions): typeof fetch;
   onExpired(cb: () => void): () => void;
 }
-const signInMessages = {
-  "invalid-url": "We couldn't find a sign-in service at that address",
-  unavailable: "Sign-in isn't available here. Please try again.",
-  "issuer-not-authorized":
-    "That account doesn't trust this provider. Try your own provider or your WebID.",
-  "ambiguous-issuer":
-    "Your WebID lists several providers. Enter your provider's address to continue.",
-  cancelled: "Sign-in was cancelled.",
-  "popup-blocked": "Allow popups for Solid Suite, then try signing in again.",
-  "account-active": "Sign out of your current Solid account before signing in to another account.",
-  "session-elsewhere":
-    "A remembered Solid session is still active in this browser. Sign in with that account's WebID, or sign out of it in the tab that uses it.",
-  "in-progress": "A sign-in is already in progress.",
-  "invalid-identity": "This account needs a WebID and one pod storage to use Solid Suite.",
-  failed: "We couldn't sign you in. Please try again.",
-} as const;
+/** English text for logs and errors; the sign-in page translates by code (`signin.errors`). */
+const signInMessages = en.signin.errors;
 export class SignInError extends Error {
   readonly code: keyof typeof signInMessages;
   constructor(code: keyof typeof signInMessages) {

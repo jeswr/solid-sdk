@@ -24,6 +24,10 @@
       "types": "./dist/preferences/index.d.ts",
       "default": "./dist/preferences/index.js"
     },
+    "./pwa": {
+      "types": "./dist/pwa.d.ts",
+      "default": "./dist/pwa.js"
+    },
     "./offline": {
       "types": "./dist/offline.d.ts",
       "default": "./dist/offline.js"
@@ -47,6 +51,10 @@
     "./pod-scoped-fetch": {
       "types": "./dist/pod-scoped-fetch.d.ts",
       "default": "./dist/pod-scoped-fetch.js"
+    },
+    "./undo": {
+      "types": "./dist/undo.d.ts",
+      "default": "./dist/undo.js"
     }
   },
   "files": [
