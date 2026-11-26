@@ -1,5 +1,6 @@
 // AUTHORED-BY GPT-5.6 Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import Foundation
 import XCTest
 
@@ -10,6 +11,9 @@ private struct FixtureFailure: Error, CustomStringConvertible {
 }
 
 final class FixtureTests: XCTestCase {
+    /// Extra facts for the e2e-debug attachment, such as what happened around the foreign tap.
+    private var debugContext = ""
+
     override func setUpWithError() throws {
         try super.setUpWithError()
         continueAfterFailure = false
@@ -18,7 +22,7 @@ final class FixtureTests: XCTestCase {
     // The fixture is ordinary remote content in the real app's WKWebView. Only accessibility
     // is used here: the application has no test-only JavaScript or launch-argument hooks.
     private func readResult(_ app: XCUIApplication, page: String, done: Bool, step: String,
-                            timeout: TimeInterval = 60) throws -> (String, [String: Any]) {
+                            timeout: TimeInterval = 45) throws -> (String, [String: Any]) {
         // WKWebView exposes aria-label as the accessibility label; the HTML id is not an identifier.
         let element = app.webViews.descendants(matching: .any)
             .matching(NSPredicate(format: "identifier == %@ OR label == %@", "e2e-result", "e2e-result"))
@@ -58,7 +62,8 @@ final class FixtureTests: XCTestCase {
         }
         let ready = NSPredicate { _, _ in current() != nil }
         let expectation = XCTNSPredicateExpectation(predicate: ready, object: element)
-        guard XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed, let result = current() else {
+        // The fixture finishes about 2 s after it appears; this budget covers slow accessibility only.
+        guard XCTWaiter.wait(for: [expectation], timeout: 60) == .completed, let result = current() else {
             // The element may have vanished or its WebContent process may be unreachable. Only
             // cached values belong here: querying value/debugDescription can abort XCTest before
             // the attachment is written (continueAfterFailure is false).
@@ -72,7 +77,8 @@ final class FixtureTests: XCTestCase {
     /// Diagnostics only: the host prints e2e-debug attachments on failure and never treats them as evidence.
     private func attachDebug(_ app: XCUIApplication, page: String, done: Bool, step: String, reason: String) {
         let hasWebView = app.webViews.count > 0
-        let attachment = XCTAttachment(string: "step=\(step), page=\(page), done=\(done), hasWebView=\(hasWebView), appState=\(app.state)\n\(reason)\n\n\(app.debugDescription)")
+        let safariState = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari").state
+        let attachment = XCTAttachment(string: "step=\(step), page=\(page), done=\(done), hasWebView=\(hasWebView), appState=\(app.state), safariState=\(safariState)\n\(debugContext)\n\(reason)\n\n\(app.debugDescription)")
         attachment.name = "e2e-debug.txt"
         attachment.lifetime = .keepAlways
         add(attachment)
@@ -107,15 +113,19 @@ final class FixtureTests: XCTestCase {
         let (_, before) = try readResult(app, page: "navigation", done: false, step: "before foreign navigation")
         XCTAssertTrue(foreign.waitForExistence(timeout: 10))
         foreign.tap()
-        // SuiteNavigationPlugin may open Safari; bring the same application back to observe
-        // its bounded refusal window. activate() preserves the existing WebView document.
+        // SuiteNavigationPlugin may open Safari; bring the same application back to observe the
+        // bounded refusal window, then check that the same WebView document survived.
         // UIApplication.open is queued, and on a loaded simulator Safari can take the foreground
-        // after an immediate activate() (train run 45776835289 ended with the app in the
-        // background and its WebContent unreachable). Let Safari arrive first when it does open.
+        // after an immediate activate(), so let Safari arrive first when it does open. readResult
+        // still re-activates while polling; no assertion is made about Safari itself.
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
-        _ = safari.wait(for: .runningForeground, timeout: 15)
-        app.activate()
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 30), "The app must return to the foreground")
+        let safariForeground = safari.wait(for: .runningForeground, timeout: 15)
+        var appForeground = false
+        for _ in 0..<3 where !appForeground {
+            app.activate()
+            appForeground = app.wait(for: .runningForeground, timeout: 10)
+        }
+        debugContext = "safariReachedForeground=\(safariForeground), appForegroundAfterActivate=\(appForeground)"
         let (_, after) = try readResult(app, page: "navigation", done: true, step: "after foreign navigation")
         XCUIDevice.shared.press(.home)
         app.activate()
