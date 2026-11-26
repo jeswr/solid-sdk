@@ -10,8 +10,19 @@ import { DRIVE_TAG } from "../src/apps/drive/lib/offline/guards";
 import { useDriveOutbox, useDriveReplay } from "../src/apps/drive/state/outbox";
 import type { PodSession } from "../src/lib/session/pod-session";
 
-const mocks = vi.hoisted(() => ({ outbox: null as unknown }));
+const mocks = vi.hoisted(() => ({
+  outbox: null as unknown,
+  info: vi.fn(),
+  replayOptions: undefined as unknown,
+}));
 vi.mock("@/shell/sync/outbox-session", () => ({ useOutboxSession: () => mocks.outbox }));
+vi.mock("@jeswr/suite-ui", () => ({ toast: { info: mocks.info } }));
+vi.mock("../src/apps/drive/lib/offline/replay", () => ({
+  driveReplayDelegate: (options: unknown) => {
+    mocks.replayOptions = options;
+    return () => async () => undefined;
+  },
+}));
 
 const WEBID = "https://pod.test/profile/card#me";
 const STORAGE = "https://pod.test/";
@@ -142,4 +153,15 @@ it("refreshes the listing only when a replay completes", () => {
   expect(invalidate).toHaveBeenCalledTimes(2);
   hook.unmount();
   expect(listeners.size).toBe(0);
+});
+
+it("tells the user when a queued folder synced onto an existing folder", () => {
+  fakeOutbox();
+  renderHook(() => useDriveReplay(session(), ROOT, vi.fn()));
+  const { onExistingFolder } = mocks.replayOptions as { onExistingFolder: (url: string) => void };
+  expect(mocks.info).not.toHaveBeenCalled();
+  onExistingFolder(`${ROOT}Plans/`);
+  expect(mocks.info).toHaveBeenCalledExactlyOnceWith(
+    'A folder named "Plans" already existed, so Drive used it.',
+  );
 });

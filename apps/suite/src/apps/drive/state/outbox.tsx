@@ -7,9 +7,11 @@
  * that guard inside Drive's root and the delegate that replays it through Drive's own client.
  */
 import type { QueueingStorageClient } from "@jeswr/suite-sdk/offline";
+import { toast } from "@jeswr/suite-ui";
 import { useEffect } from "react";
 import { useOutboxSession } from "@/shell/sync/outbox-session";
 import type { PodSession } from "../../../lib/session/pod-session";
+import { nameOf } from "../lib/client/client";
 import { DRIVE_TAG, driveGuardPolicy } from "../lib/offline/guards";
 import { driveReplayDelegate } from "../lib/offline/replay";
 
@@ -24,6 +26,11 @@ export function useDriveOutbox(session: PodSession): QueueingStorageClient | nul
   )
     return null;
   return outbox.storage;
+}
+
+/** A queued folder synced onto a folder that already had its name; that folder is used. */
+function existingFolder(url: string) {
+  toast.info(`A folder named "${nameOf(url)}" already existed, so Drive used it.`);
 }
 
 /** Run a registration that throws once the session has ended; the next session registers again. */
@@ -55,7 +62,12 @@ export function useDriveReplay(
   const storage = outbox?.storage;
   useEffect(() => {
     if (!outbox || !matches || !storage) return;
-    const off = register(() => outbox.registerReplayDelegate(DRIVE_TAG, driveReplayDelegate()));
+    const off = register(() =>
+      outbox.registerReplayDelegate(
+        DRIVE_TAG,
+        driveReplayDelegate({ onExistingFolder: existingFolder }),
+      ),
+    );
     // Items queued while Drive was closed waited for this delegate; replay them now.
     if (navigator.onLine !== false)
       void outbox.adapter.reconnected().catch(() => {

@@ -159,11 +159,34 @@ function shape(storageUrl: string, delivery: GuardedDelivery): DriveGuardKind {
   refuse(delivery, "This queued change is not one Drive makes.");
 }
 
+export interface DriveReplayOptions {
+  readonly makeClient?: (session: ReplaySession) => DriveClient;
+  /**
+   * A queued folder's name was already taken by a folder when it synced, so that folder is
+   * used instead. It may be another device's or app's, with its own access; the user is told.
+   */
+  readonly onExistingFolder?: (url: string) => void;
+}
+
+const LDP_TYPE = /<http:\/\/www\.w3\.org\/ns\/ldp#([A-Za-z]+)>\s*;\s*rel="?type"?/g;
+
+/**
+ * Whether `url` answers as a folder itself: a 2xx without following a redirect, and, when the
+ * server names LDP types, a container among them.
+ */
+async function isFolder(session: ReplaySession, url: string, signal: AbortSignal) {
+  const head = await session.fetch(url, { method: "HEAD", redirect: "manual", signal });
+  if (!head.ok || head.redirected || head.type === "opaqueredirect") return false;
+  const types = [...(head.headers.get("link") ?? "").matchAll(LDP_TYPE)].map(([, type]) => type);
+  return !types.length || types.includes("Container") || types.includes("BasicContainer");
+}
+
 /** Build the session's Drive replay delegate. */
-export function driveReplayDelegate(
-  makeClient: (session: ReplaySession) => DriveClient = ({ fetch, storageUrl, webId }) =>
+export function driveReplayDelegate({
+  makeClient = ({ fetch, storageUrl, webId }) =>
     createSolidDriveClient({ storageUrl, fetch, webId }),
-): (session: ReplaySession) => ReplayDelegate {
+  onExistingFolder,
+}: DriveReplayOptions = {}): (session: ReplaySession) => ReplayDelegate {
   return (session) => async (delivery, ctx) => {
     // Re-check the delivered request, not just the stored one.
     const kind = shape(session.storageUrl, delivery);
@@ -182,8 +205,8 @@ export function driveReplayDelegate(
           // device made it) is done, not a conflict nobody can resolve.
           if (!(error instanceof DriveError && error.status === 412)) throw error;
           const url = childUrl(container, normalizeUploadName(name, "folder"), true);
-          const head = await session.fetch(url, { method: "HEAD", signal: ctx.signal });
-          if (!head.ok) throw error;
+          if (!(await isFolder(session, url, ctx.signal))) throw error;
+          onExistingFolder?.(url);
           return { url, etag: null, created: false };
         }
       }

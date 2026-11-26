@@ -287,7 +287,8 @@ it("replays a queued folder as an inherit-verified create", async () => {
 
 it("treats a queued folder that now exists as done, and still refuses a clash it can't confirm", async () => {
   const f = await wacPod();
-  const delegate = driveReplayDelegate()(session(f));
+  const onExistingFolder = vi.fn();
+  const delegate = driveReplayDelegate({ onExistingFolder })(session(f));
   const delivery: GuardedDelivery = {
     op: "create",
     url: PRIVATE,
@@ -298,18 +299,21 @@ it("treats a queued folder that now exists as done, and still refuses a clash it
     purpose: "replay",
   };
   expect(await delegate(delivery, ctx())).toMatchObject({ created: true });
+  expect(onExistingFolder).not.toHaveBeenCalled();
   expect(await delegate(delivery, ctx())).toEqual({
     url: `${PRIVATE}Plans/`,
     etag: null,
     created: false,
   });
+  // The folder used instead may not be this device's: the user is told.
+  expect(onExistingFolder).toHaveBeenCalledExactlyOnceWith(`${PRIVATE}Plans/`);
   const client = {
     createFolder: vi.fn(async () => {
       throw new DriveError("conflict", 412, `${PRIVATE}Gone/`);
     }),
   } as unknown as DriveClient;
   const head = vi.fn(async () => new Response(null, { status: 404 }));
-  const clashing = driveReplayDelegate(() => client)({
+  const clashing = driveReplayDelegate({ makeClient: () => client })({
     fetch: head as unknown as typeof fetch,
     storageUrl: ROOT,
     webId: OWNER,
@@ -317,7 +321,41 @@ it("treats a queued folder that now exists as done, and still refuses a clash it
   await expect(
     clashing({ ...delivery, createOptions: { name: "Gone", kind: "container" } }, ctx()),
   ).rejects.toMatchObject({ code: "precondition-failed" });
-  expect(head).toHaveBeenCalledWith(`${PRIVATE}Gone/`, expect.objectContaining({ method: "HEAD" }));
+  expect(head).toHaveBeenCalledWith(
+    `${PRIVATE}Gone/`,
+    expect.objectContaining({ method: "HEAD", redirect: "manual" }),
+  );
+  // A redirect elsewhere, or something that says it is not a container, is not the folder.
+  for (const answer of [
+    () => new Response(null, { status: 302, headers: { location: `${PRIVATE}Other/` } }),
+    () => {
+      const redirected = new Response(null, { status: 200 });
+      Object.defineProperty(redirected, "redirected", { value: true });
+      return redirected;
+    },
+    () =>
+      new Response(null, {
+        status: 200,
+        headers: { link: '<http://www.w3.org/ns/ldp#NonRDFSource>; rel="type"' },
+      }),
+  ]) {
+    head.mockImplementationOnce(async () => answer());
+    await expect(
+      clashing({ ...delivery, createOptions: { name: "Gone", kind: "container" } }, ctx()),
+    ).rejects.toMatchObject({ code: "precondition-failed" });
+  }
+  head.mockImplementationOnce(
+    async () =>
+      new Response(null, {
+        status: 200,
+        headers: {
+          link: '<http://www.w3.org/ns/ldp#Resource>; rel="type", <http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
+        },
+      }),
+  );
+  expect(
+    await clashing({ ...delivery, createOptions: { name: "Gone", kind: "container" } }, ctx()),
+  ).toMatchObject({ created: false });
 });
 
 it("maps Drive failures onto the outbox's classification", async () => {
@@ -345,7 +383,7 @@ it("maps Drive failures onto the outbox's classification", async () => {
         throw thrown;
       }),
     } as unknown as DriveClient;
-    const delegate = driveReplayDelegate(() => client)({
+    const delegate = driveReplayDelegate({ makeClient: () => client })({
       fetch,
       storageUrl: ROOT,
       webId: OWNER,
@@ -364,10 +402,13 @@ it("maps Drive failures onto the outbox's classification", async () => {
     }),
   } as unknown as DriveClient;
   await expect(
-    driveReplayDelegate(() => client)({ fetch, storageUrl: ROOT, webId: OWNER })(delivery, {
-      storage: {} as never,
-      signal: controller.signal,
-    }),
+    driveReplayDelegate({ makeClient: () => client })({ fetch, storageUrl: ROOT, webId: OWNER })(
+      delivery,
+      {
+        storage: {} as never,
+        signal: controller.signal,
+      },
+    ),
   ).rejects.toMatchObject({ code: "network" });
 });
 
@@ -384,7 +425,7 @@ it("returns the write receipt's ETag when the server sends one, and none otherwi
       discoveryVerifier: () => () => undefined,
       write: vi.fn(async () => (etag ? { etag } : {})),
     } as unknown as DriveClient;
-    const delegate = driveReplayDelegate(() => client)({
+    const delegate = driveReplayDelegate({ makeClient: () => client })({
       fetch,
       storageUrl: ROOT,
       webId: OWNER,
