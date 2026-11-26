@@ -200,7 +200,7 @@ export interface PodAuth {
    * returns the covering grant. Interactive cores only; agents and test doubles may omit it.
    */
   grantResource?(url: string, options?: GrantResourceOptions): Promise<ResourceGrant>;
-  /** End a grant (by grant or exact root); true when one was removed. Takes effect on the next request. */
+  /** Remove a grant by grant or exact root. Returns true on removal. Each credentialed send checks the current boundary. */
   revokeResource?(grant: ResourceGrant | string): boolean;
   /** This account's current resource grants, in the order they were made. */
   grants?(): readonly ResourceGrant[];

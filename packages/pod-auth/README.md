@@ -398,7 +398,7 @@ There is one grant mechanism with one set of rules, all enforced in the core:
 
 - A grant is a container (trailing `/`, covering its descendants) or one exact resource, in its
   canonical HTTPS spelling (loopback HTTP only with `allowInsecureLoopback`). Queries, fragments,
-  credentials, dot or encoded segments, `//` and non-canonical spellings are refused
+  credentials, trailing-dot hostnames, dot or encoded segments, `//` and non-canonical spellings are refused
   (`invalid-url`), as are whole origins (`origin-wide`), anything inside or containing the
   account's own storages or storage endpoints (`own-storage`), and anything inside a path-based
   issuer or containing the issuer, its discovery documents, a metadata endpoint or a dot-prefixed
@@ -423,7 +423,8 @@ There is one grant mechanism with one set of rules, all enforced in the core:
   `manager.fetchFor(webId)`. A reload asks again.
 - Granting a URL inside an existing grant returns that covering grant, so revoking it ends access
   to everything beneath it.
-- `grants()` lists them, `revokeResource(grant | root)` ends one before the next request,
+- `grants()` lists them. `revokeResource(grant | root)` ends a grant immediately. Each credentialed
+  send checks the current boundary, including retries of requests already in progress.
   `isWithinGrantedScope(url)` checks scope synchronously, and `on('grants', …)` reports every change
   with the new list in `event.grants`. `withinResourceGrants(grants, url)` is the pure matcher.
 

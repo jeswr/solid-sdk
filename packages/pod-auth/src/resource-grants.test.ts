@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { afterEach, expect, test, vi } from "vitest";
 import { createBoundary } from "./boundary.js";
 import {
@@ -273,6 +274,24 @@ test.each([
 });
 
 test.each([
+  "https://op.example./.oidc/",
+  "https://op.example./token",
+  "https://pod.example./alice/",
+])("a trailing-dot grant %s is refused before discovery and receives no credentials", async (url) => {
+  const f = fixture();
+  await f.auth.login();
+  const before = f.requests.length;
+  expect(await refusal(f.auth.grantResource!(url))).toBe("invalid-url");
+  expect(f.requests).toHaveLength(before);
+  expect(f.auth.grants!()).toEqual([]);
+  expect((await f.auth.fetch(url)).status).toBe(401);
+  const attempts = f.requests.slice(before);
+  expect(attempts.map((request) => request.url)).toEqual([url]);
+  expect(attempts[0]!.headers.has("authorization")).toBe(false);
+  expect(attempts[0]!.headers.has("dpop")).toBe(false);
+});
+
+test.each([
   ["https://alice.example/"],
   ["https://alice.example"],
 ])("an origin-wide grant %s is refused", async (url) => {
@@ -354,6 +373,35 @@ test("a path-based server's other pods can be granted on the issuer's origin", a
   expect((await f.auth.fetch("https://op.example/bob/file")).status).toBe(200);
   // The token endpoint itself stays outside every grant.
   expect(f.credentialed("https://op.example/token")).toHaveLength(0);
+});
+
+test("grant exclusions recognize trailing dots on advertised issuers, endpoints and storage", async () => {
+  const f = fixture(
+    {
+      issuer: "https://op.example./realms/account/",
+      tokenEndpoint: "https://tokens.example./oauth/token",
+      storages: ["https://pod.example./users/alice/"],
+    },
+    { boundary: { storageEndpoints: ["/account/domains"] } },
+  );
+  await f.auth.login();
+  for (const url of [
+    "https://op.example/.oidc/",
+    "https://op.example/realms/account/settings",
+    "https://tokens.example/oauth/token",
+    "https://tokens.example/oauth/",
+  ])
+    expect(await refusal(f.auth.grantResource!(url))).toBe("protocol-endpoint");
+  for (const url of [
+    "https://pod.example/users/alice/file",
+    "https://pod.example/users/",
+    "https://pod.example/account/domains",
+  ])
+    expect(await refusal(f.auth.grantResource!(url))).toBe("own-storage");
+  expect(f.auth.grants!()).toEqual([]);
+  const file = "https://pod.example/users/alice/file";
+  expect((await f.auth.fetch(file)).status).toBe(401);
+  expect(f.credentialed(file)).toHaveLength(0);
 });
 
 test("browsers that report user activation require it", async () => {
@@ -523,29 +571,46 @@ test("a grant's server cannot force the shared session to renew", async () => {
 });
 
 test("a grant revoked during its upgrade fails closed and leaves the account session intact", async () => {
-  let auth!: ReturnType<typeof createPodAuth>;
-  let revokeOn401 = false;
-  const f = fixture({}, {}, (request) => {
-    if (!revokeOn401 || request.url !== `${shared}a` || request.headers.has("authorization"))
-      return undefined;
-    revokeOn401 = false;
-    // Revoke after the challenge returns, while the upgrade for this grant is under way.
-    return f.op.fetch(request).then((response) => {
-      setTimeout(() => auth.revokeResource!(shared), 0);
-      return response;
-    });
-  });
-  auth = f.auth;
+  const sessions = createMemoryStore();
+  const f = fixture({}, { storage: { sessions, caches: createMemoryStore() } });
+  const { auth } = f;
   await auth.login({ webId: f.op.webId });
-  await auth.grantResource!(shared);
-  revokeOn401 = true;
-  await auth.fetch(`${shared}a`).catch(() => undefined);
+  const grant = await auth.grantResource!(shared);
+  // The upgrade awaits publication of the authenticated account before it returns the signed request.
+  const write = sessions.setItem;
+  const publish = vi.spyOn(sessions, "setItem").mockImplementationOnce(async (key, value) => {
+    expect(value).toMatchObject({ webId: f.op.webId });
+    await write(key, value);
+    expect(auth.revokeResource!(grant)).toBe(true);
+  });
+  await expect(auth.fetch(`${shared}a`)).rejects.toThrow("Credential boundary no longer allows");
+  expect(publish).toHaveBeenCalledTimes(1);
   expect(auth.grants!()).toEqual([]);
+  expect(f.credentialed(shared)).toHaveLength(0);
   // The account's session is still its own storage, so a fresh grant reuses it without signing in.
   await auth.grantResource!(shared);
   expect((await auth.fetch(`${shared}b`)).status).toBe(200);
   expect((await auth.fetch(`${f.op.root}c`)).status).toBe(200);
   expect(f.ui.getCode).toHaveBeenCalledTimes(1);
+});
+
+test("revoking after the upgrade prevents the credentialed send", async () => {
+  const url = `${shared}a`;
+  const revoke = vi.fn((): boolean => f.auth.revokeResource!(shared));
+  const f = fixture({}, {}, (request) => {
+    if (request.url !== url || request.headers.has("authorization")) return undefined;
+    // The engine discards the original 401 body after the upgrade, immediately before the retry.
+    const body = new ReadableStream({ cancel: () => void revoke() });
+    return Promise.resolve(
+      new Response(body, { status: 401, headers: { "www-authenticate": "DPoP" } }),
+    );
+  });
+  await f.auth.login();
+  await f.auth.grantResource!(shared);
+  await expect(f.auth.fetch(url)).rejects.toThrow("Credential boundary no longer allows");
+  expect(revoke).toHaveReturnedWith(true);
+  expect(f.requests.filter((r) => r.url === url)).toHaveLength(1);
+  expect(f.credentialed(shared)).toHaveLength(0);
 });
 
 test("a granted sign-in remembers the established session, never the foreign URL", async () => {

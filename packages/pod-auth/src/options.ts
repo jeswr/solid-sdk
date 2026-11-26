@@ -3,6 +3,12 @@
 // AUTHORED-BY Codex GPT-6
 import type { FetchAccount, FetchForOptions, Identity, PodAuthOptions } from "./types.js";
 
+/** Same scheme, port and host, treating a DNS trailing dot as the host it names. */
+export function sameServer(a: URL, b: URL): boolean {
+  const host = (url: URL) => url.hostname.replace(/\.$/, "");
+  return a.protocol === b.protocol && a.port === b.port && host(a) === host(b);
+}
+
 /** Snapshot caller-selected origins before any asynchronous work. Exact origins exclude URL tricks. */
 export function extraResourceOrigins(options?: FetchForOptions): readonly string[] {
   if (options === undefined) return [];
