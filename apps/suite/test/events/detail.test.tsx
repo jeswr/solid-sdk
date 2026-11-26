@@ -39,7 +39,7 @@ const event: Invitation = {
   startDate: new Date("2027-02-01T18:00:00Z"),
   organizer: "https://host.example/me",
   eventStatus: EVENT_STATUS.scheduled,
-  visibility: "link",
+  visibility: "invitees",
   guestListVisible: true,
   publication: "published",
   created: new Date(),
@@ -212,6 +212,16 @@ it("renders an oversized listing as a notice instead of an error state", async (
   expect(view.host.textContent).toContain("reply listing exceeds the safety limits");
   expect(view.host.textContent).toContain("Some replies cannot be shown");
   expect(view.host.textContent).not.toContain("The first yes is on its way");
+});
+it("never offers other guests a list of raw replies on a link invitation", async () => {
+  vi.mocked(readReplies).mockClear();
+  const link = { ...event, visibility: "link" as const, guestListVisible: true };
+  const view = await mount(h(InvitationDetail, { event: link, fetch: vi.fn() }));
+  expect(readReplies).not.toHaveBeenCalled();
+  expect(view.host.textContent).toContain("A private guest list");
+  // The organiser always sees their own replies.
+  await mount(h(InvitationDetail, { event: link, fetch: vi.fn(), organiser: true }));
+  expect(readReplies).toHaveBeenCalled();
 });
 it("wraps organiser reads in the guarded transport", async () => {
   const raw = vi.fn();

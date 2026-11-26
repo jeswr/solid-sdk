@@ -236,7 +236,8 @@ CON-03 implements `./node` and the `pod-connectors` bin. Keep its imports separa
 browser entry points. Read `src/node/config.ts` and the README's Node CLI section before
 changing the provisional MCP JSON schema. Open the 0600 owner-held config without following symlinks. Pass the bounded
 `forClientCredentials` fetch to the Solid backend and `createStoragePodWriter`. Require both privacy
-checks from `@jeswr/pod-access` for Garmin, WHOOP and bank payloads, provenance and CLI checkpoints.
+checks from `@jeswr/pod-access` for every `private` connector in `CONNECTOR_PRIVACY` (`src/core/pod-writer-policy.ts`; Garmin, WHOOP, activity-files, bank statements and more), their provenance and CLI checkpoints.
+Classify every new adapter id there (`private` unless unquestionably public data); an unclassified id is private and `src/core/connector-privacy.test.ts` fails. ACP pods fail closed (no `acpDialect`). Reuse that one mechanism; never write a second verifier.
 Confirm the same strong ETag across resource HEADs. Latch refusals before conditional create cleanup under its own 10-second deadline.
 Keep `node/pod-auth.ts` as the adapter for the explicit token URL and exact cross-storage index grant.
 Protocol discovery is cached and byte-capped, and only validated endpoints receive exchange
