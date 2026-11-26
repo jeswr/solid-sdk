@@ -1,7 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
-// Suite scenario 9 on a real Community Solid Server pod: Drive queues a new folder and a
-// text save while offline, the shell outbox syncs them on reconnect, and a text save
-// that meets a newer pod version surfaces as a conflict resolved with "Keep both".
+// Suite scenario 9 on a real Community Solid Server pod: Drive queues a new folder (9A) and a
+// text save (9C) while offline, the shell outbox syncs them on reconnect, and a text save
+// that meets a newer pod version surfaces as a conflict resolved with "Keep both" (9B).
 import { randomUUID } from "node:crypto";
 import { createPodClient } from "@jeswr/storage-client";
 import type { Page } from "@playwright/test";
@@ -227,7 +227,8 @@ test("9B: a text save queued offline meets a pod change, and Keep both keeps bot
     expect(kept.ok).toBe(true);
     expect(await kept.text()).toBe(remote);
     // ...and the offline version as a create-only sibling named by the outbox's
-    // non-RDF keep-both rule, `<stem>-conflict-<ms><ext>`, through Drive's upload.
+    // non-RDF keep-both rule, `<stem>-conflict-<ms><ext>`, written by Drive's delegate with
+    // the file's own access (restoreFrom), not as a plain upload.
     const found = await copies();
     for (const url of found) cleanup.add(url);
     expect(found).toHaveLength(1);
@@ -240,12 +241,81 @@ test("9B: a text save queued offline meets a pod change, and Keep both keeps bot
     expect(copy.ok).toBe(true);
     expect(copy.headers.get("content-type") ?? "").toMatch(/^text\/plain\b/);
     expect(await copy.text()).toBe(local);
+    // Drive's guarded delegate gives the copy its own ACL from the source's access; a bare
+    // create-only upload (or the outbox's own storage client) would leave it inheriting.
+    const aclUrl = /<([^>]+)>\s*;\s*rel="?acl"?/.exec(copy.headers.get("link") ?? "")?.[1];
+    expect(aclUrl).toBeDefined();
+    const acl = await auth.fetch(new URL(aclUrl as string, copyUrl).href);
+    expect(acl.status).toBe(200);
+    await acl.body?.cancel();
     await accessible(page);
   } finally {
     await context.setOffline(false);
     // Include a copy created before a failed assertion between resolve and listing.
     for (const url of await copies()) cleanup.add(url);
     for (const url of cleanup) await remove(auth, url);
+    await auth.logout();
+  }
+});
+
+test("9C: a text save queued offline with no pod change syncs the new text to the pod", async ({
+  page,
+  context,
+}) => {
+  const auth = await accountAuth("alice");
+  const fileName = `plain-${randomUUID()}.txt`;
+  const fileUrl = new URL(fileName, driveRoot()).href;
+  const original = `Original ${randomUUID()}`;
+  const local = `Written offline ${randomUUID()}`;
+  try {
+    await openDrive(page);
+    const created = await auth.fetch(fileUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "text/plain", "If-None-Match": "*" },
+      body: original,
+    });
+    expect(created.status).toBe(201);
+    await created.body?.cancel();
+    const opened = await auth.fetch(fileUrl, { method: "HEAD" });
+    const openedEtag = opened.headers.get("etag");
+    expect(openedEtag).toMatch(/^"/);
+
+    await page.goto(`/drive/p/${encodeRef(fileUrl)}`);
+    await expect(page.getByText(original, { exact: true })).toBeVisible({ timeout: 30_000 });
+    await page.getByRole("button", { name: "Edit", exact: true }).click();
+    const editor = page.getByRole("textbox", { name: `Edit ${fileName}`, exact: true });
+    await expect(editor).toHaveValue(original);
+
+    await context.setOffline(true);
+    await expect(offlinePill(page)).toBeVisible();
+    await editor.fill(local);
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await expect(page.getByText(QUEUED, { exact: true })).toBeVisible();
+    await offlinePill(page).click();
+    const sheet = syncSheet(page);
+    await expect(waitingRows(page)).toHaveCount(1);
+    // Queued only: the pod still has the original text.
+    expect(await (await auth.fetch(fileUrl)).text()).toBe(original);
+
+    await context.setOffline(false);
+    await expect(sheet.getByText("Everything is saved", { exact: true })).toBeVisible(DRAIN);
+    await expect(
+      sheet.getByRole("button", { name: `Resolve ${fileName}`, exact: true }),
+    ).toHaveCount(0);
+    const synced = await auth.fetch(fileUrl);
+    expect(synced.ok).toBe(true);
+    expect(synced.headers.get("etag")).not.toBe(openedEtag);
+    expect(synced.headers.get("content-type") ?? "").toMatch(/^text\/plain\b/);
+    expect(await synced.text()).toBe(local);
+    await accessible(page);
+
+    await closeSheet(page);
+    // A fresh read of the preview shows the synced text from the pod.
+    await page.reload();
+    await expect(page.getByText(local, { exact: true })).toBeVisible({ timeout: 30_000 });
+  } finally {
+    await context.setOffline(false);
+    await remove(auth, fileUrl);
     await auth.logout();
   }
 });

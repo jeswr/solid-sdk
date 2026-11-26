@@ -30,7 +30,7 @@ async function setup() {
   outbox.registerGuardPolicy(DRIVE_TAG, driveGuardPolicy(DRIVE));
   outbox.registerDelegate(
     DRIVE_TAG,
-    driveReplayDelegate()({ fetch, storageUrl: ROOT, webId: OWNER }),
+    driveReplayDelegate({ root: DRIVE })({ fetch, storageUrl: ROOT, webId: OWNER }),
   );
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch, webId: OWNER });
   return { f, network, outbox, storage, queueing: withOutbox(storage, outbox), client };
@@ -44,7 +44,7 @@ it("queues a text save and a new folder offline, and replays both through Drive"
     contentType: "text/plain",
     ifMatch: opened.etag as string,
     offline: "queue",
-    guard: textGuard(opened.discovery as NonNullable<typeof opened.discovery>),
+    guard: textGuard(opened.discovery as NonNullable<typeof opened.discovery>, FILE),
   });
   expect(saved.queued).toBe(true);
   let queued = 0;
@@ -93,7 +93,7 @@ it("surfaces a changed file as a conflict that Keep both resolves with a copy", 
     contentType: "text/plain",
     ifMatch: opened.etag as string,
     offline: "queue",
-    guard: textGuard(opened.discovery as NonNullable<typeof opened.discovery>),
+    guard: textGuard(opened.discovery as NonNullable<typeof opened.discovery>, FILE),
   });
   await f.pod.fetch(FILE, {
     method: "PUT",

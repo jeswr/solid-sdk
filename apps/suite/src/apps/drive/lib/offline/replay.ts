@@ -13,10 +13,11 @@ import {
   createSolidDriveClient,
   type DriveClient,
   DriveError,
-  type DriveItem,
+  nameOf,
+  parentOf,
 } from "../client/client";
-import { childUrl, createFolder, uploadFile } from "../operations/operations";
-import { normalizeUploadName } from "../upload";
+import { childUrl, createFolder } from "../operations/operations";
+import { normalizeUploadName, suffixedName } from "../upload";
 import { type DriveGuardKind, inside, isPolicyDocument } from "./guards";
 import { isNetworkFailure } from "./network";
 
@@ -66,17 +67,92 @@ function body(delivery: GuardedDelivery, contentType: string): Blob {
   return new Blob(delivery.body ? [delivery.body as BlobPart] : [], { type: contentType });
 }
 
-function assertions(delivery: GuardedDelivery): { kind?: unknown; discovery?: unknown } {
+function assertions(delivery: GuardedDelivery): {
+  kind?: unknown;
+  source?: unknown;
+  discovery?: unknown;
+} {
   const value = delivery.assertions;
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+/** How many earlier kept copies of one file a "keep both" retry reads before making a new one. */
+const MAX_KEPT_COPIES = 8;
+
+/** Whether `url` now holds exactly `bytes`; a larger body is read only up to that size. */
+async function holds(client: DriveClient, url: string, bytes: Uint8Array | null): Promise<boolean> {
+  const expected = bytes ?? new Uint8Array();
+  const current = await client.readLimited(url, expected.byteLength);
+  if (!current || current.size !== expected.byteLength) return false;
+  const actual = new Uint8Array(await current.arrayBuffer());
+  return actual.every((byte, index) => byte === expected[index]);
+}
+
+/**
+ * An earlier "keep both" copy of `source` with exactly these bytes. The outbox names each
+ * attempt anew, so a copy whose create landed but whose answer was lost would otherwise be
+ * made again on retry.
+ */
+async function keptCopy(
+  client: DriveClient,
+  container: string,
+  source: string,
+  bytes: Uint8Array | null,
+): Promise<string | undefined> {
+  const original = nameOf(source);
+  const size = bytes?.byteLength ?? 0;
+  const candidates = (await client.list(container)).filter((item) => {
+    if (item.kind !== "file" || (item.size !== undefined && item.size !== size)) return false;
+    return [...item.name.matchAll(/-conflict-(\d{1,16})/g)].some(([suffix]) => {
+      try {
+        return suffixedName(original, suffix) === item.name;
+      } catch {
+        return false;
+      }
+    });
+  });
+  for (const item of candidates.slice(0, MAX_KEPT_COPIES))
+    if (await holds(client, item.url, bytes)) return item.url;
+  return undefined;
+}
+
+/**
+ * The suffix of the outbox's "keep both" name for `source` (`<stem>-conflict-<ms><ext>`), or
+ * none when `name` is not one. Drive re-applies it to the file's own name, so a long name is
+ * shortened before the suffix rather than after it.
+ */
+function conflictSuffix(source: string, name: string): string | undefined {
+  let original: string;
+  try {
+    original = decodeURIComponent(new URL(source).pathname.split("/").pop() ?? "");
+  } catch {
+    return undefined;
+  }
+  const dot = original.lastIndexOf(".");
+  const stem = dot > 0 ? original.slice(0, dot) : original;
+  const ext = dot > 0 ? original.slice(dot) : "";
+  const prefix = `${stem}-conflict-`;
+  if (!original || !name.startsWith(prefix) || !name.endsWith(ext)) return undefined;
+  const stamp = name.slice(prefix.length, name.length - ext.length);
+  return /^\d{1,16}$/.test(stamp) ? `-conflict-${stamp}` : undefined;
+}
+
+/** Inside Drive's root and not under a hidden name there (`.trash/`, policy files). */
+function inRoot(root: string, url: string | undefined): url is string {
+  return (
+    inside(root, url) &&
+    !new URL(url).pathname
+      .slice(new URL(root).pathname.length)
+      .split("/")
+      .some((segment) => segment.startsWith("."))
+  );
+}
+
 /** The delivery shapes Drive queues; anything else is refused before any request. */
-function shape(storageUrl: string, delivery: GuardedDelivery): DriveGuardKind {
+function shape(root: string, delivery: GuardedDelivery): DriveGuardKind {
   const kind = assertions(delivery).kind;
   const container = delivery.container;
-  const createsIn =
-    delivery.op === "create" && inside(storageUrl, container) && container.endsWith("/");
+  const createsIn = delivery.op === "create" && inRoot(root, container) && container.endsWith("/");
   if (kind === "folder" && createsIn && delivery.purpose === "replay") return kind;
   if (kind === "text") {
     // Text creates exist only as a conflict's "keep both" copy.
@@ -84,7 +160,7 @@ function shape(storageUrl: string, delivery: GuardedDelivery): DriveGuardKind {
     if (
       delivery.op === "write" &&
       delivery.purpose !== "resolve-both" &&
-      inside(storageUrl, delivery.url) &&
+      inRoot(root, delivery.url) &&
       !delivery.url.endsWith("/") &&
       !isPolicyDocument(delivery.url)
     )
@@ -93,14 +169,41 @@ function shape(storageUrl: string, delivery: GuardedDelivery): DriveGuardKind {
   refuse(delivery, "This queued change is not one Drive makes.");
 }
 
+export interface DriveReplayOptions {
+  /** Drive's root: every queued Drive change, and the file a kept copy keeps, lies inside it. */
+  readonly root: string;
+  readonly makeClient?: (session: ReplaySession) => DriveClient;
+  /**
+   * A queued folder's name was already taken by a folder when it synced, so that folder is
+   * used instead. It may be another device's or app's, with its own access; the user is told.
+   */
+  readonly onExistingFolder?: (url: string) => void;
+}
+
+const STRONG_ETAG = /^"[\x21\x23-\x7e\x80-\xff]*"$/;
+const LDP_TYPE = /<http:\/\/www\.w3\.org\/ns\/ldp#([A-Za-z]+)>\s*;\s*rel="?type"?/g;
+
+/**
+ * Whether `url` answers as a folder itself: a 2xx without following a redirect, and, when the
+ * server names LDP types, a container among them.
+ */
+async function isFolder(session: ReplaySession, url: string, signal: AbortSignal) {
+  const head = await session.fetch(url, { method: "HEAD", redirect: "manual", signal });
+  if (!head.ok || head.redirected || head.type === "opaqueredirect") return false;
+  const types = [...(head.headers.get("link") ?? "").matchAll(LDP_TYPE)].map(([, type]) => type);
+  return !types.length || types.includes("Container") || types.includes("BasicContainer");
+}
+
 /** Build the session's Drive replay delegate. */
-export function driveReplayDelegate(
-  makeClient: (session: ReplaySession) => DriveClient = ({ fetch, storageUrl, webId }) =>
+export function driveReplayDelegate({
+  root,
+  makeClient = ({ fetch, storageUrl, webId }) =>
     createSolidDriveClient({ storageUrl, fetch, webId }),
-): (session: ReplaySession) => ReplayDelegate {
+  onExistingFolder,
+}: DriveReplayOptions): (session: ReplaySession) => ReplayDelegate {
   return (session) => async (delivery, ctx) => {
     // Re-check the delivered request, not just the stored one.
-    const kind = shape(session.storageUrl, delivery);
+    const kind = shape(root, delivery);
     const client = makeClient(session);
     const container = delivery.container as string;
     try {
@@ -116,8 +219,8 @@ export function driveReplayDelegate(
           // device made it) is done, not a conflict nobody can resolve.
           if (!(error instanceof DriveError && error.status === 412)) throw error;
           const url = childUrl(container, normalizeUploadName(name, "folder"), true);
-          const head = await session.fetch(url, { method: "HEAD", signal: ctx.signal });
-          if (!head.ok) throw error;
+          if (!(await isFolder(session, url, ctx.signal))) throw error;
+          onExistingFolder?.(url);
           return { url, etag: null, created: false };
         }
       }
@@ -125,31 +228,63 @@ export function driveReplayDelegate(
       if (delivery.op === "create") {
         const name = delivery.createOptions?.name;
         if (!name) refuse(delivery, "This queued copy has no name.");
-        const saved = await uploadFile(
-          client,
-          container,
+        const { source, discovery } = assertions(delivery);
+        if (
+          typeof source !== "string" ||
+          !isEndpointCapture(discovery) ||
+          !inRoot(root, source) ||
+          source.endsWith("/") ||
+          isPolicyDocument(source) ||
+          parentOf(source) !== container
+        )
+          refuse(delivery, "This queued copy doesn't name the file it keeps.");
+        const suffix = conflictSuffix(source, name);
+        if (!suffix) refuse(delivery, "This queued copy's name isn't one Drive keeps.");
+        const url = childUrl(container, suffixedName(nameOf(source), suffix));
+        // "Keep both" copies the file, so the copy keeps the file's own access, as Drive's
+        // "Make a copy" does (preserve-source). A plain upload would inherit the folder's
+        // access, which can be wider than a file with its own ACL.
+        const verifyHeaders = client.discoveryVerifier(source, discovery);
+        const kept = await keptCopy(client, container, source, delivery.body);
+        if (kept) return { url: kept, etag: null, created: false };
+        const { etag } = await client.stat(source);
+        if (!etag) throw new DriveError("missing-validator", 409, source);
+        await client.write(
+          url,
           body(delivery, contentType),
-          name,
-          "fail",
-          undefined,
-          contentType,
+          { contentType, restoreFrom: { url: source, etag, verifyHeaders } },
+          { kind: "protect-ancestors" },
         );
-        // With "fail", a name clash throws; only "skip" resolves without an item.
-        return { url: (saved as DriveItem).url, etag: null, created: true };
+        return { url, etag: null, created: true };
       }
       const { discovery } = assertions(delivery);
-      if (!isEndpointCapture(discovery) || !delivery.ifMatch)
+      // Only a strong validator: a weak one never matches, and "*" would overwrite anything.
+      const { ifMatch } = delivery;
+      if (!isEndpointCapture(discovery) || !ifMatch || !STRONG_ETAG.test(ifMatch))
         refuse(delivery, "This queued save has no version to check against.");
-      const written = await client.write(
-        delivery.url,
-        body(delivery, contentType),
-        {
-          contentType,
-          ifMatch: delivery.ifMatch,
-          verifyHeaders: client.discoveryVerifier(delivery.url, discovery),
-        },
-        { kind: "protect-ancestors" },
-      );
+      let written: { etag?: string };
+      try {
+        written = await client.write(
+          delivery.url,
+          body(delivery, contentType),
+          {
+            contentType,
+            ifMatch,
+            verifyHeaders: client.discoveryVerifier(delivery.url, discovery),
+          },
+          { kind: "protect-ancestors" },
+        );
+      } catch (error) {
+        // An earlier attempt whose answer was lost may have landed: the stored If-Match is
+        // then stale, but the file already holds these bytes. That is done, not a conflict.
+        if (
+          error instanceof DriveError &&
+          error.status === 412 &&
+          (await holds(client, delivery.url, delivery.body))
+        )
+          return { url: delivery.url, etag: null, created: false };
+        throw error;
+      }
       // A receipt-less write certifies no version; the next save must read again.
       return { url: delivery.url, etag: written.etag ?? null, created: false };
     } catch (error) {

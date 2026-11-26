@@ -166,7 +166,7 @@ export function TextPreview({
           contentType,
           ifMatch: etag,
           offline: "queue",
-          guard: textGuard(current.discovery as EndpointCapture),
+          guard: textGuard(current.discovery as EndpointCapture, item.url),
         });
         return {
           etag: result.queued ? undefined : (result.etag ?? undefined),

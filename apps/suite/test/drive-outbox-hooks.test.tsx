@@ -10,8 +10,19 @@ import { DRIVE_TAG } from "../src/apps/drive/lib/offline/guards";
 import { useDriveOutbox, useDriveReplay } from "../src/apps/drive/state/outbox";
 import type { PodSession } from "../src/lib/session/pod-session";
 
-const mocks = vi.hoisted(() => ({ outbox: null as unknown }));
+const mocks = vi.hoisted(() => ({
+  outbox: null as unknown,
+  info: vi.fn(),
+  replayOptions: undefined as unknown,
+}));
 vi.mock("@/shell/sync/outbox-session", () => ({ useOutboxSession: () => mocks.outbox }));
+vi.mock("@jeswr/suite-ui", () => ({ toast: { info: mocks.info } }));
+vi.mock("../src/apps/drive/lib/offline/replay", () => ({
+  driveReplayDelegate: (options: unknown) => {
+    mocks.replayOptions = options;
+    return () => async () => undefined;
+  },
+}));
 
 const WEBID = "https://pod.test/profile/card#me";
 const STORAGE = "https://pod.test/";
@@ -82,17 +93,20 @@ it("registers Drive's policy and delegate for the matching session, replays, and
   expect(offDelegate).toHaveBeenCalledOnce();
 });
 
-it("waits for Drive's root before the policy, and replays only when online", () => {
+it("waits for Drive's root before the policy and the delegate, and replays only when online", () => {
   const { outbox } = fakeOutbox();
   const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
   const hook = renderHook(({ root }) => useDriveReplay(session(), root, vi.fn()), {
     initialProps: { root: undefined as string | undefined },
   });
   expect(outbox.registerGuardPolicy).not.toHaveBeenCalled();
-  expect(outbox.registerReplayDelegate).toHaveBeenCalledOnce();
-  expect(outbox.adapter.reconnected).not.toHaveBeenCalled();
+  // The delegate is confined to Drive's root, so it needs the root too.
+  expect(outbox.registerReplayDelegate).not.toHaveBeenCalled();
   hook.rerender({ root: ROOT });
   expect(outbox.registerGuardPolicy).toHaveBeenCalledOnce();
+  expect(outbox.registerReplayDelegate).toHaveBeenCalledOnce();
+  expect(mocks.replayOptions).toMatchObject({ root: ROOT });
+  expect(outbox.adapter.reconnected).not.toHaveBeenCalled();
   online.mockRestore();
 });
 
@@ -142,4 +156,33 @@ it("refreshes the listing only when a replay completes", () => {
   expect(invalidate).toHaveBeenCalledTimes(2);
   hook.unmount();
   expect(listeners.size).toBe(0);
+});
+
+it("tells the user when a queued folder synced onto an existing folder", () => {
+  fakeOutbox();
+  renderHook(() => useDriveReplay(session(), ROOT, vi.fn()));
+  const { onExistingFolder } = mocks.replayOptions as { onExistingFolder: (url: string) => void };
+  expect(mocks.info).not.toHaveBeenCalled();
+  onExistingFolder(`${ROOT}Plans/`);
+  expect(mocks.info).toHaveBeenCalledExactlyOnceWith(
+    'A folder named "Plans" already existed, so Drive used it.',
+  );
+});
+
+it("shares one registration between two mounted Drive providers until the last unmounts", () => {
+  const { outbox, offPolicy, offDelegate } = fakeOutbox();
+  const first = renderHook(() => useDriveReplay(session(), ROOT, vi.fn()));
+  const second = renderHook(() => useDriveReplay(session(), ROOT, vi.fn()));
+  expect(outbox.registerGuardPolicy).toHaveBeenCalledOnce();
+  expect(outbox.registerReplayDelegate).toHaveBeenCalledOnce();
+  first.unmount();
+  // The share screen's provider still needs the guard and the delegate.
+  expect(offPolicy).not.toHaveBeenCalled();
+  expect(offDelegate).not.toHaveBeenCalled();
+  second.unmount();
+  expect(offPolicy).toHaveBeenCalledOnce();
+  expect(offDelegate).toHaveBeenCalledOnce();
+  // A later mount registers afresh.
+  renderHook(() => useDriveReplay(session(), ROOT, vi.fn()));
+  expect(outbox.registerGuardPolicy).toHaveBeenCalledTimes(2);
 });
