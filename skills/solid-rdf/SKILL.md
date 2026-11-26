@@ -1,13 +1,21 @@
 ---
 name: solid-rdf
-description: Use when implementing Solid server RDF parsing or serialization, JSON-LD context security, RDF content negotiation, byte-exact storage, LDP container graphs, or SPARQL PATCH parsing. Covers N3.js, jsonld, and @rdfjs/wrapper typed accessors; client pod reads use solid-fetch-rdf.
+description: Use when implementing Solid server RDF parsing or serialization, JSON-LD context security, RDF content negotiation, byte-exact storage, LDP container graphs, or SPARQL PATCH parsing. Also covers Turtle produced from text templates (pod templates). Client code that reads pods or profiles, in an app or a browser page, uses the fetch-rdf and solid-object skills instead.
 ---
 
 ## Quick reference
 
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+
+**Writing client code, an app, or a browser page?** This is the server skill. Read pods and
+profiles with the [`fetch-rdf`](../../packages/fetch-rdf/SKILL.md) skill and the typed
+wrappers in the [`solid-object`](../solid-object/SKILL.md) skill, which also covers pages with
+no build step.
+
 Stream original stored bytes when Accept permits; convert only on the read path.
 Use one N3 DataFactory, the resource URL as baseIRI, and a refusing or pinned-context-only JSON-LD loader.
 Build graphs through typed accessors, serialize with the callback-based N3 Writer, and validate SPARQL ASTs before applying PATCH.
+A value placed in a Turtle text template is escaped for Turtle, never for HTML, or the document is written with N3.Writer instead.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
@@ -110,6 +118,23 @@ class ContainerListing extends DatasetWrapper {
 `SetFrom`/`RequiredAs` keep cardinality honest. This is the same `@solid/object`/`@rdfjs/wrapper`
 discipline used for ACL parsing — see the suite rule on object-mapper RDF.
 
+### Text templates that produce Turtle
+
+"Never hand-build triples" also covers **text templates whose output is Turtle**, such as the
+Community Solid Server pod templates (`card$.ttl.hbs`) that write a new user's profile. A
+template engine built for HTML escapes for HTML: Handlebars `{{name}}` stores `D'Arcy` as
+`D&#x27;Arcy`, which is then what every app shows. Switching to the unescaped `{{{name}}}`
+fixes apostrophes but lets a quote, backslash or newline break out of the literal and inject
+triples. So:
+
+- Escape each value **for Turtle** before it reaches the template: inside a `"…"` string
+  literal, backslash-escape `\`, `"`, and the line breaks (`\n`, `\r`), and strip other control
+  characters; as an IRI, filter it with `safeHttpIri` / `escapeIri` from `@jeswr/rdf-serialize`.
+- Better, write the document with `serialize` from `@jeswr/rdf-serialize` (N3.Writer) after the template has created the resource, so
+  no value is ever spliced into Turtle text.
+- Validate on the server. A check that only runs in the browser does not protect a direct API
+  call.
+
 ## LDP container listing shape (what GET on a container returns)
 
 - Container typed `ldp:Resource`, `ldp:Container`, `ldp:BasicContainer`.
@@ -133,6 +158,7 @@ skill if present). Never string-concatenate untrusted lexical values into SPARQL
 - [ ] `baseIRI` = the resource's own URL for relative-IRI resolution.
 - [ ] N3 `Writer` is callback-based — promisify.
 - [ ] Graphs built via `@rdfjs/wrapper` typed accessors, not hand-built quads.
+- [ ] No value reaches a Turtle text template unescaped, or HTML-escaped; prefer `N3.Writer`.
 - [ ] Stream byte-exact stored bytes when `Accept` allows; only parse+reserialise on conversion.
 
 ## See also
