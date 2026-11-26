@@ -42,17 +42,15 @@ pod a given RDF class is stored*, so independent apps can discover each other's
 data instead of hard-coding paths. Two indexes per profile: a **public** one
 (discoverable types) and a **private** one (sensitive types).
 
-This skill resolves the deferral in `AGENTS.md` §Writing data ("the type index
-is the discovery mechanism for *other* apps' data; no typed wrapper ships for it
-yet… out of scope"). No `@solid/object` wrapper ships for it, so you implement
+The Type Index is the discovery mechanism for *other* apps' data. No `@solid/object` wrapper ships for it, so you implement
 read+write through your own `TermWrapper` subclasses — never inline quads, never
-string-concatenated Turtle. Follow the house stack in `AGENTS.md`: auth via
+string-concatenated Turtle. Follow the house stack: auth via
 `@solid/reactive-authentication` (plain `fetch`), I/O via `@jeswr/fetch-rdf`,
 serialisation via `n3`.
 
 > **Stay in scope.** Use the Type Index for *interop* — locating/exposing data
 > other apps share. For data only your own app touches, derive paths from the
-> pod root (`AGENTS.md` §Writing data); you do not need a registration.
+> pod root ([guide chapter 4, Create a resource](../../docs/guide/04-reading-and-writing.md#create-a-resource)); you do not need a registration.
 
 ## Vocabulary
 
@@ -78,7 +76,7 @@ container of many) — not both.
 
 ## Read path: discover an index, then a class
 
-1. Fetch the WebID profile (`AGENTS.md` §Reading data); read `solid:publicTypeIndex`
+1. Fetch the WebID profile ([guide chapter 4, Read a resource](../../docs/guide/04-reading-and-writing.md#read-a-resource)); read `solid:publicTypeIndex`
    and `pim:preferencesFile` off the WebID subject. Fetch the linked Preferences Document
    with auth and read `solid:privateTypeIndex` off the same WebID subject there.
 2. Fetch the index document; find `solid:TypeRegistration` subjects whose
@@ -276,7 +274,7 @@ index.register(indexUrl, "#registration-notes", "https://schema.org/TextDigitalD
 });
 ```
 
-Then mint + persist exactly as `AGENTS.md` §Writing data prescribes: mutate the
+Then mint + persist exactly as [guide chapter 4, Edit a resource](../../docs/guide/04-reading-and-writing.md#edit-a-resource) prescribes: mutate the
 in-memory dataset through these wrappers, serialise the whole dataset with
 `n3.Writer`, and conditional-`PUT` with `if-match` and an explicit
 `content-type: text/turtle`. Handle `412` by re-fetching and re-applying.
@@ -335,11 +333,11 @@ rules, learned building the Pod Manager global pod search
    document** — an attacker who can write a triple in the profile or index can
    point them at a foreign origin. Before attaching the user's DPoP token,
    confirm each URL falls under one of the user's own `pim:storage` roots
-   (the `isUnderStorage` segment-boundary check in `solid-fetch-rdf`); **drop —
+   (the `isUnderStorage` segment-boundary check in `fetch-rdf`); **drop —
    never fetch — any off-storage URL** (attaching your DPoP token to a foreign
    origin leaks it). Re-validate the registered `instance`/`instanceContainer`
    locations too, not just the index URL — both come off attacker-writable
-   documents. (This is the own-pod-discovery mirror of `solid-fetch-rdf`'s
+   documents. (This is the own-pod-discovery mirror of `fetch-rdf`'s
    cross-pod-claim / external-index provenance rules; same primitive.)
 
 3. **Bound the scan so a large pod cannot hang the UI.** Cap on **three** axes
@@ -351,19 +349,18 @@ rules, learned building the Pod Manager global pod search
 
 4. **Render no raw RDF value as a link.** Result titles/URLs are pod data; a
    `javascript:`/`data:` IRI in an `<a href>`/`<img src>` is an injection vector
-   — scheme-filter to `http(s):` before rendering (same rule as `solid-fetch-rdf`
+   — scheme-filter to `http(s):` before rendering (same rule as `fetch-rdf`
    §"Consuming an external Hydra / TPF search index safely").
 
 Keep the URL-validation and scheme checks in **pure predicates** (no fetch) so
 the search filter is exhaustively unit-testable without a live pod — the same
-testability discipline as the cross-pod provenance predicate in `solid-fetch-rdf`.
+testability discipline as the cross-pod provenance predicate in `fetch-rdf`.
 
 ## Cross-references
 
-- `AGENTS.md` §Writing data — read-modify-write, ETags, explicit Content-Type,
-  trailing-slash rule (containers end in `/`). This skill **closes** that
-  section's type-index deferral.
-- [Package-local `solid-fetch-rdf` skill](../../packages/fetch-rdf/SKILL.md) — `isUnderStorage` own-storage containment check, the
+- [guide chapter 4, Edit a resource](../../docs/guide/04-reading-and-writing.md#edit-a-resource) — read-modify-write, ETags, explicit Content-Type,
+  trailing-slash rule (containers end in `/`).
+- [Package-local `fetch-rdf` skill](../../packages/fetch-rdf/SKILL.md) — `isUnderStorage` own-storage containment check, the
   cross-pod-claim provenance tiers, and the external-index SSRF/scheme rules the
   pod-search section above reuses.
 - `solid-rdf` skill — Turtle/JSON-LD parse + serialise, the "never hand-build

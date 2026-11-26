@@ -18,7 +18,7 @@ Use the [package skill](../../packages/solid-offline/SKILL.md) for `createOfflin
 
 # Offline / instant-load — stale-while-revalidate from a WebID-scoped cache
 
-Read the companion [`AGENTS.md`](../../AGENTS.md)
+Read the companion [guide](../../docs/guide/README.md)
 first; this skill assumes that stack (`@solid/reactive-authentication` patches `globalThis.fetch`,
 reads go through `@jeswr/fetch-rdf`, live-sync via the `solid-notifications` skill).
 
