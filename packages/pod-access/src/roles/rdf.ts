@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
@@ -634,12 +635,13 @@ export function appendAcp(
 }
 /**
  * Take `agent` off every rule in a WAC document that the roles layer copied (`materializedFrom`)
- * from one of `origins`. Other principals on the same rule keep it; a rule left with no principal
+ * only from `origins` (every source it names). Other principals on the same rule keep it; a rule left with no principal
  * is removed whole. Rules the agent holds directly (not copied) and copies from any other source
  * are left alone. Returns whether anything changed.
  */
 export function removeCopiedPrincipal(
   dataset: Store,
+  resource: string,
   agent: AgentRef,
   origins: ReadonlySet<string>,
 ): boolean {
@@ -647,7 +649,12 @@ export function removeCopiedPrincipal(
   let changed = false;
   for (const auth of [...new AclResource(dataset, DataFactory).authorizations]) {
     const rule = properties(auth as Term, dataset);
-    if (!rule.iris(MATERIALIZED_FROM).some((origin) => origins.has(origin))) continue;
+    // A copy of a copy names every document it came from; any one still granting keeps it.
+    // Only rules that apply here: role edits leave inert rules with no scope behind.
+    if (![`${ACL}accessTo`, `${ACL}default`].some((scope) => rule.iris(scope).includes(resource)))
+      continue;
+    const from = rule.iris(MATERIALIZED_FROM);
+    if (!from.length || !from.every((origin) => origins.has(origin))) continue;
     if (!rule.values(ACL + selector).has(principal)) continue;
     rule.values(ACL + selector).delete(principal);
     changed = true;

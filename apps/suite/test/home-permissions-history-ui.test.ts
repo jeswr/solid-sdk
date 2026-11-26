@@ -54,12 +54,17 @@ import {
   EMPTY_HISTORY,
   HistoryPage,
   PARTIAL_REVOKE,
+  partialRevokeText,
   REVOKE_FAILED,
   REVOKE_SCOPE,
 } from "../src/apps/home/components/permissions/history-page";
 import { HistoryRoute } from "../src/apps/home/components/permissions/history-route";
 import { PermissionsPage } from "../src/apps/home/components/permissions/permissions-page";
-import { type HistoryEntry, HistoryRevokeError } from "../src/apps/home/lib/permissions/history";
+import {
+  type HistoryEntry,
+  HistoryRevokeError,
+  IncompleteFolderCheckError,
+} from "../src/apps/home/lib/permissions/history";
 
 vi.stubGlobal("HTMLButtonElement", window.HTMLButtonElement);
 
@@ -258,4 +263,28 @@ it("is reached from Permissions beside Requests, and only where access requests 
   await hidden.unmount();
   await mount(h(HistoryRoute));
   expect(mocks.replace).toHaveBeenCalledWith("/permissions");
+});
+
+it("words a partial revoke without naming a place both removed and not removed", () => {
+  const folder = `${ROOT}notes/`;
+  const items = Array.from({ length: 12 }, (_, i) => `${ROOT}notes/${i}.ttl`);
+  const text = partialRevokeText(
+    new HistoryRevokeError(
+      [folder],
+      [
+        ...items.map((url) => ({ url, error: new Error("x") })),
+        { url: items[0] as string, error: new Error("again") },
+        { url: folder, error: new IncompleteFolderCheckError() },
+      ],
+    ),
+    ROOT,
+  );
+  expect(text).toContain(PARTIAL_REVOKE);
+  expect(text).toContain("and 2 more.");
+  expect(text).toContain("Not everything inside notes/ could be checked");
+  expect(text).toContain("Removed: notes/.");
+  expect(text).not.toMatch(/Not removed:[^.]*notes\/[,.]/);
+  expect(
+    partialRevokeText(new HistoryRevokeError([], [{ url: folder, error: new Error("x") }]), ROOT),
+  ).toBe(`${PARTIAL_REVOKE} Not removed: notes/.`);
 });

@@ -45,10 +45,15 @@ function holds(snapshot: Snapshot, document: Document, key: string, members: boo
   return (rows(snapshot, [document], members).get(key)?.modes.size ?? 0) > 0;
 }
 
-/** List a container's direct members, saying whether every listed member was usable. */
+/**
+ * List a container's direct members, saying whether the listing was usable in full: every
+ * listed member accepted, each a direct child, and the container described at all (an empty
+ * 200 body proves nothing about what the folder holds).
+ */
 async function members(url: string, options: RemoveCopiedGrantsOptions, root: string) {
   const response = await request(url, options, {
     headers: { accept: "text/turtle, application/ld+json;q=0.9" },
+    ...(options.signal ? { signal: options.signal } : {}),
   });
   requireOk(response, url);
   const dataset = await parseRdf(response.body ?? "", response.headers.get("content-type"), {
@@ -56,13 +61,22 @@ async function members(url: string, options: RemoveCopiedGrantsOptions, root: st
     maxBytes: MAX_LISTING_BYTES,
     ...(options.signal ? { signal: options.signal } : {}),
   });
+  const subject = DataFactory.namedNode(url);
   const listed = new Set(
-    [...dataset.match(DataFactory.namedNode(url), DataFactory.namedNode(LDP_CONTAINS))].map(
+    [...dataset.match(subject, DataFactory.namedNode(LDP_CONTAINS))].map(
       (quad) => `${quad.object.termType} ${quad.object.value}`,
     ),
   );
-  const found = parseContainerMembers(dataset, url, { scope: root });
-  return { found, complete: found.length === listed.size };
+  const found = parseContainerMembers(dataset, url, { scope: root }).filter(
+    (member) => parent(member.url) === url,
+  );
+  return {
+    found,
+    complete: found.length === listed.size && dataset.match(subject).size > 0,
+  };
+}
+function parent(url: string): string {
+  return new URL(url.endsWith("/") ? ".." : ".", url).href;
 }
 
 /**
@@ -79,8 +93,10 @@ async function members(url: string, options: RemoveCopiedGrantsOptions, root: st
  * stays. Rules the agent holds directly, and copies from outside the folder, are never touched;
  * places where any access remains are listed in `remaining`. Each change is planned from the
  * document read, re-read before writing, and saved with `If-Match`; a lost race or an unreadable
- * place is listed in `failed` and the walk goes on. Refuses the caller's own WebID; any other
- * agent's removal leaves the caller's own rules, so it cannot lock them out.
+ * place is listed in `failed` and the walk goes on. A copy of a copy names every document it came
+ * from, and is removed only when all of them are stale. A folder with no ACL of its own passes
+ * its parent's answer down. Only WebID agents are accepted, and never the caller's own, so the
+ * caller's rules are never touched.
  */
 export async function removeCopiedGrants(
   folder: string,
@@ -91,6 +107,10 @@ export async function removeCopiedGrants(
   scoped(folder, root);
   if (!folder.endsWith("/"))
     throw roleError("unsupported", folder, "Copied rules are removed below a folder");
+  // Only a person's own rules are taken off: removing a group or class could take the caller's
+  // own Control with it where that is how they hold it.
+  if (agent.type !== "webid")
+    throw roleError("unsupported", folder, "Copied rules are removed for one person at a time");
   const key = agentKey(agent);
   const me = agentKey({ type: "webid", id: options.webId });
   if (key === me) throw roleError("owner-lockout", folder, "Cannot remove your own access");
@@ -103,19 +123,26 @@ export async function removeCopiedGrants(
     failed: [],
     incomplete: false,
   };
+  const implementation = options.implementation ?? "css";
   const top = await load(folder, { ...options, root, kind: "folder" });
   if (top.model === "acp") return { ...result, model: "acp" };
-  // Source document → whether it still gives the agent access to its members.
+  // A source ACL → whether it still gives the agent access to its members. A folder with no ACL
+  // of its own takes its parent's answer: copies made from a deleted ACL are stale exactly when
+  // the folder's inherited access no longer reaches the agent.
   const sources = new Map<string, boolean>();
-  if (top.own) {
-    sources.set(top.own.url, holds(top, top.own, key, true));
-    if (holds(top, top.own, key, false) || holds(top, top.own, key, true))
-      result.remaining.push(folder);
-  }
+  // Folder URL → whether its members' effective access (own or inherited) still reaches the agent.
+  const reaches = new Map<string, boolean>();
+  const topReaches =
+    (top.own ? rows(top, [top.own], true) : rows(top, top.documents, true)).get(key) !== undefined;
+  reaches.set(folder, topReaches);
+  if (top.ownUrl) sources.set(top.ownUrl, topReaches);
+  if (top.own && (holds(top, top.own, key, false) || holds(top, top.own, key, true)))
+    result.remaining.push(folder);
   // Each place is read on its own, without the model pin, so a place with no own document
   // reads as inheriting rather than as a model mismatch.
   const { model: _pinned, ...unpinned } = options;
   const queue = [{ url: folder, depth: 0 }];
+  const seen = new Set([folder]);
   let visited = 0;
   for (const container of queue) {
     options.signal?.throwIfAborted();
@@ -130,7 +157,8 @@ export async function removeCopiedGrants(
     if (!listing.complete) result.incomplete = true;
     for (const member of listing.found) {
       options.signal?.throwIfAborted();
-      if (/\.(?:acl|acr)$/i.test(new URL(member.url).pathname)) continue;
+      if (seen.has(member.url) || /\.(?:acl|acr)$/i.test(new URL(member.url).pathname)) continue;
+      seen.add(member.url);
       if (++visited > maxResources) {
         result.incomplete = true;
         return result;
@@ -144,15 +172,21 @@ export async function removeCopiedGrants(
       try {
         const snapshot = await load(member.url, placeOptions);
         const own = snapshot.own;
-        if (own) {
+        if (!own) {
+          // Inherits: its members see what the folder above passes down.
+          const inherited = reaches.get(container.url) as boolean;
+          if (member.container) {
+            reaches.set(member.url, inherited);
+            sources.set(snapshot.ownUrl, inherited);
+          }
+        } else {
           if (own.model !== "wac")
             throw roleError("unsupported", own.url, "A folder's places mix access models");
           const dataset = new Store([...own.dataset]);
           const stale = new Set([...sources].filter(([, held]) => !held).map(([url]) => url));
-          let document = own;
-          if (removeCopiedPrincipal(dataset, agent, stale)) {
-            const policy = readPolicy(dataset, member.url, own.url, "wac", "css");
-            document = { ...own, dataset, policy, etag: null };
+          if (removeCopiedPrincipal(dataset, member.url, agent, stale)) {
+            // The edited document must still read under the same strict role policy.
+            readPolicy(dataset, member.url, own.url, "wac", implementation);
             if (own.etag === null || !/^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/.test(own.etag))
               throw roleError(
                 "precondition-required",
@@ -166,18 +200,37 @@ export async function removeCopiedGrants(
               method: "PUT",
               headers: { "content-type": "text/turtle", "if-match": own.etag },
               body: await serialize(dataset),
+              ...(options.signal ? { signal: options.signal } : {}),
             });
             requireOk(response, own.url);
             result.removed.push(member.url);
           }
-          if (member.container) sources.set(own.url, holds(snapshot, document, key, true));
-          if (holds(snapshot, document, key, false) || holds(snapshot, document, key, true))
-            result.remaining.push(member.url);
+          // What is left there, read best effort: a rule this layer can't project as roles
+          // (`acl:origin`, say) leaves the answer unknown, so the place is reported as possibly
+          // still reachable and, for a folder, its copies' source is treated as still granting.
+          let left = true;
+          try {
+            const after = readPolicy(dataset, member.url, own.url, "wac", implementation);
+            const document = { ...own, dataset, policy: after, etag: null };
+            const onMembers = holds(snapshot, document, key, true);
+            left = holds(snapshot, document, key, false) || onMembers;
+            if (member.container) {
+              reaches.set(member.url, onMembers);
+              sources.set(own.url, onMembers);
+            }
+          } catch {
+            if (member.container) {
+              reaches.set(member.url, true);
+              sources.set(own.url, true);
+            }
+          }
+          if (left) result.remaining.push(member.url);
         }
       } catch (error) {
         result.failed.push({ url: member.url, error });
         // A folder whose own access is unknown is still walked: its places may hold copies
-        // from the folder above it.
+        // from the folder above it. Its own copies' source stays unknown, so they are kept.
+        if (member.container && !reaches.has(member.url)) reaches.set(member.url, true);
       }
       if (member.container) {
         if (container.depth + 1 > maxDepth) result.incomplete = true;

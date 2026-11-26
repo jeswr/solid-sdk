@@ -33,6 +33,7 @@ import {
   type HistoryEntry,
   HistoryRevokeError,
   HistoryUnfinishedError,
+  IncompleteFolderCheckError,
   isActiveGrant,
   placesText,
   type RevokeOutcome,
@@ -53,6 +54,31 @@ export const REVOKE_FAILED = "The access couldn't be removed. Try again.";
 /** What a removal does and does not do, shown wherever removing is offered. */
 export const REVOKE_SCOPE =
   "This removes only the access this approval gave, including copies of it kept on items inside a shared folder. They may still have access to these places another way: through a parent folder, a group, public sharing, or something shared with them directly.";
+
+/** Name up to ten places, then say how many more. */
+function placeList(urls: readonly string[], storage: string): string {
+  const names = urls.slice(0, 10).map((url) => relativePath(url, storage));
+  return urls.length > 10 ? `${names.join(", ")} and ${urls.length - 10} more` : names.join(", ");
+}
+
+/** What a partial revoke changed and what it left, without listing a place as both. */
+export function partialRevokeText(error: HistoryRevokeError, storage: string): string {
+  const unchecked = error.failed
+    .filter(({ error: cause }) => cause instanceof IncompleteFolderCheckError)
+    .map(({ url }) => url);
+  const notRemoved = [
+    ...new Set(
+      error.failed
+        .filter(({ error: cause }) => !(cause instanceof IncompleteFolderCheckError))
+        .map(({ url }) => url),
+    ),
+  ];
+  return `${PARTIAL_REVOKE}${notRemoved.length ? ` Not removed: ${placeList(notRemoved, storage)}.` : ""}${
+    unchecked.length
+      ? ` Not everything inside ${placeList(unchecked, storage)} could be checked; if trying again doesn't help, remove what's left in Permissions.`
+      : ""
+  }${error.removed.length ? ` Removed: ${placeList(error.removed, storage)}.` : ""}`;
+}
 
 /** A WebID is the identity: shown whole, selectable, and wrapped rather than cut off. */
 function WebId({ id }: { id: string }) {
@@ -118,13 +144,7 @@ export function ActiveGrantRow({
         if (!(caught instanceof HistoryRevokeError))
           console.error("Revoking access failed", caught);
         setError(
-          caught instanceof HistoryRevokeError
-            ? `${PARTIAL_REVOKE} Not removed: ${caught.failed.map(({ url }) => relativePath(url, storage)).join(", ")}.${
-                caught.removed.length
-                  ? ` Removed: ${caught.removed.map((url) => relativePath(url, storage)).join(", ")}.`
-                  : ""
-              }`
-            : REVOKE_FAILED,
+          caught instanceof HistoryRevokeError ? partialRevokeText(caught, storage) : REVOKE_FAILED,
         );
       }
     } finally {

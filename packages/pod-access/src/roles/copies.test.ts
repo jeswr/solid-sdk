@@ -76,7 +76,10 @@ describe("removeCopiedGrants", () => {
     const before = await readGrants(file, options);
     expect(before.grants.some((g) => g.agent.type === "webid" && g.agent.id === bob)).toBe(true);
 
-    const result = await removeCopiedGrants(folder, bobRef, options);
+    const result = await removeCopiedGrants(folder, bobRef, {
+      ...options,
+      signal: new AbortController().signal,
+    });
     expect(result).toEqual({
       model: "wac",
       removed: [file, sub, nested],
@@ -182,6 +185,7 @@ describe("removeCopiedGrants", () => {
     for (const [url, agent, code] of [
       [file, bobRef, "unsupported"],
       [folder, { type: "webid", id: owner }, "owner-lockout"],
+      [folder, { type: "public" }, "unsupported"],
       ["https://elsewhere.example/notes/", bobRef, "scope"],
     ] as const) {
       const error = await removeCopiedGrants(url, agent, options).catch((e: unknown) => e);
@@ -204,7 +208,7 @@ describe("removeCopiedGrants", () => {
     expect(result.incomplete).toBe(true);
   });
 
-  it("marks a listing with unusable members, or an empty body, as checked accordingly", async () => {
+  it("marks a listing with unusable members, or an empty body, as incomplete", async () => {
     const { mem, options } = setup();
     mem.put(folder, listing("a.ttl", "https://elsewhere.example/x"));
     expect((await removeCopiedGrants(folder, bobRef, options)).incomplete).toBe(true);
@@ -216,7 +220,81 @@ describe("removeCopiedGrants", () => {
     const controller = new AbortController();
     expect(
       await removeCopiedGrants(folder, bobRef, { ...options, signal: controller.signal }),
-    ).toMatchObject({ incomplete: false, removed: [] });
+    ).toMatchObject({ incomplete: true, removed: [] });
+  });
+
+  it("loads each place once and skips listed members that are not direct children", async () => {
+    const { mem, options } = setup();
+    mem.put(folder, listing("a.ttl", "a.ttl", "sub/x.ttl", "sub/"));
+    const result = await removeCopiedGrants(folder, bobRef, options);
+    expect(result.incomplete).toBe(true);
+    const heads = mem.calls.filter((c) => c.url === nested && c.init.method === "HEAD");
+    // Once as sub/'s member (its own read only), never as a deeper entry of the folder's listing.
+    expect(heads).toHaveLength(1);
+    expect(mem.calls.filter((c) => c.url === file && c.init.method === "HEAD")).toHaveLength(1);
+  });
+
+  it("keeps a copy of a copy while a nearer source still grants it", async () => {
+    const { mem, options } = setup();
+    await shareWithCarol(options, sub);
+    await shareWithCarol(options, nested, dave);
+    // Bob is then made an editor on sub/ directly, and the folder approval is revoked.
+    const folderOptions = { ...options, kind: "folder" as const };
+    await addGrant(
+      [sub],
+      { agent: bobRef, role: "editor", inherited: false, source: "" },
+      folderOptions,
+    );
+    await removeGrant([folder], bobRef, folderOptions);
+    const result = await removeCopiedGrants(folder, bobRef, options);
+    expect(result.removed).toEqual([]);
+    expect(result.remaining).toEqual([sub, nested]);
+    expect(await agentsOn(mem, nested)).toContain(bob);
+  });
+
+  it("treats copies from a folder ACL that is gone as stale once nothing reaches the agent", async () => {
+    const { mem, options } = setup();
+    await shareWithCarol(options, sub);
+    await shareWithCarol(options, nested, dave);
+    await removeGrant([folder], bobRef, { ...options, kind: "folder" });
+    // sub/ is reset to inherit: its ACL (the copies' source) is deleted.
+    mem.docs.delete(`${sub}.acl`);
+    const result = await removeCopiedGrants(folder, bobRef, options);
+    expect(result).toMatchObject({ removed: [nested], remaining: [], failed: [] });
+    expect(await agentsOn(mem, nested)).toEqual([owner, carol, dave].sort());
+  });
+
+  it("keeps copies from a deleted folder ACL while the folder above still grants the agent", async () => {
+    const { mem, options } = setup();
+    await shareWithCarol(options, sub);
+    await shareWithCarol(options, nested, dave);
+    mem.docs.delete(`${sub}.acl`);
+    const result = await removeCopiedGrants(folder, bobRef, { ...options, root: undefined });
+    expect(result).toMatchObject({ removed: [], remaining: [folder, nested] });
+  });
+
+  it("removes a copy beside a rule it can't project, and reports the place as possibly reachable", async () => {
+    const { mem, options } = setup(acl(ownerRule));
+    mem.put(
+      `${sub}.acl`,
+      acl(
+        `${ownerRule}<#app> a acl:Authorization; acl:agent <${dave}>; acl:origin <https://app.example>; acl:accessTo <./>; acl:default <./>; acl:mode acl:Read.\n` +
+          `<#copy> a acl:Authorization; acl:agent <${bob}>; acl:accessTo <./>; acl:default <./>; acl:mode acl:Read; <${MATERIALIZED_FROM}> <${folder}.acl>.\n`,
+      ),
+    );
+    mem.put(
+      `${nested}.acl`,
+      acl(
+        `${rule("owner", [owner], "acl:Read, acl:Write, acl:Control", false, "x.ttl")}` +
+          `<#copy> a acl:Authorization; acl:agent <${bob}>; acl:accessTo <x.ttl>; acl:mode acl:Read; <${MATERIALIZED_FROM}> <${sub}.acl>.\n` +
+          `<#app> a acl:Authorization; acl:agent <${dave}>; acl:origin <https://app.example>; acl:accessTo <x.ttl>; acl:mode acl:Read.\n`,
+      ),
+    );
+    const result = await removeCopiedGrants(folder, bobRef, options);
+    expect(result).toMatchObject({ failed: [], remaining: [sub, nested] });
+    expect(result.removed).toEqual([sub]);
+    // sub/'s answer is unknown, so the nested copy made from it is kept.
+    expect(await agentsOn(mem, nested)).toContain(bob);
   });
 
   it("stops at the resource and depth limits", async () => {
