@@ -79,7 +79,7 @@ describe("public export boundary", () => {
         [
           "addGrant", "ensurePrivateContainerAccess", "grantsWithRoles", "isGrantableTarget",
           "isRoleError", "isSealed", "modesToRole", "movePreservingAccess", "readAccessModes",
-          "readGrants", "removeGrant", "rolesToModes", "sealAccess", "sealDataset", "setGrants",
+          "readGrants", "removeCopiedGrants", "removeGrant", "rolesToModes", "sealAccess", "sealDataset", "setGrants",
           "unsealAccess", "verifyPrivateDemoAccess",
         ].sort());
       assert.equal(roles.modesToRole(["read"], "resource"), "viewer");

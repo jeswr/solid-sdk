@@ -12,9 +12,11 @@ import {
   HistoryRevokeError,
   HistoryUnfinishedError,
   historyFrom,
+  IncompleteFolderCheckError,
   isActiveGrant,
   placesText,
   readAccessHistory,
+  recipientHref,
   recipientLabel,
   revokeHistoryGrant,
   statusText,
@@ -129,6 +131,7 @@ function pod() {
     docs,
     fetch,
     put,
+    resource,
     fail(method: string, url: string, ...statuses: number[]) {
       failures.set(`${method} ${url}`, statuses);
     },
@@ -278,6 +281,12 @@ describe("access history", () => {
     expect(placesText(1)).toBe("1 place");
     expect(placesText(3)).toBe("3 places");
   });
+
+  it("links a recipient to Permissions only when it is a web address", () => {
+    expect(recipientHref({ recipient: BOB })).toMatch(/^\/permissions\/a\/[A-Za-z0-9_-]+$/);
+    expect(recipientHref({})).toBeUndefined();
+    expect(recipientHref({ recipient: "urn:example:bob" })).toBeUndefined();
+  });
 });
 
 describe("an approval that is still being applied", () => {
@@ -310,6 +319,32 @@ describe("an approval that is still being applied", () => {
     expect(isActiveGrant(settled as HistoryEntry)).toBe(true);
     await revokeHistoryGrant(settled as ActiveHistoryEntry, options(memory));
     expect(await agentsOn(memory, FOLDER)).toEqual([OWNER]);
+  });
+});
+
+describe("reading grants and unfinished approvals", () => {
+  it("keeps the strongest role for a place named by several permissions", async () => {
+    const dataset = await parseRdf(
+      `${PREFIXES}
+      <${RECEIPT}> a dpv:ConsentRecord; dpv:hasRecipient <${BOB}>; dpv:hasConsentStatus dpv:ConsentGiven;
+        accm:grantRef <${GRANT}>.
+      <${GRANT}> a odrl:Agreement; odrl:assignee <${BOB}>; odrl:permission
+        [ odrl:action odrl:read; odrl:target <${FILE}>, <${FOLDER}> ],
+        [ odrl:action odrl:write; odrl:target <${FILE}> ],
+        [ odrl:action odrl:read; odrl:target <${FILE}>, <${FOLDER}> ].
+      [] accm:outcome "approving"; accm:grantId "1".`,
+      "text/turtle",
+      { baseIRI: RECORDS },
+    );
+    const [entry] = historyFrom(dataset);
+    // An unnamed decision record can't be tied to a grant, so it never holds the grant back.
+    expect(entry).toMatchObject({ status: "granted" });
+    expect(entry?.grant).toEqual({
+      url: GRANT,
+      targets: [FOLDER, FILE],
+      role: "editor",
+      targetRoles: { [FOLDER]: "viewer", [FILE]: "editor" },
+    });
   });
 });
 
@@ -361,7 +396,12 @@ describe("revoking from the history", () => {
       const entry = await active(memory);
       memory.fail("HEAD", FILE, status);
       const outcome = await revokeHistoryGrant(entry, options(memory));
-      expect(outcome).toEqual({ removed: [FOLDER], alreadyGone: [FILE] });
+      expect(outcome).toEqual({
+        removed: [FOLDER],
+        alreadyGone: [FILE],
+        copiesRemoved: [],
+        stillHeld: [],
+      });
       expect(await agentsOn(memory, FOLDER)).toEqual([OWNER]);
       expect(await terms(memory, GRANT, "https://jeswr.org/ns/accm#revokedAt")).toEqual([
         NOW.toISOString(),
@@ -394,6 +434,59 @@ describe("revoking from the history", () => {
         NOW.toISOString(),
       ]);
     }
+  });
+
+  it("reports a place whose check fails on the network or its access document", async () => {
+    const memory = pod();
+    const entry = await active(memory);
+    const offline = new TypeError("Failed to fetch");
+    const fetch = vi.fn<typeof globalThis.fetch>((input, init) =>
+      String(input) === FOLDER && init?.method === "HEAD"
+        ? Promise.reject(offline)
+        : memory.fetch(input, init),
+    );
+    const error = await revokeHistoryGrant(entry, { ...options(memory), fetch }).catch(
+      (caught) => caught,
+    );
+    expect(error).toBeInstanceOf(HistoryRevokeError);
+    expect((error as HistoryRevokeError).failed).toEqual([{ url: FOLDER, error: offline }]);
+    expect((error as HistoryRevokeError).removed).toEqual([FILE]);
+    expect(await agentsOn(memory, FOLDER)).toContain(BOB);
+
+    // The place itself answers, but its access document can't be read: not removed either.
+    const unreadable = pod();
+    const again = await active(unreadable);
+    unreadable.fail("GET", `${FILE}.acl`, 500, 500, 500);
+    const failure = await revokeHistoryGrant(again, options(unreadable)).catch((caught) => caught);
+    expect(failure).toBeInstanceOf(HistoryRevokeError);
+    expect((failure as HistoryRevokeError).failed.map(({ url }) => url)).toEqual([FILE]);
+    expect((failure as HistoryRevokeError).failed[0]?.error).not.toBeInstanceOf(
+      HistoryChangedError,
+    );
+    expect((failure as HistoryRevokeError).removed).toEqual([FOLDER]);
+    expect(await agentsOn(unreadable, FILE)).toContain(BOB);
+    expect(unreadable.writes()).not.toContain(GRANT);
+
+    // The role reads, but the raw policy check that follows can't: unknown, so not removed.
+    const halfway = pod();
+    const third = await active(halfway);
+    const acl = `${FILE}.acl`;
+    let reads = 0;
+    const flaky = vi.fn<typeof globalThis.fetch>((input, init) =>
+      String(input) === acl && (init?.method ?? "GET") === "GET" && ++reads > 1
+        ? Promise.resolve(new Response(null, { status: 500 }))
+        : halfway.fetch(input, init),
+    );
+    const partial = await revokeHistoryGrant(third, { ...options(halfway), fetch: flaky }).catch(
+      (caught) => caught,
+    );
+    expect(reads).toBeGreaterThan(1);
+    expect(partial).toBeInstanceOf(HistoryRevokeError);
+    expect((partial as HistoryRevokeError).failed.map(({ url }) => url)).toEqual([FILE]);
+    expect((partial as HistoryRevokeError).failed[0]?.error).toMatchObject({
+      name: "TargetUnreadableError",
+    });
+    expect(await agentsOn(halfway, FILE)).toContain(BOB);
   });
 
   it("refuses when the recipient's role on a place changed after the approval", async () => {
@@ -535,6 +628,123 @@ describe("revoking from the history", () => {
     await expect(
       revokeHistoryGrant(entry, { fetch: memory.fetch, webId: OWNER, storage: ROOT }),
     ).rejects.toThrow("A strong ETag is required");
+    expect(memory.writes()).not.toContain(GRANT);
+  });
+});
+
+// Int8 finding 610a-F1: on WAC, sharing an item inside a shared folder copies the folder's rules
+// (the recipient's included) into the item's own ACL. Revoking the folder alone left them there.
+describe("revoking a folder approval whose rules were copied into items inside it", () => {
+  const Run = `${FOLDER}run.ttl`;
+  const MaterializedFrom = "https://jeswr.org/ns/pod-access#materializedFrom";
+  const copied = (target: string, from: string) =>
+    `<#bob-copy> a acl:Authorization; acl:agent <${BOB}>; acl:accessTo <${target}>; acl:mode acl:Read; <${MaterializedFrom}> <${from}>.`;
+  function withItem(rules: string, listing = "<run.ttl>") {
+    const memory = pod();
+    memory.put(FOLDER, `${PREFIXES} <> a ldp:Container; ldp:contains ${listing}.`);
+    memory.resource(
+      Run,
+      `${PREFIXES} <> dct:title "Run".`,
+      `${PREFIXES} ${ownerRule(Run, false)} ${carolRule(Run)} ${rules}`,
+    );
+    return memory;
+  }
+
+  it("removes the copies, keeps everyone else, and marks the approval revoked", async () => {
+    const memory = withItem(copied(Run, `${FOLDER}.acl`));
+    const outcome = await revokeHistoryGrant(await active(memory), options(memory));
+    expect(outcome).toEqual({
+      removed: [FOLDER, FILE],
+      alreadyGone: [],
+      copiesRemoved: [Run],
+      stillHeld: [],
+    });
+    expect((await agentsOn(memory, Run)).sort()).toEqual([CAROL, OWNER].sort());
+    expect(await terms(memory, GRANT, "https://jeswr.org/ns/accm#revokedAt")).toEqual([
+      NOW.toISOString(),
+    ]);
+  });
+
+  it("leaves access shared with the recipient directly, and names it", async () => {
+    const memory = withItem(bobRule(Run, false).replace("<#bob>", "<#bob-direct>"));
+    const outcome = await revokeHistoryGrant(await active(memory), options(memory));
+    expect(outcome.copiesRemoved).toEqual([]);
+    expect(outcome.stillHeld).toEqual([Run]);
+    expect(await agentsOn(memory, Run)).toContain(BOB);
+    expect(await terms(memory, GRANT, "https://jeswr.org/ns/accm#revokedAt")).toEqual([
+      NOW.toISOString(),
+    ]);
+  });
+
+  it("keeps the approval active when a copy can't be removed, and finishes on retry", async () => {
+    const memory = withItem(copied(Run, `${FOLDER}.acl`));
+    const entry = await active(memory);
+    memory.fail("PUT", `${Run}.acl`, 500);
+    const error = await revokeHistoryGrant(entry, options(memory)).catch((caught) => caught);
+    expect(error).toBeInstanceOf(HistoryRevokeError);
+    expect((error as HistoryRevokeError).failed.map(({ url }) => url)).toEqual([Run]);
+    expect(memory.writes()).not.toContain(GRANT);
+    expect(await agentsOn(memory, Run)).toContain(BOB);
+    const outcome = await revokeHistoryGrant(entry, options(memory));
+    expect(outcome).toMatchObject({ removed: [], copiesRemoved: [Run] });
+    expect(await agentsOn(memory, Run)).not.toContain(BOB);
+  });
+
+  it("does not mark the approval revoked when the folder can't be checked all the way down", async () => {
+    const memory = withItem(copied(Run, `${FOLDER}.acl`), "<run.ttl>, <https://elsewhere.test/x>");
+    const error = await revokeHistoryGrant(await active(memory), options(memory)).catch(
+      (caught) => caught,
+    );
+    expect(error).toBeInstanceOf(HistoryRevokeError);
+    const [failure] = (error as HistoryRevokeError).failed;
+    expect(failure?.url).toBe(FOLDER);
+    expect(failure?.error).toBeInstanceOf(IncompleteFolderCheckError);
+    // What could be reached was still cleaned up.
+    expect(await agentsOn(memory, Run)).not.toContain(BOB);
+    expect(memory.writes()).not.toContain(GRANT);
+  });
+
+  it("reports a folder whose copies can't be looked for at all", async () => {
+    const memory = withItem(copied(Run, `${FOLDER}.acl`));
+    const entry = await active(memory);
+    // The folder's own rule is removed; after that its access can't be read any more.
+    let cleared = false;
+    const inner = memory.fetch.getMockImplementation() as typeof globalThis.fetch;
+    memory.fetch.mockImplementation(async (input, init = {}) => {
+      if (cleared && String(input) === FOLDER && init.method === "HEAD")
+        return new Response(null, { status: 500 });
+      const response = await inner(input, init);
+      if (String(input) === `${FOLDER}.acl` && init.method === "PUT") cleared = true;
+      return response;
+    });
+    const error = await revokeHistoryGrant(entry, options(memory)).catch((caught) => caught);
+    expect(error).toBeInstanceOf(HistoryRevokeError);
+    const failures = (error as HistoryRevokeError).failed.filter(({ url }) => url === FOLDER);
+    expect(failures.length).toBeGreaterThan(0);
+    for (const { error: cause } of failures)
+      expect(cause).toBeInstanceOf(IncompleteFolderCheckError);
+    expect(memory.writes()).not.toContain(GRANT);
+  });
+
+  it("reports an unreadable folder listing as a folder not fully checked", async () => {
+    const memory = withItem(copied(Run, `${FOLDER}.acl`));
+    const entry = await active(memory);
+    // Once the folder's own rule is removed, its listing can't be read any more.
+    let cleared = false;
+    const inner = memory.fetch.getMockImplementation() as typeof globalThis.fetch;
+    memory.fetch.mockImplementation(async (input, init = {}) => {
+      if (cleared && String(input) === FOLDER && (init.method ?? "GET") === "GET")
+        return new Response(null, { status: 500 });
+      const response = await inner(input, init);
+      if (String(input) === `${FOLDER}.acl` && init.method === "PUT") cleared = true;
+      return response;
+    });
+    const error = await revokeHistoryGrant(entry, options(memory)).catch((caught) => caught);
+    expect(error).toBeInstanceOf(HistoryRevokeError);
+    const failures = (error as HistoryRevokeError).failed.filter(({ url }) => url === FOLDER);
+    expect(failures.length).toBeGreaterThan(0);
+    for (const { error: cause } of failures)
+      expect(cause).toBeInstanceOf(IncompleteFolderCheckError);
     expect(memory.writes()).not.toContain(GRANT);
   });
 });

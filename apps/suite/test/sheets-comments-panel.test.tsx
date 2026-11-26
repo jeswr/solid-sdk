@@ -10,6 +10,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "../../../packages/suite-ui/node_modules/@testing-library/react";
 import { writeRdf } from "../src/apps/docs/lib/model/rdf-io";
 import { CellComments, WorkbookComments } from "../src/apps/sheets/components/cell-comments";
@@ -97,7 +98,18 @@ async function add(text = "Discuss") {
   fireEvent.click(button("Comment"));
   fireEvent.change(screen.getByLabelText("Comment on B3"), { target: { value: text } });
   fireEvent.click(button("Send"));
-  await screen.findByText(text);
+  await saved(text);
+}
+// The composer's controlled textarea mirrors its value into its text content, so a bare
+// findByText(text) can match the draft before it is saved. Wait for the saved thread entry
+// and for the post-save refresh to settle (Refresh is disabled while busy).
+async function saved(text: string) {
+  await waitFor(() => {
+    expect(
+      within(screen.getByRole("list", { name: "Comment threads" })).getByText(text),
+    ).toBeTruthy();
+    expect((button("Refresh comments") as HTMLButtonElement).disabled).toBe(false);
+  });
 }
 async function seed() {
   root = await store.create("Root", webId, anchor);
@@ -118,11 +130,11 @@ it("adds, replies, edits, resolves, reopens and deletes own comments through rea
   expect(document.activeElement).toBe(screen.getByLabelText("Reply text"));
   fireEvent.change(screen.getByLabelText("Reply text"), { target: { value: "Agreed" } });
   fireEvent.click(button("Send"));
-  await screen.findByText("Agreed");
+  await saved("Agreed");
   fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[1] as HTMLElement);
   fireEvent.change(screen.getByLabelText("Edit comment"), { target: { value: "Updated reply" } });
   fireEvent.click(button("Send"));
-  await screen.findByText("Updated reply");
+  await saved("Updated reply");
   fireEvent.click(button("Resolve"));
   await screen.findByText("Resolved");
   fireEvent.click(button("Reopen"));
@@ -146,7 +158,7 @@ it("captures selected cell when composing, supports keyboard shortcut and highli
   await act(async () => select({ ...anchor, cell: "C4" }));
   fireEvent.change(screen.getByLabelText("Comment on B3"), { target: { value: "Captured cell" } });
   fireEvent.click(button("Send"));
-  await screen.findByText("Captured cell");
+  await saved("Captured cell");
   expect((await store.list()).every(({ root: r }) => r.anchor?.cell === "B3")).toBe(true);
   expect(screen.getByText("Root").closest("li")?.getAttribute("aria-current")).toBeNull();
   await act(async () => select(anchor));
@@ -237,7 +249,7 @@ it("allows append-only comments on view-only grids while disabling changes to ex
   fireEvent.click(screen.getAllByRole("button", { name: "Reply" })[0] as HTMLElement);
   fireEvent.change(screen.getByLabelText("Reply text"), { target: { value: "Append reply" } });
   fireEvent.click(button("Send"));
-  await screen.findByText("Append reply");
+  await saved("Append reply");
 });
 it("keeps comments readable without Append, with foreign authors and deleted sheets", async () => {
   await seed();
@@ -331,8 +343,9 @@ it.each([
   expect(screen.queryByRole("textbox")).toBeNull();
   fireEvent.click(button("Retry"));
   await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  // Retry clears the alert before its refresh finishes; wait for the reload to enable Comment.
+  await waitFor(() => expect((button("Comment") as HTMLButtonElement).disabled).toBe(false));
   expect(engine.setCommentsLoading).toHaveBeenLastCalledWith(false);
-  expect((button("Comment") as HTMLButtonElement).disabled).toBe(false);
   let finish: (rows: []) => void = () => {};
   list.mockImplementationOnce(
     () =>
@@ -412,10 +425,7 @@ it("can reply with no grid selection, including rapid duplicate refreshes", asyn
     target: { value: "No selection needed" },
   });
   fireEvent.click(button("Send"));
-  await screen.findByText("No selection needed");
-  await waitFor(() =>
-    expect((button("Refresh comments") as HTMLButtonElement).disabled).toBe(false),
-  );
+  await saved("No selection needed");
   let finish: (rows: []) => void = () => {};
   const list = vi.spyOn(store, "list").mockImplementationOnce(
     () =>
@@ -605,7 +615,7 @@ it("moves an open draft with its cell and prevents sending after that cell is de
   );
   expect((screen.getByLabelText("Comment on B4") as HTMLTextAreaElement).value).toBe("Moved draft");
   fireEvent.click(button("Send"));
-  await screen.findByText("Moved draft");
+  await saved("Moved draft");
   expect((await store.list())[0]?.root.anchor?.cell).toBe("B4");
   await waitFor(() => expect((button("Comment") as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(button("Comment"));

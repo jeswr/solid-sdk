@@ -420,12 +420,14 @@ no live service is needed. Run `pnpm run gate` after the package checks.
 <!-- AUTHORED-BY Codex GPT-6 -->
 
 `@jeswr/pod-access/roles` exports `rolesToModes`, `modesToRole`, `grantsWithRoles`,
-`readGrants`, `readAccessModes`, `setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess`,
+`readGrants`, `readAccessModes`, `setGrants`, `addGrant`, `removeGrant`, `removeCopiedGrants`,
+`movePreservingAccess`,
 `isRoleError`, `isGrantableTarget`, `isSealed`, `sealAccess`, `unsealAccess`, `sealDataset`, and
 their documented types (`Role`, `ResourceKind`, `AgentRef`,
 `RoleGrant`, `GrantSnapshot`, `RoleModes`, `RoleContext`, `RoleError`, `RolesOptions`,
 `GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`, `PrincipalModes`,
-`AccessModesSnapshot`). It does not change the offline root API.
+`AccessModesSnapshot`, `RemoveCopiedGrantsOptions`, `RemoveCopiedGrantsResult`). It does not
+change the offline root API.
 
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 `readAccessModes(url, options)` returns `{ url, resource, members, governedBy, version }`: every principal's
@@ -601,6 +603,40 @@ use `GrantMutationOptions` (injected fetch, caller WebID and the usual role cont
 the same per-URL `SetGrantsResult` as `setGrants`, preflight caller lockout, and write with
 If-Match or If-None-Match: *. Neither retries conflicts. `addGrant` rejects expiry/purpose
 before any I/O, just like `setGrants`.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+**Revoking a WAC folder grant also needs `removeCopiedGrants`.** When an item inside a shared
+WAC folder first gets its own ACL (any `addGrant`/`setGrants`/`removeGrant` on it), the roles
+layer copies every inherited rule into it and marks each copy `pod-access:materializedFrom` the
+source ACL. `removeGrant([folder], agent)` changes only the folder's ACL, so the agent keeps the
+copies. After removing the folder role, call:
+
+```ts
+const copies = await removeCopiedGrants(folderUrl, agent, { fetch: authFetch, webId });
+// copies.failed and copies.incomplete: not everything was cleared; try again.
+// copies.remaining: places where the agent still holds access of their own.
+```
+
+It lists the folder breadth first (`maxResources` default 1000, `maxDepth` default 16; listings
+read through `@jeswr/ldp-container`, 4 MiB each) and, in each descendant's own ACL, takes the
+agent's rules copied from the folder's ACL or from the ACL of a folder inside it down to what
+the place would now inherit with no ACL of its own: a copy that inheritance no longer grants is
+removed, one giving more is narrowed to the modes it still gives, and a copy it fully covers
+stays. Other principals on a copied rule keep it; a rule left with
+no principal is removed. Rules the agent holds directly and copies from outside the folder are
+never touched; any place where the agent still has some access is listed in `remaining`. Judging by
+current inheritance, not by the copy's `materializedFrom` markers, matters because a folder ACL
+added after the copy was made cuts off the folders it names; copies below a folder that
+could not be read are kept. Because copies are judged by current inheritance, the sweep also narrows a copy
+of a grant that was not revoked when a newer folder ACL inside the folder no longer gives it. A folder with no ACL of its own passes its parent's
+answer down. Only rules naming the agent are read, so
+another principal's conditional rule (`acl:origin`) never blocks the sweep, while a conditional
+rule naming the agent fails that place. Each
+change is re-read and saved with If-Match; races, unreadable places and refused documents go to
+`failed` and the walk continues. `incomplete` is set when a limit is hit, a listing has a
+member that cannot be used or does not describe the folder, so the result never claims a full sweep it did not make. A folder
+on ACP returns `model: "acp"` without walking: ACP never copies rules. It refuses the caller's
+own WebID (`owner-lockout`), agents other than a WebID and a non-folder URL (`unsupported`) and URLs outside `root` (`scope`).
 
 Every replacement uses the fetched ETag verbatim in If-Match (weak tags are passed through);
 creation uses If-None-Match: *. Wildcard or malformed response validators are refused.

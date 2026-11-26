@@ -1,3 +1,4 @@
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
@@ -343,13 +344,8 @@ export function materialize(
   return result;
 }
 /** Split changed WAC principals from shared authorizations; preserve all other targets/defaults. */
-export function replaceWac(
-  dataset: Store,
-  resource: string,
-  agent: AgentRef,
-  modes: readonly Mode[],
-  members = false,
-): void {
+/** The WAC selector predicate (local name) and object IRI that name `agent`. */
+function wacPrincipal(agent: AgentRef): [string, string] {
   const selector =
     agent.type === "webid" ? "agent" : agent.type === "group" ? "agentGroup" : "agentClass";
   const principal =
@@ -358,6 +354,16 @@ export function replaceWac(
       : agent.type === "public"
         ? `${FOAF}Agent`
         : `${ACL}AuthenticatedAgent`;
+  return [selector, principal];
+}
+export function replaceWac(
+  dataset: Store,
+  resource: string,
+  agent: AgentRef,
+  modes: readonly Mode[],
+  members = false,
+): void {
+  const [selector, principal] = wacPrincipal(agent);
   for (const auth of [...new AclResource(dataset, DataFactory).authorizations]) {
     const rule = properties(auth as Term, dataset);
     const scopes = ["accessTo", ...(members ? ["default", "defaultForNew"] : [])].filter((name) =>
@@ -626,4 +632,58 @@ export function appendAcp(
     if (reachable.has(JSON.stringify([q.subject.termType, q.subject.value]))) continue;
     properties(q.subject, dataset).terms(q.predicate.value).clear();
   }
+}
+/**
+ * Prune `agent`'s copied rules in a WAC document. A rule the roles layer copied
+ * (`materializedFrom`) only from documents in `sources` keeps the agent while every mode it gives
+ * is still granted by what the resource would inherit with no document of its own (`inherited`).
+ * The markers only say where a copy came from: a folder ACL added since cuts those documents off,
+ * so they never decide what is still granted. Otherwise the agent is taken off the rule, and the
+ * modes still granted are given back in a narrowed copy of the rule (same scopes and markers).
+ * Other principals on a rule keep it; a rule left with no principal is removed whole. Rules the
+ * agent holds directly, copies naming a document not in `sources`, and rules that do not apply to
+ * `resource` are left alone. Returns whether anything changed.
+ */
+export function pruneCopiedPrincipal(
+  dataset: Store,
+  resource: string,
+  agent: AgentRef,
+  sources: ReadonlySet<string>,
+  inherited: ReadonlySet<Mode>,
+): boolean {
+  const [selector, principal] = wacPrincipal(agent);
+  let changed = false;
+  for (const auth of [...new AclResource(dataset, DataFactory).authorizations]) {
+    const rule = properties(auth as Term, dataset);
+    // Only rules that apply here: role edits leave inert rules with no scope behind.
+    if (![`${ACL}accessTo`, `${ACL}default`].some((scope) => rule.iris(scope).includes(resource)))
+      continue;
+    // A copy of a copy names every document it came from; all must be known sources.
+    const from = rule.iris(MATERIALIZED_FROM);
+    if (!from.length || !from.every((origin) => sources.has(origin))) continue;
+    if (!rule.values(ACL + selector).has(principal)) continue;
+    const granted = readModes([...inherited].map(modeIri));
+    const modes = readModes(rule.iris(`${ACL}mode`));
+    if ([...modes].every((mode) => granted.has(mode))) continue;
+    const kept = [...modes].filter((mode) => granted.has(mode));
+    if (kept.length) {
+      const narrowed = clone(auth as Term, dataset, dataset, [
+        `${ACL}agent`,
+        `${ACL}agentGroup`,
+        `${ACL}agentClass`,
+        `${ACL}mode`,
+      ]);
+      narrowed.add(ACL + selector, principal);
+      for (const mode of kept) narrowed.add(`${ACL}mode`, modeIri(mode));
+    }
+    rule.values(ACL + selector).delete(principal);
+    changed = true;
+    if (["agent", "agentGroup", "agentClass"].some((name) => rule.terms(ACL + name).size > 0))
+      continue;
+    for (const predicate of new Set(
+      [...dataset.match(auth as unknown as BlankNode)].map((q) => q.predicate.value),
+    ))
+      rule.terms(predicate).clear();
+  }
+  return changed;
 }

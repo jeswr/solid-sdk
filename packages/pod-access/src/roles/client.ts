@@ -185,7 +185,8 @@ export async function planMoveGrants(
     ownUrl: destination.ownUrl,
   });
 }
-function validators(snapshot: Snapshot) {
+/** Internal: what must be unchanged between planning a write and making it. */
+export function validators(snapshot: Snapshot) {
   return [
     snapshot.resource,
     snapshot.model,

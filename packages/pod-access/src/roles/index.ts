@@ -11,6 +11,8 @@ export {
   removeGrant,
   setGrants,
 } from "./client.js";
+export type { RemoveCopiedGrantsOptions, RemoveCopiedGrantsResult } from "./copies.js";
+export { removeCopiedGrants } from "./copies.js";
 export { isRoleError } from "./errors.js";
 export { modesToRole, rolesToModes } from "./mapping.js";
 export type {

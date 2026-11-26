@@ -283,7 +283,9 @@ plus the migrator's regression suite and the repository gate.
 <!-- AUTHORED-BY Codex -->
 
 The public `./roles` API is documented in README.md: role/mode mapping, neutral AgentRef and
-RoleGrant types, `grantsWithRoles`, `readGrants`, `setGrants`, `addGrant`, `removeGrant`, and branded `RoleError` classification via
+RoleGrant types, `grantsWithRoles`, `readGrants`, `setGrants`, `addGrant`, `removeGrant`,
+`removeCopiedGrants` (call it after removing a WAC folder role, or the agent keeps the rules
+copied into items inside it), and branded `RoleError` classification via
 `isRoleError`. Export helpers through `src/roles/index.ts` only; no mutable reader/error
 classes may escape. New public API changes must update this skill and README together.
 

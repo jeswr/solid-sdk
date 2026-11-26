@@ -3,7 +3,7 @@
 "use client";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { Button, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@jeswr/suite-ui";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePodSessionState } from "@/lib/session/pod-session";
 import { currentCommentAnchor, type DraftAnchor } from "../lib/comments/anchors";
 import type { CellAnchor } from "../lib/comments/selector";
@@ -222,17 +222,24 @@ export function CellComments({
         : {}),
     });
   };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: update shortcut as selection/permission changes
+  // The shortcut must see the same state as the Comment button. Refreshing the
+  // handler in a passive effect left a window after the commit that enabled the
+  // button in which Ctrl+Alt+M still ran a stale `start` and did nothing, so the
+  // latest `start` is published in the layout phase of that same commit.
+  const startLatest = useRef(start);
+  useLayoutEffect(() => {
+    startLatest.current = start;
+  });
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if (event.ctrlKey && event.altKey && event.key.toLowerCase() === "m") {
         event.preventDefault();
-        start("add");
+        startLatest.current("add");
       }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [selection, reason]);
+  }, []);
   const run = async (work?: () => Promise<unknown>, markSent = false) => {
     if (lifetime.locked) return;
     lifetime.locked = true;
