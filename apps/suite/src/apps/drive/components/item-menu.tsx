@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 "use client";
@@ -37,12 +38,14 @@ import {
   Share2,
   Star,
   StarOff,
+  Table2,
   Trash2,
 } from "lucide-react";
 import type { DriveItem } from "../lib/client/client";
 import { isOwnStorage } from "../lib/client/ownership";
 import { useDrive } from "../state/drive-context";
 import { useOpenWithDocs } from "../state/open-with-docs";
+import { useOpenWithSheets } from "../state/open-with-sheets";
 import type { DriveActions } from "../state/ui";
 import { useDriveUi } from "../state/ui";
 
@@ -76,6 +79,8 @@ export function useItemMenu(
   const ui = useDriveUi();
   const { session } = useDrive();
   const openWithDocs = useOpenWithDocs(targets.length === 1 ? targets[0] : undefined);
+  const openWithSheets = useOpenWithSheets(targets.length === 1 ? targets[0] : undefined);
+  const hasWorkbook = targets.some((item) => item.workbook);
   const writable = targets.every((item) => isOwnStorage(item.url, session.storageUrl));
   const [first] = targets;
   if (!first) return [];
@@ -90,22 +95,43 @@ export function useItemMenu(
       shortcut: "Enter",
       onSelect: () => actions.open(first, siblings, ui.setPreview),
     });
-    if (openWithDocs) {
+    if (openWithDocs || openWithSheets) {
       const disabledReason =
-        openWithDocs.kind === "convert" ? openWithDocs.disabledReason : undefined;
+        openWithDocs?.kind === "convert" ? openWithDocs.disabledReason : undefined;
       entries.push({
         id: "open-with",
         label: "Open with",
         icon: AppWindow,
         submenu: [
-          {
-            id: "open-with-docs",
-            label: "Docs",
-            icon: FileText,
-            disabled: disabledReason !== undefined || openWithDocs.pending,
-            ...(disabledReason ? { hint: disabledReason } : {}),
-            onSelect: () => void openWithDocs.run(),
-          },
+          ...(openWithDocs
+            ? [
+                {
+                  id: "open-with-docs",
+                  label: "Docs",
+                  icon: FileText,
+                  disabled: disabledReason !== undefined || openWithDocs.pending,
+                  ...(disabledReason ? { hint: disabledReason } : {}),
+                  onSelect: () => void openWithDocs.run(),
+                },
+              ]
+            : []),
+          ...(openWithSheets
+            ? [
+                {
+                  id: "open-with-sheets",
+                  label: "Sheets",
+                  icon: Table2,
+                  disabled:
+                    (openWithSheets.kind === "convert" &&
+                      openWithSheets.disabledReason !== undefined) ||
+                    openWithSheets.pending,
+                  ...(openWithSheets.kind === "convert" && openWithSheets.disabledReason
+                    ? { hint: openWithSheets.disabledReason }
+                    : {}),
+                  onSelect: () => void openWithSheets.run(),
+                },
+              ]
+            : []),
         ],
       });
     }
@@ -131,23 +157,25 @@ export function useItemMenu(
       });
     }
     entries.push("separator");
-    entries.push({
-      id: "rename",
-      disabled: !writable,
-      label: "Rename",
-      icon: Pencil,
-      shortcut: "F2",
-      onSelect: () => ui.openDialog({ kind: "rename", item: first }),
-    });
+    if (!hasWorkbook)
+      entries.push({
+        id: "rename",
+        disabled: !writable,
+        label: "Rename",
+        icon: Pencil,
+        shortcut: "F2",
+        onSelect: () => ui.openDialog({ kind: "rename", item: first }),
+      });
   }
-  entries.push({
-    id: "move",
-    disabled: !writable,
-    label: "Move to…",
-    icon: FolderInput,
-    shortcut: "M",
-    onSelect: () => ui.openDialog({ kind: "move", items: [...targets] }),
-  });
+  if (!hasWorkbook)
+    entries.push({
+      id: "move",
+      disabled: !writable,
+      label: "Move to…",
+      icon: FolderInput,
+      shortcut: "M",
+      onSelect: () => ui.openDialog({ kind: "move", items: [...targets] }),
+    });
   if (single && first.kind === "file") {
     entries.push({
       id: "copy",

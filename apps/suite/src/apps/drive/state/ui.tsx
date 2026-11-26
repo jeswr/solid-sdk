@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 // AUTHORED-BY Codex GPT-6
@@ -621,7 +622,7 @@ export function useDriveActions() {
     async (items: readonly DriveItem[], target: string, { undoable = true } = {}) => {
       if (
         !isOwnStorage(target, session.storageUrl) ||
-        items.some((item) => !isOwnStorage(item.url, session.storageUrl))
+        items.some((item) => item.workbook || !isOwnStorage(item.url, session.storageUrl))
       )
         return;
       const pending = toast.loading(
@@ -733,7 +734,7 @@ export function useDriveActions() {
 
   const rename = useCallback(
     async (item: DriveItem, name: string) => {
-      if (!isOwnStorage(item.url, session.storageUrl)) return;
+      if (item.workbook || !isOwnStorage(item.url, session.storageUrl)) return;
       try {
         const url = await refreshAfter(
           client,
@@ -760,7 +761,7 @@ export function useDriveActions() {
 
   const makeCopy = useCallback(
     async (item: DriveItem) => {
-      if (!isOwnStorage(item.url, session.storageUrl)) return;
+      if (item.workbook || !isOwnStorage(item.url, session.storageUrl)) return;
       try {
         const url = await refreshAfter(client, invalidate, [item.url], (tracked) =>
           copyItem(tracked, item),
