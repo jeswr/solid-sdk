@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
@@ -980,6 +981,28 @@ it("requires a provider for calendar hooks", async () => {
   } finally {
     errors.mockRestore();
   }
+});
+
+it("shows the privacy refusal and keeps the calendar name available to retry", async () => {
+  const account = mocks.session as PodSession;
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) =>
+      String(input) === `${DEMO_ROOT}calendar/private.ttl` && init?.method === "HEAD"
+        ? new Response(null, { status: 403 })
+        : account.fetch(input, init),
+  };
+  const mounted = await mount(screen());
+  await click(
+    [...mounted.host.querySelectorAll("button")].find(
+      (button) => button.textContent === "Create calendar",
+    ) as HTMLElement,
+  );
+  await nameFirstCalendar("Private");
+  expect(mounted.host.textContent).toContain(
+    "Your pod could not confirm that this calendar would stay private, so it was not created.",
+  );
+  expect(document.querySelector<HTMLInputElement>("#cal-name")?.value).toBe("Private");
 });
 
 it("retries an incomplete calendar creation through the context", async () => {

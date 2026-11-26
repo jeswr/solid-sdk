@@ -274,15 +274,15 @@ export async function readInvitations({
     candidates.set(invitation.room, invitation);
   }
   const all = [...candidates.values()];
-  const rank = (invitation: Invitation) =>
-    invitation.verified ? 0 : isWithinPodScope(storage, invitation.room) ? 1 : 2;
-  // Verified rows keep inbox order. Unverified rows are ordered by room URL, never by the
-  // poster-supplied date, so a poster cannot choose which rows are listed first.
+  const rank = (invitation: Invitation) => (isWithinPodScope(storage, invitation.room) ? 0 : 1);
+  // Verified rows keep inbox order. Unverified rows are ordered own-pod first, then by room URL
+  // (unique, as rows are keyed by room), never by the poster-supplied date, so a poster cannot
+  // choose which rows are listed first.
   const invitations = [
     ...all.filter((invitation) => invitation.verified),
     ...all
       .filter((invitation) => !invitation.verified)
-      .sort((a, b) => rank(a) - rank(b) || (a.room < b.room ? -1 : a.room > b.room ? 1 : 0)),
+      .sort((a, b) => rank(a) - rank(b) || (a.room < b.room ? -1 : 1)),
   ];
   return { invitations, truncated, ownUnchecked };
 }

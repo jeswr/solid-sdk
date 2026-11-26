@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { type Grant, ownerPolicy, type Subject, writeWac } from "@jeswr/pod-access";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
@@ -559,6 +560,29 @@ describe("Calendar creation privacy", () => {
         PALETTE[0] as string,
       ),
     ).rejects.toBeInstanceOf(CalendarUnconfirmedError);
+  });
+  it("preserves the calendar when confirmation fails and the write returned no ETag", async () => {
+    const { account, io } = await setup();
+    const url = `${root}calendar/no-validator.ttl`;
+    const recorded = recording({
+      ...account,
+      fetch: async (input, init) => {
+        const response = await account.fetch(input, init);
+        if (String(input) === url && init?.method === "PUT") response.headers.delete("etag");
+        return response;
+      },
+    });
+    const confirm = vi.fn(async () => false);
+    await expect(
+      createCalendar(
+        { ...recorded.account, privateDestination: { verify: async () => true, confirm } },
+        "No Validator",
+        PALETTE[0] as string,
+      ),
+    ).rejects.toBeInstanceOf(CalendarUnconfirmedError);
+    expect(confirm).toHaveBeenCalledWith(url, {});
+    expect(recorded.writes).toEqual([`PUT ${url}`]);
+    expect((await io.loadCalendar(url))?.data.title).toBe("No Validator");
   });
   /** A fake pod serving a real WAC root ACL, with the account in "solid" mode (no seam, no demo). */
   async function wacPod(extra?: (aclUrl: string) => Grant) {

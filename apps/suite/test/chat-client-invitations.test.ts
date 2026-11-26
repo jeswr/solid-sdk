@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { expect, it, vi } from "vitest";
 import { ChatClient } from "../src/apps/chat/lib/client";
 import { MAX_SCAN_REQUESTS } from "../src/apps/chat/lib/client/invitations";
@@ -648,7 +649,7 @@ it.each([
   const ghost = `${ROOT}chat/rooms/ghost/`;
   await writeInbox(owner, [
     offer(real, `; as:actor <${BOB}>${published(1)}`),
-    offer(ghost, `; as:actor <${BOB}>${published(2)}`),
+    offer(ghost, published(2)),
     offer(foreign, `; as:actor <${BOB}>${published(3)}`),
   ]);
   const transport: typeof globalThis.fetch = (input, init) =>
@@ -657,6 +658,10 @@ it.each([
       : owner.fetch(input, init);
   const found = await new ChatClient(transport, ROOT, ME).invitations();
   expect(found.ownUnchecked).toBe(true);
+  expect(found.invitations.find((item) => item.room === ghost)).toStrictEqual({
+    room: ghost,
+    verified: false,
+  });
   expect(found.invitations.every((item) => !item.verified)).toBe(true);
   expect(found.invitations.map((item) => item.room).sort()).toEqual([ghost, real, foreign].sort());
 });
