@@ -61,11 +61,12 @@ export function useDriveReplay(
   }, [outbox, matches, driveRoot]);
   const storage = outbox?.storage;
   useEffect(() => {
-    if (!outbox || !matches || !storage) return;
+    // The delegate is confined to Drive's root, so it waits for the root too.
+    if (!outbox || !matches || !storage || !driveRoot) return;
     const off = register(() =>
       outbox.registerReplayDelegate(
         DRIVE_TAG,
-        driveReplayDelegate({ onExistingFolder: existingFolder }),
+        driveReplayDelegate({ root: driveRoot, onExistingFolder: existingFolder }),
       ),
     );
     // Items queued while Drive was closed waited for this delegate; replay them now.
@@ -74,7 +75,7 @@ export function useDriveReplay(
         // Durable failures stay visible in the sync sheet.
       });
     return off;
-  }, [outbox, matches, storage]);
+  }, [outbox, matches, storage, driveRoot]);
   const adapter = matches ? outbox?.adapter : undefined;
   useEffect(() => {
     if (!adapter) return;

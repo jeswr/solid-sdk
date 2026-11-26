@@ -126,7 +126,7 @@ it("text guards carry the captured discovery as plain JSON", async () => {
 it("replays a queued text save through Drive's guarded write", async () => {
   const f = await wacPod();
   const { version } = await opened(f);
-  const delegate = driveReplayDelegate()(session(f));
+  const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   const result = await delegate(
     textDelivery(FILE, version.etag, textGuard(version.discovery as never, FILE).assertions),
     ctx(),
@@ -143,7 +143,7 @@ it("turns a changed file into an outbox conflict", async () => {
     body: "someone else",
     headers: { "content-type": "text/plain" },
   });
-  const delegate = driveReplayDelegate()(session(f));
+  const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   const error = await delegate(
     textDelivery(FILE, version.etag, textGuard(version.discovery as never, FILE).assertions),
     ctx(),
@@ -157,7 +157,7 @@ it("refuses a replay whose access discovery changed since the file was opened", 
   const f = await wacPod();
   const { version } = await opened(f);
   f.endpoints.set(FILE, `${FILE}.moved-policy`);
-  const delegate = driveReplayDelegate()(session(f));
+  const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   const error = await delegate(
     textDelivery(FILE, version.etag, textGuard(version.discovery as never, FILE).assertions),
     ctx(),
@@ -170,7 +170,7 @@ it("refuses a replay whose access discovery changed since the file was opened", 
 it("fails closed on tampered or incomplete queued saves", async () => {
   const f = await wacPod();
   const { version } = await opened(f);
-  const delegate = driveReplayDelegate()(session(f));
+  const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   const assertions = textGuard(version.discovery as never, FILE).assertions;
   for (const delivery of [
     textDelivery(FILE, undefined, assertions),
@@ -181,6 +181,24 @@ it("fails closed on tampered or incomplete queued saves", async () => {
     textDelivery("https://elsewhere.test/a.txt", version.etag, assertions),
     textDelivery(`${FILE}.acl`, version.etag, assertions),
     textDelivery(PUBLIC, version.etag, assertions),
+    // Confined to Drive's root, not just the storage, and to names Drive shows.
+    textDelivery(`${ROOT}profile/card`, version.etag, assertions),
+    textDelivery(`${ROOT}drivex/a.txt`, version.etag, assertions),
+    textDelivery(`${DRIVE}.trash/a.txt`, version.etag, assertions),
+    textDelivery(`${PUBLIC}.hidden`, version.etag, assertions),
+    // Only a strong validator: "*" would make the save an unconditional overwrite.
+    textDelivery(FILE, "*", assertions),
+    textDelivery(FILE, `W/${version.etag}`, assertions),
+    textDelivery(FILE, "unquoted", assertions),
+    {
+      op: "create" as const,
+      url: `${ROOT}settings/`,
+      container: `${ROOT}settings/`,
+      body: null,
+      createOptions: { name: "x", kind: "container" as const },
+      assertions: { kind: "folder" },
+      purpose: "replay" as const,
+    },
     { ...textDelivery(FILE, version.etag, assertions), purpose: "resolve-both" as const },
     { ...textDelivery(FILE, version.etag, assertions), op: "delete" as const },
     // Text creates exist only as a conflict's "keep both" copy.
@@ -202,7 +220,7 @@ it("stores a kept copy as a new file next to the file it keeps", async () => {
   const f = await wacPod();
   const { version } = await opened(f);
   const assertions = textGuard(version.discovery as never, FILE).assertions;
-  const delegate = driveReplayDelegate()(session(f));
+  const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   const copy = (overrides: Partial<GuardedDelivery> = {}): GuardedDelivery => ({
     op: "create",
     url: PUBLIC,
@@ -244,7 +262,7 @@ it("stores a kept copy as a new file next to the file it keeps", async () => {
 
 it("replays a queued folder as an inherit-verified create", async () => {
   const f = await wacPod();
-  const delegate = driveReplayDelegate()(session(f));
+  const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   const result = await delegate(
     {
       op: "create",
@@ -297,7 +315,7 @@ it("replays a queued folder as an inherit-verified create", async () => {
 it("treats a queued folder that now exists as done, and still refuses a clash it can't confirm", async () => {
   const f = await wacPod();
   const onExistingFolder = vi.fn();
-  const delegate = driveReplayDelegate({ onExistingFolder })(session(f));
+  const delegate = driveReplayDelegate({ root: DRIVE, onExistingFolder })(session(f));
   const delivery: GuardedDelivery = {
     op: "create",
     url: PRIVATE,
@@ -322,7 +340,7 @@ it("treats a queued folder that now exists as done, and still refuses a clash it
     }),
   } as unknown as DriveClient;
   const head = vi.fn(async () => new Response(null, { status: 404 }));
-  const clashing = driveReplayDelegate({ makeClient: () => client })({
+  const clashing = driveReplayDelegate({ root: DRIVE, makeClient: () => client })({
     fetch: head as unknown as typeof fetch,
     storageUrl: ROOT,
     webId: OWNER,
@@ -392,7 +410,7 @@ it("maps Drive failures onto the outbox's classification", async () => {
         throw thrown;
       }),
     } as unknown as DriveClient;
-    const delegate = driveReplayDelegate({ makeClient: () => client })({
+    const delegate = driveReplayDelegate({ root: DRIVE, makeClient: () => client })({
       fetch,
       storageUrl: ROOT,
       webId: OWNER,
@@ -411,13 +429,14 @@ it("maps Drive failures onto the outbox's classification", async () => {
     }),
   } as unknown as DriveClient;
   await expect(
-    driveReplayDelegate({ makeClient: () => client })({ fetch, storageUrl: ROOT, webId: OWNER })(
-      delivery,
-      {
-        storage: {} as never,
-        signal: controller.signal,
-      },
-    ),
+    driveReplayDelegate({ root: DRIVE, makeClient: () => client })({
+      fetch,
+      storageUrl: ROOT,
+      webId: OWNER,
+    })(delivery, {
+      storage: {} as never,
+      signal: controller.signal,
+    }),
   ).rejects.toMatchObject({ code: "network" });
 });
 
@@ -434,7 +453,7 @@ it("returns the write receipt's ETag when the server sends one, and none otherwi
       discoveryVerifier: () => () => undefined,
       write: vi.fn(async () => (etag ? { etag } : {})),
     } as unknown as DriveClient;
-    const delegate = driveReplayDelegate({ makeClient: () => client })({
+    const delegate = driveReplayDelegate({ root: DRIVE, makeClient: () => client })({
       fetch,
       storageUrl: ROOT,
       webId: OWNER,
@@ -461,7 +480,7 @@ it("gives a kept copy the source file's own access, not its looser folder's", as
   f.policies.set(`${FILE}.policy`, await aclBody(FILE));
   expect((await f.anonymous(FILE)).status).toBe(403);
   const { version } = await opened(f);
-  const delegate = driveReplayDelegate()(session(f));
+  const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   const result = await delegate(
     {
       op: "create",
@@ -490,7 +509,7 @@ it("keeps the conflict suffix when a long name has to be shortened", async () =>
     headers: { "content-type": "text/plain" },
   });
   const { version } = await opened(f, long);
-  const delegate = driveReplayDelegate()(session(f));
+  const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   const result = await delegate(
     {
       op: "create",
@@ -520,7 +539,7 @@ it("treats a save whose earlier attempt landed unanswered as done, not as a conf
     version.etag,
     textGuard(version.discovery as never, FILE).assertions,
   );
-  const delegate = driveReplayDelegate()(session(f));
+  const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   let lose = true;
   f.after(async (url, method, response) => {
     if (lose && url === FILE && method === "PUT" && response.ok) {
@@ -547,7 +566,7 @@ it("does not make a second kept copy when the first one landed unanswered", asyn
   const f = await wacPod();
   const { version } = await opened(f);
   const assertions = textGuard(version.discovery as never, FILE).assertions;
-  const delegate = driveReplayDelegate()(session(f));
+  const delegate = driveReplayDelegate({ root: DRIVE })(session(f));
   const keep = (stamp: number, text = "mine"): GuardedDelivery => ({
     op: "create",
     url: PUBLIC,

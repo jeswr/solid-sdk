@@ -93,17 +93,20 @@ it("registers Drive's policy and delegate for the matching session, replays, and
   expect(offDelegate).toHaveBeenCalledOnce();
 });
 
-it("waits for Drive's root before the policy, and replays only when online", () => {
+it("waits for Drive's root before the policy and the delegate, and replays only when online", () => {
   const { outbox } = fakeOutbox();
   const online = vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
   const hook = renderHook(({ root }) => useDriveReplay(session(), root, vi.fn()), {
     initialProps: { root: undefined as string | undefined },
   });
   expect(outbox.registerGuardPolicy).not.toHaveBeenCalled();
-  expect(outbox.registerReplayDelegate).toHaveBeenCalledOnce();
-  expect(outbox.adapter.reconnected).not.toHaveBeenCalled();
+  // The delegate is confined to Drive's root, so it needs the root too.
+  expect(outbox.registerReplayDelegate).not.toHaveBeenCalled();
   hook.rerender({ root: ROOT });
   expect(outbox.registerGuardPolicy).toHaveBeenCalledOnce();
+  expect(outbox.registerReplayDelegate).toHaveBeenCalledOnce();
+  expect(mocks.replayOptions).toMatchObject({ root: ROOT });
+  expect(outbox.adapter.reconnected).not.toHaveBeenCalled();
   online.mockRestore();
 });
 

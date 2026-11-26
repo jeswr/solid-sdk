@@ -30,7 +30,7 @@ async function setup() {
   outbox.registerGuardPolicy(DRIVE_TAG, driveGuardPolicy(DRIVE));
   outbox.registerDelegate(
     DRIVE_TAG,
-    driveReplayDelegate()({ fetch, storageUrl: ROOT, webId: OWNER }),
+    driveReplayDelegate({ root: DRIVE })({ fetch, storageUrl: ROOT, webId: OWNER }),
   );
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch, webId: OWNER });
   return { f, network, outbox, storage, queueing: withOutbox(storage, outbox), client };

@@ -137,12 +137,22 @@ function conflictSuffix(source: string, name: string): string | undefined {
   return /^\d{1,16}$/.test(stamp) ? `-conflict-${stamp}` : undefined;
 }
 
+/** Inside Drive's root and not under a hidden name there (`.trash/`, policy files). */
+function inRoot(root: string, url: string | undefined): url is string {
+  return (
+    inside(root, url) &&
+    !new URL(url).pathname
+      .slice(new URL(root).pathname.length)
+      .split("/")
+      .some((segment) => segment.startsWith("."))
+  );
+}
+
 /** The delivery shapes Drive queues; anything else is refused before any request. */
-function shape(storageUrl: string, delivery: GuardedDelivery): DriveGuardKind {
+function shape(root: string, delivery: GuardedDelivery): DriveGuardKind {
   const kind = assertions(delivery).kind;
   const container = delivery.container;
-  const createsIn =
-    delivery.op === "create" && inside(storageUrl, container) && container.endsWith("/");
+  const createsIn = delivery.op === "create" && inRoot(root, container) && container.endsWith("/");
   if (kind === "folder" && createsIn && delivery.purpose === "replay") return kind;
   if (kind === "text") {
     // Text creates exist only as a conflict's "keep both" copy.
@@ -150,7 +160,7 @@ function shape(storageUrl: string, delivery: GuardedDelivery): DriveGuardKind {
     if (
       delivery.op === "write" &&
       delivery.purpose !== "resolve-both" &&
-      inside(storageUrl, delivery.url) &&
+      inRoot(root, delivery.url) &&
       !delivery.url.endsWith("/") &&
       !isPolicyDocument(delivery.url)
     )
@@ -160,6 +170,8 @@ function shape(storageUrl: string, delivery: GuardedDelivery): DriveGuardKind {
 }
 
 export interface DriveReplayOptions {
+  /** Drive's root: every queued Drive change, and the file a kept copy keeps, lies inside it. */
+  readonly root: string;
   readonly makeClient?: (session: ReplaySession) => DriveClient;
   /**
    * A queued folder's name was already taken by a folder when it synced, so that folder is
@@ -168,6 +180,7 @@ export interface DriveReplayOptions {
   readonly onExistingFolder?: (url: string) => void;
 }
 
+const STRONG_ETAG = /^"[\x21\x23-\x7e\x80-\xff]*"$/;
 const LDP_TYPE = /<http:\/\/www\.w3\.org\/ns\/ldp#([A-Za-z]+)>\s*;\s*rel="?type"?/g;
 
 /**
@@ -183,13 +196,14 @@ async function isFolder(session: ReplaySession, url: string, signal: AbortSignal
 
 /** Build the session's Drive replay delegate. */
 export function driveReplayDelegate({
+  root,
   makeClient = ({ fetch, storageUrl, webId }) =>
     createSolidDriveClient({ storageUrl, fetch, webId }),
   onExistingFolder,
-}: DriveReplayOptions = {}): (session: ReplaySession) => ReplayDelegate {
+}: DriveReplayOptions): (session: ReplaySession) => ReplayDelegate {
   return (session) => async (delivery, ctx) => {
     // Re-check the delivered request, not just the stored one.
-    const kind = shape(session.storageUrl, delivery);
+    const kind = shape(root, delivery);
     const client = makeClient(session);
     const container = delivery.container as string;
     try {
@@ -218,7 +232,7 @@ export function driveReplayDelegate({
         if (
           typeof source !== "string" ||
           !isEndpointCapture(discovery) ||
-          !inside(session.storageUrl, source) ||
+          !inRoot(root, source) ||
           source.endsWith("/") ||
           isPolicyDocument(source) ||
           parentOf(source) !== container
@@ -244,7 +258,8 @@ export function driveReplayDelegate({
         return { url, etag: null, created: true };
       }
       const { discovery } = assertions(delivery);
-      if (!isEndpointCapture(discovery) || !delivery.ifMatch)
+      // Only a strong validator: a weak one never matches, and "*" would overwrite anything.
+      if (!isEndpointCapture(discovery) || !STRONG_ETAG.test(delivery.ifMatch ?? ""))
         refuse(delivery, "This queued save has no version to check against.");
       let written: { etag?: string };
       try {
