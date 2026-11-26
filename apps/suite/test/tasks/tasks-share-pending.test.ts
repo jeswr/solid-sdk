@@ -140,4 +140,106 @@ describe("Tasks sharing pending marker", () => {
     expect((await f.load()).pendingAccess).toBe(false);
     await f.adapter.setPerson(f.project.url, carol, "viewer");
   });
+
+  it("lets a downgrade of another person proceed while a grant is unconfirmed", async () => {
+    const f = await fixture();
+    await f.adapter.setPerson(f.project.url, carol, "editor");
+    loses(f);
+    await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toBeDefined();
+    f.intercept(undefined);
+    await f.adapter.setPerson(f.project.url, carol, "viewer");
+    const trackerGrant = (await f.grants(f.project.url)).find((g) => g.agents.includes(carol));
+    expect(trackerGrant?.modes).not.toContain(`${_ACL}Write`);
+    expect((await f.grants(f.project.url)).some((g) => g.agents.includes(bob))).toBe(false);
+  });
+
+  it("blocks a widening change from a different person while a grant is unconfirmed", async () => {
+    const f = await fixture();
+    await f.load();
+    loses(f);
+    await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toBeDefined();
+    f.intercept(undefined);
+    await expect(f.adapter.setPerson(f.project.url, carol, "editor")).rejects.toMatchObject({
+      code: "network",
+    });
+  });
+
+  it("keeps a retried change pending when the retry hits a definite 4xx", async () => {
+    const f = await fixture();
+    await f.load();
+    loses(f);
+    await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toBeDefined();
+    f.intercept((url, init) =>
+      url === `${f.project.url}.acl` && init.method === "PUT"
+        ? new Response(null, { status: 413 })
+        : undefined,
+    );
+    await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toMatchObject({
+      code: "unsupported",
+    });
+    f.intercept(undefined);
+    expect((await f.load()).pendingAccess).toBe(true);
+    expect((await f.grants(f.folder)).some((g) => g.agents.includes(bob))).toBe(false);
+  });
+
+  describe("a retry whose base revision moved", () => {
+    /** The first tracker ACL read after the folder is narrowed reports a foreign revision. */
+    async function movedBase() {
+      const f = await fixture();
+      await f.load();
+      loses(f);
+      await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toBeDefined();
+      return f;
+    }
+    const aclOf = (f: Awaited<ReturnType<typeof fixture>>) => `${f.project.url}.acl`;
+    it("fails closed when the outstanding change is still unconfirmed after settling", async () => {
+      const f = await movedBase();
+      let narrowed = false;
+      let spoofed = false;
+      f.intercept(async (url, init) => {
+        if (url === `${f.folder}.acl` && init.method === "PUT") narrowed = true;
+        if (narrowed && !spoofed && url === aclOf(f) && (init.method ?? "GET") === "GET") {
+          spoofed = true;
+          const real = await f.pod.fetch(url, init);
+          const headers = new Headers(real.headers);
+          headers.set("etag", '"foreign"');
+          return new Response(await real.text(), { status: real.status, headers });
+        }
+      });
+      await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toMatchObject({
+        code: "network",
+      });
+      expect(spoofed).toBe(true);
+    });
+    it("refuses once the settled tracker can no longer be managed", async () => {
+      const f = await fixture();
+      await f.load();
+      let delayedWrite: (() => Promise<Response>) | undefined;
+      f.intercept((url, init) => {
+        if (url === aclOf(f) && init.method === "PUT") {
+          delayedWrite = () => f.pod.fetch(url, init);
+          throw new Error("Lost response while the write remains in flight");
+        }
+      });
+      await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toBeDefined();
+      let committed = false;
+      let loads = 0;
+      f.intercept(async (url, init) => {
+        if (url === `${f.folder}.acl` && init.method === "PUT" && !committed) {
+          committed = true;
+          expect((await delayedWrite?.())?.ok).toBe(true);
+          return undefined;
+        }
+        // The tracker ACL loader (not the RDF reader) asks for plain text/turtle.
+        const accept = new Headers(init.headers).get("accept");
+        if (committed && url === aclOf(f) && init.method !== "PUT" && accept === "text/turtle")
+          if (++loads === 2) return new Response(null, { status: 403 });
+        return undefined;
+      });
+      await expect(f.adapter.setPerson(f.project.url, bob, "editor")).rejects.toMatchObject({
+        code: "forbidden",
+      });
+      expect(loads).toBeGreaterThanOrEqual(2);
+    });
+  });
 });

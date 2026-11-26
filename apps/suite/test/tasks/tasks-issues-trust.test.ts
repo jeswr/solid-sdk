@@ -1,9 +1,10 @@
 // AUTHORED-BY Claude Sonnet 5.5
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { inside, isIssueMember } from "../../src/apps/tasks/lib/issues/discovery";
-import { IssueItem } from "../../src/apps/tasks/lib/issues/model";
+import { IssueItem, isIssuesProject } from "../../src/apps/tasks/lib/issues/model";
 import { DataFactory, NS, node, Store } from "../../src/apps/tasks/lib/model/rdf";
-import { storage } from "./pod";
+import { TypeIndex } from "../../src/apps/tasks/lib/model/type-index";
+import { storage, webId } from "./pod";
 import { containerUrl, issuesFixture, trackerUrl } from "./tasks-issues-fixtures";
 
 const foreign = "https://evil.example/";
@@ -70,6 +71,7 @@ describe("containment (F8)", () => {
     ["https://pod.test/alice/issue-tracker/issues-evil/a.ttl", false],
     ["https://user@pod.test/alice/issue-tracker/issues/a.ttl", false],
     ["http://pod.test/alice/issue-tracker/issues/a.ttl", false],
+    [`${containerUrl}a%E0%A4%A.ttl`, false],
   ])("inside(%s)", (url, expected) => {
     expect(inside(url, containerUrl)).toBe(expected);
   });
@@ -137,5 +139,57 @@ describe("listProjects honours the base contract (F3)", () => {
     pod.files.delete(trackerUrl);
     const listed = await store.listProjects(undefined, { strict: true });
     expect(listed.map((project) => project.url)).toEqual([inbox.url]);
+  });
+});
+
+describe("Issues store resource ownership and strict listings", () => {
+  it("recognises its tracker and the issues beneath it, and nothing else", async () => {
+    const { store, project } = await issuesFixture();
+    expect(store.isIssueResource(project.url)).toBe(true);
+    expect(store.isIssueResource(`${project.url}#this`)).toBe(true);
+    expect(store.isIssueResource(`${containerUrl}a.ttl#it`)).toBe(true);
+    expect(store.isIssueResource(`${containerUrl}sub/a.ttl`)).toBe(false);
+    expect(store.isIssueResource(`${storage}tasks/projects/inbox.ttl`)).toBe(false);
+  });
+  it("re-reads an Issues tracker found in a collection-scoped listing", async () => {
+    const { store } = await issuesFixture();
+    const listed = await store.listProjects(undefined, {
+      collection: `${storage}issue-tracker/`,
+    });
+    expect(listed.map((project) => project.url)).toEqual([trackerUrl]);
+    expect(listed.every(isIssuesProject)).toBe(true);
+  });
+  async function register(
+    pod: Awaited<ReturnType<typeof issuesFixture>>["pod"],
+    store: Awaited<ReturnType<typeof issuesFixture>>["store"],
+    entries: { location: string; kind: "instance" | "instanceContainer" }[],
+  ) {
+    await store.bootstrapInbox();
+    const index = new TypeIndex(store.issuesIO, storage, webId, pod.ensurePrivateIndexAccess);
+    await index.register(entries.map((entry) => ({ forClass: `${NS.WF}Tracker`, ...entry })));
+  }
+  it("fails a strict listing when a registered container cannot be read", async () => {
+    const { store, pod } = await issuesFixture();
+    await register(pod, store, [{ location: `${storage}gone/`, kind: "instanceContainer" }]);
+    pod.intercept = (request) =>
+      request.url === `${storage}gone/` ? new Response(null, { status: 403 }) : undefined;
+    await expect(store.listProjects(undefined, { strict: true })).rejects.toMatchObject({
+      status: 403,
+    });
+  });
+  it("fails a strict listing without a handler on a malformed registered tracker", async () => {
+    const { store, pod } = await issuesFixture();
+    await register(pod, store, [{ location: `${storage}malformed.ttl`, kind: "instance" }]);
+    pod.seed(`${storage}malformed.ttl`, `<#this> <${NS.DCT}title> "Not a tracker".`);
+    await expect(store.listProjects(undefined, { strict: true })).rejects.toBeInstanceOf(TypeError);
+  });
+  it("reports a missing registered tracker during a strict listing", async () => {
+    const { store, pod } = await issuesFixture();
+    const missing = `${storage}missing.ttl`;
+    await register(pod, store, [{ location: missing, kind: "instance" }]);
+    const failure = vi.fn();
+    const listed = await store.listProjects(failure, { strict: true });
+    expect(failure).toHaveBeenCalledWith(missing, expect.objectContaining({ status: 404 }));
+    expect(listed.some((project) => project.url === trackerUrl)).toBe(true);
   });
 });

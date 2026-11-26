@@ -39,9 +39,7 @@ export class TaskMove {
     private readonly destination: { url: string; dataset: Store },
     private readonly listReferences: () => Promise<StoredTask[]>,
     private readonly modified: Date,
-    private readonly listCopies: (
-      previous: ResourceCopy[],
-    ) => Promise<ResourceCopy[]> = async () => [],
+    private readonly listCopies: (previous: ResourceCopy[]) => Promise<ResourceCopy[]>,
   ) {}
 
   /**
@@ -91,7 +89,9 @@ export class TaskMove {
     }
     // Recheck after rolling references back; retain the destination if the source disappeared.
     if (!(await this.io.optional(this.source.url))) throw new ModelError(409, this.source.url);
-    for (const copy of [...(this.copies ?? [])].reverse()) await this.removeCopy(copy.destination);
+    // run() lists the copies before it can fail, so a rollback always has them.
+    for (const copy of [...(this.copies as ResourceCopy[])].reverse())
+      await this.removeCopy(copy.destination);
     const destination = await this.io.optional(this.destination.url);
     if (destination) await this.removeCopy(this.destination);
     this.rollingBack = false;
