@@ -20,9 +20,6 @@
   "apps/issues/scripts/dev.mjs": {
     "rdf-literal": 1
   },
-  "apps/issues/src/lib/announce.ts": {
-    "rdf-factory": 11
-  },
   "apps/issues/src/lib/testing/fake-pod.ts": {
     "rdf-literal": 2
   },
@@ -36,9 +33,6 @@
     "rdf-literal": 1
   },
   "apps/pod-manager/src/lib/forms/subject-edit.ts": {
-    "rdf-factory": 2
-  },
-  "apps/pod-manager/src/lib/resource-acl.ts": {
     "rdf-factory": 2
   },
   "apps/pod-migrator/src/engine/executor.ts": {

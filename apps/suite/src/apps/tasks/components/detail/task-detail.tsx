@@ -18,44 +18,22 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import { ChipText, ChipTextarea } from "@/components/chips";
+import { plainTextLinks } from "@/lib/plain-text-links";
 import { encodeRef } from "@/lib/refs";
 import { duplicateTaskData } from "../../lib/detail/task-data";
+import { isIssuesProject } from "../../lib/issues/model";
+import { IssuesTaskStore } from "../../lib/issues/store";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
 import { compareTasks, treeRows } from "../../lib/views/project-groups";
 import { expandedRows, taskLevel, taskProgress } from "../../lib/views/tree";
 import { toTaskView } from "../../lib/views/types";
-import { completeTask, deleteTask } from "../../state/actions";
+import { completeTask, deleteTask, skipTask } from "../../state/actions";
 import { useTasks } from "../../state/tasks-context";
+import { IssuesDetail } from "../issues/issues-detail";
 import { TaskProgress, TreeToggle, useCollapsedTasks } from "../tree-controls";
 import { TaskAttachments } from "./attachments";
+import { TaskComments } from "./comments";
 import { ProjectFields, TaskProperties } from "./fields";
-
-function descriptionNodes(text: string) {
-  const seen = new Map<string, number>();
-  return text.split(/(https?:\/\/[^\s<>]+)/gi).map((part) => {
-    const occurrence = (seen.get(part) ?? 0) + 1;
-    seen.set(part, occurrence);
-    if (/^https?:\/\//i.test(part)) {
-      try {
-        const url = new URL(part);
-        if (url.protocol === "http:" || url.protocol === "https:")
-          return (
-            <a
-              key={`${part}-${occurrence}`}
-              href={url.href}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {part}
-            </a>
-          );
-      } catch {
-        /* Malformed URLs remain text. */
-      }
-    }
-    return part;
-  });
-}
 
 /** Saved-value changes may reconcile a submitted edit, but never a newer local draft. */
 function useDetailDraft(saved: string) {
@@ -171,6 +149,32 @@ export function TaskDetail({
     !creator || creator === tasks.webId
       ? "You"
       : (new URL(creator).pathname.split("/").filter(Boolean).at(-1) ?? new URL(creator).hostname);
+  const issue = isIssuesProject(project);
+  if (
+    issue &&
+    tasks.cache.store instanceof IssuesTaskStore &&
+    !tasks.cache.store.canEdit(project, stored)
+  )
+    return (
+      <section className="tsk-detail" aria-label={`Issue details: ${view.title}`}>
+        <Button variant="ghost" onClick={onClose}>
+          Close
+        </Button>
+        <h2>{view.title}</h2>
+        <p>You can view this tracker but not edit it</p>
+        <p>{description}</p>
+        <p>Due: {view.due?.toLocaleString("en-GB") ?? "None"}</p>
+        <p>Assignee: {view.assignee ?? "Unassigned"}</p>
+        <p>
+          Labels:{" "}
+          {project.tracker.labels
+            .filter((label) => view.labelIds.includes(label.id))
+            .map((label) => label.name)
+            .join(", ")}
+        </p>
+        <IssuesDetail stored={stored} readOnly />
+      </section>
+    );
   return (
     <section className="tsk-detail" aria-labelledby={`${id}-heading`}>
       <h2 id={`${id}-heading`} className="sr-only">
@@ -181,30 +185,34 @@ export function TaskDetail({
           <ArrowLeft size={16} aria-hidden="true" />
           Back
         </Button>
-        <Popover open={moveOpen} onOpenChange={setMoveOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              className="tsk-detail-breadcrumb"
-              variant="ghost"
-              size="sm"
-              aria-label={`${view.projectTitle} › ${section?.name ?? "No section"}, move task`}
-            >
-              {view.projectTitle} › {section?.name ?? "No section"}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="tsk-detail-popover" align="start">
-            <div className="tsk-detail-stack">
-              <ProjectFields
-                stored={stored}
-                project={project}
-                view={view}
-                onMove={(target) => {
-                  void move(target);
-                }}
-              />
-            </div>
-          </PopoverContent>
-        </Popover>
+        {issue ? (
+          <span className="tsk-detail-breadcrumb">{view.projectTitle}</span>
+        ) : (
+          <Popover open={moveOpen} onOpenChange={setMoveOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                className="tsk-detail-breadcrumb"
+                variant="ghost"
+                size="sm"
+                aria-label={`${view.projectTitle} › ${section?.name ?? "No section"}, move task`}
+              >
+                {view.projectTitle} › {section?.name ?? "No section"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="tsk-detail-popover" align="start">
+              <div className="tsk-detail-stack">
+                <ProjectFields
+                  stored={stored}
+                  project={project}
+                  view={view}
+                  onMove={(target) => {
+                    void move(target);
+                  }}
+                />
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <IconButton label="Task actions" variant="ghost">
@@ -213,7 +221,7 @@ export function TaskDetail({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              disabled={!stored.etag}
+              disabled={issue || !stored.etag}
               onSelect={() => {
                 void tasks.createTask(project, duplicateTaskData(stored, tasks.webId));
               }}
@@ -239,6 +247,16 @@ export function TaskDetail({
             >
               Delete
             </DropdownMenuItem>
+            {view.recurring && view.state === "open" && (
+              <DropdownMenuItem
+                disabled={!stored.etag || tasks.saving.includes(stored.url)}
+                onSelect={() => {
+                  void skipTask(view, tasks);
+                }}
+              >
+                Skip this occurrence
+              </DropdownMenuItem>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
         <IconButton
@@ -301,7 +319,7 @@ export function TaskDetail({
         {!editingDescription && description && (
           <>
             <p className="tsk-detail-description-text">
-              <ChipText text={description} plain={descriptionNodes} />
+              <ChipText text={description} plain={plainTextLinks} />
             </p>
             <Button
               variant="ghost"
@@ -459,6 +477,10 @@ export function TaskDetail({
         )}
       </section>
       <TaskAttachments key={stored.url} stored={stored} />
+      {/* Issues carry their own comments section; the Tasks comment store rejects `#this` subjects. */}
+      {!issue && (
+        <TaskComments key={`${tasks.webId} ${stored.url}`} stored={stored} project={project} />
+      )}
       <TaskProperties
         stored={stored}
         project={project}
@@ -467,6 +489,7 @@ export function TaskDetail({
           void move(target);
         }}
       />
+      {issue && <IssuesDetail stored={stored} />}
       <footer className="tsk-detail-footer">
         {view.created && (
           <p>

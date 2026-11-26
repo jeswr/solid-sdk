@@ -9,8 +9,13 @@ import { SidebarNav, BottomNav } from "@/components/sidebar-nav";
 import { Brand } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AccountMenu } from "@/components/account-menu";
-import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Button,
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@jeswr/suite-ui";
 
 /**
  * The authenticated app frame: persistent sidebar on desktop, a slide-in

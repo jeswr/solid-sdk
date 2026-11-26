@@ -6,15 +6,15 @@ import { Repository } from "@/lib/repository";
 import { usePeople } from "@/lib/people";
 import { PersonAvatar } from "@/components/person";
 import {
+  Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  Input,
+  Label,
+} from "@jeswr/suite-ui";
 import { Loader2, UserPlus, Users, X } from "lucide-react";
 
 /**
@@ -93,7 +93,7 @@ export function TeamDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md sm:w-md!">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="size-4" aria-hidden /> Team members

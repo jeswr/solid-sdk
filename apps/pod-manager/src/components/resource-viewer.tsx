@@ -19,8 +19,11 @@ import {
   viewModeOptions,
   type ViewMode,
 } from "@/lib/typed-views/view-modes";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Button,
+  Card,
+  CardContent,
+} from "@jeswr/suite-ui";
 
 /**
  * Render a loaded resource with the viewer chosen by its content type. The

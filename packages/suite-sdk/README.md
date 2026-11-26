@@ -17,7 +17,8 @@ const result = await notify(assignee, assignmentAnnounce(task, tracker, name, ti
 
 `notify` is a stable callable until the identity, fetch, or explicit options change. The hook
 resets its discovery cache on session changes. Delivery failures return `delivered: false`.
-Without a sender WebID or explicit activity actor it returns a `network` failure without sending.
+Without a session WebID it returns an `unauthenticated` failure without sending. Explicit activity actors
+must equal the authenticated session WebID; a mismatch returns `invalid-actor`.
 `useNotify({ recipientProtocol })` accepts a resolver for known LWS recipients; do not infer
 recipient protocol from the sender's identity. See [pod-access](../pod-access/README.md) for
 the result shape, builders, cache behavior, and Node DNS-pinning requirements.

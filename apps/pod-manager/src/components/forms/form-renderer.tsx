@@ -15,8 +15,11 @@ import type { FieldSpec } from "@/lib/forms/field-types";
 import type { FormSource } from "@/lib/forms/resolve-form";
 import { useFormEdit } from "@/components/forms/use-form-edit";
 import { EditableField } from "@/components/forms/editable-field";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Button,
+  Card,
+  CardContent,
+} from "@jeswr/suite-ui";
 
 export interface FormRendererProps {
   url: string;

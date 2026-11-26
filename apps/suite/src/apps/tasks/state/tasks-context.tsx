@@ -14,44 +14,61 @@ import {
 } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
 import { classifyError } from "../lib/model/errors";
-import { type StoredProject, TaskStore } from "../lib/model/store";
+import type { StoredProject } from "../lib/model/store";
 import { TasksSharingAdapter } from "../lib/share/adapter";
 import { ensurePrivateIndexAccess, ensurePrivateTasksAccess, supportsTasksSharing } from "./access";
 import { pendingDeletes } from "./actions";
 import { completionVisuals } from "./completion-visuals";
+import { OfflineTaskStore } from "./offline";
+import { TasksConflicts, useTasksOffline } from "./offline-session";
 import { setPreferencesIdentity, useTasksPreferences } from "./preferences";
 import { TasksCache } from "./tasks-cache";
 
 export type { NewTask, TaskLoad, TasksSnapshot } from "./tasks-cache";
-export type TasksContextValue = Omit<ReturnType<typeof useTasksValue>, "groupSession"> & {
+export type TasksContextValue = Omit<ReturnType<typeof useTasksValue>["value"], "groupSession"> & {
   groupSession?: PodSession;
 };
 const TasksContext = createContext<TasksContextValue | null>(null);
 function useTasksValue(session: PodSession) {
-  const [cache] = useState(
-    () =>
-      new TasksCache(
-        new TaskStore({
-          storage: session.storageUrl,
-          webId: session.webId,
-          fetch: session.fetch,
-          ensurePrivateTasksAccess: (url, owner) => ensurePrivateTasksAccess(session, url, owner),
-          ensurePrivateIndexAccess: (url, owner) => ensurePrivateIndexAccess(session, url, owner),
-        }),
-        (error, retry) => {
-          toast.error(
-            classifyError(error) === "conflict"
-              ? "Changed elsewhere — refreshed"
-              : error instanceof Error
-                ? error.message
-                : "Couldn't save your changes",
-            { action: { label: "Retry", onClick: retry } },
-          );
-        },
-        session.webId,
-        (message) => toast.info(message),
-      ),
-  );
+  const offline = useTasksOffline(session);
+  const [cache] = useState(() => {
+    const store = new OfflineTaskStore(
+      {
+        storage: session.storageUrl,
+        webId: session.webId,
+        fetch: offline.fetch,
+        ensurePrivateTasksAccess: (url, owner) => ensurePrivateTasksAccess(session, url, owner),
+        ensurePrivateIndexAccess: (url, owner) => ensurePrivateIndexAccess(session, url, owner),
+      },
+      offline.online,
+      offline.together,
+    );
+    return new TasksCache(
+      store,
+      (error, retry) => {
+        toast.error(
+          classifyError(error) === "conflict"
+            ? "Changed elsewhere — refreshed"
+            : error instanceof Error
+              ? error.message
+              : "Couldn't save your changes",
+          { action: { label: "Retry", onClick: retry } },
+        );
+      },
+      session.webId,
+      (message) => toast.info(message),
+    );
+  });
+  // Issues writes go straight to the pod: the Tasks replay cannot merge an Issues document.
+  // Bound to the kept cache's store (StrictMode discards one initialiser result).
+  useEffect(() => {
+    const store = cache.store as OfflineTaskStore;
+    offline.direct = (url) => store.isIssueResource(url);
+    return () => {
+      offline.direct = () => false;
+    };
+  }, [cache, offline]);
+  useEffect(() => offline.subscribeReceipts(cache.confirmOfflineWrite), [cache, offline]);
   const { preferences } = useTasksPreferences();
   useLayoutEffect(() => {
     setPreferencesIdentity(session.webId);
@@ -102,7 +119,7 @@ function useTasksValue(session: PodSession) {
     }, 0);
     return () => clearTimeout(timer);
   }, [cache, snapshot.projects]);
-  return useMemo(
+  const value = useMemo(
     () => ({
       ...snapshot,
       cache,
@@ -163,12 +180,18 @@ function useTasksValue(session: PodSession) {
     }),
     [snapshot, cache, session, sharing],
   );
+  return { value, offline };
 }
 /** Small session-scoped API: projects, URL-keyed loads, TaskView projections and conditional mutations.
  * Mutations resolve undefined after rollback + a retry toast. Consumers retain StoredTask validators. */
 export function TasksProvider({ session, children }: { session: PodSession; children: ReactNode }) {
-  const value = useTasksValue(session);
-  return <TasksContext value={value}>{children}</TasksContext>;
+  const { value, offline } = useTasksValue(session);
+  return (
+    <TasksContext value={value}>
+      {children}
+      <TasksConflicts cache={value.cache} offline={offline} webId={session.webId} />
+    </TasksContext>
+  );
 }
 export function useTasks(): TasksContextValue {
   const context = useContext(TasksContext);

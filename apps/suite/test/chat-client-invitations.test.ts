@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.2-Astra
+import { Parser } from "n3";
 import { expect, it, vi } from "vitest";
 import { ChatClient } from "../src/apps/chat/lib/client";
 import { MAX_SCAN_REQUESTS } from "../src/apps/chat/lib/client/invitations";
@@ -11,6 +12,18 @@ const ROOT = "https://8.8.8.8/";
 const ME = `${ROOT}profile#me`;
 const BOB = "https://8.8.4.4/profile#me";
 const INBOX = `${ROOT}inbox/`;
+const AS = "https://www.w3.org/ns/activitystreams#";
+/** The posted Turtle activity as the plain fields these tests assert on. */
+function activity(body: string, baseIRI: string): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  for (const quad of new Parser({ baseIRI }).parse(body)) {
+    if (quad.predicate.value === "http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+      fields.type = quad.object.value.replace(AS, "");
+    else if (quad.predicate.value.startsWith(AS))
+      fields[quad.predicate.value.slice(AS.length)] = quad.object.value;
+  }
+  return fields;
+}
 const ttl = (body: string) => new Response(body, { headers: { "content-type": "text/turtle" } });
 function fixture() {
   const pod = createDemoPod({ root: ROOT });
@@ -21,7 +34,8 @@ function fixture() {
       const resources = pod.snapshot().resources;
       for (const suffix of ["/index.ttl", "/rooms.ttl", "/.acl"])
         expect(resources.some(([url]) => url.endsWith(suffix))).toBe(true);
-      posts.push(JSON.parse(init.body as string));
+      expect(new Headers(init.headers).get("content-type")).toBe("text/turtle");
+      posts.push(activity(init.body as string, url));
       return new Response(null, { status: 201 });
     }
     if (!url.startsWith(ROOT))
@@ -76,7 +90,6 @@ it("sends a pod-access Offer to every distinct non-creator member after writes s
   expect(posts).toHaveLength(2);
   for (const post of posts)
     expect(post).toMatchObject({
-      "@context": "https://www.w3.org/ns/activitystreams",
       type: "Offer",
       actor: ME,
       object: room.url,

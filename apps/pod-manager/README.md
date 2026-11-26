@@ -101,3 +101,7 @@ reproduces that build locally. The Dockerfile and `deploy/Caddyfile` are the ear
 self-hosted setup on solid-test.jeswr.org, which was retired in November 2026 to stop AWS costs.
 The data-integration OAuth apps registered against that host's `/oauth-callback.html` need new
 redirect URIs before those integrations work from Pages.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Notification delivery distinguishes a readable profile without an inbox (`NoInboxError`)
+from an unreadable profile (`ProfileUnreadableError`, retaining the HTTP status when available).

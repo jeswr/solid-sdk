@@ -1,5 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 import { toast } from "@jeswr/suite-ui";
+import { isIssuesProject } from "../lib/issues/model";
+import type { IssuesTaskStore } from "../lib/issues/store";
 import type { StoredProject, StoredTask } from "../lib/model/store";
 import { type BulkResult, bulkSummary, runBulk } from "../lib/views/bulk";
 import { descendantsFirst } from "../lib/views/clear-completed";
@@ -22,6 +24,23 @@ function stored(view: TaskView, tasks: BulkTasks): StoredTask {
     .tasks[view.projectUrl]?.items.find((task) => task.url === view.url);
   if (!item) throw new Error(`Couldn't find '${view.title}'`);
   return item;
+}
+
+/** Drop issues the signed-in user can only read; bulk actions never offer writes on them. */
+export function editableViews(
+  views: readonly TaskView[],
+  tasks: Pick<TasksContextValue, "cache">,
+): TaskView[] {
+  // Only the Issues store knows per-document permissions (a type import avoids an import cycle).
+  const store = tasks.cache.store as Partial<Pick<IssuesTaskStore, "canEdit">>;
+  if (typeof store.canEdit !== "function") return [...views];
+  const snapshot = tasks.cache.getSnapshot();
+  return views.filter((view) => {
+    const project = snapshot.projects.find((project) => project.url === view.projectUrl);
+    if (!project || !isIssuesProject(project)) return true;
+    const item = snapshot.tasks[view.projectUrl]?.items.find((item) => item.url === view.url);
+    return Boolean(item && store.canEdit?.(project, item));
+  });
 }
 
 /** Cache mutations resolve undefined after a rollback; count that as a failure. */

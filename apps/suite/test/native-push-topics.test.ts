@@ -22,7 +22,7 @@ const account: SuiteAccount = {
 const inbox = vi.fn(async (): Promise<string | null> => `${account.storageUrl}inbox/`);
 beforeEach(() => {
   inbox.mockResolvedValue(`${account.storageUrl}inbox/`);
-  vi.mocked(createInboxReader).mockReturnValue({ inbox, list: vi.fn() });
+  vi.mocked(createInboxReader).mockReturnValue({ inbox, list: vi.fn(), listPage: vi.fn() });
   joinedRooms.mockResolvedValue([
     { url: `${account.storageUrl}chat/book/`, name: "Book\n club" },
     { url: `${account.storageUrl}chat/missing/`, error: new Error("gone") },

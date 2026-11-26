@@ -60,7 +60,7 @@ interface Options {
   ensurePrivate: (url: string, owner: string) => Promise<boolean>;
   syncMembers: (webId: string, granted: boolean) => Promise<void>;
 }
-type Reconcile = "none" | "narrow" | "all";
+type Reconcile = "none" | "narrow" | "all" | "recover" | "settle";
 type People = SharingState["people"];
 /** Named grants only: narrow folder → tracker → folder; re-read to recover partial writes. */
 export class TasksSharingAdapter implements SharingAdapter {
@@ -71,12 +71,24 @@ export class TasksSharingAdapter implements SharingAdapter {
   private readonly io: RdfIO;
   private readonly tracker: WacSharingAdapter;
   private tail: Promise<unknown> = Promise.resolve();
-  // A failed write may still commit after its recovery read. Only an explicit action may widen.
+  // A failed write may still commit. Keep access narrow until its intent is confirmed.
   private unconfirmedChange = false;
+  private pendingEtag: string | undefined;
+  private pendingPeople: People | undefined;
+  // Status of the tracker's last PUT response, to tell a definite rejection from a lost one.
+  private lastPutStatus: number | undefined;
   constructor(private readonly options: Options) {
     this.fetch = refuseRedirects(options.fetch);
     this.io = new RdfIO(this.fetch);
-    this.tracker = new WacSharingAdapter({ fetch: this.fetch, webId: options.webId });
+    this.tracker = new WacSharingAdapter({
+      fetch: async (input, init) => {
+        if (init?.method === "PUT") this.lastPutStatus = undefined;
+        const response = await this.fetch(input, init);
+        if (init?.method === "PUT") this.lastPutStatus = response.status;
+        return response;
+      },
+      webId: options.webId,
+    });
   }
   private validate(url: string) {
     const { trackerUrl, folderUrl, webId } = this.options;
@@ -138,7 +150,7 @@ export class TasksSharingAdapter implements SharingAdapter {
   }
   load(url: string, signal: AbortSignal): Promise<SharingState> {
     return this.enqueue(() =>
-      this.readState(url, signal, this.unconfirmedChange ? "narrow" : "all", false, true),
+      this.readState(url, signal, this.unconfirmedChange ? "recover" : "all", false, true),
     );
   }
   private async readState(
@@ -176,6 +188,20 @@ export class TasksSharingAdapter implements SharingAdapter {
         );
       } else this.state(url, acl);
       const state = await this.tracker.load(url, signal);
+      // A newer revision makes the outstanding PUT's If-Match stale. Its grants must
+      // also match the latest intent: an older successful grant cannot confirm a revoke.
+      const stale =
+        (reconcile === "recover" || reconcile === "settle") &&
+        this.unconfirmedChange &&
+        !!acl?.etag &&
+        acl.etag !== this.pendingEtag;
+      const recovered =
+        stale && !!this.pendingPeople && this.samePeople(state.people, this.pendingPeople);
+      // A moved revision kills the outstanding PUT (its If-Match is stale), so the marker
+      // settles whatever the people set now is. Only a matching set may widen in this pass.
+      if (stale) this.unconfirmedChange = false;
+      if (reconcile === "recover" || reconcile === "settle")
+        reconcile = recovered && reconcile === "recover" ? "all" : "narrow";
       if (reconcile !== "none" && state.canManage && !state.readOnly) {
         try {
           await this.reconcile(
@@ -191,10 +217,10 @@ export class TasksSharingAdapter implements SharingAdapter {
             !(warnOnMembersFailure && error instanceof ShareError && error.code === "members-sync")
           )
             throw error;
-          return { ...state, warning: "members-sync" };
+          return { ...state, warning: "members-sync", pendingAccess: this.unconfirmedChange };
         }
       }
-      return state;
+      return { ...state, pendingAccess: this.unconfirmedChange };
     } catch (error) {
       throw this.error(error);
     }
@@ -247,12 +273,18 @@ export class TasksSharingAdapter implements SharingAdapter {
       )
     );
   }
+  /** A change that only removes or downgrades one person cannot widen access. */
+  private narrows(current: SharingState | undefined, webId: string, role: ShareRole | null) {
+    const existing = current?.people.find((person) => person.webId === webId);
+    if (role === null) return !!existing && existing.role !== "owner";
+    return role === "viewer" && existing?.role === "editor";
+  }
   private async reconcile(
     state: SharingState,
     folder: Resource | undefined,
     members: string[],
     signal: AbortSignal,
-    mode: Exclude<Reconcile, "none">,
+    mode: "narrow" | "all",
     forceFolderWrite: boolean,
   ) {
     if (state.general.mode !== "restricted") throw new ShareError("forbidden");
@@ -313,6 +345,28 @@ export class TasksSharingAdapter implements SharingAdapter {
       )
         throw new ShareError("unsupported");
       const signal = new AbortController().signal;
+      let retrying = false;
+      if (this.unconfirmedChange) {
+        // A members-sync failure must not block the ACL change that follows.
+        await this.readState(url, signal, "settle", false, true);
+        if (this.unconfirmedChange) {
+          const acl = await this.acl(url, signal);
+          const current = acl && this.state(url, acl);
+          const retry = current?.people.filter((person) => person.webId !== webId);
+          if (role) retry?.push({ webId, role });
+          // An unchanged base allows the same mutation to retry conditionally. If the
+          // original PUT is still in flight, only one can win its If-Match. Other
+          // mutations remain blocked, and loads stay narrow until a write is confirmed.
+          if (
+            acl?.etag === this.pendingEtag &&
+            retry &&
+            this.pendingPeople &&
+            this.samePeople(retry, this.pendingPeople)
+          )
+            retrying = true;
+          else if (!this.narrows(current, webId, role)) throw new ShareError("network");
+        }
+      }
       // Reading for a change must not widen the folder before its narrowing step.
       const before = await this.readState(url, signal, "none");
       if (!before.canManage || before.readOnly) throw new ShareError("forbidden");
@@ -328,8 +382,6 @@ export class TasksSharingAdapter implements SharingAdapter {
       this.requireFolderControl(existing, before);
       // Intersect *all* principals so a pre-existing mismatch cannot survive a failed tracker write.
       const lower = this.intersect(before.people, existing.people, next);
-      const pending = this.unconfirmedChange;
-      this.unconfirmedChange = true;
       try {
         await this.io.write(
           `${folderUrl}.acl`,
@@ -338,14 +390,52 @@ export class TasksSharingAdapter implements SharingAdapter {
             : policy(folderUrl, lower),
           folder ? { etag: folder.etag } : { create: true },
         );
-        const trackerAcl = (await this.acl(url, signal))?.etag;
-        await this.tracker.setPerson(url, webId, role, opts);
-        // Only a committed tracker write proves an earlier lost write can no longer land (its
-        // If-Match is now stale). After a no-op, keep narrowing until a real write confirms.
-        const settled = !pending || (await this.acl(url, signal))?.etag !== trackerAcl;
-        const confirmed = await this.readState(url, signal, settled ? "all" : "narrow", settled);
+        const trackerAcl = await this.acl(url, signal);
+        if (!trackerAcl) throw new ShareError("conflict");
+        const etag = requireEtag(trackerAcl.etag);
+        if (retrying) {
+          // Keep the original base revision, so a later read still recognises the original
+          // PUT if it commits after this point. If it has already committed, settle against
+          // it rather than retrying over it.
+          if (etag !== this.pendingEtag) {
+            await this.readState(url, signal, "settle");
+            if (this.unconfirmedChange) throw new ShareError("network");
+            const settled = await this.readState(url, signal, "all", true);
+            if (!settled.canManage || settled.readOnly) throw new ShareError("forbidden");
+            return;
+          }
+        } else {
+          this.pendingEtag = etag;
+          this.pendingPeople = next;
+          this.unconfirmedChange = true;
+        }
+        try {
+          await this.tracker.setPerson(url, webId, role, opts);
+        } catch (error) {
+          // Rejecting a retry does not settle the original outstanding PUT.
+          if (
+            !retrying &&
+            error instanceof ShareError &&
+            ["conflict", "forbidden"].includes(error.code)
+          )
+            this.unconfirmedChange = false;
+          // Any other definite HTTP 4xx proves the write was not applied.
+          const status = this.lastPutStatus;
+          if (
+            error instanceof ShareError &&
+            error.code === "network" &&
+            status !== undefined &&
+            status >= 400 &&
+            status < 500
+          ) {
+            if (!retrying) this.unconfirmedChange = false;
+            throw new ShareError("unsupported");
+          }
+          throw error;
+        }
+        const confirmed = await this.readState(url, signal, "all", true);
         if (!confirmed.canManage || confirmed.readOnly) throw new ShareError("forbidden");
-        if (settled) this.unconfirmedChange = false;
+        this.unconfirmedChange = false;
       } catch (error) {
         // A lost tracker response may still have committed. Re-read before syncing members;
         // leave any failed recovery for the next load, while preserving the original error.

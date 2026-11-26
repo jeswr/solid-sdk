@@ -1,31 +1,38 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
-import { z } from "zod";
-import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { removeAccess } from "@/lib/sharing";
-import { assignRole, listRoleAssignments, ROLES, ROLE_PRESETS, type Role, type RoleAssignment } from "@/lib/roles";
 import {
+  Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
+  Input,
+  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select";
+} from "@jeswr/suite-ui";
 import { AlertCircle, Loader2, Trash2, UserPlus } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { z } from "zod";
 import { PersonAvatar, PersonName } from "@/components/person";
+import { ROLE_PRESETS, ROLES, type Role } from "@/lib/roles";
+import {
+  assignRole,
+  listRoleAssignments,
+  lowerCopiedAccess,
+  type RoleAssignment,
+  revokeAccess,
+  revokeCopiedAccess,
+} from "@/lib/sharing";
+
+const ROLE_ORDER: Role[] = ["viewer", "editor", "admin"];
 
 const schema = z.object({
   webId: z
@@ -42,6 +49,7 @@ export function ShareDialog({
   onOpenChange,
   resourceUrl,
   extraResourceUrls = [],
+  memberUrls = [],
   ownerWebId,
   title = "Share access",
   description = "Grant another person access by their WebID.",
@@ -52,6 +60,8 @@ export function ShareDialog({
   resourceUrl: string;
   /** Additional resources that must carry the same grants (e.g. the tracker config). */
   extraResourceUrls?: string[];
+  /** Resources inside `resourceUrl` whose own ACLs may hold a copy of a revoked grant. */
+  memberUrls?: readonly string[];
   ownerWebId: string;
   title?: string;
   description?: string;
@@ -89,9 +99,18 @@ export function ShareDialog({
   }, [open, refresh]);
 
   const grant = async (values: FormValues) => {
+    const webId = values.webId.trim();
+    let trackerChanged = false;
     try {
-      const webId = values.webId.trim();
+      // Lowering a role must also lower the copies single-issue shares made, which
+      // otherwise keep the higher role. Copies first, tracker last: a partial failure
+      // leaves the old role listed so the change can be retried.
+      const previous = assignments.find((a) => a.subject === webId)?.role;
+      if (previous && ROLE_ORDER.indexOf(values.role) < ROLE_ORDER.indexOf(previous)) {
+        await lowerCopiedAccess(memberUrls, ownerWebId, webId, values.role);
+      }
       await assignRole(resourceUrl, ownerWebId, webId, values.role);
+      trackerChanged = true;
       // Collaborators need the side resources too (sprint membership / label
       // declaration write the config doc). The config never confers control, so an
       // admin on the issues still only gets editor on the config — capped at editor.
@@ -104,20 +123,34 @@ export function ShareDialog({
       await refresh();
       onChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not grant access.");
+      const message = e instanceof Error ? e.message : "Could not grant access.";
+      toast.error(
+        trackerChanged
+          ? `${message} The tracker access was granted but the rest was not; try again to finish it.`
+          : message,
+      );
+      // Show what was actually granted, not the pre-attempt list.
+      if (trackerChanged) {
+        await refresh();
+        onChanged?.();
+      }
     }
   };
 
   const revoke = async (webId: string) => {
     setBusyId(webId);
     try {
-      await removeAccess(resourceUrl, ownerWebId, webId);
-      for (const extra of extraResourceUrls) await removeAccess(extra, ownerWebId, webId);
+      // Copies first, tracker last: if anything fails the person is still listed
+      // here, so the removal can be retried.
+      await revokeCopiedAccess(memberUrls, ownerWebId, webId);
+      for (const extra of extraResourceUrls) await revokeAccess(extra, ownerWebId, webId);
+      await revokeAccess(resourceUrl, ownerWebId, webId);
       toast.success("Access removed");
       await refresh();
       onChanged?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not remove access.");
+      await refresh();
     } finally {
       setBusyId(null);
     }
@@ -125,13 +158,17 @@ export function ShareDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg sm:w-lg!">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={form.handleSubmit(grant)} className="flex flex-col gap-2 sm:flex-row sm:items-start" noValidate>
+        <form
+          onSubmit={form.handleSubmit(grant)}
+          className="flex flex-col gap-2 sm:flex-row sm:items-start"
+          noValidate
+        >
           <div className="flex-1 space-y-1.5">
             <Label htmlFor="share-webid" className="sr-only">
               WebID to share with
@@ -147,10 +184,7 @@ export function ShareDialog({
               <p className="text-sm text-destructive">{form.formState.errors.webId.message}</p>
             )}
           </div>
-          <Select
-            defaultValue="editor"
-            onValueChange={(v) => form.setValue("role", v as Role)}
-          >
+          <Select defaultValue="editor" onValueChange={(v) => form.setValue("role", v as Role)}>
             <SelectTrigger className="sm:w-36" aria-label="Role">
               <SelectValue />
             </SelectTrigger>
@@ -193,7 +227,10 @@ export function ShareDialog({
                     <span className="block truncate text-sm font-medium">
                       <PersonName webId={a.subject} />
                     </span>
-                    <span className="block truncate text-xs text-muted-foreground" title={a.subject}>
+                    <span
+                      className="block truncate text-xs text-muted-foreground"
+                      title={a.subject}
+                    >
                       {ROLE_PRESETS[a.role].label} · {a.subject}
                     </span>
                   </span>

@@ -26,10 +26,12 @@ import {
 import { Flag, Repeat2, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { fromEditorRule, recurrenceAnchor, toEditorRule } from "../../lib/detail/recurrence-map";
+import { isIssuesProject } from "../../lib/issues/model";
 import { humanise } from "../../lib/model/recurrence";
 import type { Reminder } from "../../lib/model/reminders";
 import type { StoredProject, StoredTask } from "../../lib/model/store";
 import { labelColour } from "../../lib/views/label-colours";
+import { memberName } from "../../lib/views/member-name";
 import { type PriorityLevel, priorityValue, type TaskView } from "../../lib/views/types";
 import { offerNotificationPermission } from "../../state/reminders";
 import { useTasks } from "../../state/tasks-context";
@@ -149,7 +151,7 @@ export function ProjectFields({
       <DetailSelect
         label="Project"
         value={project.url}
-        disabled={!stored.etag}
+        disabled={isIssuesProject(project) || !stored.etag}
         options={tasks.projects.map((item) => ({
           id: item.url,
           name: item.tracker.title ?? "Project",
@@ -161,6 +163,7 @@ export function ProjectFields({
       />
       <DetailSelect
         label="Section"
+        disabled={isIssuesProject(project)}
         value={view.sectionId ?? "none"}
         options={[{ id: "none", name: "No section" }, ...project.tracker.sections]}
         onChange={(id) => {
@@ -281,15 +284,6 @@ function LabelsField({
       </form>
     </div>
   );
-}
-function memberName(webId: string) {
-  let displayName = webId;
-  try {
-    displayName = new URL(webId).hostname;
-  } catch {
-    /* Keep foreign IRIs renderable. */
-  }
-  return displayName;
 }
 function useMemberProfile(webId: string) {
   return { displayName: memberName(webId), loading: false };

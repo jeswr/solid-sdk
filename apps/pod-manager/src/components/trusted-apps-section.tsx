@@ -12,9 +12,11 @@
 import { useEffect, useState } from "react";
 import { Globe, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import {
+  Badge,
+  Button,
+  Separator,
+} from "@jeswr/suite-ui";
 import {
   usePermissionsBackend,
   type ConnectedApp,
@@ -72,7 +74,7 @@ export function TrustedAppsSection({
       const freshOrigin = reconcileTrustedApps(fresh.apps).find(
         (o) => o.origin === origin.origin,
       );
-      await permissionsBackend.revokeGrants(origin.origin, freshOrigin?.grants ?? []);
+      await permissionsBackend.revokeGrants(origin.origin, freshOrigin?.grants ?? [], "origin");
       toast.success(`${originLabel(origin.origin)} can no longer access your data.`);
       reload();
     } catch {
