@@ -66,8 +66,8 @@ export function roots(dataset: DatasetCore): AccessControlResource[] {
   return [...values.values()];
 }
 /** Clone via typed setters, retaining annotations and foreign targets without building quads. */
-function clone(term: Term, from: DatasetCore, to: DatasetCore, exclude: string[]): Properties {
-  const result = properties(DataFactory.blankNode(), to);
+function clone(term: Term, from: DatasetCore, to: Store, exclude: string[]): Properties {
+  const result = properties(to.createBlankNode(), to);
   const original = properties(term, from);
   for (const predicate of new Set([...from.match(term)].map((q) => q.predicate.value)))
     if (!exclude.includes(predicate))
@@ -370,16 +370,19 @@ export function replaceWac(
       rule.values(ACL + name).has(resource),
     );
     if (!scopes.length || !rule.values(ACL + selector).has(principal)) continue;
-    const copy = clone(auth as Term, dataset, dataset, [
-      `${ACL}accessTo`,
-      `${ACL}default`,
-      `${ACL}defaultForNew`,
-    ]);
-    for (const scope of scopes) {
-      rule.values(ACL + scope).delete(resource);
-      copy.add(ACL + scope, resource);
+    const targets = [`${ACL}accessTo`, `${ACL}default`, `${ACL}defaultForNew`];
+    if (auth.agent.size + rule.terms(`${ACL}agentGroup`).size + auth.agentClass.size > 1) {
+      const copy = clone(auth as Term, dataset, dataset, targets);
+      copy.values(ACL + selector).delete(principal);
+      for (const scope of scopes) copy.add(ACL + scope, resource);
     }
-    copy.values(ACL + selector).delete(principal);
+    for (const scope of scopes) rule.values(ACL + scope).delete(resource);
+    if (!targets.some((predicate) => rule.terms(predicate).size > 0)) {
+      // Remove the authorization while preserving unrelated statements on its subject.
+      rule.values(`${RDF}type`).delete(`${ACL}Authorization`);
+      for (const name of ["agent", "agentGroup", "agentClass", "mode", "origin"])
+        rule.terms(ACL + name).clear();
+    }
   }
   const same =
     modes.length === memberModes.length && modes.every((mode) => memberModes.includes(mode));
@@ -392,7 +395,7 @@ export function replaceWac(
         ];
   for (const [ruleModes, scopes] of rules) {
     if (!ruleModes.length) continue;
-    const rule = properties(DataFactory.blankNode(), dataset);
+    const rule = properties(dataset.createBlankNode(), dataset);
     rule.add(`${RDF}type`, `${ACL}Authorization`);
     for (const scope of scopes) rule.add(ACL + scope, resource);
     rule.add(ACL + selector, principal);

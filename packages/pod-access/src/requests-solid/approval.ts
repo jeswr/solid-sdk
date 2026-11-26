@@ -108,6 +108,8 @@ export interface DecisionResult {
     /** Strongest applied role. Use targetRoles for the exact role on each target. */
     role: "viewer" | "editor";
     targetRoles: Record<string, "viewer" | "editor">;
+    /** Granted classes per target URL, when the pinned record includes their provenance. */
+    targetDataTypes?: Record<string, string[]>;
     expiresAt?: Date;
   };
   /** Always false: expiresAt is receipt metadata; WAC/ACP roles do not enforce it. */
@@ -932,6 +934,7 @@ async function runDecision(
           roleFor(snapshot.targetModes[target] as RequestMode[]),
         ]),
       ),
+      ...(snapshot.targetDataTypes && { targetDataTypes: snapshot.targetDataTypes }),
       ...(snapshot.expiresAt !== undefined && { expiresAt: new Date(snapshot.expiresAt) }),
     },
     ...locations,

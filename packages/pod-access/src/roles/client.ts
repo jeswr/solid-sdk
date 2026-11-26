@@ -1000,6 +1000,8 @@ export async function setScopedGrants(
   selection: ScopedGrantSelection,
   options: GrantMutationOptions & { expected?: ScopedGrantSnapshot },
 ): Promise<SetGrantsResult> {
+  if ("securing" in options || "ownOnly" in options)
+    throw roleError("unsupported", url, "Scoped edits do not accept securing or ownOnly");
   // Refuse malformed selections before any request, as setGrants does.
   for (const scope of SCOPES) {
     const seen = new Set<string>();

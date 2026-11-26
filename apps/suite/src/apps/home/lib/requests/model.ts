@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The Requests inbox view model (03-home-permissions §2.5): requester names, the ConsentSheet
@@ -257,9 +258,8 @@ export type AppliedChoices = NonNullable<DecisionResult["choices"]>;
 
 /**
  * What an approval actually applied, from the choices the SDK reports (`DecisionResult.choices`).
- * They can differ from what this sheet sent: another tab may have approved first. Only data types
- * that were granted a mode are named (a change-only type under a Viewer approval was not), and a
- * Viewer approval can only see.
+ * Another tab may have approved first. Name a whole card only when all its shareable classes
+ * were granted, and call it editable only when every target for each class received Editor.
  */
 export function recordedMessage(
   name: string,
@@ -267,12 +267,32 @@ export function recordedMessage(
   applied: AppliedChoices,
   notified: boolean,
 ): string {
-  const chosen = cards.filter((card) =>
-    card.shareableTypes.some((type) => applied.dataTypes.includes(type)),
-  );
-  if (chosen.length === 0) return finishedMessage(name, notified);
-  const change = applied.role === "editor" && chosen.some((card) => card.modes.includes("write"));
-  return `${name} can now ${change ? "see and change" : "see"} your ${listText(cardLabels(chosen))}.${notified ? "" : NOT_TOLD(name)}`;
+  const granted = new Set(applied.dataTypes);
+  const editableByType = new Map<string, boolean>();
+  for (const [target, types] of Object.entries(applied.targetDataTypes ?? {})) {
+    for (const type of types)
+      editableByType.set(
+        type,
+        editableByType.get(type) !== false && applied.targetRoles[target] === "editor",
+      );
+  }
+  // Without class provenance, only a uniform grant can establish edit access for a whole card.
+  const roles = Object.values(applied.targetRoles);
+  const allEditable = roles.length > 0 && roles.every((role) => role === "editor");
+  const see: string[] = [];
+  const edit: string[] = [];
+  for (const card of cards) {
+    if (!isShareable(card) || !card.shareableTypes.every((type) => granted.has(type))) continue;
+    const labels = card.shareableTypes.every((type) => editableByType.get(type) ?? allEditable)
+      ? edit
+      : see;
+    labels.push(card.label);
+  }
+  const actions: string[] = [];
+  if (see.length) actions.push(`see your ${listText(see)}`);
+  if (edit.length) actions.push(`${see.length ? "edit" : "see and change"} your ${listText(edit)}`);
+  if (!actions.length) return finishedMessage(name, notified);
+  return `${name} can now ${listText(actions)}.${notified ? "" : NOT_TOLD(name)}`;
 }
 
 /** Added to a confirmation when an expiry was sent but the storage won't enforce it. */
@@ -340,7 +360,7 @@ export type ReviewError =
       message: string;
       /** Whether running the same decision again can succeed. */
       retry: boolean;
-      /** An approval is pinned with other choices: only finishing it (no choices) can work. */
+      /** An approval is pinned with other choices. Finish must match that pin. */
       finish?: true;
       /** Approving can't work, but denying can: offer Deny first. */
       deny?: true;

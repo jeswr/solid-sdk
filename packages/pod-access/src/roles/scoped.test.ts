@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Claude Opus 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { AclResource } from "@solid/object";
@@ -71,14 +72,9 @@ for (const model of ["wac", "acp"] as const)
         expect(
           rules
             .map((auth) => {
-              // replaceWac leaves the split original rule with no targets; it grants nothing.
               const node = properties(auth, auth.dataset);
               return [node.iris(`${ACL}accessTo`), node.iris(`${ACL}default`), auth.mode.size];
             })
-            .filter(
-              ([accessTo, defaults]) =>
-                (accessTo as string[]).length + (defaults as string[]).length,
-            )
             .sort((a, b) => String(a).localeCompare(String(b))),
         ).toEqual([
           [[], [folder], 3],
@@ -269,6 +265,23 @@ for (const model of ["wac", "acp"] as const)
           .failed[0]?.error,
       ).toMatchObject({ code: "precondition-required" });
       expect(mem.writes()).toHaveLength(0);
+    });
+
+    it.each(["securing", "ownOnly"])("rejects a caller's %s option before I/O", async (option) => {
+      const { mem, options } = await setup();
+      for (const value of [true, false, undefined]) {
+        await expect(
+          setScopedGrants(
+            folder,
+            { folder: [manager], contents: [manager] },
+            {
+              ...options,
+              [option]: value,
+            },
+          ),
+        ).rejects.toMatchObject({ name: "RoleError", code: "unsupported", url: folder });
+      }
+      expect(mem.calls).toHaveLength(0);
     });
 
     it("keeps unrelated principals and rules when splitting one principal", async () => {
