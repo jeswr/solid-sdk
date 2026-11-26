@@ -13,7 +13,7 @@
 - `.` (`dist/index.d.ts`): `ANONYMOUS_SCOPE`, `AppShellConfig`, `CACHE_PREFIX`, `CACHE_PROVENANCE_HEADER`, `CacheMetadata`, `CacheStorageLike`, `DB_PREFIX`, `DEFAULT_CACHE_NAME`, `DEFAULT_DB_NAME`, `DEFAULT_WARM_BUDGET`, `InvalidateDeps`, `InvalidateOutcome`, `NotificationActivityType`, `NotificationFrame`, `NotificationsClientConfig`, `OfflineClient`, `OfflineClientConfig`, `OfflineEvent`, `OfflineStatusSnapshot`, `OfflineStatusSurface`, `PageCache`, `PageCacheOptions`, `PageToWorkerMessage`, `PurgeDeps`, `PurgeResult`, `ResolvedAppShellConfig`, `ResolvedWarmBudget`, `ResourceFreshness`, `RevalidationEvent`, `ShellCache`, `ShellCacheStorage`, `ShellDeps`, `ShellResult`, `ShellServeSource`, `StatusListener`, `StatusSurfaceOptions`, `SweepResult`, `UpdatedEvent`, `UpdatedListener`, `WarmBudget`, `WarmConfig`, `WarmController`, `WarmDeps`, `WarmResult`, `WarmVisit`, `assetConfigCandidates`, `cacheNameForWebId`, `cacheProvenance`, `cleanupOldShellCaches`, `containerChildren`, `createOfflineClient`, `createPageCache`, `createStatusSurface`, `createWarmController`, `dbNameForWebId`, `deriveSeeds`, `handleNavigation`, `handleNotification`, `handlePrecachedAsset`, `isPrecachedAsset`, `isScopeChange`, `onIdle`, `parseWacAllow`, `precacheAppShell`, `purgeForWebId`, `resolveAppShellConfig`, `resolveAssetShellConfig`, `resolveBudget`, `resolveServingShellConfig`, `resyncSweep`, `sameShellConfig`, `scopeFor`, `scopeHash`, `shellBucketComplete`, `shellCacheName`, `typeIndexTargets`, `userCanRead`, `warm`
 - `./worker` (`dist/worker.d.ts`): _(no named exports)_
 - `./react` (`dist/react.d.ts`): `OfflineStatusSnapshot`, `OfflineStatusSurface`, `ResourceFreshness`, `ResourceState`, `UseOfflineResourceOptions`, `UseOfflineResourceResult`, `UseOfflineStatusResult`, `useOfflineResource`, `useOfflineStatus`
-- `./outbox` (`dist/outbox.d.ts`): `ConflictRecord`, `GuardPolicy`, `GuardedDelivery`, `JsonValue`, `Outbox`, `OutboxGuard`, `OutboxItem`, `OutboxOperation`, `QueueOption`, `QueueingStorageClient`, `QueueingWriteResult`, `ReplayDelegate`, `ReplayOptions`, `createOutbox`, `withOutbox`
+- `./outbox` (`dist/outbox.d.ts`): `ConflictRecord`, `GuardPolicy`, `GuardedDelivery`, `JsonValue`, `Outbox`, `OutboxGuard`, `OutboxItem`, `OutboxOperation`, `QuarantinedRecord`, `QueueOption`, `QueueingStorageClient`, `QueueingWriteResult`, `ReplayDelegate`, `ReplayOptions`, `createOutbox`, `discardQuarantined`, `quarantinedRecords`, `withOutbox`
 - `./journal` (`dist/journal.d.ts`): `DurableJournal`, `IntentStorage`, `browserIntentStorage`, `withJournalLock`
 - `./merge` (`dist/merge.d.ts`): `mergeRdf`
 
@@ -1148,6 +1148,18 @@ interface ConflictRecord {
     remoteEtag: string | null;
     contentType: string;
 }
+/**
+ * A stored record that cannot be shown or sent: a malformed envelope, an item with an invalid
+ * required field, or a conflict with an invalid field. Nothing here is copied from the record's
+ * body except an `itemId` in the shape the outbox generates. `id` is a surrogate derived from the
+ * IndexedDB key. A quarantined conflict still holds its URL until it is discarded.
+ */
+interface QuarantinedRecord {
+    id: string;
+    itemId?: string;
+    conflict: boolean;
+    invalid: true;
+}
 /** Persistable input. Signals and credentials are never stored. */
 interface OutboxOperation {
     op: OutboxItem['op'];
@@ -1213,6 +1225,7 @@ interface Outbox {
     retry(id?: string): Promise<void>;
     /** Drop an intent, even during replay. An already-started request may still complete. */
     discard(id: string): Promise<void>;
+    /** Also accepts a quarantined conflict's ID, for `'theirs'` only. */
     resolve(id: string, strategy: 'mine' | 'theirs' | 'both'): Promise<void>;
     on(event: 'change' | 'conflict', listener: () => void): () => void;
     /** Deletes only this WebID's queue. Logout deliberately does not call this. */
@@ -1247,10 +1260,18 @@ declare function createOutbox(options: {
     now?: () => number;
     namespace?: string;
 }): Outbox;
+/**
+ * Stored records withheld from `pending()`/`conflicts()` because they are invalid. A
+ * quarantined conflict holds its URL until it is discarded or resolved with `'theirs'`.
+ * Empty for an outbox that createOutbox did not make or that is closed.
+ */
+declare function quarantinedRecords(outbox: Outbox): QuarantinedRecord[];
+/** Deletes one quarantined record by its `QuarantinedRecord.id`, sending nothing. */
+declare function discardQuarantined(outbox: Outbox, id: string): Promise<void>;
 /** Opt-in only. Patch/move and every read keep the wrapped client's behavior. */
 declare function withOutbox(client: StorageClient, outbox: Outbox): QueueingStorageClient;
 
-export { type ConflictRecord, type GuardPolicy, type GuardedDelivery, type JsonValue, type Outbox, type OutboxGuard, type OutboxItem, type OutboxOperation, type QueueOption, type QueueingStorageClient, type QueueingWriteResult, type ReplayDelegate, type ReplayOptions, createOutbox, withOutbox };
+export { type ConflictRecord, type GuardPolicy, type GuardedDelivery, type JsonValue, type Outbox, type OutboxGuard, type OutboxItem, type OutboxOperation, type QuarantinedRecord, type QueueOption, type QueueingStorageClient, type QueueingWriteResult, type ReplayDelegate, type ReplayOptions, createOutbox, discardQuarantined, quarantinedRecords, withOutbox };
 ```
 
 ### `dist/journal.d.ts`

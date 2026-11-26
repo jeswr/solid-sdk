@@ -8,6 +8,7 @@ node_modules/
 dist/
 
 coverage/
+/packages/*/etc/.*.api.expected.md
 *.tsbuildinfo
 *.log
 .vitest/

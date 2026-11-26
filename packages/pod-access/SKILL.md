@@ -221,8 +221,15 @@ New records distinguish an omitted role explicitly. Explicitly different legacy
 roles refuse with the inferred role in the error, in both `decide` and `previewDecision`.
 Different choices refuse. Approval results include `choices`
 with the actual granted types, strongest applied `role`, exact roles per target URL in
-`targetRoles`, and recorded expiry (`Date`), including on
-completed replays that ignore new choices. A lost pin or CAS reports the request's re-read status
+`targetRoles`, each target's source classes in `targetDataTypes` when the record includes them,
+and recorded expiry (`Date`), including on
+completed replays that ignore new choices. Snapshot validation requires sorted, unique
+chosen/granted type lists, chosen within the request, granted within chosen, and an end date that
+is exactly the ISO instant `decide` writes. `listRequests` attaches `recorded: RecordedChoices`
+(`{ dataTypes (chosen), grantedTypes, role? (only when chosen), expiresAt? }`, the passback form
+`decide` resumes) to pending/Approving entries with an owner-pinned approval: read-only via
+`recordsKey(..., expected, readOnly = true)` on WAC and ACP, at most four lookups at once,
+fail-closed (any refusal attaches nothing), cancellation propagates. A lost pin or CAS reports the request's re-read status
 in `RequestConflictError`.
 
 For ACP records, use the roles layer's raw bounded ACR discovery, preserving all triples rather
@@ -318,11 +325,14 @@ and other grant callers (root, `settings/`, reserved folders, access documents, 
 encodings); requests-solid approval uses it. `sealAccess`/`isSealed`/`unsealAccess` keep an
 owner's seal in a resource's own access document (only Control can write it): seal last, after
 verifying what it governs, and trust contents only while sealed; `sealDataset` seals an offline
-document. Limits: anyone who held Control on the resource before it was secured can forge the
+document. `setGrants` `securing: true` writes the caller's securing mark (`pa:securingBy`) in the
+same write as the policy; `isSecuring` reads it (own document, caller only), sealing removes it,
+role edits and unsealing keep it: "marked and unsealed" means "written by others, never keep". Limits: anyone who held Control on the resource before it was secured can forge the
 owner's seal and then drop their own access (inherent to seals), and the owner widening then
 narrowing a sealed resource elsewhere keeps the seal. A seal can be dropped by any editor that
 rewrites the document without unknown statements, so treat "unsealed" as "ask the owner", never
-as "delete". Keep all of these documented in README.
+as "delete". Such an editor drops the securing mark the same way: an unmarked resource is not
+proof it was never being secured, so "unmarked" falls back to that generic "ask the owner" warning. Keep all of these documented in README.
 
 `readGrants` returns `{ url, grants, version }` as an opaque JSON-serialisable `GrantSnapshot`;
 `grantsWithRoles` remains `(await readGrants(url, options)).grants`. Preserve the version token
@@ -397,6 +407,20 @@ and own-ACR `accessControl` management. Member `memberAccess` and own-ACR
 shared with own-ACR management. Never rewrite descendant access
 documents. Test shared principals, foreign targets, metadata, both scopes, owner lockout
 and ETag races; preserve 100% coverage.
+
+`readScopedGrants(url, options)` and `setScopedGrants(url, { folder, contents }, options)` are the
+scope-aware folder editor (sst-uo4.4): folders only (`kind: "folder"`, URL ending `/`), CSS dialect
+only, no comments container. Reads show both scopes instead of refusing `partial-scope`; the token is
+the same opaque version as `readGrants`. Writes need the folder's own document (an inherit-only
+folder is `unsupported`), the caller's Control on both scopes (or inherited ACP Control), valid
+ETags, and pass `expected` from `readScopedGrants` for a conflict check. Equal per-principal modes
+share one rule (WAC `accessTo`+`default`, ACP `accessControl`+`memberAccessControl`); different modes
+get a resource-only and a members-only rule (`replaceWac(..., memberModes)`,
+`appendAcp(..., "only")`). Generated RDF is re-read per scope before the PUT; ACP removals run
+`pruneAcp`. Unrelated principals, unprojectable rules and inherited rows keep the same rules as
+`setGrants`. Scoped edits never mark or unseal. Reject `securing` and `ownOnly` options before I/O.
+Malformed selections (metadata, duplicates, Commenter) throw before any request. A
+split folder stays `partial-scope` for every other role operation, moves and request approvals.
 
 `movePreservingAccess(storage, from, destinationContainer, options)` extends the role mutation
 options with `name?`, `acceptReset?`, and `signal?`. Native moves bypass access. Emulated Solid

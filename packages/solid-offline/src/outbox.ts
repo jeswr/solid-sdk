@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import {
   type Body,
   type CreateOptions,
@@ -48,6 +49,19 @@ export interface ConflictRecord {
   localEtag: string | null;
   remoteEtag: string | null;
   contentType: string;
+}
+
+/**
+ * A stored record that cannot be shown or sent: a malformed envelope, an item with an invalid
+ * required field, or a conflict with an invalid field. Nothing here is copied from the record's
+ * body except an `itemId` in the shape the outbox generates. `id` is a surrogate derived from the
+ * IndexedDB key. A quarantined conflict still holds its URL until it is discarded.
+ */
+export interface QuarantinedRecord {
+  id: string;
+  itemId?: string;
+  conflict: boolean;
+  invalid: true;
 }
 
 /** Persistable input. Signals and credentials are never stored. */
@@ -119,6 +133,7 @@ export interface Outbox {
   retry(id?: string): Promise<void>;
   /** Drop an intent, even during replay. An already-started request may still complete. */
   discard(id: string): Promise<void>;
+  /** Also accepts a quarantined conflict's ID, for `'theirs'` only. */
   resolve(id: string, strategy: 'mine' | 'theirs' | 'both'): Promise<void>;
   on(event: 'change' | 'conflict', listener: () => void): () => void;
   /** Deletes only this WebID's queue. Logout deliberately does not call this. */
@@ -179,6 +194,10 @@ const sessions = new WeakMap<
   }
 >();
 const underlying = new WeakMap<StorageClient, StorageClient>();
+const quarantines = new WeakMap<
+  Outbox,
+  { list(): QuarantinedRecord[]; discard(id: string): Promise<void> }
+>();
 // Also serialize instances in the same realm, including tests without Web Locks.
 const queues = new WeakMap<IDBFactory, Map<string, Promise<unknown>>>();
 const encoder = new TextEncoder();
@@ -194,6 +213,7 @@ const networkFailure = (error: unknown) =>
 class MissingDelegateError extends Error {}
 class GuardRequiredError extends Error {}
 class InvalidRequestError extends TypeError {}
+const invalidDestination = '[solid-offline] invalid stored request destination';
 
 function canonicalTarget(url: string, storage?: StorageClient): string {
   // Match storage-client's http.scoped / mutation target normalization. isWithinStorage
@@ -229,7 +249,7 @@ function describeRequest(
     return { op: operation.op, url: canonicalTarget(operation.url, storage) };
   }
   const container = canonicalTarget(operation.container as string, storage);
-  const { name, kind = 'resource' } = operation.createOptions ?? {};
+  const { name, kind = 'resource', exactUrl } = operation.createOptions ?? {};
   if (kind !== 'resource' && kind !== 'container')
     throw new TypeError('[solid-offline] invalid create kind');
   let exactName = storage ? storage.protocol === 'solid' : mode === 'solid';
@@ -246,40 +266,128 @@ function describeRequest(
   // leave hint validation to the backend, including names containing '/'.
   if (exactName && !container.endsWith('/'))
     throw new TypeError('[solid-offline] expected a container URL');
+  // An exact create targets exactUrl itself (StorageClient checks it is a direct child), so
+  // bind and describe that URL rather than the container.
   const url =
-    exactName && name !== undefined
-      ? canonicalTarget(`${childUrl(container, name)}${kind === 'container' ? '/' : ''}`, storage)
-      : container;
+    exactUrl !== undefined
+      ? canonicalTarget(exactUrl, storage)
+      : exactName && name !== undefined
+        ? canonicalTarget(`${childUrl(container, name)}${kind === 'container' ? '/' : ''}`, storage)
+        : container;
   return { op: 'create', url, container, name, kind };
 }
 
+/** Read only the fields describeRequest uses; never enumerate a stored item. */
 function recordOperation(record: StoredItem): OutboxOperation {
-  return {
-    ...record.item,
-    createOptions: record.createOptions,
-  };
+  const { op, url, container } = record.item;
+  return { op, url, container, createOptions: storedOptions(record).createOptions };
 }
 
-function storedRequest(record: StoredItem, storage?: StorageClient): RequestDescription {
+interface DispatchOptions {
+  body: Uint8Array | null;
+  ifMatch?: string;
+  keepalive?: boolean;
+  createOptions?: OutboxOperation['createOptions'];
+  deleteOptions?: OutboxOperation['deleteOptions'];
+}
+
+/**
+ * Copy a stored record's dispatch fields by name and type before any of them reaches storage
+ * or a delegate. Unknown option keys are dropped; a present field of the wrong type fails the
+ * record, because omitting it would change the request.
+ */
+function storedOptions(record: StoredItem): DispatchOptions {
+  const invalid = () => new InvalidRequestError('[solid-offline] invalid stored request options');
+  const read = (source: object, key: string, valid: FieldCheck): unknown => {
+    if (!Object.hasOwn(source, key)) return undefined;
+    const value = (source as Record<string, unknown>)[key];
+    if (value !== undefined && !valid(value)) throw invalid();
+    return value;
+  };
+  const boolean: FieldCheck = (value) => typeof value === 'boolean';
+  const object = (value: unknown): value is object => typeof value === 'object' && value !== null;
+  const body = read(record, 'body', (value) => value === null || value instanceof Uint8Array);
+  const options: DispatchOptions = { body: (body ?? null) as Uint8Array | null };
+  const ifMatch = read(record, 'ifMatch', string);
+  if (ifMatch !== undefined) options.ifMatch = ifMatch as string;
+  const keepalive = read(record, 'keepalive', boolean);
+  if (keepalive !== undefined) options.keepalive = keepalive as boolean;
+  const create = read(record, 'createOptions', object);
+  if (create) {
+    const copy: Record<string, unknown> = {};
+    const fields: [string, FieldCheck][] = [
+      ['exactUrl', string],
+      ['contentType', string],
+      ['kind', oneOf('resource', 'container')],
+      ['name', string],
+      ['keepalive', boolean],
+      [
+        'links',
+        (value) =>
+          Array.isArray(value) && value.every((link) => pickFields(link, linkFields) !== undefined),
+      ],
+    ];
+    for (const [key, valid] of fields) {
+      const value = read(create as object, key, valid);
+      if (value === undefined) continue;
+      copy[key] =
+        key === 'links' ? (value as object[]).map((link) => pickFields(link, linkFields)) : value;
+    }
+    options.createOptions = copy as DispatchOptions['createOptions'];
+  }
+  const remove = read(record, 'deleteOptions', object);
+  if (remove) {
+    const recursive = read(remove as object, 'recursive', boolean);
+    options.deleteOptions = recursive === undefined ? {} : { recursive: recursive as boolean };
+  }
+  if (options.keepalive === undefined && options.createOptions?.keepalive !== undefined)
+    options.keepalive = options.createOptions.keepalive;
+  return options;
+}
+
+function storedRequest(
+  record: StoredItem,
+  storage?: StorageClient,
+  hydrating = false,
+): RequestDescription {
   try {
+    const operation = recordOperation(record);
     const request = describeRequest(
-      recordOperation(record),
+      operation,
       storage,
       record.createMode ?? (record.request ? 'solid' : 'container'),
     );
-    if (record.request !== undefined) {
-      const keys = ['op', 'url', 'container', 'name', 'kind'] as const;
+    const bound = record.request;
+    if (bound !== undefined) {
+      const keys = ['op', 'container', 'name', 'kind'] as const;
       if (
-        !record.request ||
-        keys.some((key) => request[key] !== record.request?.[key]) ||
-        record.item.url !== request.url ||
+        !bound ||
+        keys.some((key) => request[key] !== bound[key]) ||
+        record.item.url !== bound.url ||
         (request.op === 'create' && record.item.name !== request.name)
       )
         throw new TypeError('destination mismatch');
+      const exactUrl = operation.createOptions?.exactUrl;
+      if (request.op === 'create' && bound.url === request.container && exactUrl !== undefined) {
+        // Older exact creates bound both URLs to the parent. canonicalTarget already checked
+        // the URL syntax and scope; mirror storage-client's exactCreateSegment child checks.
+        const container = request.kind === 'container';
+        if (
+          !hydrating ||
+          record.createMode !== 'container' ||
+          record.item.container !== bound.url ||
+          request.name !== undefined ||
+          exactUrl !== request.url ||
+          request.url === bound.url ||
+          request.url.endsWith('/') !== container ||
+          new URL(container ? '../' : '.', request.url).href !== bound.url
+        )
+          throw new TypeError('invalid legacy exact create');
+      } else if (bound.url !== request.url) throw new TypeError('destination mismatch');
     }
     return request;
   } catch {
-    throw new InvalidRequestError('[solid-offline] invalid stored request destination');
+    throw new InvalidRequestError(invalidDestination);
   }
 }
 
@@ -312,6 +420,16 @@ function assertGuardPolicy(
     throw new GuardRequiredError('[solid-offline] guard required by registered policy');
 }
 
+/** A stored value that is at least `{ item: object }`; anything else is set aside unread. */
+function envelope(record: unknown): record is StoredItem {
+  if (typeof record !== 'object' || record === null || !Object.hasOwn(record, 'item')) return false;
+  const item = (record as { item: unknown }).item;
+  return typeof item === 'object' && item !== null;
+}
+
+/** The shape of IDs the outbox itself generates (crypto.randomUUID). */
+const generatedId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 function errorMessage(error: unknown): string {
   try {
     return error instanceof Error ? error.message : String(error);
@@ -320,10 +438,82 @@ function errorMessage(error: unknown): string {
   }
 }
 
+function validTag(tag: unknown): tag is string {
+  // Defence in depth: the anchored pattern already stops by character 65, but a length
+  // check rejects a corrupted stored tag without running the pattern at all.
+  return typeof tag === 'string' && tag.length <= 64 && /^[a-z][a-z0-9.-]{0,63}$/.test(tag);
+}
+
 function validateTag(tag: unknown): asserts tag is string {
-  if (typeof tag !== 'string' || !/^[a-z][a-z0-9.-]{0,63}$/.test(tag)) {
-    throw new TypeError('[solid-offline] invalid guard tag');
+  if (!validTag(tag)) throw new TypeError('[solid-offline] invalid guard tag');
+}
+
+type FieldCheck = (value: unknown) => boolean;
+/** A public field: its name, its value check, and whether the record is invalid without it. */
+type Field<T> = [key: keyof T, valid: FieldCheck, required?: true];
+const string: FieldCheck = (value) => typeof value === 'string';
+const optionalString: FieldCheck = (value) => value === undefined || typeof value === 'string';
+const nullableString: FieldCheck = (value) => value === null || typeof value === 'string';
+const count: FieldCheck = (value) =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0;
+const oneOf =
+  (...values: unknown[]): FieldCheck =>
+  (value) =>
+    values.includes(value);
+
+/** Public item fields in creation order; `guard` and `blocked` are derived separately. */
+const itemFields: Field<OutboxItem>[] = [
+  ['id', string, true],
+  ['op', oneOf('write', 'create', 'delete'), true],
+  ['url', string, true],
+  ['container', optionalString],
+  ['name', optionalString],
+  ['contentType', optionalString],
+  ['label', optionalString],
+  ['size', count, true],
+  ['createdAt', count, true],
+  ['status', oneOf('waiting', 'replaying', 'failed', 'conflict'), true],
+  ['error', optionalString],
+];
+
+const linkFields: Field<{ rel: string; target: string }>[] = [
+  ['rel', string, true],
+  ['target', string, true],
+];
+
+/** Conflict fields in creation order; every one is required. */
+const conflictFields: Field<ConflictRecord>[] = [
+  ['id', string, true],
+  ['itemId', string, true],
+  ['url', string, true],
+  ['kind', oneOf('rdf', 'binary'), true],
+  ['localEtag', nullableString, true],
+  ['remoteEtag', nullableString, true],
+  ['contentType', string, true],
+];
+
+/**
+ * Copy a stored record's public fields by name, keeping only values of the expected
+ * type. A corrupted record's other keys are never enumerated or exposed, and an
+ * unexpected optional value (such as an object label) is omitted rather than returned
+ * by reference. Returns undefined when a required field is missing or invalid.
+ */
+function pickFields<T>(source: unknown, fields: Field<T>[]): T | undefined {
+  if (typeof source !== 'object' || source === null) return undefined;
+  const copy: Partial<T> = {};
+  for (const [key, valid, required] of fields) {
+    const present = Object.hasOwn(source, key);
+    const value = present ? (source as T)[key] : undefined;
+    if (present && valid(value)) copy[key] = value;
+    else if (required) return undefined;
   }
+  return copy as T;
+}
+
+/** Fail a stored item whose public fields cannot be shown, so it is never replayed unseen. */
+function assertStoredItem(record: StoredItem): void {
+  if (!pickFields(record.item, itemFields))
+    throw new InvalidRequestError('[solid-offline] invalid stored item');
 }
 
 /**
@@ -656,6 +846,8 @@ export function createOutbox(options: {
       : `solid-offline-outbox:${options.namespace}:${encodeURIComponent(options.webId)}`;
   const listeners = { change: new Set<() => void>(), conflict: new Set<() => void>() };
   let records: StoredItem[] = [];
+  // Stored values that are not `{ item: object }` envelopes: never read, sent or mutated.
+  let malformed: StoredItem[] = [];
   let closed = false;
   const controller = new AbortController();
   const delegates = new Map<string, ReplayDelegate>();
@@ -694,12 +886,25 @@ export function createOutbox(options: {
       const request = store.getAll();
       request.onsuccess = () => {
         for (const record of request.result as StoredItem[]) {
+          // Set aside a record without an item object; touching it would abort the transaction.
+          if (!envelope(record)) continue;
           try {
+            assertStoredItem(record);
+            storedOptions(record);
             const storage = clients.get(outbox);
-            const description = storedRequest(record, storage);
+            const description = storedRequest(record, storage, true);
             const guard = storedGuard(record);
-            // Legacy records acquire a destination binding once a client is available.
-            if (record.request === undefined && storage) {
+            const rebindExact =
+              record.request !== undefined && record.request.url !== description.url;
+            if (rebindExact || (record.request === undefined && storage)) {
+              if (rebindExact) {
+                if (record.conflict?.url === record.item.url) record.conflict.url = description.url;
+                // An earlier hydration may already have failed this legacy binding.
+                if (record.item.status === 'failed' && record.item.error === invalidDestination) {
+                  record.item.status = record.conflict ? 'conflict' : 'waiting';
+                  delete record.item.error;
+                }
+              }
               record.request = description;
               record.createMode = description.url === description.container ? 'container' : 'solid';
               record.item.url = description.url;
@@ -726,8 +931,9 @@ export function createOutbox(options: {
       };
       return request;
     });
-    loaded.sort((a, b) => a.item.createdAt - b.item.createdAt || (a.order ?? 0) - (b.order ?? 0));
-    records = loaded;
+    malformed = loaded.filter((record) => !envelope(record));
+    records = loaded.filter(envelope);
+    records.sort((a, b) => a.item.createdAt - b.item.createdAt || (a.order ?? 0) - (b.order ?? 0));
   }
 
   function emit(event: 'change' | 'conflict'): void {
@@ -824,9 +1030,10 @@ export function createOutbox(options: {
     signal?: AbortSignal,
   ): Promise<void> {
     const { item } = record;
+    assertStoredItem(record);
     const request = storedRequest(record, storage);
     const guard = storedGuard(record);
-    const keepalive = record.keepalive ?? record.createOptions?.keepalive;
+    const { body, ifMatch, keepalive, createOptions, deleteOptions } = storedOptions(record);
     assertGuardPolicy(outbox, request, guard);
     if (guard) {
       await deliverGuarded(
@@ -837,11 +1044,11 @@ export function createOutbox(options: {
           container: request.container ?? item.container,
           name: request.op === 'create' ? request.name : item.name,
           contentType: item.contentType,
-          body: record.body,
-          ifMatch: record.ifMatch,
+          body,
+          ifMatch,
           keepalive,
-          createOptions: record.createOptions,
-          deleteOptions: record.deleteOptions,
+          createOptions,
+          deleteOptions,
           purpose: 'replay',
         },
         storage,
@@ -850,21 +1057,17 @@ export function createOutbox(options: {
       return;
     }
     if (item.op === 'delete') {
-      await storage.delete(request.url, {
-        ...record.deleteOptions,
-        ifMatch: record.ifMatch,
-        signal,
-      });
+      await storage.delete(request.url, { ...deleteOptions, ifMatch, signal });
     } else if (item.op === 'create') {
-      await storage.create(request.container as string, record.body, {
-        ...record.createOptions,
+      await storage.create(request.container as string, body, {
+        ...createOptions,
         keepalive,
         signal,
       });
     } else {
-      await storage.write(request.url, record.body ?? new Uint8Array(), {
+      await storage.write(request.url, body ?? new Uint8Array(), {
         contentType: item.contentType as string,
-        ifMatch: record.ifMatch as string,
+        ifMatch: ifMatch as string,
         keepalive,
         signal,
       });
@@ -954,25 +1157,59 @@ export function createOutbox(options: {
     }
   }
 
+  function quarantine(): { entry: QuarantinedRecord; record: StoredItem }[] {
+    const entries = [];
+    for (const record of [...malformed, ...records]) {
+      const item = envelope(record) ? record.item : undefined;
+      const itemValid = item !== undefined && pickFields(item, itemFields) !== undefined;
+      const conflict = typeof record === 'object' && record !== null && Boolean(record.conflict);
+      if (itemValid && (!conflict || pickFields(record.conflict, conflictFields))) continue;
+      const itemId = item && Object.hasOwn(item, 'id') ? item.id : undefined;
+      entries.push({
+        entry: {
+          id: `invalid:${String(record.order)}`,
+          ...(typeof itemId === 'string' && generatedId.test(itemId) ? { itemId } : {}),
+          conflict,
+          invalid: true as const,
+        },
+        record,
+      });
+    }
+    return entries;
+  }
+
   const outbox: Outbox = {
     webId: options.webId,
     ready,
     pending: () =>
-      records.map((r) => {
-        const { guard: _guard, blocked: _blocked, ...item } = r.item;
-        return {
-          ...item,
-          ...(r.guard && typeof r.guard.tag === 'string' ? { guard: { tag: r.guard.tag } } : {}),
-          ...(r.item.status === 'waiting'
-            ? guardRequired(policies, storedRequest(r), r.guard)
-              ? { blocked: 'guard-required' as const }
-              : r.guard && !delegates.has(r.guard.tag)
-                ? { blocked: 'no-delegate' as const }
-                : {}
-            : {}),
-        };
+      records.flatMap((r) => {
+        // Hydration fails records whose public fields are invalid; never show one with a
+        // required field missing, nor an invalid stored tag.
+        const item = pickFields(r.item, itemFields);
+        if (!item) return [];
+        const tag = r.guard?.tag;
+        return [
+          {
+            ...item,
+            ...(validTag(tag) ? { guard: { tag } } : {}),
+            ...(r.item.status === 'waiting'
+              ? guardRequired(policies, storedRequest(r), r.guard)
+                ? { blocked: 'guard-required' as const }
+                : r.guard && !delegates.has(r.guard.tag)
+                  ? { blocked: 'no-delegate' as const }
+                  : {}
+              : {}),
+          },
+        ];
       }),
-    conflicts: () => records.flatMap((r) => (r.conflict ? [{ ...r.conflict }] : [])),
+    conflicts: () =>
+      records.flatMap((r) => {
+        // A conflict missing any field, or whose item is invalid (and so withheld from
+        // pending()), is withheld rather than shown partially.
+        const conflict =
+          r.conflict && pickFields(r.item, itemFields) && pickFields(r.conflict, conflictFields);
+        return conflict ? [conflict] : [];
+      }),
     async enqueue(operation) {
       if (
         operation.initialStatus !== undefined &&
@@ -1059,7 +1296,8 @@ export function createOutbox(options: {
     async localBody(id) {
       await ready;
       await refresh();
-      return records.find((r) => r.item.id === id || r.conflict?.id === id)?.body?.slice() ?? null;
+      const body = records.find((r) => r.item.id === id || r.conflict?.id === id)?.body;
+      return body instanceof Uint8Array ? body.slice() : null;
     },
     replay(storage, opts) {
       const raw = underlying.get(storage) ?? storage;
@@ -1072,6 +1310,8 @@ export function createOutbox(options: {
         for (const record of [...records]) {
           if (record.item.status !== 'failed' || (id !== undefined && record.item.id !== id))
             continue;
+          // An item invalid by construction would only fail again; it stays quarantined.
+          if (!pickFields(record.item, itemFields)) continue;
           record.item.status = 'waiting';
           delete record.item.error;
           await save(record);
@@ -1086,8 +1326,10 @@ export function createOutbox(options: {
       await transaction('readwrite', (store) => {
         const request = store.getAll();
         request.onsuccess = () => {
+          // Malformed stored values (no item object) are quarantined, never matched here.
           for (const record of request.result as StoredItem[])
-            if (record.item.id === id) store.delete(record.order as number);
+            if (typeof record?.item === 'object' && record.item !== null && record.item.id === id)
+              store.delete(record.order as number);
         };
         return request;
       });
@@ -1096,6 +1338,13 @@ export function createOutbox(options: {
     },
     resolve(id, strategy) {
       return exclusive(async () => {
+        const quarantined = quarantine().find(({ entry }) => entry.conflict && entry.id === id);
+        if (quarantined) {
+          if (strategy !== 'theirs')
+            throw new InvalidRequestError('[solid-offline] invalid stored conflict');
+          await drop(quarantined.record);
+          return;
+        }
         const record = records.find((r) => r.conflict?.id === id);
         if (!record) throw new Error('[solid-offline] conflict not found');
         const { item } = record;
@@ -1103,10 +1352,13 @@ export function createOutbox(options: {
           await drop(record);
           return;
         }
+        // Deliver nothing for an item whose public fields are invalid; the refresh that
+        // exclusive() ran has already marked it failed.
+        assertStoredItem(record);
         const storage = client();
         const request = storedRequest(record, storage);
         const guard = storedGuard(record);
-        const keepalive = record.keepalive ?? record.createOptions?.keepalive;
+        const { body, keepalive, createOptions: stored, deleteOptions } = storedOptions(record);
         assertGuardPolicy(outbox, request, guard);
         if (guard) delegateFor(outbox, guard.tag);
         if (strategy === 'mine') {
@@ -1132,18 +1384,18 @@ export function createOutbox(options: {
                 container: item.container,
                 name: item.name,
                 contentType: item.contentType ?? 'application/octet-stream',
-                body: record.body,
+                body,
                 ifMatch: head.etag,
                 keepalive,
-                deleteOptions: record.deleteOptions,
+                deleteOptions,
                 purpose: 'resolve-mine',
               },
               storage,
             );
           } else if (item.op === 'delete') {
-            await storage.delete(delivery.url, { ...record.deleteOptions, ifMatch: head.etag });
+            await storage.delete(delivery.url, { ...deleteOptions, ifMatch: head.etag });
           } else {
-            await storage.write(delivery.url, record.body ?? new Uint8Array(), {
+            await storage.write(delivery.url, body ?? new Uint8Array(), {
               contentType: item.contentType ?? 'application/octet-stream',
               ifMatch: head.etag,
               keepalive,
@@ -1161,9 +1413,11 @@ export function createOutbox(options: {
           const stem = dot > 0 ? original.slice(0, dot) : original;
           const ext = dot > 0 ? original.slice(dot) : '';
           const name = `${stem}${record.conflict?.kind === 'rdf' ? ' (copy)' : `-conflict-${now()}`}${ext}`;
-          // StorageClient.create's named Solid PUT uses If-None-Match: *.
+          // StorageClient.create's named Solid PUT uses If-None-Match: *. The copy is named,
+          // so an exact target (mutually exclusive with a name) is not carried over.
+          const { exactUrl: _exact, ...copyOptions } = stored ?? {};
           const createOptions = {
-            ...record.createOptions,
+            ...copyOptions,
             keepalive,
             name,
             contentType: item.contentType,
@@ -1186,14 +1440,14 @@ export function createOutbox(options: {
               {
                 ...delivery,
                 contentType: item.contentType,
-                body: record.body,
+                body,
                 createOptions,
                 keepalive,
                 purpose: 'resolve-both',
               },
               storage,
             );
-          } else await storage.create(delivery.container as string, record.body, createOptions);
+          } else await storage.create(delivery.container as string, body, createOptions);
         } else {
           throw new Error('[solid-offline] invalid conflict strategy');
         }
@@ -1220,13 +1474,39 @@ export function createOutbox(options: {
       policies.clear();
       sessions.delete(outbox);
       clients.delete(outbox);
+      quarantines.delete(outbox);
       channel?.close();
       listeners.change.clear();
       listeners.conflict.clear();
     },
   };
   sessions.set(outbox, { delegates, policies, signal: controller.signal });
+  quarantines.set(outbox, {
+    list: () => quarantine().map(({ entry }) => entry),
+    discard: (id) =>
+      exclusive(async () => {
+        const found = quarantine().find(({ entry }) => entry.id === id);
+        if (!found) throw new Error('[solid-offline] quarantined record not found');
+        await drop(found.record);
+      }),
+  });
   return outbox;
+}
+
+/**
+ * Stored records withheld from `pending()`/`conflicts()` because they are invalid. A
+ * quarantined conflict holds its URL until it is discarded or resolved with `'theirs'`.
+ * Empty for an outbox that createOutbox did not make or that is closed.
+ */
+export function quarantinedRecords(outbox: Outbox): QuarantinedRecord[] {
+  return quarantines.get(outbox)?.list() ?? [];
+}
+
+/** Deletes one quarantined record by its `QuarantinedRecord.id`, sending nothing. */
+export function discardQuarantined(outbox: Outbox, id: string): Promise<void> {
+  const quarantine = quarantines.get(outbox);
+  if (!quarantine) return Promise.reject(new Error('[solid-offline] outbox is closed'));
+  return quarantine.discard(id);
 }
 
 /** Opt-in only. Patch/move and every read keep the wrapped client's behavior. */

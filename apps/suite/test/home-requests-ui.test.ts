@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Claude Opus 5.5
 import type { ReactNode } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -58,7 +59,9 @@ vi.mock("next/link", () => ({
 
 import {
   type AccessRequestEntry,
+  type RecordedChoices,
   RequestConflictError,
+  type RequestDecision,
   UnsupportedAccessModelError,
 } from "@jeswr/pod-access/requests-solid";
 import { PermissionsPage } from "../src/apps/home/components/permissions/permissions-page";
@@ -311,6 +314,35 @@ it("without expiring access, disables the chips with a note and sends no expiry"
   );
 });
 
+it("words the toast from the applied choices when another tab approved first", async () => {
+  mocks.caps = { accessRequests: true, grantExpiry: true };
+  // This sheet sends Activity and Vitals until revoked; the other tab recorded Activity with an
+  // end date, and that is what was applied.
+  mocks.decide.mockResolvedValueOnce({
+    status: "approved",
+    receiptUrl: `${ROOT}r`,
+    notified: true,
+    expiryEnforced: false,
+    choices: {
+      dataTypes: [ACTIVITY_CLASS],
+      role: "editor",
+      targetRoles: {},
+      expiresAt: new Date("2027-01-01T00:00:00Z"),
+    },
+  });
+  await review();
+  await click(
+    [...dialog().querySelectorAll<HTMLElement>('[role="radio"]')].find(
+      (item) => item.textContent === "Until revoked",
+    ) as HTMLElement,
+  );
+  await click(button(dialog(), "Share"));
+  expect(mocks.decide.mock.calls[0]?.[1]).not.toHaveProperty("expiresAt");
+  expect(mocks.toast.success).toHaveBeenCalledWith(
+    `MaraCoach can now see your Activity. ${EXPIRY_NOT_ENFORCED}`,
+  );
+});
+
 it("asks before denying: Keep reviewing returns, Deny decides once", async () => {
   mocks.decide.mockResolvedValue({
     status: "denied",
@@ -429,7 +461,7 @@ it("freezes the choices after any failed approval: no editing, only Try again or
   logged.mockRestore();
 });
 
-it("offers Finish approving (no choices) when an earlier approval is still finishing", async () => {
+it("offers Finish approving when an earlier approval has no listed choices", async () => {
   mocks.decide.mockRejectedValueOnce(
     new Error(
       "An earlier approval of this request is still finishing with different choices; finish it first",
@@ -457,6 +489,64 @@ it("offers Finish approving (no choices) when an earlier approval is still finis
     `You finished approving MaraCoach's request. We couldn't tell MaraCoach; they'll see it next time they check. ${EXPIRY_NOT_ENFORCED}`,
   );
   expect(onDone).toHaveBeenCalledWith("approved");
+});
+
+it.each([
+  "pending",
+  "approving",
+] as const)("uses the owner's listed choices to finish an approval (status %s) and names only granted types", async (status) => {
+  const expiresAt = new Date("2028-05-09T12:34:56.789Z");
+  const recorded: RecordedChoices = {
+    dataTypes: status === "pending" ? [ACTIVITY_CLASS, SLEEP].sort() : [SLEEP],
+    grantedTypes: [SLEEP],
+    ...(status === "pending" && { role: "viewer" }),
+    expiresAt,
+  };
+  const entry = {
+    ...request,
+    status,
+    modesByType: { ...request.modesByType, [ACTIVITY_CLASS]: ["write"] },
+  } satisfies Readable;
+  // A concurrent approval can first appear in the refresh after Share is refused.
+  if (status === "pending") mocks.list.mockResolvedValueOnce([entry]);
+  mocks.list.mockResolvedValue([{ ...entry, recorded }]);
+  mocks.decide.mockImplementation(async (_entry: Readable, decision: RequestDecision) => {
+    // New pins compare role and expiry including omission. Omitted types keep the pinned set.
+    if (
+      decision.role !== recorded.role ||
+      decision.expiresAt?.toISOString() !== expiresAt.toISOString() ||
+      (decision.dataTypes &&
+        [...new Set(decision.dataTypes)].sort().join("\n") !== recorded.dataTypes.join("\n"))
+    )
+      throw new Error(
+        "An earlier approval of this request is still finishing with different choices; finish it first",
+      );
+    return {
+      status: "approved",
+      receiptUrl: `${ROOT}r`,
+      notified: true,
+      expiryEnforced: false,
+      choices: {
+        dataTypes: recorded.grantedTypes,
+        role: "viewer",
+        targetRoles: { [`${ROOT}sleep/1`]: "viewer" },
+        expiresAt,
+      },
+    };
+  });
+  const view = await mount(h(RequestsPage));
+  await click(button(view.host, status === "pending" ? "Review" : "Finish approving"));
+  if (status === "pending") await click(button(dialog(), "Share"));
+  await click(button(dialog(), "Finish approving"));
+  expect(mocks.toast.success).toHaveBeenCalledWith(
+    `MaraCoach can now see your Vitals. ${EXPIRY_NOT_ENFORCED}`,
+  );
+  expect(mocks.decide.mock.lastCall?.[1]).toStrictEqual({
+    approve: true,
+    dataTypes: recorded.dataTypes,
+    ...(recorded.role && { role: recorded.role }),
+    expiresAt,
+  });
 });
 
 it("after closing and reopening, a pin from the first sheet's choices hides the new ones", async () => {

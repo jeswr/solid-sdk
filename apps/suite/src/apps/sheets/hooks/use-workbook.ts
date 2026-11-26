@@ -2,8 +2,9 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { OpenedWorkbook, Snapshot, SnapshotSaved } from "../lib/contract";
-import { WorkbookNotFoundError } from "../lib/contract";
+import type { SessionResourceGrant } from "@/shell/session/types";
+import type { OpenedWorkbook, Snapshot, SnapshotSaved, WorkbookService } from "../lib/contract";
+import { PrivateWorkbookError, WorkbookNotFoundError } from "../lib/contract";
 import { pendingSaves } from "../lib/pending-saves";
 import { directChild } from "../lib/workbook/layout";
 import { useWorkbookService } from "../state/service";
@@ -16,11 +17,26 @@ export function useWorkbook(container: string) {
   const [attempt, setAttempt] = useState(0);
   const writer = useRef<ReturnType<typeof pendingSaves.acquire> | undefined>(undefined);
   const own = container.startsWith(service.root) && directChild(service.root, container);
+  // Each service is bound to one shell account and session.
+  const granted = useRef<{
+    container: string;
+    service: WorkbookService;
+    handle: SessionResourceGrant;
+  }>(undefined);
   const open = useCallback(async () => {
-    return {
-      opened: await (own ? service.open(container) : service.openShared(container)),
-      shared: !own,
-    };
+    if (own) return { opened: await service.open(container), shared: false };
+    const grant = granted.current;
+    const account = grant?.container === container && grant.service === service;
+    try {
+      const opened = await service.openShared(container, account ? { account } : undefined);
+      return { opened, shared: true };
+    } catch (error) {
+      if (account && error instanceof PrivateWorkbookError && error.reason === "denied") {
+        grant.handle.revoke();
+        if (granted.current === grant) granted.current = undefined;
+      }
+      throw error;
+    }
   }, [container, service, own]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries opening the workbook
@@ -93,6 +109,7 @@ export function useWorkbook(container: string) {
       throw failure;
     }
   };
+  const { grantShared } = service;
   return {
     workbook,
     readOnly: workbook?.readOnly === true,
@@ -108,5 +125,14 @@ export function useWorkbook(container: string) {
     flush: () => writer.current?.flush(),
     discard: () => writer.current?.discard(),
     retryOpen: () => setAttempt((value) => value + 1),
+    /** Present for a shared workbook the account may be able to open; call from the consent click. */
+    openWithAccount:
+      !own && grantShared
+        ? async () => {
+            const handle = await grantShared(container);
+            granted.current = { container, service, handle };
+            setAttempt((value) => value + 1);
+          }
+        : undefined,
   };
 }

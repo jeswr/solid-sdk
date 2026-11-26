@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Claude Opus 5.5
 /**
  * The Requests inbox view model (03-home-permissions §2.5): requester names, the ConsentSheet
@@ -8,6 +9,7 @@
 
 import {
   type AccessRequestEntry,
+  type DecisionResult,
   RequestConflictError,
   type RequestMode,
   UnsupportedAccessModelError,
@@ -251,6 +253,48 @@ export function finishedMessage(name: string, notified: boolean): string {
   return `You finished approving ${name}'s request.${notified ? "" : NOT_TOLD(name)}`;
 }
 
+/** The choices an approval's result reports it applied. */
+export type AppliedChoices = NonNullable<DecisionResult["choices"]>;
+
+/**
+ * What an approval actually applied, from the choices the SDK reports (`DecisionResult.choices`).
+ * Another tab may have approved first. Name a whole card only when all its shareable classes
+ * were granted, and call it editable only when every target for each class received Editor.
+ */
+export function recordedMessage(
+  name: string,
+  cards: readonly RequestCard[],
+  applied: AppliedChoices,
+  notified: boolean,
+): string {
+  const granted = new Set(applied.dataTypes);
+  const editableByType = new Map<string, boolean>();
+  for (const [target, types] of Object.entries(applied.targetDataTypes ?? {})) {
+    for (const type of types)
+      editableByType.set(
+        type,
+        editableByType.get(type) !== false && applied.targetRoles[target] === "editor",
+      );
+  }
+  // Without class provenance, only a uniform grant can establish edit access for a whole card.
+  const roles = Object.values(applied.targetRoles);
+  const allEditable = roles.length > 0 && roles.every((role) => role === "editor");
+  const see: string[] = [];
+  const edit: string[] = [];
+  for (const card of cards) {
+    if (!isShareable(card) || !card.shareableTypes.every((type) => granted.has(type))) continue;
+    const labels = card.shareableTypes.every((type) => editableByType.get(type) ?? allEditable)
+      ? edit
+      : see;
+    labels.push(card.label);
+  }
+  const actions: string[] = [];
+  if (see.length) actions.push(`see your ${listText(see)}`);
+  if (edit.length) actions.push(`${see.length ? "edit" : "see and change"} your ${listText(edit)}`);
+  if (!actions.length) return finishedMessage(name, notified);
+  return `${name} can now ${listText(actions)}.${notified ? "" : NOT_TOLD(name)}`;
+}
+
 /** Added to a confirmation when an expiry was sent but the storage won't enforce it. */
 export const EXPIRY_NOT_ENFORCED =
   "Access won't end automatically on this storage; remove it from Permissions when you're done.";
@@ -316,7 +360,7 @@ export type ReviewError =
       message: string;
       /** Whether running the same decision again can succeed. */
       retry: boolean;
-      /** An approval is pinned with other choices: only finishing it (no choices) can work. */
+      /** An approval is pinned with other choices. Finish must match that pin. */
       finish?: true;
       /** Approving can't work, but denying can: offer Deny first. */
       deny?: true;

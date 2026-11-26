@@ -443,7 +443,7 @@ no live service is needed. Run `pnpm run gate` after the package checks.
 
 `@jeswr/pod-access/roles` exports `rolesToModes`, `modesToRole`, `grantsWithRoles`,
 `readGrants`, `readAccessModes`, `setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess`,
-`isRoleError`, `isGrantableTarget`, `isSealed`, `sealAccess`, `unsealAccess`, `sealDataset`, and
+`isRoleError`, `isGrantableTarget`, `isSealed`, `isSecuring`, `sealAccess`, `unsealAccess`, `sealDataset`, and
 their documented types (`Role`, `ResourceKind`, `AgentRef`,
 `RoleGrant`, `GrantSnapshot`, `RoleModes`, `RoleContext`, `RoleError`, `RolesOptions`,
 `GrantMutationOptions`, `SetGrantsOptions`, `SetGrantsResult`, `PrincipalModes`,
@@ -471,9 +471,24 @@ caller's seal on the resource's own document (never an inherited one); `unsealAc
 (a no-op without an own document). Only an agent with Control on the resource can write the seal,
 so it records that its owner verified what the resource governs (for example that a folder was
 empty when it was made owner-only). Seal last, after that verification, so a failure part-way
-leaves the resource unsealed. Role edits keep the seal: unseal before widening access.
+leaves the resource unsealed. Role edits keep the seal: unseal before widening access. An editor
+that rewrites the access document without unknown statements drops the seal, so treat "unsealed"
+as "ask the owner", never as "delete".
 `sealDataset(dataset, documentUrl, webId, sealed?)` adds or removes the same statement in an
 access document built offline (such as a seeded demo pod).
+
+`setGrants(urls, grants, { ..., securing: true })` also writes the caller's securing mark
+(`<doc> pa:securingBy <webId>`) into each own access document it writes, in the same conditional
+write as the policy (a document that would otherwise be unchanged is written to add it), so no
+state has the new policy without the mark. It records that the owner started securing the
+resource from access others held and has not sealed it yet, so what the resource governs was
+written, at least in part, by others. `isSecuring(url, options)` reads it like `isSealed` (the
+caller's mark on the resource's own document only). Sealing (`sealAccess`, `sealDataset`) removes
+the caller's mark in the same write; role edits and `unsealAccess` keep it. Only an agent with
+Control on the resource can write or remove it. Like the seal, the mark is an unknown statement to
+other editors: an external ACL editor that rewrites the document without unknown statements drops
+it, and the resource then reads as unmarked (a caller such as suite-groups falls back to its
+generic "unverified, ask the owner" warning instead of refusing Keep).
 
 `isGrantableTarget(target, storage, reserved?)` is the shared check behind request approvals:
 false for anything outside storage, the storage root (with or without its slash), `settings/` and
@@ -564,6 +579,21 @@ legacy folder access. Only ESS own-ACR management (`acp:access` or own-ACR
 `acp:accessControl`) is exempt from this comparison. Member management through
 `acp:memberAccess` or own-ACR `acp:memberAccessControl` remains scoped and causes
 `partial-scope`, even when the same policy also grants own-ACR management.
+
+To view or change such a folder, use the scope-aware pair. `readScopedGrants(folderUrl, options)`
+returns `{ url, folder, contents, version }`, the roles on the folder itself and on its contents.
+`setScopedGrants(folderUrl, { folder, contents }, { ...options, expected })` sets the full
+explicit set for each scope in one conditional write to the folder's own access document. Both
+need `kind: "folder"` and the CSS dialect, and refuse a comments container. Setting needs a folder
+that already has its own access document, and you must keep Control on both scopes. Equal
+roles share one rule. Different roles get separate folder-only and contents-only rules, after
+which `readGrants` again reports `partial-scope` until the scopes match. While they differ,
+`setGrants`, `addGrant`, `removeGrant`, `movePreservingAccess` and access-request approvals all
+refuse the folder with `partial-scope`. Control inherited from an ancestor ACP policy also counts
+toward keeping Control. An inherited row in a selection keeps that person's direct rule, as with
+`setGrants`; leave it out to change the direct rule. Commenter is refused, because comments need
+a comments container. Scoped edits preserve existing seals and securing marks. Passing either
+`securing` or `ownOnly` to `setScopedGrants` throws an `unsupported` RoleError before any I/O.
 Inherited rows are read-only and must match their governing source. They never overwrite an explicit selection for the same
 principal, regardless of row order. An unchanged role selection preserves that principal's
 existing modes, including chatroom Write and partial ACP contributions completed by
@@ -759,8 +789,19 @@ missing, or non-request member becomes `{ id, status: "unreadable" }`; container
 Other statuses are `pending`, `approving`, `approved`, and `denied`. Entries carry `requester`,
 notification-local `requesterName?`, `purpose?` (IRI or label), `dataTypes`, `modes`
 (`read`, `write`, `append`), `modesByType` (a rule targeting a data type applies to that type
-only; a rule with any other target applies to every requested type), `requestedDuration?`, `expiresAt?`, `created?`, and `decidedAt?`.
-Foreign dates and durations retain lexical strings. Listing never dereferences requesters or purposes.
+only; a rule with any other target applies to every requested type), `requestedDuration?`, `expiresAt?`, `created?`, `decidedAt?`,
+and `recorded?`. Foreign dates and durations retain lexical strings. Listing never dereferences requesters or purposes.
+A pending or Approving entry carries `recorded: RecordedChoices` (`{ dataTypes, grantedTypes,
+role?, expiresAt? }`) when the owner's own records already pin an approval of it, for example one
+another tab started and did not finish. `dataTypes` are the owner's chosen types, sorted (the
+request's own when none were chosen); `grantedTypes` are those that were granted a mode (name these
+when saying what was shared); `role` is present only when the owner chose one; `expiresAt` is absent
+for access until revoked. The lookup reads only, on WAC and CSS ACP records alike: it writes nothing
+(not even sealing the records folder), runs at most four record lookups at once, attaches nothing
+while the records folder is missing, unsealed, shared or lacking the owner's full control, and
+leaves out a record that can't be read, names another request or doesn't validate. Cancellation
+propagates. Passing the recorded `dataTypes`, `role` and `expiresAt` back to `decide` (or
+`previewDecision`) resumes that approval; `decide` validates the record again before using it.
 Discovery/listing failures and cancellation propagate; an individual bad notification does not.
 
 `decide(entry, { approve, role?, expiresAt?, dataTypes? }, options)` re-reads `entry.id`.
@@ -804,13 +845,16 @@ either is a mismatch. Legacy records that stored only `chosen.viewer` infer the 
 from their pinned modes; omit `role` or repeat that inferred role to resume them. An explicit
 different role is refused with the recorded role in the error. Different choices fail with an error saying an earlier approval is still
 finishing, rather than silently granting something other than what the owner just chose.
-Completed decisions are idempotent; reversing
+A pinned snapshot is refused as invalid unless its chosen and granted data types are sorted, unique
+strings, the chosen ones are all requested, every granted one was chosen, and its end date is exactly
+the instant `decide` wrote. Completed decisions are idempotent; reversing
 approval/denial is rejected. Denial receipt writes can also be retried. Requester-supplied grant/receipt
 references never select write locations.
 
-Approval results include `choices: { dataTypes, role, targetRoles, expiresAt? }`: the types actually granted,
+Approval results include `choices: { dataTypes, role, targetRoles, targetDataTypes?, expiresAt? }`: the types actually granted,
 the strongest applied role, the exact role per target URL in `targetRoles`, and the recorded expiry as
-a `Date`. Mixed Viewer/Editor approvals therefore retain both roles explicitly. Completed-decision replays report these recorded values even if the caller supplies
+a `Date`. Use `targetDataTypes` to associate the granted classes with each target's role.
+Legacy records can lack this mapping. Completed-decision replays report these recorded values even if the caller supplies
 different choices. Denials omit `choices`.
 
 `previewDecision(entry, decision, options): Promise<DecisionPreview>` runs the same resolution,

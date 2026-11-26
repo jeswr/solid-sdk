@@ -33,11 +33,12 @@ Verification includes both `acl:default` and legacy `acl:defaultForNew` grants. 
 or mixed-policy RDF blocks sharing changes even when an own WAC-looking ACL already exists.
 Every policy read is checked regardless of filename, and changed ACL discovery endpoints block writes.
 
-Shared links use a separate view-only read path for another pod on the signed-in storage's
-origin, matching Docs' link origin boundary. Public-readable workbooks open anonymously.
-Private workbooks shared from another pod are not supported yet: pod-auth and the session
-layer cannot authorize a single foreign workbook on an existing session. A 401 or 403 explains
-that access is needed from the owner's pod instead of opening the editor.
+Shared links open a direct child of another pod's `sheets/` folder on the signed-in
+storage's origin. Public workbooks open anonymously. For a private workbook (401 or 403),
+a Solid account can choose "Open with your account" (sst-imb.57.1). The prompt names
+`index.ttl` and `workbook.json`. The click grants the session those two addresses and
+reopens the workbook view-only. Switching accounts requires fresh consent. If the
+account is denied, Sheets revokes both grants and asks the reader to contact the owner.
 Cross-origin links, credentials in URLs, ambiguous paths and redirects are refused with an
 explanation. Reads stay within the validated workbook;
 mutations remain restricted to the user's own Sheets container. Shared views never acquire a

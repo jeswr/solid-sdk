@@ -12,6 +12,7 @@ import {
   addGrant,
   isGrantableTarget,
   isSealed,
+  isSecuring,
   readAccessModes,
   readGrants,
   removeGrant,
@@ -52,16 +53,46 @@ export interface FamilySpace {
   create(): Promise<string[]>;
   role: "viewer" | "editor";
 }
+/**
+ * The space URLs stored settings would grant one group (`group`, its id) on the next
+ * `setupFamily` for it. `group` is null for an entry whose key names no group, which nothing reads.
+ */
+export interface SettingsSpaces {
+  group: string | null;
+  urls: string[];
+}
 /** A dedicated folder of the directory: shareable groups, or the private settings. */
 export type GroupFolder = "groups" | "settings";
+/**
+ * What an unverified document says, read for the owner to decide with and trusted for nothing
+ * else: a group's name and member WebIDs, or the settings' Family group and the space URLs they
+ * store, by the group each would be granted to (`SettingsSpaces`). `unreadable` when it can't be read or parsed (it can then only be removed).
+ * `inherits` says whether it inherits its folder's access; one with its own access document can
+ * only be removed.
+ */
+export type UnverifiedContent = { url: string; inherits: boolean } & (
+  | { kind: "group"; name: string; members: string[] }
+  | { kind: "settings"; family: string | null; spaces: SettingsSpaces[] }
+  | { kind: "unreadable" }
+);
 /**
  * A safe folder holding documents written while it was not sealed (by an earlier build, an
  * external ACL editor that dropped the seal, or a cleanup that never finished). They are never
  * trusted or deleted until the owner decides with `verifyFolder`.
+ *
+ * `planted` folders were being secured from access others held when that pass stopped (a failed
+ * delete, a crash): their documents were added by others while it ran, so they are never kept.
+ * The next provisioning pass removes these documents (other, never-read entries stay), as does
+ * `verifyFolder(folder, "discard")`.
+ * `keepable` is whether "keep" may be offered: the folder is not `planted`, and every document is
+ * previewed in `contents` (at most `PREVIEW_LIMIT`), readable, and inherits the folder's access.
  */
 export interface UnverifiedFolder {
   folder: GroupFolder;
   documents: string[];
+  contents: UnverifiedContent[];
+  planted: boolean;
+  keepable: boolean;
 }
 export interface DeletionReview {
   group: string;
@@ -75,6 +106,8 @@ export const GROUP_TARGET =
   "Groups can't be given access to your whole pod, your settings or the groups folder. Choose a specific item.";
 /** Delivery receipts kept in the private settings: the newest, oldest dropped first. */
 export const NOTICE_LIMIT = 2000;
+/** Unverified documents read for the owner's preview, per folder. */
+export const PREVIEW_LIMIT = 500;
 export const SETTINGS_UNSAFE = "Group settings must be owner-only before they can be used";
 export const SECURING_RACE =
   "Something was added while this folder was being secured. Because others could write it, it was removed or will be ignored. Reload and try again";
@@ -84,6 +117,10 @@ export const GROUPS_UNVERIFIED =
   "Some group files were changed outside the suite. Keep them or remove them in Settings → Groups & family to continue";
 export const SETTINGS_UNVERIFIED =
   "Group settings were changed outside the suite. Keep them or remove them in Settings → Groups & family to continue";
+export const SECURING_INTERRUPTED =
+  "These files were added by someone else while this folder was being secured, so they can't be kept. Remove them to continue";
+export const UNVERIFIED_UNREADABLE =
+  "A file in this folder can't be read, so it can't be kept. Remove it to continue";
 export const GROUP_UNSAFE =
   "Shareable groups need public Read and owner-only changes. Private contact labels won't be published. Review this groups folder's access before continuing.";
 
@@ -119,6 +156,58 @@ function receipt(key: string): unknown[] {
     return Array.isArray(value) ? value : [];
   } catch {
     return [];
+  }
+}
+/**
+ * The private settings document's shape, checked before any use. Who wrote it is checked
+ * separately (`settings`); the owner's preview of unverified settings reads it through this
+ * parser and trusts it for nothing else.
+ */
+function parseSettings(text: string): Settings {
+  const data: unknown = JSON.parse(text);
+  if (
+    !data ||
+    typeof data !== "object" ||
+    !("notices" in data) ||
+    !Array.isArray(data.notices) ||
+    !data.notices.every((v) => typeof v === "string") ||
+    !("spaces" in data) ||
+    !data.spaces ||
+    typeof data.spaces !== "object" ||
+    Object.values(data.spaces).some(
+      (v) => !Array.isArray(v) || !v.every((u) => typeof u === "string"),
+    ) ||
+    ("family" in data && typeof data.family !== "string")
+  )
+    throw new Error("Group settings are unreadable");
+  return data as Settings;
+}
+/** Stored space URLs by the group they are for (keys are `JSON.stringify([group, space])`). */
+function settingsSpaces(spaces: Settings["spaces"]): SettingsSpaces[] {
+  const byGroup = new Map<string | null, Set<string>>();
+  for (const [key, urls] of Object.entries(spaces)) {
+    const group = spaceGroup(key);
+    const set = byGroup.get(group) ?? new Set();
+    for (const url of urls) set.add(url);
+    byGroup.set(group, set);
+  }
+  return [...byGroup]
+    .map(([group, urls]) => ({ group, urls: [...urls].sort() }))
+    .sort(
+      // Entries naming no group last.
+      (a, b) =>
+        Number(a.group === null) - Number(b.group === null) ||
+        String(a.group).localeCompare(String(b.group)),
+    );
+}
+function spaceGroup(key: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(key);
+    if (!Array.isArray(parsed) || parsed.length !== 2) return null;
+    const [group, space]: unknown[] = parsed;
+    return typeof group === "string" && typeof space === "string" ? group : null;
+  } catch {
+    return null;
   }
 }
 function etag(value: string | null) {
@@ -231,8 +320,17 @@ export class GroupDirectory {
       if (!auxiliary(entry.url)) found.push(entry.url);
     return found;
   }
-  /** Owner management (plus public Read for groups) in the folder's own access document. */
-  private async rewrite(url: string, publicRead: boolean, version: AccessModesSnapshot["version"]) {
+  /**
+   * Owner management (plus public Read for groups) in the folder's own access document. With
+   * `securing`, the same write marks the folder as being secured (pod-access `isSecuring`) until
+   * it is sealed: whatever it then holds was added by others, and is never kept.
+   */
+  private async rewrite(
+    url: string,
+    publicRead: boolean,
+    version: AccessModesSnapshot["version"],
+    securing: boolean,
+  ) {
     check(
       await setGrants(
         [url],
@@ -254,7 +352,7 @@ export class GroupDirectory {
               ]
             : []),
         ],
-        { ...this.options(url), expected: { [url]: version }, ownOnly: true },
+        { ...this.options(url), expected: { [url]: version }, ownOnly: true, securing },
       ),
     );
   }
@@ -270,8 +368,13 @@ export class GroupDirectory {
    * written by someone else. A safe but unsealed folder holding readable documents is refused
    * (`*_UNVERIFIED`) and nothing is deleted: only the owner can decide, with `verifyFolder`. Only
    * what appears between that check and the permission rewrite (this pass's race) is deleted.
+   *
+   * Securing an unsafe folder marks it, in the same rewrite, until the seal: a pass that stops
+   * before sealing leaves a mark saying that the folder's readable documents may have been added
+   * by others, so the next pass deletes them instead of offering them to the owner to keep. Other
+   * leftovers stay: the owner may have added them after the rewrite, and nothing reads them.
    */
-  private async provision(kind: GroupFolder) {
+  private async provision(kind: GroupFolder): Promise<void> {
     const { url, publicRead, verdict, readable, unsafe, unverified } = this.folder(kind);
     await this.ensureContainer(url);
     const options = this.options(url);
@@ -284,12 +387,19 @@ export class GroupDirectory {
     }
     const before = await this.entries(url);
     if (!safe && before.length) throw new Error(unsafe);
-    if (before.some(readable)) throw new Error(unverified);
+    // An earlier pass was securing this folder from unsafe access, empty, and stopped before the
+    // seal. What others added before its rewrite can't be told apart from what the owner added
+    // after it, so only the readable documents (the ones that block the seal, and that nothing
+    // trusts while the mark is there) are deleted; anything else stays, as on a first pass.
+    const resumed = safe && (await isSecuring(url, options));
+    if (!resumed && before.some(readable)) throw new Error(unverified);
     // Rewritten even when already safe, so the folder has its own document to carry the seal.
-    await this.rewrite(url, publicRead, snapshot.version);
-    // Leftovers that were there before (never readable, see above) are left alone.
-    const planted = (await this.entries(url)).filter((entry) => !before.includes(entry));
-    await this.discard(url, planted, readable);
+    if (!resumed) await this.rewrite(url, publicRead, snapshot.version, !safe);
+    // Leftovers that were there before (never readable unless resumed, see above) are left alone.
+    const planted = resumed
+      ? before.filter(readable)
+      : (await this.entries(url)).filter((entry) => !before.includes(entry));
+    if (await this.discard(url, planted, readable)) return this.assertFolder(kind);
     await sealAccess(url, options);
     if (planted.length) throw new Error(SECURING_RACE);
   }
@@ -298,8 +408,18 @@ export class GroupDirectory {
    * entry that can't be deleted (one with its own access document that shuts the owner out, say)
    * never stops the rest. Only readable documents left in the folder block the seal; any other
    * leftover is never read.
+   *
+   * Returns true, deleting nothing, when another pass (another tab) has sealed the folder since
+   * it was rewritten. That pass verified the folder before sealing it and creates documents only
+   * after its seal, while `entries` were listed before this check: deleting them now could remove
+   * a group it has just created. The caller re-checks the folder instead.
    */
-  private async discard(url: string, entries: string[], readable: (url: string) => boolean) {
+  private async discard(
+    url: string,
+    entries: string[],
+    readable: (url: string) => boolean,
+  ): Promise<boolean> {
+    if (entries.length && (await isSealed(url, this.options(url)))) return true;
     const ordered = [...entries].sort((a, b) => Number(readable(b)) - Number(readable(a)));
     for (const entry of ordered)
       try {
@@ -310,10 +430,45 @@ export class GroupDirectory {
         // Checked below for readable documents; anything else that stays is never read.
       }
     if ((await this.entries(url)).some(readable)) throw new Error(SECURING_BLOCKED);
+    return false;
+  }
+  /**
+   * What an unverified document says, for the owner's decision only: read with the same parsers
+   * as the readers, but nothing is trusted, granted or written because of it.
+   */
+  private async preview(kind: GroupFolder, url: string): Promise<UnverifiedContent> {
+    const { url: folder, verdict } = this.folder(kind);
+    // A document whose access can't be read (one that shuts the owner out, say) never inherits.
+    const inherits = await this.inherits(url, folder, verdict).catch(() => false);
+    try {
+      if (kind === "settings") {
+        const data = parseSettings(await (await this.session.storage.read(url)).text());
+        return {
+          url,
+          inherits,
+          kind,
+          family: data.family ?? null,
+          spaces: settingsSpaces(data.spaces),
+        };
+      }
+      const data = parseGroup(url, (await this.session.storage.readRdf(url)).dataset);
+      if (data)
+        return {
+          url,
+          inherits,
+          kind: "group",
+          name: data.name,
+          members: (data.members ?? []).map(memberWebId),
+        };
+    } catch {
+      // Shown as unreadable, which can only be removed.
+    }
+    return { url, inherits, kind: "unreadable" };
   }
   /**
    * Safe folders holding documents written while they were unsealed, for the owner to keep or
-   * remove with `verifyFolder`. A missing, sealed or unsafe folder is not listed.
+   * remove with `verifyFolder`, with a preview of each document (see `UnverifiedFolder`). A
+   * missing, sealed or unsafe folder is not listed. Reading has no side effects.
    */
   async unverified(): Promise<UnverifiedFolder[]> {
     const found: UnverifiedFolder[] = [];
@@ -327,15 +482,30 @@ export class GroupDirectory {
       )
         continue;
       const documents = (await this.entries(url)).filter(readable).sort();
-      if (documents.length) found.push({ folder: kind, documents });
+      if (!documents.length) continue;
+      const planted = await isSecuring(url, options);
+      const contents: UnverifiedContent[] = [];
+      for (const document of documents.slice(0, PREVIEW_LIMIT))
+        contents.push(await this.preview(kind, document));
+      found.push({
+        folder: kind,
+        documents,
+        contents,
+        planted,
+        keepable:
+          !planted &&
+          contents.length === documents.length &&
+          contents.every((content) => content.inherits && content.kind !== "unreadable"),
+      });
     }
     return found;
   }
   /**
    * The owner's decision on an unverified folder. "keep" trusts its documents as they are: the
-   * folder must be safe and every document must inherit its access (a document with its own
-   * access document is refused, never kept). "discard" deletes what the folder holds. Either way
-   * the folder is then made owner-managed and sealed. A sealed, safe folder is left as it is.
+   * folder must be safe, not `planted` (`SECURING_INTERRUPTED`), and every document must inherit
+   * its access (a document with its own access document is refused, never kept) and be readable
+   * (`UNVERIFIED_UNREADABLE`). "discard" deletes what the folder holds. Either way the folder is
+   * then made owner-managed and sealed. A sealed, safe folder is left as it is.
    */
   verifyFolder(kind: GroupFolder, decision: "keep" | "discard") {
     const { url, publicRead, verdict, readable, unsafe } = this.folder(kind);
@@ -346,12 +516,19 @@ export class GroupDirectory {
       const snapshot = await readAccessModes(url, options);
       if (!verdict(snapshot, this.session.webId)) throw new Error(unsafe);
       if (await isSealed(url, options)) return;
-      await this.rewrite(url, publicRead, snapshot.version);
+      // Added by others while a pass was securing the folder: never trusted, whatever it says.
+      if (decision === "keep" && (await isSecuring(url, options)))
+        throw new Error(SECURING_INTERRUPTED);
+      await this.rewrite(url, publicRead, snapshot.version, false);
       const entries = await this.entries(url);
-      if (decision === "discard") await this.discard(url, entries, readable);
-      else
-        for (const entry of entries.filter(readable))
-          if (!(await this.inherits(entry, url, verdict))) throw new Error(unsafe);
+      if (decision === "discard") {
+        if (await this.discard(url, entries, readable)) return this.assertFolder(kind);
+      } else
+        for (const entry of entries.filter(readable)) {
+          const content = await this.preview(kind, entry);
+          if (!content.inherits) throw new Error(unsafe);
+          if (content.kind === "unreadable") throw new Error(UNVERIFIED_UNREADABLE);
+        }
       await sealAccess(url, options);
     });
   }
@@ -386,28 +563,13 @@ export class GroupDirectory {
   private async settings(): Promise<{ data: Settings; etag: string | null }> {
     try {
       const read = await this.session.storage.read(this.settingsUrl);
-      const data: unknown = JSON.parse(await read.text());
-      if (
-        !data ||
-        typeof data !== "object" ||
-        !("notices" in data) ||
-        !Array.isArray(data.notices) ||
-        !data.notices.every((v) => typeof v === "string") ||
-        !("spaces" in data) ||
-        !data.spaces ||
-        typeof data.spaces !== "object" ||
-        Object.values(data.spaces).some(
-          (v) => !Array.isArray(v) || !v.every((u) => typeof u === "string"),
-        ) ||
-        ("family" in data && typeof data.family !== "string")
-      )
-        throw new Error("Group settings are unreadable");
+      const data = parseSettings(await read.text());
       // Trust needs the folder sealed (verified empty when it was secured) and owner-only, and
       // the document inheriting it: who could create, replace or delete it, and who wrote it.
       await this.assertFolder("settings");
       if (!(await this.inherits(this.settingsUrl, this.settingsContainer, ownerOnlyModes)))
         throw new Error(SETTINGS_UNSAFE);
-      return { data: data as Settings, etag: etag(read.etag) };
+      return { data, etag: etag(read.etag) };
     } catch (error) {
       if (!missing(error)) throw error;
       return { data: { notices: [], spaces: {} }, etag: null };

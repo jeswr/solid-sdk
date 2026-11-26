@@ -108,10 +108,32 @@ export interface DecisionResult {
     /** Strongest applied role. Use targetRoles for the exact role on each target. */
     role: "viewer" | "editor";
     targetRoles: Record<string, "viewer" | "editor">;
+    /** Granted classes per target URL, when the pinned record includes their provenance. */
+    targetDataTypes?: Record<string, string[]>;
     expiresAt?: Date;
   };
   /** Always false: expiresAt is receipt metadata; WAC/ACP roles do not enforce it. */
   expiryEnforced: false;
+}
+
+/**
+ * The owner's choices a pinned approval recorded, as `listRequests()` attaches them to a pending or
+ * Approving request. `dataTypes`, `role` and `expiresAt` are a {@link RequestDecision}'s: passing
+ * them back to decide() resumes that approval.
+ */
+export interface RecordedChoices {
+  /** The chosen data types, sorted and deduplicated (the request's own when none were chosen). */
+  dataTypes: string[];
+  /**
+   * The chosen data types that were actually granted a mode, sorted: a type with no mode of its
+   * own, or one that asked only to change data under a Viewer approval, is left out. Name these
+   * when saying what was shared.
+   */
+  grantedTypes: string[];
+  /** The role the owner chose; absent when they chose none (or a legacy record did not say). */
+  role?: "viewer" | "editor";
+  /** The recorded end date (receipt metadata only); absent for access until revoked. */
+  expiresAt?: Date;
 }
 
 /** A readable request, as decide() projects it. */
@@ -389,16 +411,50 @@ function withinRequest(snapshot: Snapshot, entry: RequestEntry): boolean {
   );
 }
 
+/** Sorted, unique strings: the only form decide() records a list of data types in. */
+function isSortedSet(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item, index) =>
+        typeof item === "string" && (index === 0 || (value[index - 1] as string) < item),
+    )
+  );
+}
+
+/** A recorded timestamp exactly as `Date.prototype.toISOString` writes it. */
+function isIsoInstant(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const time = Date.parse(value);
+  return Number.isFinite(time) && new Date(time).toISOString() === value;
+}
+
+/** What a validated snapshot recorded, as the owner chose it. */
+function recordedChoices(snapshot: Snapshot): RecordedChoices {
+  const role = snapshot.chosen.role;
+  return {
+    dataTypes: [...snapshot.chosen.dataTypes],
+    grantedTypes: [...snapshot.dataTypes],
+    ...(role != null && { role }),
+    ...(snapshot.expiresAt !== undefined && { expiresAt: new Date(snapshot.expiresAt) }),
+  };
+}
+
 async function validateSnapshot(
   snapshot: Snapshot,
   entry: RequestEntry,
   slotUrl: string,
-  options: DecideOptions,
+  options: Pick<DecideOptions, "webId" | "storage">,
 ): Promise<void> {
   if (
     !withinRequest(snapshot, entry) ||
     snapshot.schemaVersion !== "1" ||
-    !Array.isArray(snapshot.chosen?.dataTypes) ||
+    (snapshot.expiresAt !== undefined && !isIsoInstant(snapshot.expiresAt)) ||
+    // The owner's choices are a sorted set of requested types, holding every granted type.
+    !isSortedSet(snapshot.chosen?.dataTypes) ||
+    !snapshot.chosen.dataTypes.every((type) => entry.dataTypes.includes(type)) ||
+    !isSortedSet(snapshot.dataTypes) ||
+    !snapshot.dataTypes.every((type) => snapshot.chosen.dataTypes.includes(type)) ||
     typeof snapshot.chosen.viewer !== "boolean" ||
     (snapshot.chosen.role != null && !["viewer", "editor"].includes(snapshot.chosen.role)) ||
     (snapshot.model !== undefined && snapshot.model !== "wac" && snapshot.model !== "acp") ||
@@ -878,10 +934,76 @@ async function runDecision(
           roleFor(snapshot.targetModes[target] as RequestMode[]),
         ]),
       ),
+      ...(snapshot.targetDataTypes && {
+        targetDataTypes: Object.fromEntries(
+          Object.entries(snapshot.targetDataTypes).map(([target, types]) => [target, [...types]]),
+        ),
+      }),
       ...(snapshot.expiresAt !== undefined && { expiresAt: new Date(snapshot.expiresAt) }),
     },
     ...locations,
     notified: await notify(id, snapshot.agent, true, options),
     expiryEnforced: false,
   };
+}
+
+/** How many decision-record lookups a listing runs at once. */
+const RECORD_LOOKUPS = 4;
+
+/**
+ * Attach to each pending or Approving request the choices of the approval the owner's records
+ * hold for it, if any. Read-only (the records folder is never sealed or written): a folder that is
+ * not sealed yet holds no trusted record, so nothing is attached. A record that can't be read or
+ * doesn't validate, or a records folder that can't be checked, leaves the entry without choices;
+ * cancellation propagates. decide() validates the record again before using it.
+ */
+export async function withRecordedChoices(
+  entries: AccessRequestEntry[],
+  options: Pick<DecideOptions, "fetch" | "webId" | "storage" | "signal">,
+): Promise<AccessRequestEntry[]> {
+  const open = (entry: AccessRequestEntry): entry is RequestEntry =>
+    entry.status === "pending" || entry.status === "approving";
+  if (!entries.some(open)) return entries;
+  const fetchFn = transport(options.fetch, options.signal);
+  const owner = options.webId;
+  const storage = scoped(
+    options.storage,
+    options.storage.endsWith("/") ? options.storage : `${options.storage}/`,
+  );
+  let key: string | undefined;
+  try {
+    key = await recordsKey(recordsFolder(storage), storage, owner, fetchFn, undefined, true);
+  } catch {
+    options.signal?.throwIfAborted();
+    return entries;
+  }
+  if (key === undefined) return entries;
+  const records = key;
+  const lookup = async (entry: RequestEntry): Promise<RecordedChoices | undefined> => {
+    try {
+      // An open request matches only an approval still in progress, never a finished record.
+      const slot = (await findSlot(storage, records, entry, owner, fetchFn)) as Slot;
+      const snapshot = slot.record?.snapshot;
+      if (snapshot === undefined) return undefined;
+      await validateSnapshot(snapshot, entry, slot.url, { webId: owner, storage });
+      return recordedChoices(snapshot);
+    } catch {
+      options.signal?.throwIfAborted();
+      return undefined;
+    }
+  };
+  // A few lookups at a time, each entry keeping its place.
+  const out = [...entries];
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < entries.length) {
+      const index = next++;
+      const entry = entries[index] as AccessRequestEntry;
+      if (!open(entry)) continue;
+      const recorded = await lookup(entry);
+      if (recorded !== undefined) out[index] = { ...entry, recorded };
+    }
+  };
+  await Promise.all(Array.from({ length: RECORD_LOOKUPS }, worker));
+  return out;
 }

@@ -13,13 +13,20 @@ import type {
   WorkbookVersion,
 } from "../contract";
 import {
+  PrivateWorkbookError,
   WorkbookConflictError,
   WorkbookLinkError,
   WorkbookNotFoundError,
   WorkbookPartialSaveError,
 } from "../contract";
 import { createSheetStorage, type Snapshot, type WorkbookMetadata, workbookLayout } from "../model";
-import { assertSharedWorkbook, assertWorkbook, directChild, slug } from "./layout";
+import {
+  assertSharedWorkbook,
+  assertWorkbook,
+  directChild,
+  sharedWorkbookFiles,
+  slug,
+} from "./layout";
 import type { ProjectedSheet } from "./projection";
 import { registration } from "./registration";
 import { hasStatus, resources, strongEtag } from "./resources";
@@ -27,6 +34,7 @@ import { hasStatus, resources, strongEtag } from "./resources";
 export function createWorkbookService(options: WorkbookServiceOptions): WorkbookService {
   const root = new URL("sheets/", options.podRoot).href;
   const storage = createSheetStorage(options.fetch, options.podRoot);
+  const { grantResource } = options;
   const publicFetch = options.publicFetch ?? globalThis.fetch;
   const io = resources(storage);
   const now = options.now ?? (() => new Date());
@@ -181,19 +189,22 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     return read(checked(container));
   }
 
-  async function openShared(container: string): Promise<OpenedWorkbook> {
+  async function openShared(
+    container: string,
+    shared: { account?: boolean } = {},
+  ): Promise<OpenedWorkbook> {
     const url = assertSharedWorkbook(root, container);
-    // Sessions cannot authorize a foreign workbook. Public reads never use session
-    // credentials, and the storage transport bounds them to this URL with no redirects.
-    const anonymous: typeof fetch = (input, init) =>
-      publicFetch(input, { ...init, credentials: "omit" });
+    // Public reads never use session credentials. An account read relies on the session's
+    // grants for the index and snapshot. Either way the storage transport bounds reads to this URL
+    // with no redirects, and the workbook stays view-only.
+    const transport: typeof fetch = shared.account
+      ? options.fetch
+      : (input, init) => publicFetch(input, { ...init, credentials: "omit" });
     try {
-      return await read(url, createSheetStorage(anonymous, url), true);
+      return await read(url, createSheetStorage(transport, url), true);
     } catch (error) {
       if (error instanceof WorkbookNotFoundError && error.reason === "forbidden")
-        throw new WorkbookLinkError(
-          "You need access from the owner's pod; opening private workbooks shared from another pod is not supported yet",
-        );
+        throw new PrivateWorkbookError(shared.account ? "denied" : "private");
       if (error instanceof RedirectRefusedError)
         throw new WorkbookLinkError(
           "This shared spreadsheet redirects to another address. Open a direct workbook link.",
@@ -406,6 +417,22 @@ export function createWorkbookService(options: WorkbookServiceOptions): Workbook
     },
     open,
     openShared,
+    ...(grantResource && {
+      grantShared: async (container: string) => {
+        const files = sharedWorkbookFiles(assertSharedWorkbook(root, container));
+        // Start both grants during the click, then clean up even if only one succeeded.
+        const results = await Promise.allSettled(files.map(async (url) => grantResource(url)));
+        const revoke = () => {
+          for (const result of results) if (result.status === "fulfilled") result.value.revoke();
+        };
+        const failure = results.find((result) => result.status === "rejected");
+        if (failure) {
+          revoke();
+          throw failure.reason;
+        }
+        return { revoke };
+      },
+    }),
     save,
     rename,
     async copy(container, title) {

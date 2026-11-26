@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { Term } from "@rdfjs/types";
@@ -28,6 +29,7 @@ import { acpRecords } from "./acp-records.js";
 import { decide, previewDecision } from "./approval.js";
 import { UnsupportedAccessModelError } from "./errors.js";
 import { agentUrl } from "./http.js";
+import { listRequests } from "./listing.js";
 import { set, turtle, values } from "./rdf.js";
 import { ACCM, ACL, LDP, SOLID } from "./vocab.js";
 
@@ -182,6 +184,14 @@ describe("ACP approval and sealed owner records", () => {
     const decision = { approve: true, role: "viewer" as const };
     await expect(decide({ id: REQUEST }, decision, options(pod))).rejects.toThrow("crash");
     restore();
+    // The listing reads the pinned choices from the sealed ACP records folder, writing nothing.
+    const puts = writes(pod).length;
+    const [listed] = await listRequests(options(pod));
+    expect(listed).toMatchObject({
+      status: "approving",
+      recorded: { dataTypes: [CONTACTS_CLASS], grantedTypes: [CONTACTS_CLASS], role: "viewer" },
+    });
+    expect(writes(pod)).toHaveLength(puts);
     const result = await decide({ id: REQUEST }, decision, {
       ...options(pod),
       typeIndex: new Store(),
@@ -191,6 +201,7 @@ describe("ACP approval and sealed owner records", () => {
       dataTypes: [CONTACTS_CLASS],
       role: "viewer",
       targetRoles: { [ALICE]: "viewer" },
+      targetDataTypes: { [ALICE]: [CONTACTS_CLASS] },
     });
     expect(pod.body(`${ALICE}.acr`)).toContain(REQUESTER);
     expect(pod.etag(result.grantUrl as string)).toBe('"v1"');

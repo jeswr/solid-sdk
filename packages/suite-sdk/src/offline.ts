@@ -18,6 +18,7 @@ export type {
   OutboxGuard,
   OutboxItem,
   OutboxOperation,
+  QuarantinedRecord,
   QueueingStorageClient,
   QueueingWriteResult,
   QueueOption,
@@ -27,7 +28,13 @@ export type {
 // Guarded writes and resolutions require a session-local registerDelegate registration.
 // Trusted registerGuardPolicy requirements survive stripped record metadata within the session.
 // Snapshots expose guard tags and blocking reasons; assertions stay private to delegates.
-export { createOutbox, withOutbox } from "@jeswr/solid-offline/outbox";
+// Invalid stored records are listed and discarded through these, never through the snapshots.
+export {
+  createOutbox,
+  discardQuarantined,
+  quarantinedRecords,
+  withOutbox,
+} from "@jeswr/solid-offline/outbox";
 export type { UseOfflineStatusResult } from "@jeswr/solid-offline/react";
 export { useOfflineStatus } from "@jeswr/solid-offline/react";
 

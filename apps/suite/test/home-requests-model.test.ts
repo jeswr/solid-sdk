@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Claude Opus 5.5
 import {
   RequestConflictError,
@@ -45,6 +46,7 @@ import {
   purposeText,
   type ReadableRequest,
   type RequestCard,
+  recordedMessage,
   requestCards,
   requesterHost,
   requesterName,
@@ -346,6 +348,92 @@ describe("data type cards", () => {
     expect(finishedMessage("Bob", false)).toContain("We couldn't tell Bob;");
     expect(EXPIRY_NOT_ENFORCED).toBe(
       "Access won't end automatically on this storage; remove it from Permissions when you're done.",
+    );
+  });
+
+  it("words an approval from the choices the SDK applied, not the ones sent", () => {
+    const Doc = "https://vocab.example/Doc";
+    const Other = "https://vocab.example/Other";
+    const cards = requestCards({
+      dataTypes: [STEPS, Doc],
+      modesByType: { [STEPS]: ["read"], [Doc]: ["read", "write"] },
+    });
+    const applied = (dataTypes: string[], role: "viewer" | "editor") => ({
+      dataTypes,
+      role,
+      targetRoles: { "https://pod.example/items/1": role },
+    });
+    expect(recordedMessage("MaraCoach", cards, applied([STEPS], "viewer"), true)).toBe(
+      "MaraCoach can now see your Activity.",
+    );
+    // A Viewer approval can only see, whatever was asked for.
+    expect(recordedMessage("MaraCoach", cards, applied([Doc], "viewer"), true)).toBe(
+      "MaraCoach can now see your Doc.",
+    );
+    expect(recordedMessage("MaraCoach", cards, applied([Doc], "editor"), true)).toBe(
+      "MaraCoach can now see and change your Doc.",
+    );
+    // Chosen but not granted (it asked only to change, under a Viewer approval): the SDK reports
+    // only granted types, so it is not named.
+    const changeOnly = requestCards({
+      dataTypes: [STEPS, Doc],
+      modesByType: { [STEPS]: ["read"], [Doc]: ["write"] },
+    });
+    expect(recordedMessage("MaraCoach", changeOnly, applied([STEPS], "viewer"), true)).toBe(
+      "MaraCoach can now see your Activity.",
+    );
+    // Applied types this sheet has no card for: name none.
+    expect(recordedMessage("Bob", cards, applied([Other], "editor"), true)).toBe(
+      "You finished approving Bob's request.",
+    );
+  });
+
+  it("names what each card can do from the roles on its actual targets", () => {
+    const doc = "https://vocab.example/Doc";
+    const first = "https://pod.example/items/1";
+    const second = "https://pod.example/items/2";
+    const cards = requestCards({
+      dataTypes: [STEPS, EXERCISE, doc],
+      modesByType: { [STEPS]: ["read"], [EXERCISE]: ["read"], [doc]: ["write"] },
+    });
+    const choices = {
+      dataTypes: [STEPS, EXERCISE, doc],
+      role: "editor" as const,
+      targetRoles: { [first]: "viewer", [second]: "editor" } as const,
+      targetDataTypes: { [first]: [STEPS, EXERCISE], [second]: [doc] },
+    };
+    expect(recordedMessage("Bob", cards, choices, false)).toBe(
+      "Bob can now see your Activity and edit your Doc. We couldn't tell Bob; they'll see it next time they check.",
+    );
+    // One Activity type also resolves to an editable target. The whole card still isn't editable.
+    expect(
+      recordedMessage(
+        "Bob",
+        cards,
+        {
+          ...choices,
+          targetDataTypes: { [first]: [STEPS], [second]: [STEPS, EXERCISE, doc] },
+        },
+        true,
+      ),
+    ).toBe("Bob can now see your Activity and edit your Doc.");
+    // A partially granted card cannot be named as a whole.
+    expect(
+      recordedMessage(
+        "Bob",
+        cards,
+        {
+          ...choices,
+          dataTypes: [STEPS, doc],
+          targetDataTypes: { [first]: [STEPS], [second]: [doc] },
+        },
+        true,
+      ),
+    ).toBe("Bob can now see and change your Doc.");
+    // Older pins cannot tie mixed roles to individual cards.
+    const { targetDataTypes: _, ...legacy } = choices;
+    expect(recordedMessage("Bob", cards, legacy, true)).toBe(
+      "Bob can now see your Activity and Doc.",
     );
   });
 });

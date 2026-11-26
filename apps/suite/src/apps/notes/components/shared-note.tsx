@@ -1,10 +1,13 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import { EditorContent, useEditor } from "@tiptap/react";
 import { useEffect, useState } from "react";
+import { OpenWithAccount } from "@/components/open-with-account";
+import type { SessionResourceGrant } from "@/shell/session/types";
 import { notesExtensions } from "../editor/extensions";
 import type { StoredNote } from "../lib/model/store";
-import { readSharedNote } from "../lib/shared-note";
+import { noteLink, PrivateNoteError, readSharedNote } from "../lib/shared-note";
 
 const anonymous: typeof fetch = (input, init) =>
   fetch(input, { ...init, credentials: "omit", redirect: "error" });
@@ -25,34 +28,59 @@ function SharedBody({ note, ownerRoot }: { note: StoredNote; ownerRoot: string }
     </article>
   );
 }
-export function SharedNote({ reference, podRoot }: { reference: string; podRoot: string }) {
+interface SharedNoteProps {
+  reference: string;
+  podRoot: string;
+  /** The account's fetch and grant, when it can open private notes shared from another pod. */
+  account?: {
+    id: string;
+    fetch: typeof fetch;
+    grant: (url: string) => Promise<SessionResourceGrant>;
+  };
+}
+export function SharedNote(props: SharedNoteProps) {
+  return <SharedNoteView key={JSON.stringify([props.account?.id, props.reference])} {...props} />;
+}
+function SharedNoteView({ reference, podRoot, account }: SharedNoteProps) {
+  const [granted, setGranted] = useState<{ fetch: typeof fetch; handle: SessionResourceGrant }>();
+  const grant = granted?.fetch === account?.fetch ? granted : undefined;
   const [state, setState] = useState<{
-    reference: string;
-    note?: StoredNote;
-    ownerRoot?: string;
-    error?: string;
+    grant: typeof grant;
+    result: Awaited<ReturnType<typeof readSharedNote>> | { error: Error };
   }>();
   useEffect(() => {
     let alive = true;
-    void readSharedNote(reference, podRoot).then(
-      ({ note, ownerRoot }) => {
-        if (alive) setState({ reference, note, ownerRoot });
+    void readSharedNote(reference, podRoot, undefined, grant?.fetch).then(
+      (result) => {
+        if (alive) setState({ grant, result });
       },
       (error: Error) => {
-        if (alive) setState({ reference, error: error.message });
+        if (error instanceof PrivateNoteError && error.reason === "denied") grant?.handle.revoke();
+        if (alive) setState({ grant, result: { error } });
       },
     );
     return () => {
       alive = false;
     };
-  }, [reference, podRoot]);
-  if (state?.reference !== reference) return <p role="status">Opening shared note…</p>;
-  if (state.error) return <div role="alert">{state.error}</div>;
-  return (
-    <SharedBody
-      key={reference}
-      note={state.note as StoredNote}
-      ownerRoot={state.ownerRoot as string}
-    />
-  );
+  }, [reference, podRoot, grant]);
+  if (!state || state.grant !== grant) return <p role="status">Opening shared note…</p>;
+  if ("error" in state.result) {
+    const { error } = state.result;
+    return (
+      <div role="alert">
+        <p>{error.message}</p>
+        {account && error instanceof PrivateNoteError && error.reason === "private" && (
+          <OpenWithAccount
+            url={noteLink(reference, podRoot).url}
+            kind="note"
+            open={async () => {
+              const handle = await account.grant(noteLink(reference, podRoot).url);
+              setGranted({ fetch: account.fetch, handle });
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+  return <SharedBody {...state.result} />;
 }

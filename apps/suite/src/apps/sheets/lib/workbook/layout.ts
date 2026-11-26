@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { WorkbookLinkError } from "../contract";
@@ -20,15 +21,27 @@ export function assertWorkbook(root: string, container: string): string {
   return url;
 }
 
-/** Match Docs' link origin boundary, allowing another pod path on that origin. */
+/** A shared workbook is <owner pod>/sheets/<workbook>/ on the reader's storage origin. */
 export function assertSharedWorkbook(root: string, container: string): string {
   try {
     const url = workbookLayout(container).container;
-    if (url !== container) throw new WorkbookLinkError();
+    if (
+      url !== container ||
+      /[%?#]/.test(container) ||
+      // No dot-prefixed (.acl, .well-known, .meta) or ;-parameter segments anywhere.
+      !/^\/(?:[^/.;][^/;]*\/)+sheets\/[^/.;][^/;]*\/$/.test(new URL(url).pathname)
+    )
+      throw new WorkbookLinkError();
     return assertWithinPodScope(new URL("/", root).href, url);
   } catch {
     throw new WorkbookLinkError();
   }
+}
+
+/** The two authoritative files read by openShared. Derived sheets and comments need no grant. */
+export function sharedWorkbookFiles(container: string) {
+  const { index, snapshot } = workbookLayout(container);
+  return [index, snapshot];
 }
 
 export function slug(title: string): string {

@@ -49,6 +49,21 @@ export interface AccessModesSnapshot {
   readonly governedBy: string | null;
   readonly version: GrantSnapshot["version"];
 }
+/**
+ * A folder's roles per scope: on the folder itself and on its contents (members). `version` is
+ * the same opaque read token as `GrantSnapshot.version`.
+ */
+export interface ScopedGrantSnapshot {
+  readonly url: string;
+  folder: RoleGrant[];
+  contents: RoleGrant[];
+  readonly version: GrantSnapshot["version"];
+}
+/** The full desired role set for each scope of one folder. */
+export interface ScopedGrantSelection {
+  folder: RoleGrant[];
+  contents: RoleGrant[];
+}
 /** Separate permission targets: resource body, comments container, and own ACR. */
 export interface RoleModes {
   resource: readonly Mode[];
@@ -86,6 +101,12 @@ export interface SetGrantsOptions extends GrantMutationOptions {
   expected?: GrantSnapshot | Readonly<Record<string, GrantSnapshot["version"]>>;
   /** Replace/create own access, including empty ACP selections, without copying WAC defaults. */
   ownOnly?: boolean;
+  /**
+   * Also write the caller's securing mark (`pa:securingBy`, see `isSecuring`) into each own access
+   * document this call writes, in the same conditional write; `sealAccess` removes it. A document
+   * that would otherwise be unchanged is written to add the mark.
+   */
+  securing?: boolean;
 }
 /** A batch is not atomic. A failed URL may have earlier successful auxiliary writes. */
 export interface SetGrantsResult {

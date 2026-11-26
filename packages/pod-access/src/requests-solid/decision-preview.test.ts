@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { Term } from "@rdfjs/types";
@@ -174,6 +175,7 @@ describe("decision previews and bound consent", () => {
     expect(result.choices).toMatchObject({
       role: "editor",
       targetRoles: { [ALICE]: "viewer", [CAROL]: "editor" },
+      targetDataTypes: { [ALICE]: [CONTACTS_CLASS], [CAROL]: [CALENDAR, CONTACTS_CLASS].sort() },
     });
     const before = pod.log.length;
     expect(

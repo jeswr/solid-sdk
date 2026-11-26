@@ -8,8 +8,10 @@ export {
   grantsWithRoles,
   readAccessModes,
   readGrants,
+  readScopedGrants,
   removeGrant,
   setGrants,
+  setScopedGrants,
 } from "./client.js";
 export { isRoleError } from "./errors.js";
 export { modesToRole, rolesToModes } from "./mapping.js";
@@ -21,7 +23,7 @@ export type {
 export { movePreservingAccess } from "./move.js";
 export type { PrivateAccessSession, PrivateContainerOptions } from "./private-access.js";
 export { ensurePrivateContainerAccess, verifyPrivateDemoAccess } from "./private-access.js";
-export { isSealed, sealAccess, sealDataset, unsealAccess } from "./seal.js";
+export { isSealed, isSecuring, sealAccess, sealDataset, unsealAccess } from "./seal.js";
 export { isGrantableTarget } from "./targets.js";
 export type {
   AccessModesSnapshot,
@@ -36,6 +38,8 @@ export type {
   RoleGrant,
   RoleModes,
   RolesOptions,
+  ScopedGrantSelection,
+  ScopedGrantSnapshot,
   SetGrantsOptions,
   SetGrantsResult,
 } from "./types.js";

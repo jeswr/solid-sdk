@@ -366,3 +366,21 @@ it.each(
   expect(localStorage.getItem("suite.outbox.v1.one")).toBe(outbox);
   await view.unmount();
 });
+
+it("offers grants only for an active account whose backend supports them, and fences sign-out", async () => {
+  const solid = backend(one);
+  const handle = { revoke: vi.fn() };
+  const grant = vi.fn(async (_account: SuiteAccount, _url: string) => handle);
+  solid.grantResource = grant;
+  await mount(h(AccountsProvider, { backends: [solid, backend(two)], children: h(Probe) }));
+  expect(accounts.active?.id).toBe("one");
+  const granting = accounts.grantResource as NonNullable<typeof accounts.grantResource>;
+  await expect(granting("https://example.org/other/notes/a.ttl")).resolves.toBe(handle);
+  expect(grant).toHaveBeenCalledExactlyOnceWith(one, "https://example.org/other/notes/a.ttl");
+  await act(() => accounts.switchTo("two"));
+  expect(accounts.grantResource).toBeUndefined();
+  await expect(granting("https://example.org/other/notes/b.ttl")).rejects.toThrow(
+    "Sign in to continue",
+  );
+  expect(grant).toHaveBeenCalledOnce();
+});

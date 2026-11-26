@@ -23,12 +23,21 @@ export interface SignOutNotice {
 }
 // biome-ignore lint/suspicious/noConfusingVoidType: Existing backends return Promise<void> when no notice is needed.
 export type SignOutResult = void | SignOutNotice;
+/** Ends this resource grant on the account that issued it. */
+export interface SessionResourceGrant {
+  revoke(): void;
+}
 export interface SessionBackend {
   kind: SuiteAccount["kind"];
   restore(): Promise<SuiteAccount | null>;
   signIn(hint: SignInHint, options?: SignInOptions): Promise<SuiteAccount>;
   signOut(account: SuiteAccount): Promise<SignOutResult>;
   fetchFor(account: SuiteAccount, options?: FetchForOptions): typeof fetch;
+  /**
+   * Let this account open one resource or container on another person's storage, for this
+   * session only. Call only from the click on a consent screen that names the address.
+   */
+  grantResource?(account: SuiteAccount, url: string): Promise<SessionResourceGrant>;
   onExpired(cb: () => void): () => void;
 }
 const signInMessages = {
