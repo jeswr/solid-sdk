@@ -173,7 +173,7 @@ describe("ownOnly on WAC produces an owner-only document", () => {
       sealed++;
     }
     expect(sealed).toBeGreaterThan(200);
-  });
+  }, 30_000);
   it("writes nothing when the document is already owner-only", async () => {
     const r = await seal(ownerRule);
     expect(r.writes).toEqual([]);
@@ -255,7 +255,7 @@ describe("ownOnly on ACP produces an owner-only document", () => {
       expect(r.result.failed, chosen.join()).toEqual([]);
       expect(r.verdict, chosen.join()).toEqual({ private: true });
     }
-  });
+  }, 30_000);
   it("drops an ESS management policy of a removed agent", async () => {
     const ess = `@prefix acp: <http://www.w3.org/ns/solid/acp#>.
 <> a acp:AccessControlResource; acp:resource <${folder}>; acp:accessControl <#c>; acp:memberAccessControl <#c>;

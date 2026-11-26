@@ -487,7 +487,7 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
     importFixture() {
       return mutate(
         (snapshot) => snapshot,
-        () => importSpotifyFixture(session.fetch, session.storageUrl),
+        () => importSpotifyFixture(session),
         "Spotify sample imported",
       );
     },

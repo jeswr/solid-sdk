@@ -133,11 +133,18 @@ it("shares nothing for unshared albums and skips photos outside the library", as
   const album = await createAlbum(io, "Private", NOW);
   expect(await shareAddedPhotos(directory, io, album.url, [ref])).toEqual([]);
   expect(await groupGrant(pod.fetch, ref.split("#")[0] as string)).toEqual([]);
+  await pod.fetch(`${io.root}items/empty.ttl`, {
+    method: "PUT",
+    headers: { "Content-Type": "text/turtle" },
+    body: "",
+  });
   expect(
     await photoResources(io, [
       "https://photos.example/elsewhere.ttl#it",
       `${io.root}items/x.ttl?q#it`,
       `${io.root}albums/private.ttl#it`,
+      // A well-formed library name whose document holds no photo is skipped too.
+      `${io.root}items/empty.ttl#it`,
     ]),
   ).toEqual([]);
   expect(await shareAddedPhotos(directory, io, album.url, [])).toEqual([]);

@@ -1,16 +1,17 @@
 // AUTHORED-BY Codex GPT-6
 
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
-import { runImport } from "@jeswr/pod-connectors";
+import { createSessionPrivateDestinationChecks, runImport } from "@jeswr/pod-connectors";
 import { spotifyAdapter } from "@jeswr/pod-connectors/adapters/spotify";
+import type { PodSession } from "../../../lib/session/pod-session";
 import { createDocument, provision } from "../lib/data/library";
 import { Store } from "../lib/model";
 
 /** The connector's recorded JSON is the only source transport: this never contacts Spotify. */
 export async function importSpotifyFixture(
-  fetch: typeof globalThis.fetch,
-  storage: string,
+  session: Pick<PodSession, "fetch" | "storageUrl" | "webId">,
 ): Promise<void> {
+  const { fetch, storageUrl: storage } = session;
   await provision(fetch, storage);
   const scoped = createPodScopedFetch(storage, { fetch });
   const resolve = (slug: string) => new URL(`integrations/spotify/${slug}`, storage).href;
@@ -18,6 +19,9 @@ export async function importSpotifyFixture(
     adapter: spotifyAdapter,
     mode: "demo",
     podWriter: {
+      // Spotify history is private: the import is refused unless the pod verifies (or seals) the
+      // destination as owner-only, exactly as the Connect path checks every other connector.
+      ...createSessionPrivateDestinationChecks(session),
       resolve,
       read: async () => undefined,
       write: async (doc) => {

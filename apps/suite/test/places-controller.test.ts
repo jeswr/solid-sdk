@@ -356,3 +356,10 @@ it("stops publishing progress once an import is cancelled", async () => {
   await expect(importing).rejects.toMatchObject({ name: "AbortError" });
   expect(controller.getSnapshot().import.progress).toEqual({ done: 3, total: 26 });
 });
+it("opens Places when a registration warning has no listener", async () => {
+  const repo = setup().repo;
+  repo.initialize.mockResolvedValueOnce({ registrationWarning: "Not in your Type Index" });
+  const controller = placesController(repo, false, vi.fn());
+  await controller.open();
+  expect(controller.getSnapshot()).toMatchObject({ status: "ready", error: null });
+});
