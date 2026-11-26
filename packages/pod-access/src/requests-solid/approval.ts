@@ -934,7 +934,11 @@ async function runDecision(
           roleFor(snapshot.targetModes[target] as RequestMode[]),
         ]),
       ),
-      ...(snapshot.targetDataTypes && { targetDataTypes: snapshot.targetDataTypes }),
+      ...(snapshot.targetDataTypes && {
+        targetDataTypes: Object.fromEntries(
+          Object.entries(snapshot.targetDataTypes).map(([target, types]) => [target, [...types]]),
+        ),
+      }),
       ...(snapshot.expiresAt !== undefined && { expiresAt: new Date(snapshot.expiresAt) }),
     },
     ...locations,

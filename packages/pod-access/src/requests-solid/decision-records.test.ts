@@ -855,6 +855,12 @@ describe("recorded decision choices", () => {
     expect((await decide({ id: ID }, { approve: true }, opts(pod))).choices?.dataTypes).toEqual([
       CONTACTS_CLASS,
     ]);
+    const types = replay.choices?.targetDataTypes;
+    expect(types).toBeDefined();
+    for (const list of Object.values(types ?? {})) list.push("urn:caller-mutation");
+    const again = await decide({ id: ID }, { approve: true }, opts(pod));
+    for (const list of Object.values(again.choices?.targetDataTypes ?? {}))
+      expect(list).not.toContain("urn:caller-mutation");
   });
 
   it("resumes older WAC snapshots and refuses a persisted change of access model", async () => {
