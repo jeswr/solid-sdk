@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DriveItem } from "../src/apps/drive/lib/client/client";
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   connection: { disabled: false, reason: "You're offline. This needs a connection." },
   fetch: vi.fn<typeof fetch>(),
   folders: vi.fn(() => ({ status: "ready", items: [], refreshing: false, reload: vi.fn() })),
+  scopes: [] as string[],
 }));
 vi.mock("@jeswr/suite-ui", async (original) => ({
   ...(await original<Record<string, unknown>>()),
@@ -59,10 +61,28 @@ const drive = {
   changes: { subscribe: () => () => {}, subscribeSubtree: () => () => {} },
   uploads: { tasks: [], enqueue: vi.fn() },
 };
-vi.mock("../src/apps/drive/state/drive-context", () => ({
-  useDrive: () => ({ ...drive, session }),
-  useFolder: mocks.folders,
-}));
+/** Foreign clients the scope created; they must never serve an own-storage read here. */
+const foreignClient = {
+  read: vi.fn(async () => Promise.reject(new Error("foreign-scoped client"))),
+  stat: vi.fn(async () => Promise.reject(new Error("foreign-scoped client"))),
+};
+// Mirrors the real ForeignPreviewScope: own-storage URLs keep the account client; any other URL
+// swaps in a separate, storage-scoped client for its subtree. Scope URLs are recorded so a view
+// that drops the wrap fails the assertions below.
+vi.mock("../src/apps/drive/state/drive-context", async () => {
+  const { createContext, createElement, useContext } = await import("react");
+  const { isOwnStorage } = await import("../src/apps/drive/lib/client/ownership");
+  const Scoped = createContext<typeof client | typeof foreignClient | null>(null);
+  return {
+    useDrive: () => ({ ...drive, client: useContext(Scoped) ?? drive.client, session }),
+    useFolder: mocks.folders,
+    ForeignPreviewScope: ({ url, children }: { url: string; children: ReactNode }) => {
+      mocks.scopes.push(url);
+      const own = isOwnStorage(url, session.storageUrl);
+      return createElement(Scoped, { value: own ? drive.client : foreignClient }, children);
+    },
+  };
+});
 vi.mock("../src/lib/route-params", () => ({
   usePageRouteParams: () => ({ ref: encodeRef(BOOK.url) }),
 }));
@@ -102,6 +122,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.clearAllMocks();
+  mocks.scopes.length = 0;
   control = undefined;
 });
 
@@ -409,6 +430,8 @@ describe("Drive Sheets menu, preview and workbook presentation", () => {
       `/sheets/s/${encodeRef(BOOK.url)}`,
     );
     expect(mocks.folders).not.toHaveBeenCalled();
+    expect(mocks.scopes).toContain(BOOK.url);
+    expect(foreignClient.stat).not.toHaveBeenCalled();
   });
 
   it("keeps an ordinary folder at the same URL browsable when it has no workbook metadata", async () => {
@@ -416,5 +439,7 @@ describe("Drive Sheets menu, preview and workbook presentation", () => {
     await mount(h(DriveUiProvider, null, h(FolderRefView)));
     expect(mocks.router.replace).not.toHaveBeenCalled();
     expect(mocks.folders).toHaveBeenCalledWith(BOOK.url);
+    expect(mocks.scopes).toContain(BOOK.url);
+    expect(foreignClient.stat).not.toHaveBeenCalled();
   });
 });
