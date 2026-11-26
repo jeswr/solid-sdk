@@ -12,7 +12,12 @@
    scan). The path is relative to THIS file. */
 @import "tailwindcss";
 @import "@jeswr/app-shell/styles.css";
+@import "@jeswr/suite-ui/styles/tokens.css";
+@import "@jeswr/suite-ui/styles/theme.css";
+@import "@jeswr/suite-ui/styles/density.css";
+@import "@jeswr/suite-ui/styles/components.css";
 @source "../node_modules/@jeswr/app-shell/dist";
+@source "../node_modules/@jeswr/suite-ui/dist";
 
 /* The host chrome below predates the shared tokens and uses its own variable
    names (--bg / --ink / --accent / --muted / …). Map them onto the app-shell OKLCH
@@ -49,7 +54,7 @@
    guards the colour-isolation contract. Verified against app-shell `5a7484d`. */
 :root {
   --bg: var(--background);
-  --surface: var(--card);
+  --host-surface: var(--card);
   --ink: var(--foreground);
   /* HOST-ONLY name for muted TEXT — pointed at the app-shell `--muted-foreground`
      text token. We deliberately do NOT re-alias the PUBLIC `--muted` token (the
@@ -58,8 +63,8 @@
      color would mis-render any `bg-muted` surface a current or future consumer uses.
      pod-chat only ever needs muted TEXT, so a host-only name is the correct fit. */
   --muted-text: var(--muted-foreground);
-  --accent: var(--primary);
-  --accent-ink: var(--primary-foreground);
+  --action: var(--primary);
+  --action-ink: var(--primary-foreground);
   /* NOTE: `--border` is intentionally NOT redefined here — it already IS the
      app-shell token (set by the imported tokens.css on :root), so the host's
      `var(--border)` usages resolve to it directly and flip on `.dark` for free.
@@ -80,7 +85,7 @@ body {
 }
 
 a {
-  color: var(--accent);
+  color: var(--action);
 }
 
 /* ── Login ─────────────────────────────────────────────────────────────── */
@@ -93,7 +98,7 @@ a {
 .login-card {
   width: 100%;
   max-width: 28rem;
-  background: var(--surface);
+  background: var(--host-surface);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   padding: 2rem;
@@ -158,8 +163,8 @@ a {
   border-radius: 0.5rem;
   padding: 0.6rem 0.9rem;
   font-size: 0.95rem;
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--action);
+  color: var(--action-ink);
 }
 .login-form button:disabled {
   opacity: 0.55;
@@ -220,7 +225,7 @@ a {
 .pod-chat-table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--surface);
+  background: var(--host-surface);
 }
 .pod-chat-table th,
 .pod-chat-table td {
@@ -231,7 +236,7 @@ a {
 }
 .pod-chat-open {
   background: transparent;
-  color: var(--accent);
+  color: var(--action);
   border: none;
   padding: 0;
   text-align: left;
@@ -252,7 +257,7 @@ a {
 .pod-chat-back {
   align-self: flex-start;
   background: transparent;
-  color: var(--accent);
+  color: var(--action);
   border: 1px solid var(--border);
   cursor: pointer;
   border-radius: 0.5rem;
@@ -273,7 +278,7 @@ a {
   gap: 0.75rem;
 }
 .pod-chat-message {
-  background: var(--surface);
+  background: var(--host-surface);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.75rem 0.9rem;
@@ -314,8 +319,8 @@ a {
   border-color: var(--ok);
 }
 .pod-chat-task-open {
-  color: var(--accent);
-  border-color: var(--accent);
+  color: var(--action);
+  border-color: var(--action);
 }
 .pod-chat-assignee {
   margin: 0 0 0.4rem;
@@ -338,7 +343,7 @@ a {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  background: var(--surface);
+  background: var(--host-surface);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.75rem;
@@ -364,8 +369,8 @@ a {
   border-radius: 0.5rem;
   padding: 0.6rem 0.9rem;
   font-size: 0.95rem;
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--action);
+  color: var(--action-ink);
 }
 .pod-chat-send:disabled {
   opacity: 0.55;
@@ -400,7 +405,7 @@ a {
   margin-top: 0.5rem;
   cursor: pointer;
   background: transparent;
-  color: var(--accent);
+  color: var(--action);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 0.5rem 0.8rem;

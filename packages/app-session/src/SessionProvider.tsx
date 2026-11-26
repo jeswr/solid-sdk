@@ -19,7 +19,7 @@ import { authFlowHolder, lazyElementGetCode } from "./auth-flow-holder.js";
 import { IssuerChoiceRequiredError } from "./issuer-choice.js";
 import { clearLegacyCredentials, type LegacyKeys } from "./legacy-credentials.js";
 import { allowInsecureLoopback, publicFetch } from "./pod-auth.js";
-import { readProfile } from "./profile.js";
+import { type Profile, readProfile } from "./profile.js";
 import { type DerivedSession, deriveSession } from "./session-derivation.js";
 import { consumeAutologinAccount, signInError } from "./sign-in.js";
 
@@ -54,6 +54,9 @@ function accountHint(webId: string, issuer?: string): LoginHint {
 /** Address lookups give up after this long, so a silent host cannot freeze the card. */
 export const LOOKUP_TIMEOUT_MS = 15_000;
 
+/** The post-login profile read gives up after this long and falls back to the verified storages. */
+export const PROFILE_TIMEOUT_MS = 10_000;
+
 export function useSession(): SessionContextValue {
   const value = useContext(SessionContext);
   if (!value) throw new Error("useSession must be used inside <SessionProvider>");
@@ -76,6 +79,7 @@ export interface SessionProviderProps {
   dev?: boolean;
   auth?: PodAuth;
   lookupTimeoutMs?: number;
+  profileTimeoutMs?: number;
   readProfile?: typeof readProfile;
 }
 
@@ -88,6 +92,7 @@ export function SessionProvider({
   dev = false,
   auth: suppliedAuth,
   lookupTimeoutMs = LOOKUP_TIMEOUT_MS,
+  profileTimeoutMs = PROFILE_TIMEOUT_MS,
   readProfile: profileReader = readProfile,
 }: SessionProviderProps) {
   const flowRef = useRef<AuthorizationCodeFlow>(null);
@@ -206,7 +211,18 @@ export function SessionProvider({
     }
     const webId = identity.webId;
     setSession(null);
-    void profileReader(webId, publicFetch)
+    // A stalled WebID host must not hold the gate on "Loading" for ever; abort also on cleanup.
+    const controller = new AbortController();
+    const { signal } = controller;
+    const timer = setTimeout(
+      () => controller.abort(new Error("Profile read timed out")),
+      profileTimeoutMs,
+    );
+    const read = new Promise<Profile>((resolve, reject) => {
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      profileReader(webId, publicFetch, signal).then(resolve, reject);
+    });
+    void read
       .then(deriveSession)
       .catch(() =>
         deriveSession({
@@ -218,12 +234,59 @@ export function SessionProvider({
         }),
       )
       .then((derived) => {
+        clearTimeout(timer);
         if (!disposed) setSession(derived);
       });
     return () => {
       disposed = true;
+      clearTimeout(timer);
+      controller.abort();
     };
-  }, [identity, profileReader]);
+  }, [identity, profileReader, profileTimeoutMs]);
+
+  // pod-auth emits `logout` only in the tab that signed out; another tab's sign-out or account
+  // switch surfaces only through `auth.identity()` (which consults the cross-tab fence). Re-ask
+  // whenever the tab is brought back, so an idle tab cannot keep showing a signed-out account.
+  useEffect(() => {
+    if (!auth || !identity) return;
+    const webId = identity.webId;
+    let disposed = false;
+    let inflight: Promise<void> | null = null;
+    const check = () => {
+      // A sign-in already under way owns the session state; its own result settles it.
+      if (activeLogin.current) return;
+      inflight ??= auth
+        .identity()
+        .then((current) => {
+          if (disposed || activeLogin.current) return;
+          if (current === null) {
+            ++generation.current;
+            activeLogin.current = null;
+            setPending(null);
+            setSession(null);
+            setIdentity(null);
+          } else if (current.webId !== webId) {
+            setIdentity(current);
+          }
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          inflight = null;
+        });
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") check();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", check);
+    window.addEventListener("storage", check);
+    return () => {
+      disposed = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", check);
+      window.removeEventListener("storage", check);
+    };
+  }, [auth, identity]);
 
   const runLogin = useCallback(
     async (

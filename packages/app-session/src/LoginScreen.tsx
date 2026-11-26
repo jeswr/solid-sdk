@@ -72,7 +72,11 @@ export function LoginScreen({ appName, ...options }: LoginScreenProps) {
   } = useSession();
   return (
     <main className="login-screen">
-      <fieldset className="login-sign-in" disabled={!ready}>
+      <fieldset
+        className="login-sign-in"
+        disabled={!ready}
+        style={{ width: "100%", minWidth: 0, margin: 0, padding: 0, border: 0 }}
+      >
         <legend className="sr-only">{appName} sign-in</legend>
         <SignInCard
           key={choice ? `choice:${choice.webId}` : "sign-in"}

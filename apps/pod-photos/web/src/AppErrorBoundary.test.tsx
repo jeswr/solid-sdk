@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 //
 // AppErrorBoundary — the app-level crash-resilience wiring (#72/#73 parity).
@@ -18,7 +19,7 @@ const mock = vi.hoisted(() => ({
   webId: "https://alice.example/profile/card#me" as string | null,
 }));
 
-vi.mock("./auth/SessionProvider", () => ({
+vi.mock("@jeswr/app-session/react", () => ({
   useSession: () => ({ webId: mock.webId }),
 }));
 

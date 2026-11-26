@@ -8,9 +8,9 @@ are disabled. See [workspace deployment setup](../../docs/deployment.md).
 The hosting recipes below describe optional standalone deployments.
 
 > A discover-and-launch hub for the whole Solid app suite. Browse every app as a card
-> grouped by category, search/filter, and **Launch** any live app already logged in —
-> the session is re-established securely at your identity provider and **only your public
-> WebID ever travels in a link, never a token.** The store is itself a Solid app, and its
+> grouped by category, search/filter, and **Launch** any live app with your account ready
+> to choose. **Only your public WebID ever travels in a link, never a token.** Each app
+> handles its own sign-in. The store is itself a Solid app, and its
 > catalog is published as Linked Data (DCAT + `schema:SoftwareApplication`, content-
 > negotiable Turtle / JSON-LD, plus a human HTML view).
 
@@ -21,8 +21,8 @@ TypeScript static SPA under [`web/`](./web), deployable as the 10th pod-app subd
 
 The suite ships many apps (data-layer pod-apps, Pod Manager, Solid Issues, finance
 products, demos) but had no single place to **find and open** them. The App Store is that
-place: a public directory you can browse logged-out, and — once you sign in with your WebID
-— a launcher that opens each app *already authenticated*.
+place: a public directory you can browse logged-out, and — once you sign in — a launcher
+that passes your public WebID to each app's sign-in screen.
 
 - **Catalog grid** grouped by category (Documents, Media, Comms, Health, Productivity,
   Finance, Demo) with a search box and a "Live only" filter.
@@ -65,10 +65,9 @@ dataset). RDF is never hand-concatenated.
 
 ## The launch model — and why no token is ever in a URL
 
-A **Launch** button carries **only the user's public WebID** (a WebID is public by
-definition). The actual session is re-established at the shared identity-provider broker via
-OIDC `prompt=none` silent SSO ([media-kraken#54](https://github.com/NoelDeMartin/media-kraken/issues/54)),
-so nothing secret needs to — or does — travel in the URL.
+A **Launch** button carries **only the user's public WebID**. Apps using the shared
+session package treat it as an account suggestion requiring a click; the destination
+owns its sign-in and restore. Credentials never travel in the link.
 
 Two mechanisms, selected per app by the manifest's `launch` field
 ([`web/src/lib/launch.ts`](./web/src/lib/launch.ts)):
@@ -76,8 +75,8 @@ Two mechanisms, selected per app by the manifest's `launch` field
 1. **`autologin`** (the 8 vite pod-apps + Solid Issues) →
    `https://<app>/#autologin/<encodeURIComponent(webid)>`. The WebID rides in the URL
    **fragment**, which (RFC 3986 §3.5) is client-side and never sent on the wire. The target
-   app detects it, runs a full-page `prompt=none` redirect, and — given a live broker session
-   + prior authorization — lands already authenticated. The fragment is built with the exact
+   app consumes it as a suggested account. Shared-session apps never start login from
+   the fragment alone. The fragment is built with the exact
    `autologinFragment` shape from
    [`create-solid-app`](https://github.com/jeswr/create-solid-app) so producer and parser
    agree.
@@ -91,16 +90,40 @@ own login. `launchUrl` is a pure, exhaustively-tested function: its test suite a
 Bearer / `eyJ…` JWT ever appears in any produced URL, across every mechanism and session
 state.
 
+## Auth
+
+[`web/src/auth/pod-auth.ts`](./web/src/auth/pod-auth.ts) is the app's adapter to
+`@jeswr/app-session`: it configures the client identity, callback, development flag, app
+name and obsolete credential keys. The shared React `SessionProvider` owns restore and
+logout, and `LoginScreen` renders the shared SignInCard inside the store's native dialog.
+Provider addresses and the home provider can be configured with `VITE_KNOWN_PROVIDERS`,
+`VITE_HOME_IDP` and `VITE_HOME_IDP_NAME`.
+
+The catalog, search, filters and Linked Data downloads remain public while signed out,
+restoring or experiencing a sign-in error. The store reads no private pod data, so it has
+no pod component requiring authenticated fetch. Global fetch stays public and is never
+patched; public profile display reads use the package's pristine credential-free fetch.
+Pod-auth owns credential persistence and grants credentials only to verified storage roots.
+
+`web/public/clientid.jsonld` and `callback.html` are generated (not committed) by every
+`dev` and `build` run for `APP_ORIGIN` and `CLIENT_BASE_PATH`.
+Only `callback.html` is registered as a redirect URI. Production uses the current
+deployment's HTTPS `clientid.jsonld`; dynamic registration and insecure HTTP are enabled
+only in a development build served on loopback. On first mount the shared cleanup removes
+the old `solid-app-store:sessions` IndexedDB database, localStorage
+`solid-app-store:remembered-account`, and sessionStorage `app-store:pss.autologin.flow`
+and `app-store:autologin-attempted`. Theme settings and other apps' records are preserved.
+
 ## Develop
 
 ```bash
-cd web
-npm ci                 # keyless: git deps are pinned over git+https (the #78 rule)
-npm run dev            # gen-clientid + gen-catalog, then Vite on :5173
-npm run lint           # Biome + the lockfile-transport guard
-npm run typecheck      # tsc --noEmit
-npm test               # Vitest (incl. the launch.ts no-token suite + DCAT isomorphism)
-npm run build          # gen-clientid + gen-catalog + vite build → web/dist
+pnpm install --offline # from the workspace root, using the installed cache
+cd apps/app-store/web
+pnpm run dev           # gen-clientid + gen-catalog, then Vite on :5173
+pnpm run lint          # Biome + the lockfile-transport guard
+pnpm run typecheck     # tsc --noEmit
+pnpm test              # Vitest (shared session integration + launch links + DCAT isomorphism)
+pnpm run build         # gen-clientid + gen-catalog + vite build → web/dist
 ```
 
 The build runs `gen-clientid.mjs` (the per-origin Solid-OIDC Client Identifier Document) and

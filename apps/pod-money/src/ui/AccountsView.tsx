@@ -39,9 +39,8 @@ export interface AccountsViewProps {
    */
   ledgerUrl: string;
   /**
-   * The authenticated fetch for pod reads. Omit to use the ambient global fetch
-   * (patched by @solid/reactive-authentication in a real session). The
-   * injectable auth seam — unit tests pass a stub here.
+   * The bounded authenticated fetch for pod reads (pass pod-auth's auth.fetch).
+   * Defaults to the public global fetch; unit tests can pass a stub.
    */
   fetch?: typeof fetch;
   /** Optional heading rendered above the view. */

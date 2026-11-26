@@ -1,52 +1,34 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// Pins the browser-extension-present header swap (App.tsx, cross-app parity
-// rollout — reference pod-drive). The shared @jeswr/app-shell
-// `useSolidExtensionPresent()` hook drives the account surface:
-//   - extension PRESENT → the extension owns the account surface, so the app's full
-//     <AccountMenu/> (avatar + name + WebID) would DUPLICATE it. App drops it and
-//     renders only a minimal <Button>Sign out</Button> wired to the app's own logout
-//     (the app still holds its OWN independent session — it must not strand the user).
-//   - extension ABSENT → the normal <AccountMenu/> is rendered.
-//
-// We render the WHOLE App so the assertion covers the real header conditional, not a
-// re-implementation. The heavy leaves are stubbed to the smallest doubles that let
-// the authenticated header mount: useSession returns a logged-in session, the
-// pod-health <HealthRecords> view and the async Type-Index discovery are stubbed
-// (their behaviour is tested elsewhere). Only `useSolidExtensionPresent` is
-// overridden on the otherwise-REAL @jeswr/app-shell (importOriginal), so the real
-// <AccountMenu/> / <Button/> render — the swap is exercised end-to-end.
+// Render the signed-in header with the real AccountControl and extension detection.
+// SessionGate startup and sign-out transitions are covered in App.session.test.tsx.
+import type { SignedInSession } from "@jeswr/app-session/react";
 import { ThemeProvider } from "@jeswr/app-shell";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { App } from "./App";
 
-// The single knob the App's header branches on. Mutated per test before importing App.
-let extensionPresent = false;
-
-vi.mock("@jeswr/app-shell", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@jeswr/app-shell")>()),
-  useSolidExtensionPresent: () => extensionPresent,
-}));
-
-// A logged-in session so App renders its authenticated header (not the login/restore
-// screens). displayName/avatarUrl feed the AccountMenu; podRoot feeds discovery.
-vi.mock("./auth/SessionProvider", () => ({
-  useSession: () => ({
+const sessionState = {
+  webId: "https://alice.example/profile/card#me",
+  session: {
     webId: "https://alice.example/profile/card#me",
-    session: {
-      webId: "https://alice.example/profile/card#me",
-      podRoot: "https://alice.example/",
-      podRootIsFallback: false,
-      displayName: "Alice Health",
-      avatarUrl: null,
-    },
-    logout: vi.fn(),
-    autologinPending: false,
-    restorePending: false,
-  }),
+    podRoot: "https://alice.example/",
+    podRootIsFallback: false,
+    displayName: "Alice Health",
+  },
+  logout: vi.fn(),
+  fetch: globalThis.fetch,
+};
+
+vi.mock("@jeswr/app-session/react", async (original) => ({
+  ...(await original<typeof import("@jeswr/app-session/react")>()),
+  SessionGate: ({ children }: { children: (signedIn: SignedInSession) => ReactNode }) =>
+    children(sessionState),
+  useSession: () => sessionState,
 }));
 
-// Stub the pod-health data view — it needs the auth-patched global fetch at runtime;
+// Stub the pod-health data view — it receives the session fetch at runtime;
 // its behaviour is out of scope for this header test.
 vi.mock("pod-health/ui", () => ({
   HealthRecords: () => <div data-testid="health-records" />,
@@ -59,8 +41,6 @@ vi.mock("./health-resource", () => ({
 }));
 
 async function renderApp() {
-  // Import App AFTER the mocks + the `extensionPresent` flag are set for this test.
-  const { App } = await import("./App");
   // main.tsx wraps the app in <ThemeProvider> (the header's <ThemeToggle/> reads the
   // theme context); mirror that here so App mounts.
   render(
@@ -75,23 +55,28 @@ async function renderApp() {
 describe("App header — browser-extension-present account swap", () => {
   afterEach(() => {
     cleanup();
-    vi.resetModules();
+    document.documentElement.removeAttribute("data-solid-extension");
+    delete (window as unknown as { solid?: unknown }).solid;
   });
 
   it("extension PRESENT → hides AccountMenu, keeps a minimal Sign out", async () => {
-    extensionPresent = true;
+    document.documentElement.setAttribute("data-solid-extension", "1");
     await renderApp();
     // The minimal Sign-out control is present…
     expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sign out/i })).toHaveAttribute(
+      "data-variant",
+      "ghost",
+    );
     // …and the full AccountMenu (its trigger is labelled "Account menu") is NOT rendered.
     expect(screen.queryByRole("button", { name: /account menu/i })).not.toBeInTheDocument();
   });
 
   it("extension ABSENT → renders the normal AccountMenu", async () => {
-    extensionPresent = false;
     await renderApp();
     // The AccountMenu trigger is present…
     expect(screen.getByRole("button", { name: /account menu/i })).toBeInTheDocument();
+    expect(screen.getByText("Alice Health")).toBeInTheDocument();
     // …and there is no standalone Sign-out button (sign-out lives inside the closed
     // AccountMenu dropdown, not the header).
     expect(screen.queryByRole("button", { name: /sign out/i })).not.toBeInTheDocument();

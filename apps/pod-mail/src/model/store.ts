@@ -4,8 +4,8 @@
  *
  * Reads go through `@jeswr/fetch-rdf` (one GET, content-type-dispatched parse).
  * Writes serialise the in-memory dataset with `n3.Writer` and conditional-PUT
- * with `If-Match: <etag>`. Auth is provided by the caller's `fetch` (the suite
- * default patches `globalThis.fetch` via `@solid/reactive-authentication`), so
+ * with `If-Match: <etag>`. Auth is provided by the caller's injected `fetch` (pass pod-auth's
+ * `auth.fetch` for private data; the global default stays public), so
  * this layer is auth-agnostic — it just carries the fetch through.
  *
  * WAC-aware: a 401/403 on read surfaces as `MailAccessError` so the caller can

@@ -2,7 +2,7 @@
 
 # Model provenance ledger
 
-Everything in this repo was authored by **Claude Opus 4.8** (while Fable was unavailable), so it can
+The initial application was authored by **Claude Opus 4.8** (while Fable was unavailable), so it can
 be targeted for re-review / upgrade when Fable returns. See the suite-wide rule in
 `prod-solid-server/CLAUDE.md` → "Model provenance".
 
@@ -20,3 +20,9 @@ be targeted for re-review / upgrade when Fable returns. See the suite-wide rule 
 | UI (`web/src/App.tsx`, `web/src/components/**`, `web/src/styles.css`) | Claude Opus 4.8 | app-shell chrome + the catalog grid + the sign-in dialog + the LD catalog view |
 | Catalog data (`web/data/apps.json`) | Claude Opus 4.8 | The 17-app inventory from the recon build spec |
 | Repo meta (README, LICENSE, suite.json, CI, deploy docs) | Claude Opus 4.8 | The new-repo checklist |
+
+<!-- AUTHORED-BY GPT-6.1 Sol -->
+The auth migration now uses `@jeswr/app-session` through a small app adapter. The copied
+provider, session context, login screen, profile helpers and auth test fake have been removed;
+the native sign-in dialog, public catalog and WebID-only launch links remain app-owned.
+See each source file's markers for subsequent authorship.

@@ -12,8 +12,8 @@ export type AppStatus = "live" | "wip" | "local-only" | "gated";
 
 /**
  * How an app accepts an inbound launch:
- *  - "autologin" → `#autologin/<webid>` full-page redirect SSO (the 8 vite
- *    pod-apps + Solid Issues, built on the create-solid-app redirect autologin);
+ *  - "autologin" → `#autologin/<webid>` account suggestion (the pod-apps and
+ *    Solid Issues); shared-session apps require a click before signing in;
  *  - "prefill"   → `?webid=<webid>` query prefill + one-click sign-in (Pod Manager);
  *  - "none"      → no deep-link contract; a plain link to the app origin (its own
  *    login). Used for not-yet-live apps and as the logged-out fallback.

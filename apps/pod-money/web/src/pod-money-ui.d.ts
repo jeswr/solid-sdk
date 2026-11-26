@@ -18,8 +18,7 @@ declare module "@jeswr/pod-money/ui" {
      */
     ledgerUrl: string;
     /**
-     * The authenticated fetch for pod reads. Omit to use the ambient global
-     * fetch (patched by @solid/reactive-authentication in a real session).
+     * The bounded authenticated fetch for pod reads. Defaults to the public global fetch.
      */
     fetch?: typeof fetch;
     /** Optional heading rendered above the view. */
@@ -41,7 +40,7 @@ declare module "@jeswr/pod-money" {
   export interface MoneyStoreOptions {
     /** The pod root URL (must end in `/`). */
     podRoot: string;
-    /** The HTTP `fetch` used for PUTs. Defaults to `globalThis.fetch`. */
+    /** The HTTP `fetch` used for reads and PUTs. Defaults to `globalThis.fetch`. */
     fetch?: typeof fetch;
   }
 

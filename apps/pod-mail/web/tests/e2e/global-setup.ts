@@ -1,17 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// Playwright globalSetup for the task #123 401-budget e2e. Runs once after the
-// webServers (CSS@3000 + vite@5173) are up. It:
-//   1. creates a fresh CSS account + pod (the verified solid-test-infrastructure recipe);
-//   2. seeds the WebID profile (foaf:name + pim:storage — a fresh CSS pod has neither,
-//      so without this the app sees no display name / no storage and looks broken);
-//   3. seeds the inbox MAILBOX DOCUMENT `mail/folders/inbox.ttl` with MANY
-//      schema:EmailMessage subjects (the regression surface): pod-mail's <Inbox> loads
-//      the inbox by reading that ONE mailbox document (MailStore.load → useInbox), and
-//      the App ALSO reads the WebID profile + (discovery) the type index — several
-//      DISTINCT pod documents on load. Under the OLD reactive manager each of those
-//      documents paid a wasted 401; the proactive patch keeps the count flat. The
-//      message count is the regression surface — the 401 count must NOT scale with it.
+// Playwright globalSetup for shared sign-in. After CSS and Vite start, create a
+// fresh account, seed its profile and a private inbox document with twelve messages.
 // It writes the seeded credentials to a JSON sidecar the spec reads (the spec drives
 // the real OIDC popup login with this account; the seeded data is its pod contents).
 //
@@ -32,11 +22,7 @@ const WEBID = `${BASE}/${POD}/profile/card#me`;
 const NAME = "Alice Mail";
 const EMAIL = "alice@example.com";
 const PASSWORD = "test-password-123";
-// The pod root + the conventional inbox MAILBOX DOCUMENT (the fallback path pod-mail's
-// mailbox-discovery uses when no schema:EmailMessage Type-Index registration exists —
-// `<podRoot>mail/folders/inbox.ttl`, see src/model/paths.ts folderDocument). We seed N
-// schema:EmailMessage subjects INTO that one document; the inbox renders one row per
-// message — the count is the regression surface (the 401 count must NOT scale with it).
+// Seed the conventional inbox document when no Type Index entry exists.
 const POD_ROOT = `${BASE}/${POD}/`;
 const INBOX_DOC = `${POD_ROOT}mail/folders/inbox.ttl`;
 const MESSAGE_COUNT = 12;
@@ -149,13 +135,7 @@ export default async function globalSetup() {
     "text/turtle",
   );
 
-  // 4. seed the inbox MAILBOX DOCUMENT with MANY schema:EmailMessage subjects (the
-  //    regression surface). They are SIBLING SUBJECTS in the ONE inbox document (pod-mail
-  //    models messages as sibling subjects, not per-message resources — see
-  //    src/model/mailbox.ts), so the inbox renders N rows from ONE GET. The point of the
-  //    budget is that the FEW distinct pod documents the app reads on load (profile +
-  //    this inbox doc + the discovery type-index probe) pay a FLAT 401 count regardless
-  //    of how many messages this document holds.
+  // 4. Seed twelve sibling message subjects in the private inbox document.
   // NOTE: pod-mail's Message accessor reads `schema:sender` via NamedNodeAs.string — it
   // MUST be a NamedNode (IRI), NOT a blank node (a blank-node sender throws "Term type
   // must be NamedNode but was BlankNode" and the whole inbox load errors with zero rows).
@@ -166,7 +146,7 @@ export default async function globalSetup() {
       `<#msg-${k}> a schema:EmailMessage;
   schema:headline "Message ${k}";
   schema:sender <mailto:sender${k}@example.com>;
-  schema:dateSent "2026-06-1${k % 10}T12:00:00Z"^^xsd:dateTime.`,
+  schema:dateSent "2026-06-${String(k + 1).padStart(2, "0")}T12:00:00Z"^^xsd:dateTime.`,
     );
   }
   // Pre-create the `mail/` + `mail/folders/` CONTAINERS before PUTting the inbox document into
@@ -186,7 +166,7 @@ ${messageTriples.join("\n")}
     "text/turtle",
   );
 
-  // 5. hand the spec the seeded facts (login credentials + the regression container).
+  // 5. hand the spec the seeded facts (login credentials + the private inbox document).
   writeFileSync(
     CREDS_PATH,
     JSON.stringify(
@@ -204,5 +184,7 @@ ${messageTriples.join("\n")}
     ),
   );
   // eslint-disable-next-line no-console
-  console.log(`[global-setup] seeded ${WEBID} with ${MESSAGE_COUNT} messages in mail/folders/inbox.ttl`);
+  console.log(
+    `[global-setup] seeded ${WEBID} with ${MESSAGE_COUNT} messages in mail/folders/inbox.ttl`,
+  );
 }

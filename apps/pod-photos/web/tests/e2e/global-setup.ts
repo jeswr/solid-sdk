@@ -1,16 +1,12 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// Playwright globalSetup for the task #123 401-budget e2e. Runs once after the
+// Playwright globalSetup for the shared sign-in e2e. Runs once after the
 // webServers (CSS@3000 + vite@5173) are up. It:
 //   1. creates a fresh CSS account + pod (the verified solid-test-infrastructure recipe);
 //   2. seeds the WebID profile (foaf:name + pim:storage — a fresh CSS pod has neither,
 //      so without this the app sees no display name / no storage and looks broken);
-//   3. seeds the gallery's `photos/` container with MANY schema:Photograph resources
-//      (`photo-0..N-1.ttl`) — this is the REGRESSION SURFACE: pod-photos' listGallery
-//      lists the photos container AND THEN reads EACH photo document individually
-//      (one container GET + one read per photo — the N+1 walk in src/ui/gallery.ts),
-//      so N photos => N+1 pod reads. The budget spec asserts the 401 count does NOT
-//      scale with N.
+//   3. seeds the gallery's photos/ container with private schema:Photograph resources
+//      that the signed-in gallery must list.
 // It writes the seeded credentials to a JSON sidecar the spec reads (the spec drives
 // the real OIDC popup login with this account; the seeded data is its pod contents).
 //
@@ -33,8 +29,7 @@ const EMAIL = "alice@example.com";
 const PASSWORD = "test-password-123";
 // The photos container — the conventional fallback the app uses when no Type-Index
 // registration is present (see photos-root.ts PHOTOS_SLUG → `${podRoot}photos/`).
-// The photos container's child count is the regression surface (the 401 count must
-// NOT scale with it).
+// The sign-in test expects every seeded photo to appear in the gallery.
 const PHOTOS_CONTAINER = `${BASE}/${POD}/photos/`;
 const PHOTO_COUNT = 12;
 
@@ -153,12 +148,7 @@ export default async function globalSetup() {
     "text/turtle",
   );
 
-  // 4. seed MANY schema:Photograph resources under photos/ — the regression surface. A
-  //    PUT to `photos/photo-K.ttl` auto-creates the `photos/` container; each photo is a
-  //    distinct URL listGallery GETs individually when the gallery loads (the listing +
-  //    one read per photo — the N+1 walk in src/ui/gallery.ts), so N photos => N+1 reads.
-  //    parsePhoto requires `<#it> a schema:Photograph` (with schema:name/contentUrl) to
-  //    count as a photo row — so each seeded resource renders one `.pod-photos-tile`.
+  // 4. Seed one RDF description per photo; each produces a .pod-photos-tile.
   for (let k = 0; k < PHOTO_COUNT; k++) {
     await authedPut(
       `${PHOTOS_CONTAINER}photo-${k}.ttl`,
@@ -176,27 +166,18 @@ export default async function globalSetup() {
     );
   }
 
-  // 4b. PROVE the seeded resources are PRIVATE (the 401-budget test's load-bearing
-  //     precondition). The regression guard only proves proactive auth if the photos
-  //     are auth-REQUIRED: were they PUBLIC, the OLD unauthenticated-first reactive
-  //     behaviour would ALSO see zero resource-server 401s, so the budget test could pass
-  //     WITHOUT the proactive patch (roborev MEDIUM finding). CSS pods are private to the
-  //     owner by default, but we ASSERT it rather than assume it: an UNAUTHENTICATED GET
-  //     on both the container AND a seeded photo MUST be denied (401/403). If either is
-  //     public, fail the setup loudly — the budget test would be meaningless.
+  // 4b. Prove both the container and photo descriptions require authentication.
   for (const url of [PHOTOS_CONTAINER, `${PHOTOS_CONTAINER}photo-0.ttl`]) {
     const anon = await fetch(url, { headers: { accept: "text/turtle" } });
     if (anon.status !== 401 && anon.status !== 403) {
       throw new Error(
         `Seeded resource ${url} is NOT private (unauthenticated GET -> ${anon.status}, ` +
-          "expected 401/403). The 401-budget e2e requires auth-gated photos — a public " +
-          "resource would let the OLD unauthenticated-first behaviour also pay zero 401s, " +
-          "so the regression guard would not prove the proactive auth-fetch. Check the pod ACL.",
+          "expected 401/403). The sign-in e2e requires private photos. Check the pod ACL.",
       );
     }
   }
 
-  // 5. hand the spec the seeded facts (login credentials + the regression container).
+  // 5. hand the spec the seeded facts (login credentials + the private photos container).
   writeFileSync(
     CREDS_PATH,
     JSON.stringify(

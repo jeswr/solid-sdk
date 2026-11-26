@@ -15,7 +15,11 @@
 // The shadcn-compatible primitives are exported too for apps that want to build
 // their own header chrome on the same Radix + token base.
 
+export { AccountControl, type AccountControlProps } from "./components/account-control.js";
 export { AccountMenu, type AccountMenuProps, initials } from "./components/account-menu.js";
+export { AppFrame, type AppFrameProps, type AppFrameSession } from "./components/app-frame.js";
+export { AppHeader, type AppHeaderProps } from "./components/app-header.js";
+export { AppMain, type AppMainProps } from "./components/app-main.js";
 export {
   ErrorBoundary,
   type ErrorBoundaryFallbackProps,
@@ -52,6 +56,7 @@ export {
   useTheme,
 } from "./components/theme-provider.js";
 export { ThemeToggle } from "./components/theme-toggle.js";
+export { useSessionResource } from "./hooks/use-session-resource.js";
 export { useSolidExtensionPresent } from "./hooks/use-solid-extension-present.js";
 export { type ClassValue, cn } from "./lib/cn.js";
 export {

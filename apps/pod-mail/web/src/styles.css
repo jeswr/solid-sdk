@@ -12,7 +12,12 @@
    scan). The path is relative to THIS file. */
 @import "tailwindcss";
 @import "@jeswr/app-shell/styles.css";
+@import "@jeswr/suite-ui/styles/tokens.css";
+@import "@jeswr/suite-ui/styles/theme.css";
+@import "@jeswr/suite-ui/styles/density.css";
+@import "@jeswr/suite-ui/styles/components.css";
 @source "../node_modules/@jeswr/app-shell/dist";
+@source "../node_modules/@jeswr/suite-ui/dist";
 
 /* The host chrome below predates the shared tokens and uses its own variable
    names (--bg / --ink / --accent / --muted / …). Map them onto the app-shell OKLCH
@@ -32,11 +37,11 @@
    app-shell token, so it is already unified — do NOT re-alias it to itself. */
 :root {
   --bg: var(--background);
-  --surface: var(--card);
+  --host-surface: var(--card);
   --ink: var(--foreground);
-  --muted: var(--muted-foreground);
-  --accent: var(--primary);
-  --accent-ink: var(--primary-foreground);
+  --muted-text: var(--muted-foreground);
+  --action: var(--primary);
+  --action-ink: var(--primary-foreground);
   --danger: var(--destructive);
   --ok: var(--success);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -53,7 +58,7 @@ body {
 }
 
 a {
-  color: var(--accent);
+  color: var(--action);
 }
 
 /* ── Login ─────────────────────────────────────────────────────────────── */
@@ -66,7 +71,7 @@ a {
 .login-card {
   width: 100%;
   max-width: 28rem;
-  background: var(--surface);
+  background: var(--host-surface);
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   padding: 2rem;
@@ -77,7 +82,7 @@ a {
   font-size: 1.5rem;
 }
 .login-sub {
-  color: var(--muted);
+  color: var(--muted-text);
   margin: 0 0 1.25rem;
   font-size: 0.95rem;
 }
@@ -102,7 +107,7 @@ a {
   margin-top: 0.75rem;
 }
 .login-hint {
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 0.85rem;
   margin-top: 1rem;
 }
@@ -140,16 +145,16 @@ a {
    attribute selector's specificity leaks through `:not()` — and REPAINT
    `.pod-mail-open` filled. `:where()` excludes the shell controls while leaving the
    host overrides in charge (roborev Medium, addressed). */
-button:where(:not([data-app-shell-control])) {
+button:where(:not([data-app-shell-control], [data-slot])) {
   cursor: pointer;
   border: none;
   border-radius: 0.5rem;
   padding: 0.6rem 0.9rem;
   font-size: 0.95rem;
-  background: var(--accent);
-  color: var(--accent-ink);
+  background: var(--action);
+  color: var(--action-ink);
 }
-button:where(:not([data-app-shell-control])):disabled {
+button:where(:not([data-app-shell-control], [data-slot])):disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -160,7 +165,7 @@ button:where(:not([data-app-shell-control])):disabled {
 button[type="button"].pod-mail-back,
 .app-logout {
   background: transparent;
-  color: var(--accent);
+  color: var(--action);
   border: 1px solid var(--border);
 }
 
@@ -212,7 +217,7 @@ button[type="button"].pod-mail-back,
   margin-top: 1rem;
 }
 .app-loading {
-  color: var(--muted);
+  color: var(--muted-text);
 }
 
 /* ── Inbox (pod-mail-*) ───────────────────────────────────────────────── */
@@ -222,13 +227,13 @@ button[type="button"].pod-mail-back,
 }
 .pod-mail-loading,
 .pod-mail-empty {
-  color: var(--muted);
+  color: var(--muted-text);
 }
 .pod-mail-error {
   color: var(--danger);
 }
 /* The inbox retry button: a host button (no app-shell marker), so it inherits the
-   filled `button:where(:not([data-app-shell-control]))` base above + adds spacing. */
+   filled `button:where(:not([data-app-shell-control], [data-slot]))` base above + adds spacing. */
 .pod-mail-error button {
   margin-top: 0.5rem;
 }
@@ -249,7 +254,7 @@ button[type="button"].pod-mail-back,
 .pod-mail-table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--surface);
+  background: var(--host-surface);
 }
 .pod-mail-table th,
 .pod-mail-table td {
@@ -260,11 +265,11 @@ button[type="button"].pod-mail-back,
 }
 .pod-mail-status {
   width: 1.5rem;
-  color: var(--accent);
+  color: var(--action);
 }
 .pod-mail-open {
   background: transparent;
-  color: var(--accent);
+  color: var(--action);
   border: none;
   padding: 0;
   text-align: left;
@@ -276,13 +281,13 @@ button[type="button"].pod-mail-back,
   font-weight: 700;
 }
 .pod-mail-cell-date {
-  color: var(--muted);
+  color: var(--muted-text);
   white-space: nowrap;
 }
 
 /* ── Reading pane ─────────────────────────────────────────────────────── */
 .pod-mail-reader {
-  background: var(--surface);
+  background: var(--host-surface);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   padding: 1rem 1.25rem;
@@ -295,7 +300,7 @@ button[type="button"].pod-mail-back,
   margin: 0 0 0.75rem;
 }
 .pod-mail-headers {
-  color: var(--muted);
+  color: var(--muted-text);
   font-size: 0.88rem;
   border-bottom: 1px solid var(--border);
   padding-bottom: 0.75rem;
@@ -310,7 +315,7 @@ button[type="button"].pod-mail-back,
   font-weight: 600;
 }
 .pod-mail-sender {
-  color: var(--accent);
+  color: var(--action);
 }
 .pod-mail-body {
   white-space: pre-wrap;
