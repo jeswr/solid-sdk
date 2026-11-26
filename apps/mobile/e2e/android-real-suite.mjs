@@ -276,7 +276,10 @@ async function trustedRun(tlsDir) {
           headings: [...document.querySelectorAll('h1,h2')].map(h => h.textContent.trim().slice(0, 80)).slice(0, 6),
           buttons: [...document.querySelectorAll('button')].filter(b => b.getClientRects().length).map(b => b.textContent.trim().slice(0, 40) + (b.matches(':disabled') ? ' (disabled)' : '') + (b.getAttribute('aria-busy') === 'true' ? ' (busy)' : '')).slice(0, 12),
           alerts: [...document.querySelectorAll('[role="alert"],.error')].map(a => a.textContent.trim().slice(0, 160)).slice(0, 4),
+          signInFailure: document.documentElement.dataset.signInFailure?.slice(0, 400),
         })`);
+        if (typeof pages[name]?.signInFailure === "string")
+          pages[name].signInFailure = redactText(pages[name].signInFailure);
       } catch {
         pages[name] = "unavailable";
       }
@@ -412,6 +415,8 @@ async function trustedRun(tlsDir) {
       NEXT_PUBLIC_CLIENT_ID_URL: CLIENT_ID,
       NEXT_PUBLIC_DEV_FIXTURES: "0",
       NEXT_PUBLIC_SUITE_DEMO: "0",
+      // Test build only: the app records a redacted error name for a generic sign-in failure.
+      NEXT_PUBLIC_SIGN_IN_DIAGNOSTICS: "1",
     };
     delete env.SUITE_URL;
     try {

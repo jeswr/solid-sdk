@@ -20,7 +20,11 @@ import {
 } from "@jeswr/suite-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLIENT_ID_URL } from "../src/lib/urls";
-import { SolidBackend, type SolidBackendOptions } from "../src/shell/session/solid-backend";
+import {
+  SolidBackend,
+  type SolidBackendOptions,
+  signInDiagnostic,
+} from "../src/shell/session/solid-backend";
 import { SignInError, type SuiteAccount } from "../src/shell/session/types";
 
 const nativeBindings = vi.hoisted(() => {
@@ -1457,5 +1461,24 @@ describe("Solid shell over pod-auth", () => {
     expect(account.name).toBe(alice.webId);
     expect(account.storageUrl).toBe(alice.storages[0]);
     expect(account.photoUrl).toBeUndefined();
+  });
+});
+
+describe("signInDiagnostic", () => {
+  it("keeps error names and drops URLs and long values", () => {
+    const cause = new TypeError(
+      "Failed to fetch https://pod.example/.oidc/token?code=abc&state=xyz with eyJhbGciOiJFUzI1NiJ9xxxx",
+    );
+    const error = new Error("Token exchange failed", { cause });
+    const text = signInDiagnostic(error);
+    expect(text).toBe(
+      "Error: Token exchange failed <- TypeError: Failed to fetch [url] with [value]",
+    );
+    expect(text).not.toContain("pod.example");
+    expect(text).not.toContain("code=");
+    expect(signInDiagnostic(new Error("org.jeswr.suite:/oauth/callback?code=1"))).toBe(
+      "Error: [url]",
+    );
+    expect(signInDiagnostic("nope")).toBe("string");
   });
 });
