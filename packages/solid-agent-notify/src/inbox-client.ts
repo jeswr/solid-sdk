@@ -25,6 +25,8 @@ export interface InboxReaderOptions extends ClientTransportOptions {
   maxItems?: number;
   /** Preserve readable documents with no identifiable activity subject. */
   includeUnknownActivities?: boolean;
+  /** Called when a listing holds more children than `maxItems`, so the rest were not read. */
+  onTruncated?: (listed: number, read: number) => void;
 }
 
 /** Listing metadata remains available even when unreadable children are skipped. */
@@ -131,8 +133,11 @@ export function createInboxReader(options: InboxReaderOptions): InboxReader {
   }
   return {
     inbox: async (webId) => (await discover(webId)).inbox,
-    async list(inboxUrl, options) {
-      return (await listPage(inboxUrl, options)).notifications;
+    async list(inboxUrl, listOptions) {
+      const page = await listPage(inboxUrl, listOptions);
+      const listed = page.members.filter((member) => !isReadMarker(member)).length;
+      if (listed > maxItems) options.onTruncated?.(listed, maxItems);
+      return page.notifications;
     },
     listPage,
   };

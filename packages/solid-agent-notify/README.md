@@ -80,7 +80,7 @@ const inbox = await reader.inbox(ownerWebId); // string | null (including LWS pr
 const items = inbox ? await reader.list(inbox, { signal }) : [];
 ```
 
-`createInboxReader({ fetch, pinningFetch?, clock?, maxItems? })` shares the notifier's exact
+`createInboxReader({ fetch, pinningFetch?, clock?, maxItems?, onTruncated? })` shares the notifier's exact
 WebID discovery implementation and ten-minute cache when **fetch, pinningFetch and clock**
 identities match (omitted clock uses Date.now). Recreate session transports on account changes.
 Discovery failures return null; transient failures are retried. The cache holds at most 256 WebIDs.
@@ -107,6 +107,12 @@ Listing byte overflow retains complete Turtle/N-Triples statements and returns `
 256 KiB cap. Read sidecars are excluded from fetch budgets. Blank-node activity subjects
 preserve RDF/JS identity; missing/unknown types and repeated malformed publication dates do
 not hide otherwise readable notifications.
+
+`onTruncated(listed, read)` is an optional reader-level callback, called once per `list` whose
+container holds more direct children than `maxItems` (it is not called when the count equals
+`maxItems`), so the unread remainder can be reported. It belongs to the reader, not to a call:
+overlapping `list` calls on one reader cannot be told apart, so run them one at a time when the
+flag matters. A callback that throws fails that `list`.
 
 ## Node API
 

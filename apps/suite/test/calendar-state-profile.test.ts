@@ -103,7 +103,12 @@ async function setup(webId = "https://identity.example/profile/card#me") {
       headers: { "Content-Type": "text/turtle" },
     });
   });
-  const account: CalendarAccount = { webId, storageUrl: root, fetch: authenticated };
+  const account: CalendarAccount = {
+    webId,
+    storageUrl: root,
+    fetch: authenticated,
+    mode: "demo",
+  };
   return { account, authenticated, profile, prefs, index, registration, pod };
 }
 

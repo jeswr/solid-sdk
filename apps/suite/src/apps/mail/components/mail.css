@@ -24,6 +24,14 @@
 .mail-sidebar p {
   margin: var(--space-2) 0 0;
 }
+/* In the suite shell this sidebar sits inside .suite-sidebar-nav, whose link colour and
+   hover would otherwise repaint the filled Compose button (failing text contrast). */
+.mail-sidebar a[data-slot="button"][data-variant="default"] {
+  color: var(--primary-foreground);
+}
+.mail-sidebar a[data-slot="button"][data-variant="default"]:hover {
+  background: color-mix(in oklab, var(--primary) 90%, transparent);
+}
 .mail-sidebar :where(nav ul) {
   display: grid;
   gap: var(--space-1);
@@ -184,7 +192,7 @@
   min-width: 0;
   padding: var(--space-3);
 }
-.mail-thread :is(h1, h2) {
+.mail-thread :is(h1, h2, h3) {
   font-size: var(--text-xl);
   line-height: 1.4;
   font-weight: 600;
@@ -336,7 +344,7 @@
   max-width: 800px;
   margin-inline: auto;
 }
-.mail-import h1 {
+.mail-import > :is(h1, h2) {
   font-size: var(--text-xl);
   font-weight: 600;
 }
@@ -458,7 +466,7 @@
   clip-path: inset(50%);
 }
 
-.mail-empty h2 {
+.mail-empty :is(h2, h3) {
   margin: 0 0 var(--space-1);
   font-size: var(--text-md);
   line-height: var(--lh-md);

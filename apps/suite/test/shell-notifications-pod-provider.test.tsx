@@ -188,6 +188,7 @@ it("adds a ready real account's inbox using its fenced authenticated fetch and k
   expect(createPodNotificationSource).toHaveBeenCalledOnce();
   expect(createPodNotificationSource).toHaveBeenCalledWith({
     webId: alice.webId,
+    storageUrl: alice.storageUrl,
     fetch: expect.any(Function),
   });
   const fetch = fencedFetch(0);
@@ -283,6 +284,7 @@ it("rebuilds for a changed WebID on the same account id", async () => {
   expect(dispose).toHaveBeenCalledOnce();
   expect(createPodNotificationSource).toHaveBeenLastCalledWith({
     webId: bob.webId,
+    storageUrl: alice.storageUrl,
     fetch: expect.any(Function),
   });
 });

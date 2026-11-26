@@ -15,6 +15,8 @@ export class ChatModelError extends Error {
       | "duplicate"
       | "missing-etag"
       | "unsafe-acl",
+    /** For `duplicate`: the stored message's ID (its member container's day, in a v2 room). */
+    readonly subject?: string,
   ) {
     super(`Chat model: ${code}`);
   }

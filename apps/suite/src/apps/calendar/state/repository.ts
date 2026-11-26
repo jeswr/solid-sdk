@@ -3,6 +3,9 @@
 // AUTHORED-BY Codex GPT-6
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch, podScopedUrl, refuseRedirects } from "@jeswr/guarded-fetch";
+import { createOwnerOnlyDestinationChecks } from "@jeswr/pod-access";
+import { verifyPrivateDemoAccess } from "@jeswr/pod-access/roles";
+import { createPodClient } from "@jeswr/storage-client";
 import { termsEqual } from "@jeswr/suite-vocab";
 import { DataFactory } from "n3";
 import {
@@ -19,6 +22,60 @@ export interface CalendarAccount {
   fetch: typeof globalThis.fetch;
   /** Pristine public transport, never an authenticated session fetch. */
   publicFetch?: typeof globalThis.fetch;
+  /** The session mode. Only "demo" may use the demo pod's marker, never a real pod. */
+  mode?: string;
+  /** Replaces the owner-only checks, for tests. Defaults to the shared @jeswr/pod-access ones. */
+  privateDestination?: CalendarPrivacyChecks;
+}
+/** Owner-only verification before a write and confirmation of the stored version after it. */
+export interface CalendarPrivacyChecks {
+  verify(url: string): Promise<boolean>;
+  confirm(url: string, version: { etag?: string }): Promise<boolean>;
+}
+/** Thrown, with a safe user-facing message, when a calendar cannot be proven owner-only. */
+export class CalendarPrivacyError extends Error {
+  constructor() {
+    super(
+      "Your pod could not confirm that this calendar would stay private, so it was not created.",
+    );
+    this.name = "CalendarPrivacyError";
+  }
+}
+/**
+ * Thrown when a calendar could not be proven private and the cleanup could not be confirmed
+ * either, so something may remain in the pod. The message names no URL or policy.
+ */
+export class CalendarUnconfirmedError extends CalendarPrivacyError {
+  constructor() {
+    super();
+    this.message =
+      "Your pod could not confirm that this calendar is private, and it could not be removed. Check its sharing in your pod.";
+    this.name = "CalendarUnconfirmedError";
+  }
+}
+function privacyChecks(account: CalendarAccount): CalendarPrivacyChecks {
+  if (account.privateDestination) return account.privateDestination;
+  if (account.mode === "demo") {
+    const verify = (url: string) =>
+      verifyPrivateDemoAccess({ ...account, mode: "demo" }, url, account.webId);
+    return { verify, confirm: verify };
+  }
+  const checks = createOwnerOnlyDestinationChecks({
+    podRoot: account.storageUrl,
+    ownerWebId: account.webId,
+    openStorage: async () =>
+      (await createPodClient({ fetch: account.fetch, storage: account.storageUrl })).storage,
+  });
+  return { verify: checks.verifyPrivateDestination, confirm: checks.confirmPrivateWrite };
+}
+/** Any refusal, rejection or unreadable policy fails closed. */
+async function requirePrivate(prove: () => Promise<boolean>): Promise<void> {
+  try {
+    if (await prove()) return;
+  } catch {
+    // An unavailable access policy is a refusal too.
+  }
+  throw new CalendarPrivacyError();
 }
 // Capture before sign-in can patch the global. Foreign profile reads omit cookies and refuse redirects.
 const publicFetch = globalThis.fetch.bind(globalThis);
@@ -122,13 +179,42 @@ export async function discoverCalendars(
   return { calendars, warnings };
 }
 // Only resume resources created by this account's own incomplete attempt.
-const creations = new WeakMap<CalendarAccount, Set<string>>();
+// Each attempt maps to the ETag of the document it created (null when the server sent none).
+const creations = new WeakMap<CalendarAccount, Map<string, string | null>>();
 export interface CreateCalendarOptions {
   /**
    * A fresh calendar that never adopts existing resources: a random slug, and an existing
    * events folder is refused instead of reused (412). For calendars that are shared on creation.
    */
   exclusive?: boolean;
+}
+/**
+ * Deletes a resource this call created, only while it still has the ETag this call obtained.
+ * Returns whether the resource is confirmed gone; a missing validator or a changed resource
+ * is never deleted.
+ */
+async function removeCreated(
+  account: CalendarAccount,
+  url: string,
+  etag: string | null | undefined,
+): Promise<boolean> {
+  if (!etag) return false;
+  try {
+    const response = await createPodScopedFetch(account.storageUrl, { fetch: account.fetch })(url, {
+      method: "DELETE",
+      headers: { "If-Match": etag },
+      redirect: "error",
+    });
+    return response.ok || response.status === 404;
+  } catch {
+    return false;
+  }
+}
+/** The refusal, or the distinct unconfirmed state when the document could not be removed. */
+function refusal(error: unknown, removed: boolean): unknown {
+  return removed || !(error instanceof CalendarPrivacyError)
+    ? error
+    : new CalendarUnconfirmedError();
 }
 /** Creates (or resumes creating) a calendar and returns its document URL. */
 export async function createCalendar(
@@ -146,13 +232,27 @@ export async function createCalendar(
   const container = eventContainer(url);
   let attempts = creations.get(account);
   if (!attempts) {
-    attempts = new Set();
+    attempts = new Map();
     creations.set(account, attempts);
   }
   const attempt = JSON.stringify([url, title.trim(), colour]);
+  const privacy = privacyChecks(account);
   if (!attempts.has(attempt)) {
-    await io.saveCalendar(url, { title: title.trim(), color: colour }, { create: true });
-    attempts.add(attempt);
+    // Prove the destination owner-only before any private byte is sent.
+    await requirePrivate(() => privacy.verify(url));
+    const etag = await io.saveCalendar(
+      url,
+      { title: title.trim(), color: colour },
+      { create: true },
+    );
+    attempts.set(attempt, etag ?? null);
+    try {
+      await requirePrivate(() => privacy.confirm(url, etag ? { etag } : {}));
+    } catch (error) {
+      const removed = await removeCreated(account, url, etag);
+      attempts.delete(attempt);
+      throw refusal(error, removed);
+    }
   }
   // An empty LDP BasicContainer is represented by the request Link header, no invented RDF.
   const response = await createPodScopedFetch(account.storageUrl, { fetch: account.fetch })(
@@ -169,12 +269,24 @@ export async function createCalendar(
   );
   if (!response.ok && (options.exclusive || response.status !== 412))
     throw new CalendarHttpError(response.status, response.headers.get("etag"));
+  // Only a folder this call created may be removed; a 412 adopted a pre-existing one.
+  const createdFolder = response.ok;
+  const folderEtag = response.headers.get("etag");
   const { indexUrl } = await ensureTypeRegistrations({
     webId: account.webId,
     podRoot: account.storageUrl,
     registrations: [],
     fetchImpl: calendarFetch(account),
   });
+  // The events folder must also inherit owner-only access before events are stored in it.
+  try {
+    await requirePrivate(() => privacy.verify(new URL("events.ttl", container).href));
+  } catch (error) {
+    if (createdFolder) await removeCreated(account, container, folderEtag);
+    const removed = await removeCreated(account, url, attempts.get(attempt));
+    attempts.delete(attempt);
+    throw refusal(error, removed);
+  }
   await io.registerCalendar(indexUrl, url, container);
   attempts.delete(attempt);
   return url;

@@ -64,7 +64,7 @@ async function navigate(page: Page, name: string) {
       .getByRole("dialog", { name: "Drive navigation", exact: true })
       .getByRole("link", { name, exact: true })
       .click();
-    await page.getByRole("button", { name: "Close drive navigation", exact: true }).click();
+    // The shell closes the narrow drawer when the route changes.
     await expect(page.getByRole("dialog", { name: "Drive navigation", exact: true })).toBeHidden();
   } else {
     await page

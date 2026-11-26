@@ -241,8 +241,12 @@ start to add triples** — seed at creation (the script does) or use a pod templ
 ## Reference skills
 
 If you have access to the Solid agent skills, prefer them over re-deriving APIs:
-`solid-reactive-authentication`, `solid-object`, `solid-fetch-rdf`, `solid-test-infrastructure`.
-They document the *published* APIs and the gotchas above.
+`solid-object`, `fetch-rdf`, `solid-test-infrastructure`, and for login
+`solid-reactive-authentication`. This template still wires the legacy
+`@solid/reactive-authentication` (see the table above); that skill documents it and the
+migration to `@jeswr/pod-auth`, the suite's current auth library (`pod-auth` skill). pod-auth
+is still a private workspace package, so a scaffolded app keeps the legacy library until it is
+published. They document the *published* APIs and the gotchas above.
 
 <!-- BEGIN:nextjs-agent-rules -->
 ## This is NOT the Next.js you know
