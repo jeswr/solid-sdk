@@ -58,6 +58,7 @@ import { encodeRef } from "@/lib/refs";
 import { AppHeading } from "@/shell/app-frame";
 import { type DriveItem, nameOf, parentOf } from "../lib/client/client";
 import { isOwnStorage } from "../lib/client/ownership";
+import { isWorkbookLike } from "../lib/client/workbook";
 import {
   createSelection,
   type SelectionState,
@@ -442,14 +443,14 @@ export function FileBrowser(props: FileBrowserProps) {
       case (event.key === "F2" || (event.key === "n" && !mod)) &&
         targets.length === 1 &&
         writable(targets) &&
-        !targets.some((item) => item.workbook):
+        !targets.some(isWorkbookLike):
         event.preventDefault();
         return ui.openDialog({ kind: "rename", item: targets[0] as DriveItem });
       case event.key === "m" &&
         !mod &&
         targets.length > 0 &&
         writable(targets) &&
-        !targets.some((item) => item.workbook):
+        !targets.some(isWorkbookLike):
         event.preventDefault();
         return ui.openDialog({ kind: "move", items: [...targets] });
       case event.key === "s" && !mod && targets.length > 0:
@@ -475,7 +476,7 @@ export function FileBrowser(props: FileBrowserProps) {
 
   const onDragStart = (event: DragEvent, item: BrowserItem) => {
     const targets = targetsFor(item);
-    if (!writable(targets) || targets.some((target) => target.workbook)) {
+    if (!writable(targets) || targets.some(isWorkbookLike)) {
       event.preventDefault();
       return;
     }
@@ -490,7 +491,7 @@ export function FileBrowser(props: FileBrowserProps) {
     );
 
   const folderDropProps = (item: BrowserItem) =>
-    item.kind === "folder" && !item.workbook && isOwnStorage(item.url, session.storageUrl)
+    item.kind === "folder" && !isWorkbookLike(item) && isOwnStorage(item.url, session.storageUrl)
       ? {
           onDragOver: (event: DragEvent) => {
             const types = [...event.dataTransfer.types];
@@ -767,7 +768,7 @@ export function FileBrowser(props: FileBrowserProps) {
                       ? 0
                       : -1
                   }
-                  draggable={Boolean(folder) && !item.workbook}
+                  draggable={Boolean(folder) && !isWorkbookLike(item)}
                   onDragStart={(event) => onDragStart(event, item)}
                   onDragEnd={() => clearDragItems(client)}
                   onClick={(event) => onItemClick(event, item)}
@@ -855,7 +856,7 @@ export function FileBrowser(props: FileBrowserProps) {
                     aria-selected={isSelected}
                     data-drop={dropTarget === item.url || undefined}
                     tabIndex={isActive ? 0 : -1}
-                    draggable={Boolean(folder) && !item.workbook}
+                    draggable={Boolean(folder) && !isWorkbookLike(item)}
                     onDragStart={(event) => onDragStart(event, item)}
                     onDragEnd={() => clearDragItems(client)}
                     onClick={(event) => onItemClick(event, item)}

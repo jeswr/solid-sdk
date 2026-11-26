@@ -335,6 +335,42 @@ describe("Drive Sheets menu, preview and workbook presentation", () => {
     expect(mocks.router.push).toHaveBeenCalledWith(`/sheets/s/${encodeRef(BOOK.url)}`);
   });
 
+  it("keeps rename, move and drag off for a Sheets folder whose workbook metadata didn't load", async () => {
+    const unknown: DriveItem = {
+      url: `${ROOT}sheets/maybe/`,
+      name: "maybe",
+      kind: "folder",
+      workbookUnknown: true,
+    };
+    const menu = await mount(h(DriveUiProvider, null, h(Menu, { item: unknown })));
+    const ids = entries.filter((entry) => entry !== "separator").map((entry) => entry.id);
+    expect(ids).toContain("open");
+    for (const id of ["rename", "move"]) expect(ids).not.toContain(id);
+    await menu.unmount();
+    client.stat.mockResolvedValue(unknown);
+    const view = await mount(
+      h(
+        DriveUiProvider,
+        null,
+        h(FileBrowser, {
+          title: "Sheets",
+          folder: `${ROOT}sheets/`,
+          items: [unknown],
+          columns: ["modified", "size"],
+          empty: { title: "Empty", icon: null },
+        }),
+      ),
+    );
+    const row =
+      view.host.querySelector(`[data-item-url="${unknown.url}"]`) ??
+      view.host.querySelector("tbody tr");
+    expect(row?.getAttribute("draggable")).toBe("false");
+    await click(row as Element);
+    await key(row as Element, "F2");
+    await key(row as Element, "m");
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
   it("prevents workbook rename/move shortcuts and drag actions in the browser", async () => {
     client.stat.mockResolvedValue(BOOK);
     const view = await mount(

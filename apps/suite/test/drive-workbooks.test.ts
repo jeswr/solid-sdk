@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { describe, expect, it, vi } from "vitest";
 import { createSolidDriveClient, type DriveItem } from "../src/apps/drive/lib/client/client";
-import { withWorkbook } from "../src/apps/drive/lib/client/workbook";
+import { isWorkbookLike, withWorkbook } from "../src/apps/drive/lib/client/workbook";
 import { hrefFor } from "../src/apps/drive/lib/files/urls";
 import {
   deleteForever,
@@ -166,17 +167,62 @@ describe("Sheets containers in Drive", () => {
       expect(await withWorkbook(item, POD, fetch)).toBe(item);
     }
     expect(fetch).not.toHaveBeenCalled();
-    for (const status of [403, 404, 500])
+    for (const status of [404, 410])
       expect(await withWorkbook(folder, POD, async () => new Response(null, { status }))).toBe(
         folder,
       );
+    // Unread metadata fails closed: still a folder, but not one that can be renamed or moved.
+    const unknown = { ...folder, workbookUnknown: true };
+    for (const status of [401, 403, 500, 503])
+      expect(await withWorkbook(folder, POD, async () => new Response(null, { status }))).toEqual(
+        unknown,
+      );
+    expect(
+      await withWorkbook(folder, POD, async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    ).toEqual(unknown);
     expect(
       await withWorkbook(
         folder,
         POD,
         async () => new Response("malformed RDF", { headers: { "content-type": "text/turtle" } }),
       ),
-    ).toBe(folder);
+    ).toEqual(unknown);
+    // The index reads, but the snapshot's HEAD fails for a reason other than absence.
+    const book2 = await h.service.create({ title: "Flaky" });
+    const flaky: DriveItem = { url: book2.container, name: "flaky", kind: "folder" };
+    const headFails: typeof globalThis.fetch = async (input, init) =>
+      init?.method === "HEAD" ? new Response(null, { status: 503 }) : h.fetch(input, init);
+    expect(await withWorkbook(flaky, POD, headFails)).toEqual({ ...flaky, workbookUnknown: true });
+    expect(isWorkbookLike({ ...flaky, workbookUnknown: true })).toBe(true);
+    expect(isWorkbookLike({ ...flaky, workbook: true })).toBe(true);
+    expect(isWorkbookLike(flaky)).toBe(false);
+  });
+
+  it("bounds concurrent workbook detection when listing a large Sheets folder", async () => {
+    const h = await harness();
+    for (let i = 0; i < 40; i++) await h.pod.fetch(`${ROOT}folder-${i}/`, { method: "PUT" });
+    let active = 0;
+    let peak = 0;
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      const url = String(input);
+      if (!url.startsWith(ROOT) || url === ROOT) return h.fetch(input, init);
+      active++;
+      peak = Math.max(peak, active);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return await h.fetch(input, init);
+      } finally {
+        active--;
+      }
+    };
+    const client = createSolidDriveClient({ storageUrl: POD, fetch });
+    const items = await client.list(ROOT);
+    expect(items).toHaveLength(40);
+    expect(items.every((item) => !item.workbook && !item.workbookUnknown)).toBe(true);
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(8);
   });
 
   it("rejects trash records for Sheets internals, nested containers, and other pods", async () => {

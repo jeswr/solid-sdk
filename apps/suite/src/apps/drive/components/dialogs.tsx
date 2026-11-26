@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 "use client";
+
 /**
  * Drive dialogs (04-drive §2.9): New folder, Rename (with the extension
  * prompt), Move to… (lazy folder tree), Delete for ever, Empty trash and the
@@ -41,6 +42,7 @@ import {
   useState,
 } from "react";
 import { type DriveItem, nameOf, parentOf } from "../lib/client/client";
+import { isWorkbookLike } from "../lib/client/workbook";
 import { formatFileSize } from "../lib/files";
 import { getMoveValidity } from "../lib/list";
 import { extensionChange, isHidden, validateName } from "../lib/operations/operations";
@@ -263,7 +265,9 @@ function MoveDialog({
         setNodes((current) => ({
           ...current,
           [url]: children
-            .filter((child) => child.kind === "folder" && !child.workbook && !isHidden(child))
+            .filter(
+              (child) => child.kind === "folder" && !isWorkbookLike(child) && !isHidden(child),
+            )
             .sort((a, b) => a.name.localeCompare(b.name))
             .map((child) => ({ url: child.url, name: child.name })),
         }));
