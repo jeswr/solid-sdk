@@ -7,7 +7,7 @@ import { createConnectionStore } from "./connections-store.js";
 import { ConnectorScheduler, type ConnectorSchedulerOptions } from "./scheduler.js";
 import { connectorState } from "./state.js";
 import { createConnectorStateStore } from "./state-store.js";
-import { createMemoryPod, TEST_POD_ROOT, TEST_WEBID } from "./testing.js";
+import { createMemoryPod, ownerOnlyFixtureChecks, TEST_POD_ROOT, TEST_WEBID } from "./testing.js";
 import { ConnectionRemovedError, type ConnectorState } from "./types.js";
 
 const AT = "2026-11-01T12:00:00.000Z";
@@ -33,7 +33,14 @@ function fixture() {
       body: init?.body instanceof Uint8Array ? new TextDecoder().decode(init.body) : init?.body,
     });
   };
-  const options = { podRoot: TEST_POD_ROOT, webId: TEST_WEBID, fetch: io };
+  // Every registered connector (and the settings document) is private: owner-only fixture
+  // checks stand in for the host's verifyPrivateDestination/confirmPrivateWrite ports.
+  const options = {
+    podRoot: TEST_POD_ROOT,
+    webId: TEST_WEBID,
+    fetch: io,
+    privateDestination: ownerOnlyFixtureChecks,
+  };
   return { pod, requests, io, options };
 }
 it("writes health with If-Match and merges another account and newer checkpoint after a 412", async () => {

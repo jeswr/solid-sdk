@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type {
   ConnectorAccountState,
   ConnectorErrorClass,
@@ -94,21 +95,40 @@ function claim(value: unknown): ConnectorRunClaim {
 export function connectorCheckpoint(value: unknown): ConnectorAccountState {
   return checkpoint(value);
 }
+function cursor(value: unknown): string {
+  if (typeof value !== "string" || !value.trim() || value.length > 1_048_576)
+    throw new Error("Invalid state cursor");
+  return value;
+}
+/** Two-way sync health: required conflict/delete counts plus optional counters. */
+function syncHealth(value: unknown): NonNullable<ConnectorState["sync"]> {
+  const s = jsonObject(value);
+  return {
+    conflicts: count(s.conflicts),
+    pendingDeletes: count(s.pendingDeletes),
+    ...(s.failed === undefined ? {} : { failed: count(s.failed) }),
+    ...(s.unlinkedImports === undefined ? {} : { unlinkedImports: count(s.unlinkedImports) }),
+    ...(s.deferred === undefined ? {} : { deferred: count(s.deferred) }),
+  };
+}
+/**
+ * One checkpoint as persisted. This is the only state parser: the CLI store
+ * (`node/state.ts`) and the scheduler store (`state-store.ts`) both project through it, so
+ * either writer keeps the other's validated fields (`fileCursor`, `sync`, `health`, and at
+ * the root `accounts`/`claims`) and drops everything else.
+ */
 function checkpoint(value: unknown): ConnectorAccountState {
   const s = jsonObject(value),
     counts = jsonObject(s.counts);
   if (s.lastOutcome !== "success" && s.lastOutcome !== "error")
     throw new Error("Invalid state outcome");
-  if (
-    s.cursor !== undefined &&
-    (typeof s.cursor !== "string" || !s.cursor.trim() || s.cursor.length > 1_048_576)
-  )
-    throw new Error("Invalid state cursor");
   return {
     connectedAt: date(s.connectedAt),
     ...(s.lastSync === undefined ? {} : { lastSync: date(s.lastSync) }),
-    ...(s.cursor === undefined ? {} : { cursor: s.cursor as string }),
+    ...(s.cursor === undefined ? {} : { cursor: cursor(s.cursor) }),
+    ...(s.fileCursor === undefined ? {} : { fileCursor: cursor(s.fileCursor) }),
     lastOutcome: s.lastOutcome,
+    ...(s.sync === undefined ? {} : { sync: syncHealth(s.sync) }),
     counts: {
       documents: count(counts.documents),
       items: count(counts.items),

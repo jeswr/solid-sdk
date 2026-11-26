@@ -25,7 +25,13 @@ import {
   StateConflictError,
   updateConnectorState,
 } from "./state.js";
-import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "./testing.js";
+import {
+  createMemoryPod,
+  ownerOnlyFixtureChecks,
+  TEST_POD_ROOT,
+  TEST_PROFILE_DOC,
+  TEST_WEBID,
+} from "./testing.js";
 import type {
   ConnectorAccountState,
   ConnectorRunHealth,
@@ -625,6 +631,8 @@ it("counts created/updated/unchanged documents through the real runner and prese
         webId: TEST_WEBID,
         profileDocumentUrl: TEST_PROFILE_DOC,
         fetch: pod.fetch,
+        // Spotify is private: the real runner's gate must pass, not be bypassed.
+        ...ownerOnlyFixtureChecks,
       }),
     });
   expect((await run()).counts).toEqual({ created: 1, updated: 0, unchanged: 0, skipped: 0 });
@@ -675,6 +683,16 @@ it("passes cancellation to a real runner's in-flight source fetch and releases i
     runner: undefined,
     podWriter: () => ({
       ...writer,
+      // The real runner's private-destination gate runs against owner-only fixture checks.
+      ...ownerOnlyFixtureChecks,
+      // The run record is a real (confirmed) write, so it reports what it wrote.
+      write: async (doc) => ({
+        url: writer.resolve(doc.slug),
+        writeCreated: true,
+        writeEtag: '"run-1"',
+        category: doc.category,
+        forClass: doc.forClass,
+      }),
       registerType: async () => ({ indexUrl: "https://pod.example/index" }),
     }),
     registry: { adapterById: () => ({ ...adapter, import: async () => ({}) }) },

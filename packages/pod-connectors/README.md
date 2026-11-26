@@ -2689,6 +2689,35 @@ checkpoint meaning. Scheduler state adds:
   gets a root without `cursor`/`lastSync`. The root `health` reports the most recent
   trusted attempt.
 
+**One checkpoint, one parser, one location.** The CLI store (`node/state.ts`) and
+`createConnectorStateStore` resolve the same file (`connectorStateLocation`:
+`integrations/<container>/state.json`, or `integrations/fitbit/state-google-health.json`
+for Google Health) and project through the same `connectorState` parser. Each keeps
+the other's validated fields and drops anything else: a scheduler write keeps the
+CLI's root `cursor`, `fileCursor` and two-way `sync` health; a CLI write keeps the
+scheduler's `accounts`, `claims` and `health` from the checkpoint its conditional
+write is based on.
+
+**Private state writes.** Every registered connector is private, and so is the
+settings document, whose rows name the services an owner connected. The owner-only
+JSON stores therefore apply the PodWriter private-write contract to every Pod
+mutation: `createConnectorStateStore({ ..., privateDestination })` and
+`createConnectionStore({ ..., privateDestination })` take the host's
+`verifyPrivateDestination`/`confirmPrivateWrite` ports (type
+`PrivateDestinationChecks`; normally the same checks as the run's PodWriter, from
+`createOwnerOnlyDestinationChecks` or `createSessionPrivateDestinationChecks`). The
+exact JSON URL is verified before the first-read ACL install and before each PUT,
+each PUT is confirmed afterwards, and a create whose confirmation refuses is deleted
+`If-Match` its write ETag and checked for absence (an update is never deleted).
+Missing ports, or a false or failed check, refuse with `PrivateDestinationError` before
+any request. Refusals are sticky for the store instance; cancellation is not a refusal.
+`peek` is read-only and needs no checks. A scheduler run whose state store refuses
+writes no claim, fetches no token and starts no import. A host that implements its
+own `stateStore` port must enforce the same checks. The agent daemon's connectors job
+passes `createSessionPrivateDestinationChecks` over its Pod session (or its
+`privateDestination` option) to the settings store, every state store and every run's
+PodWriter.
+
 Health change counts describe RDF documents; unchanged comparison excludes run
 provenance. They are bounded by document count and also surface as
 `ImportReport.counts` / `onRunCounts` for partial writes. The scheduler enables

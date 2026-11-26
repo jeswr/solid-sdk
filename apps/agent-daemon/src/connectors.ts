@@ -14,8 +14,10 @@ import {
   createConnectorStateStore,
   createFetchPodWriter,
   createRegistry,
+  createSessionPrivateDestinationChecks,
   DEFAULT_CONNECTOR_RUN_TIMEOUT_MS,
   NoVaultError,
+  type PrivateDestinationChecks,
   parseConnectorConnections,
   type TokenSource,
 } from "@jeswr/pod-connectors";
@@ -63,6 +65,13 @@ export interface ConnectorsJobOptions {
   readonly runner?: ConnectorSchedulerOptions["runner"];
   /** Per-run limit (default 15 minutes); see ConnectorSchedulerOptions.runTimeoutMs. */
   readonly runTimeoutMs?: number;
+  /**
+   * Host-verified owner-only destination checks for every private Pod mutation: the
+   * settings document, each connector's state and its import writer. Defaults to
+   * `createSessionPrivateDestinationChecks` over `podFetch`, which refuses (fails closed)
+   * on a pod whose owner-only WAC policy it cannot establish.
+   */
+  readonly privateDestination?: (signal?: AbortSignal) => PrivateDestinationChecks;
 }
 /** Job poll cadence and its failure back-off: 30 s doubling to 30 min, reset after success. */
 export const CONNECTORS_POLL_MS = 30_000;
@@ -87,8 +96,24 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
 export function createConnectorsJob(o: ConnectorsJobOptions): ConnectorsJob {
   const registry = o.registry ?? createRegistry();
   const runTimeoutMs = o.runTimeoutMs ?? DEFAULT_CONNECTOR_RUN_TIMEOUT_MS;
+  const checks =
+    o.privateDestination ??
+    ((signal?: AbortSignal) =>
+      createSessionPrivateDestinationChecks({
+        fetch: o.podFetch,
+        storageUrl: o.podRoot,
+        webId: o.webId,
+        ...(signal && { signal }),
+      }));
+  // Long-lived stores share one set of checks; refusals are sticky per store instance.
+  const storeChecks = checks();
   const settings = () =>
-    createConnectionStore({ podRoot: o.podRoot, webId: o.webId, fetch: o.podFetch });
+    createConnectionStore({
+      podRoot: o.podRoot,
+      webId: o.webId,
+      fetch: o.podFetch,
+      privateDestination: storeChecks,
+    });
   // Long-lived stores protect their ACL once; polling uses conditional GETs.
   const poll = settings();
   const updates = settings();
@@ -113,6 +138,7 @@ export function createConnectorsJob(o: ConnectorsJobOptions): ConnectorsJob {
         adapterId,
         webId: o.webId,
         fetch: o.podFetch,
+        privateDestination: storeChecks,
       });
       states.set(adapterId, store);
     }
@@ -131,15 +157,20 @@ export function createConnectorsJob(o: ConnectorsJobOptions): ConnectorsJob {
         (async () => {
           throw new Error("Source transport not configured");
         }),
-      podWriter: (c, signal) =>
-        createFetchPodWriter({
+      podWriter: (c, signal) => {
+        // The runner refuses a private import whose writer lacks these ports.
+        const { verifyPrivateDestination, confirmPrivateWrite } = checks(signal);
+        return createFetchPodWriter({
           adapterId: c.connectorId,
           podRoot: o.podRoot,
           webId: o.webId,
           profileDocumentUrl: o.profileDocumentUrl,
           fetch: o.podFetch,
+          verifyPrivateDestination,
+          confirmPrivateWrite,
           signal,
-        }),
+        });
+      },
       stateStore,
       saveConnection,
       registry,
