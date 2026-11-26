@@ -259,7 +259,8 @@ export function driveReplayDelegate({
       }
       const { discovery } = assertions(delivery);
       // Only a strong validator: a weak one never matches, and "*" would overwrite anything.
-      if (!isEndpointCapture(discovery) || !STRONG_ETAG.test(delivery.ifMatch ?? ""))
+      const { ifMatch } = delivery;
+      if (!isEndpointCapture(discovery) || !ifMatch || !STRONG_ETAG.test(ifMatch))
         refuse(delivery, "This queued save has no version to check against.");
       let written: { etag?: string };
       try {
@@ -268,7 +269,7 @@ export function driveReplayDelegate({
           body(delivery, contentType),
           {
             contentType,
-            ifMatch: delivery.ifMatch,
+            ifMatch,
             verifyHeaders: client.discoveryVerifier(delivery.url, discovery),
           },
           { kind: "protect-ancestors" },

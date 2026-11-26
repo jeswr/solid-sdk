@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 import { StorageError } from "@jeswr/storage-client";
-import type { GuardedDelivery } from "@jeswr/suite-sdk/offline";
+import type { GuardedDelivery, JsonValue } from "@jeswr/suite-sdk/offline";
 import { expect, it, vi } from "vitest";
 import { DriveAccessError, isEndpointCapture } from "../src/apps/drive/lib/client/access";
 import {
@@ -239,7 +239,7 @@ it("stores a kept copy as a new file next to the file it keeps", async () => {
   expect((await f.anonymous(`${PUBLIC}placeholder-conflict-1000`)).status).toBe(200);
   // Drive's copy carries its own ACL, which a bare create-only upload never writes.
   expect(f.policies.has(`${PUBLIC}placeholder-conflict-1000.policy`)).toBe(true);
-  const discovery = (assertions as { discovery: unknown }).discovery;
+  const discovery = (assertions as { discovery: JsonValue }).discovery;
   for (const delivery of [
     copy({ createOptions: {} }),
     // Only the outbox's keep-both name for this file is accepted.
@@ -491,7 +491,7 @@ it("gives a kept copy the source file's own access, not its looser folder's", as
       contentType: "text/plain",
       body: encode("private offline text"),
       createOptions: { name: "placeholder-conflict-1000", contentType: "text/plain" },
-      assertions: textGuard(version.discovery as never, FILE).assertions,
+      assertions: textGuard(version.discovery as never, FILE).assertions ?? null,
       purpose: "resolve-both",
     },
     ctx(),
@@ -520,7 +520,7 @@ it("keeps the conflict suffix when a long name has to be shortened", async () =>
       contentType: "text/plain",
       body: encode("mine"),
       createOptions: { name: `${"a".repeat(176)}-conflict-1000.txt`, contentType: "text/plain" },
-      assertions: textGuard(version.discovery as never, long).assertions,
+      assertions: textGuard(version.discovery as never, long).assertions ?? null,
       purpose: "resolve-both",
     },
     ctx(),
