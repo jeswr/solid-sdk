@@ -237,6 +237,8 @@ it("stores a kept copy as a new file next to the file it keeps", async () => {
   expect(await (await f.pod.fetch(`${PUBLIC}placeholder-conflict-1000`)).text()).toBe("kept");
   // The file inherits the public folder's access, and so does its copy.
   expect((await f.anonymous(`${PUBLIC}placeholder-conflict-1000`)).status).toBe(200);
+  // Drive's copy carries its own ACL, which a bare create-only upload never writes.
+  expect(f.policies.has(`${PUBLIC}placeholder-conflict-1000.policy`)).toBe(true);
   const discovery = (assertions as { discovery: unknown }).discovery;
   for (const delivery of [
     copy({ createOptions: {} }),
