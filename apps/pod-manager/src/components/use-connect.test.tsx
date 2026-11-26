@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// @vitest-environment jsdom
+import { createRequire } from "node:module";
 import { createRegistry } from "@jeswr/pod-connectors";
 import { Provenance } from "@jeswr/pod-connectors/core/provenance";
 import {
@@ -23,8 +23,16 @@ const current = vi.hoisted(() => ({
 }));
 vi.mock("./session-provider", () => ({ useSession: () => current.session }));
 afterEach(() => vi.unstubAllGlobals());
+const { JSDOM } = createRequire(import.meta.url)("jsdom") as {
+  JSDOM: new (html: string) => { window: Window & typeof globalThis };
+};
 
 it("marks Pod Manager demo imports through the runner's default agent", async () => {
+  // Mount React in a DOM while keeping fetch and the pod's byte streams in the Node realm, so the
+  // writer's real owner-only destination check can parse the memory pod's root ACL.
+  const { window } = new JSDOM("<!doctype html><html><body></body></html>");
+  vi.stubGlobal("window", window);
+  vi.stubGlobal("document", window.document);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const pod = createMemoryPod();
   const sourceFetch = vi.fn<typeof fetch>(async () => {
@@ -72,5 +80,6 @@ it("marks Pod Manager demo imports through the runner's default agent", async ()
     expect(sourceFetch).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
+    window.close();
   }
 });
