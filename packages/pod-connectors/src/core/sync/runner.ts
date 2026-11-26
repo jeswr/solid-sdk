@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 import { NS } from "@jeswr/suite-vocab";
 import type {
   BlankNode,
@@ -1547,7 +1548,6 @@ export async function runTwoWaySync<Op>(
     check();
     await session.waitForPrivateWrites();
     check();
-    request();
     const { indexUrl } = await session.registerTypes();
     await session.finish();
     check();
