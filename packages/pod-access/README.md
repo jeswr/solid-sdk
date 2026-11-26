@@ -565,7 +565,8 @@ which `readGrants` again reports `partial-scope` until the scopes match. While t
 refuse the folder with `partial-scope`. Control inherited from an ancestor ACP policy also counts
 toward keeping Control. An inherited row in a selection keeps that person's direct rule, as with
 `setGrants`; leave it out to change the direct rule. Commenter is refused, because comments need
-a comments container.
+a comments container. Scoped edits preserve existing seals and securing marks. Passing either
+`securing` or `ownOnly` to `setScopedGrants` throws an `unsupported` RoleError before any I/O.
 Inherited rows are read-only and must match their governing source. They never overwrite an explicit selection for the same
 principal, regardless of row order. An unchanged role selection preserves that principal's
 existing modes, including chatroom Write and partial ACP contributions completed by
@@ -823,9 +824,10 @@ the instant `decide` wrote. Completed decisions are idempotent; reversing
 approval/denial is rejected. Denial receipt writes can also be retried. Requester-supplied grant/receipt
 references never select write locations.
 
-Approval results include `choices: { dataTypes, role, targetRoles, expiresAt? }`: the types actually granted,
+Approval results include `choices: { dataTypes, role, targetRoles, targetDataTypes?, expiresAt? }`: the types actually granted,
 the strongest applied role, the exact role per target URL in `targetRoles`, and the recorded expiry as
-a `Date`. Mixed Viewer/Editor approvals therefore retain both roles explicitly. Completed-decision replays report these recorded values even if the caller supplies
+a `Date`. Use `targetDataTypes` to associate the granted classes with each target's role.
+Legacy records can lack this mapping. Completed-decision replays report these recorded values even if the caller supplies
 different choices. Denials omit `choices`.
 
 `previewDecision(entry, decision, options): Promise<DecisionPreview>` runs the same resolution,

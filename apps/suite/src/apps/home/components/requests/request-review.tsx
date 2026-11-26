@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 
@@ -69,9 +70,8 @@ export const FINISHING_ONLY_TEXT = "This request says an approval was started. F
 const RECORDED =
   "Approving this request already started with choices recorded then. Finish approving applies those recorded choices, which may differ from what you picked here";
 /**
- * An approval is pinned that this sheet didn't send (or can't show): finishing applies the choices
- * recorded when it started. This sheet doesn't show them as cards (listed entries carry them as
- * `recorded`, and the finished approval's result reports them as `choices` for the toast).
+ * The editable cards may differ from the owner's pinned choices. Finish passes the listed
+ * choices back to the SDK, and the toast uses the choices the SDK reports it applied.
  */
 export const RECORDED_TEXT = `${RECORDED}, or deny it.`;
 /** RECORDED_TEXT once denying was refused for good. */
@@ -142,7 +142,7 @@ function CardItem({
 
 /**
  * share: the editable choices; retry: the frozen payload again; finish: the pinned approval, sent
- * as the frozen payload when that is what this sheet pinned, else with no choices at all.
+ * as the frozen payload when that is what this sheet pinned, otherwise with the listed choices.
  */
 type Attempt = "share" | "retry" | "finish" | "deny";
 
@@ -158,7 +158,7 @@ interface FrozenApproval {
 /**
  * Whose choices a pinned approval holds. "frozen": possibly this sheet's own failed approval, so
  * finishing resends that exact payload (the SDK refuses it if the pin differs). "recorded": choices
- * this sheet can't know, so finishing sends none and the cards are hidden.
+ * from the owner's decision record, so finishing uses the listing and the editable cards are hidden.
  */
 type PinnedChoices = "frozen" | "recorded";
 
@@ -256,10 +256,21 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
       };
     }
     if (attempt === "retry" && !approval) return;
-    // A choice-less finish resumes the pinned decision exactly as it was recorded; the frozen
-    // choices are accepted only if they match the pin, so what the cards show is what is applied.
+    // A concurrent pin can first appear in the inbox refresh after Share was refused.
+    const pin =
+      entry.recorded ??
+      requests.pending.find(
+        (listed) => listed.id === entry.id && listed.requester === entry.requester,
+      )?.recorded;
     const decision: RequestDecision =
-      attempt === "deny" ? { approve: false } : approval ? approval.decision : { approve: true };
+      attempt === "deny"
+        ? { approve: false }
+        : (approval?.decision ?? {
+            approve: true,
+            ...(pin && { dataTypes: pin.dataTypes }),
+            ...(pin?.role && { role: pin.role }),
+            ...(pin?.expiresAt && { expiresAt: pin.expiresAt }),
+          });
     busy.current = true;
     setSaving(true);
     setError(undefined);
@@ -276,13 +287,10 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
             : approval
               ? approvedMessage(name, cards, approval.selected, result.notified)
               : finishedMessage(name, result.notified);
-      // Without recorded choices, a choice-less finish can't know whether they had an end date:
-      // say it whenever the result doesn't promise to enforce one.
+      // With no result choices or listed pin, an interrupted approval's end date is unknown.
       const endDate = recorded
         ? recorded.expiresAt !== undefined
-        : approval
-          ? approval.decision.expiresAt !== undefined
-          : attempt === "finish";
+        : decision.expiresAt !== undefined || (attempt === "finish" && !approval && !pin);
       if (endDate && !result.expiryEnforced) message = `${message} ${EXPIRY_NOT_ENFORCED}`;
       toast.success(message);
       finish(attempt === "deny" ? "denied" : "approved");
@@ -308,7 +316,7 @@ export function RequestReview({ entry, onDone }: RequestReviewProps) {
 
   const chosen = selected.filter((id) => shareable.some((card) => card.id === id));
   const allChecked = shareable.length > 0 && chosen.length === shareable.length;
-  // The pinned choices aren't known here: show no cards, as for an interrupted approval.
+  // The editable cards don't represent an approval pinned outside this sheet.
   const unknownChoices = finishing || pinned === "recorded";
   // The choices can't change once an approval failed or is known to be pinned.
   const fixed = frozen !== undefined || pinned !== undefined;

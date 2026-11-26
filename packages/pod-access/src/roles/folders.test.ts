@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { type AccessControl, AclResource } from "@solid/object";
@@ -47,11 +48,7 @@ for (const model of ["wac", "acp"] as const)
         const dataset = await graph(mem);
         if (model === "wac") {
           for (const auth of new AclResource(dataset, DataFactory).authorizations) {
-            if (
-              (!auth.agent.has(bob) && !auth.agentClass.size) ||
-              !properties(auth, dataset).iris(`${ACL}accessTo`).includes(folder)
-            )
-              continue;
+            if (!auth.agent.has(bob) && !auth.agentClass.size) continue;
             expect(properties(auth, dataset).iris(`${ACL}accessTo`)).toEqual([folder]);
             expect(properties(auth, dataset).iris(`${ACL}default`)).toEqual([folder]);
           }

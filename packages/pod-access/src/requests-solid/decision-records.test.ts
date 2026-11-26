@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // Sealed, per-generation decision records: the records key, requester-bound grant and receipt
@@ -839,6 +840,7 @@ describe("recorded decision choices", () => {
       dataTypes: [CONTACTS_CLASS],
       role: "viewer",
       targetRoles: { [ALICE]: "viewer", [CAROL]: "viewer" },
+      targetDataTypes: { [ALICE]: [CONTACTS_CLASS], [CAROL]: [CONTACTS_CLASS] },
       expiresAt,
     });
     const replay = await decide(
@@ -923,6 +925,7 @@ describe("listed recorded choices", () => {
       dataTypes: [CONTACTS_CLASS],
       role: "viewer",
       targetRoles: { [ALICE]: "viewer", [CAROL]: "viewer" },
+      targetDataTypes: { [ALICE]: [CONTACTS_CLASS], [CAROL]: [CONTACTS_CLASS] },
       expiresAt,
     });
     // Finished requests carry no recorded choices.

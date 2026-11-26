@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2-Astra
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { Term } from "@rdfjs/types";
@@ -200,6 +201,7 @@ describe("ACP approval and sealed owner records", () => {
       dataTypes: [CONTACTS_CLASS],
       role: "viewer",
       targetRoles: { [ALICE]: "viewer" },
+      targetDataTypes: { [ALICE]: [CONTACTS_CLASS] },
     });
     expect(pod.body(`${ALICE}.acr`)).toContain(REQUESTER);
     expect(pod.etag(result.grantUrl as string)).toBe('"v1"');
