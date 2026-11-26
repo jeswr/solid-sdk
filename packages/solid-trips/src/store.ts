@@ -15,7 +15,7 @@ import {
   serializeTrip,
 } from "./model.js";
 import { groupIntoTrips } from "./planning.js";
-import { tripsTypeIndex } from "./type-index.js";
+import { TypeIndexSetupError, tripsTypeIndex } from "./type-index.js";
 import {
   type ExtractMarkup,
   type ReadNotice,
@@ -29,14 +29,41 @@ import {
 export interface StorePorts {
   storage: StorageClient;
   index: Pick<TypeIndex, "findAll" | "register">;
-  /** Establish and verify owner-only resource and descendant access. */
-  protect(url: string, folder: boolean): Promise<void>;
+  /**
+   * Owner-only access for a Trips container or document. With `created` (this call just made
+   * the resource and has written nothing into it) the port may establish owner-only access
+   * and must then verify it. Otherwise it must only verify: it never changes the access of a
+   * resource the user already had. Refusals are a {@link TripsPrivacyError}.
+   */
+  protect(url: string, folder: boolean, created: boolean): Promise<void>;
   verifyPrivateIndex?(): Promise<void>;
   /** Budget for reading the user's own Trips containers; exceeding it gives a partial notice. */
   loadBudget?: { maxPages?: number; timeoutMs?: number };
 }
 /** Generous defaults: own containers are owner-written, but a server can still page forever. */
 export const DEFAULT_LOAD_BUDGET = { maxPages: 100, timeoutMs: 60_000 } as const;
+/**
+ * Trips will not keep private data in a place it cannot prove is owner-only. `shared` means
+ * the folder (pre-existing, so never rewritten) is readable by others or its access could not
+ * be verified; `unestablished` means a folder Trips just created could not be made private.
+ * Neither changes anyone's sharing.
+ */
+export class TripsPrivacyError extends Error {
+  constructor(
+    message: string,
+    readonly reason: "shared" | "unestablished" | "unverified",
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "TripsPrivacyError";
+  }
+}
+/** Type Index registration is discovery metadata: it is retried later and never blocks Trips. */
+export type TripsRegistration =
+  | { status: "pending" }
+  | { status: "registered" }
+  | { status: "skipped"; message: string }
+  | { status: "failed"; message: string; cause: unknown };
 /**
  * The trip write may or may not have committed (network loss, timeout, 5xx, a malformed
  * success). Callers must not compensate as though it failed; reload and check instead.
@@ -68,6 +95,10 @@ export function createTripsStore(ports: StorePorts) {
       /* Best effort; preserve the original failure. */
     }
   }
+  /** Folders (by URL) that already existed and could not be verified owner-only. */
+  const unprivate = new Set<string>();
+  let registration: TripsRegistration = { status: "pending" };
+  let manualExists = true;
   async function folder(parent: string, name: string) {
     const expected = new URL(`${name}/`, parent).href;
     let url = expected;
@@ -80,18 +111,64 @@ export function createTripsStore(ports: StorePorts) {
       url = assertWithinPodScope(parent, created.url, { allowRoot: false });
     }
     try {
-      await protect(url, true);
+      // Only a folder this call created is sealed. A pre-existing one is verified, and when it
+      // is not owner-only it is left exactly as the user set it up: private writes refuse.
+      await protect(url, true, created !== undefined);
+      unprivate.delete(url);
     } catch (error) {
-      if (created?.etagSource === "response") await cleanup(url, created.etag);
-      throw error;
+      if (!created && error instanceof TripsPrivacyError) unprivate.add(url);
+      else {
+        if (created?.etagSource === "response") await cleanup(url, created.etag);
+        throw error;
+      }
     }
     return url;
   }
+  /** Re-verify (never repair) the container immediately before a private write. */
+  async function requirePrivate(container: string) {
+    await protect(container, true, false);
+    // A folder that was shared at open and is private now no longer blocks registration.
+    unprivate.delete(container);
+  }
+  async function register() {
+    if (unprivate.has(base)) {
+      registration = {
+        status: "skipped",
+        message: "Your Trips folder is shared, so Trips was not added to your private Type Index.",
+      };
+      return registration;
+    }
+    try {
+      await ports.verifyPrivateIndex?.();
+      await index.register(`${SCHEMA}Trip`, { container: base }, { index: "private" });
+      registration = { status: "registered" };
+    } catch (cause) {
+      registration = {
+        status: "failed",
+        message:
+          cause instanceof TypeIndexSetupError
+            ? cause.message
+            : "Trips could not be added to your Type Index yet. Your trips are still available; try again later.",
+        cause,
+      };
+    }
+    return registration;
+  }
   async function initialise() {
     base = await folder(storage.root, "trips");
-    manual = await folder(base, "reservations");
-    await ports.verifyPrivateIndex?.();
-    await index.register(`${SCHEMA}Trip`, { container: base }, { index: "private" });
+    manual = new URL("reservations/", base).href;
+    manualExists = true;
+    if (unprivate.has(base)) {
+      // Do not add folders inside one the user shares. An existing one is only verified.
+      try {
+        await storage.head(manual);
+        manual = await folder(base, "reservations");
+      } catch (error) {
+        if (!(error instanceof StorageError) || error.code !== "not-found") throw error;
+        manualExists = false;
+      }
+    } else manual = await folder(base, "reservations");
+    await register();
   }
   async function read(url: string, signal?: AbortSignal) {
     const scoped = assertWithinPodScope(storage.root, documentOf(url));
@@ -152,12 +229,53 @@ export function createTripsStore(ports: StorePorts) {
     } while (cursor);
     return [...urls];
   }
+  /** A direct child of `reservations/` (not a deeper or merely prefixed path). */
+  const isManualDocument = (url: string) =>
+    manualExists && url !== manual && new URL(".", url).href === manual;
+  /**
+   * A document's own trust claim is honoured only when the document and its immediate container
+   * are both verified owner-only (verify-only, never repaired); anyone with Write or Append on
+   * either could have planted it otherwise. Each container is verified once per load, and every
+   * check is bounded by the load signal. Trip documents' folder never holds trusted bookings.
+   */
+  function trustCheck(signal: AbortSignal) {
+    const containers = new Map<string, Promise<boolean>>();
+    const bounded = (check: Promise<void>) =>
+      Promise.race([
+        check.then(() => true),
+        new Promise<boolean>((_, reject) => {
+          if (signal.aborted) reject(signal.reason);
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        }),
+      ]).catch((error) => {
+        if (signal.aborted) throw error;
+        return false;
+      });
+    return async (url: string) => {
+      const container = new URL(".", url).href;
+      if (container === base) return false;
+      let ok = containers.get(container);
+      if (!ok) {
+        ok = bounded(protect(container, true, false));
+        containers.set(container, ok);
+      }
+      const containerOk = await ok;
+      if (container === manual) {
+        if (containerOk) unprivate.delete(manual);
+        else unprivate.add(manual);
+      }
+      if (!containerOk) return false;
+      return bounded(protect(url, false, false));
+    };
+  }
   async function load(): Promise<TripSnapshot> {
     const trips: Trip[] = [],
       reservations: Reservation[] = [];
     const notice: ReadNotice = { skipped: 0, capped: false };
     const signal = AbortSignal.timeout(budget.timeoutMs);
-    const docs = new Set(await documents(manual, notice, signal, Infinity, budget.maxPages));
+    const docs = new Set(
+      manualExists ? await documents(manual, notice, signal, Infinity, budget.maxPages) : [],
+    );
     for (const url of await documents(base, notice, signal, Infinity, budget.maxPages)) {
       try {
         const { dataset, etag } = await read(url, signal);
@@ -171,14 +289,14 @@ export function createTripsStore(ports: StorePorts) {
         notice.capped ||= signal.aborted;
       }
     }
+    const trust = trustCheck(signal);
     for (const url of docs) {
       try {
-        // Only the owner-only manual container is user-entered; linked connector
-        // documents elsewhere keep their own email trust.
         const scoped = assertWithinPodScope(storage.root, url);
-        const isManual = scoped.startsWith(manual) && scoped !== manual;
+        const verified = await trust(scoped);
         const parsed = parseReservations((await read(scoped, signal)).dataset, scoped, {
-          manual: isManual,
+          manual: verified && isManualDocument(scoped),
+          untrusted: !verified,
         });
         reservations.push(...parsed);
         if (!parsed.length) notice.skipped++;
@@ -192,6 +310,9 @@ export function createTripsStore(ports: StorePorts) {
   async function saveTrip(trip: Trip): Promise<Trip> {
     if (trip.etag === null) throw new Error("A version is required to edit this trip safely");
     const creating = !trip.etag;
+    await requirePrivate(base);
+    // An existing trip's own access policy may differ from its folder's (shared individually).
+    if (!creating) await protect(assertWithinPodScope(base, documentOf(trip.id)), false, false);
     const created = creating
       ? await storage.create(base, null, { contentType: "text/turtle" })
       : undefined;
@@ -200,7 +321,7 @@ export function createTripsStore(ports: StorePorts) {
     });
     let cleanupTag = created?.etagSource === "response" ? created.etag : null;
     try {
-      if (creating) await protect(url, false);
+      if (creating) await protect(url, false, true);
       const original = await storage.read(url);
       if (creating && (await original.bytes()).length)
         throw new Error("New trip is no longer empty");
@@ -227,11 +348,12 @@ export function createTripsStore(ports: StorePorts) {
     }
   }
   async function addReservation(input: ReservationInput): Promise<Reservation> {
+    await requirePrivate(manual);
     const created = await storage.create(manual, null, { contentType: "text/turtle" });
     const url = assertWithinPodScope(manual, created.url, { allowRoot: false });
     let cleanupTag = created.etagSource === "response" ? created.etag : null;
     try {
-      await protect(url, false);
+      await protect(url, false, true);
       const fresh = await storage.read(url);
       if ((await fresh.bytes()).length) throw new Error("New booking is no longer empty");
       cleanupTag = fresh.etag;
@@ -288,10 +410,13 @@ export function createTripsStore(ports: StorePorts) {
         notice.capped ||= signal.aborted;
       }
     }
+    const trust = trustCheck(signal);
     for (const url of docs) {
       try {
         signal.throwIfAborted();
-        const parsed = parseReservations((await read(url, signal)).dataset, url);
+        const parsed = parseReservations((await read(url, signal)).dataset, url, {
+          untrusted: !(await trust(url)),
+        });
         const remaining = 200 - results.length;
         results.push(...parsed.slice(0, remaining));
         if (parsed.length > remaining) {
@@ -321,6 +446,26 @@ export function createTripsStore(ports: StorePorts) {
     addReservation,
     deleteReservation,
     scan,
+    /** Type Index registration outcome; a failure is recoverable with {@link retryRegistration}. */
+    get registration(): TripsRegistration {
+      return registration;
+    },
+    /** Folders that already existed, were left untouched and are not verified owner-only. */
+    get sharedFolders(): string[] {
+      return [...unprivate];
+    },
+    /** Retry registration, first re-verifying (never repairing) a folder that was shared. */
+    async retryRegistration() {
+      if (unprivate.has(base)) {
+        try {
+          await protect(base, true, false);
+          unprivate.delete(base);
+        } catch (error) {
+          if (!(error instanceof TripsPrivacyError)) throw error;
+        }
+      }
+      return register();
+    },
     get base() {
       return base;
     },
@@ -349,26 +494,33 @@ export async function openTripsStore(
     storage,
     index,
     verifyPrivateIndex,
-    protect: async (url, folder) => {
+    protect: async (url, folder, created) => {
       if (demo) return; // Explicit session fixture, never inferred from RDF.
-      await verified(url, folder);
+      await verified(url, folder, created);
     },
   });
 }
 /**
- * Establish owner-only access, then verify the raw effective access independently with
- * checkOwnerOnly; a successful role write is never treated as proof of privacy.
+ * Establish owner-only access for a resource Trips just created, then verify the raw
+ * effective access independently with checkOwnerOnly; a successful role write is never
+ * treated as proof of privacy. A resource that already existed is only verified: its access
+ * is never written, so sharing the user set up is never narrowed (and never widened).
  */
 export function verifiedOwnerOnly(
   storage: StorageClient,
   owner: string,
   establish: (url: string, folder: boolean) => Promise<boolean>,
 ): StorePorts["protect"] {
-  return async (url, folder) => {
-    if (!(await establish(url, folder)))
-      throw new Error("Could not establish owner-only Trips storage");
+  return async (url, folder, created) => {
+    if (created && !(await establish(url, folder)))
+      throw new TripsPrivacyError("Could not establish owner-only Trips storage", "unestablished");
     if (!(await checkOwnerOnly({ storage, url, ownerWebId: owner })).private)
-      throw new Error("Could not verify owner-only Trips storage");
+      throw created
+        ? new TripsPrivacyError("Could not verify owner-only Trips storage", "unverified")
+        : new TripsPrivacyError(
+            "Could not verify owner-only Trips storage. This folder is shared or its access could not be read, so Trips will not save private data in it. Trips has not changed its sharing.",
+            "shared",
+          );
   };
 }
 export async function importEmail(

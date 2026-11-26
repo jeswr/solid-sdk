@@ -130,6 +130,12 @@ export interface ParseReservationsOptions {
    * store sets this, from the document location, never from RDF content.
    */
   manual?: boolean;
+  /**
+   * The document sits in a folder or has an access policy that is not verified owner-only, so
+   * anyone with Write or Append there could have written it. Whatever trust or origin it
+   * states is ignored: the record is unverified and not the user's own.
+   */
+  untrusted?: boolean;
 }
 export function parseReservations(
   dataset: DatasetCore,
@@ -188,9 +194,15 @@ export function parseReservations(
           })(),
         // Connector records without a trust flag fail closed to unverified. A manual
         // record claims no email trust unless one was stated explicitly.
-        trust: options.manual ? root.trust : root.trust === "verified" ? "verified" : "unverified",
+        trust: options.untrusted
+          ? "unverified"
+          : options.manual
+            ? root.trust
+            : root.trust === "verified"
+              ? "verified"
+              : "unverified",
       };
-      if (options.manual) item.origin = "manual";
+      if (options.manual && !options.untrusted) item.origin = "manual";
       for (const field of ["title", "number", "address"] as const)
         if (booking && field in booking)
           item[field] ??= (booking as unknown as Record<string, string>)[field];

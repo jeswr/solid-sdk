@@ -4,6 +4,7 @@
 import {
   EVENT_STATUS,
   entities,
+  guestListAvailable,
   type Invitation,
   type InviteeData,
   publicEventFetch,
@@ -75,7 +76,7 @@ export function InvitationDetail({
   const [moreError, setMoreError] = useState(false);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [attempt, setAttempt] = useState(0);
-  const canRead = organiser || event.guestListVisible;
+  const canRead = organiser || guestListAvailable(event);
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt explicitly retries the read
   useEffect(() => {
     let live = true;
@@ -278,7 +279,7 @@ export function InvitationDetail({
               <div className="ev-section-heading">
                 <h3 id="ev-guests-title">Good company</h3>
                 <Badge variant="secondary">
-                  Guest list {event.guestListVisible ? "visible" : "private"}
+                  Guest list {guestListAvailable(event) ? "visible" : "private"}
                 </Badge>
               </div>
               {status === "loading" ? (

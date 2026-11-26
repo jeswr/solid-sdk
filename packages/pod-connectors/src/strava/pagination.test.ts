@@ -6,6 +6,7 @@ import { createFetchPodWriter } from "../core/pod-writer.js";
 import {
   createMemoryPod,
   demoImport,
+  ownerOnlyFixtureChecks,
   sparseImport,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
@@ -30,6 +31,7 @@ const previous: ConnectorState = {
 };
 const writer = (pod: ReturnType<typeof createMemoryPod>) =>
   createFetchPodWriter({
+    ...ownerOnlyFixtureChecks,
     adapterId: "strava",
     webId: TEST_WEBID,
     profileDocumentUrl: TEST_PROFILE_DOC,

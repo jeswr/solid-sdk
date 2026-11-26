@@ -9,6 +9,7 @@ import {
   createMemoryPod,
   demoImport,
   fixtureFetch,
+  ownerOnlyFixtureChecks,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
   TEST_WEBID,
@@ -36,6 +37,7 @@ function setup() {
   const pod = createMemoryPod();
   let transport = pod.fetch;
   const podWriter = createFetchPodWriter({
+    ...ownerOnlyFixtureChecks,
     adapterId: "gmail",
     webId: TEST_WEBID,
     profileDocumentUrl: TEST_PROFILE_DOC,

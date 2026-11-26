@@ -19,6 +19,7 @@ import {
   createMemoryPod,
   fileImport,
   memoryFile,
+  ownerOnlyFixtureChecks,
   TEST_POD_ROOT,
   TEST_PROFILE_DOC,
   TEST_WEBID,
@@ -178,6 +179,7 @@ describe("Takeout shared reconciliation budget", () => {
     );
     const pod = createMemoryPod();
     const writer = createFetchPodWriter({
+      ...ownerOnlyFixtureChecks,
       adapterId: googleTakeoutFileAdapter.metadata.id,
       webId: TEST_WEBID,
       profileDocumentUrl: TEST_PROFILE_DOC,

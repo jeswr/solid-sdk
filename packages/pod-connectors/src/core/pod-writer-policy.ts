@@ -4,9 +4,74 @@ import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { IntegrationSyncError, PrivateDestinationError } from "./errors.js";
 import type { MutationGuard, PodWriter } from "./types.js";
 
-/** The health and finance imports that require a host-verified write destination. */
+/**
+ * Privacy classification of every registered connector id. `private` imports require a
+ * host-verified owner-only destination before any write, confirmation after it and clean-up on
+ * refusal. `public-ok` is an explicit decision that the imported data is unquestionably public
+ * by nature; no registered connector qualifies today (see the README table).
+ *
+ * The policy is default-private: `requiresPrivateDestination` returns true for an id missing
+ * from this table, so an unclassified adapter (a host's own, or a new one) fails closed until
+ * someone classifies it. A registry test also fails for an unclassified registered adapter.
+ */
+export const CONNECTOR_PRIVACY = {
+  // Health and location.
+  "activity-files": "private",
+  "apple-health": "private",
+  fitbit: "private",
+  garmin: "private",
+  strava: "private",
+  whoop: "private",
+  // Finance and purchases.
+  "amazon-orders": "private",
+  "bank-statements": "private",
+  uber: "private",
+  // Messages, mail, contacts, calendar and personal documents.
+  chatgpt: "private",
+  gmail: "private",
+  "google-calendar": "private",
+  "google-contacts": "private",
+  "google-drive": "private",
+  "google-takeout": "private",
+  whatsapp: "private",
+  // An import of a person's own account data is private unless the data is unquestionably
+  // public by nature. GitHub was the only candidate, but its adapter requests the `repo` scope
+  // and lists `/user/repos`, which includes private repositories, so it is private too.
+  // Social, media, storage, notes, accounts and smart-home imports:
+  discord: "private",
+  dropbox: "private",
+  facebook: "private",
+  github: "private",
+  goodreads: "private",
+  "google-photos": "private",
+  instagram: "private",
+  linkedin: "private",
+  netflix: "private",
+  notion: "private",
+  pinterest: "private",
+  reddit: "private",
+  slack: "private",
+  spotify: "private",
+  steam: "private",
+  tiktok: "private",
+  twitch: "private",
+  vesync: "private",
+  "x-twitter": "private",
+  youtube: "private",
+} as const satisfies Record<string, "private" | "public-ok">;
+
+type ConnectorId = keyof typeof CONNECTOR_PRIVACY;
+
+/** Whether a connector id has an explicit privacy classification. */
+export function isClassifiedConnector(id: string): boolean {
+  return Object.hasOwn(CONNECTOR_PRIVACY, id);
+}
+
+/** Imports that require a host-verified write destination: private, or not classified at all. */
 export function requiresPrivateDestination(id: string): boolean {
-  return id === "garmin" || id === "whoop" || id === "bank-statements";
+  return (
+    !Object.hasOwn(CONNECTOR_PRIVACY, id) || CONNECTOR_PRIVACY[id as ConnectorId] === "private"
+  );
 }
 
 export async function requirePrivateDestination(

@@ -32,7 +32,7 @@ const initial = (): PlacesSnapshot => ({
 function setup(demo = false) {
   const repo = {
     base: "https://pod.example/places/",
-    initialize: vi.fn(async () => {}),
+    initialize: vi.fn(async () => ({})),
     load: vi.fn(async () => initial()),
     savePlace: vi.fn(async (before, patch) => ({
       ...before,
@@ -93,6 +93,19 @@ it("hides stale data after failed privacy checks or refreshes and can retry", as
   await controller.refresh();
   expect(controller.getSnapshot().status).toBe("error");
   expect(controller.getSnapshot().snapshot.places).toEqual([]);
+});
+it("opens Places and surfaces a Type Index registration warning without failing", async () => {
+  const repo = setup().repo;
+  repo.initialize.mockResolvedValueOnce({ registrationWarning: "Not in your Type Index" });
+  const warn = vi.fn();
+  const controller = placesController(repo, false, vi.fn(), warn);
+  await controller.open();
+  expect(warn).toHaveBeenCalledWith("Not in your Type Index");
+  expect(controller.getSnapshot()).toMatchObject({ status: "ready", error: null });
+  repo.initialize.mockResolvedValueOnce({});
+  warn.mockClear();
+  await controller.open();
+  expect(warn).not.toHaveBeenCalled();
 });
 it("shows edits immediately and persists against the confirmed version", async () => {
   const { controller, repo } = setup();
@@ -181,7 +194,7 @@ it("drops late responses and queued writes after disposal", async () => {
 });
 it("ignores obsolete opening failures after a newer retry succeeds", async () => {
   const { controller, repo } = setup();
-  const delayed = deferred<void>();
+  const delayed = deferred<Record<string, never>>();
   repo.initialize.mockReturnValueOnce(delayed.promise);
   const obsolete = controller.open();
   await controller.open();
@@ -342,4 +355,11 @@ it("stops publishing progress once an import is cancelled", async () => {
   resume.resolve();
   await expect(importing).rejects.toMatchObject({ name: "AbortError" });
   expect(controller.getSnapshot().import.progress).toEqual({ done: 3, total: 26 });
+});
+it("opens Places when a registration warning has no listener", async () => {
+  const repo = setup().repo;
+  repo.initialize.mockResolvedValueOnce({ registrationWarning: "Not in your Type Index" });
+  const controller = placesController(repo, false, vi.fn());
+  await controller.open();
+  expect(controller.getSnapshot()).toMatchObject({ status: "ready", error: null });
 });

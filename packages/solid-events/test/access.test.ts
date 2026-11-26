@@ -1,202 +1,460 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
-import { parseRdf } from "@jeswr/fetch-rdf";
-import { createAccessClient, type EffectivePolicy, readWac } from "@jeswr/pod-access";
-import { createMemoryStorage } from "@jeswr/storage-client/memory";
-import { beforeEach, expect, it, vi } from "vitest";
-import { closeReplies, publishAccess, sealNewResource } from "../src/access.js";
-import { EVENT_STATUS, type EventData } from "../src/model.js";
+// AUTHORED-BY Claude Sonnet 5.5
+import { readFileSync } from "node:fs";
+import {
+  type AccessClient,
+  checkOwnerOnly,
+  createAccessClient,
+  type EffectivePolicy,
+  readWac,
+} from "@jeswr/pod-access";
+import { ensurePrivateContainerAccess, setGrants } from "@jeswr/pod-access/roles";
+import type { StorageClient } from "@jeswr/storage-client";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  closeReplies,
+  publishAccess,
+  revokeAccess,
+  sealNewResource,
+  withdrawReplyRead,
+} from "../src/access.js";
+import { EVENT_STATUS, type EventData, type InviteeData } from "../src/model.js";
+import { OWNER, pod, ROOT, session } from "./pod.js";
 
-vi.mock("@jeswr/pod-access", async (original) => ({
-  ...(await original<typeof import("@jeswr/pod-access")>()),
-  createAccessClient: vi.fn(),
-  readWac: vi.fn(),
-}));
-const root = "https://pod.example/";
-const owner = `${root}profile#me`;
-const target = `${root}event/`;
-const acl = `${target}.acl`;
-const policy = (): EffectivePolicy => ({
-  denials: [],
-  grants: [
-    {
-      modes: new Set(["read", "write", "control"]),
-      who: [[{ kind: "agent", webId: owner }]],
-      except: [],
-      appliesTo: "both",
-      source: { url: acl, node: `${acl}#owner` },
-    },
-  ],
+vi.mock("@jeswr/pod-access", async (original) => {
+  const module = await original<typeof import("@jeswr/pod-access")>();
+  return { ...module, createAccessClient: vi.fn(module.createAccessClient) };
 });
-const event: EventData = {
+vi.mock("@jeswr/pod-access/roles", async (original) => {
+  const module = await original<typeof import("@jeswr/pod-access/roles")>();
+  return {
+    ...module,
+    setGrants: vi.fn(module.setGrants),
+    ensurePrivateContainerAccess: vi.fn(module.ensurePrivateContainerAccess),
+  };
+});
+const actual = await vi.importActual<typeof import("@jeswr/pod-access")>("@jeswr/pod-access");
+const CLEO = "https://cleo.example/me";
+const TAVI = "https://tavi.example/me";
+const folder = `${ROOT}events/e/`;
+const eventUrl = `${folder}index.ttl`;
+const replies = `${folder}rsvps/`;
+const baseEvent = (over: Partial<EventData> = {}): EventData => ({
   name: "Supper",
   startDate: new Date("2027-01-01"),
   created: new Date(),
   modified: new Date(),
-  organizer: owner,
+  organizer: OWNER,
   eventStatus: EVENT_STATUS.scheduled,
   visibility: "link",
   guestListVisible: false,
   publication: "published",
-};
-async function fixture() {
-  const storage = createMemoryStorage({ root, protocol: "solid" });
-  storage.features.accessControl = {
-    state: "available",
-    evidence: "fixture",
-    detail: { model: "wac" },
-  };
-  await storage.create(root, null, { kind: "container", name: "event" });
-  const real = await storage.head(target);
-  const head = { ...real, allow: null, links: new Map([["acl", [{ target: acl, params: {} }]]]) };
-  storage.head = vi.fn().mockResolvedValue(head);
-  return { storage, head };
-}
+  ...over,
+});
+const invitee = (webId: string): InviteeData => ({
+  webId,
+  event: `${eventUrl}#it`,
+  invitedAt: new Date(),
+});
 beforeEach(() => {
-  vi.clearAllMocks();
-  vi.mocked(readWac).mockReturnValue(policy());
+  vi.mocked(createAccessClient).mockReset();
+  vi.mocked(createAccessClient).mockImplementation(actual.createAccessClient);
+  vi.mocked(setGrants).mockClear();
+  vi.mocked(ensurePrivateContainerAccess).mockClear();
 });
-it("bootstraps only a missing own ACL, with owner defaults for containers and no defaults for files", async () => {
-  const { storage, head } = await fixture();
-  const fetch = vi
-    .fn()
-    .mockImplementation(
-      async (_url, init) => new Response(null, { status: init?.method === "PUT" ? 201 : 404 }),
-    );
-  await sealNewResource(storage, fetch, target, owner);
-  let body = fetch.mock.calls[1]?.[1].body as string;
-  const { readWac: realRead } =
-    await vi.importActual<typeof import("@jeswr/pod-access")>("@jeswr/pod-access");
-  expect(realRead(await parseRdf(body, "text/turtle"), target, acl).grants[0]?.appliesTo).toBe(
-    "both",
+
+/** events/e/{,index.ttl,rsvps/}, each sealed through pod-access exactly as the repository does. */
+async function layout() {
+  const p = pod();
+  const { storage, fetch } = p;
+  const s = session(fetch);
+  await storage.create(ROOT, null, { kind: "container", name: "events" });
+  await sealNewResource(storage, s, `${ROOT}events/`, { created: true });
+  await storage.create(`${ROOT}events/`, null, { kind: "container", name: "e" });
+  await sealNewResource(storage, s, folder, { created: true });
+  await storage.create(folder, null, { kind: "container", name: "rsvps" });
+  await sealNewResource(storage, s, replies, { created: true });
+  await storage.create(folder, "", { name: "index.ttl", contentType: "text/turtle" });
+  await sealNewResource(storage, s, eventUrl, { created: true });
+  return { ...p, s };
+}
+async function policyOf(storage: StorageClient, url: string): Promise<EffectivePolicy> {
+  const acl = `${url}.acl`;
+  return readWac((await storage.readRdf(acl)).dataset, url, acl, "css", true);
+}
+const modesFor = (policy: EffectivePolicy, pick: (kind: string, webId?: string) => boolean) =>
+  new Set(
+    policy.grants
+      .filter((g) => g.who.some((c) => c.some((s) => pick(s.kind, "webId" in s ? s.webId : ""))))
+      .flatMap((g) => [...g.modes]),
   );
-  expect(fetch.mock.calls[1]?.[1].headers).toMatchObject({ "if-none-match": "*" });
-  head.allow = { control: true } as never;
-  fetch.mockClear();
-  await sealNewResource(storage, fetch, `${target}index.ttl`, owner);
-  body = fetch.mock.calls[1]?.[1].body as string;
-  expect(
-    realRead(await parseRdf(body, "text/turtle"), `${target}index.ttl`, acl).grants[0]?.appliesTo,
-  ).toBe("resource");
-});
-it.each(["unknown", "acp"])("refuses %s access without fetching", async (model) => {
-  const { storage } = await fixture();
-  if (model === "unknown")
-    storage.features.accessControl = {
-      state: "unknown",
-      evidence: "fixture",
-      detail: { model: "none" },
-    };
-  else
-    storage.features.accessControl = {
-      state: "available",
-      evidence: "fixture",
-      detail: { model: "acp" },
-    };
-  const fetch = vi.fn();
-  await expect(sealNewResource(storage, fetch, target, owner)).rejects.toThrow("WAC");
-  expect(fetch).not.toHaveBeenCalled();
-});
-it("rejects lack of Control and absent, empty, multiple, ACP or off-pod links before I/O", async () => {
-  const { storage, head } = await fixture();
-  const fetch = vi.fn();
-  head.allow = { control: false } as never;
-  await expect(sealNewResource(storage, fetch, target, owner)).rejects.toThrow("Control");
-  head.allow = null;
-  for (const links of [
-    new Map(),
-    new Map([["acl", []]]),
-    new Map([
-      [
-        "acl",
-        [
-          { target: acl, params: {} },
-          { target: acl, params: {} },
-        ],
-      ],
-    ]),
-    new Map([
-      ["acl", [{ target: acl, params: {} }]],
-      ["http://www.w3.org/ns/solid/acp#accessControl", []],
-    ]),
-  ]) {
-    head.links = links;
-    await expect(sealNewResource(storage, fetch, target, owner)).rejects.toThrow("unambiguous");
-  }
-  head.links = new Map([["acl", new Array(1) as never]]);
-  await expect(sealNewResource(storage, fetch, target, owner)).rejects.toThrow();
-  head.links = new Map([["acl", [{ target: "https://other.example/policy", params: {} }]]]);
-  await expect(sealNewResource(storage, fetch, target, owner)).rejects.toThrow();
-  expect(fetch).not.toHaveBeenCalled();
-});
-it("inspects existing owner access fail closed and never replaces it", async () => {
-  const { storage } = await fixture();
-  const fetch = vi
-    .fn()
-    .mockImplementation(
-      async () => new Response("", { headers: { "content-type": "text/turtle" } }),
+const publicModes = (policy: EffectivePolicy) =>
+  modesFor(policy, (kind) => kind === "public" || kind === "authenticated");
+
+describe("sealing goes through pod-access", () => {
+  it("seals a container it created and verifies it owner-only", async () => {
+    const { storage, fetch, writes } = pod();
+    const container = (await storage.create(ROOT, null, { kind: "container", name: "events" })).url;
+    await sealNewResource(storage, session(fetch), container, { created: true });
+    expect(ensurePrivateContainerAccess).toHaveBeenCalledWith(
+      expect.objectContaining({ webId: OWNER, storageUrl: ROOT }),
+      container,
+      expect.objectContaining({ created: true, storage }),
     );
-  await sealNewResource(storage, fetch, target, owner);
-  expect(readWac).toHaveBeenCalledWith(expect.anything(), target, acl, "css", true);
-  expect(fetch).toHaveBeenCalledOnce();
-  const base = policy();
-  const grant = base.grants[0];
-  if (!grant) throw new Error("Missing owner policy");
-  for (const invalid of [
-    { grants: [], denials: [] },
-    { ...base, denials: [grant] },
-    { ...base, grants: [{ ...grant, who: [[{ kind: "public" }]] }] },
-    {
-      ...base,
-      grants: [{ ...grant, who: [[{ kind: "agent", webId: "https://stranger.example/me" }]] }],
-    },
-    {
-      ...base,
-      grants: [
+    expect(writes.map((w) => w.url)).toEqual([`${container}.acl`]);
+    expect(await checkOwnerOnly({ storage, url: container, ownerWebId: OWNER })).toEqual({
+      private: true,
+    });
+  });
+  it("gives a document it created its own owner-only policy, without inheritance", async () => {
+    const { storage, fetch } = pod();
+    await storage.create(ROOT, "", { name: "doc.ttl", contentType: "text/turtle" });
+    await sealNewResource(storage, session(fetch), `${ROOT}doc.ttl`, { created: true });
+    expect(setGrants).toHaveBeenCalledWith(
+      [`${ROOT}doc.ttl`],
+      [expect.objectContaining({ agent: { type: "webid", id: OWNER }, role: "manager" })],
+      expect.objectContaining({ kind: "resource", ownOnly: true, webId: OWNER }),
+    );
+    const policy = await policyOf(storage, `${ROOT}doc.ttl`);
+    expect(policy.grants).toHaveLength(1);
+    expect(policy.grants[0]?.appliesTo).toBe("resource");
+    expect(await checkOwnerOnly({ storage, url: `${ROOT}doc.ttl`, ownerWebId: OWNER })).toEqual({
+      private: true,
+    });
+  });
+  it("only verifies what it did not create, never rewriting another application's policy", async () => {
+    const { storage, fetch, writes } = await layout();
+    const before = await (await storage.read(`${replies}.acl`)).text();
+    writes.length = 0;
+    vi.mocked(setGrants).mockClear();
+    await sealNewResource(storage, session(fetch), replies, { created: false });
+    await sealNewResource(storage, session(fetch), eventUrl, { created: false });
+    expect(setGrants).not.toHaveBeenCalled();
+    expect(writes).toEqual([]);
+    expect(await (await storage.read(`${replies}.acl`)).text()).toBe(before);
+  });
+  it.each([
+    ["container", replies],
+    ["document", eventUrl],
+  ])("refuses an existing %s with a public rule and leaves it unchanged", async (_kind, target) => {
+    const { storage, fetch } = await layout();
+    await createAccessClient({ storage }).share(
+      target,
+      { agent: { public: true }, modes: ["read"] },
+      {},
+    );
+    const before = await (await storage.read(`${target}.acl`)).text();
+    await expect(
+      sealNewResource(storage, session(fetch), target, { created: false }),
+    ).rejects.toThrow("owner-only");
+    expect(await (await storage.read(`${target}.acl`)).text()).toBe(before);
+  });
+  it("refuses an unreadable policy rather than assuming privacy", async () => {
+    const { storage, fetch } = await layout();
+    const acl = `${replies}.acl`;
+    const read = await storage.read(acl);
+    await storage.write(
+      acl,
+      `${await read.text()}\n<#hostile> <http://www.w3.org/ns/auth/acl#futurePredicate> <${CLEO}> .`,
+      { ifMatch: read.etag ?? "missing", contentType: "text/turtle" },
+    );
+    await expect(
+      sealNewResource(storage, session(fetch), replies, { created: false }),
+    ).rejects.toThrow("owner-only");
+  });
+  it.each([
+    "container",
+    "document",
+  ])("fails closed when the %s policy cannot be written", async (kind) => {
+    const { storage } = pod();
+    const target = (
+      kind === "container"
+        ? await storage.create(ROOT, null, { kind: "container", name: "sealed" })
+        : await storage.create(ROOT, "", { name: "doc.ttl", contentType: "text/turtle" })
+    ).url;
+    const denied = vi.fn(async () => new Response(null, { status: 403 }));
+    await expect(
+      sealNewResource(storage, session(denied), target, { created: true }),
+    ).rejects.toThrow(/Couldn't protect the invitation storage|isn't owner-only/);
+  });
+  it.each(["unknown", "acp"])("refuses %s access control without any request", async (model) => {
+    const { storage } = pod();
+    storage.features.accessControl =
+      model === "unknown"
+        ? { state: "unknown", evidence: "fixture", detail: { model: "none" } }
+        : { state: "available", evidence: "fixture", detail: { model: "acp" } };
+    const fetch = vi.fn();
+    await expect(
+      sealNewResource(storage, session(fetch), `${ROOT}x/`, { created: true }),
+    ).rejects.toThrow("WAC");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it("never writes an access document itself", () => {
+    for (const file of ["access.ts", "repository.ts"]) {
+      const source = readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
+      expect(source).not.toMatch(/writeWac|writeAcp|\$\{[^}]*\}\.(acl|acr)/);
+    }
+  });
+});
+
+describe("publishAccess never gives the public Read on RSVPs", () => {
+  const cases = [
+    ...(["link", "invitees"] as const).flatMap((visibility) =>
+      [true, false].flatMap((guestListVisible) =>
+        [EVENT_STATUS.scheduled, EVENT_STATUS.cancelled, EVENT_STATUS.postponed].map(
+          (eventStatus) => ({ visibility, guestListVisible, eventStatus }),
+        ),
+      ),
+    ),
+  ];
+  it.each(cases)("%o", async ({ visibility, guestListVisible, eventStatus }) => {
+    const { storage } = await layout();
+    const event = baseEvent({ visibility, guestListVisible, eventStatus });
+    await publishAccess(storage, eventUrl, event, [invitee(CLEO), invitee(TAVI)]);
+    const container = await policyOf(storage, replies);
+    // Whoever holds the link: Append at most, never Read on the container or its replies.
+    expect([...publicModes(container)].filter((mode) => mode !== "append")).toEqual([]);
+    expect(publicModes(container).has("append")).toBe(
+      visibility === "link" && eventStatus === EVENT_STATUS.scheduled,
+    );
+    // Named readers exist only for an invitee-only, visible list.
+    const named = modesFor(container, (kind, webId) => kind === "agent" && webId === CLEO);
+    expect(named.has("read")).toBe(visibility === "invitees" && guestListVisible);
+    expect(named.has("write") || named.has("control")).toBe(false);
+    // The raw replies are never granted through the invitation document either.
+    const invitation = await policyOf(storage, eventUrl);
+    expect(publicModes(invitation).has("read")).toBe(visibility === "link");
+    // A reply written later inherits only the container's default rule, which has no public Read.
+    for (const grant of container.grants)
+      if (grant.who.some((c) => c.some((s) => s.kind === "public")))
+        expect([...grant.modes]).toEqual(["append"]);
+  });
+  it("applies Read to named invitees only through an inherited rule on replies", async () => {
+    const { storage } = await layout();
+    await publishAccess(
+      storage,
+      eventUrl,
+      baseEvent({ visibility: "invitees", guestListVisible: true }),
+      [invitee(CLEO)],
+    );
+    const container = await policyOf(storage, replies);
+    const grant = container.grants.find((g) =>
+      g.who.some((c) =>
+        c.some((s) => s.kind === "agent" && s.webId === CLEO && g.modes.has("read")),
+      ),
+    );
+    expect(grant?.appliesTo).toBe("both");
+  });
+  it("skips the organiser and WebID-less invitees", async () => {
+    const { storage } = await layout();
+    await publishAccess(storage, eventUrl, baseEvent({ visibility: "invitees" }), [
+      invitee(OWNER),
+      { displayName: "Cleo", event: `${eventUrl}#it`, invitedAt: new Date() },
+    ]);
+    expect((await policyOf(storage, eventUrl)).grants).toHaveLength(1);
+  });
+  it("requires WAC", async () => {
+    const { storage } = await layout();
+    vi.mocked(createAccessClient).mockReturnValue({ model: () => "acp" } as AccessClient);
+    await expect(publishAccess(storage, eventUrl, baseEvent(), [])).rejects.toThrow("WAC");
+    await expect(revokeAccess(storage, eventUrl, baseEvent(), [])).rejects.toThrow("WAC");
+    await expect(withdrawReplyRead(storage, eventUrl, baseEvent())).rejects.toThrow("WAC");
+    await expect(closeReplies(storage, eventUrl, OWNER)).rejects.toThrow("WAC");
+  });
+  describe("fails closed when the container is readable beyond its audience", () => {
+    const seed: [string, (a: AccessClient) => Promise<unknown>, Partial<EventData>][] = [
+      [
+        "public Read",
+        (a) => a.share(replies, { agent: { public: true }, modes: ["read"] }, { inherit: true }),
+        {},
+      ],
+      [
+        "authenticated Read",
+        (a) => a.share(replies, { agent: { authenticated: true }, modes: ["read"] }, {}),
+        {},
+      ],
+      [
+        "public Write",
+        (a) => a.share(replies, { agent: { public: true }, modes: ["write"] }, {}),
+        {},
+      ],
+      [
+        "a group",
+        (a) => a.share(replies, { agent: { group: `${ROOT}g#team` }, modes: ["read"] }, {}),
         {
-          ...grant,
-          who: [
-            [
-              { kind: "agent", webId: owner },
-              { kind: "agent", webId: owner },
-            ],
-          ],
+          visibility: "invitees",
+          guestListVisible: true,
         },
       ],
-    },
-  ] as EffectivePolicy[]) {
-    vi.mocked(readWac).mockReturnValueOnce(invalid);
-    await expect(sealNewResource(storage, fetch, target, owner)).rejects.toThrow("owner-only");
-  }
-  vi.mocked(readWac).mockImplementationOnce(() => {
-    throw new TypeError("unknown WAC construct");
+      [
+        "a stranger's Read",
+        (a) => a.share(replies, { agent: "https://stranger.example/me", modes: ["read"] }, {}),
+        { visibility: "invitees", guestListVisible: true },
+      ],
+      [
+        "an invitee's Read when the list is hidden",
+        (a) => a.share(replies, { agent: CLEO, modes: ["read"] }, {}),
+        { visibility: "invitees" },
+      ],
+      [
+        "an invitee's Write",
+        (a) => a.share(replies, { agent: CLEO, modes: ["read", "write"] }, {}),
+        { visibility: "invitees", guestListVisible: true },
+      ],
+    ];
+    it.each(seed)("%s", async (_name, share, over) => {
+      const { storage } = await layout();
+      await share(createAccessClient({ storage }));
+      await expect(
+        publishAccess(storage, eventUrl, baseEvent(over), [invitee(CLEO)]),
+      ).rejects.toThrow("beyond its intended audience");
+    });
   });
-  await expect(sealNewResource(storage, fetch, target, owner)).rejects.toThrow("unknown");
-  expect(fetch.mock.calls.every(([, init]) => init?.method !== "PUT")).toBe(true);
 });
-it("preserves read errors and fails missing-ACL races without overwriting", async () => {
-  const { storage } = await fixture();
-  await expect(
-    sealNewResource(
-      storage,
-      async () => {
-        throw new Error("offline");
-      },
-      target,
-      owner,
-    ),
-  ).rejects.toThrow();
-  await expect(
-    sealNewResource(storage, async () => new Response(null, { status: 403 }), target, owner),
-  ).rejects.toMatchObject({ status: 403 });
-  const fetch = vi
-    .fn()
-    .mockImplementation(
-      async (_url, init) => new Response(null, { status: init?.method === "PUT" ? 412 : 404 }),
+
+describe("revokeAccess", () => {
+  it("withdraws every grant for the audience and confirms by re-reading", async () => {
+    const { storage } = await layout();
+    for (const [visibility, who] of [
+      ["link", undefined],
+      ["invitees", CLEO],
+    ] as const) {
+      const event = baseEvent({ visibility, guestListVisible: visibility === "invitees" });
+      await publishAccess(storage, eventUrl, event, [invitee(CLEO)]);
+      await revokeAccess(storage, eventUrl, event, [invitee(CLEO)]);
+      for (const url of [eventUrl, replies]) {
+        const policy = await policyOf(storage, url);
+        expect(publicModes(policy).size).toBe(0);
+        expect(modesFor(policy, (kind, webId) => kind === "agent" && webId === who).size).toBe(0);
+        expect(
+          modesFor(policy, (kind, webId) => kind === "agent" && webId === OWNER).has("control"),
+        ).toBe(true);
+      }
+    }
+  });
+  it("tolerates a rule that was never granted", async () => {
+    const { storage } = await layout();
+    await revokeAccess(storage, eventUrl, baseEvent(), []);
+    await revokeAccess(storage, eventUrl, baseEvent({ visibility: "invitees" }), [invitee(CLEO)]);
+  });
+  it("throws when it cannot confirm the withdrawal", async () => {
+    const { storage } = await layout();
+    await publishAccess(storage, eventUrl, baseEvent(), []);
+    const write = storage.write.bind(storage);
+    storage.write = async (url, ...rest) => {
+      if (url.endsWith(".acl")) throw new Error("offline");
+      return write(url, ...rest);
+    };
+    await expect(revokeAccess(storage, eventUrl, baseEvent(), [])).rejects.toThrow("confirm");
+  });
+});
+
+describe("withdrawReplyRead repairs an earlier public guest list", () => {
+  async function legacy(modes: ("append" | "read")[][], over: Partial<EventData> = {}) {
+    const { storage } = await layout();
+    const access = createAccessClient({ storage });
+    for (const m of modes)
+      await access.share(
+        replies,
+        { agent: { public: true }, modes: m },
+        { inherit: m.includes("read") },
+      );
+    await access.share(replies, { agent: CLEO, modes: ["read"] }, { inherit: true });
+    return { storage, access, event: baseEvent(over) };
+  }
+  const namedRead = (policy: EffectivePolicy, webId: string) =>
+    modesFor(policy, (kind, id) => kind === "agent" && id === webId).has("read");
+  it("removes public Read, keeps public Append and never touches a named reader", async () => {
+    const { storage, event } = await legacy([["append"], ["read"]]);
+    await withdrawReplyRead(storage, eventUrl, event);
+    const policy = await policyOf(storage, replies);
+    expect([...publicModes(policy)]).toEqual(["append"]);
+    expect(namedRead(policy, CLEO)).toBe(true);
+    // The organiser's own access is untouched too.
+    expect(modesFor(policy, (kind, id) => kind === "agent" && id === OWNER).has("control")).toBe(
+      true,
     );
-  await expect(sealNewResource(storage, fetch, target, owner)).rejects.toThrow("protect");
-  expect(fetch.mock.calls).toHaveLength(2);
+  });
+  it("keeps named readers for an invitee list as well", async () => {
+    const { storage, event } = await legacy([["append"], ["read"]], {
+      visibility: "invitees",
+      guestListVisible: true,
+    });
+    await withdrawReplyRead(storage, eventUrl, event);
+    const policy = await policyOf(storage, replies);
+    expect([...publicModes(policy)]).toEqual(["append"]);
+    expect(namedRead(policy, CLEO)).toBe(true);
+  });
+  it("re-issues a mixed Append+Read rule as Append only while replies are open", async () => {
+    const { storage, event } = await legacy([["append", "read"]]);
+    await withdrawReplyRead(storage, eventUrl, event);
+    expect([...publicModes(await policyOf(storage, replies))]).toEqual(["append"]);
+  });
+  it("does not re-open replies for a closed event", async () => {
+    const { storage, event } = await legacy([["append", "read"]], {
+      eventStatus: EVENT_STATUS.cancelled,
+    });
+    await withdrawReplyRead(storage, eventUrl, event);
+    expect(publicModes(await policyOf(storage, replies)).size).toBe(0);
+  });
+  it("refuses, changing nothing, when a public Read rule also covers the organiser or another agent", async () => {
+    const { storage } = await layout();
+    const revoke = vi.fn();
+    const share = vi.fn();
+    const grants = vi.fn();
+    vi.mocked(createAccessClient).mockReturnValue({
+      model: () => "wac",
+      grants,
+      revoke,
+      share,
+    } as unknown as AccessClient);
+    for (const other of [OWNER, CLEO]) {
+      grants.mockResolvedValue([
+        { id: "#shared", agent: { public: true }, modes: ["read"] },
+        { id: "#shared", agent: other, modes: ["read", "control"] },
+      ]);
+      await expect(withdrawReplyRead(storage, eventUrl, baseEvent())).rejects.toThrow(
+        /shared with the owner or another agent/,
+      );
+    }
+    expect(revoke).not.toHaveBeenCalled();
+    expect(share).not.toHaveBeenCalled();
+  });
+  it("refuses to guess at rules it cannot identify, and fails when Read cannot be confirmed gone", async () => {
+    const { storage } = await layout();
+    const grants = vi.fn();
+    vi.mocked(createAccessClient).mockReturnValue({
+      model: () => "wac",
+      grants,
+      revoke: vi.fn(),
+      share: vi.fn(),
+    } as unknown as AccessClient);
+    grants.mockResolvedValue([{ agent: { public: true }, modes: ["read"] }]);
+    await expect(withdrawReplyRead(storage, eventUrl, baseEvent())).rejects.toThrow("identify");
+    grants.mockResolvedValue([{ id: "#r", agent: { public: true }, modes: ["read"] }]);
+    await expect(withdrawReplyRead(storage, eventUrl, baseEvent())).rejects.toThrow("confirm");
+  });
+  it("is a no-op, with no writes, when only named agents or the owner hold access", async () => {
+    const { storage, writes } = await layout();
+    await createAccessClient({ storage }).share(
+      replies,
+      { agent: CLEO, modes: ["read", "write"] },
+      { inherit: true },
+    );
+    writes.length = 0;
+    await withdrawReplyRead(storage, eventUrl, baseEvent());
+    expect(writes).toEqual([]);
+    expect(namedRead(await policyOf(storage, replies), CLEO)).toBe(true);
+  });
+  it("leaves a clean container alone", async () => {
+    const { storage, writes } = await layout();
+    writes.length = 0;
+    await withdrawReplyRead(storage, eventUrl, baseEvent());
+    expect(writes).toEqual([]);
+  });
 });
+
 function accessFixture() {
   const access = {
     model: vi.fn().mockReturnValue("wac"),
@@ -204,87 +462,51 @@ function accessFixture() {
     grants: vi.fn().mockResolvedValue([]),
     revoke: vi.fn().mockResolvedValue(undefined),
   };
-  vi.mocked(createAccessClient).mockReturnValue(
-    access as unknown as ReturnType<typeof createAccessClient>,
-  );
+  vi.mocked(createAccessClient).mockReturnValue(access as unknown as AccessClient);
   return access;
 }
-it("shares with the exact audience, inheritance only for visible Read, and never Append for closed events", async () => {
-  const { storage } = await fixture();
-  const access = accessFixture();
-  for (const status of [EVENT_STATUS.scheduled, EVENT_STATUS.cancelled, EVENT_STATUS.postponed]) {
-    access.share.mockClear();
-    await publishAccess(
-      storage,
-      `${target}index.ttl`,
-      { ...event, eventStatus: status, visibility: "invitees", guestListVisible: true },
-      [
-        { webId: owner, event: `${target}index.ttl#it`, invitedAt: new Date() },
-        { displayName: "Cleo", event: `${target}index.ttl#it`, invitedAt: new Date() },
-      ],
-    );
-    expect(access.share).toHaveBeenCalledWith(
-      `${target}rsvps/`,
-      { agent: owner, modes: ["read"] },
-      { inherit: true },
-    );
-    expect(access.share.mock.calls.some(([, grant]) => grant.modes.includes("append"))).toBe(
-      status === EVENT_STATUS.scheduled,
-    );
-  }
-  access.share.mockClear();
-  await publishAccess(storage, `${target}index.ttl`, event, []);
-  expect(access.share.mock.calls).toEqual([
-    [`${target}rsvps/`, { agent: { public: true }, modes: ["append"] }, {}],
-    [`${target}index.ttl`, { agent: { public: true }, modes: ["read"] }, {}],
-  ]);
-  access.share.mockClear();
-  await publishAccess(storage, `${target}index.ttl`, { ...event, visibility: "invitees" }, []);
-  expect(access.share).not.toHaveBeenCalled();
-  access.model.mockReturnValue("acp");
-  await expect(publishAccess(storage, target, event, [])).rejects.toThrow("WAC");
-});
-it("revokes Append by rule id and refuses unidentifiable grants before touching any rule", async () => {
-  const { storage } = await fixture();
-  const access = accessFixture();
-  access.grants.mockResolvedValue([
-    { id: `${acl}#append`, agent: { public: true }, modes: ["append"] },
-    { id: `${acl}#read`, agent: { public: true }, modes: ["read"] },
-    { id: `${acl}#owner`, agent: owner, modes: ["read", "write", "control", "append"] },
-    { agent: owner, modes: ["append"] },
-    { id: `${acl}#shared-owner`, agent: owner, modes: ["append", "write"] },
-  ]);
-  await closeReplies(storage, `${target}index.ttl`, owner);
-  expect(access.revoke.mock.calls).toEqual([[`${target}rsvps/`, `${acl}#append`]]);
-  access.revoke.mockClear();
-  access.grants.mockResolvedValue([{ agent: { public: true }, modes: ["append"] }]);
-  await expect(closeReplies(storage, target, owner)).rejects.toThrow("identify");
-  expect(access.revoke).not.toHaveBeenCalled();
-  access.model.mockReturnValue("acp");
-  await expect(closeReplies(storage, target, owner)).rejects.toThrow("WAC");
-});
-it("refuses mixed non-owner Append rules before revoking any grant", async () => {
-  const { storage } = await fixture();
-  const access = accessFixture();
-  for (const agent of [{ public: true }, "https://guest.example/me"]) {
+const acl = `${replies}.acl`;
+describe("closeReplies", () => {
+  it("revokes Append by rule id and refuses unidentifiable grants before touching any rule", async () => {
+    const { storage } = pod();
+    const access = accessFixture();
     access.grants.mockResolvedValue([
       { id: `${acl}#append`, agent: { public: true }, modes: ["append"] },
-      { id: `${acl}#mixed`, agent, modes: ["append", "read"] },
+      { id: `${acl}#read`, agent: { public: true }, modes: ["read"] },
+      { id: `${acl}#owner`, agent: OWNER, modes: ["read", "write", "control", "append"] },
+      { agent: OWNER, modes: ["append"] },
+      { id: `${acl}#shared-owner`, agent: OWNER, modes: ["append", "write"] },
     ]);
-    await expect(closeReplies(storage, target, owner)).rejects.toThrow("mixed");
+    await closeReplies(storage, eventUrl, OWNER);
+    expect(access.revoke.mock.calls).toEqual([[replies, `${acl}#append`]]);
+    access.revoke.mockClear();
+    access.grants.mockResolvedValue([{ agent: { public: true }, modes: ["append"] }]);
+    await expect(closeReplies(storage, eventUrl, OWNER)).rejects.toThrow("identify");
     expect(access.revoke).not.toHaveBeenCalled();
-  }
-});
-it("refuses Append rules shared with the owner before revoking any grant", async () => {
-  const { storage } = await fixture();
-  const access = accessFixture();
-  for (const modes of [["append"], ["append", "read"]]) {
-    access.grants.mockResolvedValue([
-      { id: `${acl}#append`, agent: { public: true }, modes: ["append"] },
-      { id: `${acl}#shared`, agent: owner, modes },
-      { id: `${acl}#shared`, agent: { public: true }, modes },
-    ]);
-    await expect(closeReplies(storage, target, owner)).rejects.toThrow(/mixed|shared/);
-    expect(access.revoke).not.toHaveBeenCalled();
-  }
+  });
+  it("refuses mixed non-owner Append rules before revoking any grant", async () => {
+    const { storage } = pod();
+    const access = accessFixture();
+    for (const agent of [{ public: true }, CLEO]) {
+      access.grants.mockResolvedValue([
+        { id: `${acl}#append`, agent: { public: true }, modes: ["append"] },
+        { id: `${acl}#mixed`, agent, modes: ["append", "read"] },
+      ]);
+      await expect(closeReplies(storage, eventUrl, OWNER)).rejects.toThrow("mixed");
+      expect(access.revoke).not.toHaveBeenCalled();
+    }
+  });
+  it("refuses Append rules shared with the owner before revoking any grant", async () => {
+    const { storage } = pod();
+    const access = accessFixture();
+    for (const modes of [["append"], ["append", "read"]]) {
+      access.grants.mockResolvedValue([
+        { id: `${acl}#append`, agent: { public: true }, modes: ["append"] },
+        { id: `${acl}#shared`, agent: OWNER, modes },
+        { id: `${acl}#shared`, agent: { public: true }, modes },
+      ]);
+      await expect(closeReplies(storage, eventUrl, OWNER)).rejects.toThrow(/mixed|shared/);
+      expect(access.revoke).not.toHaveBeenCalled();
+    }
+  });
 });

@@ -18,12 +18,19 @@ import {
   StorageError,
 } from "@jeswr/storage-client";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
-import { closeReplies, publishAccess, sealNewResource } from "./access.js";
+import {
+  closeReplies,
+  publishAccess,
+  revokeAccess,
+  sealNewResource,
+  withdrawReplyRead,
+} from "./access.js";
 import {
   EVENT_STATUS,
   type EventData,
   entities,
   eventDocumentUrl,
+  guestListAvailable,
   type InviteeData,
   RDF,
   type RsvpData,
@@ -36,6 +43,34 @@ import type { Reply } from "./summary.js";
 export interface Invitation extends EventData {
   url: string;
   etag: string | null;
+}
+/** Returned by `create`: the invitation plus a recoverable discovery state. */
+export interface CreatedInvitation extends Invitation {
+  /** Set when the invitation could not be added to the private Type Index. The invitation is
+   * saved and fully usable; `registerInTypeIndex` retries the discovery hint. */
+  registrationWarning?: string;
+}
+/** A failed publication. Access was widened only after the state was committed, and has been
+ * revoked and re-read; `sharingWithdrawn` is false only when that confirmation itself failed.
+ * `draftRestored` is false when the private draft state could not be written back: the stored
+ * state is then still `published` with no audience, and `reshare` (or a fresh publish after a
+ * fix) shares it again. */
+export class PublicationError extends Error {
+  readonly sharingWithdrawn: boolean;
+  readonly draftRestored: boolean;
+  constructor(sharingWithdrawn: boolean, cause: unknown, draftRestored = true) {
+    super(publicationMessage(sharingWithdrawn, draftRestored), { cause });
+    this.name = "PublicationError";
+    this.sharingWithdrawn = sharingWithdrawn;
+    this.draftRestored = draftRestored;
+  }
+}
+function publicationMessage(withdrawn: boolean, restored: boolean): string {
+  if (withdrawn && restored)
+    return "Couldn't publish the invitation. Sharing was withdrawn and it is a private draft.";
+  if (withdrawn)
+    return "Couldn't publish the invitation. Sharing was withdrawn, but it couldn't be set back to a private draft, so it is still marked published although nobody can open it. Share it again, or try later.";
+  return `Couldn't publish the invitation, and couldn't confirm that sharing was withdrawn.${restored ? "" : " It also couldn't be set back to a private draft."} Check its sharing settings.`;
 }
 export interface EventsRepositoryOptions {
   fetch: typeof globalThis.fetch;
@@ -263,18 +298,111 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
       client = undefined;
       throw error;
     }));
+  const session = {
+    fetch,
+    storageUrl: options.storageRoot,
+    webId: owner,
+    mode: "solid",
+  };
+  /** Make sure a private container exists. One this call creates is sealed through pod-access;
+   * an existing one is only verified owner-only and never rewritten. */
   async function container(storage: StorageClient, parent: string, name: string): Promise<string> {
     if (!/^[A-Za-z0-9_-]+$/.test(name)) throw new TypeError("Use a simple container identifier");
     const expected = assertWithinPodScope(base, new URL(`${name}/`, parent).href);
+    let exists = true;
     try {
       await storage.head(expected);
-      return expected;
     } catch (e) {
       if (!(e instanceof StorageError) || e.code !== "not-found") throw e;
+      exists = false;
+    }
+    if (exists) {
+      await sealNewResource(storage, session, expected, { created: false });
+      return expected;
     }
     const created = await storage.create(parent, null, { name, kind: "container" });
-    await sealNewResource(storage, fetch, created.url, owner);
+    await sealNewResource(storage, session, created.url, { created: true });
     return created.url;
+  }
+  /** Create a Turtle document whose subject is the location the server assigned. A Solid pod
+   * honours the derived name; when the server chose another, the document is rewritten against
+   * the assigned URL so its subject always matches where it lives. */
+  async function createDocument(
+    storage: StorageClient,
+    parent: string,
+    name: string,
+    serialize: (url: string) => Promise<string>,
+  ): Promise<{ url: string; etag: string | null }> {
+    const derived = new URL(name, parent).href;
+    const created = await storage.create(parent, await serialize(derived), {
+      name,
+      contentType: "text/turtle",
+    });
+    const url = assertWithinPodScope(parent, created.url, { allowRoot: false });
+    if (new URL(url).hash || new URL(url).search || url.endsWith("/"))
+      throw new Error("The pod returned an invalid document location");
+    if (url === derived) return { url, etag: created.etag };
+    const version = created.etag ?? (await storage.head(url)).etag;
+    if (!version) throw new Error("A version is required to finish saving");
+    const written = await storage.write(url, await serialize(url), {
+      contentType: "text/turtle",
+      ifMatch: version,
+    });
+    return { url, etag: written.etag };
+  }
+  /** Discovery metadata is best-effort: a failure never blocks, or undoes, the saved data. */
+  async function register(
+    storage: StorageClient,
+    features: StorageClient["features"],
+    instance: string,
+  ): Promise<string | undefined> {
+    try {
+      await createTypeIndex({ storage, features, profile: owner, fetch }).register(
+        entities.Event.typeIri,
+        { instance },
+        { index: "private" },
+      );
+      return undefined;
+    } catch {
+      return "This invitation is saved, but it couldn't be added to your private Type Index, so other apps may not find it.";
+    }
+  }
+  /** Widen access only after the published state is committed. Any failure from here on revokes
+   * the audience's grants, confirms by re-reading them, restores a private draft and fails closed. */
+  async function widen(
+    storage: StorageClient,
+    url: string,
+    data: EventData,
+    invitees: readonly InviteeData[],
+    after: () => Promise<void>,
+    restoreDraft = true,
+  ): Promise<void> {
+    try {
+      await publishAccess(storage, url, data, invitees);
+      await after();
+    } catch (cause) {
+      let withdrawn = true;
+      try {
+        await revokeAccess(storage, url, data, invitees);
+      } catch {
+        withdrawn = false;
+      }
+      // A reshare only repairs access: it never rewrites the stored document.
+      let restored = restoreDraft;
+      try {
+        if (!restoreDraft) throw new Error("The stored document is left as it is");
+        const head = await storage.head(url);
+        if (!head.etag) throw new Error("No version to restore");
+        await storage.write(
+          url,
+          await entities.Event.serialize(url, { ...data, publication: "draft" }),
+          { contentType: "text/turtle", ifMatch: head.etag },
+        );
+      } catch {
+        restored = false;
+      }
+      throw new PublicationError(withdrawn, cause, restored);
+    }
   }
   return {
     base,
@@ -297,55 +425,62 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
       data: EventData,
       invitees: readonly InviteeData[] = [],
       id: string = crypto.randomUUID(),
-    ): Promise<Invitation> {
+    ): Promise<CreatedInvitation> {
+      // A link holder never reads raw replies, so a link invitation has no guest list.
+      if (data.guestListVisible && !guestListAvailable(data))
+        data = { ...data, guestListVisible: false };
       validateEvent(data);
       if (data.organizer !== owner)
         throw new TypeError("The organiser must be the signed-in account");
       const { storage, features } = await getClient();
       if (storage.protocol !== "solid")
         throw new Error("This invitation layout currently needs a Solid pod");
+      // Each container is sealed when created here and otherwise only verified owner-only, so
+      // invitation content is never written under public inheritance.
       await container(storage, options.storageRoot, "events");
-      // Recheck a pre-existing base; never write invitation content under public inheritance.
-      await sealNewResource(storage, fetch, base, owner);
       const folder = await container(storage, base, id);
-      await sealNewResource(storage, fetch, folder, owner);
       await container(storage, folder, "rsvps");
       const guests = await container(storage, folder, "invitees");
-      const url = new URL("index.ttl", folder).href;
       const draft = { ...data, publication: "draft" as const };
-      const created = await storage.create(folder, await entities.Event.serialize(url, draft), {
-        name: "index.ttl",
-        contentType: "text/turtle",
-      });
-      await sealNewResource(storage, fetch, created.url, owner);
+      const created = await createDocument(storage, folder, "index.ttl", (url) =>
+        entities.Event.serialize(url, draft),
+      );
+      await sealNewResource(storage, session, created.url, { created: true });
       const savedInvitees = invitees.map((i) => ({
         ...i,
         event: entities.Event.subject(created.url),
       }));
       for (const [index, invitee] of savedInvitees.entries()) {
         validateInvitee(invitee);
-        const name = `guest-${index}.ttl`;
-        await storage.create(
-          guests,
-          await entities.Invitee.serialize(new URL(name, guests).href, invitee),
-          { name, contentType: "text/turtle" },
+        await createDocument(storage, guests, `guest-${index}.ttl`, (url) =>
+          entities.Invitee.serialize(url, invitee),
         );
       }
-      await createTypeIndex({ storage, features, profile: owner, fetch }).register(
-        entities.Event.typeIri,
-        { instance: created.url },
-        { index: "private" },
-      );
+      const registrationWarning = await register(storage, features, created.url);
       if (data.publication === "published") {
-        await publishAccess(storage, created.url, data, savedInvitees);
-        const current = await storage.head(created.url);
+        // Commit the published state first; widen access only afterwards, and revoke on failure.
+        const current = created.etag ? created : await storage.head(created.url);
         if (!current.etag) throw new Error("A version is required to publish");
         await storage.write(created.url, await entities.Event.serialize(created.url, data), {
           contentType: "text/turtle",
           ifMatch: current.etag,
         });
+        let result: Invitation | undefined;
+        await widen(storage, created.url, data, savedInvitees, async () => {
+          result = await readInvitation(fetch, created.url);
+        });
+        return { ...(result as Invitation), ...(registrationWarning && { registrationWarning }) };
       }
-      return readInvitation(fetch, created.url);
+      return {
+        ...(await readInvitation(fetch, created.url)),
+        ...(registrationWarning && { registrationWarning }),
+      };
+    },
+    /** Retry the private Type Index hint for a saved invitation; resolves to a warning on failure. */
+    async registerInTypeIndex(event: Invitation): Promise<string | undefined> {
+      assertWithinPodScope(base, event.url);
+      const { storage, features } = await getClient();
+      return register(storage, features, event.url);
     },
     async update(existing: Invitation, data: EventData): Promise<Invitation> {
       validateEvent(data);
@@ -368,17 +503,66 @@ export function createEventsRepository(options: EventsRepositoryOptions) {
           method: "PUT",
           status: 412,
         });
-      if (existing.publication === "draft" && data.publication === "published") {
-        const invitees = await this.invitees(existing);
-        await publishAccess(storage, existing.url, data, invitees);
-      }
+      const publishing = existing.publication === "draft" && data.publication === "published";
+      const invitees = publishing ? await this.invitees(existing) : [];
+      // Narrowing is safe before the commit: close replies, and withdraw any public guest-list
+      // Read an earlier version granted on a link invitation.
       if (data.eventStatus !== EVENT_STATUS.scheduled && existing.publication === "published")
         await closeReplies(storage, existing.url, owner);
+      if (existing.publication === "published" && existing.visibility === "link")
+        await withdrawReplyRead(storage, existing.url, data);
       await storage.write(existing.url, await entities.Event.serialize(existing.url, data), {
         contentType: "text/turtle",
         ifMatch: existing.etag,
       });
-      return readInvitation(fetch, existing.url);
+      if (!publishing) return readInvitation(fetch, existing.url);
+      // The published state is committed; widen access only now and revoke on any failure.
+      let result: Invitation | undefined;
+      await widen(storage, existing.url, data, invitees, async () => {
+        result = await readInvitation(fetch, existing.url);
+      });
+      return result as Invitation;
+    },
+    /** Share a published invitation again, e.g. after a failed publication could not restore its
+     * private draft state. Explicit and organiser-only: an edit never widens a published invitation. */
+    async reshare(existing: Invitation): Promise<Invitation> {
+      assertWithinPodScope(base, existing.url);
+      if (existing.organizer !== owner)
+        throw new TypeError("Only the organiser can share this invitation");
+      if (!existing.etag) throw new Error("A version is required to share this invitation");
+      const { storage } = await getClient();
+      // Decide from the stored invitation, never the caller's snapshot.
+      const stored = await readInvitation(fetch, existing.url);
+      if (stored.etag !== existing.etag)
+        throw new StorageError("precondition-failed", {
+          url: existing.url,
+          method: "PUT",
+          status: 412,
+        });
+      if (stored.organizer !== owner)
+        throw new TypeError("Only the organiser can share this invitation");
+      if (stored.publication !== "published")
+        throw new Error("Only a published invitation can be shared again");
+      const invitees = await this.invitees(stored);
+      let result: Invitation | undefined;
+      await widen(
+        storage,
+        stored.url,
+        stored,
+        invitees,
+        async () => {
+          const again = await readInvitation(fetch, stored.url);
+          if (again.etag !== stored.etag || again.publication !== "published")
+            throw new StorageError("precondition-failed", {
+              url: stored.url,
+              method: "PUT",
+              status: 412,
+            });
+          result = again;
+        },
+        false,
+      );
+      return result as Invitation;
     },
     async invitees(event: Invitation): Promise<InviteeData[]> {
       const container = new URL("invitees/", event.url).href;

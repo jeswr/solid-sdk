@@ -82,17 +82,31 @@ export function ChatProvider({ session, children }: { session: ChatSession; chil
       notifySaved.current = () => {};
     };
   }, [session]);
+  // A display-name change only reseeds name resolution; it must not replace the outbox, which
+  // would re-send every in-flight message. The queue talks to the latest client through a ref.
+  const latestClient = useRef(client);
+  useLayoutEffect(() => {
+    latestClient.current = client;
+  }, [client]);
+  const queueClient = useMemo(
+    () => ({
+      webId: session.webId,
+      send: (...args: Parameters<ChatClient["send"]>) => latestClient.current.send(...args),
+    }),
+    [session.webId],
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new fetch or store means a new queue; displayName does not
   const queue = useMemo(
     () =>
       new ChatOutbox(
-        client,
+        queueClient,
         () => navigator.onLine !== false,
         local,
         (message) => {
           notifySaved.current(message);
         },
       ),
-    [client, local],
+    [queueClient, session.fetch, session.storageUrl, publicFetch, local],
   );
   const outbox = useSyncExternalStore(queue.subscribe, queue.snapshot, queue.snapshot);
   const rooms = useRef<string[]>([]);
