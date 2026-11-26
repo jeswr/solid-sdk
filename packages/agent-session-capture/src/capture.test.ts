@@ -4,7 +4,7 @@ import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
 import { ChatWriter } from "@jeswr/solid-chat-interop";
 import { createChatPodPort } from "@jeswr/solid-mcp";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
-import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "fs/promises";
+import * as fs from "fs/promises";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { createServer } from "http";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
@@ -12,7 +12,7 @@ import { tmpdir } from "os";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type CaptureOptions, runCapture } from "./capture.js";
+import { type CaptureOptions, runCapture as startCapture } from "./capture.js";
 import * as io from "./io.js";
 import { digest } from "./parsers.js";
 import { createCaptureTestTransport } from "./testing.js";
@@ -21,6 +21,35 @@ vi.mock("@jeswr/guarded-fetch/node", async (original) => {
   const node = await original<typeof import("@jeswr/guarded-fetch/node")>();
   return { ...node, createNodeGuardedFetch: vi.fn(node.createNodeGuardedFetch) };
 });
+
+// Vitest stops waiting for a test at its timeout but cannot stop the test body, which
+// keeps writing to its temporary home while afterEach removes it (ENOTEMPTY on rmdir,
+// PR #675). Every asynchronous operation a test performs on its home goes through this
+// gate. afterEach closes it, so late calls reject without touching the disk, and waits
+// for the operations already started before removing the directory.
+let gate: { closed: boolean; pending: Set<Promise<unknown>> } = {
+  closed: true,
+  pending: new Set(),
+};
+function gated<F extends (...args: never[]) => Promise<unknown>>(operation: F): F {
+  return ((...args: Parameters<F>) => {
+    const current = gate;
+    if (current.closed) return Promise.reject(new Error("test finished; late work refused"));
+    const pending = operation(...args);
+    current.pending.add(pending);
+    const settle = () => current.pending.delete(pending);
+    pending.then(settle, settle);
+    return pending;
+  }) as F;
+}
+const runCapture = gated(startCapture);
+const mkdir = gated(fs.mkdir) as typeof fs.mkdir;
+const mkdtemp = gated(fs.mkdtemp) as typeof fs.mkdtemp;
+const readdir = gated(fs.readdir) as typeof fs.readdir;
+const readFile = gated(fs.readFile) as typeof fs.readFile;
+const rm = gated(fs.rm) as typeof fs.rm;
+const symlink = gated(fs.symlink) as typeof fs.symlink;
+const writeFile = gated(fs.writeFile) as typeof fs.writeFile;
 
 const config = {
   podRoot: "https://pod.example/alice/",
@@ -80,6 +109,7 @@ async function storedConversation(provider: "claude" | "codex") {
 }
 
 beforeEach(async () => {
+  gate = { closed: false, pending: new Set() };
   home = await mkdtemp(join(tmpdir(), "solid-capture-test-"));
   cwd = join(home, "project");
   await mkdir(cwd);
@@ -89,10 +119,15 @@ beforeEach(async () => {
   options = { home, cwd, env, fetch: transport.fetch };
 });
 afterEach(async () => {
+  gate.closed = true;
+  // A capture started under fake timers ends at its fake deadline, so fire pending
+  // timers before restoring real ones. Late operations are refused, so the set only shrinks.
+  if (gate.pending.size > 0 && vi.isFakeTimers()) await vi.runOnlyPendingTimersAsync();
+  while (gate.pending.size > 0) await Promise.allSettled(gate.pending);
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
-  await rm(home, { recursive: true, force: true });
+  await fs.rm(home, { recursive: true, force: true });
 });
 
 describe("capture with real ChatWriter and client credentials", {
