@@ -188,7 +188,10 @@ function LinePlot({
   const ticks = [
     ...new Set([
       tickValues[0],
-      ...(width >= 480 ? [tickValues[Math.floor(tickValues.length / 2)]] : []),
+      // The middle label sits at the value nearest the middle of the axis, not the middle index.
+      ...(width >= 480
+        ? [nearest(tickValues, ((tickValues[0] ?? 0) + (tickValues.at(-1) ?? 0)) / 2)]
+        : []),
       tickValues.at(-1),
     ]),
   ].filter((v): v is number => v !== undefined);
@@ -328,4 +331,11 @@ function LinePlot({
       <Tooltip mark={interaction.active} id={interaction.tooltipId} width={width} height={height} />
     </div>
   );
+}
+// AUTHORED-BY Claude Opus 5.5
+function nearest(values: readonly number[], target: number): number | undefined {
+  let best: number | undefined;
+  for (const v of values)
+    if (best === undefined || Math.abs(v - target) < Math.abs(best - target)) best = v;
+  return best;
 }

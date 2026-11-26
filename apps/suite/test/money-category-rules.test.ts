@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { describe, expect, it } from "vitest";
 import { createAccount } from "../src/apps/money/lib/data/accounts";
 import { type MoneyClient, storeOf } from "../src/apps/money/lib/data/container";
@@ -189,6 +190,21 @@ describe("categorisation rules", () => {
     expect(stillUncategorised(tx("1", "x", { category: "food" }))).toBe(false);
     expect(stillUncategorised(tx("1", "x", { debitAccount: "a" }))).toBe(false);
     expect(stillUncategorised(tx("1", "x", { creditAccount: "a" }))).toBe(false);
+  });
+
+  it("propagates a transport failure while reading the rules body", async () => {
+    const error = new TypeError("Connection lost");
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"rules":'));
+      },
+      pull(controller) {
+        controller.error(error);
+      },
+    });
+    await expect(loadRules({ ...client(), fetch: async () => new Response(body) })).rejects.toBe(
+      error,
+    );
   });
 
   it("tells unusable files from failed reads, and resets only a still-broken file", async () => {

@@ -23,6 +23,8 @@ export interface UploadOptions {
   stripLocation: boolean;
   now: string;
   id: () => string;
+  /** Owner-only check for each destination container; required by every production caller. */
+  verifyDestination: (container: string) => Promise<boolean>;
   onProgress?: (index: number, progress: number) => void;
 }
 export type UploadResult =
@@ -34,7 +36,24 @@ export async function uploadFiles(
   files: readonly UploadFile[],
   options: UploadOptions,
 ): Promise<UploadResult[]> {
+  // Fail closed: a caller that omits the owner-only check must not write unchecked.
+  if (typeof options.verifyDestination !== "function")
+    throw new TypeError("An owner-only destination check is required");
   const results: UploadResult[] = [];
+  // Each container is verified once per batch; only a positive result is remembered.
+  const verified = new Map<string, Promise<boolean>>();
+  const verifyDestination = (container: string) => {
+    let known = verified.get(container);
+    if (!known) {
+      known = options.verifyDestination(container).then((ok) => {
+        if (!ok) verified.delete(container);
+        return ok;
+      });
+      known.catch(() => verified.delete(container));
+      verified.set(container, known);
+    }
+    return known;
+  };
   for (const [index, file] of files.entries()) {
     const id = options.id();
     let prepared: PreparedPhoto | undefined;
@@ -62,11 +81,12 @@ export async function uploadFiles(
         dimensions: async () => ({
           width: ready.photo.exif.pixelWidth as number,
           height: ready.photo.exif.pixelHeight as number,
+          durationSeconds: ready.photo.durationSeconds,
         }),
         stripLocation: async () => ready.original,
         thumbnail: async () => ready.thumbnail,
       };
-      await io.uploadPhotos([input], encoder, now);
+      await io.uploadPhotos([input], encoder, now, verifyDestination);
       options.onProgress?.(index, 100);
       io.forgetBinary(prepared.photo.contentUrl);
       io.forgetBinary(prepared.photo.thumbnailUrl as string);

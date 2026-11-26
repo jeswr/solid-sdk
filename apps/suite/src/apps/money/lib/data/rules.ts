@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 
+import { ResponseBodyLimitError, readBoundedText } from "@jeswr/guarded-fetch";
 import {
   type Category,
   isTransactionWritable,
@@ -74,6 +75,9 @@ export function parseRules(value: unknown): SavedRule[] {
   });
 }
 
+/** Rule files are small; refuse bodies beyond this while streaming. */
+const MAX_RULES_BYTES = 512 * 1024;
+
 export async function loadRules(client: MoneyClient): Promise<RuleFile> {
   const url = storeOf(client).resolve(RULES_FILE);
   const response = await client.fetch(url, {
@@ -83,7 +87,14 @@ export async function loadRules(client: MoneyClient): Promise<RuleFile> {
   if (response.status === 404) return { rules: [], etag: null, exists: false };
   if (!response.ok) throw new MoneyIoError(response.status);
   // A body cut off mid-read is a failed read, not an unusable file.
-  const text = await response.text();
+  let text: string;
+  try {
+    text = await readBoundedText(response, MAX_RULES_BYTES);
+  } catch (error) {
+    // An oversized file is unusable, not a transient failure.
+    if (error instanceof ResponseBodyLimitError) throw new RulesFileError();
+    throw error;
+  }
   let rules: SavedRule[];
   try {
     rules = parseRules(JSON.parse(text));

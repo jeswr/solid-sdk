@@ -41,6 +41,7 @@ export interface ScatterChartProps extends ChartBase {
   trend?: boolean;
 }
 export interface TimelineChartProps extends ChartBase {
+  formatX?: (t: number) => string;
   lanes: readonly {
     id: string;
     label: string;

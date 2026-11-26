@@ -342,23 +342,6 @@
         }
       ]
     },
-    "1f7718e37635a8f10671333e5830145e4b0b4d48b444574de590d033fe61774f": {
-      "tokens": 132,
-      "locations": [
-        {
-          "file": "apps/suite/src/apps/health/components/health-app.tsx",
-          "startLine": 132,
-          "endLine": 157,
-          "tokens": 132
-        },
-        {
-          "file": "apps/suite/src/apps/money/components/money-app.tsx",
-          "startLine": 104,
-          "endLine": 129,
-          "tokens": 132
-        }
-      ]
-    },
     "208d4b6ac3ec862a895bdc40ba44ccf71882ea8ea83c340b611cb1dc546f8f93": {
       "tokens": 120,
       "locations": [
@@ -453,6 +436,23 @@
           "startLine": 44,
           "endLine": 73,
           "tokens": 155
+        }
+      ]
+    },
+    "25c1f743b672f1e344ed73bf5bac7e125da0c5d696f3b703e152c604d141c755": {
+      "tokens": 120,
+      "locations": [
+        {
+          "file": "apps/suite/src/apps/docs/lib/model/type-index.ts",
+          "startLine": 67,
+          "endLine": 85,
+          "tokens": 120
+        },
+        {
+          "file": "apps/suite/src/apps/photos/lib/model/photograph.ts",
+          "startLine": 107,
+          "endLine": 128,
+          "tokens": 120
         }
       ]
     },
@@ -3778,23 +3778,6 @@
           "startLine": 95,
           "endLine": 112,
           "tokens": 124
-        }
-      ]
-    },
-    "ce287b8debef1eb49870ec334a714be468ffd2d496117d0bb6af94087658957d": {
-      "tokens": 122,
-      "locations": [
-        {
-          "file": "apps/suite/src/apps/money/components/money-app.tsx",
-          "startLine": 114,
-          "endLine": 137,
-          "tokens": 122
-        },
-        {
-          "file": "apps/suite/src/apps/music/components/music-app.tsx",
-          "startLine": 141,
-          "endLine": 164,
-          "tokens": 122
         }
       ]
     },

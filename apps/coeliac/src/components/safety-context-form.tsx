@@ -10,7 +10,7 @@
  * drift. A change is handed to the caller (`InsightsView`), which persists it via
  * `useSafetyContextCache` (WebID-scoped, cache-only, never networked).
  */
-import type { SafetyContext } from "@/lib/inference/types";
+import type { SafetyContext } from "@jeswr/health-insights";
 
 type AlarmFlags = NonNullable<SafetyContext["alarmFlags"]>;
 
@@ -61,7 +61,9 @@ export function SafetyContextForm({ value, onChange }: SafetyContextFormProps) {
             <input
               type="checkbox"
               checked={flags[key] === true}
-              onChange={(e) => onChange({ ...value, alarmFlags: { ...flags, [key]: e.target.checked } })}
+              onChange={(e) =>
+                onChange({ ...value, alarmFlags: { ...flags, [key]: e.target.checked } })
+              }
             />
             {ALARM_LABELS[key]}
           </label>

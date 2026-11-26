@@ -327,6 +327,44 @@ export function YAxis({
     </g>
   );
 }
+// AUTHORED-BY Claude Opus 5.5
+/** Approximate rendered width of an axis label (12px UI font), used only to avoid overlaps. */
+const LABEL_CHAR_WIDTH = 7;
+const LABEL_GAP = 8;
+type Anchor = "start" | "middle" | "end";
+/**
+ * Keep axis labels that do not overlap. The last label always stays (the most recent
+ * value), then the first; a label that would collide with a kept one is dropped.
+ */
+export function visibleTicks(
+  values: readonly number[],
+  scale: (n: number) => number,
+  format: (n: number) => string,
+): { value: number; anchor: Anchor; text: string }[] {
+  const ticks = values.map((value, i) => {
+    const anchor: Anchor = i === 0 ? "start" : i === values.length - 1 ? "end" : "middle";
+    const text = format(value);
+    const width = text.length * LABEL_CHAR_WIDTH;
+    const x = scale(value);
+    const left = anchor === "start" ? x : anchor === "end" ? x - width : x - width / 2;
+    return { value, anchor, text, left, right: left + width };
+  });
+  // Priority: the last label, then the first, then the middle ones.
+  const order = ticks.length > 1 ? [ticks.length - 1, 0, ...ticks.keys()].slice(0, -1) : [0];
+  const kept = new Set<number>();
+  for (const i of new Set(order)) {
+    const tick = ticks[i];
+    if (!tick) continue;
+    const clear = [...kept].every((k) => {
+      const other = ticks[k] as (typeof ticks)[number];
+      return tick.right + LABEL_GAP <= other.left || tick.left >= other.right + LABEL_GAP;
+    });
+    if (clear) kept.add(i);
+  }
+  return ticks
+    .filter((_, i) => kept.has(i))
+    .map(({ value, anchor, text }) => ({ value, anchor, text }));
+}
 export function XAxis({
   values,
   scale,
@@ -340,17 +378,18 @@ export function XAxis({
   format?: (n: number) => string;
   label?: string;
 }) {
+  const shown = visibleTicks(values, scale, format);
   return (
     <g className="sc-axis">
-      {values.map((v, i) => (
+      {shown.map(({ value: v, anchor, text }, i) => (
         <text
           // biome-ignore lint/suspicious/noArrayIndexKey: stateless ticks may round to the same value.
           key={`${i}:${v}`}
           x={scale(v)}
           y={bottom + 20}
-          textAnchor={i === 0 ? "start" : i === values.length - 1 ? "end" : "middle"}
+          textAnchor={anchor}
         >
-          {format(v)}
+          {text}
         </text>
       ))}
       {label && (

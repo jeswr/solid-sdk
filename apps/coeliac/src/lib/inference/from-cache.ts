@@ -23,6 +23,8 @@
  * trigger. `plan` is left unset — it is a cheap pure DERIVATION over
  * conclusions+protocols (`./diet-plan`), not a cached artifact of its own.
  */
+
+import type { DiaryData, SafetyContext } from "@jeswr/health-insights";
 import {
   isValidLagProfile,
   type MealData,
@@ -38,7 +40,6 @@ import type {
   StoredTriggerClass,
 } from "../cache/diary-store";
 import { storedConclusionToData, storedProtocolToData } from "../protocol/persist";
-import type { DiaryData, SafetyContext } from "./types";
 
 /** Parse an ISO timestamp to a valid `Date`, or `undefined` when it does not parse. */
 function parseDate(iso: string): Date | undefined {
@@ -82,7 +83,11 @@ export function storedSymptomToData(symptom: StoredSymptom): SymptomData | undef
  * the package's own `parseTriggerClass` fail-closed discipline.
  */
 export function storedTriggerClassToData(tc: StoredTriggerClass): TriggerClassData | undefined {
-  const profile = { lagWindowMin: tc.lagWindowMin, lagWindowMax: tc.lagWindowMax, lagMode: tc.lagMode };
+  const profile = {
+    lagWindowMin: tc.lagWindowMin,
+    lagWindowMax: tc.lagWindowMax,
+    lagMode: tc.lagMode,
+  };
   if (!isValidLagProfile(profile)) return undefined;
   return { slug: tc.slug, ...profile, label: tc.label };
 }
@@ -136,12 +141,8 @@ export function diaryDataFromCache(
   triggerClasses: readonly StoredTriggerClass[] = [],
 ): DiaryData {
   return {
-    meals: meals
-      .map(storedMealToData)
-      .filter((m): m is MealData => m !== undefined),
-    symptoms: symptoms
-      .map(storedSymptomToData)
-      .filter((s): s is SymptomData => s !== undefined),
+    meals: meals.map(storedMealToData).filter((m): m is MealData => m !== undefined),
+    symptoms: symptoms.map(storedSymptomToData).filter((s): s is SymptomData => s !== undefined),
     protocols: protocols.map(storedProtocolToData),
     conclusions: conclusions.map(storedConclusionToData),
     triggerClasses: triggerClasses

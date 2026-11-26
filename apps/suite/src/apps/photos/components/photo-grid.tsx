@@ -19,6 +19,7 @@ import { layoutJustifiedRows } from "../lib/library/justified";
 import { getOrientationTransform } from "../lib/library/orientation";
 import { usePhotos } from "../state/photos-context";
 import { PhotoImage } from "./photo-image";
+import { mediaLabel, VideoBadge } from "./video-badge";
 
 function dayLabel(key: string) {
   if (key === "undated") return "Undated";
@@ -190,7 +191,7 @@ export function PhotoGrid({
                 )}
                 <h2>{dayLabel(group.key)}</h2>
                 <span>
-                  {group.photos.length} photo{group.photos.length === 1 ? "" : "s"}
+                  {group.photos.length} item{group.photos.length === 1 ? "" : "s"}
                 </span>
               </header>
             )}
@@ -248,7 +249,7 @@ export function PhotoGrid({
                       <Link
                         href={`/photos/p/${encodeRef(photo.ref)}?from=${encodeURIComponent(from)}`}
                         data-photo-ref={photo.ref}
-                        aria-label={`Open ${photo.name}`}
+                        aria-label={`Open ${mediaLabel(photo)}`}
                         tabIndex={photo.ref === tabStop ? 0 : -1}
                         onFocus={() => setFocused(photo.ref)}
                         onKeyDown={(event) => key(event, photo)}
@@ -273,9 +274,13 @@ export function PhotoGrid({
                         }}
                       >
                         <PhotoImage
-                          url={photo.thumbnailUrl ?? photo.contentUrl}
+                          url={
+                            photo.thumbnailUrl ??
+                            (photo.kind === "video" ? undefined : photo.contentUrl)
+                          }
                           name={photo.name}
                         />
+                        <VideoBadge photo={photo} />
                       </Link>
                       <label
                         className="pho-select"

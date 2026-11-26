@@ -170,7 +170,7 @@ it("refetches after a 412, reports the conflict, and refreshes for pod events", 
     expect(music.snapshot?.library.tracks).toHaveLength(3);
   });
 });
-it("surfaces load errors, clears stale data, and retries successfully", async () => {
+it("surfaces load errors, retains loaded data, and retries successfully", async () => {
   let offline = true;
   await fixture(
     (fetch) => async (input, init) =>
@@ -180,14 +180,14 @@ it("surfaces load errors, clears stale data, and retries successfully", async ()
     await act(async () => {});
     expect(music.status).toBe("error");
   });
-  expect(music.snapshot).toBeUndefined();
+  expect(music.snapshot?.library.tracks).toEqual([]);
   offline = false;
   await act(async () => music.refresh());
   await ready();
   offline = true;
   await act(async () => music.refresh());
   expect(music.status).toBe("error");
-  expect(music.snapshot).toBeUndefined();
+  expect(music.snapshot?.library.tracks).toHaveLength(2);
 });
 
 it("opens Add to playlist from the row menu and restores focus when dismissed", async () => {
@@ -325,7 +325,7 @@ it("returns a committed playlist and retains it when subsequent GETs fail, then 
   expect(music.notice).toContain("refresh Music to retry");
   expect(mocks.error).not.toHaveBeenCalled();
   await act(async () => music.refresh());
-  expect(music.status).toBe("ready");
+  expect(music.status).toBe("error");
   expect(music.snapshot?.playlists.find((p) => p.id === created)).toBeDefined();
   blockReads = false;
   await act(async () => music.refresh());

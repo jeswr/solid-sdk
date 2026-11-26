@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
-import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
+import { Button, ErrorState, Toaster } from "@jeswr/suite-ui";
 import {
   ArrowDownToLine,
   BarChart3,
@@ -22,6 +23,7 @@ import { useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { MoneyProvider, useMoney } from "../state/money-context";
 import { AccountDialog } from "./money-forms";
+import { MoneyContent, MoneyLoading } from "./money-states";
 
 function Chrome({ children }: { children: ReactNode }) {
   const money = useMoney();
@@ -87,19 +89,7 @@ function Chrome({ children }: { children: ReactNode }) {
       }
     >
       <div className="mon-page">
-        {money.status === "loading" ? (
-          <>
-            <h1>Opening Money</h1>
-            <LoadingSkeleton preset="table" />
-          </>
-        ) : money.status === "error" ? (
-          <>
-            <h1>Couldn't open Money</h1>
-            <ErrorState error="unreachable" actions={{ retry: money.refresh }} />
-          </>
-        ) : (
-          children
-        )}
+        <MoneyContent>{children}</MoneyContent>
       </div>
       <AccountDialog open={add} onOpenChange={setAdd} />
     </SuiteFrame>
@@ -107,26 +97,25 @@ function Chrome({ children }: { children: ReactNode }) {
 }
 function Gate({ children }: { children: ReactNode }) {
   const state = usePodSessionState();
-  if (state.status === "loading")
+  if (state.status !== "ready")
     return (
       <div className="mon-page">
-        <h1>Opening Money</h1>
-        <LoadingSkeleton preset="table" />
-      </div>
-    );
-  // Native builds start signed out until native sign-in lands.
-  if (state.status === "signed-out")
-    return (
-      <div className="mon-page">
-        <h1>Money</h1>
-        <p role="status">Sign in to open your Money</p>
-      </div>
-    );
-  if (state.status === "error")
-    return (
-      <div className="mon-page">
-        <h1>Couldn't open Money</h1>
-        <ErrorState error="unreachable" actions={{ retry: () => location.reload() }} />
+        <h1>
+          {state.status === "error"
+            ? "Couldn't open Money"
+            : state.status === "loading"
+              ? "Opening Money"
+              : "Money"}
+        </h1>
+        {state.status === "loading" ? (
+          <MoneyLoading />
+        ) : state.status === "signed-out" ? (
+          <p role="status">Sign in to open your Money</p>
+        ) : (
+          <ErrorState error="unreachable" actions={{ retry: () => location.reload() }}>
+            <p>We couldn't open your pod session. Retry to reconnect.</p>
+          </ErrorState>
+        )}
       </div>
     );
   return (

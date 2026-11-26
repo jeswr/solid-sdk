@@ -1,0 +1,141 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix pkg: <https://jeswr.org/ns/pkg#>.
+@prefix genid: <https://jeswr.org/.well-known/genid/>.
+@prefix np: <http://www.nanopub.org/nschema#>.
+@prefix prov: <http://www.w3.org/ns/prov#>.
+@prefix oa: <http://www.w3.org/ns/oa#>.
+@prefix dpv: <https://w3id.org/dpv#>.
+@prefix pd: <https://w3id.org/dpv/pd#>.
+@prefix schema: <https://schema.org/>.
+@prefix vcard: <http://www.w3.org/2006/vcard/ns#>.
+@prefix foaf: <http://xmlns.com/foaf/0.1/>.
+@prefix health: <https://jeswr.org/ns/sectors/health#>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix fhir: <http://hl7.org/fhir/>.
+@prefix sct: <http://snomed.info/id/>.
+@prefix loinc: <https://loinc.org/>.
+@prefix time: <http://www.w3.org/2006/time#>.
+@prefix skos: <http://www.w3.org/2004/02/skos/core#>.
+@prefix dcterms: <http://purl.org/dc/terms/>.
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+
+<urn:uuid:eff5efe8-58b9-5e0b-891b-6b43166a854c> {
+<urn:uuid:eff5efe8-58b9-5e0b-891b-6b43166a854c> a np:Nanopublication;
+    np:hasAssertion <urn:uuid:8f532000-61f4-5b5a-9dcf-99b31568e6ee>;
+    np:hasProvenance <urn:uuid:eff5efe8-58b9-5e0b-891b-6b43166a854c#provenance>;
+    np:hasPublicationInfo <urn:uuid:eff5efe8-58b9-5e0b-891b-6b43166a854c#pubinfo>
+}
+<urn:uuid:8f532000-61f4-5b5a-9dcf-99b31568e6ee> {
+<https://example.org/fictional/pollen-allergy> a fhir:AllergyIntolerance;
+    health:patient <https://example.org/people/robin#me>;
+    schema:name "Fictional imported pollen allergy";
+    schema:validFrom "2025-03"^^xsd:gYearMonth
+}
+<urn:uuid:eff5efe8-58b9-5e0b-891b-6b43166a854c#provenance> {
+<urn:uuid:8f532000-61f4-5b5a-9dcf-99b31568e6ee> prov:wasAttributedTo <https://example.org/people/robin#me>;
+    prov:wasGeneratedBy <urn:uuid:353243e5-9f55-54ac-bb11-e766800fc670>;
+    pkg:epistemicStatus pkg:SelfReportedExplicit;
+    pkg:validityStatus pkg:Current;
+    dpv:hasPersonalData pd:MedicalHealth;
+    prov:wasDerivedFrom <urn:uuid:64f3dcb2-35f9-5ac2-b1be-6635d7467679>.
+<urn:uuid:64f3dcb2-35f9-5ac2-b1be-6635d7467679> a oa:Annotation;
+    oa:motivatedBy oa:linking;
+    oa:hasBody <urn:uuid:8f532000-61f4-5b5a-9dcf-99b31568e6ee>;
+    oa:hasTarget _:n3-1.
+_:n3-1 a oa:SpecificResource;
+    oa:hasSource <https://example.org/fictional/journal>;
+    oa:hasSelector _:n3-2.
+_:n3-2 a oa:TextQuoteSelector;
+    oa:exact "Fictional file evidence only."
+}
+<urn:uuid:eff5efe8-58b9-5e0b-891b-6b43166a854c#pubinfo> {
+<urn:uuid:eff5efe8-58b9-5e0b-891b-6b43166a854c> prov:generatedAtTime "2026-11-01T12:00:00+00:00"^^xsd:dateTime;
+    prov:wasAttributedTo <https://example.org/agents/fictional-file-extractor>;
+    prov:wasGeneratedBy <urn:uuid:353243e5-9f55-54ac-bb11-e766800fc670>;
+    pkg:batch "fictional-local-health-file";
+    dcterms:identifier "fictional-local-health-file/allergy"
+}
+<urn:uuid:093dbcd7-a3a8-5f22-8b71-72a0134fbc87> {
+<urn:uuid:093dbcd7-a3a8-5f22-8b71-72a0134fbc87> a np:Nanopublication;
+    np:hasAssertion <urn:uuid:fb4a19b4-3c08-548a-be23-a2808b95e05d>;
+    np:hasProvenance <urn:uuid:093dbcd7-a3a8-5f22-8b71-72a0134fbc87#provenance>;
+    np:hasPublicationInfo <urn:uuid:093dbcd7-a3a8-5f22-8b71-72a0134fbc87#pubinfo>
+}
+<urn:uuid:fb4a19b4-3c08-548a-be23-a2808b95e05d> {
+<https://example.org/people/robin#me> schema:additionalProperty <urn:uuid:bbb8055c-83fe-5767-81bd-51bee8d08aed>.
+<urn:uuid:bbb8055c-83fe-5767-81bd-51bee8d08aed> a schema:PropertyValue;
+    schema:propertyID "health-journal";
+    schema:value "Fictional imported note about a walk."
+}
+<urn:uuid:093dbcd7-a3a8-5f22-8b71-72a0134fbc87#provenance> {
+<urn:uuid:fb4a19b4-3c08-548a-be23-a2808b95e05d> prov:wasAttributedTo <https://example.org/people/robin#me>;
+    prov:wasGeneratedBy <urn:uuid:353243e5-9f55-54ac-bb11-e766800fc670>;
+    pkg:epistemicStatus pkg:SelfReportedExplicit;
+    pkg:validityStatus pkg:Current;
+    dpv:hasPersonalData pd:MedicalHealth;
+    prov:wasDerivedFrom <urn:uuid:ff611cf0-aa4d-5b63-9619-8210b54b1bbd>.
+<urn:uuid:ff611cf0-aa4d-5b63-9619-8210b54b1bbd> a oa:Annotation;
+    oa:motivatedBy oa:linking;
+    oa:hasBody <urn:uuid:fb4a19b4-3c08-548a-be23-a2808b95e05d>;
+    oa:hasTarget _:n3-3.
+_:n3-3 a oa:SpecificResource;
+    oa:hasSource <https://example.org/fictional/journal>;
+    oa:hasSelector _:n3-4.
+_:n3-4 a oa:TextQuoteSelector;
+    oa:exact "Fictional file evidence only."
+}
+<urn:uuid:093dbcd7-a3a8-5f22-8b71-72a0134fbc87#pubinfo> {
+<urn:uuid:093dbcd7-a3a8-5f22-8b71-72a0134fbc87> prov:generatedAtTime "2026-11-01T12:00:00+00:00"^^xsd:dateTime;
+    prov:wasAttributedTo <https://example.org/agents/fictional-file-extractor>;
+    prov:wasGeneratedBy <urn:uuid:353243e5-9f55-54ac-bb11-e766800fc670>;
+    pkg:batch "fictional-local-health-file";
+    dcterms:identifier "fictional-local-health-file/note"
+}
+<urn:uuid:07ed6606-af5d-53a3-a79c-be3145d7d7d8> {
+<urn:uuid:07ed6606-af5d-53a3-a79c-be3145d7d7d8> a np:Nanopublication;
+    np:hasAssertion <urn:uuid:0e374670-28e8-5956-bf09-a8ff344459f4>;
+    np:hasProvenance <urn:uuid:07ed6606-af5d-53a3-a79c-be3145d7d7d8#provenance>;
+    np:hasPublicationInfo <urn:uuid:07ed6606-af5d-53a3-a79c-be3145d7d7d8#pubinfo>
+}
+<urn:uuid:0e374670-28e8-5956-bf09-a8ff344459f4> {
+<https://example.org/fictional/old-sprain> a health:Condition, schema:MedicalCondition;
+    health:patient <https://example.org/people/robin#me>;
+    schema:name "Fictional imported sprain";
+    schema:validFrom "2025"^^xsd:gYear
+}
+<urn:uuid:07ed6606-af5d-53a3-a79c-be3145d7d7d8#provenance> {
+<urn:uuid:0e374670-28e8-5956-bf09-a8ff344459f4> prov:wasAttributedTo <https://example.org/people/robin#me>;
+    prov:wasGeneratedBy <urn:uuid:353243e5-9f55-54ac-bb11-e766800fc670>;
+    pkg:epistemicStatus pkg:SelfReportedExplicit;
+    pkg:validityStatus pkg:Current;
+    dpv:hasPersonalData pd:MedicalHealth;
+    prov:wasDerivedFrom <urn:uuid:79f9c080-e632-569a-8a54-ebe1fa378469>.
+<urn:uuid:79f9c080-e632-569a-8a54-ebe1fa378469> a oa:Annotation;
+    oa:motivatedBy oa:linking;
+    oa:hasBody <urn:uuid:0e374670-28e8-5956-bf09-a8ff344459f4>;
+    oa:hasTarget _:n3-5.
+_:n3-5 a oa:SpecificResource;
+    oa:hasSource <https://example.org/fictional/journal>;
+    oa:hasSelector _:n3-6.
+_:n3-6 a oa:TextQuoteSelector;
+    oa:exact "Fictional file evidence only."
+}
+<urn:uuid:07ed6606-af5d-53a3-a79c-be3145d7d7d8#pubinfo> {
+<urn:uuid:07ed6606-af5d-53a3-a79c-be3145d7d7d8> prov:generatedAtTime "2026-11-01T12:00:00+00:00"^^xsd:dateTime;
+    prov:wasAttributedTo <https://example.org/agents/fictional-file-extractor>;
+    prov:wasGeneratedBy <urn:uuid:353243e5-9f55-54ac-bb11-e766800fc670>;
+    pkg:batch "fictional-local-health-file";
+    dcterms:identifier "fictional-local-health-file/condition"
+}
+<urn:uuid:f50957f3-44f5-5a3a-9002-0bc948307c85> {
+<https://example.org/agents/fictional-file-extractor> a prov:SoftwareAgent;
+    rdfs:label "Fictional file extractor".
+<urn:uuid:353243e5-9f55-54ac-bb11-e766800fc670> a prov:Activity;
+    rdfs:label "PKG extraction batch fictional-local-health-file";
+    prov:wasAssociatedWith <https://example.org/agents/fictional-file-extractor>;
+    prov:used <https://example.org/fictional/journal>.
+<https://example.org/fictional/journal> a schema:DigitalDocument;
+    schema:name "Fictional imported journal"
+}
