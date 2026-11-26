@@ -1,13 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6.2
 // AUTHORED-BY Claude Opus 5.5
+// Without an onToken sink, a rotated refresh token lives only in this session.
+// Hosts needing it after restart must save it through onToken (e.g. in their token vault).
 import { refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
 import { RunBudget, readJson } from "../core/budget.js";
-import { IntegrationAuthError } from "../core/errors.js";
+import { IntegrationAuthError, IntegrationSyncError, RateLimitedError } from "../core/errors.js";
 import { createSourceAuth } from "../core/import-runner.js";
-import { grantedScope, scopeList } from "../core/oauth.js";
+import { grantedScope, scopeList, TOKEN_REQUEST_TIMEOUT_MS } from "../core/oauth.js";
+import { during, SourceTimeoutError } from "../core/source-timeout.js";
 import type { OAuthAppConfig, SourceAuth, TokenSet } from "../core/types.js";
 import { googleHealthAdapter } from "./adapter.js";
-import { API, ID, ROLLUP_PATH, record } from "./api.js";
+import { API, ID, quotaDenied, ROLLUP_PATH, readGoogleError, record } from "./api.js";
 
 /** RFC 6750 bearer syntax also covers the Google refresh tokens in this profile. */
 const credential = (value: unknown): value is string =>
@@ -32,11 +36,37 @@ function rollupQuery(input: string | Request, init: RequestInit | undefined): bo
   return url.origin === new URL(API).origin && !url.search && ROLLUP_PATH.test(url.pathname);
 }
 
+const TOKEN_RESOURCE = "Google OAuth token endpoint";
+
+async function readRefreshResponse(res: Response, budget: RunBudget, signal: AbortSignal) {
+  if (res.ok) return readJson(res, ID, TOKEN_RESOURCE, 64 * 1024, budget, signal);
+  let body: unknown;
+  if (res.status === 400 || res.status === 403) body = await readGoogleError(res, budget, signal);
+  else void res.body?.cancel().catch(() => {});
+  if (res.status === 429 || (res.status === 403 && quotaDenied(body)))
+    throw new RateLimitedError(ID, TOKEN_RESOURCE);
+  const temporary =
+    res.status === 400 &&
+    record(body) &&
+    (body.error === "temporarily_unavailable" || body.error === "server_error");
+  // Includes OAuth invalid_grant (400) for an expired or revoked refresh credential.
+  if (!temporary && [400, 401, 403].includes(res.status))
+    throw new IntegrationAuthError(
+      ID,
+      "reauthorise",
+      "Google token refresh failed. Re-authorize Google Health.",
+    );
+  throw new IntegrationSyncError(ID, `Google token refresh failed (${res.status}).`, {
+    status: res.status,
+  });
+}
+
 /** Host-owned, memory-only Google OAuth session. Retries a Health read once after 401. */
 export function createGoogleHealthSourceAuth(options: {
   config: OAuthAppConfig;
   token: TokenSet;
   fetch: typeof fetch;
+  /** A returned promise must settle successfully before the refreshed token is used. */
   onToken?: (token: TokenSet) => void;
 }): SourceAuth {
   if (
@@ -55,18 +85,23 @@ export function createGoogleHealthSourceAuth(options: {
   const auth = () =>
     createSourceAuth(ID, googleHealthAdapter, token, metered, [new URL(API).origin]);
   let refreshing: Promise<void> | undefined;
-  async function refresh(signal: AbortSignal | undefined): Promise<void> {
-    signal?.throwIfAborted();
+  async function requestToken(): Promise<TokenSet> {
     const cfg = options.config;
     // Match authorizeLoopback: a locally supplied Desktop secret selects direct
     // exchange even when the registry's default configuration uses a Web proxy.
     const direct = cfg.tokenExchange === "public" || !!cfg.clientSecret;
     const endpoint = direct ? cfg.tokenEndpoint : cfg.tokenProxyUrl;
-    if (!token.refreshToken || !cfg.clientId || !endpoint)
+    if (!token.refreshToken)
+      throw new IntegrationAuthError(
+        ID,
+        "reauthorise",
+        "Re-authorize Google Health to refresh access.",
+      );
+    if (!cfg.clientId || !endpoint)
       throw new IntegrationAuthError(
         ID,
         "not-configured",
-        "Re-authorize Google Health; Fitbit tokens cannot be used.",
+        "Google token transport is not configured.",
       );
     const url = new URL(endpoint);
     if (url.protocol !== "https:" || url.username || url.password || url.hash)
@@ -77,30 +112,43 @@ export function createGoogleHealthSourceAuth(options: {
       client_id: cfg.clientId,
     });
     if (direct && cfg.clientSecret) body.set("client_secret", cfg.clientSecret);
-    const res = await metered(url.href, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-      signal,
-      redirect: "error",
-    });
-    if (!res.ok) {
-      await res.body?.cancel();
-      throw new IntegrationAuthError(
-        ID,
-        "exchange-failed",
-        "Google token refresh failed; re-authorize Google Health.",
-      );
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(new SourceTimeoutError(ID, TOKEN_RESOURCE)),
+      TOKEN_REQUEST_TIMEOUT_MS,
+    );
+    let json: unknown;
+    try {
+      const request = metered(url.href, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: body.toString(),
+        signal: controller.signal,
+        credentials: "omit",
+        redirect: "error",
+      });
+      const res = await during(controller.signal, () => request);
+      json = await readRefreshResponse(res, budget, controller.signal);
+    } catch (error) {
+      controller.signal.throwIfAborted();
+      if (
+        error instanceof IntegrationAuthError ||
+        (error instanceof IntegrationSyncError && !(error.cause instanceof SyntaxError))
+      )
+        throw error;
+      throw new IntegrationSyncError(ID, "Google token refresh failed.");
+    } finally {
+      clearTimeout(timer);
     }
-    const json: unknown = await readJson(res, ID, "Google OAuth token endpoint", 64 * 1024, budget);
     if (
       !record(json) ||
       !credential(json.access_token) ||
+      (json.token_type !== undefined &&
+        (typeof json.token_type !== "string" || json.token_type.toLowerCase() !== "bearer")) ||
       (json.refresh_token !== undefined && !credential(json.refresh_token))
     )
       throw new IntegrationAuthError(ID, "exchange-failed", "Invalid Google token response.");
-    signal?.throwIfAborted();
-    token = {
+    return {
       accessToken: json.access_token,
       tokenType: "Bearer",
       refreshToken:
@@ -115,7 +163,18 @@ export function createGoogleHealthSourceAuth(options: {
       // Google repeats the granted scopes on refresh; otherwise the original grant stands.
       scope: grantedScope(json.scope) ?? token.scope,
     };
-    options.onToken?.(token);
+  }
+  let pendingToken: TokenSet | undefined;
+  async function refresh(): Promise<void> {
+    // If the sink fails, retry delivery with the rotated credential still in memory.
+    pendingToken ??= await requestToken();
+    try {
+      await options.onToken?.(pendingToken);
+    } catch {
+      throw new IntegrationSyncError(ID, "Could not save the refreshed Google Health token.");
+    }
+    token = pendingToken;
+    pendingToken = undefined;
   }
   return {
     /** Granted scopes of the current token, when Google listed them (`ImportContext.scopes`). */
@@ -143,10 +202,10 @@ export function createGoogleHealthSourceAuth(options: {
       const used = token;
       const response = await auth().fetch(snapshot.input, forwarded);
       if (response.status !== 401) return response;
-      await response.body?.cancel();
+      void response.body?.cancel().catch(() => {});
       signal?.throwIfAborted();
       if (token === used) {
-        refreshing ??= refresh(signal ?? undefined).finally(() => {
+        refreshing ??= refresh().finally(() => {
           refreshing = undefined;
         });
         await refreshing;

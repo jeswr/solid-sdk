@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6.2
 // AUTHORED-BY Claude Opus 5.5
 /**
  * Every Google Health provider assumption lives here. Source of record: the Google Health
@@ -55,7 +56,7 @@
  * Fitbit tokens cannot migrate; nutrition is not imported, so it is not requested.
  * Named resources retain API/name as identity/provenance only; they are never fetched.
  */
-import { type RunBudget, readJson } from "../core/budget.js";
+import { type RunBudget, readBytes, readJson } from "../core/budget.js";
 import { IntegrationAuthError, IntegrationSyncError, RateLimitedError } from "../core/errors.js";
 import { Pagination } from "../core/pagination.js";
 import type { ImportContext } from "../core/types.js";
@@ -527,14 +528,21 @@ const QUOTA_REASONS = new Set([
   "dailyLimitExceeded",
   "RATE_LIMIT_EXCEEDED",
 ]);
-/** Whether a 403 body names a rate or quota limit (Google API error conventions; VERIFY). */
-async function quotaDenied(res: Response): Promise<boolean> {
-  let body: unknown;
+/** Google may omit the JSON error envelope. Transport, timeout and size failures propagate. */
+export async function readGoogleError(
+  res: Response,
+  budget?: RunBudget,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const bytes = await readBytes(res, ID, "Google Health error", 16 * 1024, budget, signal);
   try {
-    body = await readJson(res, ID, "Google Health error", 16 * 1024);
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
-    return false;
+    return undefined;
   }
+}
+/** Whether a 403 body names a rate or quota limit (Google API error conventions; VERIFY). */
+export function quotaDenied(body: unknown): boolean {
   const error = record(body) && record(body.error) ? body.error : undefined;
   if (!error) return false;
   if (error.status === "RESOURCE_EXHAUSTED") return true;
@@ -603,18 +611,20 @@ async function request(
     // The host transport has already refreshed once on 401; a second 401 or a 403 that is
     // not a rate limit (withheld scope, unapproved Restricted access) needs re-authorization.
     if (res.status === 401) {
-      await res.body?.cancel();
+      void res.body?.cancel().catch(() => {});
       throw new IntegrationAuthError(
         ID,
-        "exchange-failed",
+        "reauthorise",
         `Google Health rejected the authorization (401). ${REAUTHORIZE}`,
       );
     }
-    const throttled = res.status === 429 || (res.status === 403 && (await quotaDenied(res)));
+    const throttled =
+      res.status === 429 ||
+      (res.status === 403 && quotaDenied(await readGoogleError(res, budget, ctx.signal)));
     if (res.status === 403 && !throttled)
       throw new IntegrationAuthError(
         ID,
-        "exchange-failed",
+        "reauthorise",
         `Google Health denied access (403). ${REAUTHORIZE}`,
       );
     if (res.status === 400 && body !== undefined && (await rangeRefused(res)))

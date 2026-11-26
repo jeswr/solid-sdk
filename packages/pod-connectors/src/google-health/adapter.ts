@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6.2
 // AUTHORED-BY Claude Opus 5.5
 import { createGoogleOAuthConfig } from "../adapters/google/oauth.js";
 import { RunBudget, type RunLimits } from "../core/budget.js";
 import { IntegrationSyncError } from "../core/errors.js";
+import { MAX_FUTURE_SKEW_MS } from "../core/state.js";
 import type { IntegrationAdapter } from "../core/types.js";
 import {
   DAY_MS,
@@ -46,7 +48,7 @@ export interface GoogleHealthOptions {
   readonly now?: () => Date;
   /**
    * Non-personal diagnostics: resolved duplicate conflicts, skipped unmappable records, a type
-   * stopped at the page cap, an older checkpoint restarted at the lookback window, and the
+   * stopped at the page cap, a checkpoint clamped for clock skew or restarted at the lookback, and the
    * fixed-code warnings `[google-health:unrecognised-shape]` (a type stopped, its checkpoint
    * kept), `[google-health:stale-unfinished]` and `[google-health:stale-unprocessed]` (points
    * too old to change, written as reported).
@@ -184,15 +186,19 @@ export function createGoogleHealthAdapter({
     // Synthetic fixtures moved by whole days so demos fall inside the first-import lookback.
     fixtures: () => demoFixtures(now()),
     async import(ctx) {
-      if (ctx.scopes && GOOGLE_HEALTH_SCOPES.some((scope) => !ctx.scopes?.includes(scope)))
-        throw new IntegrationSyncError(
-          ID,
-          "Re-authorize Google Health with all requested read permissions.",
-        );
+      const granted = ctx.scopes;
+      if (granted) {
+        const missing = GOOGLE_HEALTH_SCOPES.filter((scope) => !granted.includes(scope));
+        if (missing.length)
+          throw new IntegrationSyncError(
+            ID,
+            `Re-authorize Google Health to grant ${missing.join(", ")}.`,
+          );
+      }
       const until = now().getTime();
       if (!Number.isFinite(until) || until < 0)
         throw new IntegrationSyncError(ID, "Invalid clock for Google Health import.");
-      const stored = parseCursor(ctx.cursor, until);
+      const stored = parseCursor(ctx.cursor, until, onWarning);
       if (stored === "outdated")
         onWarning(
           `The Google Health checkpoint predates parser version ${VERSION}; re-reading the last ${lookbackDays} day(s).`,
@@ -370,8 +376,11 @@ function serializeCursor(cursors: Partial<Record<HealthType, Cursor>>): string |
 function parseCursor(
   value: string | undefined,
   until: number,
+  onWarning: (message: string) => void,
 ): Partial<Record<HealthType, Cursor>> | "outdated" {
   if (!value) return {};
+  const result: Partial<Record<HealthType, Cursor>> = {};
+  let clamped = false;
   try {
     if (value.length > 4096) throw new Error();
     const json: unknown = JSON.parse(value);
@@ -381,19 +390,25 @@ function parseCursor(
     if (!record(json) || json.version !== VERSION || !known(json.cursors) || !known(json.fetchedAt))
       throw new Error();
     const fetchedAt = json.fetchedAt;
-    const result: Partial<Record<HealthType, Cursor>> = {};
     for (const type of TYPES) {
       if (json.cursors[type] === undefined && fetchedAt[type] === undefined) continue;
       const through = timestamp(json.cursors[type]);
       const at = timestamp(fetchedAt[type]);
       if (!through || !at) throw new Error();
       const cursor = { through: Date.parse(through), at: Date.parse(at) };
-      if (cursor.through > cursor.at || cursor.at > until) throw new Error();
+      if (cursor.through > cursor.at || cursor.at > until + MAX_FUTURE_SKEW_MS) throw new Error();
+      if (cursor.at > until) {
+        cursor.at = until;
+        cursor.through = Math.min(cursor.through, until);
+        clamped = true;
+      }
       result[type] = cursor;
     }
-    return result;
   } catch {
     throw new IntegrationSyncError(ID, "Invalid Google Health checkpoint; start a full import.");
   }
+  if (clamped)
+    onWarning("Google Health checkpoint was ahead of the run clock and was clamped to it.");
+  return result;
 }
 export const googleHealthAdapter = createGoogleHealthAdapter();
