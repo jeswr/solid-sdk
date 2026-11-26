@@ -45,7 +45,7 @@ data instead of hard-coding paths. Two indexes per profile: a **public** one
 The Type Index is the discovery mechanism for *other* apps' data. No `@solid/object` wrapper ships for it, so you implement
 read+write through your own `TermWrapper` subclasses — never inline quads, never
 string-concatenated Turtle. Follow the house stack: auth via
-`@solid/reactive-authentication` (plain `fetch`), I/O via `@jeswr/fetch-rdf`,
+`@jeswr/pod-auth` (pass its `auth.fetch`), I/O via `@jeswr/fetch-rdf`,
 serialisation via `n3`.
 
 > **Stay in scope.** Use the Type Index for *interop* — locating/exposing data

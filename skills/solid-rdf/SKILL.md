@@ -130,7 +130,7 @@ triples. So:
 - Escape each value **for Turtle** before it reaches the template: inside a `"…"` string
   literal, backslash-escape `\`, `"`, and the line breaks (`\n`, `\r`), and strip other control
   characters; as an IRI, filter it with `safeHttpIri` / `escapeIri` from `@jeswr/rdf-serialize`.
-- Better, write the document with `N3.Writer` after the template has created the resource, so
+- Better, write the document with `serialize` from `@jeswr/rdf-serialize` (N3.Writer) after the template has created the resource, so
   no value is ever spliced into Turtle text.
 - Validate on the server. A check that only runs in the browser does not protect a direct API
   call.

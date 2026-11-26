@@ -5,7 +5,8 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 
 Extract the code block to `profile-agent.ts` when adapting the example. The class
-was run on 2026-11-18 in Node 22 (`--experimental-strip-types`) against
+was run on 2026-11-18 in Node 22 (`--experimental-strip-types`; the suite targets Node 24, and
+nothing here needs more than 22) against
 `@solid/object` 0.8.0, `@rdfjs/wrapper` 0.34.0 and `n3` 2.13.12: a literal
 `vcard:hasPhoto` fell through to `foaf:img`, a `javascript:` link was refused, and
 an empty profile gave the full WebID as its name. The `renderable` usage at the end

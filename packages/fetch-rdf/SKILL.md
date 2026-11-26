@@ -86,7 +86,10 @@ Orchestration: `.claude/agents/solid-app-orchestration.md`.
 The only sanctioned way to GET and parse a Solid RDF resource (companion guide:
 [`docs/guide`](../../docs/guide/README.md)). One HTTP GET + content-type-dispatched parse, returning an
 in-memory dataset plus the validators you need for conditional writes. Never parse RDF inline
-(`new Parser().parse(await res.text())`) and never use `rdf-parse`.
+(`new Parser().parse(await res.text())`) and never use `rdf-parse`. The one exception is a page
+with no build step, which cannot bundle this package: there the
+[solid-object skill's bounded N3.js recipe](../../skills/solid-object/SKILL.md#no-build-browser-page)
+applies (timeout, `res.ok` and content-type check, byte cap, then parse).
 
 ```sh
 npm install @jeswr/fetch-rdf      # npm still serves the older 0.1.0 build: see the version note above

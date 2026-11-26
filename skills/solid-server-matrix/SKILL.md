@@ -58,7 +58,7 @@ tested against one server silently depends on that server's behaviour. This
 skill is the differential model: **identify which server you're on, then branch.**
 
 It assumes the house stack:
-`@solid/reactive-authentication` (auth, DPoP), `@jeswr/fetch-rdf` (fetch+parse),
+`@jeswr/pod-auth` (auth, DPoP, credential-bounded `auth.fetch`), `@jeswr/fetch-rdf` (fetch+parse),
 `@solid/object` + `@rdfjs/wrapper` (typed RDF), `n3`. Never `@inrupt/*`,
 `@ldo/*`, or hand-built triples. RDF mutations go through `TermWrapper`
 subclasses. This skill diagnoses *server* behaviour; it does not change the
@@ -225,7 +225,7 @@ detect it; don't assume an ETag exists.
 
 For a hackathon or first integration:
 
-1. **Local CSS, in-memory** ([`solid-test-infrastructure`](../solid-test-infrastructure/SKILL.md)). Two instances, WAC + ACP. Disposable,
+1. **Local CSS, in-memory** (single-instance harness in [`solid-test-infrastructure`](../solid-test-infrastructure/SKILL.md); run a second ACP instance yourself). Two instances, WAC + ACP. Disposable,
    pristine on restart, both auth languages from day one. Default for build/iterate.
 2. **solidcommunity.net** (hosted CSS) — real-network smoke test, WAC. Community
    service, **no SLA**. On the auth issuer list.

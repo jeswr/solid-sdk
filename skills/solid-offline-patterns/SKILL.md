@@ -19,8 +19,8 @@ Use the [package skill](../../packages/solid-offline/SKILL.md) for `createOfflin
 # Offline / instant-load — stale-while-revalidate from a WebID-scoped cache
 
 Read the companion [guide](../../docs/guide/README.md)
-first; this skill assumes that stack (`@solid/reactive-authentication` patches `globalThis.fetch`,
-reads go through `@jeswr/fetch-rdf`, live-sync via the `solid-notifications` skill).
+first; this skill assumes that stack (`@jeswr/pod-auth` supplies the authenticated `auth.fetch`,
+reads go through `@jeswr/fetch-rdf` with that fetch, live-sync via the `solid-notifications` skill).
 
 A Solid app that re-reads every resource from the pod on each open shows a blank "Loading…"
 screen for the round-trip — even when the data was already known a moment ago. The fix is

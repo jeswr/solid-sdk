@@ -66,7 +66,16 @@ dependency. Root import re-exports the classes; subpaths `./webid`, `./solid`, `
 exist, and `./vocabulary` (new in 0.8.0, not re-exported from the root) exports the IRI
 constants `ACL`, `ACP`, `DC`, `FOAF`, `LDP`, `PIM`, `POSIX`, `RDF`, `RDFS`, `SOLID` and `VCARD`.
 
-## What ships (v0.8.0, checked against the npm tarball on 2026-11-18)
+**This workspace resolves 0.6.0**, not 0.8.0: the apps pin `^0.6.0` or `0.6.0`, and for a 0.x
+version `^0.6.0` excludes 0.8.0 (`pnpm-lock.yaml` lists only `@solid/object@0.6.0`). In 0.6.0
+the `exports` map has only `.`, `./acp`, `./solid` and `./webid`, so
+`import … from "@solid/object/vocabulary"` throws `ERR_PACKAGE_PATH_NOT_EXPORTED` in a
+workspace app; declare the IRIs locally, or bump the dependency first. The `Agent` and
+`WebIdDataset` getters below are identical in 0.6.0 and 0.8.0. Of the claims on this page,
+only `./vocabulary` and the 0.8.0 CDN URLs in the no-build import map need 0.8.0; the import
+map loads `dist/mod.js` directly and works the same with 0.6.0.
+
+## What ships (v0.8.0, checked against the npm tarball on 2026-11-18; the same in 0.6.0 except where noted)
 
 | Class | Entry pattern | Key members |
 |---|---|---|
@@ -116,7 +125,7 @@ For UI rendering use the bundled reference implementation,
 chains (name, avatar, bio, nickname, homepage). Each getter tries predicates in a documented
 order, skips a value of the wrong term type instead of throwing, falls back to the full WebID
 (never a path segment) for the name, and returns only `http:`/`https:` links. It was run in
-Node 22 against `@solid/object` 0.8.0 and `@rdfjs/wrapper` 0.34.0, and in Chromium on a
+Node 22 (it uses nothing newer; the suite targets Node 24, where it runs unchanged) against `@solid/object` 0.8.0 and `@rdfjs/wrapper` 0.34.0, and in Chromium on a
 no-build page. Copy it into `src/lib/` and adapt; it is a candidate for upstreaming into
 `@solid/object`, at which point prefer the upstream version.
 
@@ -146,8 +155,27 @@ as plain JSON. All three libraries are plain ES modules, so an import map is eno
   import { Parser, Store, DataFactory } from "n3";
   import { Agent } from "@solid/object";
 
-  const res = await fetch(webId, { headers: { accept: "text/turtle" } }); // every Solid server serves Turtle
-  const store = new Store(new Parser({ baseIRI: res.url, format: "text/turtle" }).parse(await res.text()));
+  const MAX_BYTES = 1_000_000;
+  // Every Solid server serves Turtle. Bound the wait: a profile can live on any host.
+  const res = await fetch(webId, {
+    headers: { accept: "text/turtle" },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok || !/^text\/turtle\b/i.test(res.headers.get("content-type") ?? ""))
+    throw new Error("not a Turtle profile");
+  if (Number(res.headers.get("content-length") ?? 0) > MAX_BYTES) throw new Error("profile too large");
+  // Count bytes as they arrive, so a missing or false Content-Length cannot bypass the cap.
+  const reader = res.body.getReader();
+  const chunks = [];
+  for (let size = 0; ; ) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_BYTES) { await reader.cancel(); throw new Error("profile too large"); }
+    chunks.push(value);
+  }
+  const text = await new Blob(chunks).text();
+  const store = new Store(new Parser({ baseIRI: res.url, format: "text/turtle" }).parse(text));
   const me = new Agent(webId, store, DataFactory);
 </script>
 ```
@@ -156,9 +184,12 @@ as plain JSON. All three libraries are plain ES modules, so an import map is eno
   needed, and a server that stores Turtle does not convert on every view.
 - **Parse against `res.url`**, the address the document was served from after redirects, not
   the WebID, so relative IRIs resolve correctly.
-- **Bound the fetch.** A profile can live on any host: add a timeout (`AbortSignal.timeout`)
-  and a size cap before parsing, and never let a page wait on one profile before it becomes
-  usable. In a build-step app, `@jeswr/fetch-rdf` does this for you.
+- **Bound the fetch.** A profile can live on any host, so the example times out
+  (`AbortSignal.timeout`), checks `res.ok` and the content type, and caps the bytes it reads
+  before parsing. Keep all four when you adapt it, and never let a page wait on one profile
+  before it becomes usable. This inline parse is the one sanctioned exception to the
+  [fetch-rdf](../../packages/fetch-rdf/SKILL.md) rule, for pages with no build step only; in a
+  build-step app use `@jeswr/fetch-rdf`, which does this for you.
 - **Load it only where needed.** Put the RDF code in its own module and `import()` it on first
   use, so pages that show no profile load no RDF library.
 - **Costs.** The raw `dist/` files above are about 75 requests per page; esm.sh
@@ -185,7 +216,7 @@ Do not look for a `save()` here.
 | `mainSubject` returns the first subject with an issuer, which may not be the WebID | Read the known WebID with `new Agent(webId, …)`. `mainSubject` is also `undefined` when the profile carries no `solid:oidcIssuer`; surface a clear error then: the WebID is not usable for Solid login |
 | `Agent.name` and `Agent.photoUrl` are unsafe to display | See [Rendering a profile](#rendering-a-profile--profileagent-reference-class): `"card"` as a name, a string literal as a picture link. `website` likewise reads `foaf:homepage` as a string |
 | Fresh CSS pod profiles are bare | Only `foaf:Person` + `solid:oidcIssuer` — `name` is the path tail and `storageUrls` is empty until the profile is seeded (see the [`solid-test-infrastructure`](../solid-test-infrastructure/SKILL.md) skill) |
-| `organization` / `role` expect **NamedNode** objects | A literal value in the data throws `TermTypeError` — wrap reads of untrusted profiles (see `first()` in `profile-agent.ts`). In 0.8.0 `title` reads a literal |
+| `organization` / `role` expect **NamedNode** objects | A literal value in the data throws `TermTypeError` — wrap reads of untrusted profiles (see `first()` in `profile-agent.ts`). `title` reads a literal (0.6.0 and 0.8.0) |
 | `LiteralAs.date` is STRICT — it throws on a foreign serialiser's date | `LiteralAs.date` calls `ensureDatatype(term, xsd:date, xsd:dateTime)`, so it **throws `LiteralDatatypeError`** on a date-only string typed `xsd:string`, an untyped/plain literal (N3 types these `xsd:string`), or any value another app serialised loosely. When parsing RDF a **different app** wrote (interop), read the lexical value with `LiteralAs.string` (no datatype check) and parse leniently yourself — `const d = new Date(value); return Number.isNaN(d.getTime()) ? undefined : d;` — never `LiteralAs.date`, or one malformed/foreign literal throws and breaks the whole document's parse. (Verified against `@rdfjs/wrapper` 0.34.0 `LiteralAs`; learned reading SolidOS `cal:dtstart` — a date-only `"2016-06-23"` literal — in the Pod Manager `/schedule` interop, jeswr/solid-pod-manager `src/lib/schedule.ts`.) |
 | Multi-valued reads (`SetFrom`/`rdf:type`) are **all-or-nothing** | `SetFrom.subjectPredicate(this, RDF_TYPE, NamedNodeAs.string, …)` throws if **any one** object fails its mapping — so a subject typed `a <ValidType>, "garbage-literal"` loses its **entire** type set, and a valid note/profile then fails its `types.has(...)` check and is silently dropped. For a multi-valued predicate from untrusted RDF, read it **per object** off the dataset and filter, never via the throwing set accessor: `const types = new Set<string>(); for (const q of dataset.match(s, namedNode(RDF_TYPE), null)) if (q.object.termType === "NamedNode") types.add(q.object.value);` (Verified `@rdfjs/wrapper` 0.34.0; learned reconciling foreign `rdf:type` triples in jeswr/solid-chat-interop.) |
 | Fallback-chain reads mask each other — guard **per predicate** | A typed getter that prefers one predicate and falls back to another — `LiteralAs.date(DCT_CREATED) ?? LiteralAs.date(AS_PUBLISHED)` — **skips the valid fallback** when the *preferred* literal is malformed, because the strict read throws before `??` is evaluated (caught higher up, the fallback is never tried → the value is wrongly dropped). Wrap **each** predicate read individually so a bad preferred value falls through: `tryRead(() => …pref) ?? tryRead(() => …fallback)` where `tryRead = (f) => { try { return f(); } catch { return undefined; } }`. (Learned in jeswr/solid-chat-interop reconciling AS2.0 ↔ SolidOS LongChat.) |

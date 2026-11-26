@@ -17,13 +17,19 @@ integrators who *use* it. Implementation rules live in the package skill.
   Desktop, Claude Code, Codex) run the stdio CLI `packages/solid-mcp/dist/cli.js`.
 - Everything is **read-only by default**. Writes need `readOnly: false` (`MCP_READ_ONLY=false`
   remotely, `SOLID_MCP_READONLY=false` locally).
-- Generic tools never reach personal data. Memory, profile, address, health, chats and the
-  shared context each have their own purpose-limited tool.
+- Generic tools never reach memory, the profile document, `private/pkg/`, `agent/context/`,
+  `agent/memory/` or `agent/accounts/`. Memory, profile, address and health reads take a
+  `purpose`; the shared context has its own tool. Chats are owner-only by ACL but have no purpose gate, and `search` / `pod_read` can
+  reach `private/chats/`.
 - Personal tools need `purpose`: `ServiceProvision` (doing what the person asked) or
   `Personalisation` (tailoring). The owner's policy decides; health and finance are denied
   by default.
-- Sensitive reads are audited in the pod before the result is returned. A read-only server
-  cannot audit, so it withholds them.
+- Reads of special-category data (health and the other DPV special categories, plus financial
+  data) are audited in the pod before the result is returned. A read-only server cannot
+  audit, so it withholds them. Address and contact reads are not audited.
+- Memory, profile, address and health tools work only on the remote server today: the stdio
+  CLI does not configure a client identity, so locally they return "Memory requires a
+  configured client IRI".
 
 ## Connecting
 
@@ -37,6 +43,11 @@ credentials, and the person's pod session stays on the server.
 `clientId`/`clientSecret`), or set the `SOLID_MCP_*` environment variables. Then point the
 client at the CLI; the package README has copyable Claude Desktop, Claude Code and Codex
 entries. Stdout carries only MCP messages; diagnostics go to stderr.
+
+The stdio CLI does not yet pass a `clientInfo` to the server, so `memory_remember`,
+`memory_recall`, `memory_forget`, `profile_get`, `address_get` and `health_query` return
+"Memory requires a configured client IRI" locally. Use the remote server for them; the
+generic, context and chat tools work locally.
 
 ## Tool catalogue
 
@@ -57,12 +68,15 @@ entries. Stdout carries only MCP messages; diagnostics go to stderr.
 | Archive a chat | `chat_save` | Writable server; see below |
 | Chats | `chat_list`, `chat_get`, `chat_export` | `chat_export` gives a redacted Markdown transcript to paste elsewhere |
 
-`solid_list`, `solid_read`, `solid_search` and `solid_write` are v0.2 aliases. Prefer the
-canonical names.
+`solid_list`, `solid_read` and `solid_write` are v0.2 aliases of `pod_list`, `pod_read` and
+`pod_write`. `solid_search` is the legacy search, a separate tool with an optional `scope`
+container and an array response; prefer `search` unless you need `scope`.
 
-Each tool's `readOnlyHint` annotation says whether calling it can change the pod. Expect
-any permitted sensitive read (recall, address or health) to append an audit record, even
-though it returns data rather than storing it.
+Each tool's `readOnlyHint` annotation says whether calling it can change the pod. A permitted
+read that returns special-category data (`health_query`, or a recall that matches special-category or
+financial facts) appends an audit record, even though it returns data rather than storing it;
+on a read-only server it is withheld instead. `address_get`, `profile_get` and recalls of
+other categories are not audited.
 
 ## Purposes and denials
 
@@ -70,7 +84,9 @@ Pass the narrowest true purpose. A denial names only the category (for example h
 never values; do not retry with a different purpose to get around it. Tell the person what
 was denied and that they can change it in their pod's policy. Recall and personal reads
 never create a missing policy: until the first memory write creates the default one, they
-fail closed.
+fail closed. On a read-only server with no policy yet, every personal tool fails and the
+agent cannot fix it: the owner must enable writes once (so a `memory_remember` creates the
+policy) or create `private/pkg/mcp-policy.ttl` themselves.
 
 ## Memory epistemic rules
 
@@ -79,14 +95,24 @@ fail closed.
 
 - Quote the person's own words in `quote` only when they actually said them. A quoted,
   unhedged fact is stored as `SelfReportedExplicit`.
-- Set `hedged: true` when they were unsure ("I think I'm allergic to…"). Hedging wins:
-  `SelfReportedHedged`.
+- Set `hedged: true` with a `fact` when they were unsure ("I think I'm allergic to…").
+  Hedging beats a quote (`SelfReportedHedged`), but a note without a `fact` is always
+  `Mentioned`, hedged or not.
 - Anything you worked out yourself is `Inferred`. Never present an inference as a quote.
 - Use a typed `fact` (email, phone, address, preference, condition, allergy, medication,
   relationship) when one fits. Free `text` without a fact becomes an uncategorised
-  `Mentioned` note, and purpose-filtered recall will not return it.
+  `Mentioned` note, and a recall that includes `mentioned` is denied while one exists.
 - `about` defaults to the owner. Facts about other people stay attributed to the owner as
   claims.
+
+Recall fails as a whole if any matching fact is denied: the result is
+`purpose denied: <category>` rather than the permitted facts alone. Pass `categories` (for
+example `["https://w3id.org/dpv/pd#Preference"]`) to recall only kinds the policy permits.
+Under the default policy health facts (condition, allergy, medication) are prohibited and
+relationship facts (`SocialNetwork`) have no permit, so one such memory makes a plain
+`memory_recall({purpose})` fail; and `include: ["mentioned"]` is denied as `uncategorized`
+whenever a free-text note exists. When a denial follows such a recall, tell the person which
+category blocked it, not that their request itself was refused.
 
 Recall defaults to definitely-true, current facts. Add `include: ["might", "mentioned",
 "past"]` only when the task needs them, and say so when you rely on them. Correct a wrong
@@ -101,13 +127,16 @@ conversation under `private/chats/<provider>/<id>/`. Providers are `claude`, `ch
 role, text and time, so identical events collapse. Titles and text are redacted before
 storage. `account` is an owner-chosen label such as `Work`, never an email address. To append
 to a stored conversation, resend the same source ID and account; use the stored ID from
-`chat_list` only for `chat_get` and `chat_export`.
+`chat_list` only for `chat_get` and `chat_export`. The chat archive needs a WAC server: it
+writes owner-only `.acl` documents, so on an ACP pod `chat_save` (and capture) fails with
+"Chat protection unavailable".
 
 Automatic capture uses [`@jeswr/agent-session-capture`](../../packages/agent-session-capture/README.md)
 with the same private config and `readOnly: false`:
 
 - Claude Code: `SessionEnd` and `PreCompact` command hooks running `solid-capture claude`.
-- Codex: `notify = [node, …/agent-session-capture/dist/cli.js, "codex"]`.
+- Codex, in `~/.codex/config.toml`, with absolute paths:
+  `notify = ["/absolute/path/to/node", "/absolute/path/to/solid-sdk/packages/agent-session-capture/dist/cli.js", "codex"]`.
 - Exports: `solid-capture chatgpt-export <zip|json>` and `solid-capture claude-export <json>`.
 
 Hooks are silent and exit 0 within a 10-second budget; failed uploads queue privately and
