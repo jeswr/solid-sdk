@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
@@ -20,12 +21,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppHeading } from "@/shell/app-frame";
 import { typedViewData } from "../../../../components/typed-view-data";
 import { decodeRef } from "../../../../lib/refs";
+import { DEMO_CONNECTOR } from "../../lib/connect/catalogue";
+import { isDemoImport } from "../../lib/connect/demo";
 import { classificationForType } from "../../lib/model/classify";
 import { DOMAINS, UNCATEGORISED } from "../../lib/model/domains";
-import { identitiesIn, provenanceOf } from "../../lib/model/provenance";
-import { inStorage } from "../../lib/model/rdf";
+import { inStorage, primarySubject } from "../../lib/model/rdf";
+import { useConnectors } from "../../state/connectors";
 import { asOfTime, itemActions, itemHref, itemTitle, relativeTime } from "../../state/presentation";
 import { domainStore } from "../../state/use-domain-items";
+import { useProvenance } from "../../state/use-provenance";
+import { DemoDataBadge } from "../connect/shared";
 import { useHomeSession } from "../home-app";
 import { domainHref } from "../home-sidebar";
 import { type ItemRead, ItemReadError, readExternalProfile, readItem } from "./data";
@@ -47,6 +52,7 @@ function reference(value: string | null): string | undefined {
 }
 export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string }) {
   const session = useHomeSession();
+  const [connections] = useConnectors(session.webId);
   const router = useRouter();
   const query = useSearchParams();
   const url = reference(itemRef);
@@ -94,9 +100,17 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
       }
       try {
         const snapshot = domainStore(session).getSnapshot();
-        const cached = snapshot.items.find(
-          (item) => item.url === url && (!subject || item.subject.value === subject),
-        );
+        const candidates = snapshot.items.filter((item) => item.url === url);
+        // A link without `s` means the document's primary subject online and offline.
+        // Card order is by title/date and does not determine the resource's primary record.
+        const cachedSubject =
+          subject ??
+          (external
+            ? session.webId
+            : candidates[0]?.dataType?.id === "files"
+              ? candidates[0].subject.value
+              : candidates[0] && primarySubject(candidates[0].dataset, url)?.value);
+        const cached = candidates.find((item) => item.subject.value === cachedSubject);
         let read: ItemRead;
         const offline = !navigator.onLine;
         if (offline && cached)
@@ -177,15 +191,11 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
   }, [state.read]);
   const read = state.read;
   const title = read ? itemTitle(read.item) : "Item";
-  const provenance =
-    read &&
-    provenanceOf(read.item.dataset, read.item.subject, read.item.containerUrl, {
-      storage: session.storageUrl,
-      userWebId: session.webId,
-      // The same names the Home card resolves, so the card and this page agree.
-      identities: identitiesIn(read.item.dataset, read.item.subject),
-    });
+  const provenance = useProvenance(read?.item, session);
   const source = actions.find((action) => action.id === "source");
+  const demo = provenance?.demo || (read && isDemoImport(read.item.url, connections));
+  const onlyDemo =
+    provenance?.demo && provenance.kind === "source" && provenance.label === DEMO_CONNECTOR.label;
   const copy = async () => {
     try {
       if (read) {
@@ -220,11 +230,15 @@ export function ItemPage({ domain, itemRef }: { domain: string; itemRef: string 
         <LoadingSkeleton preset="detail" label="Loading item" />
       ) : (
         <>
-          {provenance?.kind === "you" ? (
-            <p className="hm-you">Added by you</p>
-          ) : (
-            <ProvenanceBadge source={provenance?.label ?? "source"} />
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {demo ? <DemoDataBadge /> : null}
+            {!onlyDemo &&
+              (provenance?.kind === "you" ? (
+                <p className="hm-you">Added by you</p>
+              ) : (
+                <ProvenanceBadge className="hm-provenance" source={provenance?.label ?? "source"} />
+              ))}
+          </div>
           {!online || state.cached ? (
             <p role="status">
               Showing saved copies

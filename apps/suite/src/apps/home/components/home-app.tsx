@@ -9,6 +9,7 @@
  */
 
 import { Toaster } from "@jeswr/suite-ui";
+import { usePathname } from "next/navigation";
 import { createContext, type ReactNode, useContext } from "react";
 import { type PodSession, PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { AppFrame, AppHeading, AppSessionGuard } from "@/shell/app-frame";
@@ -55,9 +56,14 @@ function SessionGate({ children }: { children: ReactNode }) {
 
 function HomeFrame({ session, children }: { session: PodSession; children: ReactNode }) {
   const { counts } = useDomainItems(session);
+  const pathname = usePathname();
   return (
     <HomeSessionContext value={session}>
-      <AppFrame app="home" sidebar={<HomeSidebar counts={counts} />}>
+      <AppFrame
+        app="home"
+        pageTitle={pathname === "/shared" ? "Shared with me" : undefined}
+        sidebar={<HomeSidebar counts={counts} />}
+      >
         {children}
       </AppFrame>
     </HomeSessionContext>

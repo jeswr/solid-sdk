@@ -1,10 +1,12 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // Small shared UI bits: the optimistic-mutation saving indicator (suite UX
 // invariant #2 — act immediately, persist async, revert + surface on failure),
 // agent labels (profile-resolved names), mode badges, and the public-access flag.
 
 import { useEffect, useRef, useState } from "react";
+import { publicFetchFor, useSession } from "../auth/SessionContext.js";
 import type { WacMode } from "../lib/acl.js";
 import { AUTHENTICATED_AGENT, PUBLIC_AGENT } from "../lib/grants.js";
 import type { SolidFetch } from "../lib/http.js";
@@ -78,18 +80,31 @@ export function useOptimistic(): {
 }
 
 /** A human label for an agent line (public/authenticated sentinels + WebIDs). */
-export function AgentLabel({ agent, fetchFn }: { agent: string; fetchFn: SolidFetch }) {
-  const [name, setName] = useState<string | null>(null);
+export function AgentLabel({ agent, showHost = false }: { agent: string; showHost?: boolean }) {
+  const session = useSession();
+  const fetchFn = publicFetchFor(session);
+  const sessionWebId = session.webId;
+  const [display, setDisplay] = useState<{
+    agent: string;
+    fetchFn: SolidFetch;
+    sessionWebId: string;
+    name: string;
+  } | null>(null);
+  const name =
+    display?.agent === agent && display.fetchFn === fetchFn && display.sessionWebId === sessionWebId
+      ? display.name
+      : null;
   useEffect(() => {
     if (agent === PUBLIC_AGENT || agent === AUTHENTICATED_AGENT) return;
-    let cancelled = false;
-    resolveAgentDisplay(agent, fetchFn).then((d) => {
-      if (!cancelled && d.name !== agent) setName(d.name);
+    const controller = new AbortController();
+    resolveAgentDisplay(agent, fetchFn, sessionWebId, controller.signal).then((d) => {
+      if (!controller.signal.aborted && d.resolved && d.name !== agent)
+        setDisplay({ agent, fetchFn, sessionWebId, name: d.name });
     });
     return () => {
-      cancelled = true;
+      controller.abort();
     };
-  }, [agent, fetchFn]);
+  }, [agent, fetchFn, sessionWebId]);
 
   if (agent === PUBLIC_AGENT) {
     return (
@@ -102,8 +117,9 @@ export function AgentLabel({ agent, fetchFn }: { agent: string; fetchFn: SolidFe
     return <span className="agent authenticated-agent">Any logged-in agent</span>;
   }
   return (
-    <span className="agent" title={agent}>
-      {name ?? shortenWebId(agent)}
+    <span className="agent" title={showHost ? new URL(agent).host : agent}>
+      {name ? <span>{name}</span> : showHost ? new URL(agent).host : shortenWebId(agent)}
+      {name ? <span className="agent-host"> ({new URL(agent).host})</span> : null}
     </span>
   );
 }

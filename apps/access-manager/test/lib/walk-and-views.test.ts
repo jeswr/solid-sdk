@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 // Storage walk (progressive, bounded, .acl-skipping, degrades on errors) +
 // dashboard aggregations (by-resource / by-agent, public flagged, owner
@@ -98,7 +99,7 @@ describe("byResource / byAgent", () => {
 describe("type-index grouping", () => {
   it("reads registrations and groups walked nodes into data classes", async () => {
     const pod = buildPod();
-    const regs = await readTypeRegistrations(OWNER, pod.fetch);
+    const regs = await readTypeRegistrations(OWNER, pod.fetch, pod.fetch);
     expect(regs).toHaveLength(1);
     expect(regs[0]?.forClass).toBe(CONTACTS_CLASS);
     expect(regs[0]?.visibility).toBe("public");
@@ -118,7 +119,7 @@ describe("type-index grouping", () => {
 <#contacts> a solid:TypeRegistration ; solid:forClass vcard:Individual ;
   solid:instanceContainer <${POD}contacts/> .`,
     );
-    const regs = await readTypeRegistrations(OWNER, pod.fetch);
+    const regs = await readTypeRegistrations(OWNER, pod.fetch, pod.fetch);
     expect(regs).toHaveLength(1);
   });
 
@@ -135,7 +136,7 @@ describe("type-index grouping", () => {
   acl:accessTo <${POD}contacts/> ; acl:default <${POD}contacts/> ;
   acl:mode acl:Read .`,
     );
-    const regs = await readTypeRegistrations(OWNER, pod.fetch);
+    const regs = await readTypeRegistrations(OWNER, pod.fetch, pod.fetch);
     const nodes = await walkAll(pod);
     const { groups } = groupByDataClass(nodes, regs);
     const group = groups[0];
@@ -155,21 +156,21 @@ describe("type-index grouping", () => {
 describe("profile resolution", () => {
   it("resolves a display name; caches; refuses non-http WebIDs", async () => {
     const pod = buildPod();
-    const display = await resolveAgentDisplay(OWNER, pod.fetch);
+    const display = await resolveAgentDisplay(OWNER, pod.fetch, OWNER);
     expect(display.name).toBe("Owner O.");
     expect(display.resolved).toBe(true);
     const requestsBefore = pod.log.length;
-    await resolveAgentDisplay(OWNER, pod.fetch);
+    await resolveAgentDisplay(OWNER, pod.fetch, OWNER);
     expect(pod.log.length).toBe(requestsBefore); // memoised
 
-    const evil = await resolveAgentDisplay("file:///etc/passwd", pod.fetch);
+    const evil = await resolveAgentDisplay("file:///etc/passwd", pod.fetch, OWNER);
     expect(evil.resolved).toBe(false);
     expect(evil.name).toBe("file:///etc/passwd");
   });
 
   it("an unreachable / malformed profile degrades to the WebID", async () => {
     const pod = buildPod();
-    const display = await resolveAgentDisplay("https://gone.example/p#me", pod.fetch);
+    const display = await resolveAgentDisplay("https://gone.example/p#me", pod.fetch, OWNER);
     expect(display.resolved).toBe(false);
     expect(display.name).toBe("https://gone.example/p#me");
   });

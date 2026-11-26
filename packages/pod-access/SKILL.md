@@ -251,10 +251,24 @@ Denials have no targets. Resuming previews use the persisted target set, never a
 `decide` accepts `options.expected: DecisionPreview`; compare the resolved targets, roles, modes,
 provenance, model, identity and metadata before any write, and compare again on a concurrent pin.
 Refuse mismatches with `DecisionPreviewConflictError` so the consent UI must show a fresh preview.
+Resuming an approval the owner revoked throws `ApprovalRevokedError`; deny it to clear the request (an approving request that is not revoked cannot be denied).
 Preserve JSON round trips and order-independent set comparisons. Export DecisionPreview,
 DecisionTarget and the conflict class from requests-solid/index.ts; document public API changes
 in README and this skill together. Conditional-write and transport failures can still occur later;
 a preview is not a server transaction.
+
+Finishing a half-applied approval refuses with exported `ApprovalRevokedError` when its grant
+record or receipt says it was revoked; the check runs before the first target and before each
+later one. A finish racing a revoke can still re-apply one target: revoke again afterwards.
+
+Public profile UIs reuse exported `publicHttpsUrl(url)` and `publicTransport(publicFetch, signal?)`.
+The former validates public HTTPS URLs (URL classification only; DNS-checking fetch is required in
+Node). The latter forces `credentials: "omit"` and `redirect: "error"`, refuses 3xx and bounds
+successful bodies to exported `MAX_NOTIFICATION_BYTES` (256 KiB). Pass only a pristine public fetch
+and no authentication headers: it cannot undo credentials added by its underlying fetch or remove
+caller-supplied headers. Reuse exported `requireStrongEtag(etag)` before updates and `roleFor(modes)`
+for decision role wording (Write → editor, otherwise Read → viewer; append-only/empty refuses).
+Do not duplicate these policies in consuming apps.
 
 Known limit: a requester-authored `approved` notification at a reused URL that matches an earlier
 `approved` record returns that earlier grant (nothing new is granted), and the owner cannot record a

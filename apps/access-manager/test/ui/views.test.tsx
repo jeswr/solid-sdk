@@ -1,20 +1,24 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Claude Fable 5
 // DataClassView (grouping + per-class access summary) and HistoryView
 // (receipts audit trail + revoke through the UI).
 import "@testing-library/jest-dom/vitest";
+import { DPV, decide, FOAF, listRequests, ODRL, RDF } from "@jeswr/pod-access/requests-solid";
+import { LiteralFrom, OptionalAs, TermWrapper } from "@rdfjs/wrapper";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { SessionProvider } from "../../src/auth/SessionContext.js";
 import { readEffectiveAcl } from "../../src/lib/acl.js";
-import { type ApprovalContext, approveRequest } from "../../src/lib/approval.js";
-import { readAccessRequest } from "../../src/lib/inbox.js";
+import { toTurtle } from "../../src/lib/rdf.js";
 import type { WalkedNode } from "../../src/lib/storage-walk.js";
 import { walkStorage } from "../../src/lib/storage-walk.js";
 import { readTypeRegistrations } from "../../src/lib/type-index.js";
+import { DashboardView } from "../../src/ui/DashboardView.jsx";
 import { DataClassView } from "../../src/ui/DataClassView.jsx";
 import { HistoryView } from "../../src/ui/HistoryView.jsx";
-import { buildPod, GRANTS, INBOX, OWNER, POD, RECEIPTS, REQUESTER } from "../fixtures.js";
+import { buildPod, INBOX, OWNER, POD, REQUESTER } from "../fixtures.js";
 import type { PodStub } from "../pod-stub.js";
 
 async function walkAll(pod: PodStub): Promise<WalkedNode[]> {
@@ -25,15 +29,61 @@ async function walkAll(pod: PodStub): Promise<WalkedNode[]> {
 
 function withSession(pod: PodStub, ui: React.ReactNode) {
   return render(
-    <SessionProvider session={{ webId: OWNER, fetch: pod.fetch }}>{ui}</SessionProvider>,
+    <SessionProvider session={{ webId: OWNER, fetch: pod.fetch, publicFetch: pod.fetch }}>
+      {ui}
+    </SessionProvider>,
   );
 }
+
+describe("profile name provenance", () => {
+  it.each([
+    "Dashboard",
+    "History",
+    "DataClass",
+  ])("shows the requester host beside its self-chosen name in %s", async (view) => {
+    const pod = buildPod();
+    const options = { fetch: pod.fetch, webId: OWNER, storage: POD };
+    const request = (await listRequests({ ...options, inbox: INBOX }))[0];
+    if (!request) throw new Error("missing request");
+    await decide(request, { approve: true }, options);
+    const dataset = new Store();
+    OptionalAs.object(
+      new TermWrapper(REQUESTER, dataset, DataFactory),
+      FOAF.name,
+      "Trusted clinic",
+      LiteralFrom.string,
+    );
+    const profileUrl = new URL(REQUESTER);
+    profileUrl.hash = "";
+    pod.seed(profileUrl.href, await toTurtle(dataset));
+    const nodes = await walkAll(pod);
+    const registrations = await readTypeRegistrations(OWNER, pod.fetch, pod.fetch);
+    withSession(
+      pod,
+      view === "Dashboard" ? (
+        <DashboardView nodes={nodes} storageRoot={POD} walking={false} onChanged={() => {}} />
+      ) : view === "History" ? (
+        <HistoryView storageRoot={POD} onChanged={() => {}} />
+      ) : (
+        <DataClassView
+          nodes={nodes}
+          registrations={registrations}
+          storageRoot={POD}
+          walking={false}
+        />
+      ),
+    );
+    for (const name of await screen.findAllByText("Trusted clinic")) {
+      expect(name.parentElement).toHaveTextContent("Trusted clinic (app.example)");
+    }
+  });
+});
 
 describe("DataClassView", () => {
   it("groups resources into classes and summarises access", async () => {
     const pod = buildPod();
     const nodes = await walkAll(pod);
-    const registrations = await readTypeRegistrations(OWNER, pod.fetch);
+    const registrations = await readTypeRegistrations(OWNER, pod.fetch, pod.fetch);
     withSession(
       pod,
       <DataClassView
@@ -62,21 +112,10 @@ describe("DataClassView", () => {
 
 describe("HistoryView", () => {
   async function approveFixture(pod: PodStub) {
-    const nodes = await walkAll(pod);
-    const registrations = await readTypeRegistrations(OWNER, pod.fetch);
-    const request = await readAccessRequest(`${INBOX}request-1.ttl`, pod.fetch);
+    const options = { fetch: pod.fetch, webId: OWNER, storage: POD };
+    const request = (await listRequests({ ...options, inbox: INBOX }))[0];
     if (!request) throw new Error("missing request");
-    const ctx: ApprovalContext = {
-      ownerWebId: OWNER,
-      storageRoot: POD,
-      grantsContainer: GRANTS,
-      receiptsContainer: RECEIPTS,
-      fetch: pod.fetch,
-      registrations,
-      knownResources: nodes.map((n) => n.url),
-      now: () => new Date("2026-07-02T12:00:00Z"),
-    };
-    return approveRequest(request, ctx);
+    return decide(request, { approve: true }, options);
   }
 
   it("shows the consent receipt after an approval, then revokes through the UI", async () => {
@@ -103,5 +142,30 @@ describe("HistoryView", () => {
     withSession(pod, <HistoryView storageRoot={POD} onChanged={() => {}} />);
     await screen.findByText("No active grants made through this app.");
     expect(screen.getByText(/No consent receipts yet/)).toBeInTheDocument();
+  });
+
+  it("explains where older approvals can be managed without offering exact revocation", async () => {
+    const pod = buildPod();
+    const { namedNode, quad } = DataFactory;
+    for (const [path, type] of [
+      ["grants/grant-old.ttl", ODRL.Agreement],
+      ["receipts/receipt-old.ttl", DPV.ConsentRecord],
+    ]) {
+      if (!path || !type) throw new Error("missing legacy fixture");
+      const url = `${POD}access-manager/${path}`;
+      pod.seed(
+        url,
+        await toTurtle(new Store([quad(namedNode(url), namedNode(RDF.type), namedNode(type))])),
+      );
+    }
+    withSession(pod, <HistoryView storageRoot={POD} onChanged={() => {}} />);
+    expect(
+      screen.getByText(
+        /Approvals made with the older version are listed under Dashboard access only/,
+      ),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Reading records…")).not.toBeInTheDocument());
+    expect(screen.queryByTestId("revoke-grant")).not.toBeInTheDocument();
+    expect(pod.log.some((call) => call.method === "PUT")).toBe(false);
   });
 });

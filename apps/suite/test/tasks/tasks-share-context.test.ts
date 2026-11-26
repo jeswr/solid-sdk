@@ -5,6 +5,10 @@ import { ModelError } from "../../src/apps/tasks/lib/model/errors";
 import { serialize } from "../../src/apps/tasks/lib/model/rdf";
 import { createTracker } from "../../src/apps/tasks/lib/model/tracker";
 import {
+  removeSharedProjectForAccount,
+  useTasksPreferences,
+} from "../../src/apps/tasks/state/preferences";
+import {
   type TasksContextValue,
   TasksProvider,
   useTasks,
@@ -239,4 +243,26 @@ it("diffs mentions against the cached revision a change applied to, not the capt
     mentioned,
     "Renamed",
   );
+});
+
+it("forgets a shared project in the live Tasks cache when /shared removes it", async () => {
+  localStorage.clear();
+  const { context, pod } = await provider();
+  const url = "https://bob.example/team.ttl";
+  const tracker = createTracker(url, "Team", url.replace(/\.ttl$/, "/"), [webId], now);
+  pod.seed(url, await serialize(tracker.dataset));
+  let prefs!: ReturnType<typeof useTasksPreferences>;
+  function Probe() {
+    prefs = useTasksPreferences();
+    return null;
+  }
+  const view = await mount(h(Probe));
+  await act(async () => prefs.dispatch({ type: "sharedProject", url, title: "Team" }));
+  expect(context.cache.hasSharedProject(url)).toBe(true);
+  const forget = vi.spyOn(context.cache, "forgetSharedProject");
+  await act(async () => removeSharedProjectForAccount(webId, url));
+  expect(forget).toHaveBeenCalledWith(url);
+  expect(context.cache.hasSharedProject(url)).toBe(false);
+  expect(prefs.preferences.sharedProjects).toEqual([]);
+  await view.unmount();
 });

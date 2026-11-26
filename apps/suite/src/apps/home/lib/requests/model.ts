@@ -8,6 +8,8 @@
 
 import {
   type AccessRequestEntry,
+  DecisionPreviewConflictError,
+  type DecisionTarget,
   RequestConflictError,
   type RequestMode,
   UnsupportedAccessModelError,
@@ -266,20 +268,23 @@ export interface RequestLists {
   /** Approved and denied within the last 30 days, most recently decided first. */
   decided: ReadableRequest[];
   /**
-   * Inbox notifications that aren't access requests or couldn't be read. Nothing can answer
-   * them, so they are never counted as waiting.
+   * Inbox notifications that aren't access requests or couldn't be read, other than recognised
+   * notifications such as shares. Nothing can answer them, so they are never counted as waiting.
    */
   unreadable: UnreadableRequest[];
 }
 
 /**
  * Split the inbox. `answered` holds requests decided in this session: they leave the waiting lists
- * at once, before (or even without) a fresh listing showing their new status.
+ * at once, before (or even without) a fresh listing showing their new status. `notifications`
+ * holds unreadable entries recognised as other notifications (share Announces): they were read
+ * fine, so they are left out of the unreadable note.
  */
 export function splitRequests(
   entries: readonly AccessRequestEntry[],
   now: Date,
   answered: ReadonlySet<string> = new Set(),
+  notifications: ReadonlySet<string> = new Set(),
 ): RequestLists {
   const readable = entries.filter(isReadable);
   const since = now.getTime() - DECIDED_WINDOW_DAYS * DAY;
@@ -298,7 +303,8 @@ export function splitRequests(
       )
       .sort((a, b) => time(b.decidedAt) - time(a.decidedAt) || a.id.localeCompare(b.id)),
     unreadable: entries.filter(
-      (entry): entry is UnreadableRequest => !isReadable(entry) && !answered.has(entry.id),
+      (entry): entry is UnreadableRequest =>
+        !isReadable(entry) && !answered.has(entry.id) && !notifications.has(entry.id),
     ),
   };
 }
@@ -310,6 +316,8 @@ export function decidedText(entry: ReadableRequest, formatDate: (value: string) 
 
 export type ReviewError =
   | { kind: "conflict" }
+  /** What the approval would grant changed after the owner saw it: nothing was written. */
+  | { kind: "preview-changed" }
   | {
       kind: "error";
       category: "unsupported" | "unreachable" | "unknown";
@@ -360,6 +368,13 @@ const KNOWN_ERRORS: readonly {
     finish: true,
   },
   {
+    match: /^This approval was revoked after it was recorded/,
+    message:
+      "You removed this access after approving, so it won't be finished. Deny the request to clear it, then ask for a new one if you want to share again.",
+    retry: false,
+    deny: true,
+  },
+  {
     match: /^Cannot approve a denial/,
     message: "You already denied this request, so it can't be approved.",
     retry: false,
@@ -385,6 +400,7 @@ const KNOWN_ERRORS: readonly {
  */
 export function reviewError(error: unknown, approve: boolean, online = true): ReviewError {
   if (error instanceof RequestConflictError) return { kind: "conflict" };
+  if (error instanceof DecisionPreviewConflictError) return { kind: "preview-changed" };
   if (error instanceof UnsupportedAccessModelError)
     return {
       kind: "error",
@@ -439,3 +455,12 @@ export function reviewError(error: unknown, approve: boolean, online = true): Re
   console.error("Access request decision failed", error);
   return { kind: "error", category: "unknown", message: NOT_SAVED, retry: true };
 }
+
+/** The role a previewed target gets, in the cards' words. */
+export function targetRoleText(role: DecisionTarget["role"]): string {
+  return role === "editor" ? "Can change" : "Can see";
+}
+
+/** Shown above the old and new target lists after `decide` refused a stale preview. */
+export const PREVIEW_CHANGED =
+  "What this would share changed after you reviewed it, so nothing was shared. Compare the lists, then share again if it still looks right.";
