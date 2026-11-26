@@ -158,6 +158,26 @@ test.each([
   expectAnonymous(requests);
 });
 
+test("an LWS-format description with malformed or relative roots grants nothing", async () => {
+  const { boundary } = await learn((request) =>
+    request.url === description
+      ? Response.json(
+          {
+            id: description,
+            type: "Storage",
+            service: [
+              { type: "StorageRoot", serviceEndpoint: "not a url" },
+              { type: "StorageRoot", serviceEndpoint: "/alice/" },
+              { type: "StorageRoot", serviceEndpoint: "https://user@pod.example/alice/" },
+            ],
+          },
+          { headers: { "content-type": "application/lws+cid" } },
+        )
+      : css(request),
+  );
+  expect(boundary.storages()).toEqual([]);
+});
+
 test("a description claiming the origin root is refused when the root does not self-identify", async () => {
   const { boundary } = await learn((request) =>
     request.url === description ? describesStorages("https://pod.example/") : css(request),
@@ -389,4 +409,41 @@ test("end to end: no declared storage stays anonymous and says why", async () =>
   expect(response.status).toBe(401);
   for (const request of op.requests.filter((r) => r.url.startsWith(root)))
     expect(request.headers.get("authorization")).toBeNull();
+});
+
+test("a WebID whose document is a container may be its own storage", async () => {
+  const s = server((request) =>
+    request.method === "GET"
+      ? turtle([])
+      : request.url === root
+        ? new Response(null, { headers: { link: STORAGE_TYPE } })
+        : unauthorized(),
+  );
+  const boundary = createBoundary({}, { fetch: s.fetch });
+  await boundary.learn(`${root}#me`, new AbortController().signal);
+  expect(boundary.discovery()).toEqual({ source: "storage-type", root });
+});
+
+test("a WebID document with an ambiguous path probes nothing", async () => {
+  const ambiguous = "https://pod.example/alice%2fbob/card";
+  const s = server((request) =>
+    request.method === "GET"
+      ? turtle([], { link: `<${description}>; rel="${DESCRIPTION_REL}"` })
+      : new Response(null, { headers: { link: STORAGE_TYPE } }),
+  );
+  const boundary = createBoundary({}, { fetch: s.fetch });
+  await boundary.learn(`${ambiguous}#me`, new AbortController().signal);
+  expect(boundary.storages()).toEqual([]);
+  expect(s.requests.filter((r) => r.method === "HEAD")).toEqual([]);
+});
+
+test("a profile response for another URL (a followed browser redirect) gives no description evidence", async () => {
+  const { boundary, requests } = await learn((request) => {
+    if (request.url !== document) return css(request);
+    const response = profile(`<${description}>; rel="${DESCRIPTION_REL}"`);
+    Object.defineProperty(response, "redirected", { value: true });
+    return response;
+  });
+  expect(boundary.storages()).toEqual([]);
+  expect(requests.some((r) => r.url === description)).toBe(false);
 });
