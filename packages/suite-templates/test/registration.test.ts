@@ -146,6 +146,68 @@ describe.each(["solid", "lws"] as const)("%s Type Index registration", (protocol
       await open(storage).save(input);
       expect(await open(storage).list()).toHaveLength(1);
     });
+    it.each([
+      "not-found",
+      "scope",
+      "unsupported",
+      "invalid-response",
+      "not-rdf",
+    ] as const)("treats a definitive index failure (%s) as no usable index", async (code) => {
+      const index = fakeIndex(async () => undefined);
+      index.find.mockRejectedValue(new StorageError(code, { method: "GET", url: root }));
+      const storage = pod();
+      await open(storage).save(input);
+      expect(await open(storage).list()).toHaveLength(1);
+    });
+    it.each([
+      "network",
+      "server",
+      "rate-limited",
+      "unauthenticated",
+    ] as const)("surfaces a transient index failure (%s) without creating or registering a collection", async (code) => {
+      const index = fakeIndex(async () => undefined);
+      index.find.mockRejectedValue(new StorageError(code, { method: "GET", url: root }));
+      const storage = pod();
+      const create = vi.spyOn(storage, "create");
+      await expect(open(storage).save(input)).rejects.toMatchObject({ code });
+      await expect(open(storage).list()).rejects.toMatchObject({ code });
+      index.find.mockRejectedValue(new TypeError("unknown"));
+      await expect(open(storage).list()).rejects.toBeInstanceOf(TypeError);
+      index.find.mockRejectedValue(new DOMException("timed out", "TimeoutError"));
+      await expect(open(storage).list()).rejects.toMatchObject({ name: "TimeoutError" });
+      expect(create).not.toHaveBeenCalled();
+      expect(index.register).not.toHaveBeenCalled();
+    });
+    it.each([
+      "forbidden",
+      "not-rdf",
+      "invalid-response",
+    ] as const)("does not register after a degraded lookup (%s), and registers on a retry after a clean lookup", async (code) => {
+      const index = fakeIndex(async () => undefined);
+      index.find.mockRejectedValue(new StorageError(code, { method: "GET", url: root }));
+      const storage = pod();
+      const store = open(storage);
+      await store.save(input);
+      expect(index.register).not.toHaveBeenCalled();
+      expect(store.registration).toEqual({ state: "unavailable" });
+      // Still degraded: the retry neither registers nor changes the outcome.
+      expect(await store.retryRegistration()).toEqual({ state: "unavailable" });
+      expect(index.register).not.toHaveBeenCalled();
+      index.find.mockResolvedValue([]);
+      expect(await store.retryRegistration()).toEqual({ state: "registered" });
+      expect(index.register).toHaveBeenCalledOnce();
+    });
+    it.each([
+      "not-found",
+      "scope",
+    ] as const)("still registers the created collection after a %s lookup", async (code) => {
+      const index = fakeIndex(async () => undefined);
+      index.find.mockRejectedValue(new StorageError(code, { method: "GET", url: root }));
+      const store = open(pod());
+      await store.save(input);
+      expect(index.register).toHaveBeenCalledOnce();
+      expect(store.registration).toEqual({ state: "registered" });
+    });
     it("refuses an existing folder that is not verifiably owner-only and never reshares it", async () => {
       fakeIndex(async () => {
         throw new StorageError("forbidden", { method: "PUT", url: root });

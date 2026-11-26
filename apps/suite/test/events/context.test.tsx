@@ -230,3 +230,17 @@ it("reports unreadable invitations while still showing the readable ones", async
   failure.mockRestore();
   await view.unmount();
 });
+
+it("shows a Type Index registration warning from the controller as a warning toast", async () => {
+  vi.mocked(ensureEventsSample).mockResolvedValue(undefined);
+  const warning = vi.spyOn((await import("@jeswr/suite-ui")).toast, "warning");
+  const view = await mount(h(EventsProvider, { session: fixture(), children: h(Probe) }));
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(view.host.textContent).toBe("Ready");
+  });
+  value.controller.onWarning("Not in your Type Index");
+  expect(warning).toHaveBeenCalledWith("Not in your Type Index");
+  warning.mockRestore();
+  await view.unmount();
+});
