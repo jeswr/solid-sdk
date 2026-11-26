@@ -880,6 +880,10 @@ and set ordering are supported. Exported types are `DecisionPreview`, `DecisionT
 `RequestDecision`, `DecideOptions` and `DecisionResult`. A preview does not lock the server: later
 transport failures, conditional-write conflicts and concurrent policy edits can still refuse a write.
 
+Finishing a half-applied approval refuses with exported `ApprovalRevokedError` when its grant
+record or receipt says it was revoked; the check runs before the first target and before each
+later one. A finish racing a revoke can still re-apply one target: revoke again afterwards.
+
 **WAC/ACP roles do not enforce expiry.** An explicit decision `expiresAt` is receipt metadata, persisted in
 the recovery snapshot. It does not expire or automatically revoke WAC/ACP access; results always report
 `expiryEnforced: false`. Requested expiry is displayed but never silently adopted. Purpose is DPV
@@ -926,7 +930,10 @@ record (even when the crash came before the request changed state, so the Type I
 again): a notification that claims to be Approving or Approved without one was written by the
 requester, so `decide` refuses to approve it (it can still be denied). Denying a request whose
 approval was pinned but never reached Approving turns that record into `denied`, so it can never be
-resumed. A finished record only matches a request in the same state, so when a new request arrives
+resumed. A half-applied approval (request Approving, record `approving`) that the owner has since
+revoked, so its grant record carries `revokedAt` or its receipt says consent was withdrawn, can be
+denied: `decide` then settles the record as `denied` and writes no access. Resuming such an approval throws the exported `ApprovalRevokedError`. Without a revocation
+`decide` still refuses to deny an approval that is being applied. A finished record only matches a request in the same state, so when a new request arrives
 at a reused notification URL, even an identical one, it is decided afresh under the next generation
 and never reuses the old decision. A pinned decision must name this requester, stay within the role
 its request maps to, and pass the same target checks as a new one. After 32 decisions at one
@@ -1001,6 +1008,16 @@ owner's settings and governing access documents owner-controlled.
 Inbox children and `settings/access-records/` must be owner-write-only; public Append to the inbox
 is fine. A deterministic hash is an idempotency key, not an authenticity proof for requester-writable
 snapshots. Resume only as an explicit user-confirmed decision, never an automatic inbox sweep.
+
+For public profile reads, reuse `publicHttpsUrl(url)` (returns the validated URL or throws) and
+`publicTransport(publicFetch, signal?)`. Supply an explicit pristine unauthenticated fetch;
+the wrapper forces omitted credentials and refused redirects, rejects 3xx responses, and bounds
+successful response bodies to `MAX_NOTIFICATION_BYTES` (256 KiB), even without Content-Length.
+It does not remove caller-provided authentication headers or undo a fetch that adds credentials;
+never supply those headers or an authenticated fetch. The URL check has the DNS limitation above.
+`requireStrongEtag(etag)` throws for missing, weak or malformed validators before a conditional
+update. `roleFor(modes)` returns `editor` for Write, otherwise `viewer` for Read, and refuses
+append-only/empty modes. It is the same mapping used by decisions, including merged targets.
 
 The subpath exports frozen `ACCM`, `DPV`, `ODRL`, `ACL`, `LDP` and supporting vocabulary constants,
 `MAX_MEMBERS`, `MAX_NOTIFICATION_BYTES`, `deriveGrantId`, public option/result types, and canonical/legacy

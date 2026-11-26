@@ -86,9 +86,10 @@ describe("public export boundary", () => {
       const requests = await load("@jeswr/pod-access/requests-solid");
       assert.deepEqual(Object.keys(requests).sort(), [
         "ACCM", "ACL", "DCT", "DPV", "FOAF", "LDP", "ODRL", "PIM", "PROV", "RDF", "RDFS", "SOLID", "XSD",
-        "DecisionPreviewConflictError", "MAX_MEMBERS", "MAX_NOTIFICATION_BYTES", "RequestConflictError",
+        "ApprovalRevokedError", "DecisionPreviewConflictError", "MAX_MEMBERS", "MAX_NOTIFICATION_BYTES", "RequestConflictError",
         "UnsupportedAccessModelError", "accessModel", "accmAliases", "accmTerm", "canonicalizeAccmDataset",
         "decide", "deriveGrantId", "listRequests", "previewDecision",
+        "publicHttpsUrl", "publicTransport", "requireStrongEtag", "roleFor",
       ].sort());
       for (const entry of entries) {
         assert.equal("RdfNode" in entry, false);
@@ -96,7 +97,7 @@ describe("public export boundary", () => {
         assert.equal("copyDataset" in entry, false);
         for (const [name, value] of Object.entries(entry)) {
           if (typeof value !== "function") continue;
-          if (["UnsupportedAccessModelError", "RequestConflictError", "DecisionPreviewConflictError"].includes(name)) {
+          if (["UnsupportedAccessModelError", "RequestConflictError", "DecisionPreviewConflictError", "ApprovalRevokedError"].includes(name)) {
             assert.ok(value.prototype instanceof Error);
             continue;
           }

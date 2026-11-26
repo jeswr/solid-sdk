@@ -18,7 +18,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AppHeading } from "@/shell/app-frame";
 import { useOnline } from "@/shell/lib/use-online";
-import { type ConnectorEntry, destinationsFor } from "../../lib/connect/catalogue";
+import { type ConnectorEntry, DEMO_CONNECTOR, destinationsFor } from "../../lib/connect/catalogue";
 import type { ConnectionMode } from "../../lib/connect/connection-state";
 import {
   addedCopy,
@@ -220,6 +220,7 @@ function ServiceFlow({ entry }: { entry: ConnectorEntry }) {
             : await runImport({
                 adapter: withSelectedScopes(adapter as NonNullable<typeof adapter>, selectedScopes),
                 mode: mode === "demo" ? "demo" : "live",
+                ...(mode === "demo" ? { demoAgent: DEMO_CONNECTOR } : {}),
                 ...(sourceAuth ? { sourceAuth } : {}),
                 podWriter: writer,
                 // Demo replays complete fixtures; live resumes the successful checkpoint.

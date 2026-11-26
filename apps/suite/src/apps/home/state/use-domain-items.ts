@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import { RdfFetchError } from "@jeswr/fetch-rdf";
@@ -9,9 +10,15 @@ import { useEffect, useSyncExternalStore } from "react";
 import { typedViewData } from "../../../components/typed-view-data";
 import type { PodSession } from "../../../lib/session/pod-session";
 import {
+  capRecords,
+  type DiscoveryOptions,
   type DomainItem,
   type DomainItems,
   discoverDomainItems,
+  domainItemKey,
+  MAX_RECORDS_PER_DOCUMENT,
+  MAX_RECORDS_PER_REFRESH,
+  type RecordLimit,
   sortItems,
 } from "../lib/model/discovery";
 import { DiscoveryBudget } from "../lib/model/discovery-budget";
@@ -32,6 +39,8 @@ interface Snapshot {
   failures: readonly DiscoveryFailure[];
   counts: ReadonlyMap<string, number>;
   truncated: boolean;
+  /** Documents shown in part because of the record caps; Retry cannot change this. */
+  limited: ReadonlyMap<string, RecordLimit>;
   refreshing: boolean;
   used: number | undefined;
   updated: number;
@@ -45,6 +54,7 @@ const initial: Snapshot = {
   failures: [],
   counts: new Map(),
   truncated: false,
+  limited: new Map(),
   refreshing: false,
   used: undefined,
   updated: 0,
@@ -86,22 +96,40 @@ function reconcileItems(
    * the item and discard it, which says nothing about whether it still exists.
    */
   visitedFor: (item: DomainItem) => ReadonlyMap<string, string | null>,
+  /** Documents read in full but cut by the record budget: their earlier cards stay. */
+  cut: ReadonlySet<string> = new Set(),
 ): DomainItem[] {
-  const key = (item: DomainItem) => `${item.url}|${item.dataType?.id}`;
-  const items = new Map(result.items.map((item) => [key(item), item]));
+  const items = new Map(result.items.map((item) => [domainItemKey(item), item]));
+  const perDocument = new Map<string, number>();
+  let records = 0;
+  for (const item of items.values()) {
+    if (item.dataType?.id === "files") continue;
+    records++;
+    perDocument.set(item.url, (perDocument.get(item.url) ?? 0) + 1);
+  }
   for (const item of previous) {
-    const failedRead = failures.some((failure) => affectsItem(failure.url, item));
+    // A successful read of the item's own document is authoritative: an ancestor
+    // listing failure must not bring back a record that document no longer holds.
+    const failedRead =
+      !visitedFor(item).has(item.url) && failures.some((failure) => affectsItem(failure.url, item));
     const unvisited =
       preserveUnvisited(item) &&
       !visitedFor(item).has(item.url) &&
       (!result.listings.has(item.containerUrl) ||
         result.listings.get(item.containerUrl)?.has(item.url));
     if (
-      !items.has(key(item)) &&
-      (failedRead || unvisited) &&
+      !items.has(domainItemKey(item)) &&
+      (failedRead || unvisited || cut.has(item.url)) &&
       !unavailable.some((url) => affectsItem(url, item))
-    )
-      items.set(key(item), item);
+    ) {
+      if (item.dataType?.id !== "files") {
+        const count = perDocument.get(item.url) ?? 0;
+        if (records >= MAX_RECORDS_PER_REFRESH || count >= MAX_RECORDS_PER_DOCUMENT) continue;
+        records++;
+        perDocument.set(item.url, count + 1);
+      }
+      items.set(domainItemKey(item), item);
+    }
   }
   return sortItems([...items.values()]);
 }
@@ -192,6 +220,7 @@ function createDomainStore(session: HomeSession) {
         const usage = storageUsage(fetch, session.storageUrl);
         // Independent budgets keep a large domain from starving every other domain.
         const scanned = [...DOMAINS, UNCATEGORISED];
+        const documentCache: NonNullable<DiscoveryOptions["documentCache"]> = new Map();
         const domains = await Promise.all(
           scanned.map((domain) =>
             discoverDomainItems(domain, {
@@ -200,11 +229,23 @@ function createDomainStore(session: HomeSession) {
               webId: session.webId,
               profile,
               typeIndex: indexes.locations,
+              documentCache,
             }),
           ),
         );
+        // The refresh-wide record budget is shared in a stable document order, once every
+        // scan has finished, so response order never decides which cards appear.
+        const capped = capRecords(
+          [
+            ...new Map(
+              domains.flatMap((domain) => domain.items).map((i) => [domainItemKey(i), i]),
+            ).values(),
+          ],
+          new Map(domains.flatMap((domain) => [...domain.limited])),
+        );
         const result: DomainItems = {
-          items: domains.flatMap((domain) => domain.items),
+          items: capped.items,
+          limited: capped.limited,
           failures: [
             ...new Map(
               domains.flatMap((domain) => domain.failures).map((failure) => [failure.url, failure]),
@@ -246,6 +287,7 @@ function createDomainStore(session: HomeSession) {
           (item) =>
             domains[scanned.findIndex((domain) => domain.id === item.domain.id)]?.etags ??
             result.etags,
+          capped.cut,
         );
         const used = await usage;
         const views = new Map(
@@ -258,6 +300,7 @@ function createDomainStore(session: HomeSession) {
                     item,
                     await typedViewData(item.dataset, item.subject, {
                       storage: session.storageUrl,
+                      includeRawData: false,
                     }),
                   ),
                 ] as const,
@@ -272,6 +315,7 @@ function createDomainStore(session: HomeSession) {
           failures,
           counts: countItems(items),
           truncated: indexes.truncated || result.truncated,
+          limited: capped.limited,
           refreshing: false,
           used,
           updated: background ? snapshot.updated + 1 : snapshot.updated,

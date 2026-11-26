@@ -339,3 +339,75 @@ delimiters); in-scope requests refuse redirects. Chips pass only the user's stor
 add the containers an opened resource owns (Docs adds a shared document's own folder). Foreign
 reads bypass the session transport/cache, omit credentials, referrers and native caching, and
 follow redirects (WebIDs often 303). Resolve foreign chips only on hover/focus.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Shared items (`./shared`, sst-iool)
+
+`sharedItemsFromInbox(notifications, { storageUrl?, now? })` projects only share Announce
+notifications into `SharedItem` records. Pass the user's `storageUrl`: resources inside it
+(pod-scope containment, not origin) are never "shared with me". Announced resources outside it
+must be public HTTPS (`isPublicHttpsUrl`: no `http:`, credentials, loopback, private or
+link-local addresses, `.local`/single-label/cloud-internal names; judged by name and IP literal,
+no DNS); anything else is dropped. Every projected item carries `announced: true`, which
+`mergeSharedItems` keeps even when a local "opened" record merges in, so callers keep such items
+preview-only (`previewOnly: item.announced`) however the record was later merged. A `published` claim later than
+`now + SHARED_CLOCK_SKEW_MS` (5 minutes) is dropped, so a future date can neither pin an item to
+the top nor outrank a hide. Sender, title and role are unverified assertions. `fromAnotherPod`
+flags an actor that cannot be placed in the resource's pod: different origins always, and on
+the user's own host pod roots at the user's storage depth (path-based multi-pod hosts). Callers
+display the resource origin first and label announcement senders and roles as unverified. No
+grants or resource reads occur here.
+
+`isShareNotification(n)` is the share Announce test `sharedItemsFromInbox` applies (summary
+`Shared with you as …` and an http(s) object without credentials), regardless of storage.
+`shareNotificationUrls(candidates, { fetch, webId, storageUrl, publicFetch?, inbox?, pinningFetch?, signal?, maxItems? })`
+returns the candidate inbox members that are share Announces, read through the pod-access inbox
+reader. It requests only the profile (skipped when `inbox` is given), the inbox container and
+the candidates; every other URL is answered locally with 404, which the reader skips. Home's
+Requests page uses it so share notifications, which `listRequests` reports as unreadable, are
+not counted as unreadable requests. An abort through the `signal` rejects (a transport's own timeout is a network failure), even one during discovery. Credentials stay
+inside `storageUrl` (`podScopedFetch`: session fetch, redirects refused); a profile outside it is
+read through `publicFetch` (or a credential-free global fetch), and an inbox outside it is never
+read.
+
+`readSharedInbox({ webId, storageUrl, fetch, publicFetch?, pinningFetch?, signal?, maxItems? })`
+is the Shared with me read, confined the same way. It returns `{ status: "ok", notifications,
+truncated, limit }`, `{ status: "none" }` (a profile naming no inbox, or a missing inbox) or
+`{ status: "failed", reason }` with `reason` one of `network`, `forbidden`, `lws-no-ldn` (an LWS
+profile has no LDN inbox) or `outside-storage`, so callers can show an error with Retry instead of
+an empty state. The bound is `SHARED_INBOX_LIMIT` (100, Requests' bound); one extra member is read
+to set `truncated`, and the newest `limit` notifications read are returned (the container listing
+order decides which members are read at all). Aborts reject.
+
+`resolveSuiteResource(hints, { encodeRef, encodeContactRef?, shared?, storageUrl?, previewOnly?, hints? })`
+is the single resource-to-app/route resolver for search and Shared. RDF types match canonical
+`@jeswr/suite-vocab` IRIs (including known legacy aliases), never arbitrary local names.
+MIME, filename and path hints supply display classifications; search passes `hints: false` so
+only RDF types choose an app and generic rows stay in Drive (and in Drive-scoped search). A hint
+never turns a container into a file: untyped containers are Drive folders, except Sheets'
+native `sheets/<name>/` workbook layout. Shared routes require native formats and routers that
+can open shared resources: Tasks trackers (`wf:Tracker`, or untyped `.ttl` directly in
+`tasks/projects/`), and native Docs documents / Sheets containers inside the user's storage
+(pod-scope containment, never origin). Other resources fall back to Drive: containers open the
+folder view, files the preview. Callers set `previewOnly` for unverified inbox resources outside
+the user's storage or with an actor from another pod. Document references omit fragments; Tasks search keeps
+the task subject. `classifySharedItem` delegates to this resolver. `sharedApps` exports the
+runtime list underlying `SharedApp`.
+
+`isDirectChild` is the common fail-closed document layout check; `isSuiteDocsDocument` applies
+it to Drive's native Docs scope. `mergeSharedItems(...sources)` deduplicates exact URLs newest
+first (undated last), fills missing fields, and prefers names from local app/open sources over
+inbox titles regardless of date. Inputs are never mutated. `latestSharedEntries` preserves
+Drive's stable insertion order for equal dates and its existing NaN comparison behavior.
+
+Storage belongs to callers: `sharedAccountKey` keeps Tasks' encoded WebID key convention,
+`parseSharedEntries` validates stored lists, and `sharedItemsForAccount` prevents fallback
+memory from crossing accounts. `hideSharedItem` stores `{ url, hiddenAt }`; `visibleSharedItems`
+suppresses only records with no `sharedAt`/`openedAt` later than `hiddenAt`. Hide with
+`sharedHiddenAt(record)` (the later of now and the record's own dates) so a skewed sender date
+cannot outrank the hide. Persist hidden
+entries per WebID, validate with `isHiddenSharedItem`, and clear them when the user reopens a
+resource. Tasks removal must forget its cache entry and remove its preference entry. Reject
+stale callbacks on session replacement. `removeSharedItem` and `isSharedUrlEntry` remain generic
+URL-list helpers. Only `shareNotificationUrls` performs I/O.

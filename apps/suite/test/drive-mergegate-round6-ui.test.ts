@@ -42,6 +42,8 @@ it.each([
   "Recent",
 ] as const)("%s preview uses one HEAD and one GET per activation despite preference writes", async (surface) => {
   const pod = await wacPod();
+  // Resources outside the signed-in storage are read credential-free over the global fetch.
+  vi.stubGlobal("fetch", pod.fetch);
   const shared = surface.startsWith("Shared");
   const foreign = surface !== "Recent";
   const storageUrl = foreign ? `${ROOT}alice/` : ROOT;

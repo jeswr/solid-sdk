@@ -1,5 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-// Deprecated app compatibility API: new consumers use @jeswr/pod-access/requests-solid.
+// Dashboard WAC projections and edits; request grants belong to pod-access/requests-solid.
 // AUTHORED-BY Claude Fable 5
 //
 // The WAC data layer — the security core of the app. It READS and EDITS .acl
@@ -20,24 +21,22 @@
 //   - a SELF-LOCKOUT guard — an edit that would leave the owner without
 //     acl:Control on the governing resource is refused (LockoutError).
 
+import { ACL, FOAF } from "@jeswr/pod-access/requests-solid";
 import type { DatasetCore } from "@rdfjs/types";
 import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { AclResource, Authorization } from "@solid/object";
-import { DataFactory, Store } from "n3";
+import { DataFactory } from "n3";
 import {
   isWithinStorage,
   PreconditionFailedError,
   putIfMatch,
-  putIfNoneMatch,
   type ReadRdf,
   readRdf,
   type SolidFetch,
 } from "./http.js";
 import { toTurtle, tryRead } from "./rdf.js";
-import { ACL, FOAF } from "./vocab.js";
 
 export type WacMode = "Read" | "Write" | "Append" | "Control";
-export const ALL_MODES: readonly WacMode[] = ["Read", "Write", "Append", "Control"];
 
 const MODE_IRI: Record<WacMode, string> = {
   Read: ACL.Read,
@@ -181,8 +180,8 @@ export function projectEntries(dataset: DatasetCore): AclEntry[] {
   const acl = new AclResource(dataset, DataFactory);
   const out: AclEntry[] = [];
   for (const auth of acl.authorizations) {
-    const authIri = auth.value;
-    const scoped = new ScopedAuthorization(authIri, dataset, DataFactory);
+    const authIri = auth.termType === "BlankNode" ? `_:${auth.value}` : auth.value;
+    const scoped = new ScopedAuthorization(authNode(authIri), dataset, DataFactory);
     const agents = tryRead(() => [...auth.agent]) ?? [];
     const agentClasses = tryRead(() => [...auth.agentClass]) ?? [];
     const modeIris = tryRead(() => [...auth.mode]) ?? [];
@@ -305,8 +304,14 @@ export function ownerRetainsAnyControl(
   return false;
 }
 
+// Keep the blank-node authorizations emitted by the SDK as blank nodes throughout edits.
+function authNode(authIri: string) {
+  return authIri.startsWith("_:")
+    ? DataFactory.blankNode(authIri.slice(2))
+    : DataFactory.namedNode(authIri);
+}
 function authAt(dataset: DatasetCore, authIri: string): Authorization {
-  return new Authorization(authIri, dataset, DataFactory);
+  return new Authorization(authNode(authIri), dataset, DataFactory);
 }
 
 /** Remove an authorization node entirely when it no longer names any subject. */
@@ -318,7 +323,7 @@ function dropIfSubjectless(dataset: DatasetCore, authIri: string): void {
     tryRead(() => auth.agentGroup) !== undefined;
   if (!hasSubjects) {
     // Delete the whole node description through the wrapper's live dataset.
-    for (const q of [...dataset.match(DataFactory.namedNode(authIri), null, null)]) {
+    for (const q of [...dataset.match(authNode(authIri), null, null)]) {
       dataset.delete(q);
     }
   }
@@ -326,10 +331,11 @@ function dropIfSubjectless(dataset: DatasetCore, authIri: string): void {
 
 /** Mint a fresh `#grant-N` fragment IRI in the ACL document. */
 function freshAuthIri(dataset: DatasetCore, docUrl: string): string {
+  if (docUrl.startsWith("_:")) return `_:${DataFactory.blankNode().value}`;
   const base = docUrl.split("#")[0] ?? docUrl;
   let n = 0;
   let authIri = `${base}#grant-${n}`;
-  while (dataset.match(DataFactory.namedNode(authIri), null, null).size > 0) {
+  while (dataset.match(authNode(authIri), null, null).size > 0) {
     n += 1;
     authIri = `${base}#grant-${n}`;
   }
@@ -380,8 +386,8 @@ export function detachResourceScope(
     );
     if (outside.length > 0) {
       const cloneIri = cloneNodeWithoutScopes(dataset, authIri);
-      const scopedClone = new ScopedAuthorization(cloneIri, dataset, DataFactory);
-      const scopedOrig = new ScopedAuthorization(authIri, dataset, DataFactory);
+      const scopedClone = new ScopedAuthorization(authNode(cloneIri), dataset, DataFactory);
+      const scopedOrig = new ScopedAuthorization(authNode(authIri), dataset, DataFactory);
       for (const t of outside) {
         scopedClone.accessToAll.add(t);
         scopedOrig.accessToAll.delete(t);
@@ -398,9 +404,9 @@ export function detachResourceScope(
   // accessTo-only coverage: detach the resource onto a faithful clone; the
   // original keeps its other scopes untouched (roborev round 6).
   const cloneIri = cloneNodeWithoutScopes(dataset, authIri);
-  const scopedClone = new ScopedAuthorization(cloneIri, dataset, DataFactory);
+  const scopedClone = new ScopedAuthorization(authNode(cloneIri), dataset, DataFactory);
   scopedClone.accessToAll.add(resource);
-  const scopedOrig = new ScopedAuthorization(authIri, dataset, DataFactory);
+  const scopedOrig = new ScopedAuthorization(authNode(authIri), dataset, DataFactory);
   for (const t of matchingAccessTo) scopedOrig.accessToAll.delete(t);
   return cloneIri;
 }
@@ -408,8 +414,8 @@ export function detachResourceScope(
 /** Faithful clone of a node (all predicates except the scope ones). */
 function cloneNodeWithoutScopes(dataset: DatasetCore, authIri: string): string {
   const cloneIri = freshAuthIri(dataset, authIri);
-  const orig = DataFactory.namedNode(authIri);
-  const clone = DataFactory.namedNode(cloneIri);
+  const orig = authNode(authIri);
+  const clone = authNode(cloneIri);
   for (const q of [...dataset.match(orig, null, null)]) {
     if (q.predicate.value === ACL.accessTo || q.predicate.value === ACL.default) continue;
     dataset.add(DataFactory.quad(clone, q.predicate, q.object));
@@ -583,60 +589,6 @@ export function createAuthorization(
 }
 
 /**
- * MUTATION: grant `agentWebId` the given modes on `resourceUrl` inside its OWN
- * ACL document. Reuses an existing agent-only node with identical scope+modes
- * (idempotent re-grant), else creates a new node.
- */
-export function addAgentGrant(
-  dataset: DatasetCore,
-  aclUrl: string,
-  resourceUrl: string,
-  agentWebId: string,
-  modes: readonly WacMode[],
-): string {
-  const sortedWanted = [...modes].sort().join(",");
-  for (const entry of projectEntries(dataset)) {
-    const scopeMatches =
-      entry.accessTo.some((t) => sameResource(t, resourceUrl)) &&
-      !entry.isPublic &&
-      !entry.isAuthenticated;
-    if (scopeMatches && [...entry.modes].sort().join(",") === sortedWanted) {
-      const auth = authAt(dataset, entry.authIri);
-      auth.agent.add(agentWebId);
-      return entry.authIri;
-    }
-  }
-  return createAuthorization(dataset, aclUrl, {
-    agents: [agentWebId],
-    modes,
-    accessTo: resourceUrl,
-  });
-}
-
-/**
- * Build a resource's OWN ACL document from the effective (inherited) one —
- * needed before granting on a resource that has no .acl yet. Copies every
- * APPLICABLE inherited entry so existing access (above all the owner's
- * Control) is preserved, retargeted at the resource. For containers the
- * copied entries also carry acl:default so their descendants keep inheriting.
- */
-export function materializeOwnAcl(effective: EffectiveAcl, resourceUrl: string): DatasetCore {
-  const dataset: DatasetCore = new Store();
-  const aclUrl = `${resourceUrl}.acl`;
-  const isContainer = resourceUrl.endsWith("/");
-  for (const entry of effective.entries) {
-    createAuthorization(dataset, aclUrl, {
-      agents: entry.agents,
-      isPublic: entry.isPublic,
-      modes: entry.modes,
-      accessTo: resourceUrl,
-      ...(isContainer ? { defaultFor: resourceUrl } : {}),
-    });
-  }
-  return dataset;
-}
-
-/**
  * Read → mutate → conditional-write an ACL document, re-reading and re-applying
  * on 412 up to `attempts` times (the CAS retry loop). The mutation callback
  * must be PURE over the dataset (safe to re-apply on a fresh read).
@@ -662,47 +614,3 @@ export async function updateAclWithRetry(
     }
   }
 }
-
-/**
- * Grant modes on a resource, materialising an own ACL first when the resource
- * only has an inherited one (create-only, so two concurrent materialisations
- * cannot clobber each other — the loser falls through to the CAS update path).
- */
-export async function grantOnResource(
-  resourceUrl: string,
-  storageRoot: string,
-  ownerWebId: string,
-  agentWebId: string,
-  modes: readonly WacMode[],
-  fetchFn: SolidFetch,
-): Promise<void> {
-  const effective = await readEffectiveAcl(resourceUrl, storageRoot, fetchFn);
-  if (!effective.owned) {
-    const materialized = materializeOwnAcl(effective, resourceUrl);
-    const aclUrl = await discoverAclUrl(resourceUrl, fetchFn);
-    // Belt-and-braces: a fresh own ACL must NEVER omit the owner's Control
-    // (the inherited entries normally carry it; if they don't, add it).
-    if (!ownerHasControl(materialized, ownerWebId, resourceUrl)) {
-      createAuthorization(materialized, aclUrl, {
-        agents: [ownerWebId],
-        modes: ALL_MODES,
-        accessTo: resourceUrl,
-        ...(resourceUrl.endsWith("/") ? { defaultFor: resourceUrl } : {}),
-      });
-    }
-    addAgentGrant(materialized, aclUrl, resourceUrl, agentWebId, modes);
-    try {
-      await putIfNoneMatch(aclUrl, await toTurtle(materialized, aclUrl), fetchFn);
-      return;
-    } catch (e) {
-      if (!(e instanceof PreconditionFailedError)) throw e;
-      // Lost the create race — an own ACL now exists; fall through to update it.
-    }
-  }
-  const aclUrl = effective.owned ? effective.aclUrl : await discoverAclUrl(resourceUrl, fetchFn);
-  await updateAclWithRetry(aclUrl, fetchFn, (dataset) => {
-    addAgentGrant(dataset, aclUrl, resourceUrl, agentWebId, modes);
-  });
-}
-
-export { IRI_MODE, MODE_IRI };

@@ -59,6 +59,10 @@ describe("welcome app directory", () => {
         expect(app.href).toBe("/tasks/issues");
         continue;
       }
+      if (app.statusLabel === "Now in Permissions") {
+        expect(app.href).toBe("/permissions");
+        continue;
+      }
       expect(app.href).toBe(
         app.statusLabel === "For developers"
           ? `https://github.com/jeswr/solid-sdk/tree/main/apps/${app.id}`
@@ -83,5 +87,11 @@ describe("welcome app directory", () => {
         "mcp-server",
       ]),
     );
+  });
+  it("points the moved Access Manager at Permissions", () => {
+    expect(companionApps.find((app) => app.id === "access-manager")).toMatchObject({
+      href: "/permissions",
+      statusLabel: "Now in Permissions",
+    });
   });
 });

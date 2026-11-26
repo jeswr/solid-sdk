@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 import {
+  DecisionPreviewConflictError,
   RequestConflictError,
   UnsupportedAccessModelError,
 } from "@jeswr/pod-access/requests-solid";
@@ -51,6 +52,7 @@ import {
   reviewError,
   selectedDataTypes,
   splitRequests,
+  targetRoleText,
 } from "../src/apps/home/lib/requests/model";
 
 const STEPS = `${NS.HEALTH}StepCountObservation`;
@@ -385,6 +387,22 @@ describe("pending and decided lists", () => {
     expect(lists.unreadable).toEqual([]);
   });
 
+  it("leaves recognised share notifications out of unreadable, but not malformed items", () => {
+    const lists = splitRequests(
+      [
+        request({ id: "a" }),
+        { id: "share", status: "unreadable" },
+        { id: "broken", status: "unreadable" },
+      ],
+      new Date(),
+      new Set(),
+      new Set(["share", "a"]),
+    );
+    expect(lists.unreadable).toEqual([{ id: "broken", status: "unreadable" }]);
+    // The set only narrows the unreadable note: a readable request is never hidden by it.
+    expect(lists.pending.map((entry) => entry.id)).toEqual(["a"]);
+  });
+
   it("labels decisions", () => {
     const format = (value: string) => value.slice(0, 10);
     expect(
@@ -519,5 +537,15 @@ describe("errors and capabilities", () => {
     expect(
       requestCaps({ accessRequests: false, grantExpiry: true }, '{"accessRequests":true}'),
     ).toEqual({ accessRequests: false, grantExpiry: true });
+  });
+});
+
+describe("decision previews", () => {
+  it("names a stale preview apart from a lost race, and words each target's role", () => {
+    expect(reviewError(new DecisionPreviewConflictError(), true)).toEqual({
+      kind: "preview-changed",
+    });
+    expect(targetRoleText("editor")).toBe("Can change");
+    expect(targetRoleText("viewer")).toBe("Can see");
   });
 });

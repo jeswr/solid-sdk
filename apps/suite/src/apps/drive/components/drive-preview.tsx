@@ -8,10 +8,12 @@ import {
   type TypedViewData,
 } from "@jeswr/suite-ui";
 import { useMemo } from "react";
-import { createPreviewImageResolver } from "../lib/preview/image-resolver";
+import { previewImageResolverFor } from "../lib/preview/foreign";
 
 export interface DrivePreviewProps extends Omit<PreviewPaneProps, "source"> {
-  session: { fetch: typeof globalThis.fetch };
+  session: { fetch: typeof globalThis.fetch; storageUrl: string };
+  /** The previewed resource: images it names are read over a transport chosen from this. */
+  resourceUrl: string;
   source?: Omit<PreviewSource, "typedView">;
   data?: TypedViewData;
   showTechnicalDetails?: boolean;
@@ -20,14 +22,15 @@ export interface DrivePreviewProps extends Omit<PreviewPaneProps, "source"> {
 /** The Drive owner supplies the current session and the parsed preview projection. */
 export function DrivePreview({
   session,
+  resourceUrl,
   source,
   data,
   showTechnicalDetails = false,
   ...paneProps
 }: DrivePreviewProps) {
   const resolveImage = useMemo(
-    () => createPreviewImageResolver((url, init) => session.fetch(url, init)),
-    [session],
+    () => previewImageResolverFor(session, resourceUrl),
+    [session, resourceUrl],
   );
   const previewSource = source && {
     ...source,
