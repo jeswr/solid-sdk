@@ -1,5 +1,6 @@
 // AUTHORED-BY GPT-6.1 Sol
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type { AuthEvent, AuthEventType, Identity, PodAuth } from "@jeswr/pod-auth";
 import { vi } from "vitest";
 
@@ -36,6 +37,7 @@ export function fakePodAuth() {
   };
   const auth = {
     fetch: vi.fn<typeof fetch>(async () => new Response("private files")),
+    nonInteractiveFetch: vi.fn<typeof fetch>(async () => new Response("private files")),
     restore: vi.fn<PodAuth["restore"]>(async () => null),
     remembered: vi.fn<PodAuth["remembered"]>(async () => []),
     retireIfOwnedBy: vi.fn<PodAuth["retireIfOwnedBy"]>(async () => ({

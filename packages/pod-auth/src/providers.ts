@@ -16,6 +16,7 @@ import {
   DPoPTokenProvider,
   DynamicRegistrationClientProvider,
   type HttpOptions,
+  interactionRequired,
   nonReactiveFetch,
   OidcIdTokenSource,
   oidcSessionKey,
@@ -237,8 +238,9 @@ export function createAgentProviders(
       hooks.challenge(request.url);
       return true;
     },
-    upgrade: async (request, challenge) => {
-      const upgraded = await provider.upgrade(request, challenge);
+    // Agents never interact; a non-interactive option is forwarded unchanged.
+    upgrade: async (request, challenge, upgradeOptions) => {
+      const upgraded = await provider.upgrade(request, challenge, upgradeOptions);
       hooks.session(upgraded.signal);
       return upgraded;
     },
@@ -393,6 +395,8 @@ export function createProviders(
   const umaContext: ContextKey = async (request) =>
     JSON.stringify([await boundary.contextKey(request), await selectionFor(request)]);
   const authorizationServers = new Map<string, CachingAuthorizationServerProvider>();
+  // Each selection's issuer cache, keyed by credential context; read by non-interactive upgrades.
+  const issuerCaches = new Map<string, KvStore<string>>();
   const asFor = (selected: LoginHint) => {
     const key = JSON.stringify(selected);
     let provider = authorizationServers.get(key);
@@ -414,12 +418,14 @@ export function createProviders(
         },
       );
       const context: ContextKey = async (request) => await contextFor(request, selected);
+      const issuers = metadata("issuer", browser?.issuer) ?? memoryStore<string>();
+      issuerCaches.set(key, issuers);
       const issuerProvider = new CachingIssuerProvider(
         // Explicit issuer selections must remain reusable when another storage context misses cache.
         selected.webId === undefined && selected.issuer !== undefined
           ? { getIssuer: async () => new URL(selected.issuer!) }
           : webIdProvider,
-        metadata("issuer", browser?.issuer),
+        issuers,
         context,
       );
       provider = new CachingAuthorizationServerProvider(
@@ -430,6 +436,20 @@ export function createProviders(
       authorizationServers.set(key, provider);
     }
     return provider;
+  };
+  /**
+   * Refuses a non-interactive upgrade before any picker could open. Without a selected account,
+   * `ui.getWebId` would run; a WebID selection without an issuer may need `ui.chooseIssuer` unless
+   * this context's issuer is already cached. The engine itself refuses token interaction.
+   */
+  const assertNoPicker = async (request: Request, selected: LoginHint) => {
+    if (selected.webId === undefined && selected.issuer === undefined)
+      throw interactionRequired("pod-auth account selection");
+    if (selected.issuer !== undefined) return;
+    asFor(selected);
+    const issuers = issuerCaches.get(JSON.stringify(selected))!;
+    if ((await issuers.getItem(await contextFor(request, selected))) === null)
+      throw interactionRequired("pod-auth issuer selection");
   };
   const es256 = (as: RefreshSessionRecord["authorizationServer"]) => {
     if (
@@ -517,6 +537,9 @@ export function createProviders(
       const [url, selected] = JSON.parse(args[1]) as [string, LoginHint];
       args[1] = await contextFor(new Request(url), selected);
       const entry = await solidProvider.session.get(...args);
+      // A non-interactive read without a session: the UMA provider reports InteractionRequiredError.
+      // An interactive read always yields a session, so a missing one there stays a refusal.
+      if (entry === undefined && args[4] === "never") return entry;
       if (entry?.identity === undefined)
         throw new Error("Authentication did not establish an identity");
       await hooks.session(
@@ -555,8 +578,9 @@ export function createProviders(
     let binding = lwsContexts.get(key);
     if (binding === undefined) {
       let credentialContext: { oidc: OidcIdTokenSource; selected: LoginHint } | undefined;
-      const getOidc = async (signal: AbortSignal) => {
+      const getOidc = async (signal: AbortSignal, interactive = true) => {
         if (credentialContext === undefined) {
+          if (!interactive) await assertNoPicker(target, selectedHint);
           // Defer the picker until LWS has verified its challenge and authorization server.
           const selected = await selectionFor(target, selectedHint);
           const context = await contextFor(target, selected);
@@ -583,7 +607,7 @@ export function createProviders(
         id: key,
         fence,
         getCredential: async (request: CredentialRequest) => {
-          const { oidc } = await getOidc(request.signal);
+          const { oidc } = await getOidc(request.signal, request.interactive !== false);
           const credential = await oidc.getCredential(request);
           // Validate the identity of this exact credential context before it leaves the source.
           await validate(request.signal);
@@ -602,9 +626,9 @@ export function createProviders(
     fence,
     matches: async (request, challenge) =>
       await (await lwsFor(request)).provider.matches(request, challenge),
-    upgrade: async (request, challenge) => {
+    upgrade: async (request, challenge, upgradeOptions) => {
       const { provider, validate } = await lwsFor(request);
-      const upgraded = await provider.upgrade(request, challenge);
+      const upgraded = await provider.upgrade(request, challenge, upgradeOptions);
       // Cached tokens also use their original credential context, never the latest sessionRequest.
       await validate(request.signal);
       lwsRequests.set(upgraded, provider);
@@ -638,11 +662,13 @@ export function createProviders(
       hooks.challenge(request.url);
       return true;
     },
-    upgrade: async (request, challenge) => {
+    upgrade: async (request, challenge, upgradeOptions) => {
       // UMA performs its trust check before resolving the selected account or requesting credentials.
       const attemptHint = hint;
-      const selected = solid ? await selectionFor(request) : undefined;
-      const upgraded = await provider.upgrade(request, challenge);
+      // Reads caches only: no network, picker or credential use before UMA's trust check.
+      if (upgradeOptions?.interactive === false) await assertNoPicker(request, attemptHint);
+      const selected = solid ? await selectionFor(request, attemptHint) : undefined;
+      const upgraded = await provider.upgrade(request, challenge, upgradeOptions);
       if (solid && hint !== attemptHint)
         throw new Error("Login selection changed during authentication");
       const claims = await solidProvider.identity(request);
@@ -795,6 +821,7 @@ export function createProviders(
     sessionRequest = undefined;
     selections.clear();
     authorizationServers.clear();
+    issuerCaches.clear();
     if (failures.length > 0) throw new AggregateError(failures, "Logout cleanup failed");
   }
   async function loginAttempt(

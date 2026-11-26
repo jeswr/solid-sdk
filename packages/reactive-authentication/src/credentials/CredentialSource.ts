@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type { SessionFence } from "../SessionFence.js";
 
 /** An authentication credential to present to an authorization server as an RFC 8693 subject token. */
@@ -28,6 +29,12 @@ export interface CredentialRequest {
 
   /** Generation captured by the enclosing operation; credential sessions must use the same fence. */
   readonly expectedGeneration?: number;
+
+  /**
+   * `false`: return only a cached or refreshed credential and never involve the user; reject with
+   * {@link InteractionRequiredError} instead. Sources that never interact may ignore it.
+   */
+  readonly interactive?: boolean;
 }
 
 /**

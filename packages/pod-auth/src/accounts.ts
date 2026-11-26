@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { createBrowserCaches, nonReactiveFetch, withLock } from "@jeswr/reactive-authentication";
 import { createPodAuth } from "./index.js";
 import { protectStore, scopedStore } from "./kv.js";
@@ -42,8 +43,11 @@ export interface AccountManager {
   add(hint?: LoginHint, options?: LoginOptions): Promise<Identity>;
   remove(webId: string): Promise<void>;
   restoreAll(): Promise<Identity[]>;
-  fetchFor(webId: string): typeof fetch;
+  /** That account's `fetch`, or with `{ interactive: false }` its `nonInteractiveFetch`. */
+  fetchFor(webId: string, options?: { interactive?: boolean }): typeof fetch;
   fetch: typeof fetch;
+  /** The active account's `nonInteractiveFetch`, resolved at call time; credential-free when none is active. */
+  nonInteractiveFetch: typeof fetch;
   /** The actual core for a live account; null supplies an anonymous React lifecycle adapter. */
   authFor(webId: string | null): PodAuth;
   on<E extends keyof Events>(event: E, handler: (value: Events[E]) => void): () => void;
@@ -198,6 +202,7 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
   };
   const anonymous: PodAuth = {
     fetch: transport,
+    nonInteractiveFetch: transport,
     identity: async () => null,
     restore: async () => null,
     remembered: async () => [],
@@ -210,10 +215,20 @@ export function createAccountManager(options: PodAuthOptions): AccountManager {
     accounts: () => [...entries.values()].map((entry) => snapshot(entry.identity)),
     active: () => (active === null ? null : snapshot(requireEntry(active).identity)),
     authFor: (webId) => (webId === null ? anonymous : requireEntry(webId).auth),
-    fetchFor: (webId) => requireEntry(webId).auth.fetch,
+    fetchFor: (webId, fetchOptions) => {
+      const { auth } = requireEntry(webId);
+      return fetchOptions?.interactive === false ? auth.nonInteractiveFetch : auth.fetch;
+    },
     fetch: (input, init) => {
       assertOpen();
       return (active === null ? transport : requireEntry(active).auth.fetch)(input, init);
+    },
+    nonInteractiveFetch: (input, init) => {
+      assertOpen();
+      return (active === null ? transport : requireEntry(active).auth.nonInteractiveFetch)(
+        input,
+        init,
+      );
     },
     switchTo: (webId) =>
       enqueue(async () => {

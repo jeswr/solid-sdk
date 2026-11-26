@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import { sameIssuer } from "@jeswr/reactive-authentication";
 import { type AgentConfiguration, type AgentPolicy, createAgentProviders } from "./providers.js";
 import type { AuthEvent, AuthEventType, Identity, PodAuth } from "./types.js";
@@ -38,6 +39,8 @@ export function createAgentAuth(policy: AgentPolicy, config: AgentConfiguration)
   });
   return {
     fetch: providers.manager.fetch as typeof fetch,
+    // Agent credentials never involve a user.
+    nonInteractiveFetch: providers.manager.fetch as typeof fetch,
     identity: async () => snapshot(),
     remembered: async () => [],
     retireIfOwnedBy: async () => ({ retired: false, reason: "no-grant" }),

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type { KeyValueStore } from "@key-value-kit/core";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import * as DPoP from "dpop";
@@ -8,6 +9,7 @@ import type { CodeProvider } from "./CodeProvider.js";
 import type { ContextKey } from "./ContextKey.js";
 import type { ChallengeContext } from "./challenge.js";
 import type { Identity } from "./Identity.js";
+import { interactionRequired } from "./nonInteractive.js";
 import {
   accessTokenUsable,
   type DPoPTokenCacheEntry,
@@ -16,7 +18,7 @@ import {
 } from "./OidcSession.js";
 import type { SessionFence } from "./SessionFence.js";
 import { storageContextKey } from "./StorageContext.js";
-import type { TokenProvider } from "./TokenProvider.js";
+import type { TokenProvider, UpgradeOptions } from "./TokenProvider.js";
 
 export type { DPoPTokenCacheEntry } from "./OidcSession.js";
 
@@ -94,7 +96,11 @@ export class DPoPTokenProvider implements TokenProvider {
     );
   }
 
-  async upgrade(request: Request, challenge?: ChallengeContext): Promise<Request> {
+  async upgrade(
+    request: Request,
+    challenge?: ChallengeContext,
+    options?: UpgradeOptions,
+  ): Promise<Request> {
     const generation = await this.#fence.generation();
     const signal = AbortSignal.any([request.signal, this.#fence.signalFor(generation)]);
     signal.throwIfAborted();
@@ -102,14 +108,15 @@ export class DPoPTokenProvider implements TokenProvider {
     const as = await this.#asProvider.getAuthorizationServer(request, challenge);
     signal.throwIfAborted();
     const context = await this.#context(request, challenge);
-    const entry = (await this.#session.get(
+    const entry = await this.#session.get(
       as,
       context,
       signal,
       accessTokenUsable,
-      true,
+      options?.interactive === false ? "never" : true,
       generation,
-    ))!;
+    );
+    if (entry === undefined) throw interactionRequired("solid-oidc");
     const accessToken = entry.tokenResult.access_token;
     this.#remember(accessToken, { issuer: as.issuer, context });
 

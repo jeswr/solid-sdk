@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type { KeyValueStore } from "@key-value-kit/core";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import * as DPoP from "dpop";
@@ -10,6 +11,7 @@ import type { ContextKey } from "./ContextKey.js";
 import { type ChallengeContext, findChallenge } from "./challenge.js";
 import { withDPoPNonceRetry } from "./dpopNonce.js";
 import { FencedCache, type FenceTicket, type Stamped } from "./FencedCache.js";
+import { interactionRequired } from "./nonInteractive.js";
 import {
   type DPoPTokenCacheEntry,
   idTokenUsable,
@@ -19,7 +21,7 @@ import {
 import { ReactiveAuthenticationError } from "./ReactiveAuthenticationError.js";
 import { SessionFence } from "./SessionFence.js";
 import { storageContextKey } from "./StorageContext.js";
-import type { TokenProvider } from "./TokenProvider.js";
+import type { TokenProvider, UpgradeOptions } from "./TokenProvider.js";
 import { assertSecureUrl, oauthOptions, secureFetch } from "./transport.js";
 import { parseHttpUrl } from "./url.js";
 import { sameIssuer } from "./webId.js";
@@ -163,7 +165,11 @@ export class SolidUmaTokenProvider implements TokenProvider {
     return findChallenge(challenge, ["as_uri", "ticket"], "uma") !== undefined;
   }
 
-  async upgrade(request: Request, challenge?: ChallengeContext): Promise<Request> {
+  async upgrade(
+    request: Request,
+    challenge?: ChallengeContext,
+    options?: UpgradeOptions,
+  ): Promise<Request> {
     const params = findChallenge(challenge, ["as_uri", "ticket"], "uma")?.params;
     const nonce = challenge?.response.headers.get("DPoP-Nonce") ?? undefined;
     if (
@@ -233,6 +239,7 @@ export class SolidUmaTokenProvider implements TokenProvider {
           permissionTicket,
           ticket,
           o.session === undefined ? "" : context,
+          options?.interactive !== false,
         ),
         ticket,
       );
@@ -292,19 +299,21 @@ export class SolidUmaTokenProvider implements TokenProvider {
     permissionTicket: string,
     ticket: FenceTicket,
     context: string,
+    interactive: boolean,
   ): Promise<UmaRpt> {
     const uma = await this.#discover(asUri, ticket.signal);
     await this.#rpts.assertCurrent(ticket);
 
     // The ID token identifies the user to any trusted authorization server; RPTs are then per AS and context.
-    const entry = (await this.#session.get(
+    const entry = await this.#session.get(
       op,
       context,
       ticket.signal,
       idTokenUsable,
-      true,
+      interactive || "never",
       ticket.generation,
-    ))!;
+    );
+    if (entry === undefined) throw interactionRequired("solid-uma");
     await this.#session.assertCurrent(entry, ticket.signal);
     return await this.#exchange(uma, entry, permissionTicket, ticket.signal);
   }

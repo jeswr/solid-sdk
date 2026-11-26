@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import type { KeyValueStore } from "@key-value-kit/core";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import type * as oauth from "oauth4webapi";
@@ -9,7 +10,7 @@ import { FencedCache, type FenceTicket, type Stamped } from "../FencedCache.js";
 import { ReactiveAuthenticationError } from "../ReactiveAuthenticationError.js";
 import type { SessionFence } from "../SessionFence.js";
 import { describes, isInRealm, parseLinks, resolveStorageContext } from "../StorageContext.js";
-import type { TokenProvider } from "../TokenProvider.js";
+import type { TokenProvider, UpgradeOptions } from "../TokenProvider.js";
 import { assertSecureUrl, type HttpOptions, secureFetch } from "../transport.js";
 import { parseHttpUrl, withoutFragment } from "../url.js";
 import { LWS_STORAGE_REL } from "./constants.js";
@@ -138,7 +139,11 @@ export class LwsTokenProvider implements TokenProvider {
     );
   }
 
-  async upgrade(request: Request, challenge?: ChallengeContext): Promise<Request> {
+  async upgrade(
+    request: Request,
+    challenge?: ChallengeContext,
+    options?: UpgradeOptions,
+  ): Promise<Request> {
     const ticket = await this.#tokens.ticket(request.signal);
     const { as, realm, renewalWindow } = await this.#verifiedChallenge(
       request,
@@ -151,7 +156,7 @@ export class LwsTokenProvider implements TokenProvider {
       const cached = await this.#tokens.read(key, ticket);
       if (cached !== undefined && usable(cached, renewalWindow)) return cached;
       await this.#tokens.remove(key);
-      const fresh = await this.#exchange(as, realm, ticket);
+      const fresh = await this.#exchange(as, realm, ticket, options?.interactive !== false);
       // Without a declared lifetime, use the token only for this request.
       return fresh.expiresAt === undefined ? fresh : await this.#tokens.write(key, fresh, ticket);
     });
@@ -295,7 +300,12 @@ export class LwsTokenProvider implements TokenProvider {
     );
   }
 
-  async #exchange(as: URL, realm: URL, ticket: FenceTicket): Promise<LwsAccessToken> {
+  async #exchange(
+    as: URL,
+    realm: URL,
+    ticket: FenceTicket,
+    interactive: boolean,
+  ): Promise<LwsAccessToken> {
     const metadata = await this.#discover(as, ticket.signal);
     await this.#tokens.assertCurrent(ticket);
     const credential = await this.#source.getCredential({
@@ -303,6 +313,8 @@ export class LwsTokenProvider implements TokenProvider {
       resource: realm,
       signal: ticket.signal,
       expectedGeneration: ticket.generation,
+      // Sources written for earlier versions keep seeing exactly the fields they always did.
+      ...(interactive ? {} : { interactive: false }),
     });
     await this.#tokens.assertCurrent(ticket);
     const result = await exchangeToken(

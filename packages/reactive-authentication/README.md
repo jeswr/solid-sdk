@@ -88,9 +88,17 @@ More examples: [LWS suites, service worker, client credentials, custom protocols
   admits verified storage roots.
 - **Providers** decide whether they can answer a challenge (`matches(request, challenge)`) and attach
   credentials (`upgrade`). Optional `invalidate` renews rejected credentials; `forget` logs out.
-- **Reactive algorithm.** Bodies are buffered (bounded, abortable) for replay; one retry for DPoP nonces and
-  one renewal after a rejected token; credentialed redirects are followed hop by hop with credentials
-  re-evaluated per URL; an authenticated write answered by a browser-hidden redirect is returned, not repeated.
+- **Reactive algorithm.** Bodies are buffered (bounded, abortable) for replay; a body over `maxReplayBodyBytes`
+  (default 16 MiB) rejects with `ReplayBodyTooLargeError` and a stream is cancelled once past it. One retry for
+  DPoP nonces and one renewal after a rejected token; credentialed redirects are followed hop by hop with
+  credentials re-evaluated per URL; an authenticated write answered by a browser-hidden redirect is returned,
+  not repeated.
+- **Non-interactive requests.** `client.fetch(input, init, { interactive: false })` passes
+  `{ interactive: false }` as `upgrade`'s third argument (interactive upgrades keep the two-argument call).
+  `DPoPTokenProvider`, `SolidUmaTokenProvider` and `OidcIdTokenSource` (via `CredentialRequest.interactive`)
+  then use only cached sessions and refresh grants (`OidcSession.get(..., "never")`, which skips even the
+  `silentAfterRefreshFailure` `prompt=none` grant) and throw `InteractionRequiredError` otherwise; the client
+  answers with the challenged 401. Providers that ignore the option may still interact.
 - **Composable Solid-OIDC.** `IssuerProvider` (picker, `WebIdIssuerProvider`, `HintIssuerProvider`,
   `PatternIssuerProvider`) → `XASProvider` (discovery) → `ClientProvider` (dynamic registration or a Client
   Identifier Document) → `CodeProvider` (popup element, service-worker bridge, or your own) →

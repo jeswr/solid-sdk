@@ -1,5 +1,16 @@
+// AUTHORED-BY Claude Opus 5.5
 import type { ChallengeContext } from "./challenge.js";
 import type { SessionFence } from "./SessionFence.js";
+
+/** Options for one {@link TokenProvider.upgrade}; absent for interactive upgrades. */
+export interface UpgradeOptions {
+  /**
+   * `false`: use only cached credentials and refresh grants. Never start user interaction (authorization
+   * redirects or popups, account or issuer pickers, `prompt=none` code requests); reject with
+   * {@link InteractionRequiredError} instead. Providers that never interact may ignore it.
+   */
+  readonly interactive?: boolean;
+}
 
 /**
  * Upgrades a request that was answered with 401 so that it carries credentials.
@@ -23,7 +34,11 @@ export interface TokenProvider {
    * credentials only for `request.url` (e.g. a fresh DPoP proof per request). The returned request must
    * retain cancellation for the provider's captured generation, including after this method resolves.
    */
-  upgrade(request: Request, challenge?: ChallengeContext): Promise<Request>;
+  upgrade(
+    request: Request,
+    challenge?: ChallengeContext,
+    options?: UpgradeOptions,
+  ): Promise<Request>;
 
   /**
    * Throws if this provider's current resource policy forbids sending `request`. The client calls this

@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 import type * as oauth from "oauth4webapi";
 import type { ClientProvider } from "../ClientProvider.js";
 import type { CodeProvider } from "../CodeProvider.js";
 import type { Identity } from "../Identity.js";
 import { TokenType } from "../lws/constants.js";
+import { interactionRequired } from "../nonInteractive.js";
 import { idTokenUsable, OidcSession, type OidcSessionOptions } from "../OidcSession.js";
 import { ReactiveAuthenticationError } from "../ReactiveAuthenticationError.js";
 import type { SessionFence } from "../SessionFence.js";
@@ -82,14 +84,15 @@ export class OidcIdTokenSource implements CredentialSource {
   async getCredential(request: CredentialRequest): Promise<SubjectCredential> {
     // The ID token identifies the user to any authorization server (aud is chosen by the provider), so one
     // session serves every realm; access tokens are then realm-bound by the exchange.
-    const entry = (await this.#session.get(
+    const entry = await this.#session.get(
       this.#issuer,
       this.#context,
       request.signal,
       idTokenUsable,
-      true,
+      request.interactive === false ? "never" : true,
       request.expectedGeneration,
-    ))!;
+    );
+    if (entry === undefined) throw interactionRequired("lws-oidc");
     const idToken = entry.tokenResult.id_token!;
     const identity = entry.identity;
     // Claims were validated by oauth4webapi when the token response was processed.

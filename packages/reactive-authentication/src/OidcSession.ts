@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import type { KeyValueStore } from "@key-value-kit/core";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import * as oauth from "oauth4webapi";
@@ -241,7 +242,8 @@ export class OidcSession {
   /**
    * Returns a usable session for the authorization server and credential context: cached, refreshed,
    * or (when `interactive`) newly authorized. Returns `undefined` only when not interactive and no
-   * session could be restored.
+   * session could be restored. `false` still allows the single `prompt=none` grant of
+   * `silentAfterRefreshFailure`; `"never"` allows no authorization request at all, only cache and refresh.
    * Pass `expectedGeneration` when the operation began before discovery or context resolution.
    */
   async get(
@@ -249,7 +251,7 @@ export class OidcSession {
     context: string,
     signal: AbortSignal,
     usable: (entry: DPoPTokenCacheEntry, justIssued: boolean) => boolean,
-    interactive = true,
+    interactive: boolean | "never" = true,
     expectedGeneration?: number,
   ): Promise<DPoPTokenCacheEntry | undefined> {
     const fence = this.#fence;
@@ -307,8 +309,13 @@ export class OidcSession {
           }
         }
 
-        if (!interactive) {
-          if (!invalidGrant || this.#options.silentAfterRefreshFailure !== true) return undefined;
+        if (interactive !== true) {
+          if (
+            interactive === "never" ||
+            !invalidGrant ||
+            this.#options.silentAfterRefreshFailure !== true
+          )
+            return undefined;
           return await this.#commit(
             key,
             await this.#authorize(as, combined, true),

@@ -49,7 +49,10 @@ export interface PodAuthOptions {
   clock?: () => number;
   /**
    * Largest request body `auth.fetch` buffers so it can replay a request after a 401 challenge
-   * (default 16 MiB). Raise it for apps that upload large files; larger bodies reject.
+   * (default 16 MiB, `16 * 1024 * 1024`). A larger body rejects with `ReplayBodyTooLargeError`
+   * before anything is sent; a streamed body is cancelled as soon as it passes the limit, so a
+   * stream of unknown length is never buffered whole. `Blob`/`File` bodies replay without
+   * buffering and are not limited. `0` buffers only empty bodies.
    */
   maxReplayBodyBytes?: number;
 }
@@ -124,6 +127,15 @@ export interface LoginOptions {
 /** Suite authentication and credential-free session lifecycle. */
 export interface PodAuth {
   fetch: typeof fetch;
+  /**
+   * `fetch` that never starts user interaction, for background readers such as thumbnail loaders.
+   * Cached credentials, refresh grants and UMA/LWS exchanges from an existing session still run.
+   * Where `fetch` would open `ui.getWebId`, `ui.chooseIssuer` or `ui.getCode` (including a
+   * `prompt=none` request), it resolves with the challenged 401 response instead. Requests outside
+   * the credential boundary behave exactly as with `fetch`. Requires an account selected by
+   * `login()` or `restore()`; agents never interact, so theirs equals `fetch`.
+   */
+  nonInteractiveFetch: typeof fetch;
   /**
    * Interactive login. `options.signal` abandons this attempt: its requests and the authorization popup are
    * cancelled and the promise rejects with the abort reason once the attempt has wound down, leaving stored

@@ -20,7 +20,11 @@ import type {
   PodAuthOptions,
 } from "./types.js";
 
-export { IssuerNotAuthorizedError } from "@jeswr/reactive-authentication";
+export {
+  InteractionRequiredError,
+  IssuerNotAuthorizedError,
+  ReplayBodyTooLargeError,
+} from "@jeswr/reactive-authentication";
 export type {
   AuthEvent,
   AuthEventType,
@@ -229,26 +233,34 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
     }
     return false;
   };
-  const api: PodAuth = {
-    fetch: async (input, init) => {
+  /** `interactive: false` lets providers use cached and refreshed credentials only; see nonInteractiveFetch. */
+  const authFetch =
+    (interactive: boolean): typeof fetch =>
+    async (input, init) => {
       lifetime.signal.throwIfAborted();
       if (expired) throw new Error("Session expired");
       const started = epoch;
       if (await checkExpiry(started)) throw new Error("Session expired");
       if (started !== epoch) throw new Error("Session changed during authentication");
       const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+      const merged = {
+        ...init,
+        signal: AbortSignal.any([lifetime.signal, ...(signal == null ? [] : [signal])]),
+      };
       try {
-        const response = await providers.manager.fetch(input, {
-          ...init,
-          signal: AbortSignal.any([lifetime.signal, ...(signal == null ? [] : [signal])]),
-        });
+        const response = await (interactive
+          ? providers.manager.fetch(input, merged)
+          : providers.manager.client.fetch(input, merged, { interactive: false }));
         if (response.status === 401) await checkExpiry(started);
         return response;
       } catch (error) {
         await checkExpiry(started);
         throw error;
       }
-    },
+    };
+  const api: PodAuth = {
+    fetch: authFetch(true),
+    nonInteractiveFetch: authFetch(false),
     identity: readIdentity,
     remembered: async () => {
       const account = await providers.persistence.active();

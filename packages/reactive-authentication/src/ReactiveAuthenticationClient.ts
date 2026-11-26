@@ -1,9 +1,12 @@
+// AUTHORED-BY Claude Opus 5.5
 import type { Boundary } from "./CredentialBoundary.js";
 import { type ChallengeContext, challengeContext } from "./challenge.js";
+import { InteractionRequiredError } from "./oauth/AccessTokenSource.js";
 import { ReactiveAuthenticationError } from "./ReactiveAuthenticationError.js";
+import { ReplayBodyTooLargeError } from "./ReplayBodyTooLargeError.js";
 import type { SessionFence } from "./SessionFence.js";
 import { SessionSupersededError } from "./SessionSupersededError.js";
-import type { TokenProvider } from "./TokenProvider.js";
+import type { TokenProvider, UpgradeOptions } from "./TokenProvider.js";
 import { type FetchFunction, nonReactiveFetch } from "./transport.js";
 
 export interface ReactiveAuthenticationOptions {
@@ -26,13 +29,25 @@ export interface ReactiveAuthenticationOptions {
   readonly maxRedirects?: number;
 
   /**
-   * Largest request body buffered for replay. Larger bodies reject with {@link ReactiveAuthenticationError}.
+   * Largest request body buffered for replay. Larger bodies reject with {@link ReplayBodyTooLargeError} (a
+   * {@link ReactiveAuthenticationError}) before anything is sent; a stream is cancelled once it passes the limit.
    * Bodies are buffered for URLs the boundary allows and for discovery candidates it may still authorize;
    * excluded URLs (neither) are never buffered. A `Blob` or `File` given as `init.body` is replayed as it is,
    * without buffering, so this limit does not apply to it.
    * @defaultValue 16 MiB
    */
   readonly maxReplayBodyBytes?: number;
+}
+
+/** Options for one {@link ReactiveAuthenticationClient.fetch} call. */
+export interface ReactiveFetchOptions {
+  /**
+   * `false` forbids user interaction for this request: providers receive `{ interactive: false }` and may use
+   * only cached credentials and refresh grants. When a provider would need the user (it throws
+   * {@link InteractionRequiredError}), the challenged 401 response is returned instead.
+   * @defaultValue true
+   */
+  readonly interactive?: boolean;
 }
 
 const redirectStatuses = new Set([301, 302, 303, 307, 308]);
@@ -53,6 +68,8 @@ const bodyHeaders = [
 interface Session {
   readonly generation: number | undefined;
   readonly signal: AbortSignal;
+  /** `false` for a non-interactive fetch. */
+  readonly interactive: boolean;
 }
 
 /**
@@ -96,7 +113,11 @@ export class ReactiveAuthenticationClient {
     return this.#providers;
   }
 
-  async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  async fetch(
+    input: RequestInfo | URL,
+    init?: RequestInit,
+    options?: ReactiveFetchOptions,
+  ): Promise<Response> {
     // Captured before any await: a caller may reuse one init object and swap its body for the next call.
     const supplied = init?.body;
     const request = new Request(input, init);
@@ -113,7 +134,11 @@ export class ReactiveAuthenticationClient {
       supplied instanceof Blob
         ? withContentType([supplied], request)
         : await bufferBody(request, session.signal, this.#maxReplayBodyBytes);
-    return await this.#run(new Attempt(request, body), { generation, signal: session.signal }, 0);
+    return await this.#run(
+      new Attempt(request, body),
+      { generation, signal: session.signal, interactive: options?.interactive !== false },
+      0,
+    );
   }
 
   #session(signal: AbortSignal, generation = 0): { signal: AbortSignal } {
@@ -178,7 +203,20 @@ export class ReactiveAuthenticationClient {
     let renewals = 0;
     while (true) {
       await this.#assertCurrent(session);
-      const upgraded = await provider.upgrade(attempt.request(session.signal), challenge);
+      let upgraded: Request;
+      try {
+        upgraded = await this.#upgrade(
+          provider,
+          attempt.request(session.signal),
+          challenge,
+          session,
+        );
+      } catch (error) {
+        // Without interaction there is nothing better than the challenge itself: answer with that 401.
+        if (!session.interactive && error instanceof InteractionRequiredError)
+          return challenge.response;
+        throw error;
+      }
       await discard(challenge.response);
 
       const result = await this.#send(
@@ -200,6 +238,18 @@ export class ReactiveAuthenticationClient {
       }
       return result;
     }
+  }
+
+  /** Providers written for earlier versions receive exactly the two arguments they always did. */
+  async #upgrade(
+    provider: TokenProvider,
+    request: Request,
+    challenge: ChallengeContext,
+    session: Session,
+  ): Promise<Request> {
+    if (session.interactive) return await provider.upgrade(request, challenge);
+    const options: UpgradeOptions = { interactive: false };
+    return await provider.upgrade(request, challenge, options);
   }
 
   /**
@@ -457,10 +507,8 @@ function withContentType(parts: BlobPart[], request: Request): Blob {
   return new Blob(parts, type === null ? {} : { type });
 }
 
-function bodyTooLarge(maxBytes: number): ReactiveAuthenticationError {
-  return new ReactiveAuthenticationError(
-    `Request body exceeds ${maxBytes} bytes and cannot be buffered for replay; authenticate first with a smaller request or raise maxReplayBodyBytes`,
-  );
+function bodyTooLarge(maxBytes: number): ReplayBodyTooLargeError {
+  return new ReplayBodyTooLargeError(maxBytes);
 }
 
 function withRedirect(request: Request, redirect: RequestRedirect): Request {

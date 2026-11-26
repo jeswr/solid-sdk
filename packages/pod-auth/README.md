@@ -84,10 +84,37 @@ storage's grant and are not reported in `Identity.storages`. A path ending in `/
 descendants; any other path matches exactly. A path that is itself a verified storage or a static
 root stays a storage with its own grant.
 
-`auth.fetch` buffers request bodies so it can replay them after a 401. Bodies larger than
-`maxReplayBodyBytes` (default 16 MiB) reject; the size is checked after the body is read, so it
-limits requests, not peak memory. A `Blob` or `File` passed as the body is replayed as it is,
-without buffering, so pass uploads as a `File` rather than raising the limit.
+`auth.fetch` buffers request bodies so it can replay them after a 401. `maxReplayBodyBytes`
+(default 16 MiB, `16 * 1024 * 1024`) caps that buffer: a larger body rejects with the re-exported
+`ReplayBodyTooLargeError` (a `ReactiveAuthenticationError` with a `maxBytes` field) before the
+request is sent. A streamed body, including one of unknown length, is cancelled as soon as more than
+the limit has been read, so it is never held in memory whole; only bodies that are already in memory
+(strings, `ArrayBuffer`s, `FormData`) are copied up to the limit. A `Blob` or `File` passed as the
+body is replayed as it is, without buffering or limit, so pass uploads as a `File` rather than
+raising the limit. Node agents keep the default.
+
+### Background reads that must never sign in
+
+`auth.nonInteractiveFetch` is `auth.fetch` for code the user did not just ask to run, such as a
+gallery thumbnail loader or a prefetch. It never opens `ui.getWebId`, `ui.chooseIssuer` or
+`ui.getCode` (not even a `prompt=none` request): where `auth.fetch` would start a sign-in, it
+resolves with the server's 401 response instead, the same answer an unauthenticated read gets.
+Cached access tokens, refresh grants and UMA/LWS exchanges from the existing session still run, so
+it works whenever `auth.fetch` would have worked silently. A transient refresh failure rejects as it
+does for `auth.fetch`. It needs an account selected by `login()` or `restore()`; before that, every
+challenged read is a 401. A storage the account has not authorized yet (a new credential context)
+also answers 401, where `auth.fetch` would authorize it. The `challenge` event still fires.
+
+```ts
+const { storage } = await createPodClient({ fetch: auth.nonInteractiveFetch, storage: root });
+const response = await auth.nonInteractiveFetch(thumbnailUrl);
+if (response.status === 401) showPlaceholder(); // signing in stays a user action
+```
+
+The choice is per call site: pass `auth.fetch` or `auth.nonInteractiveFetch`, both unbound and
+`typeof fetch`, so either composes with the SDK packages. Agent cores (`./node`) never interact;
+their `nonInteractiveFetch` is their `fetch`. Breaking change for implementers: `PodAuth` now
+requires `nonInteractiveFetch`; test fakes must add it.
 
 Credential roots come exclusively from `boundary.roots` (including explicit application/user grants)
 or the authenticated WebID profile's `pim:storage` statements about that exact WebID. Automatic roots
@@ -314,6 +341,8 @@ await manager.add({ webId: bobWebId });
 await manager.switchTo(aliceWebId); // local storage only; no navigation or network
 await manager.fetch(resource); // selects the active account when called
 await manager.fetchFor(bobWebId)(bobResource); // stays bound to Bob
+await manager.nonInteractiveFetch(thumbnail); // active account, never signs in
+await manager.fetchFor(bobWebId, { interactive: false })(bobThumbnail); // Bob, never signs in
 const stop = manager.on('expired', webId => showExpired(webId));
 await manager.remove(bobWebId);
 stop();

@@ -44,6 +44,7 @@ export { contextKey, withLock } from "./locks.js";
 export * from "./lws/constants.js";
 export * from "./lws/LwsTokenProvider.js";
 export * from "./lws/tokenExchange.js";
+export { interactionRequired } from "./nonInteractive.js";
 export * from "./OidcSession.js";
 // Standard OAuth 2.0 / OpenID Connect
 export * from "./oauth/AccessTokenSource.js";
@@ -57,6 +58,7 @@ export * from "./ReactiveAuthenticationClient.js";
 export * from "./ReactiveAuthenticationError.js";
 export * from "./ReactiveFetchManager.js";
 export * from "./ReactiveFetchWorkerManager.js";
+export * from "./ReplayBodyTooLargeError.js";
 export * from "./ServerOidcClient.js";
 export * from "./SessionFence.js";
 export * from "./SessionSupersededError.js";

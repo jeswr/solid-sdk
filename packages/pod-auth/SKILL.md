@@ -121,9 +121,17 @@ first; storage failures are harmless. Providers use monograms by default; host-s
   origin, for server APIs outside the pod folder; they share that storage's grant and stay out of
   `Identity.storages`. Use it only for endpoints of the server that hosts the storage.
 - `auth.fetch` buffers bodies for replay after a 401; bodies over `maxReplayBodyBytes` (default
-  16 MiB) reject after being read. A `Blob`/`File` body is replayed as it is and never buffered,
-  so upload files as a `File` instead of raising the limit. Node agents
+  16 MiB) reject with `ReplayBodyTooLargeError` (`maxBytes`) before sending. Streams are cancelled
+  once past the limit, never buffered whole. A `Blob`/`File` body is replayed as it is and never
+  buffered, so upload files as a `File` instead of raising the limit. Node agents
   (`forClientCredentials`, `forCid`) keep the default.
+- Give background readers (thumbnails, prefetch, sync) `auth.nonInteractiveFetch` (manager:
+  `nonInteractiveFetch`, `fetchFor(webId, { interactive: false })`). It never calls `ui.getWebId`,
+  `ui.chooseIssuer` or `ui.getCode`, including `prompt=none`; it returns the challenged 401 instead.
+  Cached tokens, refresh grants and UMA/LWS exchanges still run. The engine carries the choice as
+  `TokenProvider.upgrade(request, challenge, { interactive: false })` and `OidcSession.get(...,
+  "never")`; pod-auth refuses pickers before upgrading when no account or (WebID hints) no cached
+  issuer exists. Never emulate it with a global "authorizing" flag in `ui.getCode`.
   Do not trust an origin merely because it hosts the issuer/WebID or returned a 401. Excluded or
   public resources must not prompt; unverified 401s remain 401s.
 - Automatic roots load on login/restore from `pim:storage` assertions naming the exact authenticated

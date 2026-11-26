@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import {
   type CredentialSource,
   type LwsAccessToken,
@@ -48,10 +49,14 @@ export function createLwsProvider(
   return {
     fence,
     matches: async (request, challenge) => await shared.matches(request, challenge),
-    upgrade: async (request, challenge) => {
+    upgrade: async (request, challenge, upgradeOptions) => {
       const signal = AbortSignal.any([request.signal, fence.signal]);
       const provider = providerFor(signal);
-      const upgraded = await provider.upgrade(new Request(request, { signal }), challenge);
+      const upgraded = await provider.upgrade(
+        new Request(request, { signal }),
+        challenge,
+        upgradeOptions,
+      );
       signal.throwIfAborted();
       requests.set(upgraded, provider);
       return upgraded;
