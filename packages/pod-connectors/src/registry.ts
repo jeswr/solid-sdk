@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The integrations registry — every app in docs/integrations-catalog.md,
  * each with its honest status:
@@ -267,6 +268,28 @@ export const TIER_C: readonly CatalogEntry[] = [
     ["documents", "media", "calendar", "contacts", "mail", "mobility", "health"],
     "Mail with sender-asserted purchases and reservations from email markup and sender authentication labels, calendar, contacts, Drive files, activity history, location visits and Fit daily metrics from supported Takeout exports; unsupported products are reported.",
     "Takeout archive",
+  ),
+  C(
+    "letterboxd",
+    "Letterboxd",
+    ["media"],
+    "Your film diary, ratings, reviews and watchlist into Media.",
+    "Data export (ZIP/CSV)",
+  ),
+  C("pocket", "Pocket", ["documents"], "Your saved links into Documents.", "Export (CSV/HTML)"),
+  C(
+    "storygraph",
+    "The StoryGraph",
+    ["documents"],
+    "Your reading log, ratings and reviews into Documents (StoryGraph or Open Library).",
+    "Library export CSV",
+  ),
+  C(
+    "telegram",
+    "Telegram",
+    ["social"],
+    "Chat history into Social & interests.",
+    "Chat export (JSON)",
   ),
 ];
 

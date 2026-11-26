@@ -765,3 +765,13 @@ ACLs beside the document, never containers or container `.acl`s. Owner-JSON stor
 once per instance and on create, poll with If-None-Match, and `peek` is read-only.
 The token vault is injected via TokenSource, with ReauthoriseError defined in core/types.ts.
 Tests must cover fake-clock scheduling, source/Pod shutdown and conditional merge races.
+The Letterboxd, Pocket, StoryGraph and Telegram file adapters (see the README section) take
+every field bound from `core/export-fields.ts` and Goodreads/StoryGraph book identity from
+`core/books.ts`; do not fork either. Letterboxd reuses the Takeout ZIP reader with an entry
+allowlist and its own entry/inflation caps; keep it from inflating unselected entries.
+Pocket writes the `@jeswr/solid-bookmark` wire format (`http://schema.org/url`), never
+`PodThing.sourceUrl`, so provenance stays on the export. Telegram reads JSON keys as own
+properties and records attachment names only; never open or resolve an export path. Keep
+one document per independently exported unit (Letterboxd `media/letterboxd/<kind>.ttl`,
+Telegram `social/telegram/<chat key>.ttl`, StoryGraph and Open Library one each): a
+partial export must replace only what it covers, never earlier imports.

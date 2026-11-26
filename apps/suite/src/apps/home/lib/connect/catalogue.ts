@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { type createRegistry, fileAdapterById } from "@jeswr/pod-connectors";
 import { NS } from "@jeswr/suite-vocab";
 import { classificationForSourceClass } from "../model/classify";
@@ -53,6 +54,10 @@ const classes: Readonly<Record<string, readonly string[]>> = {
   steam: [...schema("VideoGame"), `${NS.FOAF}OnlineAccount`],
   chatgpt: schema("TextDigitalDocument"),
   "bank-statements": schema("Invoice"),
+  letterboxd: schema("WatchAction", "Movie"),
+  pocket: [`${NS.BOOKMARK}Bookmark`],
+  storygraph: schema("Book"),
+  telegram: schema("Message"),
   "google-takeout": [
     ...schema(
       "TextDigitalDocument",

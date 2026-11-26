@@ -22,11 +22,11 @@ describe("integrations registry", () => {
     });
     for (const entry of allCatalogEntries()) expect(entry.twoWay).toBeUndefined();
   });
-  it("exposes exactly 36 catalog entries with unique, URL-safe ids", () => {
+  it("exposes exactly 40 catalog entries with unique, URL-safe ids", () => {
     const entries = allCatalogEntries();
-    expect(entries).toHaveLength(36);
+    expect(entries).toHaveLength(40);
     const ids = entries.map((e) => e.id);
-    expect(new Set(ids).size).toBe(36);
+    expect(new Set(ids).size).toBe(40);
     for (const id of ids) expect(id).toMatch(/^[a-z0-9-]+$/);
     expect(ids).toEqual(expect.arrayContaining(["activity-files", "vesync", "whoop"]));
   });
@@ -116,7 +116,7 @@ describe("integrations registry", () => {
   });
 
   it("ships a working file-import adapter for every Tier-C catalog entry", () => {
-    // All 11 Tier-C entries plus Spotify, Garmin and WHOOP hybrids.
+    // All 15 Tier-C entries plus Spotify, Garmin and WHOOP hybrids.
     expect(FILE_ADAPTERS).toHaveLength(TIER_C.length + 3);
     for (const entry of TIER_C) {
       const adapter = fileAdapterById(entry.id);
@@ -163,11 +163,23 @@ describe("integrations registry", () => {
       steam: "https://help.steampowered.com/en/accountdata",
       chatgpt: "https://chatgpt.com",
       garmin: "https://www.garmin.com/account/datamanagement/",
+      letterboxd: "https://letterboxd.com/settings/data/",
       spotify: "https://www.spotify.com/account/privacy/",
     };
     // In-app or institution-specific exports: no URL to send the user to —
     // the field must be ABSENT (the UI renders no link).
-    const NoExportUrl = ["activity-files", "apple-health", "whatsapp", "bank-statements", "whoop"];
+    // Pocket has closed (users import an earlier download); StoryGraph also takes Open
+    // Library logs, so neither has one export page; Telegram exports from its desktop app.
+    const NoExportUrl = [
+      "activity-files",
+      "apple-health",
+      "whatsapp",
+      "bank-statements",
+      "whoop",
+      "pocket",
+      "storygraph",
+      "telegram",
+    ];
 
     for (const a of FILE_ADAPTERS) {
       const expected = ExportUrls[a.metadata.id];
@@ -178,6 +190,27 @@ describe("integrations registry", () => {
         expect(NoExportUrl).toContain(a.metadata.id);
         expect(a.exportUrl, `${a.metadata.id} must not carry an exportUrl`).toBeUndefined();
       }
+    }
+  });
+
+  // AUTHORED-BY Claude Opus 5.5
+  it("registers the Letterboxd, Pocket, StoryGraph and Telegram export adapters", () => {
+    const expected: Record<string, { accept: string[]; categories: string[] }> = {
+      letterboxd: { accept: [".zip", ".csv"], categories: ["media"] },
+      pocket: { accept: [".csv", ".html"], categories: ["documents"] },
+      storygraph: { accept: [".csv"], categories: ["documents"] },
+      telegram: { accept: [".json"], categories: ["social"] },
+    };
+    for (const [id, { accept, categories }] of Object.entries(expected)) {
+      const entry = TIER_C.find((candidate) => candidate.id === id);
+      expect(entry?.authKind, id).toBe("export-file");
+      expect(entry && statusOf(entry)).toBe("export-file");
+      const adapter = fileAdapterById(id);
+      expect(adapter?.metadata.name).toBe(entry?.name);
+      expect(adapter?.metadata.categories).toEqual(categories);
+      for (const extension of accept) expect(adapter?.accept, id).toContain(extension);
+      // Letterboxd archives use the bounded ZIP reader (stat size + ranged streams in the CLI).
+      expect(adapter?.streaming).toBe(id === "letterboxd" ? true : undefined);
     }
   });
 
@@ -218,7 +251,7 @@ describe("injected public configuration", () => {
     expect(first.statusOf(TIER_C[0]!)).toBe("export-file");
     expect(first.statusOf({ ...ADAPTERS[0]!.metadata, id: "unknown" })).toBe("demo");
     expect(first.adapterById("unknown")).toBeUndefined();
-    expect(first.allCatalogEntries()).toHaveLength(36);
+    expect(first.allCatalogEntries()).toHaveLength(40);
   });
 });
 
