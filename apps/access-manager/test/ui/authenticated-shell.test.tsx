@@ -27,6 +27,7 @@
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
+import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ADA, createDemoSession } from "../../src/demo/fixtures.js";
 import type { SolidFetch } from "../../src/lib/http.js";
@@ -83,7 +84,28 @@ function onWindowError(event: ErrorEvent): void {
   event.preventDefault();
 }
 
+/**
+ * The root the entry mounted. RTL's auto-cleanup only unmounts trees made by
+ * its own render(), so this root must be unmounted here. Left mounted, the
+ * Shell's data layer keeps walking the fixture pod after the test returns, and
+ * its state updates schedule React work that can run after Vitest has torn
+ * down jsdom ("ReferenceError: window is not defined").
+ */
+let mountedRoot: Root | null = null;
+
+async function unmountEntry(): Promise<void> {
+  const root = mountedRoot;
+  mountedRoot = null;
+  if (root) {
+    await act(async () => {
+      root.unmount();
+    });
+  }
+}
+
 async function loadEntryAndLogIn(): Promise<void> {
+  // A reload discards the previous page, so unmount its tree first.
+  await unmountEntry();
   vi.resetModules();
   document.body.innerHTML = '<div id="root"></div>';
   window.history.replaceState({}, "", "/");
@@ -92,7 +114,8 @@ async function loadEntryAndLogIn(): Promise<void> {
   await act(async () => {
     const { renderLegacyApp } = await import("../../src/legacy-entry.jsx");
     const { createRoot } = await import("react-dom/client");
-    renderLegacyApp(createRoot(document.getElementById("root") as HTMLElement));
+    mountedRoot = createRoot(document.getElementById("root") as HTMLElement);
+    renderLegacyApp(mountedRoot);
   });
   const login = await screen.findByTestId("stub-login", undefined, FIND);
   await act(async () => {
@@ -109,7 +132,8 @@ describe("legacy-entry.tsx — the authenticated Shell mounts (theme provider pr
     seam.fetch = createDemoSession().session.fetch;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await unmountEntry();
     window.removeEventListener("error", onWindowError);
   });
 
