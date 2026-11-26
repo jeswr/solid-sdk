@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { withCharts } from "../src/apps/sheets/lib/charts/spec";
+import { cells, LOCAL_ORIGIN, sheetStates } from "../src/apps/sheets/lib/collaboration/model";
 import type {
   MountEngine,
   SheetEngine,
@@ -97,9 +98,51 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
+it("opens online with a visible durability note when IndexedDB is denied and still deletes", async () => {
+  const { service, book } = await setup();
+  vi.spyOn(indexedDB, "open").mockImplementation(() => {
+    throw new DOMException("Storage denied", "SecurityError");
+  });
+  const editor = await mount(h(SheetEditor, { container: book.container }));
+  try {
+    await act(async () => {
+      await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
+    });
+    expect(editor.host.textContent).toContain("Offline edits won't be kept on this device.");
+    expect(editor.host.textContent).not.toContain("Couldn't load the spreadsheet engine");
+    const runtime = mocks.mount.mock.calls[0]?.[1].collaboration;
+    if (!runtime) throw new Error("Missing online collaboration");
+    expect(runtime.localMirrorUnavailable).toBe(true);
+    const state = sheetStates(runtime.doc).get("data");
+    if (!state) throw new Error("Missing collaborative sheet");
+    const key = [...cells(state).keys()][0] as string;
+    runtime.doc.transact(
+      () => cells(state).set(key, { v: "Online edit without a mirror" }),
+      LOCAL_ORIGIN,
+    );
+    await runtime.flush();
+    const viewer = await service.collaborate?.(book.container, book.snapshot, true);
+    if (!viewer) throw new Error("Missing online viewer");
+    try {
+      expect(JSON.stringify(sheetStates(viewer.doc).toJSON())).toContain(
+        "Online edit without a mirror",
+      );
+    } finally {
+      await viewer.destroy();
+    }
+    await expect(service.remove(book.container)).resolves.toBeUndefined();
+    await expect(service.open(book.container)).rejects.toThrow("doesn't exist");
+  } finally {
+    await editor.unmount();
+  }
+});
+
 it("loads the remote snapshot into a mounted engine and returns conflict focus to File", async () => {
   const { book, remote, entry } = await conflict();
   const editor = await mount(h(SheetEditor, { container: book.container }));
+  await act(async () => {
+    await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
+  });
   const engine = await mocks.mount.mock.results[0]?.value;
   expect(mocks.mount.mock.calls[0]?.[1].commentsLoading).toBe(true);
   expect(document.activeElement?.textContent).toBe("Load their version");
@@ -119,6 +162,9 @@ it("acknowledges saved workbook revisions for both renames and engine edits", as
     setWorkbookRevision: vi.fn(),
   }));
   const editor = await mount(h(SheetEditor, { container: book.container }));
+  await act(async () => {
+    await vi.waitFor(() => expect(mocks.mount).toHaveBeenCalled());
+  });
   const engine = await mocks.mount.mock.results[0]?.value;
   expect(mocks.mount.mock.calls[0]?.[1].workbookRevision).toBe(book.version.snapshotEtag);
   const entry = pendingSaves.get(book.container);
@@ -270,7 +316,8 @@ it.each([
   401, 403, 404, 410,
 ])("renders the appropriate open error and pending-edit actions for %s", async (status) => {
   const { service, book, setHook } = await setup(false);
-  const local = snapshot("Offline\nedit");
+  if (typeof book.snapshot.id !== "string") throw new Error("Missing workbook instance ID");
+  const local = { ...snapshot("Offline\nedit"), id: book.snapshot.id };
   const entry = pendingSaves.acquire(service, book);
   entry.setOnline(false);
   entry.schedule(() => local);
@@ -290,7 +337,9 @@ it.each([
     expect(pendingSaves.get(book.container)).toBe(entry);
     setHook(() => undefined);
     await click(button(editor.host, "Retry"));
-    expect(mocks.mount.mock.calls.at(-1)?.[1].snapshot).toEqual(local);
+    await act(async () => {
+      await vi.waitFor(() => expect(mocks.mount.mock.calls.at(-1)?.[1].snapshot).toEqual(local));
+    });
   } else {
     expect(editor.host.querySelector("button")).toBeNull();
     expect(pendingSaves.get(book.container)).toBeUndefined();
@@ -323,7 +372,7 @@ it.each([
   if (!remove) throw new Error("Missing delete menu item");
   await click(remove);
   await click(button(document, "Delete"));
-  expect(pendingSaves.get(book.container)).toBeUndefined();
+  await vi.waitFor(() => expect(pendingSaves.get(book.container)).toBeUndefined());
   await expect(service.open(book.container)).rejects.toMatchObject({
     name: "WorkbookNotFoundError",
   });
