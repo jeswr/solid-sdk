@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2
 import { describe, expect, it, vi } from "vitest";
 import { IntegrationAuthError } from "./errors.js";
 import {
@@ -5,6 +6,7 @@ import {
   exchangeCodeForToken,
   generatePkcePair,
   generateState,
+  grantedScope,
   parseCallbackUrl,
 } from "./oauth.js";
 import type { OAuthAppConfig } from "./types.js";
@@ -84,6 +86,14 @@ describe("parseCallbackUrl", () => {
   });
 });
 
+describe("grantedScope", () => {
+  it("accepts at most 4096 characters", () => {
+    const maxScope = "x".repeat(4096);
+    expect(grantedScope(maxScope)).toBe(maxScope);
+    expect(grantedScope(`${maxScope}x`)).toBeUndefined();
+  });
+});
+
 describe("exchangeCodeForToken", () => {
   const params = {
     code: "abc",
@@ -101,10 +111,13 @@ describe("exchangeCodeForToken", () => {
       expect(
         (await exchangeCodeForToken("spotify", CFG, params, answer(scope))).scope,
       ).toBeUndefined();
-    // An oversized scope is a malformed token answer, not a token with its scope dropped.
-    await expect(
-      exchangeCodeForToken("spotify", CFG, params, answer("x".repeat(8193))),
-    ).rejects.toThrow();
+  });
+
+  it.each([4097, 8193])("rejects a token response with a %i-character scope", async (length) => {
+    const answer = async () => Response.json({ access_token: "tok", scope: "x".repeat(length) });
+    await expect(exchangeCodeForToken("spotify", CFG, params, answer)).rejects.toThrow(
+      IntegrationAuthError,
+    );
   });
 
   it("posts a form-encoded PKCE exchange and parses the token set", async () => {

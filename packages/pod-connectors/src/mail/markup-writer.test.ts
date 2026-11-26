@@ -1,10 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6.2
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { EMAIL_MARKUP_FIXTURES, jsonLdFixture } from "../../test-support/markup-fixtures.js";
+import { RunBudgetExceededError } from "../core/budget.js";
+import { IntegrationAuthError, PrivateDestinationError } from "../core/errors.js";
 import { runImport } from "../core/import-runner.js";
-import { createFetchPodWriter } from "../core/pod-writer.js";
+import { createFetchPodWriter, type FetchPodWriterOptions } from "../core/pod-writer.js";
 import { Provenance } from "../core/provenance.js";
 import {
   createMemoryPod,
@@ -28,7 +31,9 @@ const account = "example@example.test";
 const ROOT = `${TEST_POD_ROOT}integrations/markup/`;
 const message = (id: string) => `${ROOT}${messageSlug(account, id)}#it`;
 const date = new Date("2026-01-01T09:00:00Z");
-function setup() {
+function setup(
+  verifyPrivateDestination: FetchPodWriterOptions["verifyPrivateDestination"] = ownerOnlyFixtureChecks.verifyPrivateDestination,
+) {
   const pod = createMemoryPod();
   const podWriter = createFetchPodWriter({
     adapterId: "markup",
@@ -37,6 +42,7 @@ function setup() {
     podRoot: TEST_POD_ROOT,
     fetch: pod.fetch,
     ...ownerOnlyFixtureChecks,
+    verifyPrivateDestination,
   });
   async function run(callback: (ctx: ImportContext) => Promise<void>, signal?: AbortSignal) {
     return runImport({
@@ -285,6 +291,49 @@ describe("MailMarkupWriter persistence", () => {
     };
     await expect(createMailMarkupWriter(ctx, account).add(source())).rejects.toThrow();
     expect(ctx.write).not.toHaveBeenCalled();
+  });
+  it("fails the run immediately when verification refuses the markup inventory write", async () => {
+    const verify = vi.fn().mockResolvedValueOnce(true).mockResolvedValue(false);
+    const { pod, run } = setup(verify);
+    const continued = vi.fn();
+    await expect(
+      run(async (ctx) => {
+        await seed(ctx, message("one"));
+        await createMailMarkupWriter(ctx, account).add(source());
+        continued();
+      }),
+    ).rejects.toBeInstanceOf(PrivateDestinationError);
+    const messageUrl = message("one").slice(0, -"#it".length);
+    expect(verify.mock.calls).toEqual([[messageUrl], [messageUrl]]);
+    expect(continued).not.toHaveBeenCalled();
+    expect(
+      new MailMarkupResource(message("one"), pod.dataset(messageUrl), DataFactory).markupSlugs.size,
+    ).toBe(0);
+    expect(markupUrls(pod)).toHaveLength(0);
+  });
+  it.each([
+    ["a run budget error", new RunBudgetExceededError("markup", "items", 1)],
+    ["an authentication error", new IntegrationAuthError("markup", "reauthorise")],
+    ["an AbortError", Object.assign(new Error(), { name: "AbortError" })],
+    ["a cancellation DOMException", new DOMException("", "TimeoutError")],
+  ])("propagates %s from an item write", async (_label, error) => {
+    const { run } = setup();
+    await expect(
+      run(async (ctx) => {
+        await seed(ctx, message("one"));
+        const writer = createMailMarkupWriter(
+          {
+            ...ctx,
+            async write(doc) {
+              if (doc.slug.includes("/trips/")) throw error;
+              return ctx.write(doc);
+            },
+          },
+          account,
+        );
+        await writer.add(source());
+      }),
+    ).rejects.toBe(error);
   });
   it("preserves conditional-write conflicts", async () => {
     const { pod, podWriter, run } = setup();
