@@ -99,11 +99,20 @@ raising the limit. Node agents keep the default.
 gallery thumbnail loader or a prefetch. It never opens `ui.getWebId`, `ui.chooseIssuer` or
 `ui.getCode` (not even a `prompt=none` request): where `auth.fetch` would start a sign-in, it
 resolves with the server's 401 response instead, the same answer an unauthenticated read gets.
-Cached access tokens, refresh grants and UMA/LWS exchanges from the existing session still run, so
-it works whenever `auth.fetch` would have worked silently. A transient refresh failure rejects as it
-does for `auth.fetch`. It needs an account selected by `login()` or `restore()`; before that, every
-challenged read is a 401. A storage the account has not authorized yet (a new credential context)
-also answers 401, where `auth.fetch` would authorize it. The `challenge` event still fires.
+Cached access tokens, refresh grants and UMA/LWS exchanges from the existing session still run. A
+transient refresh failure rejects as it does for `auth.fetch`. It needs an account selected by
+`login()` or `restore()`; before that, every challenged read is a 401. A storage the account has not
+authorized yet (a new credential context) also answers 401, where `auth.fetch` would authorize it.
+The `challenge` event still fires. A concurrent `login()` does not change the account a running
+non-interactive upgrade uses, so the upgrade never joins that login's picker.
+
+It fails safe, so some reads answer 401 where `auth.fetch` would have succeeded without asking the
+user. After `login({ webId })` (not `restore()`, which remembers the issuer) the issuer is known only
+from this core's per-context issuer cache. When that cache has no entry for the request's credential
+context, it answers 401 even if the WebID lists a single issuer. This happens for another storage
+root, without `storage.caches` (a fresh in-memory cache), or when the cached authorization server
+metadata meant the issuer was never looked up. Treat a 401 as "not available without the user", not
+as "not authorized".
 
 ```ts
 const { storage } = await createPodClient({ fetch: auth.nonInteractiveFetch, storage: root });
