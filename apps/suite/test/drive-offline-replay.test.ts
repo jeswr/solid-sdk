@@ -461,3 +461,79 @@ it("keeps the conflict suffix when a long name has to be shortened", async () =>
   expect(await (await f.pod.fetch(copy)).text()).toBe("mine");
   expect(await (await f.pod.fetch(long)).text()).toBe("theirs");
 });
+
+it("treats a save whose earlier attempt landed unanswered as done, not as a conflict", async () => {
+  const f = await wacPod();
+  const { version } = await opened(f);
+  const delivery = textDelivery(
+    FILE,
+    version.etag,
+    textGuard(version.discovery as never, FILE).assertions,
+  );
+  const delegate = driveReplayDelegate()(session(f));
+  let lose = true;
+  f.after(async (url, method, response) => {
+    if (lose && url === FILE && method === "PUT" && response.ok) {
+      lose = false;
+      throw new TypeError("Failed to fetch");
+    }
+    return response;
+  });
+  await expect(delegate(delivery, ctx())).rejects.toMatchObject({ code: "network" });
+  expect(await (await f.pod.fetch(FILE)).text()).toBe("edited offline");
+  // The retry still sends the old If-Match, but the pod already holds these bytes.
+  expect(await delegate(delivery, ctx())).toEqual({ url: FILE, etag: null, created: false });
+  // Someone else's change is still a conflict.
+  await f.pod.fetch(FILE, {
+    method: "PUT",
+    body: "theirs",
+    headers: { "content-type": "text/plain" },
+  });
+  await expect(delegate(delivery, ctx())).rejects.toMatchObject({ code: "precondition-failed" });
+  expect(await (await f.pod.fetch(FILE)).text()).toBe("theirs");
+});
+
+it("does not make a second kept copy when the first one landed unanswered", async () => {
+  const f = await wacPod();
+  const { version } = await opened(f);
+  const assertions = textGuard(version.discovery as never, FILE).assertions;
+  const delegate = driveReplayDelegate()(session(f));
+  const keep = (stamp: number, text = "mine"): GuardedDelivery => ({
+    op: "create",
+    url: PUBLIC,
+    container: PUBLIC,
+    contentType: "text/plain",
+    body: encode(text),
+    createOptions: { name: `placeholder-conflict-${stamp}`, contentType: "text/plain" },
+    assertions: assertions ?? null,
+    purpose: "resolve-both",
+  });
+  const first = `${PUBLIC}placeholder-conflict-1000`;
+  let lose = true;
+  f.after(async (url, method, response) => {
+    // The payload PUT (after Drive's empty placeholder) lands, its answer is lost.
+    if (
+      lose &&
+      url === first &&
+      method === "PUT" &&
+      response.ok &&
+      (await f.pod.fetch(first).then((r) => r.text())) === "mine"
+    ) {
+      lose = false;
+      throw new TypeError("Failed to fetch");
+    }
+    return response;
+  });
+  await expect(delegate(keep(1000), ctx())).rejects.toMatchObject({ code: "network" });
+  expect(await (await f.pod.fetch(first)).text()).toBe("mine");
+  // The outbox names the retry anew; Drive finds the copy it already made.
+  expect(await delegate(keep(2000), ctx())).toEqual({ url: first, etag: null, created: false });
+  expect((await f.pod.fetch(`${PUBLIC}placeholder-conflict-2000`, { method: "HEAD" })).status).toBe(
+    404,
+  );
+  // Different text is a different copy.
+  expect(await delegate(keep(3000, "other"), ctx())).toMatchObject({
+    url: `${PUBLIC}placeholder-conflict-3000`,
+    created: true,
+  });
+});

@@ -76,6 +76,46 @@ function assertions(delivery: GuardedDelivery): {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
+/** How many earlier kept copies of one file a "keep both" retry reads before making a new one. */
+const MAX_KEPT_COPIES = 8;
+
+/** Whether `url` now holds exactly `bytes`; a larger body is read only up to that size. */
+async function holds(client: DriveClient, url: string, bytes: Uint8Array | null): Promise<boolean> {
+  const expected = bytes ?? new Uint8Array();
+  const current = await client.readLimited(url, expected.byteLength);
+  if (!current || current.size !== expected.byteLength) return false;
+  const actual = new Uint8Array(await current.arrayBuffer());
+  return actual.every((byte, index) => byte === expected[index]);
+}
+
+/**
+ * An earlier "keep both" copy of `source` with exactly these bytes. The outbox names each
+ * attempt anew, so a copy whose create landed but whose answer was lost would otherwise be
+ * made again on retry.
+ */
+async function keptCopy(
+  client: DriveClient,
+  container: string,
+  source: string,
+  bytes: Uint8Array | null,
+): Promise<string | undefined> {
+  const original = nameOf(source);
+  const size = bytes?.byteLength ?? 0;
+  const candidates = (await client.list(container)).filter((item) => {
+    if (item.kind !== "file" || (item.size !== undefined && item.size !== size)) return false;
+    return [...item.name.matchAll(/-conflict-(\d{1,16})/g)].some(([suffix]) => {
+      try {
+        return suffixedName(original, suffix) === item.name;
+      } catch {
+        return false;
+      }
+    });
+  });
+  for (const item of candidates.slice(0, MAX_KEPT_COPIES))
+    if (await holds(client, item.url, bytes)) return item.url;
+  return undefined;
+}
+
 /**
  * The suffix of the outbox's "keep both" name for `source` (`<stem>-conflict-<ms><ext>`), or
  * none when `name` is not one. Drive re-applies it to the file's own name, so a long name is
@@ -168,6 +208,8 @@ export function driveReplayDelegate(
         // "Make a copy" does (preserve-source). A plain upload would inherit the folder's
         // access, which can be wider than a file with its own ACL.
         const verifyHeaders = client.discoveryVerifier(source, discovery);
+        const kept = await keptCopy(client, container, source, delivery.body);
+        if (kept) return { url: kept, etag: null, created: false };
         const { etag } = await client.stat(source);
         if (!etag) throw new DriveError("missing-validator", 409, source);
         await client.write(
@@ -181,16 +223,29 @@ export function driveReplayDelegate(
       const { discovery } = assertions(delivery);
       if (!isEndpointCapture(discovery) || !delivery.ifMatch)
         refuse(delivery, "This queued save has no version to check against.");
-      const written = await client.write(
-        delivery.url,
-        body(delivery, contentType),
-        {
-          contentType,
-          ifMatch: delivery.ifMatch,
-          verifyHeaders: client.discoveryVerifier(delivery.url, discovery),
-        },
-        { kind: "protect-ancestors" },
-      );
+      let written: { etag?: string };
+      try {
+        written = await client.write(
+          delivery.url,
+          body(delivery, contentType),
+          {
+            contentType,
+            ifMatch: delivery.ifMatch,
+            verifyHeaders: client.discoveryVerifier(delivery.url, discovery),
+          },
+          { kind: "protect-ancestors" },
+        );
+      } catch (error) {
+        // An earlier attempt whose answer was lost may have landed: the stored If-Match is
+        // then stale, but the file already holds these bytes. That is done, not a conflict.
+        if (
+          error instanceof DriveError &&
+          error.status === 412 &&
+          (await holds(client, delivery.url, delivery.body))
+        )
+          return { url: delivery.url, etag: null, created: false };
+        throw error;
+      }
       // A receipt-less write certifies no version; the next save must read again.
       return { url: delivery.url, etag: written.etag ?? null, created: false };
     } catch (error) {
