@@ -66,6 +66,8 @@ describe("real Android share intents and DOM observations", () => {
     const uri = "content://media/external/file/123";
     const args = sendIntent(undefined, uri);
     expect(args).toContain("--grant-read-uri-permission");
+    // The read grant covers the intent's data URI, not its extras.
+    expect(args.slice(args.indexOf("-d"), args.indexOf("-d") + 2)).toEqual(["-d", uri]);
     expect(args.slice(args.indexOf("--eu"), args.indexOf("--eu") + 3)).toEqual([
       "--eu",
       "android.intent.extra.STREAM",

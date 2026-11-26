@@ -43,7 +43,9 @@ export function sendIntent(text: string | undefined, stream?: string): string[] 
     "-t",
     stream ? "application/pdf" : "text/plain",
     ...(stream
-      ? ["--grant-read-uri-permission", "--eu", "android.intent.extra.STREAM", stream]
+      ? // `am start` neither copies EXTRA_STREAM into ClipData (as an app's startActivity does)
+        // nor extends the read grant to extras, so the grant must name the URI as the data too.
+        ["--grant-read-uri-permission", "-d", stream, "--eu", "android.intent.extra.STREAM", stream]
       : []),
     ...(text === undefined ? [] : ["--es", "android.intent.extra.TEXT", text]),
     "-n",
