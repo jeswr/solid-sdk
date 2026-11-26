@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
+import { useT } from "@jeswr/suite-i18n/react";
 import { Toaster } from "@jeswr/suite-ui";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -120,10 +121,11 @@ export function useAllPreferences() {
 }
 
 export function AutosaveStatus() {
+  const t = useT();
   const { status } = useAllPreferences();
   return (
     <p className="settings-save-status" role="status">
-      {status}
+      {status === "Saved" ? t("settings.saved") : status ? t("settings.visitOnly") : ""}
     </p>
   );
 }
@@ -137,6 +139,7 @@ const OWN_TOASTER = [
   "/contacts",
   "/money",
   "/music",
+  "/photos",
   "/health",
   "/mail",
   "/chat",

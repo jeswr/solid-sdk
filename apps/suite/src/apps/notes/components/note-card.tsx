@@ -1,21 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
-import { Button, IconButton, Popover, PopoverContent, PopoverTrigger } from "@jeswr/suite-ui";
-import {
-  Archive,
-  ArchiveRestore,
-  MoreHorizontal,
-  Pin,
-  PinOff,
-  RotateCcw,
-  Trash2,
-  Users,
-} from "lucide-react";
+import { Button, IconButton } from "@jeswr/suite-ui";
+import { Archive, ArchiveRestore, Pin, PinOff, RotateCcw, Trash2, Users } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { cardTextExcerpt } from "../lib/excerpt";
 import { firstNoteImage } from "../lib/images";
 import { NoteCover } from "./note-cover";
+import { NoteDocsActions } from "./note-docs-actions";
 import { ShareNote } from "./share-note";
 
 /** Spec: a card shows the first six lines; the grapheme cap bounds one very long line. */
@@ -31,7 +23,20 @@ import { offerReminderPermission } from "../state/reminders";
 import { ColourPicker, ConfirmDialog, LabelChips, LabelPicker } from "./controls";
 import { ReminderChip, ReminderPicker } from "./reminder-picker";
 
-export function NoteCard({ note, now = new Date() }: { note: StoredNote; now?: Date }) {
+export function NoteCard({
+  note,
+  now = new Date(),
+  selection,
+}: {
+  note: StoredNote;
+  now?: Date;
+  selection?: {
+    checked: boolean;
+    active: boolean;
+    busy: boolean;
+    toggle: (range: boolean) => void;
+  };
+}) {
   const {
     prefs,
     openNote,
@@ -45,7 +50,6 @@ export function NoteCard({ note, now = new Date() }: { note: StoredNote; now?: D
     sharedNotes,
     refreshSharing,
     store,
-    refresh,
   } = useNotesContext();
   const id = useId();
   const [cover, setCover] = useState<ReturnType<typeof firstNoteImage>>();
@@ -72,16 +76,32 @@ export function NoteCard({ note, now = new Date() }: { note: StoredNote; now?: D
   return (
     <article
       className="notes-card"
+      data-note-url={note.url}
+      data-selected={selection?.checked || undefined}
       aria-labelledby={id}
       data-note-colour={prefs.colours[note.url] ?? "default"}
       aria-busy={pending || busy}
     >
+      {selection && (
+        <label className="notes-card-select">
+          <input
+            type="checkbox"
+            aria-label={`Select ${note.title || "Untitled note"}`}
+            checked={selection.checked}
+            disabled={selection.busy || busy || pending}
+            onChange={(event) => selection.toggle((event.nativeEvent as MouseEvent).shiftKey)}
+          />
+          <span aria-hidden="true">✓</span>
+        </label>
+      )}
       <button
         type="button"
         className="notes-card-body"
         disabled={busy || pending}
-        onClick={(event) => openNote(note, event.currentTarget)}
-        aria-label={`Open ${note.title || "Untitled note"}`}
+        onClick={(event) => {
+          if (selection && (selection.active || event.shiftKey)) selection.toggle(event.shiftKey);
+          else openNote(note, event.currentTarget);
+        }}
       >
         {cover && <NoteCover {...cover} fetchImpl={session.fetch} />}
         <h3 id={id}>{note.title || "Untitled note"}</h3>
@@ -193,54 +213,54 @@ export function NoteCard({ note, now = new Date() }: { note: StoredNote; now?: D
                 value={note.labels}
                 onChange={(labels) => run(() => mutations.save(note, { labels }))}
               />
-              <Popover>
-                <PopoverTrigger asChild>
-                  <IconButton label="More note actions" variant="ghost" disabled={busy || pending}>
-                    <MoreHorizontal size={17} aria-hidden="true" />
-                  </IconButton>
-                </PopoverTrigger>
-                <PopoverContent
-                  className="notes-popover notes-more-menu"
-                  aria-label="More note actions"
+              <NoteDocsActions
+                disabled={busy || pending}
+                run={(work) =>
+                  run(async () => {
+                    const saved = await getPendingDrafts(session.webId).flush(note, (...args) =>
+                      store.save(...args),
+                    );
+                    await work(saved);
+                  })
+                }
+              >
+                <Button
+                  variant="ghost"
+                  disabled={busy || pending}
+                  onClick={() =>
+                    run(() =>
+                      create(
+                        { title: note.title, body: note.body, labels: note.labels },
+                        false,
+                        prefs.colours[note.url] ?? "default",
+                      ),
+                    )
+                  }
                 >
-                  <Button
-                    variant="ghost"
-                    disabled={busy || pending}
-                    onClick={() =>
-                      run(() =>
-                        create(
-                          { title: note.title, body: note.body, labels: note.labels },
-                          false,
-                          prefs.colours[note.url] ?? "default",
-                        ),
-                      )
-                    }
-                  >
-                    Make a copy
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    disabled={busy || pending}
-                    onClick={() =>
-                      run(async () => {
-                        const saved = await getPendingDrafts(session.webId).flush(note, (...args) =>
-                          store.save(...args),
-                        );
-                        setSharing(saved);
-                      })
-                    }
-                  >
-                    Collaborator
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    disabled={busy || pending}
-                    onClick={() => run(() => move(note, "trash"))}
-                  >
-                    Move to trash
-                  </Button>
-                </PopoverContent>
-              </Popover>
+                  Make a copy
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={busy || pending}
+                  onClick={() =>
+                    run(async () => {
+                      const saved = await getPendingDrafts(session.webId).flush(note, (...args) =>
+                        store.save(...args),
+                      );
+                      setSharing(saved);
+                    })
+                  }
+                >
+                  Collaborator
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={busy || pending}
+                  onClick={() => run(() => move(note, "trash"))}
+                >
+                  Move to trash
+                </Button>
+              </NoteDocsActions>
             </>
           )}
         </div>

@@ -20,13 +20,9 @@
 // (`listMessages`, the store's own tests) depend on the swallow behaviour.
 //
 // ── AUTH SEAM ────────────────────────────────────────────────────────────────
-// The authenticated `fetch` is INJECTED, never imported (see the data layer's
-// note in src/rdf-io.ts). Pass the session's fetch via `fetch`; omit it and the
-// data layer falls back to the global fetch — which, in a real session,
-// @solid/reactive-authentication patches so a plain fetch transparently upgrades
-// with a DPoP token. That wiring is the create-solid-app shell's job (#18-gated:
-// https://github.com/solid-contrib/reactive-authentication/issues/18); this
-// facade is deliberately unaware of it and works today against a stub fetch.
+// Pass pod-auth's `auth.fetch` via `fetch` for authenticated pod reads. Omitting
+// it uses the public global fetch. The facade owns no login flow and tests use
+// the same injected transport seam.
 
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";

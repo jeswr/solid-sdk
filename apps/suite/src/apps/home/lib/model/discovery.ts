@@ -6,6 +6,7 @@ import { TEMPLATE_CLASS } from "@jeswr/suite-templates";
 import { NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { TermAs } from "@rdfjs/wrapper";
+import { DataFactory } from "n3";
 import { classificationForType, classifySubject, hasProfileContactDetails } from "./classify";
 import { DiscoveryBudget, type DiscoveryBudgetOptions } from "./discovery-budget";
 import { type Classification, type DataCategory, DOMAINS, UNCATEGORISED } from "./domains";
@@ -23,6 +24,34 @@ export interface DomainItem extends Classification {
   etag: string | null;
 }
 
+/** Multiple records can share a document; profile views can also share a subject. */
+export function domainItemKey(item: DomainItem): string {
+  // Blank-node labels belong to one parse, so these cards keep document/type identity.
+  // Binary listing subjects may also be URL aliases for the same file.
+  const subject =
+    item.subject.termType === "NamedNode" && item.dataType?.id !== "files"
+      ? item.subject.value
+      : undefined;
+  return JSON.stringify([resourceUrl(item.url), subject, item.dataType?.id]);
+}
+
+export const MAX_RECORDS_PER_DOCUMENT = 200;
+export const MAX_RECORDS_PER_REFRESH = 1_000;
+
+/** A document with more records than Home shows: the newest `shown` of `total` are cards. */
+export interface RecordLimit {
+  shown: number;
+  total: number;
+}
+
+interface ClassifiedDocument {
+  dataset: DatasetCore;
+  etag: string | null;
+  items: DomainItem[];
+  /** Set when the document holds more records than its per-document cap. */
+  limit?: RecordLimit;
+}
+
 export interface DiscoveryOptions extends DiscoveryBudgetOptions {
   fetch: typeof globalThis.fetch;
   storage: string;
@@ -31,13 +60,17 @@ export interface DiscoveryOptions extends DiscoveryBudgetOptions {
   webId?: string;
   /** Allows a profile hosted outside storage without forwarding credentials there. */
   profile?: DatasetCore;
+  /** Shared only within one refresh, so overlapping domain scans classify each document once. */
+  documentCache?: Map<string, ClassifiedDocument>;
 }
 
 export interface DomainItems {
   items: DomainItem[];
   failures: DiscoveryFailure[];
-  /** True when discovery stopped at its request budget or deadline. Failures also imply partial data. */
+  /** True when discovery reached its request or time budget. Failures also imply partial data. */
   truncated: boolean;
+  /** Documents whose records were cut to the per-document cap, by document URL. */
+  limited: Map<string, RecordLimit>;
   etags: ReadonlyMap<string, string | null>;
   /** Listing membership is independent of whether child contents were visited. */
   listings: ReadonlyMap<string, ReadonlySet<string>>;
@@ -52,6 +85,62 @@ export function nameFromUrl(value: string): string {
   } catch {
     return value;
   }
+}
+
+/** Date (newest first) then card identity: independent of dataset or response order. */
+function newestFirst(items: readonly DomainItem[]): DomainItem[] {
+  return [...items].sort(
+    (a, b) =>
+      (Date.parse(b.modified ?? "") || 0) - (Date.parse(a.modified ?? "") || 0) ||
+      domainItemKey(a).localeCompare(domainItemKey(b)),
+  );
+}
+
+/**
+ * Applies the per-refresh record budget after every domain has been scanned, so it never
+ * depends on which request answered first. Documents share it fairly: the largest equal
+ * allowance that fits, with the remainder going to documents in URL order. A document
+ * keeps its newest records. Returns the cut documents (their previous cards are not
+ * evidence of deletion) alongside the kept items.
+ */
+export function capRecords(
+  items: readonly DomainItem[],
+  limited: ReadonlyMap<string, RecordLimit> = new Map(),
+  budget = MAX_RECORDS_PER_REFRESH,
+): { items: DomainItem[]; limited: Map<string, RecordLimit>; cut: Set<string> } {
+  const byDocument = new Map<string, DomainItem[]>();
+  const rest: DomainItem[] = [];
+  for (const item of items) {
+    if (item.dataType?.id === "files") rest.push(item);
+    else byDocument.set(item.url, [...(byDocument.get(item.url) ?? []), item]);
+  }
+  const urls = [...byDocument.keys()].sort();
+  const total = [...byDocument.values()].reduce((sum, group) => sum + group.length, 0);
+  const out = new Map(limited);
+  const cut = new Set<string>();
+  if (total <= budget)
+    return { items: [...rest, ...byDocument.values()].flat(), limited: out, cut };
+  const sizes = urls.map((url) => (byDocument.get(url) as DomainItem[]).length);
+  const fits = (allowance: number) =>
+    sizes.reduce((sum, size) => sum + Math.min(size, allowance), 0);
+  let allowance = 0;
+  while (fits(allowance + 1) <= budget) allowance++;
+  let spare = budget - fits(allowance);
+  const kept = [...rest];
+  for (const url of urls) {
+    const group = newestFirst(byDocument.get(url) as DomainItem[]);
+    let take = Math.min(group.length, allowance);
+    if (group.length > take && spare > 0) {
+      take++;
+      spare--;
+    }
+    kept.push(...group.slice(0, take));
+    if (take < group.length) {
+      cut.add(url);
+      out.set(url, { shown: take, total: out.get(url)?.total ?? group.length });
+    }
+  }
+  return { items: kept, limited: out, cut };
 }
 
 export function sortItems(items: readonly DomainItem[]): DomainItem[] {
@@ -70,12 +159,61 @@ interface Visit {
 }
 
 /** Normalize HTTP resource identities without rewriting RDF subject identifiers. */
-function resourceUrl(value: string): string {
+export function resourceUrl(value: string): string {
   return (httpUrl(value)?.href ?? value).split("#")[0] as string;
 }
 
 /**
- * Merge Type Index hits and suite containers, classify actual primary subjects, dedupe URLs.
+ * The records a document's cards show, in order: named local records stamped with
+ * provenance by a connector, then the document's own primary record unless it is one of
+ * those or connector scaffolding (a provenance activity). Blank-node collections keep
+ * primary-subject discovery. Deletion protection uses the same list, so a card's delete
+ * never removes a sibling card's record.
+ */
+export function documentRecords(
+  dataset: DatasetCore,
+  url: string,
+  webId?: string,
+  limit = Number.POSITIVE_INFINITY,
+): { node: ReturnType<typeof subjectOf>; classification: Classification }[] {
+  const records: { node: ReturnType<typeof subjectOf>; classification: Classification }[] = [];
+  const imported = new Set<string>();
+  const scaffolding = new Set<string>();
+  const generatedBy = DataFactory.namedNode(`${NS.PROV}wasGeneratedBy`);
+  const profile = webId !== undefined && url === resourceUrl(webId);
+  for (const { subject, object } of dataset.match(null, generatedBy)) {
+    scaffolding.add(object.value);
+    // One past the limit lets the caller report truncation.
+    if (records.length > limit) break;
+    if (
+      profile ||
+      subject.termType !== "NamedNode" ||
+      subject.value === url ||
+      resourceUrl(subject.value) !== url ||
+      imported.has(subject.value)
+    )
+      continue;
+    const node = subjectOf(dataset, subject);
+    const classification = classifySubject(node, webId);
+    if (!classification.dataType) continue;
+    imported.add(subject.value);
+    records.push({ node, classification });
+  }
+  const primary = profile && webId ? subjectOf(dataset, webId) : primarySubject(dataset, url);
+  if (primary) {
+    const term = TermAs.term(primary);
+    if (
+      dataset.match(term).size > 0 &&
+      !imported.has(term.value) &&
+      !(imported.size && scaffolding.has(term.value))
+    )
+      records.push({ node: primary, classification: classifySubject(primary, webId) });
+  }
+  return records;
+}
+
+/**
+ * Merge Type Index hits and suite containers, classify records, dedupe document/subject/type.
  * Known folders may not exist (404); permission, network and parse failures are retained.
  * Integrations are walked recursively; ordinary folders contribute direct non-container children.
  * Results carry validators so the later SDK adapter can cache by container ETag.
@@ -95,11 +233,13 @@ export async function discoverDomainItems(
   if (!inStorage(storage, storage) || new URL(storage).hash)
     throw new TypeError("Expected a storage root ending in /");
   const budget = options.budget ?? new DiscoveryBudget(options);
+  const documents = options.documentCache ?? new Map<string, ClassifiedDocument>();
   const listings = new Map<string, ReadonlySet<string>>();
   const result: DomainItems = {
     items: [],
     failures: [],
     truncated: false,
+    limited: new Map(),
     etags: new Map(),
     listings,
   };
@@ -110,31 +250,42 @@ export async function discoverDomainItems(
   const listedModified = new Map<string, string>();
 
   const addDataset = (dataset: DatasetCore, url: string, parent: string, etag: string | null) => {
-    const node =
-      webId && url === resourceUrl(webId)
-        ? subjectOf(dataset, webId)
-        : primarySubject(dataset, url);
-    if (!node || dataset.match(TermAs.term(node)).size === 0) return;
-    const classified = classifySubject(node, webId);
-    const modifiedAt = node.modified;
-    const item: DomainItem = {
-      ...classified,
-      url,
-      subject: TermAs.term(node),
-      dataset,
-      etag,
-      containerUrl: parent,
-      title: node.name ?? nameFromUrl(url),
-      ...(modifiedAt ? { modified: modifiedAt } : {}),
-    };
-    result.items.push(item);
-    if (hasProfileContactDetails(node, webId)) {
-      result.items.push({
-        ...item,
-        ...classificationForType("contact-details"),
-        title: "Contact details",
-      });
+    let document = documents.get(url);
+    if (!document) {
+      const items: DomainItem[] = [];
+      const add = (node: ReturnType<typeof subjectOf>, classified: Classification) => {
+        const modifiedAt = node.modified;
+        const item: DomainItem = {
+          ...classified,
+          url,
+          subject: TermAs.term(node),
+          dataset,
+          etag,
+          containerUrl: parent,
+          title: node.name ?? nameFromUrl(url),
+          ...(modifiedAt ? { modified: modifiedAt } : {}),
+        };
+        items.push(item);
+        if (hasProfileContactDetails(node, webId))
+          items.push({
+            ...item,
+            ...classificationForType("contact-details"),
+            title: "Contact details",
+          });
+      };
+      for (const { node, classification } of documentRecords(dataset, url, webId))
+        add(node, classification);
+      document = { dataset, etag, items };
+      if (items.length > MAX_RECORDS_PER_DOCUMENT) {
+        // Newest first, then a stable order, so the same records are kept on every refresh.
+        document.items = newestFirst(items).slice(0, MAX_RECORDS_PER_DOCUMENT);
+        document.limit = { shown: MAX_RECORDS_PER_DOCUMENT, total: items.length };
+      }
+      documents.set(url, document);
     }
+    if (document.limit) result.limited.set(url, document.limit);
+    // Listing dates and parents belong to the current scan, not the shared cache.
+    result.items.push(...document.items.map((item) => ({ ...item, containerUrl: parent })));
   };
 
   for (const location of options.typeIndex ?? []) {
@@ -195,6 +346,12 @@ export async function discoverDomainItems(
       continue;
     }
     try {
+      const cached = documents.get(url);
+      if (cached && !visit.container && !visit.files) {
+        etags.set(url, cached.etag);
+        addDataset(cached.dataset, url, visit.parent, cached.etag);
+        continue;
+      }
       const resource = await budget.read(fetch, url);
       if (!resource) break;
       const { dataset, etag } = resource;
@@ -265,7 +422,7 @@ export async function discoverDomainItems(
     const modified = item.modified ?? listedModified.get(item.url);
     if (modified) item.modified = modified;
     if (category.id === "all" || item.domain.id === category.id)
-      unique.set(`${item.url}|${item.dataType?.id}`, item);
+      unique.set(domainItemKey(item), item);
   }
   let fileCount = 0;
   result.items = sortItems([...unique.values()]).filter(

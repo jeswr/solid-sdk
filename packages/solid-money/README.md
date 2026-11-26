@@ -80,8 +80,29 @@ apart from import paths. The app oracle remains untouched.
 - Generated required labels accept exactly one `xsd:string`; language-tagged, numeric or
   ambiguous labels now reject the snapshot instead of projecting the first literal's text.
 - Malformed or ambiguous optional descriptions drop, using the existing `Transaction`
-  default. Malformed optional transaction IRIs drop. A present category parent that cannot
-  be projected rejects the category snapshot. Ambiguous required account links reject the record.
+  default. A present category parent that cannot be projected rejects the category snapshot.
+  Ambiguous required account links reject the record.
+- A present optional transaction link (`pm:category`, `fin:hasCounterparty`,
+  `prov:wasDerivedFrom`, `fin:debitAccount`, `fin:creditAccount`) that does not project
+  (a literal, an unsafe IRI or several values) is left out of the listed record, which still
+  reads so that one bad link cannot hide the rest of the ledger. The listed record carries
+  `unreadableLinks` (the keys left out) and `isTransactionWritable(record)` is false for it.
+  `putTransaction` refuses with "Invalid transaction link" when the stored record holds such
+  a link, and when the snapshot carries `unreadableLinks`, whatever document it targets. It
+  cannot see a copy of an unmarked snapshot written to another document: a caller that
+  writes a record elsewhere and then deletes the original (a move between shards) must call
+  `document.assertTransactionWritable(id)` on the source first. `linkIris(id, key)` returns
+  every stored IRI of a link, including values the read left out. Deleting a record still
+  removes all its quads, including links that could not be read. The oracle kept the first
+  value.
+- The amount link (`fin:hasMonetaryAmount`), the amount (`schema:value`, or the legacy
+  `fin:amount` when the canonical predicate is absent), `fin:postingTime` and `pm:asOf`
+  must each hold exactly one value. Several values reject the record with "Incomplete money
+  RDF record" instead of returning whichever quad the store yields first. Writing a record
+  whose stored node carries such duplicates also fails, since the write path reads the
+  amount link first.
+- A blank-node balance or account root that the oracle projected is rejected even when its
+  amount node is valid (pinned with a complete fixture).
 - Canonical `schema:currency` must be one `xsd:string`; language-tagged currencies no longer
   project. When the canonical predicate is absent, `fin:currency` retains its historical
   literal reads.

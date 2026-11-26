@@ -7,11 +7,12 @@
  * same list is the drawer below 1024px.
  */
 
-import { Plug, ShieldCheck } from "lucide-react";
+import { Plug, ShieldCheck, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DOMAINS, UNCATEGORISED } from "../lib/model/domains";
 import { DomainIcon } from "./domain-icon";
+import { useHomeLabels } from "./use-home-labels";
 
 /** The route for a domain; Personal is the /home landing page. */
 export function domainHref(id: string): string {
@@ -26,6 +27,7 @@ export function domainFromPath(pathname: string): string | undefined {
 }
 
 export function HomeSidebar({ counts }: { counts?: ReadonlyMap<string, number> }) {
+  const labels = useHomeLabels();
   const pathname = usePathname();
   const active = domainFromPath(pathname);
   return (
@@ -41,7 +43,7 @@ export function HomeSidebar({ counts }: { counts?: ReadonlyMap<string, number> }
                   aria-current={active === domain.id ? "page" : undefined}
                 >
                   <DomainIcon name={domain.icon} />
-                  <span className="hm-nav-label">{domain.label}</span>
+                  <span className="hm-nav-label">{labels.domain(domain)}</span>
                   {(counts?.get(domain.id) ?? 0) > 0 ? (
                     <span className="hm-nav-count">
                       <span className="hm-sr-only">, </span>
@@ -57,6 +59,16 @@ export function HomeSidebar({ counts }: { counts?: ReadonlyMap<string, number> }
       </nav>
       <nav aria-label="Manage">
         <ul>
+          <li>
+            <Link
+              href="/shared"
+              className="hm-nav-item"
+              aria-current={pathname === "/shared" ? "page" : undefined}
+            >
+              <Users aria-hidden="true" size={18} strokeWidth={1.75} />
+              <span className="hm-nav-label">Shared with me</span>
+            </Link>
+          </li>
           <li>
             <Link
               href="/connect"

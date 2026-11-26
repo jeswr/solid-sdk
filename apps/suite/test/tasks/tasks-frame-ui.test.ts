@@ -71,6 +71,37 @@ async function populated(titles: string[]) {
 beforeEach(() => {
   localStorage.clear();
 });
+
+it("offers Skip this occurrence only on open recurring rows and advances without history", async () => {
+  const frame = await frameCache();
+  cache = frame.cache;
+  const recurring = await cache.createTask(frame.inbox, {
+    title: "Review",
+    allDay: "2026-11-20",
+    recurrence: { frequency: "MONTHLY", byDay: ["Friday"], bySetPos: 3 },
+  });
+  await cache.createTask(frame.inbox, { title: "Plain" });
+  if (!recurring) throw new Error("Missing recurring task");
+  await mount(h(Listing));
+  await key(
+    document.querySelector("button[aria-label=\"Actions for 'Plain'\"]") as Element,
+    "ArrowDown",
+  );
+  expect(
+    [...document.querySelectorAll('[role="menuitem"]')].some(
+      (item) => item.textContent === "Skip this occurrence",
+    ),
+  ).toBe(false);
+  await key(document.querySelector('[role="menu"]') as Element, "Escape");
+  await key(
+    document.querySelector("button[aria-label=\"Actions for 'Review'\"]") as Element,
+    "ArrowDown",
+  );
+  await click(button("Skip this occurrence"));
+  await act(() => vi.waitFor(() => expect(cache.getSnapshot().saving).toEqual([])));
+  expect((await frame.store.readTask(recurring.url)).task.allDay).toBe("2026-12-18");
+  expect(cache.getSnapshot().views).toHaveLength(2);
+});
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();

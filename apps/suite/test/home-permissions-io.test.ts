@@ -820,6 +820,7 @@ describe("public Client ID Document resolver", () => {
   it("uses global public fetch once per 24h, coalesces concurrent calls and never retrieves the logo", async () => {
     const publicFetch = vi.fn<typeof fetch>(async () =>
       Response.json({
+        client_id: "https://journal.test/client.json",
         client_name: "Journal",
         client_uri: "https://journal.test/",
         logo_uri: "https://cdn.test/logo.png",
@@ -856,12 +857,51 @@ describe("public Client ID Document resolver", () => {
     expect(sessionFetch).not.toHaveBeenCalled();
     expect(publicFetch.mock.calls.every(([url]) => String(url) === clientId)).toBe(true);
   });
+  it("ignores a document whose client_id is not the URL fetched", async () => {
+    const id = "https://claims.test/client.json";
+    for (const clientId of [undefined, "https://other.test/client.json", 7]) {
+      const transport = vi.fn<typeof fetch>(async () =>
+        Response.json({ client_id: clientId, client_name: "Spotify" }),
+      );
+      expect(await resolveClientName(`${id}?c=${String(clientId)}`, transport)).toEqual({});
+    }
+  });
+  it("reads the body through a byte cap and cancels an oversized stream", async () => {
+    const id = "https://big.test/client.json";
+    let cancelled = false;
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        controller.enqueue(new Uint8Array(16 * 1024).fill(0x20));
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const transport = vi.fn<typeof fetch>(
+      async () => new Response(body, { headers: { "content-type": "application/json" } }),
+    );
+    expect(await resolveClientName(id, transport)).toEqual({});
+    expect(cancelled).toBe(true);
+    expect(pulled).toBeLessThan(10);
+    const declared = vi.fn<typeof fetch>(
+      async () =>
+        new Response("{}", {
+          headers: { "content-type": "application/json", "content-length": "9999999" },
+        }),
+    );
+    expect(await resolveClientName("https://big.test/declared.json", declared)).toEqual({});
+  });
   it("accepts a JSON-LD Client ID Document", async () => {
     const transport = vi.fn<typeof fetch>(
       async () =>
-        new Response(JSON.stringify({ client_name: "MaraCoach" }), {
-          headers: { "content-type": "application/ld+json; charset=utf-8" },
-        }),
+        new Response(
+          JSON.stringify({ client_id: "https://ld.test/id.jsonld", client_name: "MaraCoach" }),
+          {
+            headers: { "content-type": "application/ld+json; charset=utf-8" },
+          },
+        ),
     );
     expect(await resolveClientName("https://ld.test/id.jsonld", transport)).toEqual({
       name: "MaraCoach",
@@ -903,12 +943,43 @@ describe("public Client ID Document resolver", () => {
     }
   });
   it("never fetches a bare origin, only Client ID Documents with a path", async () => {
-    const transport = vi.fn<typeof fetch>(async () => Response.json({ client_name: "Origin" }));
+    const transport = vi.fn<typeof fetch>(async (input) =>
+      Response.json({ client_id: String(input), client_name: "Origin" }),
+    );
     for (const id of ["https://app.test", "https://app.test/", "https://app.test/?q=1"])
       expect(await resolveClientName(id, transport)).toEqual({});
     expect(transport).not.toHaveBeenCalled();
     expect(isClientIdDocument("https://app.test/id")).toBe(true);
     expect(isClientIdDocument("https://app.test/")).toBe(false);
+  });
+  it("refuses private, loopback and internal hosts before invoking any transport", async () => {
+    const transport = vi.fn<typeof fetch>();
+    for (const host of [
+      "localhost",
+      "localhost.",
+      "intranet.",
+      "foo..bar",
+      "foo.bar..",
+      ".foo.bar",
+      "sub.localhost.",
+      "printer.local",
+      "internal",
+      "service.internal",
+      "127.0.0.1",
+      "2130706433",
+      "10.0.0.1",
+      "172.16.0.1",
+      "192.168.1.1",
+      "169.254.169.254",
+      "[::1]",
+      "[fc00::1]",
+      "[::ffff:127.0.0.1]",
+    ]) {
+      expect(await resolveClientName(`https://${host}/client-id.jsonld`, transport)).toEqual({});
+    }
+    expect(transport).not.toHaveBeenCalled();
+    expect(isClientIdDocument("https://8.8.8.8/client.json")).toBe(true);
+    expect(isClientIdDocument("https://app.test./client.json")).toBe(true);
   });
   it("times out a hanging document and retries failures soon instead of caching them for a day", async () => {
     vi.useFakeTimers();
@@ -925,16 +996,16 @@ describe("public Client ID Document resolver", () => {
       expect(signal?.aborted).toBe(true);
       expect(await resolveClientName(id, hanging, CLIENT_RETRY_MS - 1)).toEqual({});
       expect(hanging).toHaveBeenCalledTimes(1);
-      const recovered = vi.fn<typeof fetch>(async () => Response.json({ client_name: "Back" }));
+      const recovered = vi.fn<typeof fetch>(async (input) =>
+        Response.json({ client_id: String(input), client_name: "Back" }),
+      );
       expect((await resolveClientName(id, recovered, CLIENT_RETRY_MS)).name).toBe("Back");
       // A body that stalls after the headers is bounded by the same timeout.
       const stalled = vi.fn<typeof fetch>(
         async () =>
-          ({
-            ok: true,
-            headers: new Headers({ "content-type": "application/json" }),
-            json: () => new Promise(() => {}),
-          }) as unknown as Response,
+          new Response(new ReadableStream({ pull: () => new Promise(() => {}) }), {
+            headers: { "content-type": "application/json" },
+          }),
       );
       const slow = resolveClientName("https://stalled.test/id.json", stalled, 0);
       await vi.advanceTimersByTimeAsync(CLIENT_TIMEOUT_MS);

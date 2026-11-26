@@ -1,15 +1,24 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
-import { serialize } from "@jeswr/rdf-serialize";
+import {
+  type Album,
+  buildAlbum,
+  buildPhoto,
+  documentUrl,
+  httpIri,
+  type Photo,
+  parsePhotos,
+  parseStoredAlbum,
+  parseStoredPhoto,
+  RestoreReceipt,
+  serializePhotos,
+} from "@jeswr/solid-photos";
 import type { DatasetCore } from "@rdfjs/types";
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
-import { type Album, buildAlbum, parseAlbum } from "./album.js";
-import { buildPhoto, type Photo, parsePhoto, parsePhotos, RestoreReceipt } from "./photograph.js";
 import { type ImageEncoder, preparePhoto, type UploadInput } from "./upload.js";
-import { documentUrl, httpIri } from "./validation.js";
-import { PREFIXES } from "./vocab.js";
 
 export class PhotoIoError extends Error {
   constructor(
@@ -18,6 +27,15 @@ export class PhotoIoError extends Error {
   ) {
     super(`Photo storage request failed (${status})`);
     this.name = "PhotoIoError";
+  }
+}
+/** The destination could not be shown to be readable by its owner alone; nothing was written. */
+export class PrivateDestinationError extends Error {
+  constructor() {
+    super(
+      "Photos couldn't confirm that your photo folders are private to you, so nothing was uploaded.",
+    );
+    this.name = "PrivateDestinationError";
   }
 }
 export type Precondition = { create: true } | { etag: string };
@@ -48,12 +66,7 @@ export function photoStorage(fetch: typeof globalThis.fetch, storage: string) {
     return { etag: response.headers.get("etag") };
   }
   async function write(url: string, dataset: DatasetCore, precondition: Precondition) {
-    return put(
-      url,
-      await serialize([...dataset], { prefixes: PREFIXES }),
-      "text/turtle",
-      precondition,
-    );
+    return put(url, await serializePhotos(dataset), "text/turtle", precondition);
   }
   async function remove(url: string, etag: string) {
     const response = await scoped(documentUrl(url), {
@@ -116,11 +129,11 @@ export function photoStorage(fetch: typeof globalThis.fetch, storage: string) {
     ensureContainers,
     async loadPhoto(url: string) {
       const { dataset, etag } = await read(url);
-      return { photo: parsePhoto(url, dataset), dataset, etag };
+      return { photo: parseStoredPhoto(url, dataset), dataset, etag };
     },
     async loadPhotos(url: string) {
       const { dataset, etag } = await read(url);
-      return { photos: parsePhotos(url, dataset), etag };
+      return { photos: parsePhotos(url, dataset, { tolerant: true }), etag };
     },
     async savePhoto(url: string, photo: Photo, precondition: Precondition) {
       const dataset = buildPhoto(url, photo);
@@ -140,7 +153,7 @@ export function photoStorage(fetch: typeof globalThis.fetch, storage: string) {
     },
     async loadAlbum(url: string) {
       const { dataset, etag } = await read(url);
-      return { album: parseAlbum(url, dataset), etag };
+      return { album: parseStoredAlbum(url, dataset), etag };
     },
     async saveAlbum(url: string, album: Album, precondition: Precondition) {
       return write(url, buildAlbum(url, album), precondition);
@@ -153,12 +166,32 @@ export function photoStorage(fetch: typeof globalThis.fetch, storage: string) {
       const container = new Container(containerUrl, dataset, DataFactory);
       return [...container.contains].map((resource) => resource.id).sort();
     },
-    async uploadPhotos(inputs: readonly UploadInput[], encoder: ImageEncoder, now: string) {
+    async uploadPhotos(
+      inputs: readonly UploadInput[],
+      encoder: ImageEncoder,
+      now: string,
+      /** Resolves true only when a container is verifiably owner-only; false or a throw refuses. */
+      verifyDestination: (container: string) => Promise<boolean>,
+    ) {
+      // Fail closed: a caller that omits the owner-only check must not write unchecked.
+      if (typeof verifyDestination !== "function")
+        throw new TypeError("An owner-only destination check is required");
       const uploaded = [];
       // Prepare before creating/writing resources, so invalid inputs do not publish metadata.
       for (const input of inputs) {
         const prepared = await preparePhoto(storage, input, encoder, now);
         await ensureContainers(["", "originals/", "thumbs/", "items/"]);
+        // Containers exist now, so their effective policy can be read; nothing private is written
+        // until every destination has been shown to be owner-only.
+        for (const path of ["originals/", "thumbs/", "items/"]) {
+          let verified = false;
+          try {
+            verified = await verifyDestination(new URL(path, root).href);
+          } catch {
+            /* An unreadable policy is a refusal. */
+          }
+          if (!verified) throw new PrivateDestinationError();
+        }
         await put(prepared.photo.contentUrl, prepared.original, prepared.original.type, {
           create: true,
         });

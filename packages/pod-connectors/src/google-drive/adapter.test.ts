@@ -1802,7 +1802,14 @@ describe("Drive content retry list", () => {
     );
   });
 
-  it("keeps at most 10,000 entries and rewrites an oversized list", async () => {
+  // The cap (MAX_RETRY_FILES) is a fixed 10,000, so proving it takes a list just over that
+  // size through loadRetry, saveRetry's rebuild, the pod write and a re-parse. That is about
+  // 20,000 triples per pass, linear in list size (profiled: 2.5k/5k/10k/20k entries take
+  // roughly 0.3/0.8/1.2/2.2 s), about 1.3 s locally but over 5 s on a loaded CI runner.
+  // The seed is a single raw-Turtle PUT. The time goes to the run, so the test gets headroom.
+  it("keeps at most 10,000 entries and rewrites an oversized list", {
+    timeout: 30_000,
+  }, async () => {
     const { run, pod } = setup();
     const ids = Array.from({ length: 10_005 }, (_, i) => `big-${String(i).padStart(5, "0")}`);
     await seed(

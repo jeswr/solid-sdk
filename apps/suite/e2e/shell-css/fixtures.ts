@@ -31,16 +31,27 @@ export function cssAccount(name: AccountName) {
 export async function accessible(page: Page) {
   // App routes can redirect again and mount their lazy frame after the URL changes.
   await page.locator("h1").first().waitFor({ state: "visible" });
-  const report = await new AxeBuilder({ page }).analyze();
+  // axe's multi-frame path opens an extra renderer to merge results. Shell pages
+  // without child frames can run the same rules in place, keeping keyboard focus
+  // and leaving memory for Next/CSS. Retain full frame scanning when needed.
+  const frameFree = page.frames().length === 1;
+  const report = await new AxeBuilder({ page }).setLegacyMode(frameFree).analyze();
+  if (frameFree) expect(page.frames()).toHaveLength(1);
   expect(
     report.violations.filter((issue) => issue.impact === "serious" || issue.impact === "critical"),
   ).toEqual([]);
   await expect(page.locator("h1")).toHaveCount(1);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const dimensions = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
 }
 
 /** Traverse the real tab order, including in the CSS login form. */
 export async function tabTo(page: Page, target: Locator) {
+  // axe and OIDC popups can leave another page foregrounded in Chromium.
+  await page.bringToFront();
   await expect(target).toBeVisible();
   await expect(target).toBeEnabled();
   for (let step = 0; step < 40; step++) {
@@ -70,6 +81,10 @@ export async function signIn(page: Page, name: AccountName, options: SignInOptio
   const keyboardOnly = options.keyboardOnly ?? false;
   await page.goto("/signin");
   await accessible(page);
+  // Require hydration/restore to finish before starting provider-navigation waiters.
+  await expect(page.getByRole("button", { name: "Other provider", exact: true })).toBeEnabled({
+    timeout: 30_000,
+  });
   const submit = async () => {
     if (options.method === "webid") {
       await typeInto(
@@ -102,6 +117,20 @@ export async function signIn(page: Page, name: AccountName, options: SignInOptio
   };
   const waitForForm = async (candidate: Page) => {
     await candidate.waitForURL((url) => url.origin === new URL(account.issuer).origin);
+    // Local logout preserves the OP's cookie. CSS then offers consent for the old
+    // identity; use its real account switch before entering the requested account.
+    const different = candidate.getByRole("button", {
+      name: "Use a different account",
+      exact: true,
+    });
+    const switchAccount = await Promise.race([
+      candidate
+        .locator("#email")
+        .waitFor({ state: "visible" })
+        .then(() => false),
+      different.waitFor({ state: "visible" }).then(() => true),
+    ]);
+    if (switchAccount) await activate(candidate, different, keyboardOnly);
     await candidate.locator("#email").waitFor({ state: "visible" });
     return candidate;
   };
@@ -196,7 +225,10 @@ export async function warmLiveRoutes(request: APIRequestContext) {
 }
 
 /** Arrange through CSS's account API; browser tests still use interactive OIDC. */
-export async function accountAuth(name: AccountName) {
+export async function accountAuth(
+  name: AccountName,
+  boundary = new URL("alice/", cssAccount("alice").issuer).href,
+) {
   const account = cssAccount(name);
   let cookie = "";
   const json = async (path: string, body?: unknown) => {
@@ -231,8 +263,8 @@ export async function accountAuth(name: AccountName) {
     issuer: account.issuer,
     clientId: credentials.id,
     clientSecret: credentials.secret,
-    // Both fixture users explicitly receive this known root for arrangement only.
-    boundary: [new URL("alice/", account.issuer).href],
+    // Enforcement checks may explicitly name the other fixture user's pod.
+    boundary: [boundary],
     allowInsecureLoopback: true,
   });
 }

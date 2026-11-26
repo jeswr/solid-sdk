@@ -1,15 +1,22 @@
+// AUTHORED-BY Codex GPT-6
 import { Store } from 'n3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { photosStore } from '../src/photos/stores.js';
-import { deleteResource, freshRdf, writeResource } from '../src/pod/rdf.js';
+import { ResourceDeleteError, ResourceWriteError } from '../src/pod/errors.js';
+import {
+  deleteResource,
+  ensureContainer,
+  freshRdf,
+  writeResource,
+} from '../src/pod/rdf.js';
 import { MockPod } from './helpers/mock-pod.js';
 
 /**
- * The production paths omit `fetchImpl` so the auth-patched `globalThis.fetch`
- * runs. These tests stub the global to exercise those default branches (the
+ * Omitting `fetchImpl` uses the unauthenticated `globalThis.fetch`. These tests
+ * stub the global to exercise those default branches (the
  * `fetchImpl ? … : …` ternaries) without a network.
  */
-describe('production global-fetch paths', () => {
+describe('default public-fetch paths', () => {
   const pod = new MockPod();
   const realFetch = globalThis.fetch;
 
@@ -41,6 +48,16 @@ describe('production global-fetch paths', () => {
     expect(etag).toBeTruthy();
     await deleteResource(url);
     expect(pod.resources.has(url)).toBe(false);
+  });
+
+  it('surfaces denied container creation and deletion through the public transport', async () => {
+    globalThis.fetch = vi.fn(async () => new Response(null, { status: 403 }));
+    await expect(ensureContainer('https://alice.example/private/')).rejects.toBeInstanceOf(
+      ResourceWriteError,
+    );
+    await expect(deleteResource('https://alice.example/private/photo.ttl')).rejects.toBeInstanceOf(
+      ResourceDeleteError,
+    );
   });
 
   it('a store with no fetchImpl drives the whole create flow through the global', async () => {

@@ -9,6 +9,7 @@
  * queue. Screens read it through {@link useDrive} and {@link useFolder}.
  */
 
+import { podScopedFetch } from "@jeswr/suite-sdk/pod-scoped-fetch";
 import { toast } from "@jeswr/suite-ui";
 import { termsEqual } from "@jeswr/suite-vocab";
 import {
@@ -37,8 +38,10 @@ import {
   nameOf,
   parentOf,
 } from "../lib/client/client";
+import { isOwnStorage } from "../lib/client/ownership";
 import { DRIVE_ROOT_CLASS } from "../lib/constants";
 import { useAccessConfirmation } from "./access-confirmation";
+import { useDriveReplay } from "./outbox";
 import { type DrivePreferences, useDrivePreferences } from "./prefs";
 import { type UploadQueue, useUploadQueue } from "./uploads";
 
@@ -222,6 +225,7 @@ export function DriveProvider({
   );
 
   useEffect(() => session.subscribe((url) => invalidate(url)), [session, invalidate]);
+  useDriveReplay(session, driveRoot, invalidate);
 
   useEffect(() => {
     if (!provision) return;
@@ -302,6 +306,31 @@ export function DriveProvider({
       {dialog}
     </DriveContext>
   );
+}
+
+/**
+ * A resource outside the user's storage is read with a client whose transport uses the session
+ * only inside the storage: everything else goes credential-free, without referrer or cache.
+ * Resources inside the storage keep the account's own client unchanged.
+ */
+export function ForeignPreviewScope({ url, children }: { url: string; children: ReactNode }) {
+  const parent = useDrive();
+  const { session } = parent;
+  const own = isOwnStorage(url, session.storageUrl);
+  const client = useMemo(
+    () =>
+      own
+        ? undefined
+        : createSolidDriveClient({
+            storageUrl: session.storageUrl,
+            fetch: podScopedFetch(session.fetch, session.storageUrl),
+            webId: session.webId,
+            provision: false,
+          }),
+    [own, session],
+  );
+  const value = useMemo(() => (client ? { ...parent, client } : parent), [parent, client]);
+  return <DriveContext value={value}>{children}</DriveContext>;
 }
 
 export function useDrive(): DriveContextValue {

@@ -3,6 +3,7 @@ import { afterEach, assert, describe, expect, it, vi } from "vitest";
 import { computeFireTimes } from "../../src/apps/tasks/lib/model/reminders";
 import {
   createIndexedDbFiredStore,
+  createLocalStorageFiredStore,
   createMemoryFiredStore,
   reminderKey,
 } from "../../src/apps/tasks/lib/reminders/fired-store";
@@ -20,10 +21,47 @@ const task = (extra: Partial<ReminderTask> = {}): ReminderTask => ({
   reminders: [{ offset: "-PT1H" }],
   ...extra,
 });
+const legacyClaimTime = new Date(now.getTime() - 3600000);
+function legacyFixture(kind: "url" | "identity" | "named") {
+  const identity = "2026-10-01T00:00:00.000Z|Task";
+  const oldFire = new Date(legacyClaimTime.getTime() - 3600000).toISOString();
+  const oldKey =
+    kind === "identity"
+      ? `${identity}|-PT3H@${oldFire}`
+      : kind === "named"
+        ? `https://pod.test/alarm@${oldFire}`
+        : `${task().url}#it/reminder--PT3H@${oldFire}`;
+  const times = [-1, 0, 1].map((delta) => new Date(legacyClaimTime.getTime() + delta));
+  return {
+    oldKey,
+    times,
+    task: task({
+      ...(kind === "identity" ? { url: "https://pod.test/moved", identity } : {}),
+      reminders: times.map((time, index) => ({
+        time,
+        ...(kind === "named"
+          ? { id: index === 0 ? "https://pod.test/alarm" : `https://pod.test/alarm-${index}` }
+          : {}),
+      })),
+    }),
+  };
+}
 afterEach(() => vi.useRealTimers());
 
 describe("reminder identity and memory store", () => {
-  it("matches model keys for anonymous, named, absolute and recurring triggers", async () => {
+  it("honours legacy claims when merging into a memory store", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(legacyClaimTime);
+    const previous = legacyFixture("url");
+    const store = createMemoryFiredStore();
+    await store.claim(previous.oldKey);
+    vi.setSystemTime(now);
+    const result = await collectDueReminders([previous.task], now, store);
+    expect(result.errors).toEqual([]);
+    expect(result.due.map((event) => event.fireTime)).toEqual([previous.times[2]]);
+  });
+
+  it("keys suppression on scheduling inputs for anonymous, named and absolute triggers", async () => {
     for (const reminder of [
       { offset: "-PT1H" },
       { time: now },
@@ -31,13 +69,78 @@ describe("reminder identity and memory store", () => {
     ]) {
       const fire = computeFireTimes(task().url, task().due, [reminder])[0];
       assert.isDefined(fire);
-      expect(reminderKey(task().url, reminder, fire.at)).toBe(fire.key);
-      expect(reminderKey(task().url, reminder, new Date(fire.at.getTime() + 1))).not.toBe(fire.key);
+      const key = reminderKey(task().url, reminder, fire.at, task().due);
+      expect(
+        reminderKey(task().url, { ...reminder, id: "https://other.test/id" }, fire.at, task().due),
+      ).toBe(key);
+      expect(
+        reminderKey(task().url, reminder, new Date(fire.at.getTime() + 1), task().due),
+      ).not.toBe(key);
+      expect(reminderKey(task().url, reminder, fire.at, new Date(now.getTime() + 1))).not.toBe(key);
     }
     const store = createMemoryFiredStore();
     expect(await store.claim("a")).toBe(true);
     expect(await store.claim("a")).toBe(false);
     expect(await createMemoryFiredStore().claim("a")).toBe(true);
+  });
+});
+
+describe("localStorage fired store", () => {
+  function local() {
+    const values = new Map<string, string>();
+    return {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        values.set(key, value);
+      },
+    } as Storage;
+  }
+  it.each([
+    "url",
+    "identity",
+    "named",
+  ] as const)("honours persisted legacy %s claims through their recorded time after upgrade", async (kind) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const previous = legacyFixture(kind);
+    const storage = local();
+    storage.setItem(
+      "tasks.firedReminders",
+      JSON.stringify({ [previous.oldKey]: legacyClaimTime.getTime() }),
+    );
+    const result = await collectDueReminders(
+      [previous.task, task({ url: "https://pod.test/unrelated" })],
+      now,
+      createLocalStorageFiredStore(storage),
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.due.map((event) => event.fireTime)).toEqual([previous.times[2], now]);
+    expect(
+      await collectDueReminders([previous.task], now, createLocalStorageFiredStore(storage)),
+    ).toEqual({ due: [], errors: [] });
+  });
+  it("retains claims across reloads and prunes only records older than 30 days", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const storage = local();
+    const first = createLocalStorageFiredStore(storage);
+    expect(await first.claim("key")).toBe(true);
+    const next = createLocalStorageFiredStore(storage);
+    expect(await next.claim("key")).toBe(false);
+    vi.setSystemTime(now.getTime() + 30 * 86400000);
+    await next.prune?.();
+    expect(await next.claim("key")).toBe(false);
+    vi.setSystemTime(now.getTime() + 30 * 86400000 + 1);
+    await next.prune?.();
+    expect(await next.claim("key")).toBe(true);
+  });
+  it("ignores invalid stored entries and tolerates non-object records", async () => {
+    const storage = local();
+    for (const record of ["null", '"old"', '{"bad":"wrong","valid":1}']) {
+      storage.setItem("tasks.firedReminders", record);
+      const store = createLocalStorageFiredStore(storage);
+      expect(await store.claim("bad")).toBe(true);
+    }
   });
 });
 
@@ -60,7 +163,9 @@ describe("scheduler", () => {
       errors: [],
     });
     expect(
-      await store.claim(reminderKey(task().url, task().reminders[0] as { offset: string }, now)),
+      await store.claim(
+        reminderKey(task().url, task().reminders[0] as { offset: string }, now, task().due),
+      ),
     ).toBe(false);
     expect(await collectDueReminders(tasks, new Date(now.getTime() + 60000), store)).toEqual({
       due: [],
@@ -224,6 +329,8 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
   let transactionFailure: "error" | "abort" | undefined;
   const databases: IDBDatabase[] = [];
   let transactionTail = Promise.resolve();
+  const transactions = vi.fn();
+  const scans = vi.fn();
   const factory = {
     open: vi.fn((name: string, nextVersion?: number) => {
       expect(name).toBe("tasks");
@@ -255,6 +362,7 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
           },
           close: vi.fn(),
           transaction: (name: string, mode: IDBTransactionMode) => {
+            transactions();
             expect(name).toBe("firedReminders");
             expect(mode).toBe("readwrite");
             const tx = {} as IDBTransaction;
@@ -303,6 +411,7 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
                 return req;
               },
               openCursor: () => {
+                scans();
                 const req = {} as IDBRequest;
                 const keys = [...values.keys()];
                 let index = 0;
@@ -314,6 +423,7 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
                         key === undefined
                           ? null
                           : {
+                              key,
                               value: values.get(key),
                               delete: () =>
                                 schedule(() => {
@@ -350,6 +460,8 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
     factory,
     values,
     databases,
+    transactions,
+    scans,
     failOpen: (mode: "error" | "blocked") => {
       openFailure = mode;
     },
@@ -364,6 +476,47 @@ function fakeIndexedDB(existing = false, upgradeExisting = false) {
 }
 
 describe("IndexedDB fired store", () => {
+  it.each([
+    true,
+    false,
+  ])("checks persisted legacy claims before a direct claim without pruning (already fired: %s)", async (fired) => {
+    const fake = fakeIndexedDB(true);
+    const previous = legacyFixture("url");
+    fake.values.set(previous.oldKey, legacyClaimTime.toISOString());
+    fake.values.set(1, now.toISOString());
+    fake.values.set("unrelated", now.toISOString());
+    const store = createIndexedDbFiredStore(fake.factory);
+    const at = new Date(legacyClaimTime.getTime() + (fired ? 0 : 1));
+    const key = reminderKey(previous.task.url, { time: at }, at, previous.task.due);
+    const legacy = { prefixes: [`${previous.task.url}#`], fireTime: at };
+    expect(await store.claim(key, legacy)).toBe(!fired);
+    expect(await store.claim(key, legacy)).toBe(false);
+    expect(await store.claim(`${key}-other`, legacy)).toBe(!fired);
+    expect(fake.scans).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    "url",
+    "identity",
+    "named",
+  ] as const)("honours persisted legacy %s claims through their recorded time after upgrade", async (kind) => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const previous = legacyFixture(kind);
+    const fake = fakeIndexedDB(true);
+    fake.values.set(previous.oldKey, legacyClaimTime.toISOString());
+    const result = await collectDueReminders(
+      [previous.task, task({ url: "https://pod.test/unrelated" })],
+      now,
+      createIndexedDbFiredStore(fake.factory),
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.due.map((event) => event.fireTime)).toEqual([previous.times[2], now]);
+    expect(
+      await collectDueReminders([previous.task], now, createIndexedDbFiredStore(fake.factory)),
+    ).toEqual({ due: [], errors: [] });
+  });
+
   it("atomically claims reminders across concurrent store instances", async () => {
     const fake = fakeIndexedDB();
     const a = createIndexedDbFiredStore(fake.factory);
@@ -398,20 +551,45 @@ describe("IndexedDB fired store", () => {
     expect(fake.values.size).toBe(2);
     expect([...fake.values.values()][0]).toMatch(/^\d{4}-\d\d-\d\dT/);
   });
-  it("prunes only entries older than 30 days, on claims", async () => {
+  it("prunes only entries older than 30 days, once per tick", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(now);
     const fake = fakeIndexedDB();
     fake.values.set("expired", new Date(now.getTime() - 30 * 86400000 - 1).toISOString());
     fake.values.set("boundary", new Date(now.getTime() - 30 * 86400000).toISOString());
     const store = createIndexedDbFiredStore(fake.factory);
+    await store.prune?.();
     expect(await store.claim("expired")).toBe(true);
     expect(await store.claim("boundary")).toBe(false);
     expect(fake.values.get("expired")).toBe(now.toISOString());
     vi.setSystemTime(new Date(now.getTime() + 1));
+    await store.prune?.();
     await store.claim("fresh");
     expect(fake.values.has("boundary")).toBe(false);
     expect(fake.values.get("fresh")).toBe(new Date(now.getTime() + 1).toISOString());
+  });
+  it("caches known fired keys and scans retention once per tick instead of per reminder", async () => {
+    const fake = fakeIndexedDB();
+    const store = createIndexedDbFiredStore(fake.factory);
+    const tasks = [task({ reminders: [{ time: now }, { time: new Date(now.getTime() - 1) }] })];
+    expect((await collectDueReminders(tasks, now, store)).due).toHaveLength(2);
+    expect(fake.scans).toHaveBeenCalledTimes(1);
+    expect(fake.transactions).toHaveBeenCalledTimes(3);
+    expect((await collectDueReminders(tasks, now, store)).due).toEqual([]);
+    expect(fake.scans).toHaveBeenCalledTimes(2);
+    expect(fake.transactions).toHaveBeenCalledTimes(4);
+  });
+  it("expires cached keys at retention and retries failed pruning", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(now);
+    const fake = fakeIndexedDB();
+    const store = createIndexedDbFiredStore(fake.factory);
+    await store.claim("key");
+    vi.setSystemTime(now.getTime() + 30 * 86400000 + 1);
+    fake.failTransaction("error");
+    await expect(store.prune?.()).rejects.toThrow("transaction failed");
+    await store.prune?.();
+    expect(await store.claim("key")).toBe(true);
   });
   it("adds the object store to an existing tasks database without deleting other stores", async () => {
     const fake = fakeIndexedDB(true);
@@ -427,6 +605,15 @@ describe("IndexedDB fired store", () => {
     const store = createIndexedDbFiredStore(fake.factory);
     expect(await store.claim("previous")).toBe(false);
   });
+  it("closes every connection after its claim or prune, holding none between ticks", async () => {
+    const fake = fakeIndexedDB();
+    const store = createIndexedDbFiredStore(fake.factory);
+    await store.claim("key");
+    await store.prune?.();
+    await store.claim("next");
+    expect(fake.factory.open).toHaveBeenCalledTimes(3);
+    for (const db of fake.databases) expect(db.close).toHaveBeenCalledOnce();
+  });
   it("closes on version changes and reopens lazily", async () => {
     const fake = fakeIndexedDB();
     const store = createIndexedDbFiredStore(fake.factory);
@@ -434,6 +621,7 @@ describe("IndexedDB fired store", () => {
     fake.databases[0]?.onversionchange?.({} as IDBVersionChangeEvent);
     expect(fake.databases[0]?.close).toHaveBeenCalled();
     expect(await store.claim("key")).toBe(false);
+    await store.claim("next");
     expect(fake.factory.open).toHaveBeenCalledTimes(2);
   });
   it.each(["error", "blocked"] as const)("reports open %s and permits retry", async (mode) => {

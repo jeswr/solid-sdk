@@ -14,3 +14,13 @@ export class DecisionPreviewConflictError extends Error {
     this.name = "DecisionPreviewConflictError";
   }
 }
+
+/** The owner withdrew this approval (its records say so), so finishing it would re-grant access. */
+export class ApprovalRevokedError extends Error {
+  constructor() {
+    super(
+      "This approval was revoked after it was recorded, so it will not be finished. Deny the request to clear it, then ask for a new one if you still want to share",
+    );
+    this.name = "ApprovalRevokedError";
+  }
+}

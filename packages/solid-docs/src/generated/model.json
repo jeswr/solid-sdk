@@ -1,0 +1,431 @@
+{
+  "manifestVersion": 1,
+  "runtime": {
+    "name": "@jeswr/model-runtime",
+    "major": 0
+  },
+  "prefixes": {
+    "pd": "https://jeswr.org/ns/pod-docs#",
+    "dct": "http://purl.org/dc/terms/",
+    "prov": "http://www.w3.org/ns/prov#",
+    "oa": "http://www.w3.org/ns/oa#",
+    "schema": "https://schema.org/",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "name": "Annotation",
+      "typeIris": [
+        "http://www.w3.org/ns/oa#Annotation"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "created",
+          "predicate": "http://purl.org/dc/terms/created",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "creator",
+          "predicate": "http://purl.org/dc/terms/creator",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "text",
+          "predicate": "http://www.w3.org/ns/oa#bodyValue",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "sanitizeText": false,
+            "nonBlank": true
+          }
+        },
+        {
+          "name": "selector",
+          "predicate": "http://www.w3.org/ns/oa#hasSelector",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "source",
+          "predicate": "http://www.w3.org/ns/oa#hasSource",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "target",
+          "predicate": "http://www.w3.org/ns/oa#hasTarget",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "motivation",
+          "predicate": "http://www.w3.org/ns/oa#motivatedBy",
+          "kind": "iri",
+          "minCount": 1,
+          "maxCount": 1,
+          "in": [
+            "http://www.w3.org/ns/oa#commenting",
+            "http://www.w3.org/ns/oa#replying"
+          ],
+          "guards": {
+            "requiredFailClosed": true
+          }
+        },
+        {
+          "name": "end",
+          "predicate": "https://jeswr.org/ns/pod-docs#anchorEnd",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false,
+            "minLength": 1
+          }
+        },
+        {
+          "name": "start",
+          "predicate": "https://jeswr.org/ns/pod-docs#anchorStart",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false,
+            "minLength": 1
+          }
+        },
+        {
+          "name": "resolved",
+          "predicate": "https://jeswr.org/ns/pod-docs#resolved",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#boolean",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "resolvedAt",
+          "predicate": "https://jeswr.org/ns/pod-docs#resolvedAt",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "resolvedBy",
+          "predicate": "https://jeswr.org/ns/pod-docs#resolvedBy",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        }
+      ]
+    },
+    {
+      "name": "Quote",
+      "typeIris": [
+        "http://www.w3.org/ns/oa#TextQuoteSelector"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "exact",
+          "predicate": "http://www.w3.org/ns/oa#exact",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "sanitizeText": false,
+            "minLength": 1
+          }
+        },
+        {
+          "name": "prefix",
+          "predicate": "http://www.w3.org/ns/oa#prefix",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "suffix",
+          "predicate": "http://www.w3.org/ns/oa#suffix",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "minCount": 1,
+          "maxCount": 1,
+          "guards": {
+            "requiredFailClosed": true,
+            "sanitizeText": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "Revision",
+      "typeIris": [
+        "http://www.w3.org/ns/prov#Entity"
+      ],
+      "subject": {
+        "convention": "self"
+      },
+      "fields": [
+        {
+          "name": "created",
+          "predicate": "http://purl.org/dc/terms/created",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "creator",
+          "predicate": "http://purl.org/dc/terms/creator",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "label",
+          "predicate": "http://www.w3.org/2000/01/rdf-schema#label",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "generatedAt",
+          "predicate": "http://www.w3.org/ns/prov#generatedAtTime",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "attributedTo",
+          "predicate": "http://www.w3.org/ns/prov#wasAttributedTo",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "wasRevisionOf",
+          "predicate": "http://www.w3.org/ns/prov#wasRevisionOf",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "body",
+          "predicate": "https://jeswr.org/ns/pod-docs#body",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "format",
+          "predicate": "https://jeswr.org/ns/pod-docs#format",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "snapshot",
+          "predicate": "https://jeswr.org/ns/pod-docs#snapshot",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "kind",
+          "predicate": "https://jeswr.org/ns/pod-docs#versionKind",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "in": [
+            "named",
+            "automatic"
+          ],
+          "guards": {
+            "sanitizeText": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "Document",
+      "typeIris": [
+        "https://jeswr.org/ns/pod-docs#Document"
+      ],
+      "aliasTypeIris": [
+        "https://w3id.org/jeswr/pod-docs#Document"
+      ],
+      "subject": {
+        "convention": "hash-it"
+      },
+      "fields": [
+        {
+          "name": "created",
+          "predicate": "http://purl.org/dc/terms/created",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "creator",
+          "predicate": "http://purl.org/dc/terms/creator",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "instanceId",
+          "predicate": "http://purl.org/dc/terms/identifier",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "modified",
+          "predicate": "http://purl.org/dc/terms/modified",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#dateTime",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "title",
+          "predicate": "http://purl.org/dc/terms/title",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "wasDerivedFrom",
+          "predicate": "http://www.w3.org/ns/prov#wasDerivedFrom",
+          "kind": "iri",
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "assets",
+          "predicate": "https://jeswr.org/ns/pod-docs#assets",
+          "kind": "iri",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/pod-docs#assets"
+          ],
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "body",
+          "predicate": "https://jeswr.org/ns/pod-docs#body",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "comments",
+          "predicate": "https://jeswr.org/ns/pod-docs#comments",
+          "kind": "iri",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/pod-docs#comments"
+          ],
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "currentRevision",
+          "predicate": "https://jeswr.org/ns/pod-docs#currentRevision",
+          "kind": "iri",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/pod-docs#currentRevision"
+          ],
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "format",
+          "predicate": "https://jeswr.org/ns/pod-docs#format",
+          "kind": "literal",
+          "datatype": "http://www.w3.org/2001/XMLSchema#string",
+          "maxCount": 1,
+          "guards": {
+            "sanitizeText": false
+          }
+        },
+        {
+          "name": "updateLog",
+          "predicate": "https://jeswr.org/ns/pod-docs#updateLog",
+          "kind": "iri",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/pod-docs#updateLog"
+          ],
+          "maxCount": 1,
+          "guards": {}
+        },
+        {
+          "name": "wordCount",
+          "predicate": "https://schema.org/wordCount",
+          "kind": "literal",
+          "aliasPredicates": [
+            "http://schema.org/wordCount"
+          ],
+          "datatype": "http://www.w3.org/2001/XMLSchema#integer",
+          "maxCount": 1,
+          "guards": {
+            "minInclusive": 0
+          }
+        }
+      ]
+    }
+  ]
+}

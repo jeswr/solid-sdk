@@ -36,9 +36,11 @@ it("detects Google font imports, re-exports and dynamic loads without matching p
   expect(importsGoogleFonts('import localFont from "next/font/local";', "example.ts")).toBe(false);
 });
 
+// A synchronous scan of every package and app source tree: it grows with the workspace and took
+// 36 s on a loaded CI runner on 26 Nov 2026 with the merged batches, so it gets 120 s.
 it("uses local fonts throughout packages and apps, including the standalone template", () => {
   expect(checkLocalFonts(root), "Vendor fonts and load them with next/font/local").toEqual([]);
-}, 30000);
+}, 120000);
 
 it("fails the CLI for nested app and template imports while ignoring generated files", () => {
   const fixture = mkdtempSync(join(tmpdir(), "local-fonts-"));

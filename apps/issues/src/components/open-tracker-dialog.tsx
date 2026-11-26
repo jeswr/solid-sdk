@@ -6,16 +6,16 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { resolveTracker, type TrackerLocation } from "@/lib/profile";
 import {
+  Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  Input,
+  Label,
+} from "@jeswr/suite-ui";
 import { AlertCircle, Loader2 } from "lucide-react";
 
 const schema = z.object({
@@ -57,7 +57,7 @@ export function OpenTrackerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md sm:w-md!">
         <DialogHeader>
           <DialogTitle>Open someone&apos;s tracker</DialogTitle>
           <DialogDescription>

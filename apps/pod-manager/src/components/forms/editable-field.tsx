@@ -18,10 +18,12 @@ import type { FieldSpec } from "@/lib/forms/field-types";
 import { controlFor, toControlValue } from "@/lib/forms/field-input";
 import { sourceFor } from "@/lib/forms/autocomplete";
 import { cn } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import {
+  Checkbox,
+  Input,
+  Label,
+  Textarea,
+} from "@jeswr/suite-ui";
 
 export interface EditableFieldProps {
   field: FieldSpec;

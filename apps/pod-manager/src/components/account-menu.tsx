@@ -3,16 +3,18 @@
 import { usePodMedia } from "@/components/use-pod-media";
 import { LogOut, UserRound } from "lucide-react";
 import { useSession } from "@/components/session-provider";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@jeswr/suite-ui";
 
 /** Initials from a display name, for the avatar fallback. */
 export function initials(name: string): string {

@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
+import { useT } from "@jeswr/suite-i18n/react";
 import {
   AppRail,
   type AppSlug,
@@ -36,6 +37,7 @@ import { ShortcutsProvider, useShortcutSettings } from "./shortcuts/provider";
 import { useRecentTitle } from "./sync/offline-provider";
 import { useSyncSnapshot } from "./sync/online";
 import { ShellSyncSheet } from "./sync/shell-sync-sheet";
+import { UndoShortcuts } from "./undo/shortcuts";
 
 export interface SuiteShellProps {
   app: AppSlug;
@@ -70,6 +72,7 @@ function Frame({
   searchSource,
   children,
 }: SuiteShellProps) {
+  const t = useT();
   // The registry compares slash-free routes; the native export adds a trailing slash.
   const pathname = useRoutePathname();
   const router = useRouter();
@@ -79,7 +82,9 @@ function Frame({
   const { active } = useAccounts();
   const { characterKeys } = useShortcutSettings();
   const env = useSuiteEnvironment();
-  const app = appRegistry.find((item) => item.slug === slug);
+  const app = appRegistry
+    .map((item) => ({ ...item, name: t(`apps.${item.slug}`) }))
+    .find((item) => item.slug === slug);
   const title = app
     ? `${pageTitle === app.name ? app.name : `${pageTitle} · ${app.name}`} · Solid Suite`
     : undefined;
@@ -128,7 +133,10 @@ function Frame({
     }
   };
   const account = active && <AccountMenu />;
-  const apps = visibleApps(env.NEXT_PUBLIC_SHOW_BACKLOG_APPS);
+  const apps = visibleApps(env.NEXT_PUBLIC_SHOW_BACKLOG_APPS).map((item) => ({
+    ...item,
+    name: t(`apps.${item.slug}`),
+  }));
   return (
     <RailPreferencesProvider
       value={{ value: rail, update: updateRail, status: "ready", retry: () => {} }}
@@ -157,7 +165,10 @@ function Frame({
         }
         sidebar={
           sidebar === undefined
-            ? { label: `${app.name} sections`, sections: app.sidebar?.({ pathname }) ?? [] }
+            ? {
+                label: t("shell.sections", { name: app.name }),
+                sections: app.sidebar?.({ pathname }) ?? [],
+              }
             : sidebar
         }
         {...(details ? { details } : {})}
@@ -168,7 +179,7 @@ function Frame({
             <>
               {actions}
               <a className="suite-feedback-link" href="/feedback">
-                Give feedback
+                {t("shell.feedback")}
               </a>
             </>
           ),
@@ -204,19 +215,22 @@ function Frame({
 function ReadyShortcuts({ hasSidebar }: { hasSidebar: boolean }) {
   const { status } = useAccounts();
   return status === "ready" ? (
-    <GlobalShortcuts
-      hasSidebar={hasSidebar}
-      onOpenApps={() => {
-        // The rail and mobile tab bar own their launchers. Activate the visible native
-        // trigger once the palette has closed, so focus and cleanup match pointer entry.
-        setTimeout(() => {
-          const triggers = document.querySelectorAll<HTMLButtonElement>(
-            '[data-slot="app-launcher-trigger"]',
-          );
-          [...triggers].find((trigger) => trigger.getClientRects().length > 0)?.click();
-        }, 0);
-      }}
-    />
+    <>
+      <UndoShortcuts />
+      <GlobalShortcuts
+        hasSidebar={hasSidebar}
+        onOpenApps={() => {
+          // The rail and mobile tab bar own their launchers. Activate the visible native
+          // trigger once the palette has closed, so focus and cleanup match pointer entry.
+          setTimeout(() => {
+            const triggers = document.querySelectorAll<HTMLButtonElement>(
+              '[data-slot="app-launcher-trigger"]',
+            );
+            [...triggers].find((trigger) => trigger.getClientRects().length > 0)?.click();
+          }, 0);
+        }}
+      />
+    </>
   ) : null;
 }
 

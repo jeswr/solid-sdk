@@ -1,6 +1,13 @@
+/* AUTHORED-BY Claude Opus 5.5 */
 @import "tailwindcss";
-@import "tw-animate-css";
-@import "shadcn/tailwind.css";
+/* Shared primitives come from @jeswr/suite-ui: its token, theme, density and
+   component styles, in the README order. This app's palette below overrides the
+   suite colours; the bridge after it maps the suite-only surface tokens onto it. */
+@import "@jeswr/suite-ui/styles/tokens.css";
+@import "@jeswr/suite-ui/styles/theme.css";
+@import "@jeswr/suite-ui/styles/density.css";
+@import "@jeswr/suite-ui/styles/components.css";
+@source "../../../../packages/suite-ui/dist";
 
 /* Scan the @jeswr/app-shell dist so the FeedbackButton dialog's utility classes
    are generated. The shell components reference the SAME token variable names
@@ -10,7 +17,6 @@
    `node_modules` is outside Tailwind v4's default content scan, hence @source. */
 @source "../../node_modules/@jeswr/app-shell/dist";
 
-@custom-variant dark (&:is(.dark *));
 
 @theme inline {
   --color-background: var(--background);
@@ -151,6 +157,18 @@
   --success-foreground: oklch(0.17 0.03 150);
   --warning: oklch(0.8 0.13 80);
   --warning-foreground: oklch(0.2 0.04 70);
+}
+
+/* suite-ui seam: suite components read these suite-only tokens. */
+:root,
+.dark {
+  --surface: var(--card);
+  --surface-2: var(--muted);
+  --surface-3: var(--secondary);
+  --foreground-muted: var(--muted-foreground);
+  --primary-soft: var(--accent);
+  --primary-soft-foreground: var(--accent-foreground);
+  --font-ui: var(--font-geist-sans);
 }
 
 :root {

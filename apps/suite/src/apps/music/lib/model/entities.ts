@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, SetFrom } from "@rdfjs/wrapper";
+// AUTHORED-BY Claude Opus 5.5
 import type { Store } from "n3";
 import { MusicNode } from "./rdf";
 import { durationSeconds, httpIri, nonEmpty, nonNegative } from "./validation";
@@ -11,7 +11,13 @@ export interface MusicReference {
   name?: string | undefined;
 }
 
+type RecordingView = "LibraryTrack" | "LibraryArtist" | "LibraryAlbum" | "LibraryPlaylist";
+
+/** Canonical writes go through @jeswr/solid-listening's generated library model. */
 export class Recording extends MusicNode {
+  protected get view(): RecordingView {
+    return "LibraryTrack";
+  }
   get artists(): MusicReference[] {
     return this.references(`${S}byArtist`, `${M}performedByArtist`, `${MO}performer`);
   }
@@ -41,13 +47,26 @@ export class Recording extends MusicNode {
     );
   }
 
+  /** schema:name and dcterms:title together (albums, tracks and playlists). */
+  protected writeTitle(checked: string): void {
+    const view = this.view as Exclude<RecordingView, "LibraryArtist">;
+    const quads = [
+      ...this.modelQuads(view, "name", checked),
+      ...this.modelQuads(view, "title", checked),
+    ];
+    this.clear(`${S}name`);
+    this.clear(`${NS.DCT}title`);
+    this.addQuads(quads);
+  }
+
   get sourceUrl(): string | undefined {
     return this.iris(`${S}url`)[0] ?? this.strings(`${S}url`)[0];
   }
   set sourceUrl(value: string | undefined) {
     const checked = value === undefined ? undefined : httpIri(value);
+    const quads = this.modelQuads(this.view, "url", checked);
     this.clear(`${S}url`);
-    this.writeIri(`${S}url`, checked);
+    this.addQuads(quads);
   }
 
   get imageUrl(): string | undefined {
@@ -58,57 +77,64 @@ export class Recording extends MusicNode {
   }
   set imageUrl(value: string | undefined) {
     const checked = value === undefined ? undefined : httpIri(value);
+    const quads = this.modelQuads(this.view, "image", checked);
     this.clear(`${S}image`);
     this.clear(`${S}thumbnailUrl`);
-    this.writeIri(`${S}image`, checked);
+    this.addQuads(quads);
   }
 
   setArtist(iri: string | undefined): void {
     const checked = iri === undefined ? undefined : httpIri(iri);
+    const quads = [
+      ...this.modelQuads(this.view, "byArtist", checked),
+      ...this.modelQuads(this.view, "performedByArtist", checked),
+    ];
     for (const p of [`${S}byArtist`, `${M}performedByArtist`, `${MO}performer`]) this.clear(p);
-    this.writeIri(`${S}byArtist`, checked);
-    this.writeIri(`${M}performedByArtist`, checked);
+    this.addQuads(quads);
   }
 }
 
 export class Artist extends Recording {
+  protected override get view(): RecordingView {
+    return "LibraryArtist";
+  }
   stampType(): this {
-    return this.stamp(`${S}MusicGroup`, `${M}Artist`);
+    return this.stampModel("LibraryArtist");
   }
   override get title(): string {
     return super.title;
   }
   override set title(value: string) {
     const checked = nonEmpty(value);
+    const quads = [
+      ...this.modelQuads("LibraryArtist", "name", checked),
+      ...this.modelQuads("LibraryArtist", "foafName", checked),
+    ];
     this.clear(`${S}name`);
     this.clear(`${NS.FOAF}name`);
-    this.writeString(`${S}name`, checked);
-    this.writeString(`${NS.FOAF}name`, checked);
+    this.addQuads(quads);
   }
 }
 
 export class Album extends Recording {
+  protected override get view(): RecordingView {
+    return "LibraryAlbum";
+  }
   stampType(): this {
-    return this.stamp(`${S}MusicAlbum`, `${M}Album`);
+    return this.stampModel("LibraryAlbum");
   }
   override get title(): string {
     return super.title;
   }
   override set title(value: string) {
-    const checked = nonEmpty(value);
-    this.clear(`${S}name`);
-    this.clear(`${NS.DCT}title`);
-    this.writeString(`${S}name`, checked);
-    this.writeString(`${NS.DCT}title`, checked);
+    this.writeTitle(nonEmpty(value));
   }
   get tracks(): string[] {
     return [...new Set(this.iris(`${S}track`, `${MO}track`))];
   }
   addTrack(iri: string): void {
     this.assertWritableSubject();
-    SetFrom.subjectPredicate(this, `${S}track`, NamedNodeAs.string, NamedNodeFrom.string).add(
-      httpIri(iri),
-    );
+    this.addQuads(this.modelQuads("LibraryAlbum", "track", httpIri(iri)));
   }
 }
 
@@ -118,35 +144,36 @@ export class Track extends Recording {
   }
   set contentUrl(value: string | undefined) {
     const checked = value === undefined ? undefined : httpIri(value);
+    const quads = this.modelQuads("LibraryTrack", "contentUrl", checked);
     this.clear(`${S}contentUrl`);
-    this.writeIri(`${S}contentUrl`, checked);
+    this.addQuads(quads);
   }
   get lyricsUrl(): string | undefined {
     return this.iris(`${S}lyrics`)[0];
   }
   set lyricsUrl(value: string | undefined) {
     const checked = value === undefined ? undefined : httpIri(value);
+    const quads = this.modelQuads("LibraryTrack", "lyrics", checked);
     this.clear(`${S}lyrics`);
-    this.writeIri(`${S}lyrics`, checked);
+    this.addQuads(quads);
   }
   stampType(): this {
-    return this.stamp(`${S}MusicRecording`, `${M}Track`);
+    return this.stampModel("LibraryTrack");
   }
   override get title(): string {
     return super.title;
   }
   override set title(value: string) {
-    const checked = nonEmpty(value);
-    this.clear(`${S}name`);
-    this.clear(`${NS.DCT}title`);
-    this.writeString(`${S}name`, checked);
-    this.writeString(`${NS.DCT}title`, checked);
+    this.writeTitle(nonEmpty(value));
   }
   setAlbum(iri: string | undefined): void {
     const checked = iri === undefined ? undefined : httpIri(iri);
+    const quads = [
+      ...this.modelQuads("LibraryTrack", "schemaInAlbum", checked),
+      ...this.modelQuads("LibraryTrack", "inAlbum", checked),
+    ];
     for (const p of [`${S}inAlbum`, `${M}inAlbum`, `${MO}record`]) this.clear(p);
-    this.writeIri(`${S}inAlbum`, checked);
-    this.writeIri(`${M}inAlbum`, checked);
+    this.addQuads(quads);
   }
   get durationSeconds(): number | undefined {
     for (const value of this.strings(`${S}duration`, `${M}durationSeconds`, `${MO}duration`)) {
@@ -157,32 +184,33 @@ export class Track extends Recording {
   }
   set durationSeconds(value: number | undefined) {
     const checked = value === undefined ? undefined : nonNegative(value);
-    for (const p of [`${S}duration`, `${M}durationSeconds`, `${MO}duration`]) this.clear(p);
-    this.writeString(`${S}duration`, checked === undefined ? undefined : `PT${checked}S`);
-    OptionalAs.object(this, `${M}durationSeconds`, checked, (seconds, factory) =>
-      // xsd:decimal has no exponent notation, even for very small/large numbers.
-      LiteralFrom.datatypeTuple(
-        [
-          `${NS.XSD}decimal`,
-          seconds.toLocaleString("en-US", { useGrouping: false, maximumSignificantDigits: 21 }),
-        ],
-        factory,
+    // The generated xsd:decimal writer never uses exponent notation.
+    const quads = [
+      ...this.modelQuads(
+        "LibraryTrack",
+        "duration",
+        checked === undefined ? undefined : `PT${checked}S`,
       ),
-    );
+      ...this.modelQuads("LibraryTrack", "durationSeconds", checked),
+    ];
+    for (const p of [`${S}duration`, `${M}durationSeconds`, `${MO}duration`]) this.clear(p);
+    this.addQuads(quads);
   }
   get loved(): boolean {
     return this.strings(`${M}loved`).some((value) => value === "true" || value === "1");
   }
   set loved(value: boolean) {
+    const quads = this.modelQuads("LibraryTrack", "loved", value);
     this.clear(`${M}loved`);
-    OptionalAs.object(this, `${M}loved`, value, LiteralFrom.boolean);
+    this.addQuads(quads);
   }
   get isrc(): string | undefined {
     return this.strings(`${M}isrc`, `${MO}isrc`)[0];
   }
   set isrc(value: string | undefined) {
+    const quads = this.modelQuads("LibraryTrack", "isrc", value);
     this.clear(`${M}isrc`);
     this.clear(`${MO}isrc`);
-    this.writeString(`${M}isrc`, value);
+    this.addQuads(quads);
   }
 }

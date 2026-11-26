@@ -7,11 +7,15 @@ import { Share2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { ShareDialog } from "../../drive/components/share-dialog";
-import { loadSharing, type SharingSession } from "../../drive/lib/sharing/adapter";
+import type { SharingSession } from "../../drive/lib/sharing/adapter";
 import { Hint } from "../components/common";
+import {
+  applyDocumentSharing,
+  checkDocumentSharing,
+  documentGroupTargets,
+  loadDocumentSharing,
+} from "../lib/sharing/document-sharing";
 
-const COMPANION_NOTICE =
-  'Sharing currently changes only this document\'s main resource. Its update log, assets and comments keep their existing permissions. Collaborators may not be able to open the document or see its images and comments, and their edits may not save. This also applies to "Anyone with the link".';
 const OWNER_REASON = "Only the owner can change sharing.";
 
 function permissionFailureReason(error: unknown): string | undefined {
@@ -53,7 +57,8 @@ export function useDocumentSharing(
       const resolved = (reason: string | undefined) => {
         if (live) setAccess({ session, resource, reason });
       };
-      void loadSharing(session, resource).then(
+      // Only the entry point and companion root: the whole tree is checked when the dialog opens.
+      void checkDocumentSharing(session, resource).then(
         (snapshot) =>
           resolved(snapshot.canManage ? undefined : (snapshot.readOnly ?? OWNER_REASON)),
         (error: unknown) => resolved(permissionFailureReason(error)),
@@ -112,7 +117,10 @@ export function useDocumentSharing(
           item={{ url: resource, name: title || "Untitled document" }}
           session={session}
           link={`/docs/d/${encodeRef(resource)}`}
-          notice={COMPANION_NOTICE}
+          load={loadDocumentSharing}
+          scopedEditor={false}
+          apply={applyDocumentSharing}
+          groupTargets={documentGroupTargets}
           disabledReason={disabledReason}
           onClose={() => setShown(false)}
           onSaved={() => {}}

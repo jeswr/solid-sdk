@@ -1,6 +1,7 @@
+// AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
-import type { Photo } from "../model";
+import type { Photo } from "@jeswr/solid-photos";
 
 /** One photo's footprint in the pod: its original plus its stored thumbnail. */
 export interface PhotoUsage {

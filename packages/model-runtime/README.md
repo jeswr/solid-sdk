@@ -122,6 +122,14 @@ entity invariants, which also enforce staged writes (see below).
 Ordered fields also throw when the surviving item count violates their outer `sh:minCount`
 or `sh:maxCount`, including omitted fields below their minimum.
 
+`applyScalarGuards(field, value)` and `hasDatasetClass(doc, subject, requiredClasses)`
+are also public for runtime schema interpreters. The former drops scalars outside
+the reviewed closed guards; it does not validate datatypes. The latter reuses the
+bounded, cycle-safe data-graph class walk without exposing migration context. An optional
+fourth argument, a caller-owned `ClassWalkBudget` (`{ reads, limit }`), is charged by every walk
+that receives it; once `reads` exceeds `limit` those walks return `false` (never throw), so an
+interpreter can bound a whole operation's class checks, not just each call.
+
 The manifest schema (`ModelManifest`) and `validateManifest` are exported for the generator and for
 tooling. The IRI filters (`httpIriOrUndefined`, `isHttpIri`, `sanitizeText`, `tryRead`) are exported so
 consumers migrating off a hand-written package keep the exact filter behaviour. Schema tooling
@@ -134,6 +142,29 @@ members, so `1.0000000000000001` cannot silently become `1`. Integer subtypes al
 the safe-integer cap. Enum reads compare exact lexical forms and datatypes against the
 runtime writer's canonical literals; admission rejects noncanonical enum members that a
 value-only manifest cannot preserve (`"01"^^xsd:integer`, for example).
+
+**Opt-in exact decimals.** A literal field with `"decimal": "exact"` (allowed only on
+`xsd:decimal`, never its integer subtypes) maps to a `string` holding the exact lexical:
+an optional ASCII sign, ASCII digits, and an optional `.` followed by ASCII digits, at most
+64 characters (`isExactDecimalLexical`). No significand passes through a JS number, so
+`9007199254740993.01` survives and `10.50` keeps its scale byte-for-byte; leading zeros, `+1`
+and `-0.0` are preserved as written. `.5`, `5.`, exponents, whitespace, non-ASCII digits,
+non-strings and over-long values drop on read, write and set add under the usual
+optional-drop / required-reject policy (build keeps its non-validating drop contract).
+Reads require a Literal typed exactly `xsd:decimal`. Exact fields reject `in`, numeric
+bounds, text guards and non-lexical defaults at manifest validation. Without the key,
+the number mapping is unchanged. `fieldLiteralMapper(datatype, decimal)` is the single
+resolution used by the runtime, manifest validation and the generator's emitted types.
+Exact values compare by lexical, not numeric value: in a set, `has("10.5")` and
+`delete("10.5")` do not match a stored `"10.50"`, and a parse of `10.5, 10.50` keeps both.
+
+**Closed string pattern.** `guards.stringPattern: "upper-alpha-3"` (only on an `xsd:string`
+literal) keeps exactly three ASCII uppercase letters (`isUpperAlpha3`), the projection of
+`sh:pattern "^[A-Z]{3}$"` (the ISO 4217 alphabetic code shape; list membership is domain
+policy). It is checked character by character, never as a regex from manifest text, and the
+value is validated raw: write sanitization is skipped so `"US\u0000D"` drops instead of
+being repaired to `USD`. Manifest validation therefore rejects `trim`, `dropBlank` and
+`sanitizeText` alongside a `stringPattern`.
 
 The XSD string family (`normalizedString`, `token`, `language`, `NMTOKEN`, `Name`, `NCName`,
 `ID`, `IDREF`, `ENTITY` and their list types) has closed lexical checks on reads and writes.

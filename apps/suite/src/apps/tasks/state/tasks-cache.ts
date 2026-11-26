@@ -3,6 +3,7 @@
 import { isomorphic } from "rdf-isomorphic";
 import { missingLabels } from "../lib/compose/planning";
 import { projectMoveData } from "../lib/detail/task-data";
+import { isIssuesProject } from "../lib/issues/model";
 import { ModelError, ProjectMembersSyncError } from "../lib/model/errors";
 import type { TaskMove } from "../lib/model/move";
 import { DataFactory, isSharedTrackerUrl, NS, requireProjectFolder } from "../lib/model/rdf";
@@ -17,6 +18,7 @@ import { type FilterQuery, serializeFilterQuery } from "../lib/views/filter-quer
 import { type DropPosition, positionForDrop } from "../lib/views/positions";
 import { projectColour } from "../lib/views/project-colours";
 import { compareTasks } from "../lib/views/project-groups";
+import { applySkip, planSkip, type SkipPlan, skipMatches } from "../lib/views/skip";
 import { type TaskView, toTaskView } from "../lib/views/types";
 import { changeProject, changeTask, moveItem, optimisticValue, sortedProjects } from "./mutations";
 
@@ -147,6 +149,11 @@ export class TasksCache {
   /** Failed commit-time reads block queued completed deletes until an explicit strict refresh. */
   private completedDeletionBlocked = true;
   private undoOperations = new WeakMap<CompletionPlan, () => Promise<boolean | undefined>>();
+  private readonly offlineReceipts = new Map<string, string>();
+  /** Only an acknowledged create may replace an offline validator in an undo ownership check. */
+  readonly confirmOfflineWrite = (url: string, local: string, remote: string | null) => {
+    if (remote) this.offlineReceipts.set(`${url}\u0000${local}`, remote);
+  };
   private completionCopies = new WeakMap<CompletionPlan, StoredTask>();
   private undoRepairs = new Map<string, UndoRepair>();
   private sharedProjects = new Map<string, string>();
@@ -333,7 +340,11 @@ export class TasksCache {
         this.completedDeletionBlocked = true;
         throw error;
       });
-    const ownProjects = new Set(projects.map((project) => project.url));
+    // A tracker opened from a link or an address is someone else's: it is listed, never owned.
+    const opened = (this.store as { isOpenedTracker?: (url: string) => boolean }).isOpenedTracker;
+    const ownProjects = new Set(
+      projects.map((project) => project.url).filter((url) => !opened?.call(this.store, url)),
+    );
     for (const url of this.sharedProjects.keys()) {
       if (ownProjects.has(url) || !inScope(url)) continue;
       try {
@@ -1019,6 +1030,10 @@ export class TasksCache {
       this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
     );
     if (!source) return Promise.resolve(undefined);
+    if (isIssuesProject(source)) {
+      this.onFailure(new Error("Issues cannot be moved between projects."), () => {});
+      return Promise.resolve(undefined);
+    }
     if (source.url === target.url) return Promise.resolve(item);
     const id = crypto.randomUUID();
     const url = `${target.tracker.stateStore}${id}.ttl`;
@@ -1218,6 +1233,73 @@ export class TasksCache {
     else this.hiddenTasks.delete(url);
     this.emit();
   }
+  /** Recover committed completions first; the skip itself never creates completion history. */
+  async skipTask(item: StoredTask, now = new Date()): Promise<SkipPlan | undefined> {
+    let current = Object.values(this.snapshot.tasks)
+      .flatMap((load) => load.items)
+      .find((task) => task.url === item.url);
+    if (!current) return undefined;
+    const unresolved = this.unresolvedCompletions.get(item.url);
+    const recovery = unresolved ? unresolved() : this.recoverPersistedCompletion(current, now);
+    if (recovery) {
+      if (!(await recovery)) {
+        this.onNotice("Couldn't check this task's history. Try again.");
+        return undefined;
+      }
+      current = Object.values(this.snapshot.tasks)
+        .flatMap((load) => load.items)
+        .find((task) => task.url === item.url);
+      if (!current) return undefined;
+    }
+    const plan = planSkip(current, this.snapshot.views, now);
+    if (!plan) return undefined;
+    return this.updateOccurrence(current, plan.original, plan.previous).then((result) =>
+      result ? plan : undefined,
+    );
+  }
+  undoSkip(item: StoredTask, plan: SkipPlan): Promise<StoredTask | undefined> {
+    return this.updateOccurrence(item, plan.previous, plan.original);
+  }
+  private updateOccurrence(
+    item: StoredTask,
+    target: TaskDetails,
+    expected: TaskDetails,
+  ): Promise<StoredTask | undefined> {
+    const project = this.snapshot.projects.find((project) =>
+      this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
+    );
+    if (!project) return Promise.resolve(undefined);
+    const accepts = (task: TaskItem) => skipMatches(task, expected) || skipMatches(task, target);
+    const current = this.snapshot.tasks[project.url]?.items.find((task) => task.url === item.url);
+    if (!current || !accepts(current.task)) {
+      this.onNotice("The occurrence was changed by a newer action");
+      return Promise.resolve(undefined);
+    }
+    return this.mutate(
+      (state) => {
+        const current = state.tasks[project.url]?.items.find((task) => task.url === item.url);
+        return current && accepts(current.task)
+          ? replaceTask(
+              state,
+              project.url,
+              item.url,
+              changeTask(current, (task) => applySkip(task, target)),
+            )
+          : state;
+      },
+      async () => {
+        const current = this.task(project.url, item.url);
+        if (!accepts(current.task)) throw new Error("The occurrence was changed by a newer action");
+        const task = await this.store.updateTask(current, (task) => applySkip(task, target));
+        this.undoRepairs.get(item.url)?.supersede(task);
+        return { result: task, commit: (state) => replaceTask(state, project.url, item.url, task) };
+      },
+      () => {
+        void this.updateOccurrence(item, target, expected);
+      },
+      [item.url],
+    );
+  }
   completeTask(
     item: StoredTask,
     now = new Date(),
@@ -1225,6 +1307,19 @@ export class TasksCache {
   ): Promise<CompletionPlan | undefined> {
     const unresolved = this.unresolvedCompletions.get(item.url);
     if (unresolved) return unresolved();
+    const recovery = this.recoverPersistedCompletion(item, now);
+    if (recovery) return recovery;
+    const plan = planComplete(item, this.snapshot.views, now, options);
+    if (plan.kind === "advance") return this.advanceTask(item, plan);
+    return this.updateTask(item, (task) => {
+      task.state = "closed";
+      task.endedAt = now;
+    }).then((task) => (task ? plan : undefined));
+  }
+  private recoverPersistedCompletion(
+    item: StoredTask,
+    now: Date,
+  ): Promise<CompletionPlan | undefined> | undefined {
     const project = this.snapshot.projects.find((project) =>
       this.snapshot.tasks[project.url]?.items.some((task) => task.url === item.url),
     );
@@ -1236,12 +1331,6 @@ export class TasksCache {
         !item.task.completionOperations.has(copy.url),
     );
     if (project && orphans?.length) return this.recoverCompletion(project, item, orphans, now);
-    const plan = planComplete(item, this.snapshot.views, now, options);
-    if (plan.kind === "advance") return this.advanceTask(item, plan);
-    return this.updateTask(item, (task) => {
-      task.state = "closed";
-      task.endedAt = now;
-    }).then((task) => (task ? plan : undefined));
   }
   /** Undo retains occurrence ownership across lost responses and retries each write conditionally. */
   undoCompletion(item: StoredTask, plan: CompletionPlan): Promise<boolean | undefined> {
@@ -1296,7 +1385,8 @@ export class TasksCache {
     };
     const copyMatches = (copy: StoredTask) =>
       !!reservedCopy?.etag &&
-      copy.etag === reservedCopy.etag &&
+      copy.etag ===
+        (this.offlineReceipts.get(`${copy.url}\u0000${reservedCopy.etag}`) ?? reservedCopy.etag) &&
       isomorphic([...copy.dataset], [...reservedCopy.dataset]);
     const forward = (task: TaskItem) => {
       if (plan.kind !== "advance") return;
@@ -1956,7 +2046,14 @@ export class TasksCache {
           const folder = requireProjectFolder(project.url, current.tracker.stateStore, projects);
           const confirmed: StoredTask[] = [];
           if (!granted) {
-            const items = await this.store.listTasks(folder, { strict: true, skipInvalid: true });
+            const items = await this.store.listTasks(folder, {
+              strict: true,
+              skipInvalid: true,
+              onInvalid: async (resource) => {
+                if (await this.store.unassignInvalidTask(resource, webId))
+                  unassigned.add(resource.url);
+              },
+            });
             for (const item of items) {
               if (item.task.assignee !== webId) {
                 confirmed.push(item);

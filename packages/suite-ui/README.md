@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 # @jeswr/suite-ui
 
 Normative tokens from `01-design-system` §2.1–2.7 and Amendment 2026-10-25. Import `styles/tokens.css`,
@@ -21,6 +22,21 @@ parity test guard changes. Run `pnpm check:tokens` and `pnpm check:contrast` at 
 workspace root. `--input` supplies form control boundaries with at least 3:1 contrast
 against `--background` and `--surface` in both themes. `--border-strong` remains
 the decorative border token. Warning text on `--warning` meets 4.5:1 in both themes.
+
+### Apps that keep their own palette
+
+An app may keep its shadcn colour tokens (`--background`, `--card`, `--primary`, …).
+Import `tokens.css`, `theme.css`, `density.css` and `components.css` first, then define
+the app palette after them, then map the suite-only tokens onto it under `:root, .dark`:
+`--surface` (card), `--surface-2` (muted), `--surface-3` (secondary), `--foreground-muted`
+(muted foreground), `--primary-soft` / `--primary-soft-foreground` (accent) and
+`--font-ui` (the app font). The type, spacing, density and motion scales and the
+component radii stay the suite's; an app's own `@theme` radius overrides apply only to
+its utility classes. `components.css` is unlayered, so it beats Tailwind utilities: a
+call site that needs a narrower input or a borderless trigger marks the class
+important (`w-16!`, `border-transparent!`). Issues and Pod Manager use this seam; see
+their `globals.css`. The app's own `--input` colour sets control borders, so keep it at
+3:1 against the background to meet the boundary contrast the components assume.
 
 ## DS-08 date and time inputs
 
@@ -139,7 +155,9 @@ The shadcn source provenance and MIT notice are in [THIRD_PARTY_NOTICES.md](THIR
 
 `components/ui/` contains the §5 shadcn/Radix primitives, Command (cmdk), Calendar
 (react-day-picker 9), Form (react-hook-form + Zod), Toast (`Toaster` / `toast`, sonner),
-and Resizable. Controls inherit `--control-h` / `--control-h-sm`; focus is a 2px ring
+Resizable and Card. `Card` (`size="default" | "sm"`) is a `bg-card` surface with a
+`--border` ring; `CardHeader`, `CardTitle`, `CardDescription`, `CardAction`,
+`CardContent` and `CardFooter` share its `--card-spacing` padding. Controls inherit `--control-h` / `--control-h-sm`; focus is a 2px ring
 with a 2px offset. Menus, dialogs and sheets use the suite surface/elevation tokens.
 
 Keep `CommandEmpty` inside `CommandList`. It renders the no-match message as a disabled
@@ -518,3 +536,16 @@ composer focus, while Tab or outside focus closes the picker without refocusing.
 source filters, native buttons, arrow/Home/End navigation, loading/error/retry states
 and optional `onDelete` are included. `busy` disables choices and dismissal while the
 caller creates an item. Load `styles/components.css` for token-based light/dark styles.
+
+Navigation's built-in app names and `SignInCard` controls use the shared
+`I18nProvider` from `@jeswr/suite-i18n/react`. Standalone use defaults to English;
+explicit host app names and sign-in titles remain authoritative.
+
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+Navigation chrome (launcher, customise panel, loading and empty states, landmarks) is
+translated the same way. The host must share one `@jeswr/suite-i18n` copy with suite-ui,
+or these components fall back to English. `DirectionProvider` and `useDirection` re-export
+Radix's direction context: wrap the app in `<DirectionProvider dir={dir(locale)}>` so menus,
+popovers and the launcher grid's arrow keys follow RTL. Shell, navigation and sign-in styles
+use logical properties; add `suite-rtl-mirror` to a directional icon to flip it under
+`[dir="rtl"]`.

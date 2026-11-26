@@ -99,7 +99,7 @@ export async function notifySavedChips(
   if (!notify) {
     notify = createMentionNotifier({
       actor: session.webId,
-      notify: createNotify({ fetch: session.fetch }),
+      notify: createNotify({ fetch: session.fetch, webId: session.webId }),
       receipts: localStorage,
     });
     actors.set(session.webId, notify);

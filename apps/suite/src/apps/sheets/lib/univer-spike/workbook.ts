@@ -1,13 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import {
-  CellValueType,
-  getPlainText,
-  type ICellData,
-  type IWorkbookData,
-  LocaleType,
-} from "@univerjs/core";
+// AUTHORED-BY Claude Opus 5.5
+import { CellValueType, type ICellData, type IWorkbookData, LocaleType } from "@univerjs/core";
 import { getCellValue } from "@univerjs/sheets";
+import { cellLinkUrls, linkPlainText } from "../hyperlinks";
 import { parseCsv, serializeCsv } from "./csv";
 
 export interface CsvSheet {
@@ -20,6 +16,13 @@ export interface CsvSheet {
 export interface ColumnProjection {
   name: string;
   type: "string" | "number" | "date" | "boolean";
+}
+
+/** A loop, not `Math.max(...rows)`: spreading one argument per row overflows the stack. */
+function width(grid: readonly (readonly string[])[]): number {
+  let columns = 1;
+  for (const row of grid) if (row.length > columns) columns = row.length;
+  return columns;
 }
 
 /** Preserve lexical text, including leading zeroes, dates and formula-looking text. */
@@ -61,7 +64,7 @@ export function csvToWorkbook(
         id: sheet.id,
         name: sheet.name,
         rowCount: Math.max(1, grid.length),
-        columnCount: Math.max(1, ...grid.map((row) => row.length)),
+        columnCount: width(grid),
         cellData,
       },
     });
@@ -92,8 +95,10 @@ export function workbookToCsv(snapshot: IWorkbookData, sheetId: string): string 
     Array.from({ length: height }, (_, r) =>
       Array.from({ length: width }, (_, c) => {
         const cell = cells[r]?.[c];
+        const urls = cell ? cellLinkUrls(cell) : [];
+        if (urls.length) return urls.join(" ");
         const richText = cell?.p?.body?.dataStream;
-        if (richText) return getPlainText(richText);
+        if (richText) return linkPlainText(richText);
         if (cell?.v != null) {
           if (cell.t === CellValueType.BOOLEAN) {
             return getCellValue(CellValueType.BOOLEAN, cell) ? "true" : "false";

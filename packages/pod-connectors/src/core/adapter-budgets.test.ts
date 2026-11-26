@@ -65,7 +65,11 @@ async function capped(
 }
 
 describe.each(
-  ALL_ADAPTERS.map((adapter) => ({ adapter, id: adapter.metadata.id })),
+  // A deprecated adapter refuses every live run before any source request.
+  ALL_ADAPTERS.filter((adapter) => !adapter.metadata.deprecated).map((adapter) => ({
+    adapter,
+    id: adapter.metadata.id,
+  })),
 )("$id run budget", ({ adapter }) => {
   it("refuses the first source request at a zero request allowance", async () => {
     const api = vi.fn(fixtureFetch(adapter.metadata.id, adapter.fixtures()));
@@ -218,7 +222,6 @@ describe.each(
 /** These adapters intentionally read one page; hostile continuations must not start a traversal. */
 const snapshotArrays: Record<string, readonly string[]> = {
   facebook: ["data"],
-  fitbit: ["activities"],
   garmin: [],
   "google-photos": ["mediaItems"],
   instagram: ["data"],

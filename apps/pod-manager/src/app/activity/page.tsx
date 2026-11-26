@@ -3,7 +3,9 @@
 import { useRecentActivity } from "@/components/use-activity";
 import { ActivityFeed, ActivityEmpty } from "@/components/activity-feed";
 import { ErrorState } from "@/components/states";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Skeleton,
+} from "@jeswr/suite-ui";
 
 export default function ActivityPage() {
   const { data, loading, error } = useRecentActivity(50);

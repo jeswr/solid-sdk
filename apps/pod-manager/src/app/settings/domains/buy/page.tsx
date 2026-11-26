@@ -26,12 +26,17 @@ import {
 import { DomainsErrorState } from "@/components/domains-ui";
 import { EmptyState } from "@/components/states";
 import { useDomains, usePurchaseFeature } from "@/components/use-domains";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Separator,
+  Skeleton,
+} from "@jeswr/suite-ui";
 import {
   DomainPurchaseUnavailableError,
   DomainsAuthError,

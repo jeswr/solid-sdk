@@ -191,8 +191,7 @@ async function createIndexDocument(indexUrl: string, fetchImpl?: typeof fetch): 
  * profile) when neither exists. Idempotent — existing registrations are left
  * untouched, so re-running never duplicates entries.
  *
- * @param fetchImpl - test-only override; **omit in production** so the
- *   auth-patched global fetch runs.
+ * @param fetchImpl - authenticated transport; omit for unauthenticated global fetch.
  */
 export async function ensureTypeRegistrations(opts: {
   webId: string;

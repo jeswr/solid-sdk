@@ -24,6 +24,10 @@
       "types": "./dist/preferences/index.d.ts",
       "default": "./dist/preferences/index.js"
     },
+    "./pwa": {
+      "types": "./dist/pwa.d.ts",
+      "default": "./dist/pwa.js"
+    },
     "./offline": {
       "types": "./dist/offline.d.ts",
       "default": "./dist/offline.js"
@@ -47,6 +51,14 @@
     "./pod-scoped-fetch": {
       "types": "./dist/pod-scoped-fetch.d.ts",
       "default": "./dist/pod-scoped-fetch.js"
+    },
+    "./shared": {
+      "types": "./dist/shared.d.ts",
+      "default": "./dist/shared.js"
+    },
+    "./undo": {
+      "types": "./dist/undo.d.ts",
+      "default": "./dist/undo.js"
     }
   },
   "files": [
@@ -74,6 +86,7 @@
     "@jeswr/solid-offline": "workspace:*",
     "@jeswr/storage-capabilities": "workspace:*",
     "@jeswr/storage-client": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
     "@rdfjs/wrapper": "0.34.0",
     "n3": "2.0.3"
   },

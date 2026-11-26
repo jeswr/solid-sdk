@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
 import { Authorization } from "@solid/object";
+import { isDirectChild } from "../../../docs/lib/model/layout";
 import { projectMoveData } from "../detail/task-data";
+import { TaskCommentStore } from "./comments";
 import { InboxAclRecoveryError, ModelError } from "./errors";
 import { RdfIO, type Resource, requireEtag } from "./io";
 import { TaskMove } from "./move";
@@ -64,6 +66,9 @@ export interface StoreOptions {
 }
 /** Hook-free port of Pod Manager's one-resource-per-item productivity store. */
 export class TaskStore {
+  comments(project: StoredProject, task: StoredTask): TaskCommentStore {
+    return new TaskCommentStore(project, task, this.options.webId, this.options.fetch);
+  }
   readonly projects: string;
   private readonly io: RdfIO;
   private readonly index: TypeIndex;
@@ -391,12 +396,27 @@ export class TaskStore {
   /** Strict reads fail on missing/unreadable resources; membership cleanup can skip invalid tasks. */
   async listTasks(
     stateStore: string,
-    { strict = false, skipInvalid = false } = {},
+    {
+      strict = false,
+      skipInvalid = false,
+      onInvalid,
+    }: {
+      strict?: boolean;
+      skipInvalid?: boolean;
+      /** Parsed documents rejected by task validation, for narrowly scoped membership cleanup. */
+      onInvalid?: (resource: Resource) => Promise<void>;
+    } = {},
   ): Promise<StoredTask[]> {
     const tasks: StoredTask[] = [];
     for (const url of await this.io.list(stateStore, { strict })) {
       if (!isTaskMember(url, stateStore)) continue;
-      const resource = strict ? await this.io.read(url) : await this.readListedResource(url);
+      let resource: Resource | undefined;
+      try {
+        resource = strict ? await this.io.read(url) : await this.readListedResource(url);
+      } catch (error) {
+        if (skipInvalid && error instanceof TypeError) continue;
+        throw error;
+      }
       if (!resource) continue;
       if (strict) {
         try {
@@ -404,7 +424,10 @@ export class TaskStore {
           if (!data) throw new TypeError("Expected a wf:Task.");
           validateTask(data);
         } catch (error) {
-          if (skipInvalid) continue;
+          if (skipInvalid) {
+            await onInvalid?.(resource);
+            continue;
+          }
           throw error;
         }
       }
@@ -412,6 +435,26 @@ export class TaskStore {
       if (task.isTask) tasks.push({ ...resource, task });
     }
     return tasks;
+  }
+  /** Remove only the revoked member's assignee triple, even if other task fields are invalid. */
+  async unassignInvalidTask(resource: Resource, webId: string): Promise<boolean> {
+    const dataset = new Store([...resource.dataset]);
+    const task = node(`${resource.url}#it`, dataset);
+    if (!task.nodes(`${NS.RDF}type`).has(node(`${NS.WF}Task`, dataset))) return false;
+    if (!task.nodes(`${NS.WF}assignee`).delete(node(webId, dataset))) return false;
+    try {
+      await this.io.write(resource.url, dataset, { etag: resource.etag });
+    } catch (error) {
+      // As with validated tasks, a lost PUT response may already have removed the assignment.
+      const current = await this.io.read(resource.url);
+      if (
+        node(`${resource.url}#it`, current.dataset)
+          .nodes(`${NS.WF}assignee`)
+          .has(node(webId, current.dataset))
+      )
+        throw error;
+    }
+    return true;
   }
   async createTask(
     project: StoredProject,
@@ -480,6 +523,8 @@ export class TaskStore {
         return [...references.values()];
       },
       now,
+      (previous) =>
+        this.comments(source, item).prepareMove(`${container}comments/`, `${url}#it`, previous),
     );
   }
   /** Create, remap child/occurrence links, then delete, reconciling before compensation. */
@@ -494,6 +539,39 @@ export class TaskStore {
   }
   async deleteTask(item: StoredTask): Promise<void> {
     await this.io.remove(item.url, item.etag);
+    // The task is gone: its comments must not outlive it. A failure here never undoes or
+    // blocks the delete; it stays queued and is retried on the next delete or retry call.
+    const folder = item.url.slice(0, item.url.lastIndexOf("/") + 1);
+    try {
+      this.pendingCommentCleanup.set(
+        item.url,
+        new TaskCommentStore(
+          { tracker: { stateStore: folder } },
+          item,
+          this.options.webId,
+          this.options.fetch,
+        ),
+      );
+    } catch (error) {
+      console.warn("Tasks: cannot locate comments of a deleted task.", error);
+    }
+    await this.retryCommentCleanup();
+  }
+  private readonly pendingCommentCleanup = new Map<string, TaskCommentStore>();
+  /** Task URLs whose comments could not be removed yet. */
+  get commentCleanupPending(): string[] {
+    return [...this.pendingCommentCleanup.keys()];
+  }
+  /** Retry removing comments of deleted tasks. Failures are warned about and stay queued. */
+  async retryCommentCleanup(): Promise<void> {
+    for (const [url, comments] of [...this.pendingCommentCleanup]) {
+      try {
+        await comments.removeAll();
+        this.pendingCommentCleanup.delete(url);
+      } catch (error) {
+        console.warn("Tasks: could not remove comments of a deleted task; will retry.", error);
+      }
+    }
   }
   /** Each resource keeps its own read validator; a conflict stops further removal. */
   async deleteSection(project: StoredProject, id: string): Promise<StoredProject> {
@@ -528,6 +606,18 @@ export class TaskStore {
     const reserved = await this.io.write(project.url, dataset, { etag: current.etag });
     for (const item of await this.listTasks(container))
       await this.removeIfPresent(item.url, item.etag);
+    const comments = `${container}comments/`;
+    for (const url of await this.io.list(comments)) {
+      // Never follow foreign or nested entries advertised by an untrusted listing.
+      if (!isDirectChild(url, comments)) continue;
+      const comment = await this.io.optional(url);
+      if (!comment) continue;
+      await this.removeAcl(url);
+      await this.removeIfPresent(url, comment.etag);
+    }
+    await this.removeAcl(comments);
+    const commentContainer = await this.io.optional(comments);
+    if (commentContainer) await this.removeIfPresent(comments, commentContainer.etag);
     // Auxiliary ACLs are listed by some pods; remove them before the folder DELETE.
     await this.removeAcl(container);
     const resource = await this.io.optional(container);

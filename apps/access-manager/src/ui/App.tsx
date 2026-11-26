@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // App root: logged out → <jeswr-login-panel> (suite login + silent session
 // restore); logged in → the @jeswr/app-shell chrome (theme / account menu /
@@ -8,8 +9,9 @@
 import { AccountMenu, FeedbackButton, ThemeToggle } from "@jeswr/app-shell";
 import type { LoginController, SessionChangeDetail } from "@jeswr/solid-elements";
 import { LoginPanel } from "@jeswr/solid-elements/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { type Session, SessionProvider, useSession } from "../auth/SessionContext.js";
+import { clearAgentDisplayCache } from "../lib/profile.js";
 import { DashboardView } from "./DashboardView.jsx";
 import { DataClassView } from "./DataClassView.jsx";
 import { HistoryView } from "./HistoryView.jsx";
@@ -22,9 +24,16 @@ export function App({ controller }: { controller: LoginController }) {
   const [webId, setWebId] = useState<string | null>(null);
 
   const session: Session | null = useMemo(
-    () => (webId ? { webId, fetch: controller.authenticatedFetch } : null),
+    () =>
+      webId
+        ? { webId, fetch: controller.authenticatedFetch, publicFetch: controller.publicFetch }
+        : null,
     [webId, controller],
   );
+
+  useEffect(() => {
+    if (webId) return clearAgentDisplayCache;
+  }, [webId]);
 
   const onSessionChange = (event: CustomEvent<SessionChangeDetail>) => {
     setWebId(event.detail.loggedIn ? event.detail.webId : null);
@@ -142,8 +151,6 @@ export function Shell({
             <InboxView
               inboxUrl={data.inboxUrl}
               storageRoot={data.storageRoot}
-              registrations={data.registrations}
-              nodes={data.nodes}
               onChanged={data.refresh}
             />
           ) : (

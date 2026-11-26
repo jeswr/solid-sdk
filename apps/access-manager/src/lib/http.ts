@@ -1,19 +1,19 @@
 // AUTHORED-BY Codex GPT-6
-// Deprecated app compatibility API: new consumers use @jeswr/pod-access/requests-solid.
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
-// The HTTP seam of the whole app. EVERY pod interaction goes through an
-// injectable `SolidFetch` (the authenticated fetch handed down from the login
-// controller), so every view and every pipeline is unit-testable against a
-// stubbed in-memory pod — no live server needed for the gate.
+// Dashboard/history reads and conditional writes use an injected session fetch
+// directly. readRdf has no byte limit: the SDK exports no bounded reader for
+// authenticated storage reads. Public profile callers supply the SDK's bounded
+// public transport, and the request inbox/decision pipeline uses the SDK transport.
 //
 // Writes are ALWAYS conditional (the suite CAS discipline, proposal §3.5):
 //   - `putIfMatch`     — update guarded by the ETag from the read (lost race → 412)
-//   - `putIfNoneMatch` — create-only (`If-None-Match: *`; already-exists → 412)
 // A 412 is a first-class, typed outcome (`PreconditionFailedError`) the caller
 // re-reads and reconciles on — never a swallowed error.
 
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import { requireStrongEtag } from "@jeswr/pod-access/requests-solid";
 import type { DatasetCore } from "@rdfjs/types";
 
 /** The injectable authenticated-fetch seam. */
@@ -30,12 +30,8 @@ export interface ReadRdf {
 /** Thrown when a conditional write loses the race (HTTP 412). */
 export class PreconditionFailedError extends Error {
   readonly url: string;
-  constructor(url: string, kind: "if-match" | "if-none-match") {
-    super(
-      kind === "if-match"
-        ? `Conditional write to ${url} failed: the resource changed since it was read (412).`
-        : `Create-only write to ${url} failed: the resource already exists (412).`,
-    );
+  constructor(url: string) {
+    super(`Conditional write to ${url} failed: the resource changed since it was read (412).`);
     this.name = "PreconditionFailedError";
     this.url = url;
   }
@@ -97,8 +93,7 @@ export async function readRdf(url: string, fetchFn: SolidFetch): Promise<ReadRdf
 
 /**
  * Conditional update: PUT Turtle guarded by the ETag captured at read time.
- * When `etag` is null (a server that sends no validator) the write degrades to
- * an unconditional PUT — the degraded legacy path, kept explicit here.
+ * Refuse missing, weak or malformed validators before sending any write.
  */
 export async function putIfMatch(
   url: string,
@@ -106,30 +101,9 @@ export async function putIfMatch(
   etag: string | null,
   fetchFn: SolidFetch,
 ): Promise<void> {
-  const headers: Record<string, string> = { "content-type": "text/turtle" };
-  if (etag !== null) headers["if-match"] = etag;
+  requireStrongEtag(etag);
+  const headers = { "content-type": "text/turtle", "if-match": etag as string };
   const res = await fetchFn(url, { method: "PUT", headers, body: turtle });
-  if (res.status === 412) throw new PreconditionFailedError(url, "if-match");
+  if (res.status === 412) throw new PreconditionFailedError(url);
   if (!res.ok) throw new WriteFailedError(url, res.status);
-}
-
-/** Create-only PUT (`If-None-Match: *`). 412 = already exists. */
-export async function putIfNoneMatch(
-  url: string,
-  turtle: string,
-  fetchFn: SolidFetch,
-): Promise<void> {
-  const res = await fetchFn(url, {
-    method: "PUT",
-    headers: { "content-type": "text/turtle", "if-none-match": "*" },
-    body: turtle,
-  });
-  if (res.status === 412) throw new PreconditionFailedError(url, "if-none-match");
-  if (!res.ok) throw new WriteFailedError(url, res.status);
-}
-
-/** DELETE a resource. 404 is treated as already-gone (idempotent). */
-export async function deleteResource(url: string, fetchFn: SolidFetch): Promise<void> {
-  const res = await fetchFn(url, { method: "DELETE" });
-  if (!res.ok && res.status !== 404) throw new WriteFailedError(url, res.status);
 }

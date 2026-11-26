@@ -7,17 +7,17 @@ import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { readJson } from "../core/budget.js";
+import { connectorStateLocation } from "../core/container.js";
 import { requirePrivateWriteConfirmation } from "../core/pod-writer-policy.js";
+import { connectorState as coreConnectorState } from "../core/state.js";
 import type { ConnectorState, PodWriter } from "../core/types.js";
 import { isCompletedPut, writeResource } from "../pod/resource.js";
 import {
   httpsUrl,
   isTransientCause,
   NodeRuntimeError,
-  object,
   PermanentCauseError,
   StateStoreError,
-  textValue,
 } from "./errors.js";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
@@ -35,43 +35,24 @@ class OwnerAuthorization extends Authorization {
   }
 }
 
-/** The CLI checkpoint keeps file-import progress in its own slot beside the API cursor, so
- * neither import path overwrites or misreads the other's progress. */
-export interface CliConnectorState extends ConnectorState {
-  readonly fileCursor?: string;
-}
+/** The CLI checkpoint keeps file-import progress in its own slot (`fileCursor`) beside the
+ * API cursor, so neither import path overwrites or misreads the other's progress. */
+export type CliConnectorState = ConnectorState;
 
-/** Project validated checkpoint fields only; never persist incidental token/error properties. */
+/**
+ * Project validated checkpoint fields only; never persist incidental token/error properties.
+ * The single core parser, shared with the scheduler's store, so each keeps the other's
+ * validated fields (`fileCursor`, `sync`, `health`, `accounts`, `claims`).
+ */
 export function connectorState(value: unknown): CliConnectorState {
-  const state = object(value);
-  const date = (value: unknown): string => {
-    const text = textValue(value);
-    if (!Number.isFinite(Date.parse(text))) throw new Error("Invalid state date");
-    return text;
-  };
-  const counts = object(state.counts);
-  const count = (value: unknown): number => {
-    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
-      throw new Error("Invalid state count");
-    return value;
-  };
-  if (state.lastOutcome !== "success" && state.lastOutcome !== "error")
-    throw new Error("Invalid state outcome");
-  return {
-    connectedAt: date(state.connectedAt),
-    ...(state.lastSync === undefined ? {} : { lastSync: date(state.lastSync) }),
-    ...(state.cursor === undefined ? {} : { cursor: textValue(state.cursor) }),
-    ...(state.fileCursor === undefined ? {} : { fileCursor: textValue(state.fileCursor) }),
-    lastOutcome: state.lastOutcome,
-    counts: {
-      documents: count(counts.documents),
-      items: count(counts.items),
-      skipped: count(counts.skipped),
-    },
-  };
+  return coreConnectorState(value);
 }
 
-/** Owner-only JSON checkpoint bound to one connector; conditional writes reject lost updates. */
+/**
+ * Owner-only JSON checkpoint bound to one connector; conditional writes reject lost updates.
+ * Stored at `integrations/<container>/state.json`, or `state-<id>.json` for a successor
+ * connector writing into its predecessor's container (Google Health → `integrations/fitbit/`).
+ */
 export function createStateStore(options: {
   readonly podRoot: string;
   readonly adapterId: string;
@@ -81,13 +62,22 @@ export function createStateStore(options: {
 }) {
   if (!/^[a-z0-9-]+$/.test(options.adapterId))
     throw new NodeRuntimeError("config", "Invalid connector id.");
-  const root = new URL(`integrations/${options.adapterId}/`, options.podRoot).href;
+  // Successor connectors share their predecessor's container but keep their own checkpoint;
+  // the scheduler's store resolves the same location.
+  let location: ReturnType<typeof connectorStateLocation>;
+  try {
+    location = connectorStateLocation(options.podRoot, options.adapterId);
+  } catch {
+    throw new NodeRuntimeError("config", "Invalid connector id.");
+  }
+  const { root, file, url } = location;
   const webId = httpsUrl(options.webId, true);
-  const url = assertWithinPodScope(options.podRoot, new URL("state.json", root).href);
   const fetchSafe = refuseRedirects(options.fetch);
   let etag: string | undefined;
   let loaded = false;
   let exists = false;
+  // The scheduler's fields as last read, carried over so a CLI write never drops them.
+  let stored: CliConnectorState | undefined;
   return {
     url,
     async read(): Promise<CliConnectorState | undefined> {
@@ -125,19 +115,21 @@ export function createStateStore(options: {
         if (response.status === 404) {
           exists = false;
           etag = undefined;
+          stored = undefined;
           loaded = true;
           return undefined;
         }
         if (!response.ok) throw new StateHttpError(response.status);
         if (!response.headers.get("etag")) throw new PermanentCauseError(); // Unsafe to update.
         const body = await readJson(response, options.adapterId, url, MAX_CHECKPOINT_BYTES);
-        let state: ConnectorState;
+        let state: CliConnectorState;
         try {
           state = connectorState(body);
         } catch {
           throw new PermanentCauseError(); // A corrupt checkpoint never repairs itself.
         }
         etag = response.headers.get("etag") as string;
+        stored = state;
         exists = true;
         loaded = true;
         return state;
@@ -160,7 +152,7 @@ export function createStateStore(options: {
         const response = await fetchSafe(url, {
           method: "PUT",
           headers,
-          body: JSON.stringify(connectorState(state)),
+          body: JSON.stringify(connectorState(withSchedulerFields(state, stored))),
         });
         if (!response.ok) throw new StateHttpError(response.status);
         created = createOnly && isCompletedPut(response.status);
@@ -175,7 +167,7 @@ export function createStateStore(options: {
         await requirePrivateWriteConfirmation(
           options.adapterId,
           privacy,
-          "state.json",
+          file,
           url,
           created,
           writeEtag,
@@ -183,5 +175,21 @@ export function createStateStore(options: {
         options.signal?.throwIfAborted();
       }
     },
+  };
+}
+
+/**
+ * Keep the scheduler's per-account checkpoints, run claims and attempt health from the
+ * checkpoint this write is conditional on (same ETag); the CLI never owns those fields.
+ */
+function withSchedulerFields(
+  state: CliConnectorState,
+  stored: CliConnectorState | undefined,
+): CliConnectorState {
+  return {
+    ...(stored?.health === undefined ? {} : { health: stored.health }),
+    ...(stored?.accounts === undefined ? {} : { accounts: stored.accounts }),
+    ...(stored?.claims === undefined ? {} : { claims: stored.claims }),
+    ...state,
   };
 }

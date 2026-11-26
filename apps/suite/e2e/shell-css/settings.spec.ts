@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { accessible, cssAccount, expect, test, warmLiveRoutes } from "./fixtures";
+import { accessible, expect, test, warmLiveRoutes } from "./fixtures";
 
 const caps = JSON.parse(process.env.SUITE_TEST_CAPS ?? "{}") as Record<string, boolean>;
 

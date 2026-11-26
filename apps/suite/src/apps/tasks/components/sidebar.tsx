@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 "use client";
+import { visibleSharedItems } from "@jeswr/suite-sdk/shared";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,7 +36,10 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useId, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { useRoutePathname } from "@/lib/route-params";
+import { useHiddenSharedItems } from "@/lib/shared/hidden";
+import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import { dueDate, isOverdue, localDay } from "../lib/format/due";
+import { isIssuesProject } from "../lib/issues/model";
 import { ModelError } from "../lib/model/errors";
 import type { StoredProject } from "../lib/model/store";
 import { unionLabels } from "../lib/model/tracker";
@@ -115,6 +119,7 @@ function ProjectRow({
   children?: ReactNode;
 }) {
   const tasks = useTasks();
+  const connection = useNeedsConnection();
   const calendar = useCalendarExchange(project);
   const { preferences, dispatch } = useTasksPreferences();
   const favourite = preferences.favourites.includes(project.url);
@@ -253,7 +258,11 @@ function ProjectRow({
                   Rename
                 </DropdownMenuItem>
                 {tasks.sharingAvailable && (
-                  <DropdownMenuItem disabled={!project.etag} onSelect={() => setSharing(true)}>
+                  <DropdownMenuItem
+                    disabled={!project.etag || connection.disabled}
+                    title={connection.disabled ? "Sharing needs a connection" : undefined}
+                    onSelect={() => setSharing(true)}
+                  >
                     Share
                   </DropdownMenuItem>
                 )}
@@ -415,12 +424,17 @@ export function TasksSidebar() {
   const overdue = dueToday.some((task) => isOverdue(task, now));
   const inboxCount = open.filter((task) => task.projectUrl === tasks.inboxUrl).length;
   const labels = unionLabels(tasks.projects.map((project) => project.tracker));
-  const shared = preferences.sharedProjects.filter(
-    (project) => !tasks.cache.isOwnProject(project.url),
+  const { hidden } = useHiddenSharedItems(preferences.sharedOwner ?? "");
+  const shared = visibleSharedItems(preferences.sharedProjects, hidden).filter(
+    (project) =>
+      !tasks.cache.isOwnProject(project.url) &&
+      !tasks.projects.some((loaded) => loaded.url === project.url && isIssuesProject(loaded)),
   );
-  const sharedUrls = new Set(shared.map((project) => project.url));
+  const sharedUrls = new Set(preferences.sharedProjects.map((project) => project.url));
+  const isShared = (url: string) => sharedUrls.has(url) || !tasks.cache.isOwnProject(url);
   const projects = tasks.projects.filter(
-    (project) => project.url !== tasks.inboxUrl && !sharedUrls.has(project.url),
+    (project) =>
+      project.url !== tasks.inboxUrl && !isShared(project.url) && !isIssuesProject(project),
   );
   const tree = tasks.cache.projectTree;
   const disclosureFor = (project: StoredProject, childListId: string) => (
@@ -472,10 +486,15 @@ export function TasksSidebar() {
         );
       });
   // Refresh retains cached shared trackers on errors; confirmed deletions aren't favourites.
-  const favourites = tasks.projects.filter((project) => {
+  // A Shared hide applies to shared projects only, never to the user's own projects.
+  const favourites = visibleSharedItems(
+    tasks.projects,
+    hidden.filter((item) => !tasks.cache.isOwnProject(item.url)),
+  ).filter((project) => {
     const error = tasks.tasks[project.url]?.error;
     return (
       preferences.favourites.includes(project.url) &&
+      !isIssuesProject(project) &&
       !project.tracker.archivedAt &&
       !(error instanceof ModelError && error.url === project.url && error.category === "not-found")
     );
@@ -549,6 +568,25 @@ export function TasksSidebar() {
         {link("/tasks/upcoming", "Upcoming", <CalendarRange size={18} aria-hidden="true" />)}
         {link("/tasks/completed", "Completed", <Check size={18} aria-hidden="true" />)}
       </ul>
+      {tasks.projects.some(isIssuesProject) && (
+        <section aria-label="Issues">
+          <h2 className="tsk-nav-heading">
+            <Link href="/tasks/issues">Issues</Link>
+          </h2>
+          <ul className="tsk-nav-list">
+            {tasks.projects.filter(isIssuesProject).map((project) => {
+              const href = `/tasks/issues/${encodeRef(project.url)}`;
+              return (
+                <li key={project.url}>
+                  <Link href={href} aria-current={path === href ? "page" : undefined}>
+                    {project.tracker.title ?? "Issues"}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
       {labels.size > 0 && (
         <>
           <button
@@ -599,7 +637,7 @@ export function TasksSidebar() {
               <ProjectRow
                 key={project.url}
                 project={project}
-                shared={sharedUrls.has(project.url)}
+                shared={isShared(project.url)}
                 first={projects[0]?.url === project.url}
                 last={projects.at(-1)?.url === project.url}
               />

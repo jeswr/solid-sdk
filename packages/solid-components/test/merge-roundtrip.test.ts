@@ -118,6 +118,36 @@ describe("§10 task merge — preserves untouched triples + the dual-predicate c
     ).toEqual(["a sibling subject"]);
   });
 
+  it("stores a zoneless form due date as the local instant with an explicit Z; zoned values pass through", () => {
+    const previous = process.env.TZ;
+    process.env.TZ = "Australia/Sydney";
+    try {
+      const run = (due: string) => {
+        const existing = parseTurtle(
+          `@prefix wf: <${WF}> . @prefix dct: <${DCT}> . <${TASK_SUBJ}> a wf:Task ; dct:title "T" .`,
+          TASK_URL,
+        );
+        const formGraph = parseTurtle(
+          `@prefix wf: <${WF}> . @prefix dct: <${DCT}> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+           <urn:m> a wf:Task ; dct:title "T" ; wf:dateDue "${due}"^^xsd:dateTime .`,
+          TASK_URL,
+        );
+        (document.createElement("test-task-form") as TestTaskForm).runMerge(
+          formGraph,
+          existing,
+          TASK_URL,
+        );
+        return existing.getObjects(TASK_SUBJ, `${WF}dateDue`, null).map((o) => o.value);
+      };
+      // 10:00 local (UTC+11 in March) is 23:00Z the previous day.
+      expect(run("2026-03-01T10:00:00")).toEqual(["2026-02-28T23:00:00.000Z"]);
+      expect(run("2026-03-01T10:00:00Z")).toEqual(["2026-03-01T10:00:00.000Z"]);
+    } finally {
+      if (previous === undefined) delete process.env.TZ;
+      else process.env.TZ = previous;
+    }
+  });
+
   it("does NOT do a naive replace: a foreign predicate the shape ignores is kept", () => {
     const existing = parseTurtle(
       `

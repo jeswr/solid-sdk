@@ -37,7 +37,11 @@ export async function deliverInvitations(
   displayName: string,
   signal?: AbortSignal,
 ): Promise<InvitationDelivery[]> {
-  const notify = createNotify({ fetch: signal ? withAbortSignal(fetch, signal) : fetch });
+  // The sender is the signed-in actor; the notifier refuses activities asserting anyone else.
+  const notify = createNotify({
+    webId: actor,
+    fetch: signal ? withAbortSignal(fetch, signal) : fetch,
+  });
   const members = [...new Set(room.members)].filter((member) => member !== actor);
   const results: InvitationDelivery[] = [];
   let cursor = 0;

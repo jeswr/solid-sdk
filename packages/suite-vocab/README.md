@@ -15,6 +15,11 @@ isLegacy("http://schema.org/Event"); // true
 termsEqual("http://schema.org/Event", "https://schema.org/Event"); // true
 ```
 
+`CONNECTOR_SYNC` holds the connector two-way sync terms used by `@jeswr/pod-connectors/sync`
+for its owner-only link store (link records, shard headers, the per-connection manifest and
+pending items). They live under `NS.CORE`; standard terms such as `prov:wasRevisionOf` keep
+their own namespaces.
+
 `LEGACY_NAMESPACES` maps known legacy namespace bases to canonical bases. Unknown IRIs pass
 through unchanged; local names are preserved, and comparison is case-sensitive. Both schema.org
 schemes are accepted on reads, with HTTPS as the canonical result (DECISIONS V7). This helper
@@ -23,3 +28,9 @@ does not change the task model's HTTP write convention or rename retired classes
 Run `pnpm --filter @jeswr/suite-vocab run test`; coverage uses the workspace's existing V8 provider
 (`pnpm --filter @jeswr/app-pod-docs exec vitest run --root ../../packages/suite-vocab --coverage`).
 The package is private until the first conformance gate, per ADR-001 D5; no mirror is configured.
+
+`NS.SUITE` (`https://jeswr.org/ns/suite#`) is owned by this package for suite-wide terms.
+It declares `DEMO_CONNECTOR`, the `prov:SoftwareAgent` individual
+`https://jeswr.org/ns/suite#demo-connector`, labelled **Demo data**. Connector demo runs use
+this constant's `iri` and `label` for item attribution and the agent's stored name; live runs
+never add it. This declaration is maintained directly in TypeScript, with no TTL generator.

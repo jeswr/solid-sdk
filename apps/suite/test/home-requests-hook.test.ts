@@ -9,12 +9,19 @@ const mocks = vi.hoisted(() => ({
   session: undefined as unknown as PodSession,
   list: vi.fn(),
   decide: vi.fn(),
+  shares: vi.fn(),
+  preview: vi.fn(),
 }));
 vi.mock("../src/apps/home/components/home-app", () => ({ useHomeSession: () => mocks.session }));
 vi.mock("@jeswr/pod-access/requests-solid", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   listRequests: mocks.list,
   decide: mocks.decide,
+  previewDecision: mocks.preview,
+}));
+vi.mock("@jeswr/suite-sdk/shared", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
+  shareNotificationUrls: mocks.shares,
 }));
 
 import type { AccessRequestEntry } from "@jeswr/pod-access/requests-solid";
@@ -72,6 +79,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.session = session();
   mocks.list.mockResolvedValue([pending, decided, { id: `${ROOT}inbox/x`, status: "unreadable" }]);
+  mocks.shares.mockResolvedValue(new Set());
 });
 
 it("lists with the session's fetch and splits pending, decided and unreadable", async () => {
@@ -85,6 +93,29 @@ it("lists with the session's fetch and splits pending, decided and unreadable", 
     webId: `${ROOT}profile#me`,
     storage: ROOT,
   });
+});
+
+it("counts a malformed inbox item as unreadable, never a share notification", async () => {
+  const share = `${ROOT}inbox/shared-doc.ttl`;
+  mocks.list.mockResolvedValue([
+    pending,
+    { id: share, status: "unreadable" },
+    { id: `${ROOT}inbox/x`, status: "unreadable" },
+  ]);
+  mocks.shares.mockResolvedValue(new Set([share]));
+  await mount(h(Probe));
+  expect(binding.pending).toEqual([pending]);
+  expect(binding.unreadable).toEqual([{ id: `${ROOT}inbox/x`, status: "unreadable" }]);
+  // Only the members listRequests couldn't place are offered to the share reader.
+  // The share reader is confined to the storage, so it must be told where that is.
+  expect(mocks.shares).toHaveBeenCalledWith(
+    [share, `${ROOT}inbox/x`],
+    expect.objectContaining({
+      fetch: mocks.session.fetch,
+      webId: `${ROOT}profile#me`,
+      storageUrl: mocks.session.storageUrl,
+    }),
+  );
 });
 
 it("passes an extension session's unauthenticated fetch for public reads", () => {
@@ -155,6 +186,43 @@ it("decides through the SDK in one call and re-lists whatever the outcome", asyn
     await expect(binding.decide(readable, { approve: false })).rejects.toThrow("refused");
   });
   expect(mocks.list).toHaveBeenCalledTimes(3);
+});
+
+it("previews read-only with the session's options and pins a decision to that preview", async () => {
+  await mount(h(Probe));
+  const readable = binding.pending[0] as Exclude<AccessRequestEntry, { status: "unreadable" }>;
+  const preview = { requestId: readable.id, targets: [] };
+  mocks.preview.mockResolvedValueOnce(preview);
+  const controller = new AbortController();
+  await expect(binding.preview(readable, { approve: true }, controller.signal)).resolves.toBe(
+    preview,
+  );
+  expect(mocks.preview).toHaveBeenCalledWith(
+    readable,
+    { approve: true },
+    {
+      fetch: mocks.session.fetch,
+      webId: `${ROOT}profile#me`,
+      storage: ROOT,
+      signal: controller.signal,
+    },
+  );
+  await binding.preview(readable, { approve: false });
+  expect(mocks.preview.mock.calls[1]?.[2]).not.toHaveProperty("signal");
+  mocks.decide.mockResolvedValueOnce({ status: "approved", receiptUrl: `${ROOT}r` });
+  await act(async () => {
+    await binding.decide(readable, { approve: true }, preview as never);
+  });
+  expect(mocks.decide).toHaveBeenCalledWith(
+    readable,
+    { approve: true },
+    {
+      fetch: mocks.session.fetch,
+      webId: `${ROOT}profile#me`,
+      storage: ROOT,
+      expected: preview,
+    },
+  );
 });
 
 it("drops a decided request from Pending at once, while the re-list runs and after it fails", async () => {

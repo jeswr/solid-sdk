@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import { toast } from "@jeswr/suite-ui";
 import {
@@ -13,6 +14,7 @@ import {
 } from "react";
 import type { PodSession } from "@/lib/session/pod-session";
 import { ensureSample } from "../demo/sample";
+import { DiaryPrivacyError } from "../lib/data/diary-confirm";
 import { PartialImportError, writeSamples } from "../lib/data/import";
 import {
   addMeasurement,
@@ -32,6 +34,7 @@ import {
 import { createHealthDataStore } from "../lib/data/store";
 import { PartialGpxImportError } from "../lib/data/workouts";
 import type { Measurement, MetricKind, Precondition } from "../lib/model";
+import { DiaryProvider } from "./diary-context";
 
 export type AsyncState<T> =
   | { status: "loading" }
@@ -51,7 +54,7 @@ interface HealthContextValue {
   recordEdits: (ClinicalRecord & { generation: number })[];
   saving: number;
   invalidate(): void;
-  mutate<T>(write: () => Promise<T>, message: string): Promise<T>;
+  mutate<T>(write: () => Promise<T>, message?: string): Promise<T>;
   add(
     kind: MetricKind | "blood-pressure",
     value: number,
@@ -72,9 +75,11 @@ const Context = createContext<HealthContextValue | null>(null);
 export function HealthProvider({
   session,
   children,
+  enabled = true,
 }: {
   session: PodSession;
   children: ReactNode;
+  enabled?: boolean;
 }) {
   const store = useMemo(
     () => createHealthDataStore(session.fetch, session.storageUrl, session.webId),
@@ -82,9 +87,10 @@ export function HealthProvider({
   );
   const [clock, setClock] = useState(() => new Date());
   useEffect(() => {
+    if (!enabled) return;
     const timer = setInterval(() => setClock(new Date()), 60000);
     return () => clearInterval(timer);
-  }, []);
+  }, [enabled]);
   const [revision, setRevision] = useState(0);
   const [boot, setBoot] = useState<AsyncState<null>>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -116,6 +122,7 @@ export function HealthProvider({
   const invalidate = useCallback(() => setRevision((value) => value + 1), []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt retries initialization
   useEffect(() => {
+    if (!enabled) return;
     let live = true;
     setBoot({ status: "loading" });
     void ensureSample(session)
@@ -131,8 +138,9 @@ export function HealthProvider({
     return () => {
       live = false;
     };
-  }, [session, store, attempt]);
+  }, [session, store, attempt, enabled]);
   useEffect(() => {
+    if (!enabled) return;
     let timer: ReturnType<typeof setTimeout>;
     const off = session.subscribe((url) => {
       // Focus reconciliation can invalidate the storage root or an ancestor
@@ -146,9 +154,9 @@ export function HealthProvider({
       off();
       clearTimeout(timer);
     };
-  }, [session, store, invalidate]);
+  }, [session, store, invalidate, enabled]);
   const mutate = useCallback(
-    async <T,>(write: () => Promise<T>, message: string): Promise<T> => {
+    async <T,>(write: () => Promise<T>, message?: string): Promise<T> => {
       setSaving((value) => value + 1);
       const task = queue.current.then(write);
       queue.current = task.then(
@@ -158,7 +166,7 @@ export function HealthProvider({
       try {
         const result = await task;
         invalidate();
-        toast.success(message);
+        if (message) toast.success(message);
         return result;
       } catch (error) {
         invalidate();
@@ -172,13 +180,15 @@ export function HealthProvider({
           "status" in underlying &&
           underlying.status === 412;
         toast.error(
-          error instanceof PartialGpxImportError
+          error instanceof DiaryPrivacyError
             ? error.message
-            : conflict
-              ? "This item changed elsewhere. We refreshed your data. Review it before saving again."
-              : error instanceof PartialImportError
-                ? error.message
-                : "Couldn't save to your private Health storage. Your change was rolled back.",
+            : error instanceof PartialGpxImportError
+              ? error.message
+              : conflict
+                ? "This item changed elsewhere. We refreshed your data. Review it before saving again."
+                : error instanceof PartialImportError
+                  ? error.message
+                  : "Couldn't save to your private Health storage. Your change was rolled back.",
         );
         throw error;
       } finally {
@@ -296,7 +306,7 @@ export function HealthProvider({
         save,
       }}
     >
-      {children}
+      <DiaryProvider key={`${session.webId}:${session.storageUrl}`}>{children}</DiaryProvider>
     </Context>
   );
 }

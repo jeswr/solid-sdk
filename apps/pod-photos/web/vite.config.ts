@@ -61,7 +61,7 @@ export default defineConfig({
       { find: "@jeswr/pod-photos/ui", replacement: podPhotosSrc("ui/index.ts") },
       { find: "@jeswr/pod-photos", replacement: podPhotosSrc("index.ts") },
       { find: "@jeswr/fetch-rdf", replacement: hostModule("@jeswr/fetch-rdf") },
-      { find: "@solid/object", replacement: hostModule("@solid/object") },
+      { find: /^@solid\/object$/, replacement: hostModule("@solid/object") },
       { find: "@rdfjs/wrapper", replacement: hostModule("@rdfjs/wrapper") },
       { find: "n3", replacement: hostModule("n3") },
       // The library declares React as an OPTIONAL peer dep; bundling its source
@@ -73,8 +73,7 @@ export default defineConfig({
       { find: /^react-dom\//, replacement: `${hostModule("react-dom")}/` },
     ],
     // Guarantee a single React instance across the host + the bundled library +
-    // the @jeswr/app-shell package. app-shell is a PUBLISHED, SHA-pinned GitHub dep
-    // with committed dist — but a package can still
+    // the @jeswr/app-shell workspace package. A package can still
     // resolve react/react-dom + Radix/lucide against its OWN nested node_modules,
     // pulling a SECOND copy (invalid-hook-call). Deduping these forces ONE copy
     // from the host's node_modules (where they are installed as direct deps).

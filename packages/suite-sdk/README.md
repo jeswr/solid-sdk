@@ -17,7 +17,8 @@ const result = await notify(assignee, assignmentAnnounce(task, tracker, name, ti
 
 `notify` is a stable callable until the identity, fetch, or explicit options change. The hook
 resets its discovery cache on session changes. Delivery failures return `delivered: false`.
-Without a sender WebID or explicit activity actor it returns a `network` failure without sending.
+Without a session WebID it returns an `unauthenticated` failure without sending. Explicit activity actors
+must equal the authenticated session WebID; a mismatch returns `invalid-actor`.
 `useNotify({ recipientProtocol })` accepts a resolver for known LWS recipients; do not infer
 recipient protocol from the sender's identity. See [pod-access](../pod-access/README.md) for
 the result shape, builders, cache behavior, and Node DNS-pinning requirements.
@@ -38,6 +39,22 @@ limits match [pod-access](../pod-access/README.md). No read-state writes are per
 
 `./testing` re-exports `createNotify` for fixture-fetch tests. Run this package's `lint`, `build`,
 `typecheck` and `test` scripts; tests enforce 100% coverage.
+
+## PWA installation
+
+Import `installPrompt` and `useInstallPrompt` from `@jeswr/suite-sdk/pwa`.
+Start capture in a root provider effect with `useEffect(() => installPrompt.start(window), [])`.
+In Settings, show an Install button for `status === 'available'`, disable it while `prompting`,
+show “Use Share, then Add to Home Screen” for `ios`, and hide the row for `installed`.
+`unavailable` means no browser prompt is available. Standalone mode includes iOS and
+window controls overlay. No UI is injected by the SDK.
+
+Call `installPrompt.install()` directly from the button's click handler. It returns
+`'accepted' | 'dismissed' | null`, propagates browser errors, and consumes each browser
+prompt once. A later browser event can enable installation again after dismissal or failure.
+Capture survives Settings navigation, and root listeners are reference counted and cleaned
+up after the last provider unmounts. SSR has a stable unavailable snapshot and no browser I/O.
+`createInstallPromptStore()` creates an isolated store, accepted by `useInstallPrompt(store)`.
 
 ## Accounts (`SDK-APP-02`)
 
@@ -338,3 +355,148 @@ delimiters); in-scope requests refuse redirects. Chips pass only the user's stor
 add the containers an opened resource owns (Docs adds a shared document's own folder). Foreign
 reads bypass the session transport/cache, omit credentials, referrers and native caching, and
 follow redirects (WebIDs often 303). Resolve foreign chips only on hover/focus.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Shared items (`./shared`, sst-iool)
+
+`sharedItemsFromInbox(notifications, { storageUrl?, now? })` projects only share Announce
+notifications into `SharedItem` records. Pass the user's `storageUrl`: resources inside it
+(pod-scope containment, not origin) are never "shared with me". Announced resources outside it
+must be public HTTPS (`isPublicHttpsUrl`: no `http:`, credentials, loopback, private or
+link-local addresses, `.local`/single-label/cloud-internal names; judged by name and IP literal,
+no DNS); anything else is dropped. Every projected item carries `announced: true`, which
+`mergeSharedItems` keeps even when a local "opened" record merges in, so callers keep such items
+preview-only (`previewOnly: item.announced`) however the record was later merged. A `published` claim later than
+`now + SHARED_CLOCK_SKEW_MS` (5 minutes) is dropped, so a future date can neither pin an item to
+the top nor outrank a hide. Sender, title and role are unverified assertions. `fromAnotherPod`
+flags an actor that cannot be placed in the resource's pod: different origins always, and on
+the user's own host pod roots at the user's storage depth (path-based multi-pod hosts). Callers
+display the resource origin first and label announcement senders and roles as unverified. No
+grants or resource reads occur here.
+
+`isShareNotification(n)` is the share Announce test `sharedItemsFromInbox` applies (summary
+`Shared with you as …` and an http(s) object without credentials), regardless of storage.
+`shareNotificationUrls(candidates, { fetch, webId, storageUrl, publicFetch?, inbox?, pinningFetch?, signal?, maxItems? })`
+returns the candidate inbox members that are share Announces, read through the pod-access inbox
+reader. It requests only the profile (skipped when `inbox` is given), the inbox container and
+the candidates; every other URL is answered locally with 404, which the reader skips. Home's
+Requests page uses it so share notifications, which `listRequests` reports as unreadable, are
+not counted as unreadable requests. An abort through the `signal` rejects (a transport's own timeout is a network failure), even one during discovery. Credentials stay
+inside `storageUrl` (`podScopedFetch`: session fetch, redirects refused); a profile outside it is
+read through `publicFetch` (or a credential-free global fetch), and an inbox outside it is never
+read.
+
+`readSharedInbox({ webId, storageUrl, fetch, publicFetch?, pinningFetch?, signal?, maxItems? })`
+is the Shared with me read, confined the same way. It returns `{ status: "ok", notifications,
+truncated, limit }`, `{ status: "none" }` (a profile naming no inbox, or a missing inbox) or
+`{ status: "failed", reason }` with `reason` one of `network`, `forbidden`, `lws-no-ldn` (an LWS
+profile has no LDN inbox) or `outside-storage`, so callers can show an error with Retry instead of
+an empty state. The bound is `SHARED_INBOX_LIMIT` (100, Requests' bound); one extra member is read
+to set `truncated`, and the newest `limit` notifications read are returned (the container listing
+order decides which members are read at all). Aborts reject.
+
+`resolveSuiteResource(hints, { encodeRef, encodeContactRef?, shared?, storageUrl?, previewOnly?, hints? })`
+is the single resource-to-app/route resolver for search and Shared. RDF types match canonical
+`@jeswr/suite-vocab` IRIs (including known legacy aliases), never arbitrary local names.
+MIME, filename and path hints supply display classifications; search passes `hints: false` so
+only RDF types choose an app and generic rows stay in Drive (and in Drive-scoped search). A hint
+never turns a container into a file: untyped containers are Drive folders, except Sheets'
+native `sheets/<name>/` workbook layout. Shared routes require native formats and routers that
+can open shared resources: Tasks trackers (`wf:Tracker`, or untyped `.ttl` directly in
+`tasks/projects/`), and native Docs documents / Sheets containers inside the user's storage
+(pod-scope containment, never origin). Other resources fall back to Drive: containers open the
+folder view, files the preview. Callers set `previewOnly` for unverified inbox resources outside
+the user's storage or with an actor from another pod. Document references omit fragments; Tasks search keeps
+the task subject. `classifySharedItem` delegates to this resolver. `sharedApps` exports the
+runtime list underlying `SharedApp`.
+
+`isDirectChild` is the common fail-closed document layout check; `isSuiteDocsDocument` applies
+it to Drive's native Docs scope. `mergeSharedItems(...sources)` deduplicates exact URLs newest
+first (undated last), fills missing fields, and prefers names from local app/open sources over
+inbox titles regardless of date. Inputs are never mutated. `latestSharedEntries` preserves
+Drive's stable insertion order for equal dates and its existing NaN comparison behavior.
+
+Storage belongs to callers: `sharedAccountKey` keeps Tasks' encoded WebID key convention,
+`parseSharedEntries` validates stored lists, and `sharedItemsForAccount` prevents fallback
+memory from crossing accounts. `hideSharedItem` stores `{ url, hiddenAt }`; `visibleSharedItems`
+suppresses only records with no `sharedAt`/`openedAt` later than `hiddenAt`. Hide with
+`sharedHiddenAt(record)` (the later of now and the record's own dates) so a skewed sender date
+cannot outrank the hide. Persist hidden
+entries per WebID, validate with `isHiddenSharedItem`, and clear them when the user reopens a
+resource. Tasks removal must forget its cache entry and remove its preference entry. Reject
+stale callbacks on session replacement. `removeSharedItem` and `isSharedUrlEntry` remain generic
+URL-list helpers. Only `shareNotificationUrls` performs I/O.
+
+## Undo (`./undo`, UX-6)
+
+`createUndoStack({ limit = 50, now = Date.now, isRetryable = () => false })` creates
+framework-independent, in-memory history. Import `UndoEntry`, `UndoStack`, `UndoItem`,
+`UndoResult` and `UndoStackOptions` from `@jeswr/suite-sdk/undo`.
+
+- `push({ label, scope, undo, redo?, expiresAt? })` returns a unique ID and clears only
+  that scope's redo history. `undo(scope)` selects the latest live entry;
+  `undoById(id)` selects the exact entry offered by a toast; `redo(scope)` reapplies it.
+- All callbacks receive an `AbortSignal`. One callback runs at a time across the stack;
+  concurrent requests resolve `{ status: 'busy' }`. Results are `{ status: 'done', id,
+  label }` (the entry that ran), `nothing`, `busy`, `expired`, or `{ status: 'failed', error }`. Expiry uses milliseconds since
+  epoch; entries with `expiresAt <= now()` are dropped without running.
+- Failed operations are consumed unless `isRetryable(error)` returns true. Retryable
+  entries stay in their original position. A new push during undo prevents its redo
+  from becoming available; a redo that was running when a push retired it is kept as an
+  undo entry below the push. Undo-only entries are consumed on success.
+- `canUndo(scope)` and `canRedo(scope)` say whether a live entry exists, so a shortcut can
+  leave the key alone when there is nothing to do. Subscribers are notified when an
+  entry with `expiresAt` expires.
+- At most `limit` entries, counting undo and redo history, are retained per scope;
+  oldest entries are dropped. `limit` must be a positive integer.
+- `entries(scope?)` returns pending undo entries oldest first, with `{ id, label,
+  scope, canRedo }`; `canRedo` indicates that the entry supplies a redo callback.
+  `subscribe(listener)` returns an unsubscribe function. The unfiltered snapshot is
+  stable between changes; `useUndoStack(stack)` from `@jeswr/suite-sdk` subscribes with
+  `useSyncExternalStore` and supplies an empty snapshot during server rendering.
+- `clear()` removes all history and aborts the running callback. Late settlements
+  cannot restore cleared entries. The callback must pass the signal into its I/O
+  and check it before changing local state. An ignored abort cannot cancel a write
+  already performed by a transport.
+
+### Adopting the undo stack
+
+In the suite shell, call `useUndo()` from `shell/undo/provider` and push the inverse
+**after a successful reversible change**. The shell supplies the current route's app
+scope, an Undo toast, Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z. Native undo in editable controls
+is preserved. The shell retires history and toast actions on account replacement or
+sign-out. Standalone clients own a stack per session and call `clear()` on teardown.
+
+For an ordinary Tasks completion, capture the open/closed state and completion
+timestamp before writing, then register both transitions through the app's adapter:
+
+```ts
+import { createUndoStack } from '@jeswr/suite-sdk/undo';
+
+const stack = createUndoStack(); // owned by the authenticated session
+async function completeTask(task: Task) {
+  const previous = { state: task.state, endedAt: task.endedAt };
+  const next = { state: 'closed' as const, endedAt: new Date() };
+  await writeCompletion(task.url, next);
+  stack.push({
+    label: `Completed ${task.title}`,
+    scope: 'tasks',
+    undo: (signal) => writeCompletion(task.url, previous, { signal }),
+    redo: (signal) => writeCompletion(task.url, next, { signal }),
+  });
+}
+```
+
+`writeCompletion` is the app's existing persistence adapter; it updates its local
+completion state and writes the same fields. In a shell component, use `push` from
+`useUndo()` in place of `stack.push` and omit `scope`. Capture values rather than
+closing over a mutable task, preserve unrelated fields, and supply redo only when
+repeating the operation is supported. Tasks' repeating completion also retains its
+`CompletionPlan.previous` snapshot and reserved `copyUrl`: undo restores due date,
+all-day and reminder fields and removes that completed occurrence. Preserve that
+existing `undoCompletion(stored, result)` behavior in the migration adapter; only
+provide redo if it can reuse the same occurrence identity. Delayed deletion entries
+should set `expiresAt`
+to the point when restoring the resource stops being possible. Tasks and Drive's
+existing flows are migrated separately.

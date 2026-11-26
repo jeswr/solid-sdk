@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 //
 // AppErrorBoundary — the app-level crash-resilience boundary (cross-app parity
@@ -8,7 +9,7 @@
 //
 // RESET KEY: pod-photos is ROUTER-FREE (no pathname routing — see App.tsx), so
 // the app's only "navigation" is a session-identity change: login, logout, or
-// an autologin identity switch. We therefore pass the session's `webId` as the
+// an account switch. We therefore pass the session's `webId` as the
 // boundary's `resetKey` — when it changes (`Object.is`) while an error is
 // showing, the boundary clears the error and re-renders, exactly as a pathname
 // change would in a routed sibling app. The manual `Try again` button (the
@@ -19,9 +20,10 @@
 // reads `useSession()` for the resetKey — and an auth-seam failure must surface
 // through the provider's own `error` state, not be swallowed here), but AROUND
 // the routed content (<App/>). See main.tsx.
+
+import { useSession } from "@jeswr/app-session/react";
 import { ErrorBoundary } from "@jeswr/app-shell";
 import type { ReactNode } from "react";
-import { useSession } from "./auth/SessionProvider";
 
 export function AppErrorBoundary({ children }: { children?: ReactNode }) {
   const { webId } = useSession();

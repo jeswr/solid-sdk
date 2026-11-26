@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
+import { docContainerUrls } from "@jeswr/solid-docs/layout";
 import {
   Button,
   Dialog,
@@ -11,13 +12,14 @@ import {
 import { type Editor, EditorContent, type JSONContent, useEditor } from "@tiptap/react";
 import { ySyncPluginKey, yUndoPluginKey, yXmlFragmentToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useDisplayNames } from "@/lib/profile/use-display-names";
+import { DocumentVersionPanel } from "../../../components/document-version-panel";
 import { documentScopedFetch } from "../editor/document-fetch";
 import { baseExtensions } from "../editor/extensions";
 import type { DocumentPersistence } from "../editor/persistence";
 import { useDialogFocus } from "../hooks/use-dialog-focus";
 import { suggestionAction } from "../lib/editor/suggestions";
 import { versionDisabledReason } from "../lib/editor/versions";
-import { docContainerUrls } from "../lib/model/layout";
 import { type DocumentVersion, DocumentVersionStore, versionError } from "../lib/model/versions";
 import { Hint } from "./common";
 import { PageCanvas } from "./page-canvas";
@@ -110,6 +112,10 @@ export function VersionHistory({
     [resource, http],
   );
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
+  const displayName = useDisplayNames(
+    versions.map((version) => version.creator),
+    runtime.session,
+  );
   const [selected, setSelected] = useState<DocumentVersion>();
   const [preview, setPreview] = useState<JSONContent>();
   const [error, setError] = useState<string>();
@@ -275,54 +281,40 @@ export function VersionHistory({
           ))}
       </PageCanvas>
       {open && (
-        <aside className="docs-version-history" aria-labelledby={headingId}>
-          <h2 id={headingId} ref={heading} tabIndex={-1}>
-            Version history
-          </h2>
-          <Button variant="ghost" onClick={close}>
-            Back to editing
-          </Button>
-          {error && <p role="alert">{error}</p>}
-          {loading && <p role="status">Loading versions…</p>}
-          <ul aria-label="Document versions">
-            <li>
-              <button
-                type="button"
-                aria-current={!selected ? "true" : undefined}
-                onClick={() => {
-                  request.current++;
-                  setSelected(undefined);
-                  setPreview(undefined);
-                  setLoading(false);
-                  setError(undefined);
-                }}
-              >
-                Current version
-              </button>
-            </li>
-            {versions.map((version) => (
-              <li key={version.url}>
-                <button
-                  type="button"
-                  aria-current={selected?.url === version.url ? "true" : undefined}
-                  onClick={() => void choose(version)}
-                >
-                  <span>{version.name || new Date(version.created).toLocaleString()}</span>
-                  <small>
-                    {version.creator === runtime.session.webId
-                      ? runtime.session.displayName
-                      : version.creator || "Unknown author"}
-                  </small>
-                </button>
-              </li>
-            ))}
-          </ul>
-          {selected && (
+        <DocumentVersionPanel
+          className="docs-version-history"
+          headingId={headingId}
+          headingRef={heading}
+          close={close}
+          closeLabel="Back to editing"
+          listLabel="Document versions"
+          error={error}
+          loading={loading}
+          selectedId={selected?.url}
+          entries={versions.map((version) => ({
+            id: version.url,
+            created: version.created,
+            label: version.name,
+            author: displayName(version.creator),
+            authorId: version.creator,
+          }))}
+          choose={(id) => {
+            const version = versions.find((version) => version.url === id);
+            if (version) void choose(version);
+            else {
+              request.current++;
+              setSelected(undefined);
+              setPreview(undefined);
+              setLoading(false);
+              setError(undefined);
+            }
+          }}
+          restoreAction={
             <VersionAction reason={reason} busy={busy || !preview} run={() => setConfirm(true)}>
               Restore this version
             </VersionAction>
-          )}
-        </aside>
+          }
+        />
       )}
       <Dialog
         open={naming}

@@ -1,12 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { randomUUID } from "node:crypto";
-import { forClientCredentials } from "@jeswr/pod-auth/node";
 import type { Locator, Page } from "@playwright/test";
 import { encodeRef } from "../../src/lib/refs";
 import {
-  type AccountName,
   accessible,
+  accountAuth,
   cssAccount,
   expect,
   signIn,
@@ -21,48 +20,7 @@ test.beforeAll(async ({ request }) => {
   expect((await request.get(`/drive/f/${encodeRef(root)}`)).status()).toBe(200);
 });
 // Two interactive OIDC logins and several real, conditional ACL writes per scenario.
-test.setTimeout(120_000);
-
-/** Separate credentials for enforcement checks, never injected into either browser session. */
-async function accountAuth(name: AccountName, boundary: string) {
-  const account = cssAccount(name);
-  let cookie = "";
-  const json = async (path: string, body?: unknown) => {
-    const url = new URL(path, account.issuer);
-    expect(url.origin).toBe(new URL(account.issuer).origin);
-    const response = await fetch(url, {
-      method: body === undefined ? "GET" : "POST",
-      redirect: "error",
-      headers: {
-        Accept: "application/json",
-        Cookie: cookie,
-        ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    cookie = response.headers.get("set-cookie")?.split(";")[0] ?? cookie;
-    // Never include an account response body (which can contain secrets) in an assertion.
-    expect(response.ok).toBe(true);
-    return response.json();
-  };
-  const before = await json(".account/");
-  await json(before.controls.password.login, {
-    email: account.email,
-    password: account.password,
-  });
-  const after = await json(".account/");
-  const credentials = await json(after.controls.account.clientCredentials, {
-    name: `shell-share-${randomUUID()}`,
-    webId: account.webId,
-  });
-  return forClientCredentials({
-    issuer: account.issuer,
-    clientId: credentials.id,
-    clientSecret: credentials.secret,
-    boundary: [boundary],
-    allowInsecureLoopback: true,
-  });
-}
+test.setTimeout(180_000);
 
 async function activate(page: Page, target: Locator, keyboardOnly: boolean) {
   if (keyboardOnly) {
@@ -89,9 +47,11 @@ async function tabTo(page: Page, target: Locator) {
 
 async function selectRow(page: Page, row: Locator, keyboardOnly: boolean) {
   if (!keyboardOnly) {
-    // Space selects at every viewport; a phone's row click opens the item.
+    // Space toggles selection at every viewport; a phone's row click opens the item.
+    // Selection survives closing the share dialog, so only select a row that is not selected.
     await row.focus();
-    await row.press("Space");
+    if ((await row.getAttribute("aria-selected")) !== "true") await row.press("Space");
+    await expect(row).toHaveAttribute("aria-selected", "true");
     return;
   }
   await tabTo(page, page.locator('tr[data-url][tabindex="0"]'));
@@ -126,7 +86,7 @@ async function anonymousStatus(url: string, status: number) {
 }
 
 for (const keyboardOnly of [false, true]) {
-  test(`scenario 7 partial: folder permissions and real file ACLs (${keyboardOnly ? "keyboard only" : "pointer"})`, async ({
+  test(`scenario 7: folder Editor, member upload, public link and revocation (${keyboardOnly ? "keyboard only" : "pointer"})`, async ({
     page,
     browser,
     baseURL,
@@ -136,44 +96,83 @@ for (const keyboardOnly of [false, true]) {
     const fileName = "shared.txt";
     const aliceRoot = new URL("alice/", cssAccount("alice").issuer).href;
     const alice = await accountAuth("alice", aliceRoot);
+    const sessions = [alice];
+    // Cleanup targets, deleted newest first so each folder is empty before its own DELETE.
+    const cleanup: string[] = [];
     const bobContext = await browser.newContext({
       baseURL,
       viewport: page.viewportSize(),
       colorScheme: info.project.use.colorScheme ?? "light",
       reducedMotion: "reduce",
     });
-    let folderUrl: string | undefined;
-    let fileUrl: string | undefined;
-    let bob: Awaited<ReturnType<typeof accountAuth>> | undefined;
     try {
       await page.goto("/drive");
       await expect(
         page.getByRole("heading", { level: 2, name: "My Drive", exact: true }),
       ).toBeVisible({ timeout: 30_000 });
       if ((page.viewportSize()?.width ?? 1280) < 768) {
-        await page
-          .getByRole("button", { name: "New", exact: true })
-          .filter({ visible: true })
-          .click();
-        await page.getByRole("menuitem", { name: /^New folder/ }).click();
-      } else
-        await page
-          .getByRole("toolbar", { name: "Folder actions", exact: true })
-          .getByRole("button", { name: "New folder", exact: true })
-          .click();
+        await activate(
+          page,
+          page.getByRole("button", { name: "New", exact: true }).filter({ visible: true }),
+          keyboardOnly,
+        );
+        await activate(page, page.getByRole("menuitem", { name: /^New folder/ }), keyboardOnly);
+      } else {
+        await activate(
+          page,
+          page
+            .getByRole("toolbar", { name: "Folder actions", exact: true })
+            .getByRole("button", { name: "New folder", exact: true }),
+          keyboardOnly,
+        );
+      }
       const create = page.getByRole("dialog", { name: "New folder", exact: true });
-      await create.getByRole("textbox", { name: "Folder name", exact: true }).fill(folderName);
-      await create.getByRole("button", { name: "Create", exact: true }).click();
+      const nameInput = create.getByRole("textbox", { name: "Folder name", exact: true });
+      if (keyboardOnly) {
+        await tabTo(page, nameInput);
+        await page.keyboard.type(folderName);
+      } else await nameInput.fill(folderName);
+      await activate(
+        page,
+        create.getByRole("button", { name: "Create", exact: true }),
+        keyboardOnly,
+      );
       await expect(create).toBeHidden();
       const folder = page.locator("tr[data-url]").filter({
         has: page.getByText(folderName, { exact: true }),
       });
       await expect(folder).toBeVisible();
-      folderUrl = (await folder.getAttribute("data-url")) as string;
-      expect(folderUrl.startsWith(aliceRoot)).toBe(true);
-      bob = await accountAuth("bob", folderUrl);
+      const folderUrl = await folder.getAttribute("data-url");
+      if (!folderUrl?.startsWith(aliceRoot))
+        throw new Error("Created folder is outside Alice's pod");
+      cleanup.push(folderUrl);
+      const uploadedUrl = new URL("bob-upload.txt", folderUrl).href;
+      // Bob's client may only send its token inside Alice's Drive container: wide enough to
+      // probe the private sibling and the container itself, narrower than the pod root.
+      const driveUrl = new URL("../", folderUrl).href;
+      const bob = await accountAuth("bob", driveUrl);
+      sessions.push(bob);
+      // A private sibling outside the shared folder: the over-share control.
+      const siblingUrl = new URL(`private-sibling-${randomUUID()}.txt`, driveUrl).href;
+      const sibling = await alice.fetch(siblingUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "text/plain", "If-None-Match": "*" },
+        body: "Alice's private sibling",
+      });
+      expect(sibling.status).toBe(201);
+      cleanup.push(siblingUrl);
+      /** Nothing but the folder and what inherits from it may have been shared. */
+      const expectOutsideStaysPrivate = async (members: readonly string[]) => {
+        for (const url of [siblingUrl, driveUrl, ...members]) {
+          await anonymousStatus(url, 401);
+          const response = await bob.fetch(url);
+          expect(response.status, `Bob must stay denied on ${url}`).toBe(403);
+          await response.body?.cancel();
+        }
+      };
       const bobPage = await bobContext.newPage();
-      await signIn(bobPage, "bob");
+      await signIn(bobPage, "bob", { keyboardOnly });
+      await accessible(bobPage);
       // Bob's login foregrounds his window. Native Tab navigation needs Alice's
       // document active again; this does not assign focus to any share control.
       await page.bringToFront();
@@ -190,17 +189,17 @@ for (const keyboardOnly of [false, true]) {
         await expect(dialog.getByLabel("Role for added people", { exact: true })).toBeEnabled();
         await expect(dialog.getByLabel("Who can access", { exact: true })).toBeEnabled();
         await accessible(page);
-        await anonymousStatus(folderUrl as string, 401);
-        const denied = await bob?.fetch(folderUrl as string);
-        expect(denied?.status).toBe(403);
-        await denied?.body?.cancel();
-        const upload = await bob?.fetch(new URL("bob-upload.txt", folderUrl).href, {
+        await anonymousStatus(folderUrl, 401);
+        const denied = await bob.fetch(folderUrl);
+        expect(denied.status).toBe(403);
+        await denied.body?.cancel();
+        const upload = await bob.fetch(uploadedUrl, {
           method: "PUT",
           headers: { "Content-Type": "text/plain", "If-None-Match": "*" },
           body: "Bob must not be able to upload before a grant",
         });
-        expect(upload?.status).toBe(403);
-        await upload?.body?.cancel();
+        expect(upload.status).toBe(403);
+        await upload.body?.cancel();
         await activate(
           page,
           dialog.getByRole("button", { name: "Done", exact: true }),
@@ -209,9 +208,10 @@ for (const keyboardOnly of [false, true]) {
         await expect(dialog).toBeHidden();
       });
 
-      // Arrange file bytes through CSS, then exercise grants and revocation through Drive.
+      // Arrange file bytes through CSS, then exercise file grants and revocation through Drive.
       const original = `Alice's private file ${randomUUID()}`;
-      fileUrl = new URL(fileName, folderUrl).href;
+      const fileUrl = new URL(fileName, folderUrl).href;
+      cleanup.push(fileUrl);
       const created = await alice.fetch(fileUrl, {
         method: "PUT",
         headers: { "Content-Type": "text/plain", "If-None-Match": "*" },
@@ -347,12 +347,144 @@ for (const keyboardOnly of [false, true]) {
       });
       await activate(page, dialog.getByRole("button", { name: "Done", exact: true }), keyboardOnly);
       await expect(dialog).toBeHidden();
+      await test.step("folder Editor grant lets Bob upload, then a public link and revocation are enforced", async () => {
+        // The file section left the file with its own explicit ACL (Bob removed again).
+        await page.goto("/drive");
+        await expect(
+          page.getByRole("heading", { level: 2, name: "My Drive", exact: true }),
+        ).toBeVisible({ timeout: 30_000 });
+        await expect(folder).toBeVisible();
+        await expectOutsideStaysPrivate([fileUrl]);
+        const dialog = await openShare(page, folder, folderName, keyboardOnly);
+        const picker = dialog.getByRole("combobox", { name: "Add people", exact: true });
+        if (keyboardOnly) {
+          await tabTo(page, picker);
+          await page.keyboard.type(cssAccount("bob").webId);
+          await page.keyboard.press("Enter");
+        } else {
+          await picker.fill(cssAccount("bob").webId);
+          await dialog.getByRole("button", { name: "Add person", exact: true }).click();
+        }
+        const addedRole = dialog.getByLabel("Role for added people", { exact: true });
+        if (keyboardOnly) {
+          await tabTo(page, addedRole);
+          await page.keyboard.press("End");
+        } else await addedRole.selectOption("editor");
+        await expect(addedRole).toHaveValue("editor");
+        await activate(
+          page,
+          dialog.getByRole("button", { name: "Share", exact: true }),
+          keyboardOnly,
+        );
+        const bobRole = dialog.getByLabel(`Role for ${cssAccount("bob").webId}`, { exact: true });
+        await expect(bobRole).toHaveValue("editor");
+        await expect(bobRole).toBeEnabled();
+        await accessible(page);
+
+        // An independent DPoP client proves both folder and inherited member permissions.
+        const shared = await bob.fetch(folderUrl);
+        expect(shared.status).toBe(200);
+        await shared.body?.cancel();
+        const bytes = `Bob's folder upload ${randomUUID()}`;
+        const upload = await bob.fetch(uploadedUrl, {
+          method: "PUT",
+          headers: { "Content-Type": "text/plain", "If-None-Match": "*" },
+          body: bytes,
+        });
+        expect(upload.status).toBe(201);
+        cleanup.push(uploadedUrl);
+        const ownerRead = await alice.fetch(uploadedUrl);
+        expect(ownerRead.status).toBe(200);
+        expect(await ownerRead.text()).toBe(bytes);
+        await anonymousStatus(folderUrl, 401);
+        await anonymousStatus(uploadedUrl, 401);
+        // Items with their own sharing and everything outside the folder do not follow it.
+        await expectOutsideStaysPrivate([fileUrl]);
+        await activate(
+          page,
+          dialog.getByRole("button", { name: "Done", exact: true }),
+          keyboardOnly,
+        );
+        await expect(dialog).toBeHidden();
+        await openShare(page, folder, folderName, keyboardOnly);
+        await expect(bobRole).toHaveValue("editor");
+
+        const general = dialog.getByLabel("Who can access", { exact: true });
+        if (keyboardOnly) {
+          await tabTo(page, general);
+          await page.keyboard.press("End");
+        } else await general.selectOption("anyone");
+        await expect(general).toHaveValue("anyone");
+        await expect(general).toBeEnabled();
+        await expect(dialog.getByLabel("Link role", { exact: true })).toHaveValue("viewer");
+        await anonymousStatus(folderUrl, 200);
+        const publicRead = await fetch(uploadedUrl, { redirect: "error" });
+        expect(publicRead.status).toBe(200);
+        expect(await publicRead.text()).toBe(bytes);
+        await expectOutsideStaysPrivate([fileUrl]);
+        await accessible(page);
+
+        // A public Viewer grant would keep Bob able to read after removing his Editor grant.
+        if (keyboardOnly) {
+          await tabTo(page, general);
+          await page.keyboard.press("Home");
+        } else await general.selectOption("restricted");
+        await expect(general).toHaveValue("restricted");
+        await expect(general).toBeEnabled();
+        await anonymousStatus(folderUrl, 401);
+        await anonymousStatus(uploadedUrl, 401);
+        const stillShared = await bob.fetch(uploadedUrl);
+        expect(stillShared.status).toBe(200);
+        expect(await stillShared.text()).toBe(bytes);
+        await activate(
+          page,
+          dialog.getByRole("button", {
+            name: `Remove access for ${cssAccount("bob").webId}`,
+            exact: true,
+          }),
+          keyboardOnly,
+        );
+        await expect(bobRole).toHaveCount(0);
+        await expect(general).toBeEnabled();
+        for (const url of [folderUrl, uploadedUrl]) {
+          const revoked = await bob.fetch(url);
+          expect(revoked.status).toBe(403);
+          await revoked.body?.cancel();
+        }
+        const revokedWrite = await bob.fetch(new URL("revoked.txt", folderUrl).href, {
+          method: "PUT",
+          headers: { "Content-Type": "text/plain" },
+          body: "Must be denied after revocation",
+        });
+        expect(revokedWrite.status).toBe(403);
+        await revokedWrite.body?.cancel();
+        const revokedOverwrite = await bob.fetch(uploadedUrl, {
+          method: "PUT",
+          headers: { "Content-Type": "text/plain" },
+          body: "A revoked Editor must not overwrite the file it uploaded",
+        });
+        expect(revokedOverwrite.status).toBe(403);
+        await revokedOverwrite.body?.cancel();
+        await expectOutsideStaysPrivate([fileUrl]);
+        const retained = await alice.fetch(uploadedUrl);
+        expect(retained.status).toBe(200);
+        expect(await retained.text()).toBe(bytes);
+        await accessible(page);
+        await activate(
+          page,
+          dialog.getByRole("button", { name: "Done", exact: true }),
+          keyboardOnly,
+        );
+        await expect(dialog).toBeHidden();
+      });
     } finally {
       await bobContext.close();
-      if (fileUrl) expect.soft((await alice.fetch(fileUrl, { method: "DELETE" })).ok).toBe(true);
-      if (folderUrl)
-        expect.soft((await alice.fetch(folderUrl, { method: "DELETE" })).ok).toBe(true);
-      await Promise.all([alice.logout(), bob?.logout()]);
+      for (const url of cleanup.reverse()) {
+        const removed = await alice.fetch(url, { method: "DELETE" });
+        expect.soft([200, 204, 205, 404], `DELETE ${url}`).toContain(removed.status);
+        await removed.body?.cancel();
+      }
+      await Promise.all(sessions.map((session) => session.logout()));
     }
   });
 }

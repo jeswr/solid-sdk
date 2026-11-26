@@ -160,9 +160,14 @@ it("indexes 1,000 threads across eight folders within a linear access budget", a
   const store = new MailStore(vi.fn(), "https://mail.example/");
   vi.spyOn(store, "list").mockResolvedValue([url]);
   vi.spyOn(store, "load").mockResolvedValue({ mailbox, url, exists: true, etag: '"1"' });
-  const getter = Object.getOwnPropertyDescriptor(Message.prototype, "partOfThread")!.get!;
+  // The accessor lives on a generated base class, so walk the prototype chain to find it.
+  let owner: object | null = Message.prototype;
+  while (owner && !Object.getOwnPropertyDescriptor(owner, "partOfThread")) {
+    owner = Object.getPrototypeOf(owner);
+  }
+  const getter = Object.getOwnPropertyDescriptor(owner, "partOfThread")!.get!;
   let reads = 0;
-  const spy = vi.spyOn(Message.prototype, "partOfThread", "get").mockImplementation(function (
+  const spy = vi.spyOn(owner as Message, "partOfThread", "get").mockImplementation(function (
     this: Message,
   ) {
     if (++reads > 20_000) throw new Error("Repeated whole-mailbox thread scans");

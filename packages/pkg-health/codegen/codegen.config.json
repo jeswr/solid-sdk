@@ -1,0 +1,201 @@
+{
+  "shapesBase": "https://jeswr.org/ns/pkg-health/shapes#",
+  "prefixes": {
+    "health": "https://jeswr.org/ns/sectors/health#",
+    "core": "https://jeswr.org/ns/core#"
+  },
+  "entities": [
+    {
+      "name": "Condition",
+      "targetClass": "https://jeswr.org/ns/sectors/health#Condition",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "MedicationStatement",
+      "targetClass": "https://jeswr.org/ns/sectors/health#MedicationStatement",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "MedicinalProduct",
+      "targetClass": "https://jeswr.org/ns/sectors/health#MedicinalProduct",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "Observation",
+      "targetClass": "https://jeswr.org/ns/sectors/health#Observation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "Immunization",
+      "targetClass": "https://jeswr.org/ns/sectors/health#Immunization",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "Encounter",
+      "targetClass": "https://jeswr.org/ns/sectors/health#Encounter",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "CodeableConcept",
+      "targetClass": "https://jeswr.org/ns/sectors/health#CodeableConcept",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AllergyIntolerance",
+      "targetClass": "http://hl7.org/fhir/AllergyIntolerance",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "Instant",
+      "targetClass": "http://www.w3.org/2006/time#Instant",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "DigitalDocument",
+      "targetClass": "https://schema.org/DigitalDocument",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "PropertyValue",
+      "targetClass": "https://schema.org/PropertyValue",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "VitalSign",
+      "targetClass": "https://jeswr.org/ns/sectors/health#VitalSign",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "HeartRateObservation",
+      "targetClass": "https://jeswr.org/ns/sectors/health#HeartRateObservation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "StepCountObservation",
+      "targetClass": "https://jeswr.org/ns/sectors/health#StepCountObservation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "SleepObservation",
+      "targetClass": "https://jeswr.org/ns/sectors/health#SleepObservation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantTextValue",
+      "targetClass": "https://jeswr.org/ns/pkg-health/import#AssistantTextValue",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantDateFields",
+      "targetClass": "https://jeswr.org/ns/pkg-health/import#AssistantDateFields",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantDateTimeFields",
+      "targetClass": "https://jeswr.org/ns/pkg-health/import#AssistantDateTimeFields",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantTextFields",
+      "targetClass": "https://jeswr.org/ns/pkg-health/import#AssistantTextFields",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantSourceMetadata",
+      "targetClass": "https://jeswr.org/ns/pkg-health/import#AssistantSourceMetadata",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantOwner",
+      "targetClass": "https://jeswr.org/ns/pkg-health/import#AssistantOwner",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantAnnotation",
+      "targetClass": "http://www.w3.org/ns/oa#Annotation",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantEvidenceTarget",
+      "targetClass": "http://www.w3.org/ns/oa#SpecificResource",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    },
+    {
+      "name": "AssistantQuoteSelector",
+      "targetClass": "http://www.w3.org/ns/oa#TextQuoteSelector",
+      "subject": {
+        "convention": "self"
+      },
+      "fields": {}
+    }
+  ]
+}

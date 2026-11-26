@@ -1,31 +1,12 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// CSS-ISOLATION REGRESSION GUARD (#80 / solid-elements rollout #67/#68/#70 / #121 safe form).
-//
-// pod-music's host chrome uses the host filled `button` rule + a direct re-alias of the
-// host's `--accent` / `--muted` onto the app-shell tokens, safe because @jeswr/app-shell
-// #80 made the shell SELF-ISOLATING. The #121 safe form additionally SCOPES the host base
-// to `button:not([data-app-shell-control])`, so app-shell controls are excluded from the
-// host base outright (protecting their box model too, not just colour). This test pins WHY
-// the relaxation is safe so a future app-shell bump that dropped the isolation hook would
-// be caught here, not in production.
-//
-//   1. Every app-shell control the host renders (the FeedbackButton trigger + every
-//      control in its portaled dialog) carries `data-app-shell-control`. That is the
-//      hook BOTH the package's UNLAYERED reset (re-asserting colour to out-rank a bare
-//      `button {}`) AND the host's `:not([data-app-shell-control])` scope key off, so
-//      the host's filled look + box model can no longer leak onto them.
-//   2. The dialog is portaled to <body> (outside `.app-shell` / `.login-form`), which
-//      is exactly the surface the old hand-scoping was needed to protect.
-//
-// (We assert the data-attribute contract rather than computed styles because jsdom
-// does not run the cascade; the contract is what the unlayered reset keys off, and
-// app-shell's own suite tests the cascade math. The real-browser render is verified
-// at runtime in the rollout.)
+// Keep host button styling inside MusicLibrary so shared chrome, SignInCard and
+// portaled dialogs retain their own colours and box model. jsdom cannot exercise
+// the full CSS cascade, so pin the selector boundary and chrome marker contract.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { AccountMenu, FeedbackButton, ThemeProvider, ThemeToggle } from "@jeswr/app-shell";
+import { AccountControl, FeedbackButton, ThemeProvider, ThemeToggle } from "@jeswr/app-shell";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
@@ -38,23 +19,20 @@ const STYLES_CSS = readFileSync(
 );
 
 describe("app-shell CSS isolation survives pod-music's host button base (#80 / #121)", () => {
-  it("scopes the host button base with :not([data-app-shell-control]) (#121 box-model guard)", () => {
-    // The #121 SAFE FORM: the host filled-button base MUST be scoped so it never
-    // applies to app-shell controls (which would clobber their box model — app-shell
-    // #80 isolates colour but NOT padding/radius/sizing). This assertion fails if
-    // styles.css regresses to a bare unscoped `button {}` filled base, which the
-    // marker-presence checks below would NOT catch.
-    expect(STYLES_CSS).toContain("button:not([data-app-shell-control]) {");
-    // And no UNSCOPED filled `button {` base may exist (a bare `button {` declaration
-    // block, as opposed to a descendant/class selector ending in ` button {`). Match a
-    // `button` selector at the start of a line followed directly by `{`.
-    const unscopedBase = /(^|\n)\s*button\s*\{/.test(STYLES_CSS);
-    expect(unscopedBase).toBe(false);
+  it("scopes the host button base to MusicLibrary and excludes shared controls", () => {
+    expect(STYLES_CSS).toContain(
+      ".pod-music-library button:where(:not([data-app-shell-control])) {",
+    );
+    expect(STYLES_CSS).not.toMatch(/(^|\n)\s*button(?::not\([^\n]*\))?\s*\{/);
+    for (const sheet of ["tokens", "theme", "density", "components"]) {
+      expect(STYLES_CSS).toContain(`@import "@jeswr/suite-ui/styles/${sheet}.css"`);
+    }
+    expect(STYLES_CSS).not.toContain("--surface: var(--card)");
   });
 
   it("every header control App renders is isolation-tagged", () => {
     // Render the SAME app-shell header trio App.tsx mounts (FeedbackButton +
-    // ThemeToggle + AccountMenu), so the guard covers ALL the chrome the bare
+    // ThemeToggle + AccountControl), so the guard covers ALL the chrome the bare
     // `button {}` could leak onto — not just the FeedbackButton. A future app-shell
     // bump that dropped `data-app-shell-control` from ANY of these would fail here.
     const { container } = render(
@@ -63,7 +41,7 @@ describe("app-shell CSS isolation survives pod-music's host button base (#80 / #
       <ThemeProvider>
         <FeedbackButton repo="jeswr/pod-music" appName="Pod Music" appVersion="testsha" />
         <ThemeToggle />
-        <AccountMenu
+        <AccountControl
           webId="https://alice.example/profile/card#me"
           displayName="Alice"
           onSignOut={() => {}}

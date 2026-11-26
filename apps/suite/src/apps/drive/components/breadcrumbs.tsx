@@ -44,7 +44,7 @@ export function Breadcrumbs({ folder }: { folder: string }) {
     <nav className="drv-crumbs" aria-label="Breadcrumb">
       {parent ? (
         <Link className="drv-crumbs-back" href={hrefOf(parent.url)}>
-          <ChevronLeft aria-hidden="true" size={16} /> {parent.label}
+          <ChevronLeft className="suite-rtl-mirror" aria-hidden="true" size={16} /> {parent.label}
         </Link>
       ) : null}
       <ol>

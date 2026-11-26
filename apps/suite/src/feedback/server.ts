@@ -4,7 +4,7 @@ import { z } from "zod";
 import { validateAudio } from "./audio";
 import { questionById } from "./guide";
 import { buildModelRequest } from "./prompt";
-import { MAX_AUDIO_BYTES, verifyReceipts } from "./receipts";
+import { MAX_AUDIO_BYTES, submissionIdSchema, verifyReceipts } from "./receipts";
 import {
   allowedOrigin,
   type FeedbackEnv,
@@ -36,6 +36,21 @@ const anthropicClient = (key: string): InterviewClient => ({
       .join("");
   },
 });
+// Input is validated before storage runs, so any storage failure is upstream (502), never
+// a 400 that would let the client treat a possibly committed record as unsaved.
+const upstream = <T>(work: Promise<T>) =>
+  work.catch((error: unknown) => {
+    if (error instanceof FeedbackError) throw error;
+    throw new FeedbackError(
+      502,
+      "We couldn't save or process that feedback. Your feedback is still here. You can download a copy.",
+    );
+  });
+/** A declared Content-Length over the cap is refused before the allowance is charged. */
+function declaredSize(request: Request, max: number) {
+  if (Number(request.headers.get("content-length")) > max)
+    throw new FeedbackError(413, "This feedback is too large. Download it to keep a copy.");
+}
 export function createFeedbackHandlers(options: {
   env: FeedbackEnv;
   client?: InterviewClient;
@@ -50,18 +65,30 @@ export function createFeedbackHandlers(options: {
     request: Request,
     kind: "turn" | "submit" | "audio",
     action: () => Promise<Response>,
+    precheck: () => void = () => {},
   ): Promise<Response> {
     const origin = allowedOrigin(request, env);
     if (!origin)
       return json({ error: "Feedback is available from the suite's own pages only." }, 403);
-    const headers = { "Access-Control-Allow-Origin": origin, Vary: "Origin" };
+    const headers = {
+      "Access-Control-Allow-Origin": origin,
+      "Access-Control-Expose-Headers": "Retry-After",
+      Vary: "Origin",
+    };
     try {
+      // Order: origin, then validation that needs no request body (content type, declared size,
+      // submission id), then the allowance, then the body and the real work. Malformed requests
+      // and the client's own doomed retries therefore never spend the allowance, while a body is
+      // read only after the allowance is charged: validating it first would let anonymous callers
+      // make the server buffer and parse up to 3 MB each with no limit at all.
+      precheck();
       const wait = limiter(visitorOf(request), kind);
       if (wait !== undefined)
         return json(
           {
             error:
               "You've reached the feedback allowance. Please try again later, or download your feedback.",
+            code: "rate_limited",
           },
           429,
           { ...headers, "Retry-After": String(Math.ceil(wait / 1000)) },
@@ -71,10 +98,16 @@ export function createFeedbackHandlers(options: {
       return response;
     } catch (error) {
       if (error instanceof FeedbackError)
-        return json({ error: error.message }, error.status, headers);
+        return json({ error: error.message, code: error.code }, error.status, {
+          ...headers,
+          ...(error.retryAfter !== undefined ? { "Retry-After": String(error.retryAfter) } : {}),
+        });
       if (error instanceof z.ZodError || error instanceof SyntaxError || error instanceof TypeError)
         return json(
-          { error: "The feedback request is not valid. Check the fields and try again." },
+          {
+            error: "The feedback request is not valid. Check the fields and try again.",
+            code: "invalid",
+          },
           400,
           headers,
         );
@@ -82,6 +115,7 @@ export function createFeedbackHandlers(options: {
         {
           error:
             "We couldn't save or process that feedback. Your feedback is still here. You can download a copy.",
+          code: "upstream",
         },
         502,
         headers,
@@ -112,95 +146,132 @@ export function createFeedbackHandlers(options: {
         : json({ error: "Origin not allowed." }, 403);
     },
     turn(request: Request) {
-      return protect(request, "turn", async () => {
-        if (!request.headers.get("content-type")?.startsWith("application/json"))
-          throw new FeedbackError(415, "Send JSON.");
-        const input = validateTurn(
-          JSON.parse(new TextDecoder().decode(await readBody(request, 240_000))),
-        );
-        const key = env.ANTHROPIC_API_KEY?.trim();
-        if (!key)
-          throw new FeedbackError(
-            503,
-            "The interviewer isn't switched on yet. You can still use the plain feedback form.",
+      return protect(
+        request,
+        "turn",
+        async () => {
+          const input = validateTurn(
+            JSON.parse(new TextDecoder().decode(await readBody(request, 240_000))),
           );
-        let result: unknown;
-        try {
-          result = JSON.parse(
-            await (options.client ?? anthropicClient(key)).complete(
-              buildModelRequest(input, env.FEEDBACK_MODEL?.trim() || undefined),
-            ),
-          );
-        } catch {
-          throw new FeedbackError(
-            502,
-            "The interviewer couldn't reply. Your answer is still here. Try again or use the plain form.",
-          );
-        }
-        const r = z
-          .object({
-            reply: z.string().min(1).max(4000),
-            updates: z
-              .array(z.object({ id: z.string(), value: z.string().max(4000) }).strict())
-              .max(100),
-            nextQuestionId: z.string(),
-            done: z.boolean(),
-          })
-          .strict()
-          .parse(result);
-        const answers = coerceUpdates(r.updates);
-        const merged = validateAnswers({ ...input.answers, ...answers });
-        const question = r.nextQuestionId !== "none" ? questionById(r.nextQuestionId) : undefined;
-        if (r.nextQuestionId !== "none" && !question)
-          throw new FeedbackError(
-            502,
-            "The interviewer returned an unknown question. Please use the plain form.",
-          );
-        const lastUser = input.messages.at(-1);
-        const confirmation =
-          input.answers.confirmed === "yes" ||
-          (lastUser?.role === "user" &&
-            /^(yes|yes[, .]?( that.s right)?|correct|that.s right)[.!]?$/i.test(
-              lastUser.content.trim(),
-            ));
-        if (!confirmation) delete merged.confirmed;
-        const done =
-          r.done &&
-          confirmation &&
-          Boolean(input.answers.summary) &&
-          merged.confirmed === "yes" &&
-          Boolean(merged.summary);
-        if (!done && !question)
-          throw new FeedbackError(
-            502,
-            "The interviewer couldn't choose a next question. Please use the plain form.",
-          );
-        return json({ reply: r.reply, answers: merged, ...(question ? { question } : {}), done });
-      });
+          const key = env.ANTHROPIC_API_KEY?.trim();
+          if (!key)
+            throw new FeedbackError(
+              503,
+              "The interviewer isn't switched on yet. You can still use the plain feedback form.",
+            );
+          let result: unknown;
+          try {
+            result = JSON.parse(
+              await (options.client ?? anthropicClient(key)).complete(
+                buildModelRequest(input, env.FEEDBACK_MODEL?.trim() || undefined),
+              ),
+            );
+          } catch {
+            throw new FeedbackError(
+              502,
+              "The interviewer couldn't reply. Your answer is still here. Try again or use the plain form.",
+            );
+          }
+          const r = z
+            .object({
+              reply: z.string().min(1).max(4000),
+              updates: z
+                .array(z.object({ id: z.string(), value: z.string().max(4000) }).strict())
+                .max(100),
+              nextQuestionId: z.string(),
+              done: z.boolean(),
+            })
+            .strict()
+            .parse(result);
+          const answers = coerceUpdates(r.updates);
+          const merged = validateAnswers({ ...input.answers, ...answers });
+          const question = r.nextQuestionId !== "none" ? questionById(r.nextQuestionId) : undefined;
+          if (r.nextQuestionId !== "none" && !question)
+            throw new FeedbackError(
+              502,
+              "The interviewer returned an unknown question. Please use the plain form.",
+            );
+          const lastUser = input.messages.at(-1);
+          const confirmation =
+            input.answers.confirmed === "yes" ||
+            (lastUser?.role === "user" &&
+              /^(yes|yes[, .]?( that.s right)?|correct|that.s right)[.!]?$/i.test(
+                lastUser.content.trim(),
+              ));
+          if (!confirmation) delete merged.confirmed;
+          const done =
+            r.done &&
+            confirmation &&
+            Boolean(input.answers.summary) &&
+            merged.confirmed === "yes" &&
+            Boolean(merged.summary);
+          if (!done && !question)
+            throw new FeedbackError(
+              502,
+              "The interviewer couldn't choose a next question. Please use the plain form.",
+            );
+          return json({ reply: r.reply, answers: merged, ...(question ? { question } : {}), done });
+        },
+        () => {
+          if (!request.headers.get("content-type")?.startsWith("application/json"))
+            throw new FeedbackError(415, "Send JSON.");
+          declaredSize(request, 240_000);
+        },
+      );
     },
     audio(request: Request) {
-      return protect(request, "audio", async () => {
-        const bytes = await readBody(request, MAX_AUDIO_BYTES);
-        const file = new File([bytes as Uint8Array<ArrayBuffer>], "recording", {
-          type: request.headers.get("content-type") ?? "",
-        });
-        return json(await storage().upload(await validateAudio(file)));
-      });
+      return protect(
+        request,
+        "audio",
+        async () => {
+          const submissionId = submissionIdSchema.parse(
+            new URL(request.url).searchParams.get("submissionId"),
+          );
+          const bytes = await readBody(request, MAX_AUDIO_BYTES);
+          const file = new File([bytes as Uint8Array<ArrayBuffer>], "recording", {
+            type: request.headers.get("content-type") ?? "",
+          });
+          const audio = await validateAudio(file);
+          return json(await upstream(storage().upload(audio, submissionId)));
+        },
+        () => {
+          submissionIdSchema.parse(new URL(request.url).searchParams.get("submissionId"));
+          if (!(request.headers.get("content-type") ?? "").toLowerCase().startsWith("audio/"))
+            throw new FeedbackError(400, "Each recording must be an audio file of at most 3 MB.");
+          declaredSize(request, MAX_AUDIO_BYTES);
+        },
+      );
     },
     submit(request: Request) {
-      return protect(request, "submit", async () => {
-        if (!request.headers.get("content-type")?.startsWith("application/json"))
-          throw new FeedbackError(415, "Send JSON feedback with recording receipts.");
-        const data = z
-          .object({ record: z.unknown(), receipts: z.unknown() })
-          .strict()
-          .parse(JSON.parse(new TextDecoder().decode(await readBody(request, 1_000_000))));
-        const submission = validateSubmission(data.record);
-        const receipts = verifyReceipts(data.receipts, env);
-        if (submission.transcript.some((m) => m.audio?.some((i) => i >= receipts.length)))
-          throw new FeedbackError(400, "A recording is missing from the feedback.");
-        return json(await storage().save(submission, receipts));
-      });
+      return protect(
+        request,
+        "submit",
+        async () => {
+          const data = z
+            .object({
+              submissionId: submissionIdSchema,
+              record: z.unknown(),
+              receipts: z.unknown(),
+            })
+            .strict()
+            .parse(JSON.parse(new TextDecoder().decode(await readBody(request, 1_000_000))));
+          const submission = validateSubmission(data.record);
+          const receipts = verifyReceipts(data.receipts, data.submissionId, env);
+          if (submission.transcript.some((m) => m.audio?.some((i) => i >= receipts.length)))
+            throw new FeedbackError(
+              400,
+              "A recording is missing from the feedback.",
+              undefined,
+              "receipts_invalid",
+            );
+          return json(await upstream(storage().save(submission, receipts, data.submissionId)));
+        },
+        () => {
+          if (!request.headers.get("content-type")?.startsWith("application/json"))
+            throw new FeedbackError(415, "Send JSON feedback with recording receipts.");
+          declaredSize(request, 1_000_000);
+        },
+      );
     },
   };
 }

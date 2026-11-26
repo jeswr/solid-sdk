@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6.2-Sol
 import { resolve } from "node:path";
 import type { NextConfig } from "next";
 
@@ -10,6 +11,12 @@ if (
   (process.env.VERCEL === "1" || process.env.GITHUB_WORKFLOW === "pages")
 )
   throw new Error("Demo fixtures must be disabled for deployment builds");
+
+if (
+  process.env.NEXT_PUBLIC_SIGN_IN_DIAGNOSTICS === "1" &&
+  (process.env.VERCEL === "1" || process.env.GITHUB_WORKFLOW === "pages")
+)
+  throw new Error("Sign-in diagnostics are for the MOB-07 test build only");
 
 const config: NextConfig = {
   // The live OIDC harness needs next dev for HTTP loopback. Keep its warmed route
@@ -32,8 +39,23 @@ const config: NextConfig = {
   webpack(config, { isServer, webpack }) {
     // rdf-engine's lazy WASM loader includes a Node-only disk fallback. Browser
     // initialization uses its emitted WASM URL and never enters that branch.
-    if (!isServer)
+    if (!isServer) {
       config.plugins.push(new webpack.IgnorePlugin({ resourceRegExp: /^node:fs\/promises$/ }));
+      // Webpack's scheme reader runs before aliases for Node-prefixed imports.
+      const browserCrypto = resolve(config.context, "src/lib/browser-node-crypto.ts");
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(
+          /^node:(crypto|url)$/,
+          (resource: { request: string }) => {
+            resource.request = resource.request === "node:crypto" ? browserCrypto : "url";
+          },
+        ),
+      );
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        "node:url": "url",
+      };
+    }
     // Univer lazy-loads one hyphenation pattern chunk per language (134 chunks, 10.8 MB). The
     // Suite never enables auto-hyphenation and Univer bundles en-us inline, so the bundled native
     // export leaves the other languages out to stay inside its size budget.

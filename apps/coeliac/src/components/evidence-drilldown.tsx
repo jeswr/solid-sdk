@@ -9,7 +9,7 @@
  * (no bespoke open/close state or ARIA plumbing needed — accessible by
  * construction).
  */
-import type { EvidencePairing } from "@/lib/inference/types";
+import type { EvidencePairing } from "@jeswr/health-insights";
 import { triggerLabel } from "@/lib/off/exposure-display";
 
 const EXPOSURE_LEVEL_LABEL: Record<EvidencePairing["exposureLevel"], string> = {
@@ -30,8 +30,11 @@ export function EvidenceDrilldown({ evidence }: { evidence: readonly EvidencePai
         See the {evidence.length} matched exposure{evidence.length === 1 ? "" : "s"}
       </summary>
       <ul className="evidence-drilldown__list">
-        {evidence.map((pairing, i) => (
-          <li key={`${pairing.mealId ?? "meal"}-${i}`} className="evidence-drilldown__item">
+        {evidence.map((pairing) => (
+          <li
+            key={pairing.mealId ?? pairing.ingestedAt.toISOString()}
+            className="evidence-drilldown__item"
+          >
             <p className="evidence-drilldown__meal">
               <span className="evidence-drilldown__level">
                 {EXPOSURE_LEVEL_LABEL[pairing.exposureLevel]}
@@ -39,8 +42,8 @@ export function EvidenceDrilldown({ evidence }: { evidence: readonly EvidencePai
               — {formatDateTime(pairing.ingestedAt)}
             </p>
             <ul className="evidence-drilldown__symptoms">
-              {pairing.symptoms.map((s, si) => (
-                <li key={s.symptomId ?? `${i}-${si}`}>
+              {pairing.symptoms.map((s) => (
+                <li key={s.symptomId ?? `${s.symptomType}-${s.onset.toISOString()}`}>
                   {triggerLabel(s.symptomType)}
                   {s.severity !== undefined ? ` (severity ${s.severity}/10)` : ""} —{" "}
                   {s.lagHours.toFixed(1)}h later
@@ -49,7 +52,8 @@ export function EvidenceDrilldown({ evidence }: { evidence: readonly EvidencePai
             </ul>
             {pairing.coPresentTriggers.length > 0 ? (
               <p className="evidence-drilldown__confounders">
-                Also present in this window: {pairing.coPresentTriggers.map(triggerLabel).join(", ")}
+                Also present in this window:{" "}
+                {pairing.coPresentTriggers.map(triggerLabel).join(", ")}
               </p>
             ) : null}
           </li>

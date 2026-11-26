@@ -19,6 +19,14 @@ import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import type { ImportContext } from "../core/types.js";
 import { mailBodyText } from "./html-text.js";
+import type { MailMarkupAuthentication } from "./markup-types.js";
+import { MailMarkupResource } from "./markup-vocab.js";
+import {
+  createMailMarkupWriter,
+  type MailMarkupErrorCode,
+  type MailMarkupWriterOptions,
+  removeMailMarkupResources,
+} from "./markup-writer.js";
 import { parseMail } from "./parse.js";
 import {
   accountRoot,
@@ -28,6 +36,7 @@ import {
   messageSlug,
   threadSlug,
 } from "./paths.js";
+import { googleAuthentication, markupSender, receiverTime } from "./receiver.js";
 import { MAIL_CLASSES, MailAttachment, MailCollection, MailMessage } from "./vocab.js";
 
 export { MailParseError } from "./parse.js";
@@ -35,7 +44,7 @@ export { MailParseError } from "./parse.js";
 /** The connector ports the writer needs (API and file imports both provide them). */
 export type MailPorts = Pick<
   ImportContext,
-  "resolve" | "read" | "write" | "writeBinary" | "remove"
+  "resolve" | "read" | "write" | "writeBinary" | "remove" | "signal" | "releaseRead"
 >;
 
 /**
@@ -62,7 +71,14 @@ export interface MailItem {
   resolveParent?(messageId: string): Promise<string | undefined>;
   /** Source item URL recorded as provenance (`prov:wasDerivedFrom`); identifies the item. */
   readonly sourceUrl?: string;
+  /** Receiver-controlled source time only, never MIME Date. Missing time remains unknown. */
   readonly receivedAt?: Date;
+  /** Select receiver headers only for raw messages obtained from Google. */
+  readonly googleReceiver?: boolean;
+  /** Trusted host-supplied receiver evidence overrides parsed Google evidence. */
+  readonly authentication?: MailMarkupAuthentication;
+  /** Keep the message in Trash while removing its current transactional markup. */
+  readonly trashed?: boolean;
 }
 
 export interface StoredMail {
@@ -76,6 +92,7 @@ export interface StoredMail {
 }
 
 export interface MailWriter {
+  readonly errors: readonly MailMarkupErrorCode[];
   /** Store one message. Throws `MailParseError` for unparseable input (skip it). */
   add(item: MailItem): Promise<StoredMail>;
   /**
@@ -99,7 +116,22 @@ export function binaryType(contentType: string): string {
 
 const docOf = (iri: string) => iri.split("#", 1)[0] as string;
 
-export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
+export interface MailWriterOptions {
+  /** Extract transactional schema.org markup after storing the source message. Default true. */
+  readonly extractMarkup?: boolean;
+  readonly markup?: MailMarkupWriterOptions;
+}
+
+export function createMailWriter(
+  ctx: MailPorts,
+  account: string,
+  options: MailWriterOptions = {},
+): MailWriter {
+  const importedAt = new Date();
+  const markup =
+    options.extractMarkup === false
+      ? undefined
+      : createMailMarkupWriter(ctx, account, options.markup);
   const accountDir = accountRoot(account);
   const base = ctx.resolve("mail/").slice(0, -"mail/".length);
   const slugOf = (url: string) => {
@@ -172,6 +204,13 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     const slug = messageSlug(account, id);
     const iri = iriOf(slug);
     deletions.delete(slug);
+    if (item.trashed && previous)
+      await removeMailMarkupResources(
+        ctx,
+        account,
+        iri,
+        new MailMarkupResource(iri, previous.dataset, DataFactory).markupSlugs,
+      );
 
     const dataset = new Store();
     const message = new MailMessage(iri, dataset, DataFactory);
@@ -185,7 +224,19 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     for (const cc of mail.cc) message.cc.add(cc);
     for (const bcc of mail.bcc) message.bcc.add(bcc);
     message.dateSent = mail.date;
-    message.dateReceived = item.receivedAt;
+    const received = receiverTime(item.receivedAt, importedAt);
+    message.dateReceived = received;
+    const authentication =
+      item.authentication ??
+      (item.googleReceiver ? googleAuthentication(item.raw, mail.from) : undefined);
+    const sender = markupSender(mail.from, authentication);
+    const metadata = new MailMarkupResource(iri, dataset, DataFactory);
+    metadata.trust = sender.trust;
+    metadata.senderKey = sender.senderKey;
+    metadata.dateModified = received;
+    if (previous)
+      for (const old of new MailMarkupResource(iri, previous.dataset, DataFactory).markupSlugs)
+        metadata.markupSlugs.add(old);
     // Keep the first read time across re-imports; the read flag is the presence of dateRead.
     message.dateRead = item.read
       ? (previous?.dateRead ?? mail.date ?? item.receivedAt ?? new Date(0))
@@ -271,6 +322,14 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
         body: part.content,
         mode: "replace",
       });
+    if (mail.html !== undefined && !item.trashed)
+      await markup?.add({
+        messageIri: iri,
+        html: mail.html,
+        dateModified: received,
+        sender: mail.from,
+        authentication,
+      });
     if (mail.messageId) messageIds.set(mail.messageId, id);
     return { slug, iri, thread: iriOf(threadDoc), id };
   }
@@ -340,6 +399,12 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
       for (const folder of [...folders].sort())
         await dropMembers(folder, iris, MAIL_CLASSES.Folder);
       for (const [slug, previous] of messages) {
+        await removeMailMarkupResources(
+          ctx,
+          account,
+          previous.value,
+          new MailMarkupResource(previous.value, previous.dataset, DataFactory).markupSlugs,
+        );
         for (const attachment of previous.attachments) await ctx.remove(slugOf(attachment));
         if (previous.encoding) await ctx.remove(slugOf(previous.encoding));
         await ctx.remove(slug);
@@ -430,5 +495,12 @@ export function createMailWriter(ctx: MailPorts, account: string): MailWriter {
     desired.clear();
   }
 
-  return { add, removeMessage, flush };
+  return {
+    add,
+    removeMessage,
+    flush,
+    get errors() {
+      return markup?.errors ?? [];
+    },
+  };
 }

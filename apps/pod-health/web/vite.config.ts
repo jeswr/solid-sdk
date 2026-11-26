@@ -37,7 +37,7 @@ const buildVersion = (() => {
 const podHealthSrc = (rel: string) => fileURLToPath(new URL(`../src/${rel}`, import.meta.url));
 
 // The library SOURCE lives OUTSIDE web/ (in ../src), so when Rollup bundles it,
-// its bare imports (@jeswr/fetch-rdf, @solid/object, n3, …) would resolve against
+// its bare imports (@jeswr/fetch-rdf, n3, …) would resolve against
 // ../src's nearest node_modules — which doesn't exist. Pin those runtime deps to
 // THIS host's node_modules so the out-of-root source resolves them.
 const hostModule = (pkg: string) =>
@@ -62,7 +62,6 @@ export default defineConfig({
       { find: "pod-health", replacement: podHealthSrc("index.ts") },
       { find: "@jeswr/fetch-rdf", replacement: hostModule("@jeswr/fetch-rdf") },
       { find: "@jeswr/suite-vocab", replacement: hostModule("@jeswr/suite-vocab") },
-      { find: "@solid/object", replacement: hostModule("@solid/object") },
       { find: "@rdfjs/wrapper", replacement: hostModule("@rdfjs/wrapper") },
       { find: "n3", replacement: hostModule("n3") },
       // The library declares React as an OPTIONAL peer dep; bundling its source

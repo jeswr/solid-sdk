@@ -1,8 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
-import type { Term } from "@rdfjs/types";
+import {
+  type LibraryField,
+  type LibraryValue,
+  type LibraryView,
+  libraryFieldQuads,
+  libraryTypeQuads,
+} from "@jeswr/solid-listening";
+import type { Quad, Term } from "@rdfjs/types";
 import {
   LiteralFrom,
   NamedNodeAs,
@@ -90,6 +98,35 @@ export class MusicNode extends TermWrapper {
   }
   set title(value: string) {
     this.writeString(`${S}name`, nonEmpty(value));
+  }
+
+  /** Stamp the generated model's sector class and its schema.org co-type. */
+  stampModel(view: LibraryView): this {
+    httpIri(this.value);
+    this.assertWritableSubject();
+    this.addQuads(libraryTypeQuads(view, this.value));
+    return this;
+  }
+
+  /**
+   * The quads @jeswr/solid-listening's generated model writes for one field. Computed
+   * before any clearing, so a value the model rejects never partly mutates the node.
+   */
+  modelQuads<V extends LibraryView, F extends LibraryField<V>>(
+    view: V,
+    field: F,
+    value: LibraryValue<V, F> | undefined,
+  ): Quad[] {
+    this.assertWritableSubject();
+    try {
+      return libraryFieldQuads(view, this.value, field, value);
+    } catch (error) {
+      throw new InvalidMusicError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  addQuads(quads: readonly Quad[]): void {
+    (this.dataset as Store).addQuads([...quads]);
   }
 
   writeString(predicate: string, value: string | undefined): void {

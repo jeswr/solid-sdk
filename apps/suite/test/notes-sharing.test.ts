@@ -205,11 +205,11 @@ it("never blocks the list or bootstraps ACLs, caps discovery at four, and leaves
   await work;
   expect(max).toBe(4);
   expect(found.mock.calls).toEqual([
-    ["owner", false],
-    ["public", true],
-    ["person", true],
-    ["four", false],
-    ["five", false],
+    ["owner", false, []],
+    ["public", true, []],
+    ["person", true, [BOB]],
+    ["four", false, []],
+    ["five", false, []],
   ]);
   const controller = new AbortController();
   load.mockImplementation(async () => {

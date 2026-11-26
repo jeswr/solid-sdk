@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { safeIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Literal, NamedNode, Quad, Term } from "@rdfjs/types";
@@ -8,8 +9,8 @@ import {
   DataFactory as df,
   BlankNode as N3BlankNode,
   Literal as N3Literal,
-  Parser,
   Store,
+  termToId,
 } from "n3";
 import {
   UnsupportedBlankNodeLabelError,
@@ -69,6 +70,27 @@ const referenceFactory = {
   },
 };
 
+/**
+ * Language-tagged literals already stored, keyed by graph, subject, predicate,
+ * value and lower-cased tag. Held outside the instance because N3's constructor
+ * inserts quads before subclass fields are initialised.
+ */
+const languageKeys = new WeakMap<Store, Set<string>>();
+// N3 accepts external RDF/JS terms; @types/n3 narrows this helper to N3 terms.
+const termKey = termToId as (term: Term) => string;
+
+function languageKey(quad: Quad): string | undefined {
+  const { object } = quad;
+  if (object.termType !== "Literal" || !object.language) return undefined;
+  return JSON.stringify([
+    termKey(quad.graph),
+    termKey(quad.subject),
+    termKey(quad.predicate),
+    object.value,
+    object.language.toLowerCase(),
+  ]);
+}
+
 /** N3 also recreates terms on reads; retain tag spelling through every store. */
 export class ReferenceStore extends Store {
   constructor(quads: Quad[] = []) {
@@ -91,23 +113,83 @@ export class ReferenceStore extends Store {
     const quad = predicate
       ? df.quad(subjectOrQuad as Quad["subject"], predicate, object as Quad["object"], graph)
       : (subjectOrQuad as Quad);
-    const literal = quad.object;
-    if (literal.termType === "Literal" && literal.language) {
-      // RDFlib retains the first spelling of an equal language literal. Match
-      // only this statement's graph, subject and predicate, leaving its stored
-      // term untouched so serialization and assertion hashes keep that spelling.
-      for (const existing of this.getQuads(quad.subject, quad.predicate, null, quad.graph)) {
-        const other = existing.object;
-        if (
-          other.termType === "Literal" &&
-          other.value === literal.value &&
-          other.language.toLowerCase() === literal.language.toLowerCase()
-        )
-          return false;
+    // RDFlib retains the first spelling of an equal language literal. An index
+    // keyed by this statement's graph, subject, predicate, value and folded tag
+    // answers in constant time; the stored term is left untouched so
+    // serialization and assertion hashes keep that spelling.
+    const key = languageKey(quad);
+    let keys = languageKeys.get(this);
+    if (key !== undefined && keys?.has(key)) return false;
+    const added = super.addQuad(quad);
+    if (key !== undefined && added) {
+      if (!keys) {
+        keys = new Set();
+        languageKeys.set(this, keys);
       }
+      keys.add(key);
     }
-    return super.addQuad(quad);
+    return added;
   }
+
+  override removeQuad(quad: Quad): boolean;
+  override removeQuad(
+    subject: Quad["subject"],
+    predicate: Quad["predicate"],
+    object: Quad["object"],
+    graph?: Quad["graph"],
+  ): boolean;
+  override removeQuad(
+    subjectOrQuad: Quad["subject"] | Quad,
+    predicate?: Quad["predicate"],
+    object?: Quad["object"],
+    graph?: Quad["graph"],
+  ): boolean {
+    const quad = predicate
+      ? df.quad(subjectOrQuad as Quad["subject"], predicate, object as Quad["object"], graph)
+      : (subjectOrQuad as Quad);
+    const removed = super.removeQuad(quad);
+    const key = removed ? languageKey(quad) : undefined;
+    if (key !== undefined) languageKeys.get(this)?.delete(key);
+    return removed;
+  }
+}
+
+type Index = Record<number, Record<number, Record<number, null>>>;
+
+/** Force sparse numeric elements before inserting N3's document-wide term IDs.
+ * Small per-graph indexes otherwise acquire large V8 element backing arrays.
+ * The removed sentinel never represents a term, quad or hash input.
+ */
+function sparseIndex<T>(): Record<number, T> {
+  const index = { 2147483647: null };
+  Reflect.deleteProperty(index, 2147483647);
+  return index as unknown as Record<number, T>;
+}
+
+/** N3's insertion hook, retaining its index shape and duplicate semantics. */
+class CompactReferenceStore extends ReferenceStore {
+  protected _addToIndex(index: Index, subject: number, predicate: number, object: number): boolean {
+    let predicates = index[subject];
+    if (!predicates) {
+      predicates = sparseIndex();
+      index[subject] = predicates;
+    }
+    let objects = predicates[predicate];
+    if (!objects) {
+      objects = sparseIndex();
+      predicates[predicate] = objects;
+    }
+    const existed = object in objects;
+    if (!existed) objects[object] = null;
+    return !existed;
+  }
+}
+
+/** A compact store holding only the given quads (and only their terms). */
+export function compactStore(quads: Iterable<Quad>): Store {
+  const out = new CompactReferenceStore();
+  for (const q of quads) out.add(q);
+  return out;
 }
 
 /** Parse through the suite boundary while preserving reference LANGTAG spelling. */
@@ -116,18 +198,11 @@ export async function parseReferenceRdf(
   format: "text/turtle" | "application/trig",
   baseIRI?: string,
 ): Promise<DatasetCore> {
-  const dataset = await parseRdf(body, format, { baseIRI });
-  if (![...dataset].some((q) => q.object.termType === "Literal" && q.object.language))
-    return dataset;
-  // fetch-rdf exposes no factory option. Replay its validated N3 input with a
-  // spelling-preserving factory; the default N3 factory lowercases LANGTAGs.
-  return new ReferenceStore(
-    new Parser({
-      format,
-      baseIRI,
-      factory: referenceFactory,
-    }).parse(body),
-  );
+  return parseRdf(body, format, {
+    baseIRI,
+    factory: referenceFactory,
+    storeFactory: () => new CompactReferenceStore(),
+  });
 }
 
 const supportedLiteralDatatypes = new Set([
@@ -265,7 +340,7 @@ export function graph(dataset: DatasetCore, name: string): Store {
   return out;
 }
 
-export function putGraph(dataset: Store, name: string, contents: DatasetCore): void {
+export function putGraph(dataset: Store, name: string, contents: Iterable<Quad>): void {
   for (const q of contents)
     dataset.addQuad(df.quad(q.subject, q.predicate, q.object, df.namedNode(name)));
 }

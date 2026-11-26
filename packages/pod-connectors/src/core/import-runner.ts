@@ -13,13 +13,17 @@
  * URLs, so a re-import overwrites in place (idempotent).
  */
 import { refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
+import { DEMO_CONNECTOR } from "@jeswr/suite-vocab";
 import { abortablePodWriter, unlessAborted } from "./abort.js";
 import { RunBudget, type RunLimits, stricterLimits } from "./budget.js";
+import { connectorStorageId } from "./container.js";
 import { IntegrationSyncError, PrivateDestinationError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createImportSession } from "./import-session.js";
+import { scopeList } from "./oauth.js";
 import { budgetedFetch } from "./source-budget.js";
 import type {
+  ConnectorRunCounts,
   ConnectorState,
   ConnectorStateOptions,
   ImportProgress,
@@ -39,6 +43,8 @@ export interface RunImportOptions extends ConnectorStateOptions {
   /** Explicit, host-owned storage port for this adapter. */
   podWriter: PodWriter;
   mode: ImportMode;
+  /** Override DEMO_CONNECTOR for demo fixtures; requires an absolute HTTPS IRI and a nonblank label. Ignored for live imports. */
+  demoAgent?: { readonly iri: string; readonly label: string };
   /** Required for live mode; already authenticated by the host. */
   sourceAuth?: SourceAuth;
   /** Cursor from the previous import (incremental, where supported). */
@@ -68,14 +74,21 @@ export interface RunImportOptions extends ConnectorStateOptions {
    * then does not establish cancellation. The next rewrite links items to its own activity.
    */
   signal?: AbortSignal;
-  /** Granted source permissions when the user withheld some (`ImportContext.scopes`). */
+  /**
+   * Granted source permissions when the user withheld some (`ImportContext.scopes`). Defaults
+   * to the live `sourceAuth.scopes`, which `createSourceAuth` derives from `TokenSet.scope`.
+   */
   scopes?: readonly string[];
 }
 
 export interface ImportReport {
+  /** Stable, non-personal codes for recoverable failures. */
+  errors?: readonly string[];
   adapterId: string;
   /** Updated host-owned checkpoint; persist only in the host. */
   state?: ConnectorState;
+  /** Document changes and malformed-item skips in this attempt. */
+  counts?: ConnectorRunCounts;
   mode: ImportMode;
   written: WrittenDoc[];
   /** Distinct category ids that received data (for the success screen). */
@@ -94,12 +107,14 @@ export interface ImportReport {
 
 /** Root container for one adapter's documents. */
 export function adapterContainerUrl(podRoot: string, adapterId: string): string {
-  return new URL(`integrations/${adapterId}/`, podRoot).toString();
+  return new URL(`integrations/${connectorStorageId(adapterId)}/`, podRoot).toString();
 }
 
 export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
   const { adapter, mode } = opts;
   const id = adapter.metadata.id;
+  if (mode === "live" && adapter.metadata.deprecated)
+    throw new IntegrationSyncError(id, adapter.metadata.deprecated);
 
   const api = mode === "demo" ? fixtureFetch(id, adapter.fixtures()) : opts.sourceAuth?.fetch;
   if (!api)
@@ -143,6 +158,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
         : `urn:solid:connector:${encodeURIComponent(id)}:source`,
       { ...opts, maxRunActivities: adapter.maxRunActivities },
       adapter.vocabMap,
+      mode === "demo" ? (opts.demoAgent ?? DEMO_CONNECTOR) : undefined,
     );
   } catch (error) {
     sourceApi.close();
@@ -159,6 +175,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       cursor: opts.cursor ?? opts.state?.cursor,
       resolve: (slug) => opts.podWriter.resolve(slug),
       read: checked(session.read),
+      releaseRead: session.releaseRead,
       // Progress stops only on caller cancellation; the deadline is enforced on source I/O.
       progress: (p) => {
         opts.signal?.throwIfAborted();
@@ -168,7 +185,8 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       writeBinary: checked(session.writeBinary),
       remove: checked(session.remove),
       signal,
-      scopes: opts.scopes,
+      // Hosts may narrow explicitly; otherwise the token's granted scopes, when it listed them.
+      scopes: opts.scopes ?? (mode === "live" ? opts.sourceAuth?.scopes : undefined),
       limits,
     });
     imported = true;
@@ -179,10 +197,14 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
     const { indexUrl } = await session.registerTypes();
     opts.signal?.throwIfAborted();
     let state: ConnectorState | undefined;
+    let counts: ConnectorRunCounts | undefined;
     await session.finish(async () => {
       // A cancel during the final provenance write is still a cancel: never report success.
       opts.signal?.throwIfAborted();
       state = session.state(outcome);
+      counts = session.counts(outcome.skipped);
+      opts.onRunCounts?.(counts);
+      opts.signal?.throwIfAborted();
       opts.onState?.(state);
       // The run is committed and its cursor reported. Only now may the adapter discard
       // private resume state that the cursor supersedes; a failure or cancel leaves it.
@@ -202,8 +224,10 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       skipped: outcome.skipped,
       ...(outcome.warnings ? { warnings: outcome.warnings } : {}),
       ...(outcome.unsupported ? { unsupported: outcome.unsupported } : {}),
+      errors: outcome.errors,
       indexUrl,
       state,
+      counts: session.tracking ? counts : undefined,
     };
   } catch (error) {
     try {
@@ -287,5 +311,6 @@ export function createSourceAuth(
     const next: RequestInit = { ...snapshot.init, headers };
     return sourceFetch(snapshot.input, next);
   };
-  return { fetch: impl as typeof fetch };
+  const scopes = scopeList(token.scope);
+  return { fetch: impl as typeof fetch, ...(scopes && { scopes }) };
 }

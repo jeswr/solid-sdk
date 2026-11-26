@@ -1,5 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { readFileSync } from "node:fs";
 import type { NextConfig } from "next";
+import { normaliseOrigin } from "./src/lib/app-origin";
 
 // Static-export deploy (Caddy `file_server` on a subdomain) vs. the default
 // server build (Vercel / `next start`, used by the e2e harness).
@@ -14,6 +16,7 @@ import type { NextConfig } from "next";
 // `next build && next start` (the Playwright e2e webServer) keeps working —
 // `output: "export"` is INCOMPATIBLE with `next start`, so it must stay opt-in.
 const staticExport = process.env.APP_STATIC_EXPORT === "1";
+const suiteOrigin = process.env.SUITE_ORIGIN?.trim();
 
 /**
  * The build version attached to feedback diagnostics (the FeedbackButton's
@@ -41,7 +44,10 @@ function buildVersion(): string {
 const baseConfig: NextConfig = {
   // Bake the build version into the client bundle so the FeedbackButton can
   // attach it to issue diagnostics without a runtime lookup.
-  env: { NEXT_PUBLIC_APP_VERSION: buildVersion() },
+  env: {
+    NEXT_PUBLIC_APP_VERSION: buildVersion(),
+    NEXT_PUBLIC_SUITE_ORIGIN: suiteOrigin ? normaliseOrigin(suiteOrigin) : "",
+  },
 };
 
 const nextConfig: NextConfig = staticExport
@@ -50,13 +56,45 @@ const nextConfig: NextConfig = staticExport
       output: "export",
       // Served from a sub-path on GitHub Pages (jeswr.github.io/solid-sdk/issues/):
       // scripts/build-pages.mjs sets NEXT_PUBLIC_BASE_PATH. Unset, the app is at the root.
-      basePath: process.env.NEXT_PUBLIC_BASE_PATH?.replace(/\/+$/, "") || undefined,
+      ...(process.env.NEXT_PUBLIC_BASE_PATH?.replace(/\/+$/, "")
+        ? { basePath: process.env.NEXT_PUBLIC_BASE_PATH.replace(/\/+$/, "") }
+        : {}),
       // Caddy `file_server` serves `/foo` → `/foo/index.html`; trailing-slash
       // routing makes Next emit that directory layout so links resolve on disk.
       trailingSlash: true,
       // No Next.js image optimisation server in a static export.
       images: { unoptimized: true },
     }
-  : baseConfig;
+  : {
+      ...baseConfig,
+      async redirects() {
+        const suite = process.env.SUITE_ORIGIN?.trim();
+        // Next appends the incoming query to a redirect and cannot filter it, so an OIDC callback
+        // (`code`, `state`, `error`, `iss`, ...) must never match: those requests stay served
+        // locally. The browser redirect (`SuiteRedirect`) forwards only the `tracker` hint.
+        const callback = [
+          "code",
+          "state",
+          "error",
+          "iss",
+          "session_state",
+          "id_token",
+          "access_token",
+        ].map((key) => ({
+          type: "query" as const,
+          key,
+        }));
+        return suite
+          ? [
+              {
+                source: "/",
+                missing: callback,
+                destination: `${normaliseOrigin(suite)}/tasks/issues`,
+                permanent: false,
+              },
+            ]
+          : [];
+      },
+    };
 
 export default nextConfig;

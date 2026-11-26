@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { NS } from "@jeswr/suite-vocab";
@@ -12,7 +13,14 @@ import { migrateMoney } from "./migration.js";
 import { MoneyNode } from "./node.js";
 import { required } from "./records.js";
 import type { Account, Balance, Category, Money, Transaction } from "./types.js";
-import { hasText, instant, iri, validateMoney, validateTransaction } from "./validation.js";
+import {
+  hasText,
+  instant,
+  iri,
+  isTransactionWritable,
+  validateMoney,
+  validateTransaction,
+} from "./validation.js";
 import { V } from "./vocab.js";
 
 export { MoneyDocument, MoneyNode, migrateMoney, V };
@@ -76,9 +84,12 @@ export function putTransaction(document: MoneyDocument, value: Transaction): voi
   validateTransaction(value);
   // Writes check the text that survives control-character stripping; reads keep trim().
   if (!hasText(value.description)) throw new TypeError("Transaction description is required");
+  // A snapshot of a record whose links could not be read must not be written anywhere,
+  // including to another document, where no stored link would trip the check below.
+  if (!isTransactionWritable(value)) throw new TypeError("Invalid transaction link");
+  // Links that could not be read are not in the snapshot; refuse rather than erase them.
+  document.assertTransactionWritable(value.id);
   const node = document.node(value.id);
-  if (node.types.has(V.transferClass))
-    throw new TypeError("Transfer legs must be changed together");
   writeCore(document, value.id, "Transaction", entities.Transaction.build(value.id, value));
   node.postingTime = value.postingTime;
   node.amountNode = putMoney(document, value.id, value);

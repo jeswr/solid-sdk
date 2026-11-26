@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { useT } from "@jeswr/suite-i18n/react";
 import {
   Button,
   EmptyState,
@@ -18,6 +19,9 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { StartSomethingNew } from "@/components/templates/start-something-new";
+import { SharedCard } from "@/lib/shared/shared-card";
+import { domainItemKey } from "../lib/model/discovery";
+import "@/lib/shared/shared.css";
 import { DOMAINS, UNCATEGORISED, visibleDomains } from "../lib/model/domains";
 import {
   connectedSources,
@@ -38,8 +42,11 @@ import { AddManuallySheet } from "./item/add-manually-sheet";
 import { itemShortcut } from "./item/shortcuts";
 import { useItemActions } from "./item/use-item-actions";
 import { HomeAgentPermissions } from "./permissions/home-agent-permissions";
+import { useHomeLabels } from "./use-home-labels";
 
 export function HomePage({ domain }: { domain: string }) {
+  const t = useT();
+  const labels = useHomeLabels();
   const session = useHomeSession();
   const loaded = useDomainItems(session);
   const access = useHomeAccess(session, loaded.updated);
@@ -62,7 +69,10 @@ export function HomePage({ domain }: { domain: string }) {
   const [page, setPage] = useState({ domain, filter: search.get("types"), limit: 24 });
   const limit = page.domain === domain && page.filter === search.get("types") ? page.limit : 24;
   const items = data.items.filter((item) => item.domain.id === entry.id);
-  const sections = sectionsFor(entry, items, selected, limit);
+  const sections = sectionsFor(entry, items, selected, limit).map((section) => ({
+    ...section,
+    label: labels.type(section),
+  }));
   const sources = connectedSources(items, session.storageUrl);
   const [online, setOnline] = useState(true);
   const [now, setNow] = useState(Date.now);
@@ -129,6 +139,7 @@ export function HomePage({ domain }: { domain: string }) {
       />
       <HomeAgentPermissions />
       <StartSomethingNew session={session} />
+      {domain === "personal" ? <SharedCard /> : null}
       <DomainNavigation
         domains={visibleDomains(data.items)}
         active={entry.id}
@@ -138,7 +149,7 @@ export function HomePage({ domain }: { domain: string }) {
         <div className="hm-domain-heading">
           <h2 id="hm-domain-heading">
             <DomainIcon name={entry.icon} size={24} />
-            {entry.label}
+            {labels.domain(entry)}
           </h2>
           {canAdd ? (
             <Button ref={addButton} variant="outline" onClick={openAdd} disabled={!online}>
@@ -152,7 +163,7 @@ export function HomePage({ domain }: { domain: string }) {
           </p>
         ) : null}
         <FilterChips
-          label={`${entry.label} data types`}
+          label={t("home.dataTypes", { domain: labels.domain(entry) })}
           options={entry.dataTypes}
           value={selected}
           onChange={filter}
@@ -213,9 +224,14 @@ export function HomePage({ domain }: { domain: string }) {
                 </Button>
               </p>
             ) : null}
+            {data.limited.size ? (
+              <p className="hm-notice" role="status">
+                {limitNote(data.limited)}
+              </p>
+            ) : null}
             {!items.length ? (
               <EmptyState
-                title="Nothing here yet"
+                title={t("home.empty")}
                 body="Connect a service or add something yourself."
                 icon={<DomainIcon name={entry.icon} size={32} />}
                 primaryAction={
@@ -234,7 +250,7 @@ export function HomePage({ domain }: { domain: string }) {
             ) : !sections.length ? (
               <EmptyState
                 variant="filtered-empty"
-                title="No items match these filters"
+                title={t("home.noMatches")}
                 onClearFilters={() => filter(entry.dataTypes.map((type) => type.id))}
               />
             ) : (
@@ -256,7 +272,7 @@ export function HomePage({ domain }: { domain: string }) {
                     <ul className="hm-grid" role="list" aria-label={`${section.label} items`}>
                       {section.items.map((item) => (
                         <HomeCard
-                          key={`${item.url}|${item.dataType?.id}`}
+                          key={domainItemKey(item)}
                           item={item}
                           view={
                             data.views.get(item) as NonNullable<ReturnType<typeof data.views.get>>
@@ -295,4 +311,16 @@ export function HomePage({ domain }: { domain: string }) {
       ) : null}
     </div>
   );
+}
+
+/** Plain-language note for documents that hold more records than Home lists at once. */
+function limitNote(limited: ReadonlyMap<string, { shown: number; total: number }>): string {
+  let shown = 0;
+  let total = 0;
+  for (const entry of limited.values()) {
+    shown += entry.shown;
+    total += entry.total;
+  }
+  const where = limited.size === 1 ? "one large import" : `${limited.size} large imports`;
+  return `Showing ${shown.toLocaleString("en")} of ${total.toLocaleString("en")} records from ${where}.`;
 }

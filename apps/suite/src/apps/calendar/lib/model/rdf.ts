@@ -1,7 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5 (calendar documents and event fields on @jeswr/solid-scheduling)
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
+import {
+  buildCalendarDocument,
+  buildCalendarEventFields,
+  CalendarDocumentView,
+  CalendarEventView,
+  isCalendarDocument,
+  isCalendarEvent,
+  parseCalendarDocument,
+} from "@jeswr/solid-scheduling";
 import { canonicalize, LEGACY_NAMESPACES, NS } from "@jeswr/suite-vocab";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import {
@@ -12,9 +22,11 @@ import {
   OptionalAs,
   OptionalFrom,
   SetFrom,
+  TermAs,
+  TermFrom,
   TermWrapper,
 } from "@rdfjs/wrapper";
-import { DataFactory, Store } from "n3";
+import { DataFactory, type Store } from "n3";
 import {
   type Calendar,
   type CalendarDate,
@@ -73,8 +85,16 @@ export class ModelNode extends TermWrapper {
     }
     return undefined;
   }
+  /**
+   * First object with termType "Literal" over the predicate and its aliases. `LiteralAs.string`
+   * does not check the term type, so an IRI or blank-node object must be skipped here rather
+   * than read as text and written back as a string literal.
+   */
   text(p: string): string | undefined {
-    return this.read(p, LiteralAs.string);
+    for (const predicate of aliases(p))
+      for (const term of SetFrom.subjectPredicate(this, predicate, TermAs.term, TermFrom.itself))
+        if (term.termType === "Literal") return term.value;
+    return undefined;
   }
   clear(p: string): void {
     for (const predicate of aliases(p))
@@ -131,32 +151,37 @@ export class ModelNode extends TermWrapper {
     return node;
   }
 }
-export class CalendarDoc extends ModelNode {
-  get title() {
-    return this.text(`${NS.DCT}title`);
-  }
-  set title(v: string | undefined) {
-    this.setText(`${NS.DCT}title`, v);
-  }
-  get color() {
-    return this.text(`${s}color`);
-  }
-  set color(v: string | undefined) {
-    this.setText(`${s}color`, v);
-  }
-}
+/** The generated `CalendarDocument` view (`title`, `color`) from @jeswr/solid-scheduling. */
+export class CalendarDoc extends CalendarDocumentView {}
+/**
+ * Event accessors. `timeZone`, `location`, `description`, `uid` and schema:name go through
+ * the generated `CalendarEvent` view; dates, summary, calendar and the recurrence/reminder
+ * nodes stay here because the generator cannot express them (see @jeswr/solid-scheduling).
+ */
 export class EventDoc extends ModelNode {
+  private get fields() {
+    return new CalendarEventView(this.value, this.dataset, this.factory);
+  }
+  /**
+   * The generated reader is strict: it returns `undefined` for a language-tagged, duplicated or
+   * non-`xsd:string` value. The app rewrites whole documents on every edit, so a field dropped on
+   * read would be erased from the pod. Fall back to the first Literal object's lexical value (IRI and blank-node objects are ignored), as the
+   * hand-written model always did.
+   */
+  private tolerant(generated: string | undefined, predicate: string): string | undefined {
+    return generated ?? this.text(predicate);
+  }
   get timeZone() {
-    return this.text(`${c}timeZone`);
+    return this.tolerant(this.fields.timeZone, `${c}timeZone`);
   }
   set timeZone(v: string | undefined) {
-    this.setText(`${c}timeZone`, v);
+    this.fields.timeZone = v;
   }
   get name() {
-    return this.text(`${s}name`) ?? this.text(`${c}summary`);
+    return this.tolerant(this.fields.name, `${s}name`) ?? this.text(`${c}summary`);
   }
   set name(v: string | undefined) {
-    this.setText(`${s}name`, v);
+    this.fields.name = v;
     this.setText(`${c}summary`, v);
   }
   get start() {
@@ -174,16 +199,16 @@ export class EventDoc extends ModelNode {
     this.setDate(`${c}endTime`, v);
   }
   get location() {
-    return this.text(`${s}location`);
+    return this.tolerant(this.fields.location, `${s}location`);
   }
   set location(v: string | undefined) {
-    this.setText(`${s}location`, v);
+    this.fields.location = v;
   }
   get description() {
-    return this.text(`${s}description`);
+    return this.tolerant(this.fields.description, `${s}description`);
   }
   set description(v: string | undefined) {
-    this.setText(`${s}description`, v);
+    this.fields.description = v;
   }
   get inCalendar() {
     return this.iri(`${c}inCalendar`);
@@ -192,10 +217,10 @@ export class EventDoc extends ModelNode {
     this.setIri(`${c}inCalendar`, v);
   }
   get uid() {
-    return this.text(`${s}identifier`);
+    return this.tolerant(this.fields.uid, `${s}identifier`);
   }
   set uid(v: string | undefined) {
-    this.setText(`${s}identifier`, v);
+    this.fields.uid = v;
   }
 }
 export function writeRule(node: ModelNode, rule: RecurrenceRule): void {
@@ -275,41 +300,46 @@ function subject(url: string): string {
 }
 export function buildCalendar(url: string, data: Calendar): Store {
   validateCalendar(data);
-  const store = new Store();
-  const doc = new CalendarDoc(subject(url), store, DataFactory);
-  doc.types.add(CALENDAR_CLASS);
-  doc.title = data.title;
-  doc.color = data.color;
-  return store;
+  return buildCalendarDocument(httpIri(url), { title: data.title, color: data.color });
 }
 export function parseCalendar(url: string, dataset: DatasetCore): Calendar | undefined {
-  const doc = new CalendarDoc(subject(url), dataset, DataFactory);
-  if (!doc.hasType(CALENDAR_CLASS)) return undefined;
-  const data = { title: doc.title ?? "", color: doc.color };
+  const target = httpIri(url);
+  const node = new ModelNode(subject(url), dataset, DataFactory);
+  // The generated type check does not know the legacy w3id `Calendar` class the hand-written
+  // reader accepted through `canonicalize`, so that class is accepted here.
+  if (!isCalendarDocument(target, dataset) && !node.hasType(CALENDAR_CLASS)) return undefined;
+  const doc = parseCalendarDocument(target, dataset);
+  // The generated parse rejects the whole document for a tagged or duplicated title; read the
+  // first literal as the hand-written model did.
+  const data = {
+    title: doc?.title ?? node.text(`${NS.DCT}title`) ?? "",
+    color: doc?.color ?? node.text(`${s}color`),
+  };
   validateCalendar(data);
   return data;
 }
 export function buildEvent(url: string, data: CalendarEvent): Store {
   validateEvent(data);
-  const store = new Store();
+  const target = httpIri(url);
+  const store = buildCalendarEventFields(target, {
+    name: data.name,
+    timeZone: data.timeZone,
+    location: data.location,
+    description: data.description,
+    uid: data.uid,
+  });
   const doc = new EventDoc(subject(url), store, DataFactory);
-  doc.types.add(EVENT_CLASS);
-  doc.types.add(`${s}Event`);
-  doc.name = data.name;
+  doc.setText(`${c}summary`, data.name);
   doc.start = data.start;
   doc.end = data.end;
-  doc.timeZone = data.timeZone;
-  doc.location = data.location;
-  doc.description = data.description;
   doc.inCalendar = data.inCalendar;
-  doc.uid = data.uid;
   if (data.recurrence) writeRule(doc.link(`${c}recurrence`), data.recurrence);
   for (const reminder of data.reminders ?? []) writeReminder(doc.link(`${c}hasReminder`), reminder);
   return store;
 }
 export function parseEvent(url: string, dataset: DatasetCore): CalendarEvent | undefined {
+  if (!isCalendarEvent(httpIri(url), dataset)) return undefined;
   const doc = new EventDoc(subject(url), dataset, DataFactory);
-  if (!doc.hasType(EVENT_CLASS) && !doc.hasType(`${s}Event`)) return undefined;
   const start = doc.start;
   if (start === undefined) return undefined;
   const rule = doc.nodes(`${c}recurrence`)[0];

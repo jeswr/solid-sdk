@@ -46,6 +46,7 @@
     "@jeswr/solid-community-feeds",
     "@jeswr/solid-components",
     "@jeswr/solid-dav-bridge",
+    "@jeswr/solid-docs",
     "@jeswr/solid-dpop",
     "@jeswr/solid-drawing",
     "@jeswr/solid-elements",
@@ -53,6 +54,7 @@
     "@jeswr/solid-granary",
     "@jeswr/solid-health",
     "@jeswr/solid-health-diary",
+    "@jeswr/health-insights",
     "@jeswr/solid-mcp",
     "@jeswr/solid-memory",
     "@jeswr/solid-money",
@@ -81,6 +83,7 @@
     "@jeswr/rdf-engine",
     "@jeswr/storage-conformance",
     "@jeswr/pkg-memory",
+    "@jeswr/pkg-health",
     "@jeswr/mcp-oauth",
     "@jeswr/agent-session-capture",
     "@jeswr/suite-vocab",
@@ -102,6 +105,7 @@
     "@jeswr/pod-type-index",
     "@jeswr/federation-codegen",
     "@jeswr/model-runtime",
+    "@jeswr/shacl-forms",
     "@jeswr/solid-listening",
     "@jeswr/solid-scheduling",
     "@jeswr/solid-sheets",
@@ -121,7 +125,10 @@
     "@jeswr/solid-events",
     "@jeswr/solid-trips",
     "@jeswr/excalidraw-scene",
-    "@jeswr/pod-ask"
+    "@jeswr/pod-ask",
+    "@jeswr/suite-i18n",
+    "@jeswr/solid-mail",
+    "@jeswr/solid-photos"
   ],
   "applications": [
     {

@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 /**
  * The integration adapter contract (docs/integrations-catalog.md §"The common
  * adapter shape"). An adapter pulls a user's data from a platform API,
@@ -23,6 +25,8 @@ export type AuthKind =
 
 /** Static, render-ready description of an integration. No RDF, no I/O. */
 export interface IntegrationMetadata {
+  /** Retired live API; message identifies the successor. Retained for stored/demo connections. */
+  readonly deprecated?: string;
   /** Stable catalog id; URL-safe (used in routes + container paths). */
   readonly id: string;
   readonly name: string;
@@ -38,6 +42,8 @@ export interface IntegrationMetadata {
   readonly whatYouGet: string;
   /** Honest go-live notes: what the maintainer must register/deploy. */
   readonly requirements: readonly string[];
+  /** Registry scheduling default for API connectors; hosts may override (minimum 15). */
+  readonly defaultIntervalMinutes?: number;
 }
 
 /** OAuth2 endpoints + per-app parameters for the shared PKCE engine. */
@@ -87,13 +93,19 @@ export interface TokenSet {
   readonly accessToken: string;
   readonly tokenType: string;
   readonly refreshToken?: string;
-  readonly scope?: string;
   /** Epoch ms when the access token expires, when the platform said. */
   readonly expiresAt?: number;
+  /**
+   * Space-delimited scopes the platform granted (RFC 6749 §5.1 `scope`), when it said.
+   * Source auth exposes them as `SourceAuth.scopes`, which runImport passes on as `ctx.scopes`.
+   */
+  readonly scope?: string;
 }
 
 /** One normalised document the adapter wants written into the pod. */
 export interface NormalisedDoc {
+  /** Optional hard UTF-8 Turtle cap, enforced after session provenance and vocabulary mapping. */
+  readonly maxSerializedBytes?: number;
   /**
    * Path under the adapter's root container, e.g. `"music/top-tracks.ttl"`.
    * Deterministic slugs ⇒ idempotent re-imports (overwrite, never duplicate).
@@ -169,6 +181,8 @@ export interface WrittenDoc {
   readonly writeCreated?: boolean;
   /** ETag from the write response, when available for private-destination cleanup. */
   readonly writeEtag?: string;
+  /** Validator returned by this write, when available (never a later read's validator). */
+  readonly etag?: string | null;
   readonly category: string;
   readonly forClass: string;
   /** Further classes registered for the same container as `forClass`. */
@@ -207,6 +221,9 @@ export interface ImportContext {
    * An optional inspection can reject the stored dataset before the session retains a copy.
    */
   read(slug: string, inspect?: (dataset: DatasetCore) => void): Promise<DatasetCore | undefined>;
+  /** Release a read-only dataset/precondition when no write will follow. A later write re-reads.
+   * Hosts without retained read state may omit this port. It performs no Pod I/O. */
+  releaseRead?(slug: string): void;
   /** Write RDF; defaults to the precondition retained by a preceding read of this URL. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
   /**
@@ -234,10 +251,11 @@ export interface ImportContext {
   readonly signal?: AbortSignal;
   /**
    * Source permissions the user granted for this run; undefined means every `metadata.scopes`
-   * entry. Advisory: only adapters that opt in read it (currently Spotify, which omits
-   * playlists of a withheld kind and keeps what earlier runs imported under it). Other adapters
-   * ignore it, so hosts that let users withhold scopes must also gate those adapters' requests
-   * and documents themselves.
+   * entry. runImport takes `RunImportOptions.scopes`, else the live `SourceAuth.scopes` (the
+   * token's granted `scope`). Advisory: only adapters that opt in read it. Spotify omits playlists of a withheld
+   * kind and keeps what earlier runs imported under it. Google Health requires every requested
+   * Health scope and refuses partial grants before a source request. Other adapters ignore it,
+   * so hosts that let users withhold scopes must gate their requests and documents themselves.
    */
   readonly scopes?: readonly string[];
 }
@@ -247,6 +265,8 @@ export interface ImportOutcome {
   /** Actionable notices, including a successfully saved partial batch. Fixed adapter
    * strings only: never provider-supplied text (hosts print them). */
   readonly warnings?: readonly string[];
+  /** Stable, non-personal codes for recoverable failures. */
+  readonly errors?: readonly string[];
   /** Opaque incremental cursor for the next import, where the API supports it. */
   readonly cursor?: string;
   /**
@@ -291,14 +311,141 @@ export interface ConnectorState {
   readonly connectedAt: string;
   readonly lastSync?: string;
   readonly cursor?: string;
+  /** CLI file-import progress beside the API `cursor`, so neither path misreads the other. */
+  readonly fileCursor?: string;
   readonly lastOutcome: "success" | "error";
   readonly counts: { readonly documents: number; readonly items: number; readonly skipped: number };
+  /** Two-way health; details remain in the owner-only sync links and manifest. */
+  readonly sync?: {
+    readonly conflicts: number;
+    readonly pendingDeletes: number;
+    /** Items skipped this run with a fixed error class (retried or re-detected later). */
+    readonly failed?: number;
+    /** Imported items without a link; never created at the provider. */
+    readonly unlinkedImports?: number;
+    /** Items waiting on an unresolved create intent. */
+    readonly deferred?: number;
+  };
+  /** Latest attempt, separate from the last successful checkpoint above. */
+  readonly health?: ConnectorRunHealth;
+  /** Independent cursors and health, keyed by a host-owned opaque account id. */
+  readonly accounts?: Readonly<Record<string, ConnectorAccountState>>;
+  /**
+   * Root only: expiring cross-host run claims keyed by account id. A scheduler writes its
+   * claim conditionally before fetching a token and removes it when the run ends; other
+   * hosts skip that connection until `expiresAt`.
+   */
+  readonly claims?: Readonly<Record<string, ConnectorRunClaim>>;
+}
+
+export type ConnectorAccountState = Omit<ConnectorState, "accounts" | "claims">;
+
+/** A cross-host run claim: a random per-run holder id and its expiry instant (ISO). */
+export interface ConnectorRunClaim {
+  readonly holder: string;
+  readonly expiresAt: string;
+}
+
+export interface ConnectorRunCounts {
+  readonly created: number;
+  readonly updated: number;
+  readonly unchanged: number;
+  readonly skipped: number;
+}
+
+export type ConnectorErrorClass =
+  | "deprecated"
+  | "reauthorise"
+  | "rate-limited"
+  | "unauthorised"
+  | "forbidden"
+  | "conflict"
+  | "source-or-pod"
+  | "unexpected"
+  | "aborted"
+  /** The run exceeded the scheduler's run time limit. */
+  | "timeout";
+
+export interface ConnectorRunHealth {
+  readonly lastRunStartedAt: string;
+  readonly lastRunEndedAt: string;
+  readonly outcome: "ok" | "partial" | "failed" | "needs-reauth";
+  readonly counts: ConnectorRunCounts;
+  readonly errorClass?: ConnectorErrorClass;
+  /** Static adapter guidance for a deprecated connection. */
+  readonly message?: string;
+  readonly consecutiveFailures: number;
+  readonly nextRunAt?: string;
+  /**
+   * For needs-reauth or deprecated: the connection row's `enabledAt` this latch was set against, or ""
+   * when the row had none. The latch clears when the row's value differs (string compare).
+   */
+  readonly latchedEnabledAt?: string;
+  /** The effective interval used for stale classification. */
+  readonly intervalMinutes: number;
+}
+
+/** The vault lane supplies this port. Credentials must never enter persisted state. */
+export interface TokenSource {
+  /**
+   * The run's signal aborts at shutdown or the run time limit; the scheduler stops waiting
+   * then even if the vault ignores it. Throw ReauthoriseError for a missing or revoked
+   * grant and NoVaultError when this host has no vault at all.
+   */
+  accessToken(connectorId: string, account: string, signal?: AbortSignal): Promise<string>;
+  /**
+   * Optional: discard a cached grant confirmed invalid — called only after two
+   * consecutive source 401 (access token rejected) outcomes, never for 403s, rate limits
+   * or other failures. Failures here never fail the run.
+   *
+   * It is called only for the grant that was in use for the rejected run, and never when
+   * an owner re-enable superseded the latch (the row's `enabledAt` changed during the run,
+   * in memory or in the stored settings) or the settings write failed or was cancelled.
+   * The call can still race a reconnection, so implementations should discard only a
+   * token matching that grant (e.g. the one they last returned from `accessToken`),
+   * never a newer grant the owner has just supplied.
+   */
+  invalidate?(connection: {
+    readonly connectorId: string;
+    readonly account: string;
+  }): Promise<void> | void;
+}
+
+/** A missing or revoked vault grant requires explicit owner re-enablement. */
+export class ReauthoriseError extends Error {
+  constructor() {
+    super("Connector authorisation is required.");
+    this.name = "ReauthoriseError";
+  }
+}
+
+/**
+ * This host has no token vault (a capability gap, not a revoked grant). The scheduler
+ * skips the run without recording health, latching needs-reauth or changing settings.
+ */
+export class NoVaultError extends Error {
+  constructor() {
+    super("No token vault on this host.");
+    this.name = "NoVaultError";
+  }
+}
+
+/** The host settings row disappeared while a run was in flight; callers skip quietly. */
+export class ConnectionRemovedError extends Error {
+  constructor() {
+    super("Connector connection was removed.");
+    this.name = "ConnectionRemovedError";
+  }
 }
 
 export interface ConnectorStateOptions {
   readonly state?: ConnectorState;
   /** Reports confirmed success or the previous state on failure. After-write privacy refusals report no state. */
   readonly onState?: (state: ConnectorState) => void;
+  /** Bounded document accounting, also emitted after partial writes. */
+  readonly onRunCounts?: (counts: ConnectorRunCounts) => void;
+  /** Opt into document change comparisons; a counts listener also enables them. */
+  readonly trackChanges?: boolean;
 }
 
 export interface IntegrationAdapter {
@@ -364,7 +511,9 @@ export interface PodWriter {
     options: { etag: string; signal: AbortSignal },
   ): Promise<boolean>;
   /** Read existing RDF and its ETag; undefined only for a missing document. */
-  read(slug: string): Promise<{ dataset: DatasetCore; etag: string | null } | undefined>;
+  read(
+    slug: string,
+  ): Promise<{ dataset: DatasetCore; etag: string | null; lastModified?: string } | undefined>;
   /** Write RDF, preserving the caller's conditional-write precondition. */
   write(
     doc: NormalisedDoc,
@@ -395,4 +544,6 @@ export interface PodWriter {
 /** Host-owned source API transport, already authenticated for this source. */
 export interface SourceAuth {
   readonly fetch: typeof fetch;
+  /** Scopes the token was granted, when the token response listed them (`ImportContext.scopes`). */
+  readonly scopes?: readonly string[];
 }

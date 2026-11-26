@@ -4,7 +4,10 @@ import { ResourceWriteError } from "../../docs/lib/model/errors";
 import { NoteConflictError, NotePermissionError } from "../lib/model/errors";
 import type { NotesStore, StoredNote } from "../lib/model/store";
 
-export type NoteDraft = Pick<StoredNote, "title" | "body" | "labels">;
+export type NoteDraft = Pick<StoredNote, "title" | "body" | "labels"> & {
+  /** Persist restore intent so retries also retain the replaced content. */
+  preserveCurrent?: boolean | undefined;
+};
 export interface PendingDraft {
   note: StoredNote;
   draft: NoteDraft;
@@ -67,7 +70,12 @@ export function createPendingDrafts(seams: {
           if (latest.draft === snapshot.draft) {
             entries.delete(note.url);
             seams.saved?.(note.url);
-          } else entries.set(note.url, { ...latest, note: saved });
+          } else {
+            // A saved restore already kept the replaced content; later edits must not repeat it.
+            const { preserveCurrent: _kept, ...rest } = latest.draft;
+            const draft = snapshot.draft.preserveCurrent ? rest : latest.draft;
+            entries.set(note.url, { ...latest, draft, note: saved });
+          }
           changed(note.url, saved);
         }
         return saved;

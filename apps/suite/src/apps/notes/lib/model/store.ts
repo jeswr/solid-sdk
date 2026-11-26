@@ -2,19 +2,20 @@
 // AUTHORED-BY Codex GPT-6
 import { parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { normalizePodBase, refuseRedirects } from "@jeswr/guarded-fetch";
+import { documentSubject, type Revision } from "@jeswr/solid-docs/document";
+import { isDirectChild, toSlug } from "@jeswr/solid-docs/layout";
+import { DOCUMENT_CLASS, NS, PREFIXES } from "@jeswr/solid-docs/vocab";
 import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { AclResource, Container, ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { wacOnlyFetch } from "../../../../shell/share/verified-wac-adapter";
 import { uploadPodImage } from "../../../docs/lib/editor/image-upload";
-import { documentSubject, type Revision } from "../../../docs/lib/model/document";
 import {
   ConcurrencyValidatorError,
   OutOfScopeError,
   ResourceDeleteError,
   ResourceWriteError,
 } from "../../../docs/lib/model/errors";
-import { isDirectChild, toSlug } from "../../../docs/lib/model/layout";
 import { deleteRdf, readRdf, writeRdf } from "../../../docs/lib/model/rdf-io";
 import {
   discoverProfileLinks,
@@ -22,8 +23,8 @@ import {
   ensureTypeRegistrations,
 } from "../../../docs/lib/model/type-index";
 import { verifyPrivateIndexAccess } from "../../../docs/lib/model/type-index-access";
-import { DOCUMENT_CLASS, NS, PREFIXES } from "../../../docs/lib/model/vocab";
 import { readSharing } from "../../../drive/lib/sharing";
+import { NoteImageCleanup } from "../image-cleanup";
 import { notesMediaContainer } from "../images";
 import { deleteLabel, mergeLabels } from "../organise/labels";
 import { createBrowserFiredStore, type FiredReminderStore } from "../reminders/fired-store";
@@ -51,6 +52,8 @@ export interface StoredNote extends Note {
   localGeneration?: number;
 }
 export interface NoteChanges {
+  /** Restore saves retain the replaced title/body as a named revision atomically. */
+  preserveCurrent?: boolean | undefined;
   title?: string;
   body?: string;
   labels?: readonly string[];
@@ -71,6 +74,7 @@ export interface NotesStoreOptions {
 /** Account-scoped I/O; every caller and listing URL is checked before it is used. */
 export class NotesStore {
   readonly containers: Readonly<Record<NoteLocation, string>>;
+  readonly imageCleanup: NoteImageCleanup;
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => Date;
   private readonly podRoot: string;
@@ -90,6 +94,11 @@ export class NotesStore {
       active,
       archived: `${active}archive/`,
       trashed: `${active}.trash/`,
+    });
+    this.imageCleanup = new NoteImageCleanup({
+      podRoot: this.podRoot,
+      fetch: this.fetchImpl,
+      readNote: (url) => this.read(url),
     });
   }
 
@@ -287,6 +296,7 @@ export class NotesStore {
     const dataset = buildNote(note.url, {
       ...this.input(note),
       ...input,
+      beforeRestore: input.preserveCurrent ? { title: note.title, body: note.body } : undefined,
     });
     try {
       const written = await writeRdf(note.url, dataset, {

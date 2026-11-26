@@ -2,14 +2,8 @@
   "apps/access-manager/src/demo/fixtures.ts": {
     "rdf-literal": 8
   },
-  "apps/access-manager/src/demo/pod.ts": {
-    "rdf-literal": 2
-  },
   "apps/access-manager/src/lib/acl.ts": {
     "rdf-factory": 1
-  },
-  "apps/access-manager/src/lib/rdf.ts": {
-    "rdf-factory": 5
   },
   "apps/coeliac/src/lib/community/publish.ts": {
     "rdf-factory": 1
@@ -19,9 +13,6 @@
   },
   "apps/issues/scripts/dev.mjs": {
     "rdf-literal": 1
-  },
-  "apps/issues/src/lib/announce.ts": {
-    "rdf-factory": 11
   },
   "apps/issues/src/lib/testing/fake-pod.ts": {
     "rdf-literal": 2
@@ -36,9 +27,6 @@
     "rdf-literal": 1
   },
   "apps/pod-manager/src/lib/forms/subject-edit.ts": {
-    "rdf-factory": 2
-  },
-  "apps/pod-manager/src/lib/resource-acl.ts": {
     "rdf-factory": 2
   },
   "apps/pod-migrator/src/engine/executor.ts": {

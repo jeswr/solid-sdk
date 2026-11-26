@@ -20,12 +20,28 @@ import {
 } from "@jeswr/suite-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CLIENT_ID_URL } from "../src/lib/urls";
-import { SolidBackend, type SolidBackendOptions } from "../src/shell/session/solid-backend";
+import {
+  SolidBackend,
+  type SolidBackendOptions,
+  signInDiagnostic,
+} from "../src/shell/session/solid-backend";
 import { SignInError, type SuiteAccount } from "../src/shell/session/types";
 
-const nativeBindings = vi.hoisted(() => ({
-  authSessionPlugin: { authenticate: vi.fn(), cancel: vi.fn(async () => {}) },
-}));
+const nativeBindings = vi.hoisted(() => {
+  const methods = { authenticate: vi.fn(), cancel: vi.fn(async () => {}) };
+  // Like Capacitor's registerPlugin proxy: every other property, `then` included, is a method
+  // that rejects as not implemented, so awaiting the binding itself fails.
+  const authSessionPlugin = new Proxy(methods, {
+    get: (target, property) =>
+      property in target
+        ? target[property as keyof typeof target]
+        : () =>
+            Promise.reject(
+              new Error(`"SuiteAuthSession.${String(property)}()" is not implemented on android`),
+            ),
+  });
+  return { authSessionPlugin };
+});
 vi.mock("@jeswr/suite-native/capacitor", () => nativeBindings);
 
 const alice = {
@@ -1445,5 +1461,35 @@ describe("Solid shell over pod-auth", () => {
     expect(account.name).toBe(alice.webId);
     expect(account.storageUrl).toBe(alice.storages[0]);
     expect(account.photoUrl).toBeUndefined();
+  });
+});
+
+describe("signInDiagnostic", () => {
+  it("keeps error names and drops URLs and long values", () => {
+    const cause = new TypeError(
+      "Failed to fetch https://pod.example/.oidc/token?code=abc&state=xyz with eyJhbGciOiJFUzI1NiJ9xxxx",
+    );
+    const error = new Error("Token exchange failed", { cause });
+    const text = signInDiagnostic(error);
+    expect(text).toBe(
+      "Error: Token exchange failed <- TypeError: Failed to fetch [value] with [value]",
+    );
+    expect(text).not.toContain("pod.example");
+    expect(text).not.toContain("code=");
+    expect(signInDiagnostic(new Error("org.jeswr.suite:/oauth/callback?code=1"))).toBe(
+      "Error: [value]",
+    );
+    expect(
+      signInDiagnostic(
+        new Error("bad https%3A%2F%2Fpod.example did:key:z6Mk urn:x:y a@b.example c0de"),
+      ),
+    ).toBe("Error: bad [value] [value] [value] [value] c0de");
+    const odd = new Error("x");
+    Object.defineProperty(odd, "message", { value: 42 });
+    expect(signInDiagnostic(odd)).toBe("Error: 42");
+    expect(signInDiagnostic(new TypeError("Symbol.dispose is not defined."))).toBe(
+      "TypeError: Symbol.dispose is not defined.",
+    );
+    expect(signInDiagnostic("nope")).toBe("string");
   });
 });

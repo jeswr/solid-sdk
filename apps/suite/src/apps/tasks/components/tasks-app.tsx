@@ -3,6 +3,7 @@
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, ErrorState, LoadingSkeleton, Toaster } from "@jeswr/suite-ui";
+import { OnlineGate } from "@jeswr/suite-ui/sync";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   type ReactNode,
@@ -19,6 +20,7 @@ import { TemplateLauncher } from "@/components/templates/template-picker";
 import { decodeRef, encodeRef } from "@/lib/refs";
 import { useRouteParams, useRoutePathname } from "@/lib/route-params";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
+import { useNeedsConnection } from "../../../shell/sync/requires-online";
 import { parseQuickAdd } from "../lib/compose/quick-add";
 import { classifyError } from "../lib/model/errors";
 import { replaceQuery } from "../lib/route/replace-query";
@@ -41,10 +43,12 @@ const VIEW_NAMES: Readonly<Record<string, string>> = {
   "/tasks/today": "Today",
   "/tasks/upcoming": "Upcoming",
   "/tasks/completed": "Completed",
+  "/tasks/issues": "Issues",
 };
 
 function TasksChrome({ children }: { children: ReactNode }) {
   const tasks = useTasks();
+  const connection = useNeedsConnection();
   const { preferences, dispatch } = useTasksPreferences();
   const [sharing, setSharing] = useState(false);
   const pathname = useRoutePathname();
@@ -71,7 +75,9 @@ function TasksChrome({ children }: { children: ReactNode }) {
         ? (tasks.projects.find((project) => encodeRef(project.url) === ref)?.tracker.title ??
           preferences.sharedProjects.find((shared) => encodeRef(shared.url) === ref)?.title ??
           "Project")
-        : "Tasks");
+        : pathname.startsWith("/tasks/issues/")
+          ? "Issues"
+          : "Tasks");
   let projectUrl: string | undefined;
   try {
     if (typeof ref === "string") projectUrl = decodeRef(ref);
@@ -91,6 +97,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
   }, [projectUrl, activeProject, projectLoad, tasks.status, tasks.cache]);
   useEffect(() => {
     if (
+      projectUrl &&
       activeProject &&
       !tasks.cache.isOwnProject(activeProject.url) &&
       tasks.cache.hasSharedProject(activeProject.url)
@@ -100,7 +107,7 @@ function TasksChrome({ children }: { children: ReactNode }) {
         url: activeProject.url,
         title: activeProject.tracker.title ?? "Project",
       });
-  }, [activeProject, tasks.cache, dispatch]);
+  }, [activeProject, projectUrl, tasks.cache, dispatch]);
   const taskRef = params.get("task");
   let taskUrl: string | undefined;
   try {
@@ -121,11 +128,16 @@ function TasksChrome({ children }: { children: ReactNode }) {
     [tasks.cache, taskUrl, params, pathname],
   );
   // Reminder notifications and toasts open the same `?task=` detail pane as a task row.
-  useReminderScheduler(tasks.cache, (url) => {
-    const query = new URLSearchParams(params.toString());
-    query.set("task", encodeRef(url));
-    router.push(`${pathname}?${query}`, { scroll: false });
-  });
+  useReminderScheduler(
+    tasks.cache,
+    (url) => {
+      const query = new URLSearchParams(params.toString());
+      query.set("task", encodeRef(url));
+      router.push(`${pathname}?${query}`, { scroll: false });
+    },
+    undefined,
+    tasks.webId,
+  );
   const origin = useRef<string | undefined>(undefined);
   const returnTo = useRef<string | undefined>(undefined);
   // A narrow-viewport details Sheet restores focus itself once it unmounts; point it at the
@@ -164,7 +176,12 @@ function TasksChrome({ children }: { children: ReactNode }) {
     if (document.querySelector('.tsk-detail input[role="combobox"][aria-expanded="true"]')) return;
     // The sub-task composer consumes Escape to collapse its own row first.
     if (document.activeElement?.matches('.tsk-detail input[aria-label="Sub-task title"]')) return;
-    if (document.activeElement?.closest(".tsk-detail [data-tsk-attachment-form]")) return;
+    if (
+      document.activeElement?.closest(
+        ".tsk-detail [data-tsk-attachment-form], .tsk-detail [data-tsk-comment-form]",
+      )
+    )
+      return;
     const query = new URLSearchParams(params.toString());
     query.delete("task");
     // A shared link's pane must close after a hard load too (see replaceQuery).
@@ -265,9 +282,11 @@ function TasksChrome({ children }: { children: ReactNode }) {
           <>
             <TemplateLauncher app="tasks" />
             {activeProject && tasks.sharingAvailable && (
-              <Button variant="outline" onClick={() => setSharing(true)}>
-                Share
-              </Button>
+              <OnlineGate online={!connection.disabled} reason="Sharing needs a connection">
+                <Button variant="outline" onClick={() => setSharing(true)}>
+                  Share
+                </Button>
+              </OnlineGate>
             )}
             {supportsSort && <SortMenu viewId={pathname} crossProject={!projectList} />}
             {projectUrl && (

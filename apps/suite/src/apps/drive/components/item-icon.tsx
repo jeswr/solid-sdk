@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
 "use client";
@@ -10,11 +11,14 @@ export function ItemIcon({
   item,
   size,
 }: {
-  item: Pick<DriveItem, "kind" | "name" | "contentType">;
+  item: Pick<DriveItem, "kind" | "name" | "contentType" | "workbook">;
   size: 16 | 20 | 24 | 32 | 40 | 48;
 }) {
-  const contentType =
-    item.kind === "folder" ? "inode/directory" : resolveContentType(item.name, item.contentType);
+  const contentType = item.workbook
+    ? "application/vnd.oasis.opendocument.spreadsheet"
+    : item.kind === "folder"
+      ? "inode/directory"
+      : resolveContentType(item.name, item.contentType);
   return (
     <FileTypeIcon
       {...(contentType ? { contentType } : {})}

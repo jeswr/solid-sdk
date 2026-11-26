@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { isDirectChild } from "@jeswr/solid-docs/layout";
 import { toast } from "@jeswr/suite-ui";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -15,7 +16,6 @@ import {
 } from "react";
 import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
-import { isDirectChild } from "../../docs/lib/model/layout";
 import { NoteFailures } from "../components/note-failures";
 import { ShareNote } from "../components/share-note";
 import { NoteMoveBlockedError } from "../lib/model/errors";
@@ -44,6 +44,7 @@ function useNotesValue(session: PodSession) {
   );
   const [prefs, updatePrefs] = useNotesPreferences(session.webId);
   const [sharedNotes, setSharedNotes] = useState<Record<string, boolean>>({});
+  const [collaborators, setCollaborators] = useState<Record<string, string[]>>({});
   const [shareRevision, setShareRevision] = useState(0);
   const [sharing, setSharing] = useState<StoredNote>();
   const [batchFailures, setBatchFailures] = useState<NoteFailure[]>([]);
@@ -101,9 +102,16 @@ function useNotesValue(session: PodSession) {
   useEffect(() => {
     const controller = new AbortController();
     setSharedNotes({});
-    void discoverNoteShares(JSON.parse(shareUrls), session, controller.signal, (url, shared) => {
-      setSharedNotes((current) => ({ ...current, [url]: shared }));
-    });
+    setCollaborators({});
+    void discoverNoteShares(
+      JSON.parse(shareUrls),
+      session,
+      controller.signal,
+      (url, shared, people) => {
+        setSharedNotes((current) => ({ ...current, [url]: shared }));
+        setCollaborators((current) => ({ ...current, [url]: people }));
+      },
+    );
     return () => controller.abort();
   }, [shareUrls, session, shareRevision]);
   const router = useRouter();
@@ -245,6 +253,7 @@ function useNotesValue(session: PodSession) {
     },
     create,
     sharedNotes,
+    collaborators,
     refreshSharing: () => setShareRevision((value) => value + 1),
   };
 }

@@ -89,8 +89,9 @@ describe("app-shell CSS isolation survives pod-money's bare button {} (#80)", ()
   it("scopes the host button base with zero-specificity :where() (box-model + overrides safe)", () => {
     // Vitest runs with cwd at `web/`, so the source lives at `src/styles.css`.
     const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
-    // The host filled-button base excludes app-shell controls via :where(:not(...)).
-    expect(css).toMatch(/button:where\(:not\(\[data-app-shell-control\]\)\)\s*\{/);
+    // The host filled-button base excludes app-shell controls via :where(:not(...)). `[data-slot]` also
+    // excludes suite-ui (shadcn) buttons, e.g. the shared sign-in card.
+    expect(css).toMatch(/button:where\(:not\(\[data-app-shell-control\], \[data-slot\]\)\)\s*\{/);
     // And it is NOT the bare specificity-raising form (that would repaint the host
     // link/outline buttons). Match the SELECTOR position only (`button:not(...) {`),
     // so the explanatory comment that names the rejected form does not trip this guard.

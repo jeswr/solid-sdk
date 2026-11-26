@@ -58,3 +58,50 @@ the pending draft. Missing permission hints allow editing until storage responds
 Cards show Shared only when a readable own ACL confirms non-owner or public access.
 Discovery never creates ACLs, never blocks the list, caps concurrent reads at four,
 and leaves missing, inherited, unsupported and unreadable policies unmarked.
+
+Search at `/notes/search` combines text with type (`images`, `lists`, `reminders`,
+`links`), local colour, exact label and collaborator filters. The URL stores these as
+`q`, `type`, `colour`, `label` and `shared`; `shared=any` includes every confirmed shared
+note, including public links. Specific collaborator WebIDs come from the same read-only
+discovery as the Shared indicator. Unknown sharing stays out of these filters.
+Archived notes are searchable; Trash is excluded. Images use the approved image projection,
+lists require checklist items, and links match HTTP(S) destinations or plain text URLs.
+Start with the entry tiles or use Add filters while searching. Each chip removes one field;
+Clear all also clears the text query. Filter links support bookmarks and browser history.
+
+Version history (NOT-13) is in the editor's More note actions menu. It uses the
+same history panel as Docs and previews an independent read-only editor with the
+Notes schema, link rules and image boundary. Trashed notes cannot open history;
+view-only collaborators can browse but cannot restore.
+
+A confirmed restore flushes pending drafts, then saves the selected title and body
+through the normal conditional draft writer. It preserves labels and reminders.
+The same PUT records a named “Before restore” revision, including edits made inside
+the ten-minute automatic snapshot interval. Histories retain at most twenty entries.
+Conflicts, permission failures and retries use the normal editor recovery controls;
+restore intent survives draft recovery so a retried restore also preserves the
+replaced content. New revision snapshots store titles. Older revisions that have no
+title keep the current note title when restored.
+
+Restore never sends mention notifications: chips that come back with an old revision were
+not typed by the person restoring it, so the save skips the mention pass. A revision title
+over 200 characters is not restored; the current title is kept.
+
+The editor's single More note actions menu holds Version history, Copy to Docs and Move to
+Docs (trashed and view-only notes keep a menu with only Version history).
+
+Copy and Move to Docs check the destination with `@jeswr/pod-access` before writing anything:
+the Docs folder and the new document's assets folder must verify as owner-only. A private note
+is refused (with a message, nothing written, no ACL changed) when Docs is shared, public or
+cannot be verified; only a note proven already shared may go to a looser Docs. Source images
+are read through a 20 MB streaming cap. In the demo pod, which has no storage description,
+the check cannot be established and the copy is refused.
+
+Clean up unused images never offers an image that is referenced by an unsaved draft in any
+tab or by the in-memory drafts, changed in the last 24 hours, or without a usable
+Last-Modified; drafts and age are checked again immediately before each delete. Docs version
+snapshots, update logs and the Drive trash (`.trash/`) are searched by file name, and any
+location that cannot be listed, read or bounded stops the scan with a message. A missing
+`notes/` folder next to existing media is a fault. A malformed `img src` protects an image
+it names instead of blocking, and an unreadable file in a notes folder is named in the error.
+Not covered: notes moved by Drive elsewhere in the pod, and offline outbox copies.

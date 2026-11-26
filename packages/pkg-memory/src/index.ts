@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /** PKG nanopublication model, fact templates, belief, purpose policy and pod storage. */
 export type { Belief, ClassifiedNanopublication } from "./belief.js";
 export { classifyNanopublications } from "./belief.js";
@@ -11,7 +12,23 @@ export {
   UnsupportedLiteralDatatypeError,
   UnsupportedLiteralLexicalFormError,
 } from "./errors.js";
-export { canonicalizeAssertion, messageId, PKG_NAMESPACE_UUID, pkgId } from "./ids.js";
+export {
+  canonicalizeAssertion,
+  messageId,
+  PKG_NAMESPACE_UUID,
+  pkgId,
+  validateAssertionTerms,
+} from "./ids.js";
+export {
+  MAX_CLASSIFIED_NANOPUBLICATIONS,
+  MAX_REPLACED_BY,
+  MAX_SKIPPED_TARGETS,
+} from "./limits.js";
+export {
+  MAX_SHARED_GRAPH_BLANK_NODES,
+  MAX_SHARED_GRAPH_ROUNDS,
+  mergeNanopublications,
+} from "./merge.js";
 export type {
   Batch,
   BuildOptions,
@@ -22,7 +39,10 @@ export type {
   NanopubEvidence,
   Nanopublication,
   Nanopublications,
+  ParseNanopublicationsOptions,
+  SkippedNanopublication,
   Source,
+  TolerantNanopublications,
   ValidityStatus,
 } from "./model.js";
 export {
@@ -31,10 +51,13 @@ export {
   EPISTEMIC_STATUSES,
   parseAssertion,
   parseNanopublications,
+  parseNanopublicationsTolerant,
   serializeNanopublications,
   VALIDITY_STATUSES,
 } from "./model.js";
 export type { PodConditions, PodPort } from "./pod-port.js";
+export type { FactProvenance, SourceInfo } from "./provenance.js";
+export { createNanopubProvenanceReader, readNanopubProvenance } from "./provenance.js";
 export type { MemoryPurpose } from "./purpose.js";
 export {
   createDefaultPolicy,
@@ -42,6 +65,9 @@ export {
   MEMORY_PURPOSES,
   purposeFilter,
 } from "./purpose.js";
+/** Suite RDF parser without nanopub-envelope or literal validation; validate before building. */
+export { parseReferenceRdf } from "./rdf.js";
+export { readNamedGraph } from "./read-graph.js";
 export { DEFAULT_MEMORY_SCOPE, type MemoryMandate, memoryCategory, scopeAdmits } from "./scope.js";
 export type { RetractionOptions } from "./store.js";
 export { NanopubStore } from "./store.js";

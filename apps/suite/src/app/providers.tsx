@@ -2,12 +2,15 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { installPrompt } from "@jeswr/suite-sdk/pwa";
 import { ThemeProvider, useTheme } from "next-themes";
 import { Suspense, useEffect } from "react";
 import { NativePreviewCleanup } from "@/components/native-preview-cleanup";
 import { NativeShareLaunch } from "@/components/native-share-launch";
+import { FeedbackDraftCleanup } from "@/feedback/draft-cleanup";
 import { accountFixtureProps } from "@/shell/account/test-backends";
 import { SuiteEnvironmentContext } from "@/shell/environment";
+import { SuiteI18nProvider } from "@/shell/i18n";
 import { LegacyProvider } from "@/shell/legacy/provider";
 import type { SuiteEnv } from "@/shell/lib/env";
 import { NotificationsProvider } from "@/shell/notifications/provider";
@@ -16,7 +19,11 @@ import { ShellSearchProvider } from "@/shell/search/search-context";
 import { AccountsProvider } from "@/shell/session/accounts-provider";
 import { AppearanceEffect, PreferencesProvider } from "@/shell/settings/preferences";
 import { OutboxSessionProvider } from "@/shell/sync/outbox-session";
-import { ServiceWorkerRegistration } from "@/shell/sync/service-worker";
+import {
+  RememberedPagesAccountGuard,
+  ServiceWorkerRegistration,
+} from "@/shell/sync/service-worker";
+import { UndoProvider } from "@/shell/undo/provider";
 import { WalkthroughProvider } from "@/welcome/walkthrough-provider";
 
 function ThemeAttribute() {
@@ -33,12 +40,15 @@ export function Providers({
   children: React.ReactNode;
   environment: SuiteEnv;
 }) {
+  useEffect(() => installPrompt.start(window), []);
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem enableColorScheme>
       <ThemeAttribute />
       <ServiceWorkerRegistration />
       <SuiteEnvironmentContext.Provider value={environment}>
         <AccountsProvider {...accountFixtureProps()}>
+          <RememberedPagesAccountGuard />
+          <FeedbackDraftCleanup />
           <NativePushProvider>
             <Suspense>
               <NativeShareLaunch />
@@ -46,14 +56,18 @@ export function Providers({
             {process.env.NEXT_PUBLIC_SUITE_TARGET === "native" ? <NativePreviewCleanup /> : null}
             <OutboxSessionProvider>
               <PreferencesProvider>
-                <AppearanceEffect />
-                <ShellSearchProvider>
-                  <NotificationsProvider>
-                    <LegacyProvider>
-                      <WalkthroughProvider>{children}</WalkthroughProvider>
-                    </LegacyProvider>
-                  </NotificationsProvider>
-                </ShellSearchProvider>
+                <SuiteI18nProvider>
+                  <AppearanceEffect />
+                  <ShellSearchProvider>
+                    <UndoProvider>
+                      <NotificationsProvider>
+                        <LegacyProvider>
+                          <WalkthroughProvider>{children}</WalkthroughProvider>
+                        </LegacyProvider>
+                      </NotificationsProvider>
+                    </UndoProvider>
+                  </ShellSearchProvider>
+                </SuiteI18nProvider>
               </PreferencesProvider>
             </OutboxSessionProvider>
           </NativePushProvider>

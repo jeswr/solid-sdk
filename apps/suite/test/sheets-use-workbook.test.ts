@@ -30,6 +30,19 @@ async function setup(online = true) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("workbook editor lifecycle", () => {
+  it("keeps a published restore successful when the follow-up reload fails", async () => {
+    const { book, service } = await setup();
+    const editor = await mount(h(Editor, { container: book.container }));
+    const open = vi.spyOn(service, "open");
+    open.mockRejectedValueOnce(new Error("offline"));
+    const restored = { ...snapshot("Restored"), id: crypto.randomUUID() };
+    await act(async () => {
+      await expect(state.restore(restored)).resolves.toBeUndefined();
+    });
+    expect(state.workbook?.snapshot.id).toBe(restored.id);
+    await editor.unmount();
+  });
+
   it("opens and reloads a shared route using the recipient's distinct storage root", async () => {
     const { book, options, service } = await setup(false);
     const ownerEntry = pendingSaves.acquire(service, book);

@@ -994,6 +994,23 @@ describe("Pod client credentials", () => {
 });
 
 describe("CLI import", () => {
+  it("directs retired Fitbit connections to Google Health before Pod or source login", async () => {
+    const transport = vi.fn<typeof fetch>();
+    const stderr = vi.fn();
+    const openAuthorizationUrl = vi.fn();
+    expect(
+      await runCli(["import", "fitbit"], {
+        configPath: await configPath(),
+        podTransport: transport,
+        sourceTransport: transport,
+        stderr,
+        openAuthorizationUrl,
+      }),
+    ).toBe(EXIT_CODES.config);
+    expect(stderr.mock.calls.flat().join(" ")).toContain("Google Health");
+    expect(transport).not.toHaveBeenCalled();
+    expect(openAuthorizationUrl).not.toHaveBeenCalled();
+  });
   it("reports missing Twitch callbackPort as a configuration error before opening the browser", async () => {
     const path = await configPath();
     await writeFile(
@@ -1245,7 +1262,11 @@ describe("CLI import", () => {
       ...spotifyAdapter,
       async import(ctx: Parameters<typeof spotifyAdapter.import>[0]) {
         seen.push(ctx.cursor);
-        return { ...(await spotifyAdapter.import(ctx)), cursor: "after:1700000000000" };
+        // This test is about the CLI's checkpoint handling, not Spotify's import. The full
+        // fixture import wrote about 500 DPoP-signed Pod requests per run (four runs took
+        // over 5 s under load). One source request keeps the failing-source path below real.
+        await ctx.api("https://api.spotify.com/v1/me");
+        return { cursor: "after:1700000000000" };
       },
     };
     vi.spyOn(registryModule, "createRegistry").mockReturnValue({

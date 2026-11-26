@@ -3,24 +3,13 @@
 // CRUD and LDP listing ported from apps/pod-docs/src/store.ts.
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { refuseRedirects } from "@jeswr/guarded-fetch";
-import { termsEqual } from "@jeswr/suite-vocab";
-import { Container, ContainerDataset } from "@solid/object";
-import { DataFactory, Store } from "n3";
-import { applyUpdate, Doc } from "yjs";
 import {
   type BuildDocumentInput,
   buildDocument,
   DocumentDoc,
   type PodDocument,
   parseDocument,
-} from "./document.js";
-import {
-  OutOfScopeError,
-  ResourceReadError,
-  ResourceWriteError,
-  TitleConflictError,
-} from "./errors.js";
-import { DocumentReplacedError, sameIncarnation } from "./incarnation.js";
+} from "@jeswr/solid-docs/document";
 import {
   DOCS_SLUG,
   docContainerUrls,
@@ -28,11 +17,22 @@ import {
   isDirectChild,
   LEGACY_DOCS_SLUG,
   toSlug,
-} from "./layout.js";
+} from "@jeswr/solid-docs/layout";
+import { DOCUMENT_CLASS, NS, PREFIXES } from "@jeswr/solid-docs/vocab";
+import { termsEqual } from "@jeswr/suite-vocab";
+import { Container, ContainerDataset } from "@solid/object";
+import { DataFactory, Store } from "n3";
+import { applyUpdate, Doc } from "yjs";
+import {
+  OutOfScopeError,
+  ResourceReadError,
+  ResourceWriteError,
+  TitleConflictError,
+} from "./errors.js";
+import { DocumentReplacedError, sameIncarnation } from "./incarnation.js";
 import { nameFromUrl, REVALIDATE_HEADERS, readRdf, serializeTurtle, writeRdf } from "./rdf-io.js";
 import { discoverRegistrations, ensureTypeRegistrations } from "./type-index.js";
 import { DocumentUpdateStore } from "./update-store.js";
-import { DOCUMENT_CLASS, NS, PREFIXES } from "./vocab.js";
 
 export interface StoredDocument {
   url: string;
@@ -53,6 +53,11 @@ export interface Snapshot {
   /** Captured with the body so remote format changes cannot reinterpret it. */
   format: string;
   wordCount?: number | undefined;
+}
+/** Retain this object across retries; preparation runs before the document is published. */
+export interface CreatePreparation {
+  reservation?: { url: string; instanceId: string };
+  prepare: (assets: string) => Promise<Snapshot>;
 }
 export interface SaveOptions {
   /** Regenerate body and format together from the live editor after each conflict. */
@@ -242,40 +247,57 @@ export class DocsStore {
   async create(
     input: Omit<BuildDocumentInput, "priorRevisions">,
     slugHint?: string,
+    preparation?: CreatePreparation,
   ): Promise<StoredDocument> {
     const slug = toSlug(slugHint ?? input.title) || crypto.randomUUID().slice(0, 8);
-    return this.createAtSlug(input, slug);
+    return this.createAtSlug(input, slug, preparation);
   }
 
   private async createAtSlug(
     input: Omit<BuildDocumentInput, "priorRevisions">,
     slug: string,
+    preparation?: CreatePreparation,
   ): Promise<StoredDocument> {
     await this.ensureRegistered();
     for (let suffix = 1; ; suffix++) {
-      const url = `${this.container}${slug}${suffix === 1 ? "" : `-${suffix}`}.ttl`;
+      const url =
+        preparation?.reservation?.url ??
+        `${this.container}${slug}${suffix === 1 ? "" : `-${suffix}`}.ttl`;
+      this.assertScope(url, true);
       const layout = docContainerUrls(url);
-      const dataset = buildDocument(url, {
-        ...input,
-        ...layout,
-        instanceId: input.instanceId ?? crypto.randomUUID(),
-        creator: input.creator ?? this.webId,
-      });
-      let etag: string | null;
+      const instanceId =
+        preparation?.reservation?.instanceId ?? input.instanceId ?? crypto.randomUUID();
       try {
         // Reserve a fresh companion tree before publishing its links in the document.
         // A collision anywhere belongs to another document, even if its .ttl is gone.
-        for (const child of [layout.container, layout.updateLog, layout.assets, layout.comments]) {
-          await this.createContainer(child);
+        if (!preparation?.reservation) {
+          for (const child of [
+            layout.container,
+            layout.updateLog,
+            layout.assets,
+            layout.comments,
+          ]) {
+            await this.createContainer(child);
+          }
+          if (preparation) preparation.reservation = { url, instanceId };
         }
-        ({ etag } = await writeRdf(url, dataset, {
+        const snapshot = await preparation?.prepare(layout.assets);
+        const dataset = buildDocument(url, {
+          ...input,
+          ...snapshot,
+          ...layout,
+          instanceId,
+          creator: input.creator ?? this.webId,
+        });
+        const { etag } = await writeRdf(url, dataset, {
           createOnly: true,
           fetchImpl: this.fetchImpl,
           prefixes: PREFIXES,
-        }));
+        });
+        return { url, etag, data: parseDocument(url, dataset) as PodDocument };
       } catch (error) {
         if (error instanceof ResourceWriteError && error.status === 412) {
-          if (input.instanceId) {
+          if (input.instanceId || preparation?.reservation) {
             let existing: StoredDocument | undefined;
             try {
               existing = await this.read(url);
@@ -285,13 +307,13 @@ export class DocsStore {
             }
             // A draft may have published its snapshot before losing the first
             // acknowledgement. Reuse only its persisted allocation identity.
-            if (existing?.data.instanceId === input.instanceId) return existing;
+            if (existing?.data.instanceId === instanceId) return existing;
           }
+          if (preparation) delete preparation.reservation;
           continue;
         }
         throw error;
       }
-      return { url, etag, data: parseDocument(url, dataset) as PodDocument };
     }
   }
 

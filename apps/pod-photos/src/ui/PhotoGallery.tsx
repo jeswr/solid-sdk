@@ -23,13 +23,22 @@ export interface PhotoGalleryProps {
   /** The container URL to open first (the gallery root). */
   rootUrl: string;
   /**
-   * The authenticated fetch for pod reads. Omit to use the ambient global fetch
-   * (patched by @solid/reactive-authentication in a real session). The
-   * injectable auth seam — unit tests pass a stub here.
+   * The authenticated fetch for pod reads, passed through to the data layer.
+   * Omit to use the unauthenticated global fetch; tests may inject a stub.
    */
   fetch?: typeof fetch;
   /** Optional heading rendered above the gallery. */
   title?: string;
+}
+
+/** Pod documents are untrusted: only http(s) image IRIs may reach an <img src>. */
+function safeImageSrc(value: string): string | undefined {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:" ? value : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -114,7 +123,7 @@ export function PhotoGallery({ rootUrl, fetch, title }: PhotoGalleryProps) {
           {photos.map((entry) => {
             const heading = photoTitle(entry.url, entry.photo);
             const dimensions = photoDimensions(entry.photo);
-            const src = entry.photo.contentUrl;
+            const src = safeImageSrc(entry.photo.contentUrl);
             return (
               <li key={entry.url} className="pod-photos-tile">
                 <figure>

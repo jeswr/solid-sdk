@@ -1,0 +1,24 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Minimal admission input documenting the four reused mail classes.
+# This is a package projection, not a replacement schema.org ontology. Reused
+# properties are constrained in SHACL, not redeclared with global domain/range.
+@prefix schema: <http://schema.org/> .
+@prefix sioc: <http://rdfs.org/sioc/ns#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+schema:EmailMessage a owl:Class ; rdfs:label "Message" ;
+  rdfs:comment "The message subject viewed by the shared mail model." .
+
+schema:Conversation a owl:Class ; rdfs:label "Thread" ;
+  rdfs:comment "The thread subject viewed by the shared mail model." .
+
+schema:Collection a owl:Class ; rdfs:label "Folder" ;
+  rdfs:comment "The folder subject viewed by the shared mail model." .
+
+schema:MediaObject a owl:Class ; rdfs:label "Attachment" ;
+  rdfs:comment "The attachment subject viewed by the shared mail model." .
+

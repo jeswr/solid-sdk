@@ -351,6 +351,8 @@ export async function runCli(args: readonly string[], options: CliOptions = {}):
     const fileAdapter = command.bank
       ? createBankStatementsFileAdapter(command.bank)
       : fileAdapterById(command.id);
+    if (!command.file && adapter?.metadata.deprecated)
+      throw new NodeRuntimeError("config", adapter.metadata.deprecated);
     if ((command.file && !fileAdapter) || (!command.file && !adapter))
       throw new NodeRuntimeError(
         "config",

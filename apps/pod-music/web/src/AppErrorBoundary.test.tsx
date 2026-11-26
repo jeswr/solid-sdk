@@ -9,14 +9,16 @@
 // useSession is mocked (the boundary reads ONLY webId from it); the boundary /
 // fallback mechanics themselves are exhaustively tested in @jeswr/app-shell —
 // this is the thin adoption test for the parity rollout.
+
+import type { SessionContextValue } from "@jeswr/app-session/react";
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppErrorBoundary } from "./AppErrorBoundary";
-import type { SessionContextValue } from "./auth/SessionProvider";
 
 // Mutable session double — only webId is read by AppErrorBoundary.
 const sessionState = { webId: null as string | null };
-vi.mock("./auth/SessionProvider", () => ({
+vi.mock("@jeswr/app-session/react", async (original) => ({
+  ...(await original<typeof import("@jeswr/app-session/react")>()),
   useSession: (): Pick<SessionContextValue, "webId"> => ({ webId: sessionState.webId }),
 }));
 

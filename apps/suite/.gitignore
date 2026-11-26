@@ -4,3 +4,6 @@ next-env.d.ts
 *.tsbuildinfo
 .native-stage/
 www/
+# Written by next build since 16.4; not project documentation.
+AGENTS.md
+test-results/

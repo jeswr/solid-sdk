@@ -23,5 +23,7 @@ it("counts access across the full demo pod including nested Docs CRDT files", as
     return null;
   }
   await mount(h(Probe));
-  await expect.poll(() => access).toEqual({ apps: 1, people: 1, publicItems: 4 });
+  // NoteNest adds an app grant plus its public Client ID document and logo. The Groups &
+  // family seed's public-read groups folder adds three more public entries.
+  await expect.poll(() => access).toEqual({ apps: 2, people: 1, publicItems: 6 });
 });

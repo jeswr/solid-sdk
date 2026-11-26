@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 //
 // AppErrorBoundary — the app's ONE crash-resilience boundary (cross-app parity
@@ -16,9 +17,9 @@
 // PLACEMENT (main.tsx): INSIDE ThemeProvider (the fallback stays themed) and
 // INSIDE SessionProvider (this component reads useSession, and the auth seam's
 // own invariants stay outside the guarded subtree), around <App/>.
+import { useSession } from "@jeswr/app-session/react";
 import { ErrorBoundary } from "@jeswr/app-shell";
 import type { ReactNode } from "react";
-import { useSession } from "./auth/SessionProvider";
 
 export function AppErrorBoundary({ children }: { children?: ReactNode }) {
   const { webId } = useSession();

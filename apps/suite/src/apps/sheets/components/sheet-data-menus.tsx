@@ -40,20 +40,22 @@ export function DataMenus({ engine, locked }: { engine: SheetEngine | null; lock
     if (!engine) return;
     const shortcut = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
-      if (!["h", "f"].includes(event.key.toLowerCase())) return;
+      if (!["h", "f", "k"].includes(event.key.toLowerCase())) return;
       // Find in the grid; preserve browser Find outside the spreadsheet canvas.
       if (
-        event.key.toLowerCase() === "f" &&
+        ["f", "k"].includes(event.key.toLowerCase()) &&
         !(event.target instanceof Element && event.target.closest(".sht-univer"))
       )
         return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      void engine.findReplace?.();
+      if (event.key.toLowerCase() === "k") {
+        if (!locked) void engine.editLink?.();
+      } else void engine.findReplace?.();
     };
     document.addEventListener("keydown", shortcut, true);
     return () => document.removeEventListener("keydown", shortcut, true);
-  }, [engine]);
+  }, [engine, locked]);
   return (
     <>
       <DropdownMenu>
@@ -92,6 +94,9 @@ export function DataMenus({ engine, locked }: { engine: SheetEngine | null; lock
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent>
+          <DropdownMenuItem disabled={locked} onSelect={() => void engine?.editLink?.()}>
+            Insert or edit link
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => void engine?.findReplace?.()}>
             Find and replace
           </DropdownMenuItem>

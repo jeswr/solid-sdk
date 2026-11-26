@@ -3,16 +3,18 @@
 /**
  * The Requests inbox binding (03-home-permissions §2.5): one shared list per session, so the
  * Permissions tab badge, the Requests page and a review sheet mounted elsewhere agree. Listing and
- * decisions go only through `@jeswr/pod-access/requests-solid`; every decision is one call.
+ * decisions go only through `@jeswr/pod-access/requests-solid` (listing via `listInboxRequests`,
+ * which also recognises share notifications); every decision is one call.
  */
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import {
   type AccessRequestEntry,
+  type DecisionPreview,
   type DecisionResult,
   decide as decideRequest,
-  listRequests,
+  previewDecision,
   type RequestDecision,
 } from "@jeswr/pod-access/requests-solid";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
@@ -25,6 +27,7 @@ import { provenanceOf } from "../lib/model/provenance";
 import { inStorage } from "../lib/model/rdf";
 import { readTypeIndexes } from "../lib/model/type-index";
 import { type RequestCaps, requestCaps } from "../lib/requests/caps";
+import { listInboxRequests } from "../lib/requests/listing";
 import { type RequestCard, type RequestLists, splitRequests } from "../lib/requests/model";
 
 /** Focus refreshes at most this often (§3). */
@@ -33,6 +36,8 @@ export const FOCUS_REFRESH_MS = 60_000;
 export interface RequestsSnapshot {
   status: "loading" | "ready" | "error";
   entries: readonly AccessRequestEntry[];
+  /** Unreadable entries recognised as share notifications, kept out of the unreadable note. */
+  shares: ReadonlySet<string>;
 }
 
 interface RequestsStore {
@@ -56,7 +61,7 @@ function storeFor(session: PodSession): RequestsStore {
   if (!store || store.identity !== identity) {
     store = {
       identity,
-      snapshot: { status: "loading", entries: [] },
+      snapshot: { status: "loading", entries: [], shares: new Set() },
       loadedAt: 0,
       generation: 0,
       answered: new Set(),
@@ -89,12 +94,12 @@ function load(store: RequestsStore, session: PodSession): Promise<void> {
   const generation = ++store.generation;
   const loading = (async () => {
     try {
-      const entries = await listRequests(requestOptions(session));
-      if (generation === store.generation) publish(store, { status: "ready", entries });
+      const { entries, shares } = await listInboxRequests(requestOptions(session));
+      if (generation === store.generation) publish(store, { status: "ready", entries, shares });
     } catch {
       // A failed refresh keeps the requests already shown.
       if (generation === store.generation && store.snapshot.status !== "ready")
-        publish(store, { status: "error", entries: [] });
+        publish(store, { status: "error", entries: [], shares: new Set() });
     } finally {
       store.loadedAt = Date.now();
       store.loading = undefined;
@@ -112,7 +117,21 @@ export interface RequestsBinding extends RequestLists {
    * leaves the waiting lists as soon as the decision resolves, so it can't be decided twice while
    * the re-list runs or after it fails.
    */
-  decide(entry: AccessRequestEntry, decision: RequestDecision): Promise<DecisionResult>;
+  decide(
+    entry: AccessRequestEntry,
+    decision: RequestDecision,
+    expected?: DecisionPreview,
+  ): Promise<DecisionResult>;
+  /**
+   * What `decision` would grant, read-only (GET/HEAD only). Pass the result to `decide` as
+   * `expected` so the decision refuses (DecisionPreviewConflictError) if the access it would
+   * grant changed after the owner saw it.
+   */
+  preview(
+    entry: AccessRequestEntry,
+    decision: RequestDecision,
+    signal?: AbortSignal,
+  ): Promise<DecisionPreview>;
   /** Whether the note about unreadable inbox items was dismissed in this session. */
   unreadableDismissed: boolean;
   dismissUnreadable(): void;
@@ -148,9 +167,12 @@ export function useRequests(): RequestsBinding {
   }, [store, session]);
 
   const decide = useCallback(
-    async (entry: AccessRequestEntry, decision: RequestDecision) => {
+    async (entry: AccessRequestEntry, decision: RequestDecision, expected?: DecisionPreview) => {
       try {
-        const result = await decideRequest(entry, decision, requestOptions(session));
+        const result = await decideRequest(entry, decision, {
+          ...requestOptions(session),
+          ...(expected && { expected }),
+        });
         store.answered.add(entry.id);
         publish(store, { ...store.snapshot });
         return result;
@@ -161,6 +183,12 @@ export function useRequests(): RequestsBinding {
     [store, session, refresh],
   );
 
+  const preview = useCallback(
+    (entry: AccessRequestEntry, decision: RequestDecision, signal?: AbortSignal) =>
+      previewDecision(entry, decision, { ...requestOptions(session), ...(signal && { signal }) }),
+    [session],
+  );
+
   const dismissUnreadable = useCallback(() => {
     store.unreadableDismissed = true;
     publish(store, { ...store.snapshot });
@@ -168,9 +196,10 @@ export function useRequests(): RequestsBinding {
 
   return {
     status: snapshot.status,
-    ...splitRequests(snapshot.entries, new Date(), store.answered),
+    ...splitRequests(snapshot.entries, new Date(), store.answered, snapshot.shares),
     refresh,
     decide,
+    preview,
     unreadableDismissed: store.unreadableDismissed,
     dismissUnreadable,
   };

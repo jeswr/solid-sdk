@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.2-Astra
+import { Parser } from "n3";
 import { expect, it, vi } from "vitest";
 import { ChatClient } from "../src/apps/chat/lib/client";
 import { MAX_SCAN_REQUESTS } from "../src/apps/chat/lib/client/invitations";
@@ -11,6 +12,20 @@ const ROOT = "https://8.8.8.8/";
 const ME = `${ROOT}profile#me`;
 const BOB = "https://8.8.4.4/profile#me";
 const INBOX = `${ROOT}inbox/`;
+const AS = "https://www.w3.org/ns/activitystreams#";
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+/** Project a delivered Turtle activity (<#it>, relative to the inbox) onto its AS terms. */
+function activity(body: string, inbox: string): Record<string, unknown> {
+  const quads = new Parser({ baseIRI: inbox }).parse(body);
+  const subject = `${inbox}#it`;
+  const fields: Record<string, unknown> = {};
+  for (const { subject: s, predicate, object } of quads) {
+    expect(s.value).toBe(subject);
+    const key = predicate.value === RDF_TYPE ? "type" : predicate.value.slice(AS.length);
+    fields[key] = predicate.value === RDF_TYPE ? object.value.slice(AS.length) : object.value;
+  }
+  return fields;
+}
 const ttl = (body: string) => new Response(body, { headers: { "content-type": "text/turtle" } });
 function fixture() {
   const pod = createDemoPod({ root: ROOT });
@@ -21,7 +36,8 @@ function fixture() {
       const resources = pod.snapshot().resources;
       for (const suffix of ["/index.ttl", "/rooms.ttl", "/.acl"])
         expect(resources.some(([url]) => url.endsWith(suffix))).toBe(true);
-      posts.push(JSON.parse(init.body as string));
+      expect(new Headers(init.headers).get("content-type")).toBe("text/turtle");
+      posts.push(activity(init.body as string, url));
       return new Response(null, { status: 201 });
     }
     if (!url.startsWith(ROOT))
@@ -76,7 +92,6 @@ it("sends a pod-access Offer to every distinct non-creator member after writes s
   expect(posts).toHaveLength(2);
   for (const post of posts)
     expect(post).toMatchObject({
-      "@context": "https://www.w3.org/ns/activitystreams",
       type: "Offer",
       actor: ME,
       object: room.url,

@@ -1,10 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { NS } from "@jeswr/suite-vocab";
+import { TermAs } from "@rdfjs/wrapper";
 import { describe, expect, it } from "vitest";
 import {
+  capRecords,
   type DomainItem,
   discoverDomainItems,
+  documentRecords,
+  domainItemKey,
   nameFromUrl,
   sortItems,
 } from "../../src/apps/home/lib/model/discovery";
@@ -14,6 +18,98 @@ import { readTypeIndexes } from "../../src/apps/home/lib/model/type-index";
 import { fixtureFetch, rdf, STORAGE, WEB_ID } from "./fixtures";
 
 describe("domain discovery", () => {
+  it("keys blank-node primary subjects by document and type rather than parser labels", async () => {
+    const url = `${STORAGE}blank.ttl`;
+    const options = {
+      storage: STORAGE,
+      fetch: fixtureFetch({ [url]: '[] a schema:Movie; schema:name "A film".' }),
+      typeIndex: [{ forClass: `${NS.SCHEMA}Movie`, instance: url }],
+    };
+    const first = await discoverDomainItems("media", options);
+    const second = await discoverDomainItems("media", options);
+    expect(first.items).toHaveLength(1);
+    expect(second.items).toHaveLength(1);
+    expect(first.items[0]?.subject.value).not.toBe(second.items[0]?.subject.value);
+    expect(first.items.map(domainItemKey)).toEqual(second.items.map(domainItemKey));
+  });
+
+  it("caps each document at 200 records and reports how many it holds", async () => {
+    const urls = Array.from({ length: 6 }, (_, index) => `${STORAGE}history-${index}.ttl`);
+    const fetch = fixtureFetch(
+      Object.fromEntries(
+        urls.map((url) => [
+          url,
+          Array.from(
+            { length: 201 },
+            (_, index) =>
+              `<#record-${index}> a schema:WatchAction; schema:name "Film ${index}";
+                prov:wasGeneratedBy <runs.ttl#run>.`,
+          ).join("\n"),
+        ]),
+      ),
+    );
+    const result = await discoverDomainItems("media", {
+      storage: STORAGE,
+      fetch,
+      typeIndex: urls.map((instance) => ({ forClass: `${NS.SCHEMA}WatchAction`, instance })),
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.truncated).toBe(false);
+    expect(result.items).toHaveLength(1_200);
+    expect([...result.limited.values()]).toEqual(urls.map(() => ({ shown: 200, total: 201 })));
+    const capped = capRecords(result.items, result.limited);
+    expect(capped.items).toHaveLength(1_000);
+    expect(new Set(capped.items.map(domainItemKey)).size).toBe(1_000);
+    // A fair share each, remainder in document order, regardless of response order.
+    expect(urls.map((url) => capped.items.filter((item) => item.url === url).length)).toEqual([
+      167, 167, 167, 167, 166, 166,
+    ]);
+    expect(capped.cut.size).toBe(6);
+    expect(
+      capRecords([...result.items].reverse(), result.limited)
+        .items.map(domainItemKey)
+        .sort(),
+    ).toEqual(capped.items.map(domainItemKey).sort());
+  });
+
+  it.each([
+    "A Quiet Weekend",
+    "The Garden",
+  ])("discovers separate imported subjects even when the second title is %s", async (secondTitle) => {
+    const url = `${STORAGE}integrations/netflix/media/viewing-history.ttl`;
+    const fetch = fixtureFetch({
+      [`${STORAGE}integrations/`]: "<> ldp:contains <netflix/> .",
+      [`${STORAGE}integrations/netflix/`]: "<> ldp:contains <media/> .",
+      [`${STORAGE}integrations/netflix/media/`]: "<> ldp:contains <viewing-history.ttl> .",
+      [url]: `<> prov:wasGeneratedBy <../runs.ttl#run> .
+          <#first> a schema:WatchAction, schema:Movie ; schema:name "The Garden" ;
+            prov:wasGeneratedBy <../runs.ttl#run> .
+          <#second> a schema:WatchAction ; schema:name "${secondTitle}" ;
+            prov:wasGeneratedBy <../runs.ttl#run>, <../runs.ttl#previous> .
+          <#helper> a schema:Movie ; schema:name "Mapped helper" .
+          <#source> a prov:Activity ; prov:wasGeneratedBy <../runs.ttl#run> .
+          [] a schema:Movie ; prov:wasGeneratedBy <../runs.ttl#run> .
+          <https://foreign.example/movie> a schema:Movie ; schema:name "Linked movie" ;
+            prov:wasGeneratedBy <../runs.ttl#run> .`,
+    });
+    const result = await discoverDomainItems("media", {
+      storage: STORAGE,
+      fetch,
+      // Both routes must fetch the document only once and keep both records.
+      typeIndex: [{ forClass: `${NS.SCHEMA}WatchAction`, instance: `${url}#second` }],
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.items).toHaveLength(2);
+    expect(result.items.map((item) => item.title).sort()).toEqual(
+      ["The Garden", secondTitle].sort(),
+    );
+    expect(new Set(result.items.map((item) => item.subject.value))).toEqual(
+      new Set([`${url}#first`, `${url}#second`]),
+    );
+    expect(result.items.every((item) => item.url === url)).toBe(true);
+    expect(fetch.mock.calls.filter(([input]) => String(input) === url)).toHaveLength(1);
+  });
+
   it.each([
     "http",
     "https",
@@ -236,6 +332,43 @@ describe("domain discovery", () => {
     expect(fetch.mock.calls.some(([input]) => String(input).includes("unrelated"))).toBe(false);
   });
 
+  // An imported reference inside a note used to hide the note's own card.
+  it("keeps a document's primary record when it also holds imported records", async () => {
+    const url = `${STORAGE}notes/reading.ttl`;
+    const result = await discoverDomainItems("all", {
+      storage: STORAGE,
+      fetch: fixtureFetch({
+        [url]: `<#it> a schema:NoteDigitalDocument; schema:name "Reading notes".
+          <#book> a schema:Book; schema:name "A book"; prov:wasGeneratedBy <runs.ttl#run>.`,
+      }),
+      typeIndex: [{ forClass: `${NS.SCHEMA}NoteDigitalDocument`, instance: url }],
+    });
+    expect(result.items.map((item) => item.title).sort()).toEqual(["A book", "Reading notes"]);
+  });
+
+  // An untyped primary note used to vanish from Other once an imported record was found.
+  it("keeps an uncategorised primary record beside imported records, but not provenance runs", async () => {
+    const url = `${STORAGE}misc/reading.ttl`;
+    const result = await discoverDomainItems("all", {
+      storage: STORAGE,
+      fetch: fixtureFetch({
+        [url]: `<#it> schema:name "Untitled note"; schema:text "Some thoughts".
+          <#book> a schema:Book; schema:name "A book"; prov:wasGeneratedBy <#run>.`,
+      }),
+      typeIndex: [{ forClass: `${NS.SCHEMA}Book`, instance: url }],
+    });
+    expect(result.items.map((item) => item.title).sort()).toEqual(["A book", "Untitled note"]);
+    const scaffolded = await discoverDomainItems("all", {
+      storage: STORAGE,
+      fetch: fixtureFetch({
+        [url]: `<#run> a prov:Activity; schema:name "Import run"; schema:startTime "2026-11-01T00:00:00Z"; schema:endTime "2026-11-01T00:01:00Z".
+          <#book> a schema:Book; schema:name "A book"; prov:wasGeneratedBy <#run>.`,
+      }),
+      typeIndex: [{ forClass: `${NS.SCHEMA}Book`, instance: url }],
+    });
+    expect(scaffolded.items.map((item) => item.title)).toEqual(["A book"]);
+  });
+
   it("uses only the primary subject for connector collections independently of the WebID", async () => {
     const fetch = fixtureFetch({
       [`${STORAGE}collection.ttl`]:
@@ -380,6 +513,21 @@ describe("domain discovery", () => {
     ).toHaveLength(2);
   });
 
+  it("cuts a document to its share of the refresh budget and reports it as cut", async () => {
+    const body =
+      '<#me> a vcard:Individual ; vcard:fn "Alice Example" ; vcard:hasEmail [ vcard:hasValue <mailto:alice@example.com> ] .';
+    const result = await discoverDomainItems("personal", {
+      storage: STORAGE,
+      fetch: fixtureFetch({ [`${STORAGE}profile/card`]: body }),
+      webId: WEB_ID,
+    });
+    expect(result.truncated).toBe(false);
+    const capped = capRecords(result.items, result.limited, 1);
+    expect(capped.items).toHaveLength(1);
+    expect(capped.cut).toEqual(new Set([`${STORAGE}profile/card`]));
+    expect(capped.limited.get(`${STORAGE}profile/card`)).toEqual({ shown: 1, total: 2 });
+  });
+
   it.each([
     true,
     false,
@@ -499,5 +647,25 @@ describe("domain discovery", () => {
     expect(nameFromUrl("https://pod.example/")).toBe("pod.example");
     expect(nameFromUrl("bad")).toBe("bad");
     expect(nameFromUrl(`${STORAGE}bad%ZZ`)).toBe(`${STORAGE}bad%ZZ`);
+  });
+
+  it("stops one record past a document limit so callers can tell it was cut", async () => {
+    const url = `${STORAGE}history.ttl`;
+    const dataset = await rdf(
+      Array.from(
+        { length: 4 },
+        (_, index) =>
+          `<#record-${index}> a schema:WatchAction; schema:name "Film ${index}";
+            prov:wasGeneratedBy <runs.ttl#run>.`,
+      ).join("\n"),
+      url,
+    );
+    expect(documentRecords(dataset, url)).toHaveLength(4);
+    const limited = documentRecords(dataset, url, undefined, 1);
+    expect(limited).toHaveLength(2);
+    expect(limited.map(({ node }) => TermAs.term(node).value)).toEqual([
+      `${url}#record-0`,
+      `${url}#record-1`,
+    ]);
   });
 });

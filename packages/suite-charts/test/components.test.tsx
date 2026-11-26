@@ -556,6 +556,27 @@ describe("ScatterChart", () => {
   });
 });
 describe("TimelineChart", () => {
+  it("applies an optional UTC formatter to axes, tooltip labels and all table bounds", () => {
+    const formatX = (time: number) =>
+      new Date(time).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+    const { container } = render(
+      <TimelineChart title="Local dates" lanes={lanes} now="2026-01-10" formatX={formatX} />,
+    );
+    expect(container.querySelector(".sc-svg")?.textContent).toContain("10 Jan 2026");
+    const active = screen.getByRole("button", { name: /Current course/ });
+    expect(active.getAttribute("aria-label")).toContain("1 Jan 2026, ongoing through 10 Jan 2026");
+    fireEvent.focus(active);
+    expect(screen.getByRole("tooltip").textContent).toContain("10 Jan 2026");
+    fireEvent.click(screen.getByRole("button", { name: "Show table for Local dates" }));
+    expect(screen.getByRole("table").textContent).toContain("Ongoing (through 10 Jan 2026)");
+    expect(screen.getByRole("table").textContent).toContain("2 Jan 2026");
+    expect(screen.getByRole("table").textContent).not.toContain("T00:00");
+  });
   it("renders a rounded interval, an active open end through now and a point diamond", () => {
     const { container } = render(
       <TimelineChart title="Treatment" lanes={lanes} now="2026-01-10" />,

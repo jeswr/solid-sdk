@@ -1,0 +1,55 @@
+# AUTHORED-BY Codex (GPT-6.1 Sol)
+# Generation profile for the Task ONLY; tracker and contacts remain hand-written.
+#
+# There is no wf:Task federation-sector shape. The scheduling sector's TaskShape
+# describes sched:Task, sched:summary, sched:dueTime (date OR dateTime), and a
+# sched:completed boolean, not this package's wire model. This projection keeps
+# wf:Task / dct:title / wf:dateDue and rdf:type wf:Open|Closed exactly; it does not
+# remint them or import CalendarEvent, Calendar, Attendance, RecurrenceRule or
+# Reminder. Due times narrow the sector union to this package's xsd:dateTime.
+# All other metadata/relations below are additions from shapes/task.ttl.
+#
+# Relative to the published shapes/task.ttl:
+# - Omit rdf:type qualifiedValueShape/qualifiedMinCount/qualifiedMaxCount: closed
+#   admission cannot express the advisory exactly-one-state constraint, nor the
+#   completion timestamp side effect. Task.state retains that typed policy.
+# - dct:isPartOf narrows to maxCount 1, matching the public scalar parent field.
+# - Add schema:priority as an optional string singleton. The facade retains its
+#   case/whitespace normalization; no closed enum changes the legacy read policy.
+# - Give fields their public JS names (project, endedAt, dueDate, rank, parent,
+#   blockedBy, relatesTo, duplicateOf, clonedFrom); descriptionDct is an internal
+#   generated accessor. Both description predicates stay independent, not aliases:
+#   setters must write BOTH, whereas generated aliases write canonical-only.
+# - Enforce http(s) writes on every IRI field via config. The facade preserves the
+#   hardened read contract: first valid scalar, each valid set member, exact stored
+#   spelling, case-insensitive scheme. This cannot be expressed by runtime singleton
+#   cardinality or its normalizing IRI projection. Creator/assignee retain the
+#   published pattern; facade reads apply the stricter lexical safety policy.
+# - Required title and literal datatype/cardinality rules are retained, so generated
+#   reads fail closed outside the oracle. README Exact divergences pins each change.
+# sh:name/message annotations are descriptive only; the published shape is unchanged.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix wf: <http://www.w3.org/2005/01/wf/flow#> .
+@prefix dct: <http://purl.org/dc/terms/> .
+@prefix schema: <http://schema.org/> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+[] a sh:NodeShape ; sh:targetClass wf:Task ;
+    sh:property [ sh:path dct:title ; sh:name "title" ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ] ;
+    sh:property [ sh:path wf:description ; sh:name "description" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+    sh:property [ sh:path dct:description ; sh:name "descriptionDct" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+    sh:property [ sh:path dct:created ; sh:name "created" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+    sh:property [ sh:path dct:modified ; sh:name "modified" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+    sh:property [ sh:path prov:endedAtTime ; sh:name "endedAt" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+    sh:property [ sh:path dct:creator ; sh:name "creator" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+    sh:property [ sh:path wf:assignee ; sh:name "assignee" ; sh:nodeKind sh:IRI ; sh:pattern "^https?://" ; sh:maxCount 1 ] ;
+    sh:property [ sh:path wf:tracker ; sh:name "project" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+    sh:property [ sh:path wf:dateDue ; sh:name "dueDate" ; sh:datatype xsd:dateTime ; sh:maxCount 1 ] ;
+    sh:property [ sh:path schema:priority ; sh:name "priority" ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
+    sh:property [ sh:path schema:position ; sh:name "rank" ; sh:datatype xsd:double ; sh:maxCount 1 ] ;
+    sh:property [ sh:path dct:isPartOf ; sh:name "parent" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+    sh:property [ sh:path dct:requires ; sh:name "blockedBy" ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path dct:relation ; sh:name "relatesTo" ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path dct:isReplacedBy ; sh:name "duplicateOf" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] ;
+    sh:property [ sh:path prov:wasDerivedFrom ; sh:name "clonedFrom" ; sh:nodeKind sh:IRI ; sh:maxCount 1 ] .

@@ -77,7 +77,7 @@ describe("readHealth", () => {
     ).rejects.toMatchObject({ status: 404 });
   });
 
-  it("falls back to the patched globalThis.fetch when no fetch is supplied", async () => {
+  it("falls back to globalThis.fetch when no fetch is supplied", async () => {
     const globalMock = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(turtleResponse(CONFORMANT_HEALTH_TTL, { etag: '"g"' }));

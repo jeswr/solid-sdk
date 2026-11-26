@@ -18,6 +18,7 @@ const photo = {
   exif: {},
 };
 const now = "2026-10-25T00:00:00.000Z";
+const allow = async () => true;
 const encoder: ImageEncoder = {
   dimensions: async () => ({ width: 4000, height: 3000 }),
   thumbnail: async () => new Blob(["webp"], { type: "image/webp" }),
@@ -192,7 +193,7 @@ it("uploads original, thumbnail, then metadata with create-only preconditions", 
     original: new Blob([tiffFixture()], { type: "image/tiff" }),
     stripLocation: false,
   };
-  const [uploaded] = await io.uploadPhotos([input], encoder, now);
+  const [uploaded] = await io.uploadPhotos([input], encoder, now, allow);
   expect(uploaded?.photo.contentUrl).toBe(`${storage}photos/originals/a.tif`);
   expect((await io.loadPhoto(url)).photo?.thumbnailUrl).toBe(`${storage}photos/thumbs/a.webp`);
   expect([...pod.files.keys()].slice(-3)).toEqual([
@@ -200,11 +201,13 @@ it("uploads original, thumbnail, then metadata with create-only preconditions", 
     `${storage}photos/thumbs/a.webp`,
     url,
   ]);
-  expect(await io.uploadPhotos([], encoder, now)).toEqual([]);
-  await expect(io.uploadPhotos([input], encoder, now)).rejects.toMatchObject({ status: 412 });
+  expect(await io.uploadPhotos([], encoder, now, allow)).toEqual([]);
+  await expect(io.uploadPhotos([input], encoder, now, allow)).rejects.toMatchObject({
+    status: 412,
+  });
   const next = { ...input, id: "b" };
   pod.failures.set(`PUT ${storage}photos/thumbs/b.webp`, 507);
-  await expect(io.uploadPhotos([next], encoder, now)).rejects.toMatchObject({ status: 507 });
+  await expect(io.uploadPhotos([next], encoder, now, allow)).rejects.toMatchObject({ status: 507 });
   expect(pod.files.has(`${storage}photos/items/b.ttl`)).toBe(false);
 });
 
@@ -217,8 +220,10 @@ it("uploads batches and later photos, then recovers trash with CSS response beha
     original: new Blob([tiffFixture()], { type: "image/tiff" }),
     stripLocation: false,
   };
-  expect(await io.uploadPhotos([input, { ...input, id: "b" }], encoder, now)).toHaveLength(2);
-  expect(await io.uploadPhotos([{ ...input, id: "c" }], encoder, now)).toHaveLength(1);
+  expect(await io.uploadPhotos([input, { ...input, id: "b" }], encoder, now, allow)).toHaveLength(
+    2,
+  );
+  expect(await io.uploadPhotos([{ ...input, id: "c" }], encoder, now, allow)).toHaveLength(1);
   const actor = `${storage}profile/card#me`;
   const trash = await trashPhoto(io, url, "a", actor, now);
   expect(await restorePhoto(io, trash)).toBe(url);
@@ -248,6 +253,7 @@ it.each([
     ],
     encoder,
     now,
+    allow,
   );
   expect(io.root).toBe(`${storage}photos/`);
   expect(uploaded?.itemUrl).toBe(url);

@@ -104,6 +104,14 @@ export function useWorkbook(container: string) {
     onSaved,
     rename: (title: string) => writer.current?.rename(title),
     reload,
+    restore: async (snapshot: Snapshot, loaded?: SnapshotSaved) => {
+      if (!writer.current || writer.current.workbook.readOnly)
+        throw new Error("Write access required");
+      await writer.current.restore(snapshot);
+      // The restore is published. A failed reload must not report it as failed: the
+      // caller remounts onto the writer's snapshot, which is the restored workbook.
+      await reload(loaded).catch(() => undefined);
+    },
     retry: (force = false) => writer.current?.retry(force),
     flush: () => writer.current?.flush(),
     discard: () => writer.current?.discard(),

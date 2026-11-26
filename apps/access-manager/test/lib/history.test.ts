@@ -1,9 +1,13 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 // Revocation correctness (direct AND inherited-materialised grants, idempotent
 // re-run, lockout guard) + the receipts/grants audit listings.
+
+import { type DecideOptions, DPV, decide, listRequests } from "@jeswr/pod-access/requests-solid";
+import { policyToRdf } from "@jeswr/solid-odrl";
+import { Store } from "n3";
 import { beforeEach, describe, expect, it } from "vitest";
 import { readEffectiveAcl } from "../../src/lib/acl.js";
-import { type ApprovalContext, approveRequest } from "../../src/lib/approval.js";
 import {
   listGrants,
   listReceipts,
@@ -11,9 +15,7 @@ import {
   retractGrantFromTarget,
   revokeGrant,
 } from "../../src/lib/history.js";
-import { readAccessRequest } from "../../src/lib/inbox.js";
-import { readTypeRegistrations } from "../../src/lib/type-index.js";
-import { DPV } from "../../src/lib/vocab.js";
+import { toTurtle } from "../../src/lib/rdf.js";
 import {
   BOB,
   buildPod,
@@ -33,41 +35,71 @@ const CAROL = `${POD}contacts/carol.ttl`;
 const REPORT = `${POD}docs/report.ttl`;
 
 let pod: PodStub;
-let c: ApprovalContext;
+let c: DecideOptions;
 
 beforeEach(async () => {
   pod = buildPod();
   c = {
-    ownerWebId: OWNER,
-    storageRoot: POD,
-    grantsContainer: GRANTS,
-    receiptsContainer: RECEIPTS,
+    webId: OWNER,
+    storage: POD,
     fetch: pod.fetch,
-    registrations: await readTypeRegistrations(OWNER, pod.fetch),
-    knownResources: [ALICE, CAROL, REPORT],
     now: () => new Date("2026-07-02T12:00:00Z"),
   };
 });
 
 async function approve() {
-  const request = await readAccessRequest(REQUEST, pod.fetch);
+  const request = (await listRequests({ ...c, inbox: INBOX })).find(
+    (entry) => entry.id === REQUEST,
+  );
   if (!request) throw new Error("missing request");
-  return approveRequest(request, c);
+  const result = await decide(request, { approve: true }, c);
+  if (!result.grantUrl) throw new Error("missing grant URL");
+  return { ...result, grantUrl: result.grantUrl };
 }
 
 describe("listGrants + listReceipts", () => {
   it("lists what an approval produced; empty containers list empty", async () => {
     expect(await listGrants(GRANTS, pod.fetch)).toEqual([]);
     expect(await listReceipts(RECEIPTS, pod.fetch)).toEqual([]);
-    const { snapshot } = await approve();
+    const { grantUrl } = await approve();
     const grants = await listGrants(GRANTS, pod.fetch);
     expect(grants).toHaveLength(1);
-    expect(grants[0]?.grantId).toBe(snapshot.grantId);
+    expect(grants[0]?.url).toBe(grantUrl);
     expect(grants[0]?.revokedAt).toBeUndefined();
     const receipts = await listReceipts(RECEIPTS, pod.fetch);
     expect(receipts).toHaveLength(1);
     expect(receipts[0]?.status).toBe(DPV.ConsentGiven);
     expect(receipts[0]?.createdAt?.toISOString()).toBe("2026-07-02T12:00:00.000Z");
+  });
+
+  it("keeps distinct ODRL modes per target for history revocation", async () => {
+    const url = `${GRANTS}grant-mixed.ttl`;
+    pod.seed(
+      url,
+      await toTurtle(
+        new Store(
+          policyToRdf({
+            id: url,
+            type: "Agreement",
+            assignee: REQUESTER,
+            permissions: [
+              { type: "permission", action: "read", target: ALICE },
+              ...(["read", "write", "append"] as const).map((action) => ({
+                type: "permission" as const,
+                action,
+                target: CAROL,
+              })),
+            ],
+          }),
+        ),
+      ),
+    );
+    const grant = await readGrantRecord(url, pod.fetch);
+    expect(grant?.modesByTarget).toEqual({
+      [ALICE]: ["Read"],
+      [CAROL]: ["Read", "Write", "Append"],
+    });
+    expect(grant?.targets).toEqual([ALICE, CAROL]);
   });
 
   it("an unreadable record never aborts the audit listing", async () => {

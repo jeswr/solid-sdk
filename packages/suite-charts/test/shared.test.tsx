@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { extent, XAxis } from "../src/shared.js";
+import { extent, visibleTicks, XAxis } from "../src/shared.js";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -41,5 +41,26 @@ describe("chart domains", () => {
       </svg>,
     );
     expect(error).not.toHaveBeenCalled();
+  });
+});
+
+// AUTHORED-BY Claude Opus 5.5
+describe("visibleTicks", () => {
+  const identity = (n: number) => n;
+  const label = (n: number) => `day ${n}`; // 5 chars, about 35px wide
+  it("keeps every label when they fit", () => {
+    expect(visibleTicks([0, 200, 400], identity, label).map((t) => t.text)).toEqual([
+      "day 0",
+      "day 200",
+      "day 400",
+    ]);
+  });
+  it("drops earlier labels that would overlap, always keeping the last", () => {
+    const shown = visibleTicks([0, 10, 400], identity, label);
+    expect(shown.map((t) => [t.value, t.anchor])).toEqual([
+      [0, "start"],
+      [400, "end"],
+    ]);
+    expect(visibleTicks([0, 5], identity, label).map((t) => t.value)).toEqual([5]);
   });
 });

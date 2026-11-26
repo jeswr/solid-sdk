@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2-Sol
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 
 import type { FetchForOptions } from "@jeswr/pod-auth";
 import { toast } from "@jeswr/suite-ui";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { clearTasksCachesFor } from "@/apps/tasks/state/offline-cache-key";
 import { purgeNativePodCache } from "@/lib/session/native-pod-cache";
 import {
   ACCOUNTS_KEY,
@@ -50,8 +51,13 @@ export interface AccountsContextValue {
   status: SessionStatus;
   active: SuiteAccount | null;
   accounts: SuiteAccount[];
-  /** Checks the live session, including changes React has not committed yet. */
-  isActiveAccount(id: string, sessionVersion?: number): boolean;
+  /** Read the selected account even if its session is unavailable or React has not committed. */
+  getActiveAccount?(): SuiteAccount | undefined;
+  /** Check the live account by shell ID or by WebID and storage, even before React commits. */
+  isActiveAccount(
+    account: string | Pick<SuiteAccount, "webId" | "storageUrl">,
+    sessionVersion?: number,
+  ): boolean;
   isSignedInAccount?(id: string): boolean;
   /** Account-bound fetch; optional only for older preview adapters. */
   fetchFor?(account: SuiteAccount, options?: FetchForOptions): typeof fetch;
@@ -92,13 +98,25 @@ export function AccountsProvider({
   const generation = useRef(0);
   const signInAttempt = useRef(0);
   const sessionVersion = useRef(0);
+  const getActiveAccount = useCallback(() => {
+    const { activeId, accounts } = current.current;
+    return accounts.find((account) => account.id === activeId);
+  }, []);
   const isActiveAccount = useCallback(
-    (id: string, expected?: number) =>
-      current.current.activeId === id &&
-      currentStatus.current === "ready" &&
-      !retiring.current.has(id) &&
-      (expected === undefined || expected === sessionVersion.current),
-    [],
+    (account: string | Pick<SuiteAccount, "webId" | "storageUrl">, expected?: number) => {
+      const { activeId } = current.current;
+      if (
+        !activeId ||
+        currentStatus.current !== "ready" ||
+        retiring.current.has(activeId) ||
+        (expected !== undefined && expected !== sessionVersion.current)
+      )
+        return false;
+      if (typeof account === "string") return activeId === account;
+      const active = getActiveAccount();
+      return active?.webId === account.webId && active.storageUrl === account.storageUrl;
+    },
+    [getActiveAccount],
   );
   const changeStatus = useCallback((value: SessionStatus) => {
     currentStatus.current = value;
@@ -239,6 +257,7 @@ export function AccountsProvider({
     }
     // Keep pending outbox items: signing out must not discard unsent changes.
     dispatch({ type: "remove", id });
+    clearTasksCachesFor(account.webId);
     try {
       const results = await Promise.allSettled([
         purgeNativePodCache(account.webId),
@@ -271,6 +290,7 @@ export function AccountsProvider({
       /* Browser storage may be blocked. */
     }
     dispatch({ type: "clear" });
+    for (const { account } of previous) clearTasksCachesFor(account.webId);
     try {
       const results = await Promise.allSettled(
         previous.flatMap(({ account, backend }) => [
@@ -310,6 +330,7 @@ export function AccountsProvider({
         status,
         active,
         accounts: state.accounts,
+        getActiveAccount,
         isActiveAccount,
         isSignedInAccount: (id) => sessions.current.has(id) && !retiring.current.has(id),
         fetchFor: (account, options) => {

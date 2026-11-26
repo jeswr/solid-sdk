@@ -1,16 +1,14 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
-// Client entry. Wraps the app in the ThemeProvider (theme is session-independent,
-// outside the session provider) then the SessionProvider (the one auth seam) and
-// mounts into #root. A pure static SPA — no SSR/prerender; reactive-auth is loaded
-// via a dynamic import inside the provider so the bundle has no top-level
-// reactive-auth evaluation.
+// Client entry: SessionProvider lazily creates one page-lifetime pod-auth core.
+// ThemeProvider remains outside the session so the public catalog shares the theme.
+import { SessionProvider } from "@jeswr/app-session/react";
 import { ThemeProvider } from "@jeswr/app-shell";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
-import { SessionProvider } from "./auth/SessionProvider";
+import { APP_NAME, getPodAuth, LEGACY_CREDENTIALS } from "./auth/pod-auth";
 import "./styles.css";
 
 const rootEl = document.getElementById("root");
@@ -24,7 +22,12 @@ createRoot(rootEl).render(
         the React state always agree. The `.dark` class it toggles on <html> drives
         both the app-shell components' `dark:` utilities and the host chrome. */}
     <ThemeProvider storageKey="app-store:app-shell-theme">
-      <SessionProvider>
+      <SessionProvider
+        getPodAuth={getPodAuth}
+        appName={APP_NAME}
+        dev={import.meta.env.DEV}
+        legacyCredentials={LEGACY_CREDENTIALS}
+      >
         <App />
       </SessionProvider>
     </ThemeProvider>

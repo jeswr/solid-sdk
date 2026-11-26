@@ -21,7 +21,7 @@
 
 import { literalMapper, VALIDATED_DATATYPES } from "@jeswr/model-runtime";
 import type { NormalizedOntology } from "./adapter.js";
-import { isFailClosedSeverity, isHttpPattern } from "./compile.js";
+import { isFailClosedSeverity, isHttpPattern, stringPatternGuard } from "./compile.js";
 import { type CodegenConfig, isCompositeConfig } from "./config.js";
 import { shapeInvariants } from "./invariants.js";
 import { orderedItemTargets } from "./ordered.js";
@@ -295,7 +295,9 @@ export function admit(
           (c?.datatype !== undefined && literalMapper(c.datatype).jsType === "string");
         if (
           !c ||
-          (!(c.kind === "iri" && isHttpPattern(c.pattern)) && !(isString && c.pattern === "\\S"))
+          (!(c.kind === "iri" && isHttpPattern(c.pattern)) &&
+            !(isString && c.pattern === "\\S") &&
+            stringPatternGuard(c) === undefined)
         )
           unsupported("unknown pattern; no reviewed closed guard");
       }

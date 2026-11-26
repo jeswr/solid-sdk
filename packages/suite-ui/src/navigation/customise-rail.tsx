@@ -3,6 +3,7 @@
 // AUTHORED-BY Claude Opus 5.5
 "use client";
 
+import { useT } from "@jeswr/suite-i18n/react";
 import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
 import { useId } from "react";
 import { IconButton } from "../components/ui/icon-button.js";
@@ -10,6 +11,7 @@ import type { AppSlug, NavigationApp } from "./apps.js";
 import { usePreferences } from "./preferences.js";
 
 export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
+  const t = useT();
   const preferences = usePreferences("rail");
   const description = useId();
   // Edits made while the account's preferences are loading or failed would be
@@ -44,19 +46,17 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
   return (
     <section
       className="suite-customise"
-      aria-label="Customise rail"
+      aria-label={t("navigation.customise")}
       aria-disabled={writable ? undefined : true}
     >
-      <p id={description}>
-        Pin up to 6 apps. Drag to reorder, or use the checkboxes and Move up/down buttons.
-      </p>
+      <p id={description}>{t("navigation.customiseHelp")}</p>
       <p role="status">
         {writable
-          ? `${saved.length} of 6 apps pinned${preferences.status === "saving" ? " · Saving…" : ""}`
-          : "Rail settings are unavailable until your app preferences load"}
+          ? `${t("navigation.pinnedCount", { count: saved.length })}${preferences.status === "saving" ? ` · ${t("navigation.saving")}` : ""}`
+          : t("navigation.railUnavailable")}
       </p>
       <fieldset className="suite-customise-list" disabled={!writable}>
-        <legend className="suite-sr-only">Pinned apps</legend>
+        <legend className="suite-sr-only">{t("navigation.pinnedApps")}</legend>
         <ul aria-describedby={description}>
           {ordered.map((app) => {
             const index = pinned.indexOf(app.slug);
@@ -82,7 +82,7 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
                     event.dataTransfer.setData("text/plain", app.slug);
                     event.dataTransfer.effectAllowed = "move";
                   }}
-                  label={`Drag ${app.name} to pin or reorder`}
+                  label={t("navigation.drag", { name: app.name })}
                   aria-describedby={description}
                 >
                   <GripVertical size={16} className="size-4" aria-hidden="true" />
@@ -105,7 +105,7 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
                       type="button"
                       data-slot="navigation-icon-button"
                       className="suite-icon-button"
-                      label={`Move ${app.name} up`}
+                      label={t("navigation.moveUp", { name: app.name })}
                       disabled={index === 0}
                       onClick={() => move(app.slug, index - 1)}
                     >
@@ -117,7 +117,7 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
                       type="button"
                       data-slot="navigation-icon-button"
                       className="suite-icon-button"
-                      label={`Move ${app.name} down`}
+                      label={t("navigation.moveDown", { name: app.name })}
                       disabled={index === pinned.length - 1}
                       onClick={() => move(app.slug, index + 1)}
                     >

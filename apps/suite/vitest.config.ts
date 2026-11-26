@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2-Sol
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
@@ -24,6 +25,7 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       include: [
+        "src/lib/profile/**/*.ts",
         "src/apps/bookmarks/lib/**/*.ts",
         "src/apps/bookmarks/state/*.{ts,tsx}",
         "src/apps/forms/lib/**/*.ts",
@@ -64,6 +66,7 @@ export default defineConfig({
         "src/apps/tasks/state/preferences-reducer.ts",
         "src/apps/tasks/lib/detail/**/*.ts",
         "src/apps/tasks/lib/views/**/*.ts",
+        "src/apps/tasks/lib/issues/**/*.ts",
         "src/apps/tasks/lib/format/**/*.ts",
         "src/apps/calendar/lib/model/**/*.ts",
         "src/apps/calendar/state/*.{ts,tsx}",
@@ -90,12 +93,16 @@ export default defineConfig({
         "src/apps/sheets/lib/model/**/*.ts",
         "src/apps/sheets/lib/comments/**/*.ts",
         "src/apps/sheets/components/cell-comments.tsx",
+        "src/apps/sheets/components/sheets-states.tsx",
         "src/apps/sheets/lib/autosave.ts",
         "src/apps/sheets/lib/pending-saves.ts",
         "src/apps/sheets/lib/sharing.ts",
+        "src/apps/sheets/lib/routes.ts",
         "src/shell/share/verified-wac-adapter.ts",
         "src/apps/sheets/hooks/use-workbook.ts",
         "src/apps/sheets/lib/engine/**/*.ts",
+        "src/apps/sheets/lib/hyperlinks.ts",
+        "src/apps/sheets/lib/collaboration/**/*.ts",
         "src/apps/photos/lib/library/**/*.ts",
         "src/apps/docs/lib/diff/**/*.ts",
         "src/apps/docs/lib/find/**/*.ts",
@@ -141,6 +148,7 @@ export default defineConfig({
         "src/apps/notes/lib/convert/**/*.ts",
         "src/apps/notes/lib/keep/**/*.ts",
         "src/apps/notes/state/pending-drafts.ts",
+        "src/apps/notes/components/notes-states.tsx",
         "src/lib/order/**/*.ts",
         "src/apps/tasks/lib/lists/**/*.ts",
         "src/apps/tasks/lib/tree/**/*.ts",
@@ -197,6 +205,7 @@ export default defineConfig({
         "src/apps/mail/lib/threading/**/*.ts",
         "src/apps/mail/lib/quotes/**/*.ts",
         "src/lib/demo-pod/{pod,seed,seed-home,binaries}.ts",
+        "src/lib/browser-node-crypto.ts",
         "src/lib/refs.ts",
         "src/lib/chat-invitation-room.ts",
         "src/lib/account-id-set.ts",
@@ -208,12 +217,16 @@ export default defineConfig({
         "src/apps/drive/lib/view/**/*.ts",
         "src/apps/drive/lib/open-with/**/*.ts",
         "src/apps/drive/state/open-with-docs.ts",
+        "src/apps/drive/state/open-with-sheets.ts",
+        "src/apps/drive/state/open-with.ts",
+        "src/apps/drive/components/open-with-button.tsx",
         "src/apps/mail/lib/address/**/*.ts",
         "src/apps/music/lib/data/**/*.ts",
         "src/apps/health/lib/data/**/*.ts",
         "src/apps/money/lib/data/**/*.ts",
         "src/apps/photos/lib/data/**/*.ts",
         "src/apps/sheets/lib/workbook/**/*.ts",
+        "src/apps/sheets/lib/versions/**/*.ts",
         "src/lib/session/extension-pod-session.ts",
         "src/apps/insights/lib/**/*.ts",
         "src/apps/insights/sources/**/*.ts",

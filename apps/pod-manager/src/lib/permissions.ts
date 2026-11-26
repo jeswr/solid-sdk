@@ -1,13 +1,21 @@
+// AUTHORED-BY Claude Opus 5.5
 /**
  * Permissions — the WAC read/write model behind "Connected apps"
  * (DESIGN.md §3/§4 screens 6–7, §9 "keys & gates").
  *
- * The Connected-apps view is a *read model* over the pod's `.acl` documents:
- * for every agent that is not the pod owner, which data categories it can
- * reach and with which modes. Mutations (revoke / grant) edit those same
- * documents through `@solid/object`'s typed `AclResource`/`Authorization`
- * wrappers — never hand-built triples (the `solid-wac` house rule) — and are
- * atomic per document (conditional `PUT` with `If-Match`).
+ * Granting goes through `@jeswr/pod-access/roles` (`addGrant`): conditional
+ * writes, inherited rules materialised so nobody loses access, and the caller
+ * lockout preflight. Only mode sets that are exactly a role can be granted
+ * ({@link roleForModes}); anything else is refused rather than widened.
+ *
+ * The rest stays a raw-ACL power-user surface the role model cannot express:
+ * the Connected-apps view is an *inventory* over the pod's `.acl` documents —
+ * every non-owner `acl:agent` and `acl:origin`, with its exact modes (including
+ * partial ones such as append-only), on folders whose scopes may differ (the
+ * stock CSS root ACL) — and revoke removes the agent or origin from exactly the
+ * authorizations listed, so nothing it shows can be left behind. Those edits
+ * use `@solid/object`'s typed `AclResource`/`Authorization` wrappers — never
+ * hand-built triples — and are atomic per document (`PUT` with `If-Match`).
  *
  * Backend seam: everything goes through the {@link PermissionsBackend}
  * interface so an ACP (`.acr`) implementation can be added later without
@@ -19,13 +27,14 @@
  * never derived from the resource URL.
  */
 import { parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
-import { AclResource, Authorization } from "@solid/object";
+import { addGrant, modesToRole, type Role } from "@jeswr/pod-access/roles";
+import { AclResource, type Authorization } from "@solid/object";
 import { freshRdf } from "./rdf-read.js";
-import { DataFactory, Store, Writer } from "n3";
+import { DataFactory, Writer } from "n3";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { CATEGORIES, UNCATEGORISED, type DataCategory } from "./categories.js";
 import type { CategorySummary } from "./pod-data.js";
-import { AclDiscoveryError, AclReadError, AclWriteError } from "./errors.js";
+import { AclDiscoveryError, AclReadError, AclWriteError, SharingError } from "./errors.js";
 import { ProfileAgent } from "./profile-agent.js";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
@@ -64,6 +73,8 @@ export interface PermissionsContext {
  * names. Revoke operates on these — they pin the mutation to exact documents.
  */
 export interface AccessGrant {
+  /** The exact modes the rule gives (set by `listApps`; used to restore precisely). */
+  modes?: AccessMode[];
   /** The ACL document URL. */
   aclUrl: string;
   /** IRI of the `acl:Authorization` subject inside that document. */
@@ -72,6 +83,17 @@ export interface AccessGrant {
   target: string;
   /** True when granted via `acl:default` (inherits to contained resources). */
   inherits: boolean;
+}
+
+/** A category grant that was written at some locations and refused at others. */
+export class PartialGrantError extends AclWriteError {
+  /** The locations the grant WAS written to. */
+  readonly applied: string[];
+  constructor(aclUrl: string, applied: string[], options?: { cause?: unknown }) {
+    super(aclUrl, undefined, options);
+    this.name = "PartialGrantError";
+    this.applied = applied;
+  }
 }
 
 /** A category an agent can reach, with modes and the grants that say so. */
@@ -105,16 +127,23 @@ export interface PermissionsBackend {
   /** Build the {@link AppAccess} read model for every non-owner agent. */
   listApps(ctx: PermissionsContext): Promise<AppAccess[]>;
   /**
-   * Remove an agent from the authorizations named by `grants`. Atomic per ACL
-   * document; throws {@link AclWriteError} (fail-closed) on any failure.
+   * Remove an agent (or origin) from every rule in the listed ACL documents
+   * that targets a listed resource. Atomic per ACL document; throws
+   * {@link AclWriteError} (fail-closed) on any failure.
    * Removing the agent removes ALL of its modes on those rules — revoke
    * prefers over-removal to silently leaving access behind.
    */
-  revokeGrants(agentId: string, grants: AccessGrant[]): Promise<void>;
+  revokeGrants(agentId: string, grants: AccessGrant[], kind?: AgentKind): Promise<void>;
   /**
-   * Give an agent access to a category (default mode: Read). Writes one new
-   * authorization per category location, into the ACL document its server
-   * advertises.
+   * Re-create exactly the listed grants (per location, per mode set), for Undo.
+   * Refuses (writing nothing) unless {@link canRestoreGrants} holds.
+   */
+  restoreGrants(ctx: PermissionsContext, agentId: string, grants: AccessGrant[]): Promise<void>;
+  /**
+   * Give an agent access to a category (default mode: Read) on every category
+   * location. `modes` must be exactly a role ({@link roleForModes}); throws
+   * {@link AclWriteError} otherwise, or when any location could not be granted
+   * ({@link PartialGrantError} when some locations WERE written).
    */
   grant(
     ctx: PermissionsContext,
@@ -212,12 +241,20 @@ function splitLinkHeader(header: string): string[] {
  * single-valued; the spec allows multiples, so we match quads directly here.
  */
 function irisOf(auth: Authorization, predicate: string): string[] {
-  const subject = DataFactory.namedNode(auth.value);
   const out: string[] = [];
-  for (const q of auth.dataset.match(subject as Term, DataFactory.namedNode(predicate))) {
+  for (const q of auth.dataset.match(termOf(auth), DataFactory.namedNode(predicate))) {
     if (q.object.termType === "NamedNode") out.push(q.object.value);
   }
   return out;
+}
+
+/**
+ * The authorization's own RDF term — a NamedNode or a blank node (pod-access
+ * writes blank-node rules), never `namedNode(auth.value)`, which would miss
+ * every blank-node rule and under-report its access.
+ */
+function termOf(auth: Authorization): Term {
+  return auth as unknown as Term;
 }
 
 function modesOf(auth: Authorization): AccessMode[] {
@@ -332,6 +369,7 @@ export class WacPermissionsBackend implements PermissionsBackend {
 
         for (const { target, inherits } of targets) {
           const grant: AccessGrant = {
+            modes,
             aclUrl,
             authorization: auth.value,
             target,
@@ -391,25 +429,96 @@ export class WacPermissionsBackend implements PermissionsBackend {
     return [...apps.values()].filter((a) => a.categories.length > 0);
   }
 
-  async revokeGrants(agentId: string, grants: AccessGrant[]): Promise<void> {
+  async revokeGrants(agentId: string, grants: AccessGrant[], kind?: AgentKind): Promise<void> {
+    // Match rules by (document, target), not by authorization node: blank-node
+    // rules get fresh labels on every parse, so a node id from the listing may
+    // name nothing in the re-read document (a silently incomplete revoke).
     const byDoc = new Map<string, Set<string>>();
     for (const g of grants) {
       const set = byDoc.get(g.aclUrl) ?? new Set<string>();
-      set.add(g.authorization);
+      set.add(g.target);
       byDoc.set(g.aclUrl, set);
     }
-    for (const [aclUrl, authorizations] of byDoc) {
-      await this.updateAcl(aclUrl, (acl) => {
-        let changed = false;
-        for (const auth of acl.authorizations) {
-          if (!authorizations.has(auth.value)) continue;
-          if (auth.agent.delete(agentId)) changed = true;
-          if (auth.origin.delete(agentId)) changed = true;
-          pruneEmptyAuthorization(auth);
+    const mutation = (targets: Set<string>) => (acl: AclResource) => {
+      let changed = false;
+      for (const auth of [...acl.authorizations]) {
+        const named = [...irisOf(auth, `${ACL}accessTo`), ...irisOf(auth, `${ACL}default`)];
+        if (!named.some((target) => targets.has(target))) continue;
+        // Only the predicate the app was listed under: an origin and a WebID
+        // with the same string are different principals.
+        if (kind !== "origin" && auth.agent.delete(agentId)) changed = true;
+        if (kind !== "agent" && auth.origin.has(agentId)) {
+          // `acl:origin` narrows a rule to those origins: removing the last
+          // one would leave its agents unrestricted (wider access), so the
+          // rule is deleted instead. A rule that also carries Control may be
+          // the owner's only way to manage access, so deleting it is refused
+          // unchanged rather than risk a lockout.
+          if (auth.origin.size === 1 && auth.canReadWriteAcl)
+            throw new SharingError(
+              "owner-lockout",
+              "This app's access is part of a rule that controls who can manage sharing. Change it in Sharing instead.",
+            );
+          auth.origin.delete(agentId);
+          changed = true;
+          if (auth.origin.size === 0) deleteAuthorization(auth);
         }
-        return changed;
-      });
+        pruneEmptyAuthorization(auth);
+      }
+      return changed;
+    };
+    // Refuse before writing anything: run every document's mutation against a
+    // fresh read first, so a refusal in a later document never leaves earlier
+    // ones already revoked.
+    for (const [aclUrl, targets] of byDoc) {
+      const doc = await this.readAcl(aclUrl);
+      if (doc) mutation(targets)(new AclResource(doc.dataset, DataFactory));
     }
+    for (const [aclUrl, targets] of byDoc) await this.updateAcl(aclUrl, mutation(targets));
+  }
+
+  async restoreGrants(
+    ctx: PermissionsContext,
+    agentId: string,
+    grants: AccessGrant[],
+  ): Promise<void> {
+    if (!canRestoreGrants(grants)) {
+      throw new AclWriteError(
+        ensureSlash(ctx.podRoot),
+        "That access can't be restored exactly, so nothing was changed.",
+      );
+    }
+    const podRoot = ensureSlash(ctx.podRoot);
+    const failed: { url: string; error: unknown }[] = [];
+    const applied: string[] = [];
+    const done = new Set<string>();
+    for (const g of grants) {
+      const modes = g.modes ?? [];
+      const role = roleForModes(modes);
+      const key = `${g.target}|${g.inherits}|${role}`;
+      if (!role || done.has(key)) continue;
+      done.add(key);
+      const grant = {
+        agent: { type: "webid", id: agentId },
+        role,
+        inherited: false,
+        source: "",
+      } as const;
+      try {
+        const result = await addGrant([g.target], grant, {
+          fetch: this.fetchImpl ?? globalThis.fetch.bind(globalThis),
+          webId: ctx.ownerWebId,
+          // `acl:default` rules cover the folder and its contents; others only the item.
+          kind: g.inherits ? "folder" : "resource",
+          root: podRoot,
+        });
+        if (result.failed.length > 0) failed.push(...result.failed);
+        else applied.push(g.target);
+      } catch (error) {
+        failed.push({ url: g.target, error });
+      }
+    }
+    const first = failed[0];
+    if (first) throw new PartialGrantError(first.url, applied, { cause: first.error });
   }
 
   async grant(
@@ -418,36 +527,49 @@ export class WacPermissionsBackend implements PermissionsBackend {
     categoryId: string,
     modes: AccessMode[] = ["read"],
   ): Promise<void> {
-    const targets = grantTargets(ctx, categoryId);
-    if (targets.length === 0) {
+    const podRoot = ensureSlash(ctx.podRoot);
+    const role = roleForModes(modes);
+    if (!role) {
       throw new AclWriteError(
-        ensureSlash(ctx.podRoot),
-        "This category has no storage location to share yet.",
+        podRoot,
+        `Pod Manager can't grant permission to ${describeModes(modes)} on its own; nothing was shared.`,
       );
     }
-    for (const target of targets) {
-      const aclUrl = await this.discoverAclUrl(target);
-      if (!aclUrl) {
-        throw new AclWriteError(target, `The resource to share does not exist (${target}).`);
-      }
-      const existing = await this.readAcl(aclUrl);
-      const dataset: DatasetCore = existing?.dataset ?? new Store();
-      if (!existing) {
-        // A fresh ACL document REPLACES inherited rules (the WAC walk is
-        // monolithic) — it must carry the owner's full control or we lock the
-        // owner out of their own resource.
-        applyAuthorization(dataset, `${aclUrl}#owner`, {
-          agentId: ctx.ownerWebId,
-          target,
-          modes: ["read", "write", "control"],
+    const targets = grantTargets(ctx, categoryId);
+    if (targets.length === 0) {
+      throw new AclWriteError(podRoot, "This category has no storage location to share yet.");
+    }
+    const grant = {
+      agent: { type: "webid", id: agentId },
+      role,
+      inherited: false,
+      source: "",
+    } as const;
+    const failed: { url: string; error: unknown }[] = [];
+    const applied: string[] = [];
+    // A folder grant covers the folder and its contents; files only themselves.
+    for (const kind of ["folder", "resource"] as const) {
+      const urls = targets.filter((t) => t.endsWith("/") === (kind === "folder"));
+      if (urls.length === 0) continue;
+      try {
+        const result = await addGrant(urls, grant, {
+          fetch: this.fetchImpl ?? globalThis.fetch.bind(globalThis),
+          webId: ctx.ownerWebId,
+          kind,
+          root: podRoot,
         });
+        const bad = new Set(result.failed.map((f) => f.url));
+        applied.push(...urls.filter((u) => !bad.has(u)));
+        failed.push(...result.failed);
+      } catch (error) {
+        failed.push({ url: urls[0], error });
       }
-      applyAuthorization(dataset, `${aclUrl}#grant-${crypto.randomUUID()}`, {
-        agentId,
-        target,
-        modes,
-      });
-      await this.putAcl(aclUrl, dataset, existing ? existing.etag : "create");
+    }
+    const first = failed[0];
+    if (first) {
+      throw applied.length > 0
+        ? new PartialGrantError(first.url, applied, { cause: first.error })
+        : new AclWriteError(first.url, undefined, { cause: first.error });
     }
   }
 
@@ -476,19 +598,6 @@ export class WacPermissionsBackend implements PermissionsBackend {
       aclUrl,
       "The access settings changed while saving. Nothing was changed — try again.",
     );
-  }
-
-  private async putAcl(
-    aclUrl: string,
-    dataset: DatasetCore,
-    etag: string | null | "create",
-  ): Promise<void> {
-    const status = await this.tryPutAcl(aclUrl, dataset, etag);
-    if (status !== "ok") {
-      throw new AclWriteError(aclUrl, undefined, {
-        cause: status === "conflict" ? "412 precondition failed" : status,
-      });
-    }
   }
 
   private async tryPutAcl(
@@ -552,26 +661,6 @@ function grantTargets(ctx: PermissionsContext, categoryId: string): string[] {
 }
 
 /**
- * Write one `acl:Authorization` into a dataset through the typed wrapper —
- * the only sanctioned authoring path (never hand-built triples).
- */
-function applyAuthorization(
-  dataset: DatasetCore,
-  iri: string,
-  rule: { agentId: string; target: string; modes: AccessMode[] },
-): void {
-  const auth = new Authorization(iri, dataset, DataFactory);
-  auth.type.add(`${ACL}Authorization`);
-  auth.accessTo = rule.target;
-  if (rule.target.endsWith("/")) auth.default = rule.target; // containers inherit
-  auth.agent.add(rule.agentId);
-  auth.canRead = rule.modes.includes("read");
-  auth.canWrite = rule.modes.includes("write");
-  auth.canAppend = rule.modes.includes("append");
-  auth.canReadWriteAcl = rule.modes.includes("control");
-}
-
-/**
  * Remove an authorization's remaining triples once no subject is left —
  * a rule that names no agent grants nothing (fail-closed) but is clutter.
  */
@@ -584,8 +673,12 @@ function pruneEmptyAuthorization(auth: Authorization): void {
   ) {
     return;
   }
-  const subject = DataFactory.namedNode(auth.value);
-  for (const quad of [...auth.dataset.match(subject as Term)]) {
+  deleteAuthorization(auth);
+}
+
+/** Delete every triple of an authorization (its own term as subject). */
+function deleteAuthorization(auth: Authorization): void {
+  for (const quad of [...auth.dataset.match(termOf(auth))]) {
     auth.dataset.delete(quad);
   }
 }
@@ -748,8 +841,12 @@ export function allGrants(app: AppAccess): AccessGrant[] {
  * list (never a cached UI snapshot) so a "revoke all" acts on the agent's
  * current grant set — a grant added after a cache write is still revoked.
  */
-export function grantsForAgent(apps: AppAccess[], agentId: string): AccessGrant[] {
-  const app = apps.find((a) => a.agentId === agentId);
+export function grantsForAgent(
+  apps: AppAccess[],
+  agentId: string,
+  kind?: AgentKind,
+): AccessGrant[] {
+  const app = apps.find((a) => a.agentId === agentId && (kind === undefined || a.kind === kind));
   return app ? allGrants(app) : [];
 }
 
@@ -761,10 +858,28 @@ export function grantsForCategory(
   apps: AppAccess[],
   agentId: string,
   categoryId: string,
+  kind?: AgentKind,
 ): AccessGrant[] {
-  const app = apps.find((a) => a.agentId === agentId);
+  const app = apps.find((a) => a.agentId === agentId && (kind === undefined || a.kind === kind));
   const category = app?.categories.find((c) => c.category.id === categoryId);
   return category?.grants ?? [];
+}
+
+/**
+ * Whether revoked grants can be re-created exactly: each one a role-shaped mode
+ * set whose scope the role layer can express (a folder with `acl:default`, or a
+ * single resource without it). Anything else is not offered an Undo.
+ */
+export function canRestoreGrants(grants: readonly AccessGrant[]): boolean {
+  return (
+    grants.length > 0 &&
+    grants.every(
+      (g) =>
+        g.modes !== undefined &&
+        roleForModes(g.modes) !== undefined &&
+        g.inherits === g.target.endsWith("/"),
+    )
+  );
 }
 
 /** Plain-language verb phrase for a set of modes (DESIGN.md §6 copy). */
@@ -777,4 +892,14 @@ export function describeModes(modes: AccessMode[]): string {
   if (parts.length === 0) return "access";
   if (parts.length === 1) return parts[0];
   return `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+}
+
+/**
+ * The role a requested mode set is exactly equivalent to, or `undefined` when
+ * no role matches (append-only, Read+Append, Control without Write, …). Write
+ * implies Append in WAC, so Read+Write is the editor role. Never rounds up.
+ */
+export function roleForModes(modes: readonly AccessMode[]): Exclude<Role, "commenter"> | undefined {
+  const role = modesToRole(modes, "resource");
+  return role === "commenter" ? undefined : role;
 }

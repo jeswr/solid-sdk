@@ -1,6 +1,12 @@
 // AUTHORED-BY Claude Opus 5.5
 
-import { type Category, putTransaction, type Transaction } from "@jeswr/solid-money";
+import { ResponseBodyLimitError, readBoundedText } from "@jeswr/guarded-fetch";
+import {
+  type Category,
+  isTransactionWritable,
+  putTransaction,
+  type Transaction,
+} from "@jeswr/solid-money";
 import { type CategoryRule, categoriseTransactions } from "../import";
 import { MoneyIoError } from "../model";
 import { type MoneyClient, storeOf } from "./container";
@@ -69,6 +75,9 @@ export function parseRules(value: unknown): SavedRule[] {
   });
 }
 
+/** Rule files are small; refuse bodies beyond this while streaming. */
+const MAX_RULES_BYTES = 512 * 1024;
+
 export async function loadRules(client: MoneyClient): Promise<RuleFile> {
   const url = storeOf(client).resolve(RULES_FILE);
   const response = await client.fetch(url, {
@@ -78,7 +87,14 @@ export async function loadRules(client: MoneyClient): Promise<RuleFile> {
   if (response.status === 404) return { rules: [], etag: null, exists: false };
   if (!response.ok) throw new MoneyIoError(response.status);
   // A body cut off mid-read is a failed read, not an unusable file.
-  const text = await response.text();
+  let text: string;
+  try {
+    text = await readBoundedText(response, MAX_RULES_BYTES);
+  } catch (error) {
+    // An oversized file is unusable, not a transient failure.
+    if (error instanceof ResponseBodyLimitError) throw new RulesFileError();
+    throw error;
+  }
   let rules: SavedRule[];
   try {
     rules = parseRules(JSON.parse(text));
@@ -211,9 +227,7 @@ export function ruleMatches(
   transactions: readonly Transaction[],
 ): Map<string, string[]> {
   const rules = ownRules(saved, categories);
-  const candidates = transactions.filter(
-    (row) => !row.category && !row.debitAccount && !row.creditAccount,
-  );
+  const candidates = transactions.filter(stillUncategorised);
   const filed = categoriseTransactions(
     candidates.map((row) => ({
       date: row.postingTime.slice(0, 10),
@@ -232,9 +246,15 @@ export function ruleMatches(
   return groups;
 }
 
-/** True while a row is still there, uncategorised and not a transfer leg. */
+/**
+ * True while a row is still there, uncategorised, not a transfer leg and writable. A row
+ * holding an unreadable link (a literal category lists as uncategorised) is skipped, so one
+ * bad record cannot stop the run on every retry.
+ */
 export function stillUncategorised(row: Transaction | undefined): row is Transaction {
-  return !!row && !row.category && !row.debitAccount && !row.creditAccount;
+  return (
+    !!row && !row.category && !row.debitAccount && !row.creditAccount && isTransactionWritable(row)
+  );
 }
 
 /**

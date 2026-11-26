@@ -20,7 +20,9 @@ import { editableSubjects } from "@/lib/forms/editable-subjects";
 import { editFieldsFor } from "@/lib/forms/edit-map";
 import { autoFormFor } from "@/lib/forms/auto-form";
 import { FormRenderer } from "@/components/forms/form-renderer";
-import { Separator } from "@/components/ui/separator";
+import {
+  Separator,
+} from "@jeswr/suite-ui";
 
 export interface EditableTypedViewProps {
   resource: LoadedResource;

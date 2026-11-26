@@ -13,9 +13,9 @@ implementation as it nears release.
 
 - **WAC** end-to-end against local CSS: login (popup), CRUD, comments, priority/
   labels, per-issue + container sharing, cross-pod open, type-index discovery.
-- **ACP** is handled in code via `@solid/object`'s `wacToAcp`/`acpToWac` converters
-  (`src/lib/sharing.ts`) and unit-tested at the translation layer, but has **not**
-  been run against a live ESS pod.
+- **ACP** is handled by `@jeswr/pod-access/roles` (used by `src/lib/sharing.ts`;
+  CSS dialect by default) and unit-tested in that package, but has **not** been run
+  from this app against a live ESS pod.
 
 ## Manual procedure (needs your accounts)
 

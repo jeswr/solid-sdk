@@ -19,7 +19,10 @@ import { Clock, Music } from "lucide-react";
 import type { MusicModel, MusicTrack } from "@/lib/typed-views/music-view";
 import { humanizeDuration } from "@/lib/typed-views/music-view";
 import { safeLinkHref } from "@/lib/pod-scope";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+} from "@jeswr/suite-ui";
 import { SourceActionButton } from "@/components/typed-views/source-action";
 
 /** The cover-art row list for a music resource. */

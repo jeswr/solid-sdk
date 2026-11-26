@@ -7,8 +7,7 @@
 // React-free data-layer core (`pod-money`). React is a *peer* dependency so a
 // data-layer-only consumer never pulls it in. The view never touches RDF/fetch
 // directly — it drives the data layer through `useAccountsLedger`, and takes the
-// authenticated fetch as an injected seam (post-#18 the create-solid-app shell
-// patches the global fetch; until then a stub fetch makes it unit-testable).
+// bounded auth.fetch explicitly; omitting it uses the public global fetch.
 
 export { AccountsView, type AccountsViewProps } from "./AccountsView.js";
 export {
