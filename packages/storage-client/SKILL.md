@@ -190,6 +190,8 @@ Solid read side (ADR-003 §6):
   so a public resource is answered anonymously (CSS: `user="read",public="read"` even to the
   owner). `allow` is therefore null unless `user` grants a mode beyond `public` (proof of an
   identified requester) or grants every mode. A `false` mode is a real denial; null is unknown.
+  Null also withholds proven grants (`user="read write",public="read write"`) and ACP denials
+  where `user` is narrower than `public`; on null, send the request and let the server decide.
   `read` sends Accept, If-None-Match and `Range: bytes=…` (206). Only 200, a requested 206 and a
   conditional 304 succeed; any other 2xx/3xx is `invalid-response`. `body` is the live stream;
   `bytes()/text()/blob()` buffer that same stream once (use one or the other). A body failing

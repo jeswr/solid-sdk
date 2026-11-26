@@ -80,6 +80,9 @@ export interface ReadResult {
    * when WAC-Allow `user` grants nothing beyond `public` (and not every mode), because reactive
    * authentication answers public resources anonymously and that view is not the signed-in
    * agent's. A `false` mode is a denial for the identified requester; null means unknown.
+   * Null withholds granted modes too: `user="read write",public="read write"` is null, not
+   * `write: true`, and an ACP `user` narrower than `public` (an actual denial) is also null. Treat
+   * null as "ask the server": attempt the request and let it authorize.
    */
   allow: { read: boolean; write: boolean; append: boolean; control: boolean } | null;
 }
