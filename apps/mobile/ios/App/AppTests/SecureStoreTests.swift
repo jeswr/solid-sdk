@@ -1,5 +1,6 @@
 // AUTHORED-BY GPT-5.6 Codex
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import Capacitor
 import Foundation
 import CryptoKit
@@ -504,21 +505,47 @@ private final class SecureStoreAdmissionBridge: NSObject, @preconcurrency CAPBri
     }
 }
 
+/// A fixture document that never finished loading. Thrown so the test stops at the load
+/// instead of reporting knock-on read timeouts that hide the real cause.
+private struct FixtureLoadTimedOut: Error, CustomStringConvertible {
+    let url: URL
+    let result: XCTWaiter.Result
+    let pending: [String]
+    var description: String {
+        "Fixture document \(url.absoluteString) did not finish loading within "
+            + "\(Int(SecureStoreAdmissionTests.fixtureLoadTimeout))s (waiter result \(result.rawValue); "
+            + "still waiting for: \(pending.joined(separator: ", "))). The simulated load needs no network, "
+            + "so this usually means the simulator's WebKit content process stalled."
+    }
+}
+
 @MainActor
 final class SecureStoreAdmissionTests: XCTestCase {
+    /// loadSimulatedRequest needs no network, but a busy CI simulator can take well over 10s
+    /// to start a WebKit content process. The wait is longer than that; every assertion stays.
+    nonisolated static let fixtureLoadTimeout: TimeInterval = 45
+
     private func load(_ fixture: SecureStoreAdmissionBridge, path: String) throws {
         let url = fixture.bridge.config.serverURL.appendingPathComponent(path)
-        let allowed = expectation(description: "Capacitor allowed configured document URL")
-        let committed = expectation(description: "Main-frame commit forwarded")
-        let finished = expectation(description: "Document loaded")
+        // Standalone expectations: the explicit waiter below reports a timeout as one clear
+        // failure instead of XCTest's generic unfulfilled-expectation list.
+        let allowed = XCTestExpectation(description: "Capacitor allowed configured document URL")
+        let committed = XCTestExpectation(description: "Main-frame commit forwarded")
+        let finished = XCTestExpectation(description: "Document loaded")
+        // Callbacks arrive on the main actor, as does this wait, so a plain set is enough.
+        var reached = Set<String>()
+        func reach(_ expectation: XCTestExpectation) {
+            reached.insert(expectation.expectationDescription)
+            expectation.fulfill()
+        }
         fixture.handler.decided = { requestedURL, policy in
             XCTAssertEqual(requestedURL, url)
             XCTAssertEqual(policy, .allow)
-            allowed.fulfill()
+            reach(allowed)
         }
         fixture.handler.failed = { error in XCTFail("Document navigation failed: \(error)") }
-        fixture.handler.committed = { committed.fulfill() }
-        fixture.handler.finished = { finished.fulfill() }
+        fixture.handler.committed = { reach(committed) }
+        fixture.handler.finished = { reach(finished) }
         defer {
             fixture.handler.decided = nil
             fixture.handler.failed = nil
@@ -528,7 +555,12 @@ final class SecureStoreAdmissionTests: XCTestCase {
         // Use a request URL, not loadHTMLString's about:blank navigation/base-URL distinction.
         // A simulated response preserves its HTTPS frame origin without any network access.
         _ = fixture.webView.loadSimulatedRequest(URLRequest(url: url), responseHTML: "<!doctype html><p>fixture</p>")
-        wait(for: [allowed, committed, finished], timeout: 10, enforceOrder: true)
+        let expectations = [allowed, committed, finished]
+        let result = XCTWaiter().wait(for: expectations, timeout: Self.fixtureLoadTimeout, enforceOrder: true)
+        guard result == .completed else {
+            let pending = expectations.filter { !reached.contains($0.expectationDescription) }
+            throw FixtureLoadTimedOut(url: url, result: result, pending: pending.map(\.expectationDescription))
+        }
         XCTAssertEqual(fixture.webView.url, url)
     }
 
@@ -548,7 +580,8 @@ final class SecureStoreAdmissionTests: XCTestCase {
             XCTAssertEqual(result as? Int, 0)
             submitted.fulfill()
         }
-        wait(for: [admitted, submitted], timeout: 10)
+        // The page's script round trip runs in the same WebKit content process as the load.
+        wait(for: [admitted, submitted], timeout: Self.fixtureLoadTimeout)
         fixture.admitted = nil
     }
 
