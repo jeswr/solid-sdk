@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { Store } from "n3";
 import { DCT, EXIF, GEO, RDF_TYPE, SCHEMA } from "./vocab.js";
 
@@ -17,6 +18,7 @@ export function orderedStore(dataset: Store, predicates: string[]): Store {
 
 export const PHOTO_PREDICATE_ORDER = [
   RDF_TYPE,
+  `${SCHEMA}duration`,
   ...["name", "description", "contentUrl", "thumbnailUrl"].map((name) => `${SCHEMA}${name}`),
   `${DCT}created`,
   `${DCT}modified`,

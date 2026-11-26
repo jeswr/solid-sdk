@@ -28,6 +28,7 @@ import { useDialogFocus } from "./dialog-focus";
 import { PhotoGrid } from "./photo-grid";
 import { PhotoImage } from "./photo-image";
 import { useRequestUpload } from "./photos-app";
+import { VideoBadge } from "./video-badge";
 
 export function collectionPhotos(
   photos: LibraryPhoto[],
@@ -163,10 +164,10 @@ export function CollectionScreen({
           <h1>{title}</h1>
           <p>
             {kind === "trash"
-              ? "Photos in Trash stay in your pod until you delete them forever."
+              ? "Photos and videos in Trash stay in your pod until you delete them forever."
               : kind === "album"
-                ? `${photos.length} photos · Use Alt + ↑ / ↓ to reorder`
-                : `${photos.length} photo${photos.length === 1 ? "" : "s"}`}
+                ? `${photos.length} items · Use Alt + ↑ / ↓ to reorder`
+                : `${photos.length} item${photos.length === 1 ? "" : "s"}`}
           </p>
         </div>
         <div className="pho-header-actions">
@@ -351,25 +352,25 @@ export function CollectionScreen({
               : kind === "favourites"
                 ? "Keep your favourites close"
                 : kind === "search"
-                  ? "No matching photos"
+                  ? "No matching photos or videos"
                   : kind === "album"
                     ? "Make this album yours"
                     : "Your story starts here"
           }
           body={
             kind === "trash"
-              ? "Photos you move to trash will appear here."
+              ? "Photos and videos you move to trash will appear here."
               : kind === "favourites"
-                ? "Mark a photo with a heart to find it here."
+                ? "Mark a photo or video with a heart to find it here."
                 : kind === "search"
                   ? "Try a date, month, keyword or album name."
-                  : "Add a few photos to get started."
+                  : "Add a few photos and videos to get started."
           }
           primaryAction={
             kind === "album" ? (
               <Button onClick={() => setPicker(true)}>Choose photos</Button>
             ) : kind === "timeline" ? (
-              <Button onClick={requestUpload}>Upload photos</Button>
+              <Button onClick={requestUpload}>Upload photos and videos</Button>
             ) : (
               <Link href="/photos">Browse photos</Link>
             )
@@ -561,7 +562,16 @@ export function AlbumsScreen() {
                 <Link href={`/photos/a/${encodeRef(album.url)}`} className="pho-album-card">
                   <div className="pho-album-cover" aria-hidden="true">
                     {cover ? (
-                      <PhotoImage url={cover.thumbnailUrl ?? cover.contentUrl} name="" />
+                      <>
+                        <PhotoImage
+                          url={
+                            cover.thumbnailUrl ??
+                            (cover.kind === "video" ? undefined : cover.contentUrl)
+                          }
+                          name=""
+                        />
+                        <VideoBadge photo={cover} />
+                      </>
                     ) : (
                       <Album size={32} aria-hidden="true" />
                     )}

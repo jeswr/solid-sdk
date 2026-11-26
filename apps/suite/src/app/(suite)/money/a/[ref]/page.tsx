@@ -1,8 +1,10 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { LedgerRoute } from "@/apps/money/components/ledger-route";
+import { MoneyOpening } from "@/apps/money/components/money-states";
 import { decodeRef } from "@/lib/refs";
 
 // Staging sets this literal to false; the web target retains on-demand routes.
@@ -23,7 +25,7 @@ export default async function Page({ params }: { params: Promise<{ ref: string }
     }
   }
   return (
-    <Suspense>
+    <Suspense fallback={<MoneyOpening />}>
       <LedgerRoute />
     </Suspense>
   );

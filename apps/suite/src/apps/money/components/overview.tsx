@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, EmptyState } from "@jeswr/suite-ui";
@@ -6,11 +7,13 @@ import Link from "next/link";
 import { useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { overview } from "../lib/data/overview";
-import { useMoney } from "../state/money-context";
+import { useIncompleteFigures, useMoney } from "../state/money-context";
 import { BudgetSummary } from "./budget";
 import { AccountDialog, Amount } from "./money-forms";
+import { IncompleteNotice, WithheldBalance } from "./money-states";
 export function AccountsScreen({ overviewPage = false }: { overviewPage?: boolean }) {
   const money = useMoney();
+  const incomplete = useIncompleteFigures();
   const [add, setAdd] = useState(false);
   const [table, setTable] = useState(false);
   const data = overview(money.accounts, money.transactions, money.categories, money.today);
@@ -37,20 +40,16 @@ export function AccountsScreen({ overviewPage = false }: { overviewPage?: boolea
           </Button>
         </div>
       </header>
+      <IncompleteNotice figures="balances" />
       {overviewPage && <BudgetSummary />}
       {!money.accounts.length ? (
         <section className="mon-panel">
           <h2>Get started</h2>
           <EmptyState
-            title="Your money starts here"
+            title="No accounts yet"
             body="Add an account, then bring in a statement to see the full picture."
             icon={<Wallet aria-hidden="true" />}
             primaryAction={<Button onClick={() => setAdd(true)}>Add an account</Button>}
-            secondaryAction={
-              <Button asChild variant="outline">
-                <Link href="/money/import">Import a statement</Link>
-              </Button>
-            }
           />
         </section>
       ) : (
@@ -60,9 +59,7 @@ export function AccountsScreen({ overviewPage = false }: { overviewPage?: boolea
               {data.totals.map((total) => (
                 <section className="mon-worth" key={total.currency}>
                   <p className="mon-eyebrow">Net worth · {total.currency}</p>
-                  <h2>
-                    <Amount {...total} />
-                  </h2>
+                  <h2>{incomplete.balances ? <WithheldBalance /> : <Amount {...total} />}</h2>
                   <p>
                     {money.accounts.filter((a) => a.currency === total.currency).length} accounts ·
                     as of {money.today}
@@ -90,7 +87,11 @@ export function AccountsScreen({ overviewPage = false }: { overviewPage?: boolea
                         {account.currency}
                       </p>
                     </div>
-                    <Amount amount={account.currentBalance} currency={account.currency} />
+                    {incomplete.balances ? (
+                      <WithheldBalance />
+                    ) : (
+                      <Amount amount={account.currentBalance} currency={account.currency} />
+                    )}
                     <ArrowUpRight size={16} aria-hidden="true" />
                   </li>
                 ))}

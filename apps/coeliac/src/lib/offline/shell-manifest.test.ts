@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 import { readFileSync } from "node:fs";
@@ -18,7 +19,6 @@ const SW_SOURCE = readFileSync(resolve(process.cwd(), "public/sw.js"), "utf8");
 describe("app-shell manifest", () => {
   it("precaches the primary-nav routes", () => {
     expect([...APP_SHELL_ROUTES]).toEqual([
-      "/",
       "/log",
       "/symptoms",
       "/insights",
@@ -40,11 +40,13 @@ describe("app-shell manifest", () => {
 
   it("derives the versioned cache name from the prefix + version", () => {
     expect(SHELL_CACHE_NAME).toBe(`${SHELL_CACHE_PREFIX}${SHELL_CACHE_VERSION}`);
-    expect(SHELL_CACHE_NAME).toBe("coeliac-shell-v1");
+    expect(SHELL_CACHE_NAME).toBe("coeliac-shell-v2");
   });
 
   it("uses a fallback route that is itself precached", () => {
     expect(APP_SHELL_ROUTES).toContain(SHELL_FALLBACK_ROUTE);
+    expect(APP_SHELL_ROUTES).not.toContain("/");
+    expect(SHELL_FALLBACK_ROUTE).toBe("/log");
   });
 
   it("produces a config @jeswr/solid-offline accepts (contract-compatible)", () => {

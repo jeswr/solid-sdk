@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6.2-Astra
 /** Generated accessors plus the two RDF-term links outside closed admission. */
 import type { DatasetCore, Term } from "@rdfjs/types";
 import {
@@ -14,6 +15,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
+import { formatDuration, parseDuration } from "./duration.js";
 import {
   entities,
   type ImageGalleryData,
@@ -25,7 +27,7 @@ import {
   type TrashWrapper,
 } from "./generated/model.js";
 import { documentUrl, httpIri } from "./validation.js";
-import { GEO, RDF_TYPE, SCHEMA } from "./vocab.js";
+import { GEO, RDF_TYPE, SCHEMA, VIDEO_CLASS } from "./vocab.js";
 
 // Generated optional properties need explicit clearing types for consumers using
 // exactOptionalPropertyTypes; field behavior still comes entirely from the runtime.
@@ -57,9 +59,17 @@ const TrashWrapperBase = entities.Trash.Wrapper as new (
 ) => TrashView;
 
 export class PhotographDoc extends PhotoWrapper {
-  override mark(): this {
-    super.mark();
+  override mark(kind?: "video"): this {
+    if (kind === "video") this.types.add(VIDEO_CLASS);
+    else super.mark();
     return this;
+  }
+  get durationSeconds(): number | undefined {
+    const duration = super.duration;
+    return duration === undefined ? undefined : parseDuration(duration);
+  }
+  set durationSeconds(value: number | undefined) {
+    super.duration = value === undefined ? undefined : formatDuration(value);
   }
   override get contentUrl(): string | undefined {
     return super.contentUrl;
@@ -212,6 +222,12 @@ export class LenientPhoto extends TermWrapper {
   }
   textSet(predicate: string): string[] {
     return this.literals(predicate);
+  }
+  /** A repeated duration historically used its first object, with exact datatype identity. */
+  firstTypedLiteral(predicate: string, datatype: string): string | undefined {
+    return OptionalFrom.subjectPredicate(this, predicate, (term) =>
+      term.termType === "Literal" && term.datatype.value === datatype ? term.value : undefined,
+    );
   }
   /**
    * First object that is a finite numeric literal of any numeric datatype with a

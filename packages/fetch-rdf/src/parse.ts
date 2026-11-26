@@ -106,7 +106,7 @@ function parseBufferedN3(body: string, options: ParseRdfSyncOptions, signal: Abo
     factory: budget.factory,
   });
   budget.start();
-  const store = new Store();
+  const store = createStore(options);
   const insert = (quad: Quad) => {
     options.check?.();
     checkAbort(signal);
@@ -305,7 +305,7 @@ function parseDefault(
   budget.start();
   const onAbort = () => fail(abortError(signal));
   signal.addEventListener("abort", onAbort, { once: true });
-  const storePromise = collectIntoStore(parser);
+  const storePromise = collectIntoStore(parser, options);
   const pumpPromise = pumpBody(parser, body, maxBytes, signal, checkChunk, (cancel) => {
     cancelPump = cancel;
   }).catch((cause: unknown) => {
@@ -344,9 +344,9 @@ export function extractMediaType(headerValue: string | null): string | null {
 
 /** Wire up the parser's `data`/`end`/`error` events so each emitted
  * quad lands directly in a fresh `Store`. */
-function collectIntoStore(parser: QuadTransform): Promise<Store> {
+function collectIntoStore(parser: QuadTransform, options: ParseRdfOptions): Promise<Store> {
   return new Promise<Store>((resolve, reject) => {
-    const store = new Store();
+    const store = createStore(options);
     parser.on("data", (quad) => {
       store.addQuad(quad);
     });
@@ -355,6 +355,12 @@ function collectIntoStore(parser: QuadTransform): Promise<Store> {
       resolve(store);
     });
   });
+}
+
+function createStore(options: ParseRdfOptions): Store {
+  const store = options.storeFactory?.() ?? new Store([], { factory: options.factory });
+  if (store.size !== 0) throw new RdfFetchError("Parser store must be empty.");
+  return store;
 }
 
 /** Feed a string or web `ReadableStream<Uint8Array>` into the parser.

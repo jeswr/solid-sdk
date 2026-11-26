@@ -1,7 +1,8 @@
 {
+  "$comment": "// AUTHORED-BY Codex GPT-6.2-Astra",
   "name": "@jeswr/solid-photos",
   "version": "0.1.0",
-  "description": "Generated RDF models for photographs, EXIF, ordered albums and trash provenance.",
+  "description": "Generated RDF models for photographs, videos, EXIF, ordered albums and trash provenance.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",
@@ -28,6 +29,10 @@
     "./album": {
       "types": "./dist/album.d.ts",
       "import": "./dist/album.js"
+    },
+    "./duration": {
+      "types": "./dist/duration.d.ts",
+      "import": "./dist/duration.js"
     },
     "./exif": {
       "types": "./dist/exif.d.ts",

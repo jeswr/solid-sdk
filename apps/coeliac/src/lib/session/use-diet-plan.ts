@@ -1,5 +1,7 @@
 // AUTHORED-BY Claude Fable 5
 "use client";
+import type { ReviewSurfacing } from "@jeswr/health-insights";
+import { type CurrentPlan, deriveCurrentPlan, surfaceReviews } from "@jeswr/health-insights";
 /**
  * Load the account's current DietPlan (DESIGN §2.2 entity 9) and its due
  * re-challenges from the durable cache — cache-only reads, so the Plan view and the
@@ -12,9 +14,6 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { storedConclusionToData } from "../protocol/persist";
-import { deriveCurrentPlan, type CurrentPlan } from "../inference/diet-plan";
-import { surfaceReviews } from "../inference/review";
-import type { ReviewSurfacing } from "../inference/types";
 import { useSession } from "./context";
 
 export interface DietPlanState {

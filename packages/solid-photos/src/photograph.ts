@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Claude Sonnet 5.5
+// AUTHORED-BY Codex GPT-6.2-Astra
 /** Public photo model over generated fields; EXIF normalization remains domain policy. */
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { DataFactory, type Store } from "n3";
+import { formatDuration, parseDuration } from "./duration.js";
 import type { ExifMetadata } from "./exif.js";
 import { normaliseExif } from "./exif.js";
 import { entities, type PhotographData } from "./generated/model.js";
@@ -18,7 +20,7 @@ import {
   PhotographDoc,
   RestoreReceipt,
 } from "./views.js";
-import { DCT, EXIF, RDF_TYPE, SCHEMA } from "./vocab.js";
+import { DCT, EXIF, RDF_TYPE, SCHEMA, XSD } from "./vocab.js";
 
 export { normaliseKeywords, parseKeywordsInput } from "./keywords.js";
 export type { Photo } from "./types.js";
@@ -58,17 +60,25 @@ function optionalValue<T>(read: () => T): T | undefined {
   }
 }
 
+/** A co-typed VideoObject takes precedence, even if it has no playable binary. */
+function parseCore(
+  subject: string,
+  dataset: DatasetCore,
+): (PhotographData & Pick<Photo, "kind">) | undefined {
+  const video = entities.VideoObject.parse(subject, dataset);
+  if (video) return { ...video, kind: "video" };
+  return (
+    entities.Photograph.parse(subject, dataset) ?? entities.ImageObject.parse(subject, dataset)
+  );
+}
+
 export function parsePhoto(
   itemUrl: string,
   dataset: DatasetCore,
   subject = `${documentUrl(itemUrl)}#it`,
 ): Photo | undefined {
   subject = httpIri(subject);
-  return photoFromCore(
-    dataset,
-    subject,
-    entities.Photograph.parse(subject, dataset) ?? entities.ImageObject.parse(subject, dataset),
-  );
+  return photoFromCore(dataset, subject, parseCore(subject, dataset));
 }
 
 /**
@@ -83,19 +93,14 @@ export function parseStoredPhoto(
   subject = `${documentUrl(itemUrl)}#it`,
 ): Photo | undefined {
   subject = httpIri(subject);
-  return photoFromCore(
-    dataset,
-    subject,
-    entities.Photograph.parse(subject, dataset) ?? entities.ImageObject.parse(subject, dataset),
-    true,
-  );
+  return photoFromCore(dataset, subject, parseCore(subject, dataset), true);
 }
 
 /** Project an already-parsed core once, so scans do not re-run class recognition. */
 function photoFromCore(
   dataset: DatasetCore,
   subject: string,
-  core: ReturnType<typeof entities.Photograph.parse>,
+  core: ReturnType<typeof parseCore>,
   tolerant = false,
 ): Photo | undefined {
   if (!core) return undefined;
@@ -106,9 +111,15 @@ function photoFromCore(
   const description = core.description ?? lenient?.text(`${SCHEMA}description`);
   // The library renders and fetches these IRIs, so only http(s) values leave the facade.
   const contentUrl = optionalHttpIri(core.contentUrl ?? lenient?.iri(`${SCHEMA}contentUrl`));
+  if (core.kind === "video" && !contentUrl) return undefined;
+  const duration =
+    core.duration ?? lenient?.firstTypedLiteral(`${SCHEMA}duration`, `${XSD}duration`);
+  const durationSeconds = duration === undefined ? undefined : parseDuration(duration);
   const thumbnailUrl = optionalHttpIri(core.thumbnailUrl ?? lenient?.iri(`${SCHEMA}thumbnailUrl`));
   const keywords = lenient ? lenient.textSet(`${SCHEMA}keywords`) : (core.keywords ?? []);
   return {
+    ...(core.kind ? { kind: core.kind } : {}),
+    ...(durationSeconds !== undefined ? { durationSeconds } : {}),
     name: core.name ?? lenient?.text(`${SCHEMA}name`) ?? "",
     ...(description !== undefined ? { description } : {}),
     contentUrl: contentUrl ?? "",
@@ -123,7 +134,10 @@ function photoFromCore(
 export function buildPhoto(itemUrl: string, photo: Photo): Store {
   itemUrl = documentUrl(itemUrl);
   const exif = normaliseExif(photo.exif);
-  const dataset = entities.Photograph.build(`${itemUrl}#it`, {
+  const entity = photo.kind === "video" ? entities.VideoObject : entities.Photograph;
+  const dataset = entity.build(`${itemUrl}#it`, {
+    duration:
+      photo.durationSeconds === undefined ? undefined : formatDuration(photo.durationSeconds),
     name: photo.name || undefined,
     description: photo.description || undefined,
     contentUrl: httpIri(photo.contentUrl),
@@ -162,8 +176,7 @@ export function parsePhotos(
     if (quad.subject.termType === "NamedNode") subjects.add(quad.subject.value);
   }
   return [...subjects].sort().flatMap((subject) => {
-    const core =
-      entities.Photograph.parse(subject, dataset) ?? entities.ImageObject.parse(subject, dataset);
+    const core = parseCore(subject, dataset);
     const photo = core
       ? photoFromCore(dataset, httpIri(subject), core, options.tolerant === true)
       : undefined;

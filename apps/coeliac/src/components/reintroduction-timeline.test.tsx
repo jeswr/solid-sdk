@@ -1,7 +1,8 @@
 // AUTHORED-BY Claude Sonnet 5
+
+import type { ReintroductionSchedule } from "@jeswr/health-insights";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { ReintroductionSchedule } from "@/lib/inference/types";
 import { ReintroductionTimeline } from "./reintroduction-timeline";
 
 function schedule(over: Partial<ReintroductionSchedule> = {}): ReintroductionSchedule {

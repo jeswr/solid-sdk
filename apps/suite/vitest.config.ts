@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2-Sol
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
@@ -204,6 +205,7 @@ export default defineConfig({
         "src/apps/mail/lib/threading/**/*.ts",
         "src/apps/mail/lib/quotes/**/*.ts",
         "src/lib/demo-pod/{pod,seed,seed-home,binaries}.ts",
+        "src/lib/browser-node-crypto.ts",
         "src/lib/refs.ts",
         "src/lib/chat-invitation-room.ts",
         "src/lib/account-id-set.ts",

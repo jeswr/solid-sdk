@@ -1,0 +1,90 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Minimal admission input. Health class labels/definitions copied from the sector.
+# External properties are declared only to select the canonical member of read aliases.
+@prefix health: <https://jeswr.org/ns/sectors/health#> .
+@prefix core: <https://jeswr.org/ns/core#> .
+@prefix fhir: <http://hl7.org/fhir/> .
+@prefix qudt: <http://qudt.org/schema/qudt/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix vann: <http://purl.org/vocab/vann/> .
+<https://jeswr.org/ns/sectors/health> a owl:Ontology ;
+  vann:preferredNamespacePrefix "health" ;
+  vann:preferredNamespaceUri "https://jeswr.org/ns/sectors/health#" .
+
+health:Condition a owl:Class ;
+    rdfs:label "Condition"@en ;
+    skos:definition "A clinical problem, diagnosis or health concern recorded for a patient (a coded diagnosis). A core:Record core:about a core:Person. Aligns to fhir:Condition / snomed:64572001 (Clinical finding)."@en .
+
+health:MedicationStatement a owl:Class ;
+    rdfs:label "Medication Statement"@en ;
+    skos:definition "A record that a patient is/was taking a medicinal product, possibly with dosage and period. A core:Record core:about a core:Person; references a health:MedicinalProduct via health:medication. Aligns to fhir:MedicationStatement."@en .
+
+health:MedicinalProduct a owl:Class ;
+    rdfs:label "Medicinal Product"@en ;
+    skos:definition "A medicinal product as an identifiable thing (a drug, a vaccine). A core:Asset (something held/consumed) carrying core:identifiedBy ISO IDMP identifiers. Aligns (closeMatch) to fhir:Medication / fhir:MedicinalProductDefinition and IDMP-O. The product is NOT the statement of taking it."@en .
+
+health:Observation a owl:Class ;
+    rdfs:label "Observation"@en ;
+    skos:definition "A measured or asserted clinical value as a RECORD: a code (what was measured), a value, a unit and an effective time. The data shape behind Apple Health metrics and lab results. As it carries a value+unit it is also a core:Quantity. Aligns to fhir:Observation / snomed:363787002 (Observable entity)."@en .
+
+health:Immunization a owl:Class ;
+    rdfs:label "Immunization"@en ;
+    skos:definition "A record that a vaccine was administered to a patient. A core:Record core:about a core:Person; the administration EVENT is the separate health:ImmunizationActivity. References the vaccine via health:medication. Aligns to fhir:Immunization / snomed:830152006 (Immunization)."@en .
+
+health:Encounter a owl:Class ;
+    rdfs:label "Encounter"@en ;
+    skos:definition "An interaction between a patient and the healthcare system (a visit, admission, consultation). A core:Activity occurring over time, performed by a practitioner/provider at a place. Aligns to fhir:Encounter / snomed:308335008 (Patient encounter)."@en .
+
+health:CodeableConcept a owl:Class ;
+    rdfs:label "Codeable Concept"@en ;
+    skos:definition "A coded clinical concept drawn from a coding system (SNOMED CT, LOINC, or an Apple Health type). A core:Identifier whose core:inScheme is the coding system; the 'what' of an Observation/Condition. Aligns to fhir:CodeableConcept / fhir:Coding."@en .
+health:hasUnit a owl:ObjectProperty ;
+    rdfs:domain health:Observation ;
+    rdfs:range qudt:Unit ;
+    rdfs:label "has unit"@en ;
+    skos:definition "The QUDT unit of health:value (unit:BEAT-PER-MIN for heart rate, unit:SEC for sleep duration, unit:M for distance). Reuses the QUDT slim module; the parallel UCUM code is health:unitCode. Aligns to fhir:Quantity.system+code (http://unitsofmeasure.org)."@en .
+health:unitCode a owl:DatatypeProperty ;
+    rdfs:domain health:Observation ;
+    rdfs:range xsd:string ;
+    rdfs:label "unit code"@en ;
+    skos:definition "The UCUM unit code for health:value ('/min' for heart rate, 's' for sleep duration, '{steps}' for step count, 'mm[Hg]' for blood pressure). The string parallel of health:hasUnit. Aligns to fhir:Quantity.code (system http://unitsofmeasure.org)."@en .
+health:recordedBy a owl:ObjectProperty ;
+    rdfs:subPropertyOf core:performedBy ;
+    rdfs:domain core:Activity ;
+    rdfs:range core:Agent ;
+    rdfs:label "recorded by"@en ;
+    skos:definition "The practitioner or provider (a core:Agent) who carried out / authored a clinical activity (an Encounter, an ObservationActivity, an ImmunizationActivity). A sub-property of core:performedBy. Aligns to fhir:Encounter.participant / fhir:Immunization.performer."@en .
+core:value a owl:DatatypeProperty .
+
+health:VitalSign a owl:Class ;
+  rdfs:subClassOf health:Observation ;
+  rdfs:label "Vital Sign"@en ;
+  skos:definition "An Observation of a physiological vital sign (heart rate, blood pressure, body temperature, respiratory rate, oxygen saturation). Mirrors the FHIR vital-signs profile category (LOINC 85353-1)."@en .
+
+health:HeartRateObservation a owl:Class ;
+  rdfs:subClassOf health:VitalSign ;
+  rdfs:label "Heart Rate Observation"@en ;
+  skos:definition "A heart-rate measurement in beats/min. Maps the Apple Health HKQuantityTypeIdentifierHeartRate type and LOINC 8867-4; the value carries unit:BEAT-PER-MIN (QUDT) / UCUM '/min'."@en .
+
+health:StepCountObservation a owl:Class ;
+  rdfs:subClassOf health:Observation ;
+  rdfs:label "Step Count Observation"@en ;
+  skos:definition "A count of steps over an interval. Maps the Apple Health HKQuantityTypeIdentifierStepCount type and LOINC 55423-8; a dimensionless count (UCUM '{steps}'). Carries an interval effective time, not an instant."@en .
+
+health:SleepObservation a owl:Class ;
+  rdfs:subClassOf health:Observation ;
+  rdfs:label "Sleep Observation"@en ;
+  skos:definition "A sleep-analysis record (asleep/awake/in-bed duration). Maps the Apple Health HKCategoryTypeIdentifierSleepAnalysis type and LOINC 93832-4; carries an interval effective time and a duration value in unit:SEC / UCUM 's'."@en .
+
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Local assistant-import composition facets; these are not clinical sector classes.
+@prefix import: <https://jeswr.org/ns/pkg-health/import#> .
+import:AssistantTextValue a owl:Class .
+import:AssistantTextFields a owl:Class .
+import:AssistantSourceMetadata a owl:Class .
+import:AssistantOwner a owl:Class .
+import:AssistantDateFields a owl:Class .
+import:AssistantDateTimeFields a owl:Class .

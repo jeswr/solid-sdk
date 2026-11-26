@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex (GPT-6.1 Sol)
+// AUTHORED-BY Codex GPT-6.2-Astra
 import { NS } from "@jeswr/suite-vocab";
 
 export const SCHEMA = NS.SCHEMA;
@@ -10,6 +11,7 @@ export const DCT = NS.DCT;
 export const XSD = NS.XSD;
 export const PROV = NS.PROV;
 export const PHOTOGRAPH_CLASS = `${SCHEMA}Photograph`;
+export const VIDEO_CLASS = `${SCHEMA}VideoObject`;
 export const IMAGE_GALLERY_CLASS = `${SCHEMA}ImageGallery`;
 export const PREFIXES = { schema: SCHEMA, exif: EXIF, geo: GEO, dct: DCT, xsd: XSD } as const;
 export const PHOTOS_SLUG = "photos/";

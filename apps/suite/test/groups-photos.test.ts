@@ -62,6 +62,7 @@ async function setup() {
         },
       ],
       {
+        verifyDestination: async () => true,
         encoder: {
           dimensions: async () => ({ width: 160, height: 100 }),
           stripLocation: async (v) => v,
