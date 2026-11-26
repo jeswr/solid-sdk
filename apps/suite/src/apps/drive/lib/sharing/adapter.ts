@@ -45,6 +45,9 @@ export interface SharingSnapshot {
   readonly readOnly?: string;
   /** A folder whose contents' effective access differs from the folder's own access. */
   readonly contentsDiffer: boolean;
+  /** An application may coordinate this item with companion resources. */
+  readonly notice?: string;
+  readonly needsSave?: boolean;
 }
 
 const CONFLICT_RELOADED =

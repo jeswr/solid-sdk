@@ -597,3 +597,9 @@ it("reloads the access snapshot after a group grant is saved", async () => {
   await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
   expect(onSaved).toHaveBeenCalledTimes(1);
 });
+
+it("shows a caller-provided sharing notice", async () => {
+  show({ notice: "Sharing guidance" });
+  await ready();
+  expect(screen.getByRole("note").textContent).toBe("Sharing guidance");
+});
