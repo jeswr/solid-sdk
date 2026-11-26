@@ -1,6 +1,7 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6.2 -->
 # @jeswr/pod-connectors
 
 > Experimental — AI-agent-generated. Security-critical; private until conformance is gate-green.
@@ -150,6 +151,9 @@ destination policy. The two existing `*Verifier` factories still return the pre-
 
 Live imports take `sourceAuth: { fetch: authenticatedSourceFetch }`. The optional
 `createSourceAuth(id, adapter, token, sourceFetch)` helper adds bearer and adapter headers.
+`exchangeCodeForToken` keeps the token response's granted `scope` string in `TokenSet.scope`;
+source auth exposes it as `SourceAuth.scopes`, and `runImport` passes it on as `ctx.scopes`
+unless the host supplies `RunImportOptions.scopes` (live mode only). The CLI follows the same path.
 The helper binds credentials to an HTTPS-only origin allowlist (default: static fixture route origins)
 and refuses redirects; pass a fifth argument to supply additional API origins explicitly.
 Hosts must capture a pristine `sourceFetch` before initializing Solid authentication and
@@ -184,11 +188,12 @@ Pod I/O. Live mode ignores this option.
 
 Entry points:
 
-- `.`: contracts, runners, catalog, config factory, fetch-backed and storage-backed writers, errors.
+- `.`: contracts, import runners, scheduler, health, catalog, config factory, fetch-backed and storage-backed writers, errors.
 - `./oauth`: PKCE, refresh, vault-backed source sessions and popup flow (only `authorize` touches `window`).
 - `./vault`: browser-safe WebCrypto vault, memory/IndexedDB stores and key helpers.
 - `./node`: Node CLI, pod-auth client-credentials Pod fetch, loopback source PKCE, state and file vault stores.
 - `./testing`: recorded fixture fetch, memory Pod and import helpers; fail-closed fixture recorder.
+- `./sync`: opt-in two-way sync framework and host ports (CON-A3.1).
 - `./mail`: shared browser-safe mail primitives and the existing MailWriter (details below).
 - `./mail/*`: individual primitive, MIME parser and typed-wrapper modules.
 - `./adapters/<id>`: each source's existing adapter (OAuth or export-file).
@@ -317,6 +322,274 @@ The complete adapter audit is:
 | Google Takeout | Uploaded-file import only; legacy JSON has 64 MiB/100,000-record caps. ZIP has separate streaming entry, inflation, product-row and reconciliation-state caps described below. |
 | Activity files | Uploaded GPX, TCX, FIT or ZIP only. See Activity files below for file size, archive inflation, activity, record and parser caps. |
 | Mail | Shared writer/parser, with no independent source fetch or pagination; Gmail and Takeout enforce source limits before handing messages to it. |
+## Two-way sync framework (CON-A3.1)
+
+`runTwoWaySync(adapter, connection, ports)` runs inbound then outbound under the same
+per-connector import-session lock, abort boundary and host-owned checkpoint. Existing
+provider adapters remain import-only; this framework does not enable their write-back.
+The reference platform is exported only from `./testing`, and is absent from the catalog.
+`catalogEntry(adapter)` projects optional `twoWay` container/scope capabilities for host UIs.
+
+```ts
+import { runTwoWaySync, createFetchSyncPodWriter } from '@jeswr/pod-connectors/sync';
+
+const report = await runTwoWaySync(adapter, {
+  account: 'account-key',
+  writeBack: true,                 // default false
+  conflictPolicy: 'lww',           // also manual, remote-wins, pod-wins
+  propagateDeletes: false,         // default false
+}, {
+  podWriter: createFetchSyncPodWriter({ ...writerOptions, signal }),
+  sourceAuth,
+  scopes: explicitlyGrantedScopes,
+  state: previousState,
+  signal,
+});
+```
+
+Sync hosts must meet the private-write contract: every connector id is private unless
+classified `public-ok` (none is), so `podWriter` must supply `verifyPrivateDestination` and
+`confirmPrivateWrite` (pass them to `createFetchSyncPodWriter`, for example from
+`createSessionPrivateDestinationChecks`). Without a verifier the run refuses before any Pod
+mutation. Every mutation the runner makes (mapped items, link shards and manifest,
+conflict/trash snapshots, outbound records, provenance) is verified before and confirmed
+after through the import session; the `<item>.acl` owner-only install runs only after its
+resource is verified. A refusal ends the run and blocks every later mutation; a refused
+create is cleaned up, and an after-write refusal is the error the run rejects with.
+
+Hosts obtain incremental consent for `adapter.requiredWriteScopes` before turning on
+write-back; the runner checks explicit grants before any I/O. `TwoWayAdapter<Op>` extends
+`IntegrationAdapter` with `fieldsForHash`, account-relative leaf `writeBackContainers`,
+`requiredWriteScopes`, `toRemote(resource)`, `applyRemote(op, options)`,
+`findByIdempotencyKey(key, options)`, `deleteRemote(id, options)`, an optional
+`itemSubjects(documentUrl)` and an optional `deduplicatesCreateKeys` (default `true`). Remote
+methods receive the separate, bounded `options.api` transport and the run signal. Creates MUST
+deduplicate `options.idempotencyKey`; a provider that cannot declares
+`deduplicatesCreateKeys: false`, and the framework then never re-sends an unconfirmed create:
+it stays `deferred` until the key lookup finds it. A create the provider refuses (a 4xx other
+than 401, 403, 408 and 429) three times (`MAX_CREATE_REJECTIONS`) is retired as a manual
+conflict instead of being retried forever. Updates and
+deletes MUST enforce `options.ifMatch` using the provider's conditional-write mechanism. A
+deleted remote item is an idempotent success for `deleteRemote`. `applyRemote` and key lookup
+return `{ remoteId, remoteVersion }`.
+
+### Mapped predicates and inbound updates
+
+`fieldsForHash` is the adapter's single declaration of its **mapped predicates**: the canonical
+hash covers exactly these, and an inbound update replaces exactly these. **Adapters must list
+every field they want inbound updates to change in `fieldsForHash`.** Incoming unmapped facts
+only fill gaps: they are added for a (subject, predicate) the resource lacks and never
+overwrite or remove a pod value, so a provider-side change to an unlisted field never reaches
+an existing pod resource.
+
+Hashing and merging are scoped to the **item's own subjects**: the document URL plus its
+fragment IRIs or, when the adapter declares `itemSubjects(documentUrl)` (at most 32 IRIs, for
+example `` [`${documentUrl}#item`] ``), the document URL plus exactly those; and the blank-node
+closure reached from those subjects' mapped quads. Quads about any other subject, such as a
+`<#note>` the owner added beside a declared `#item`, are neither hashed nor removed, even when
+they use a mapped predicate. A non-conflict inbound update removes the item's stored mapped
+quads (and that blank-node structure) and adds the incoming ones; every other triple stays, so
+owner annotations such as a pod-added `schema:description` survive remote edits. The merged
+resource's mapped projection equals the incoming one, so hash and conflict logic are unchanged
+by the merge. Whenever a merge would remove pod quads the incoming document lacks (an inbound
+overwrite of a mapped value, or a remote-wins resolution), the previous pod version is first
+copied to protected `<account>/trash/` with a 30-day expiry; a remote-resolved conflict
+already keeps it as its conflict snapshot.
+
+### Inbound contract
+
+Slugs are framework-owned. Adapters call `ctx.sync.resolve(remoteId, prefix, idempotencyKey?)`
+**before mapping RDF subjects**, where `prefix` is an account-qualified write-back container
+slug (`account/items`). It returns the linked pod URL, the URL of a pending create carrying
+`idempotencyKey`, or `<prefix>/<first 32 hex chars of sha-256(remoteId)>.ttl`; raw provider
+ids never reach pod paths. Then call `ctx.sync.upsert({ remoteId, remoteVersion, modifiedAt,
+idempotencyKey?, document })`. When the provider stores our create key (iCalendar UID, body
+marker, ...), pass it as `idempotencyKey`: inbound then adopts the pending-create link instead
+of minting a second pod resource, but only when the item's mapped hash equals the intent's: a
+different item carrying our (visible) key is a third party reusing it, recorded as a manual
+conflict on the intent and mapped at its own slug on the next run. A keyless unlinked inbound
+item is deferred (retried next run) only when its mapped hash equals that of an open create
+the framework will still re-send; an item whose key matches no intent, or whose content
+matches no such create, is provably not ours and maps normally. Creates that are never
+re-sent never defer anything: write-back off, a provider that cannot deduplicate keys, or a
+retired create. An open create whose pod resource is gone and whose key lookup misses is
+retired as a manual conflict (counted in health). Use `ctx.sync.delete(id, version)` only for explicit tombstones,
+and `ctx.sync.fail(id)` to record an adapter-side mapping failure for retry.
+
+`ctx.sync.pendingRemoteIds()` lists identities the adapter must fetch even when a provider
+delta omits them: echoes of our own writes, retained manual conflicts, and previously failed or
+deferred inbound items. The runner verifies first echoes before advancing the checkpoint, so a
+recovered version cannot hide later platform edits. Mapped resources are one item per document;
+existing aggregate collection adapters need a separate item-layout migration. Their mapped
+writes/removals may not bypass `ctx.sync` through `ctx.write`/`ctx.remove`. Unmapped companion
+documents can use the ordinary import ports.
+
+### Adopting a one-way import
+
+The first two-way run of a connection (no adoption marker in the link-store manifest) performs
+a full inbound pass **without** the delta cursor and links existing pod items at their
+framework-owned slugs by remote id; a successful run then sets the marker and later runs resume
+the cursor. Outbound never creates a resource that carries this connector's import provenance
+(`prov:wasDerivedFrom` the connector source or `prov:wasGeneratedBy` a connector run Activity)
+and has no link; such resources are reported as `unlinked-import`. Provider lanes converting an
+existing import-only adapter must therefore write imports at the framework-owned slugs.
+
+### Per-item failure isolation
+
+An item whose mapping, hashing, pod read or write, or provider call fails is skipped with a
+fixed reason class and the run continues: `mapping-failed`, `hash-failed`, `read-failed`,
+`write-failed`, `remote-failed`, `weak-etag`, `duplicate-identity`, `link-cap`, plus the
+non-failure classes `deferred`, `unlinked-import` and `unsupported-resource` (sub-containers
+and members a listing types as non-RDF, which are never read). Health carries only these
+classes, never provider text or tokens. Inbound skips are kept in the owner-only manifest
+(at most 2,048 pending items) and returned by `pendingRemoteIds()`, so a cursor advance cannot
+lose them. If the pending list would overflow, or an inbound failure has no valid remote id
+(`ctx.sync.fail(undefined)`, an upsert without `remoteId`), the run keeps the previous cursor
+instead, counts the failure and reports `cursorHeld: true`.
+Abort, run-budget exhaustion (`RunBudgetExceededError`), rate limiting and 401/403
+authorization failures still end the run. A weak ETag fails only its item.
+
+### Conflicts, tombstones and moves
+
+Provider timestamps must be server timestamps; pod timestamps come from `Last-Modified`.
+Missing timestamps or differences of at most the default 120,000 ms skew guard preserve both
+versions for manual resolution. The storage-client writer forwards `Last-Modified` only when
+its backend exposes one on RDF reads; storage-client's `readRdf` does not today, so `lww` on
+that writer falls back to `manual`. The fetch writer reads the header.
+
+Manual conflicts are listed in `pendingRemoteIds()`. Switching the connection to `pod-wins`
+or `remote-wins` resolves them on the next inbound replay or, when the provider omits the
+item, in the outbound pass (pod-wins pushes the pod version under the conflict's remote
+version; remote-wins restores the retained remote snapshot). Without write-back, a pod win
+records the remote state as the baseline, so the item is not re-conflicted every run, and the
+pod edit is pushed once write-back is enabled. Canonical content remains authoritative when a
+provider's version or coarse `updated_at` timestamp does not advance. Concurrent
+pod-delete/remote-edit disputes retain the remote snapshot for manual resolution.
+
+Tombstones are durable: a remote restore of a trashed or pod-deleted item, or a pod resource
+recreated at a tombstoned URL, becomes a manual conflict counted in health, never a silent
+skip or an automatic recreate. A provider identity already linked to another pod resource
+(for example a lagging lookup, or a cross-process race) never wedges the connection: that pod
+resource keeps a conflict-only manual record naming the duplicate remote id.
+
+Within one run, a newly listed unlinked resource is a move of a link whose pod resource just
+vanished when its canonical hash equals that link's `lastSyncedHash`, or when its subjects or
+PROV links (`prov:wasDerivedFrom`, `prov:wasRevisionOf`, ...) refer to that link's old
+document URL or its fragments. The link is re-pointed (no remote create, no remote delete)
+regardless of `propagateDeletes`. Canonical hashes are location-independent: the document URL
+and its fragment IRIs hash relative to the document. A reference pairing first rebases
+subjects copied verbatim with absolute IRIs onto the new URL (a conditional pod write), then
+pushes an update to the provider. Only unambiguous one-to-one pairings move. A move writes the
+new record first; an interrupted move is completed on the next load.
+
+Safety net: a run that sees an `unlinked-import` arrival or an ambiguous move candidate cannot
+tell a rename from a delete, so it propagates no pod deletes. Each vanished link is held as a
+pending delete (counted in health). The next run decides: it moves, deletes (when enabled) or
+keeps the warning if the ambiguity is gone, and a second consecutive held run
+(`MAX_DELETE_HOLDS`) records a manual conflict with an empty pod-side snapshot instead.
+
+### Link store
+
+Links live in an owner-only store under `<account>/links/`: a manifest plus 64 base shards
+placed by HMAC-SHA-256 (WebCrypto) keyed with a random per-connection salt held only in the
+manifest, so remote ids cannot be ground into one shard. Each document holds at most 128
+records; a full shard spills into overflow documents (`NN-1.ttl`, ...) recorded in the base
+shard's header. A hard cap of 50,000 links per connection (`MAX_SYNC_LINKS`; `ports.maxLinks`
+may lower it) skips and reports further items as `link-cap` instead of failing the run.
+Trashed and pod-deleted tombstones are garbage-collected 30 days after deletion (unless they
+carry an open manual conflict). Records use typed RDF accessors for remote identity/version,
+pod URL/ETag, canonical baseline, durable create intent (with its rejection count), conflict,
+deletion state, held-delete runs and time, and move markers.
+
+The salt exists only in the manifest. If the manifest is missing while any base shard or
+overflow document exists, `load()` refuses to mint a new salt (which would place every record
+in the wrong shard) and the run fails with `LinkManifestLostError`. Recovery: restore
+`<account>/links/manifest.ttl` from a backup, or delete the whole `<account>/links/`
+container; the next run then re-adopts items with a full inbound pass, and pod resources that
+carry import provenance but cannot be re-linked are reported as `unlinked-import`. A document 412 re-reads and merges unrelated record changes, with four
+attempts; a concurrent change to the same record fails that item. Hosts must still serialize
+runs across processes. Strong ETags are required on existing sync resources and link
+documents. New documents are create-only. Sync resource reads use the import session's
+metadata-preserving `readResource()` seam without retaining its precondition cache, so legacy
+suite vocabulary aliases are normalized before canonical hashing and typed outbound access.
+
+The link-store terms come from `CONNECTOR_SYNC` in `@jeswr/suite-vocab` (all under `NS.CORE`):
+`ConnectorSyncLink`, `ConnectorSyncLinkShard`, `ConnectorSyncManifest` and
+`ConnectorSyncPendingItem` classes; per-link `connectorPodUrl`, `connectorRemoteId`,
+`connectorRemoteVersion`, `connectorPodEtag`, `connectorLastSyncedHash`,
+`connectorNeedsInbound`, `connectorPendingCreate{Key,Hash,Etag,Resource,Attempts}`,
+`connectorConflict{Resource,Version,RemoteId,Resolution}`, `connectorPendingDelete`,
+`connectorDeleteHeldRuns`,
+`connectorSyncStatus`, `connectorDeletedAt`, `connectorMovedFrom`, `connectorTrashUrl`; the
+item link `connectorConflictSnapshot`; shard `connectorOverflowCount`; manifest
+`connectorShardSalt` and `connectorAdoptedAt`; pending-item `connectorErrorClass` and
+`connectorSyncDirection`. Snapshots also use `prov:wasRevisionOf` and `schema:expires`.
+
+### Host ports
+
+`SyncPodWriter` adds finite complete direct-child `list()` and `ensureOwnerOnly()` ports.
+The fetch implementation reads listings through `@solid/object`, consumes advertised
+`solid:etag` values, flags members typed `ldp:NonRDFSource`, and falls back to resource reads
+when an ETag is missing. A listing entry is skipped as unchanged only when both its ETag and
+the link's are known and equal. The fetch writer requires an advertised WAC ACL at the exact
+resource URL plus `.acl`. Before loading link documents or creating snapshots, it creates the
+owner-only ACL with `If-None-Match: *`. A 412 preserves existing grants. Reading a stored
+snapshot leaves its ACL untouched. Unsupported ACL discovery fails closed. Other permission systems
+supply an equally strict protection port. Both owner protection and full listing completeness
+are security contracts for custom hosts. The fetch implementation refuses partial responses
+and advertised pagination; hosts needing paged containers supply a bounded complete listing
+port. Pass the same signal to the writer and runner so every HTTP request within a port is
+cancelled and checked, including the ACL PUT following its discovery HEAD.
+
+### Writes, deletes and health
+
+Creates persist their key and an immutable original payload snapshot before the remote call.
+An interrupted create is recovered by key before inbound mapping, including when write-back
+has since been disabled. Later pod edits remain detectable. Successful remote writes update
+the link's remote version and exact submitted pod baseline, suppressing echoes without
+absorbing a racing local edit. Remote deletes first copy into protected `<account>/trash/`,
+mark a 30-day expiry and `prov:wasRevisionOf`, durably record the move, conditionally remove
+the original, and leave a `trashed` tombstone. The expiry marker is for host cleanup; the
+runner never silently purges trash. Interrupted trash moves remain counted as pending deletes
+until removal completes. Pod deletions produce health warnings until propagation is
+explicitly enabled.
+
+Conflict losers live in protected `<account>/conflicts/`, carry `prov:wasRevisionOf`, and are
+linked from the surviving item. `report.issues` exposes retained links with conflict snapshots
+or pending deletes; `report.skippedItems` lists skipped items with their class (bounded to
+1,000). `report.conflicts`, `pendingDeletes`, `failed`, `unlinkedImports`, `deferred`,
+`moved` and `cursorHeld`, and the counts in `state.sync`, feed health pages. Manual conflicts block
+outbound execution unless the policy resolves them. One PROV Activity describes each outbound
+batch, alongside the existing import activity. Failed runs retain the prior checkpoint;
+cancelled runs start no further I/O and retain durable intents for recovery.
+
+One `RunBudget` covers Pod operations, remote operations and source transport requests;
+source response bytes are charged as read (32 MiB per response). Documents are capped at
+10,000 quads, 4 MiB of term text and 65,536 characters per term. Exact canonical mapped-field
+hashes over the item's own subjects retain datatype, language and graph identity while
+ignoring serialization, triple order, blank labels and the document's own URL. Nested RDF triple terms and other unsupported
+term kinds are refused throughout the document, including outside the mapped projection.
+Complex blank graphs fail closed: seven blank nodes, 100,000 quad visits and 32 MiB of
+canonical comparison text are the limits. `maxResources` may lower the 50,000-entry scan
+bound. Finite injected notification hints are bounded and validated, and force current
+resource reads even when a listing's ETag lags an edit. They never replace complete scans;
+hosts own subscription lifecycle and missed-event recovery. Companion binary writes share the
+request/byte budgets; mapped item documents must use the RDF sync ports.
+
+### Conformance
+
+Later provider tests call `await twoWayConformanceSuite(makeAdapter)` from `./testing` with
+the documented `TwoWayConformanceFixture` controls (including `seedOneWayImport`) over
+recorded/synthetic transports. It checks import/update, crash recovery, a create retry with
+the key lookup forced to miss, stale-`ifMatch` update and delete rejection, echo suppression,
+all conflict policies, skew, delete opt-in, remote deletion leaving a trash snapshot and
+tombstone, and the one-way-import adoption migration. `createFakeTwoWayAdapter(account,
+{ delta?, deduplicatesCreateKeys? })`, `createMemorySyncPod()` and `fakeOneWayImport()`
+provide the reference implementation (the memory pod models an owner-only pod with
+private-destination checks, refusable through its `privacy` controls, so the suite runs
+through the privacy gate); the package runs the suite over the full-listing,
+delta-only and non-deduplicating variants. Targeted framework tests exercise validators,
+bounds, abort, shard races and hostile inputs. No production provider APIs are used.
 
 ## Binary resources
 
@@ -406,6 +679,159 @@ then deletes attachments and `.eml`, and deletes each message's RDF last. Flush 
 collections it reconciles so each dataset uses the ETag from its own read. An interrupted deletion
 retains its cleanup inventory in that RDF for replay; a missing document is a no-op. Attachment
 media types from mail are untrusted: RDF and malformed types are stored as `application/octet-stream`.
+
+## Transactional email markup (CON-A8)
+
+`./mail` exports `extractEmailMarkup(html, { maxBytes?, maxItems? })`,
+`extractEmailMarkupResult(html, options?)` (items, truncation flag and scalar-character count),
+`createMailMarkupWriter(ctx, account, options?)` and `rescanMailMarkup(ctx, account, options?)`.
+The pure extractor returns discriminated `EmailMarkupItem` values (`type`, `properties`), with
+allowlisted schema.org properties containing arrays of inert scalars or nested `MarkupNode`s.
+It supports Order (including OrderItem, Offer and ParcelDelivery), ParcelDelivery,
+FlightReservation, TrainReservation, BusReservation, LodgingReservation,
+FoodEstablishmentReservation, EventReservation and RentalCarReservation.
+
+Extraction accepts JSON-LD scripts, arrays and `@graph`, plus nested microdata scopes.
+Schema.org HTTP/HTTPS type IRIs and optional trailing slashes are normalized to mail's
+`http://schema.org/` vocabulary when written. Compact JSON-LD terms use an implied schema.org
+context; schema.org context strings and a single inline `@vocab` are accepted. Foreign or
+redefining contexts are refused. Nothing is executed or fetched, including contexts, script
+sources, tracking URLs and microdata `itemref`. This is a closed metadata reader, not a full
+JSON-LD processor or browser HTML tree builder. Untyped nested property objects are retained;
+unsupported explicitly typed objects and unknown properties are omitted. URLs remain literals.
+
+The default whole-HTML UTF-8 cap is 1 MiB (configurable up to 8 MiB); an oversized email yields
+no items. Default root item cap is 100 (hard ceiling 1,000). Further fixed caps are 32 script
+blocks (including non-JSON scripts), 50,000 HTML elements, nesting depth 32, 4,096 normalized
+nodes, 4,096 microdata scopes, 16,384 visited property values across the email, 64 values per
+property, 64 attributes per tag, 16 KiB per tag,
+8,192 UTF-16 units per scalar and 50,000 JSON separators per script. JSON depth/structural/string
+guards run before `JSON.parse`. Malformed blocks are skipped, oversized scalar values omitted,
+and unfinished microdata scopes discarded. Tokenization scans forward through the bounded
+input and skips comments and raw script/style/textarea bodies without parsing their HTML.
+
+`createMailWriter(ctx, account, { extractMarkup: false })` disables automatic extraction;
+the default is on after the message RDF and bytes have been stored. The source factories
+`createGmailAdapter(options)` and `createGoogleTakeoutFileAdapter(options)` accept the same
+`MailWriterOptions` (`extractMarkup`, and `markup: { maxBytes, maxItems, maxTotalItems,
+maxUnverifiedItems, maxTotalWrites, maxUnverifiedWrites }`). Scalar extraction across an email is capped at 256 Ki UTF-16 characters;
+completed microdata values also have an independent intermediate budget of that size, before
+normalization can duplicate nested aliases. Extraction stops at exhaustion, retains values
+that fit, and flags `truncated`. Source message IRIs are capped at 8,192 characters before repeated provenance allocation.
+Each item is capped at 256 RDF nodes (`MAX_MARKUP_ITEM_NODES`, root plus nested resources)
+and its UTF-8 Turtle at 64 KiB. The writer keeps a running size estimate while building an
+item and abandons it as soon as either cap is exceeded, before serializing; the exact
+serialized size is then checked before writing and again after session provenance/vocabulary
+mapping. Oversized items are skipped with `markup-item-too-large`.
+Depth overflow suppresses further microdata frames while still finding later JSON-LD scripts.
+A writer shares item and PUT-attempt budgets across messages. Only items accepted for
+writing count against the item budget; skipped, stale and rejected items do not. Verified
+mail has its own allowance (`maxTotalItems`, 2,000 by default) and keeps the per-message cap
+(`maxItems`, default 100). Unverified mail is capped at 10 root items per message
+(`MAX_UNVERIFIED_MARKUP_ITEMS_PER_MESSAGE`) and a separate `maxUnverifiedItems` allowance
+(500 by default, never above `maxTotalItems`), so unverified senders cannot starve later
+verified mail. PUT attempts (`maxTotalWrites`, 2,000 by default) include source
+cleanup-inventory updates and failed attempts. Unverified mail's inventory and item PUTs also
+draw on `maxUnverifiedWrites` (500 by default, never above `maxTotalWrites`), so verified mail
+always keeps the rest of the PUT budget. Hard ceilings are 100,000. Every item of a message is
+decided and size-checked before any PUT, so rejected, stale, blocked and oversized items cost
+no PUT. Accepted items are trimmed to the remaining item allowance and to the PUTs left for
+their trust level (counting the inventory PUT when it is needed); trimmed items are reported
+with the budget error codes. `MailMarkupWriter.exhausted` is true once neither verified nor
+unverified mail can write another item, because each has spent its item or PUT allowance.
+Re-scan uses the same budgets. Failures skip that message's remaining markup and leave its
+email and mailbox import running; cancellation still aborts. `MailWriter.errors`,
+`MailMarkupWriter.errors`, re-scan results and `ImportReport.errors` expose distinct stable
+codes, without exception text: `markup-extraction-failed`, `markup-write-failed`,
+`markup-truncated`, `markup-item-too-large`, `markup-item-budget-exceeded`,
+`markup-write-budget-exceeded` and `markup-source-missing`. Imports can therefore advance their cursor with these
+recoverable markup errors; re-scan can repair partial writes later.
+
+The writer stores schema.org resources under `mail/<account>/purchases/` (orders/deliveries)
+and `mail/<account>/trips/` (reservations), registering their classes there. SHA-256 identities
+use `[type, senderKey, provider, number]` (tracking number for deliveries), otherwise message
+IRI + extraction index. Provider identity prefers URL, identifier, then name; names fold
+ASCII case/whitespace, while URL paths and identifiers retain case. Sender keys are the
+aligned DMARC domain for verified messages and the lowercased From domain otherwise.
+Missing/invalid From uses the source message IRI, preventing cross-message collisions.
+Every nested resource records `prov:wasDerivedFrom`, `fedcon:emailMarkupSenderKey` and
+`fedcon:emailMarkupTrust`. Verified assertions can update either trust level at the same
+identity; unverified assertions can update only unverified resources. Older receiver times
+are rejected; verified evidence may promote an unverified assertion regardless of its old time.
+
+Gmail raw and Takeout mbox imports accept Google's `Authentication-Results` only by position.
+The receiver walks the header block top-down. Every `Received` header above the assertion must
+be a Google hop: `by <host>.google.com` with `SMTP`, `ESMTP`, `ESMTPS`, `SMTPS`, `UTF8SMTP` or
+`UTF8SMTPS`, or Google's internal `by <IP literal> with SMTP id` form. Authenticated
+submission (`ESMTPA`, `ESMTPSA`, `UTF8SMTPA`) marks where client-written headers enter, and
+`LMTP` appears in no genuine Google layout, so neither is accepted. The last hop must be the
+inbound MX receipt, `Received: from ... by mx.google.com with ESMTP|ESMTPS|SMTPS|UTF8SMTP|UTF8SMTPS`
+(UTF8 forms carry internationalized mail), and the first assertion with
+authserv-id `mx.google.com` must follow it with no other `Received` in between. A non-Google
+hop, a Google POP3/IMAP/HTTP receipt (mail fetch, IMAP append, API insertion), an unparseable
+trace, or an assertion above the receipt leaves the message unverified. This covers
+migrated or appended mail that carries a sender-forged `mx.google.com` assertion without
+Google's own. Later duplicate headers and all other authserv-ids are ignored. A message
+appended with no Google trace at all whose sender wrote a complete Google-shaped block on top
+is indistinguishable from received mail. Result clauses are split per RFC 8601 after CFWS
+tokenization, so semicolons inside quoted strings or comments cannot start a clause. An
+ambiguous header fails closed: a `"` inside a comment, or `(`, `)` or `;` inside a quoted
+string (for example a quoted MAIL FROM local part echoed in Google's spf comment). The same
+tokenization applies to `Received` headers. A single
+`dmarc=pass` clause, with an optional `reason` and `ptype.property=value` properties only,
+must include one unquoted aligned `header.from` domain matching the From domain exactly or
+containing it as a subdomain. Missing, mismatched, ambiguous or
+failed evidence stays unverified. Unsupported syntax in that first Google header also stays
+unverified and never authorizes a later duplicate. The host can still supply trusted receiver evidence through
+`MailItem.authentication`, `MailMarkupSource.authentication` or the re-scan lookup, including
+`alignedDomain`; the existing explicitly aligned SPF+DKIM host evidence is also accepted.
+Verified means only that Google reported DMARC alignment for the From domain: any sender
+whose own domain passes DMARC counts as verified for that domain, including a domain an
+attacker registered. It verifies sender authentication, not the truth of a booking; the
+sender key keeps each domain's assertions apart. Message RDF retains the
+sender key, trust and receiver modification time for later HTML-only re-scans.
+
+`schema:dateModified` uses only receiver time: Gmail `internalDate`; Takeout's mbox `From `
+separator timestamp, which Google writes (zone-less separator times are interpreted as UTC),
+falling back only when the separator has no valid date to Google's inbound MX receipt under
+the positional rule above. Future receiver times are clamped to
+import time. Missing time is omitted and compares as epoch; neither MIME `Date` nor markup
+modification times can pin a record. Re-scan uses only the dedicated receiver modification
+time persisted by the writer; legacy sent/received fields are not treated as trusted evidence.
+
+The source message's `fedcon:emailMarkupSlug` literals index accepted markup resources only.
+The inventory is committed once before item PUTs, is skipped entirely when no item is
+accepted, and is preserved on replay. Removal checks each
+indexed resource's current derivation before deleting it, so removing an earlier email keeps
+a newer booking update. Gmail 404, SPAM and full-sync sweep deletions use this cleanup;
+moving a message to Trash retires its markup while retaining the message in the Trash folder.
+Cleanup works even when extraction is opted out. Direct markup-writer callers supply `MailMarkupSource.sender` as the From mailbox (plain
+address or `mailto:`) and store the source EmailMessage first so its cleanup inventory can be
+persisted. If the source message read returns nothing, every item write for that message is
+skipped with `markup-source-missing`, so no item lacks a cleanup index.
+`removeMailMarkupResources(ctx, account, messageIri, slugs)` exposes the same
+guarded cleanup for hosts. `MailItem.trashed` retires markup while keeping the source message;
+its Trash folder membership also prevents re-scan from recreating assertions.
+
+Re-scan reads only stored `schema:EmailMessage` HTML from the account's messages listing;
+`maxMessages` bounds visited entries (10,000 default, 100,000 hard ceiling). It returns
+`{ messages, items, errors? }`. `maxTotalItems` defaults to 2,000 (100,000 hard ceiling).
+Re-scan stops early once the writer's budgets are exhausted.
+`prune: true` additionally checks purchases/trips resources, removes those whose sole current
+source message no longer exists, and returns `pruned`. Each run checks at most
+`maxPruneItems` resources (2,000 by default, 100,000 hard ceiling; separate from the item
+budget) in slug order after a continuation cursor. The cursor is persisted in
+`markupStateSlug(account)` (`mail/<account>/markup-state.ttl`, `fedcon:emailMarkupPruneCursor`),
+which inherits the mail account's owner-only access and is never registered in a type index.
+A capped run advances the cursor; a run that reaches the end clears it, so successive runs
+page through every resource and then start again. A malformed cursor restarts from the
+beginning. Pruning requires
+`ctx.remove`; external, malformed or ambiguous source links are retained. Supply serialized
+import-session ports to preserve ETags, provenance, cancellation and registration.
+`ctx.releaseRead(slug)` releases read-only datasets/preconditions; runners provide it and
+custom ports that cache reads must implement it. Re-scan requires no provider API access.
+`NormalisedDoc.maxSerializedBytes` optionally applies a post-provenance UTF-8 Turtle cap, including the Pod writer's vocabulary prefixes, in
+the shared session; markup writes set it to 64 KiB.
 
 ## Google Takeout
 
@@ -1053,10 +1479,14 @@ exact URL, storage client, authenticated fetch and owner WebID. Pre-write verifi
 receives the run signal. Confirmation receives the write ETag when present and can report
 its first HEAD's strong ETag via `observeEtag` for conditional cleanup.
 
-The CLI stores `<podRoot>integrations/<id>/state.json`, including failed outcomes while
+The CLI stores `<podRoot>integrations/<id>/state.json` (a successor connector writing into its
+predecessor's container keeps its own `state-<id>.json` there: Google Health uses
+`integrations/fitbit/state-google-health.json`, leaving Fitbit's `state.json` untouched and
+creating no `integrations/google-health/` container), including failed outcomes while
 retaining the last successful checkpoint. Before accessing JSON, it discovers the resource's
 `rel="acl"` link and writes a WAC ACL granting only the owner WebID Read, Write and Control.
-The ACL must be in the same connector container. Missing ACL discovery or rejected ACL
+The ACL must be a resource ACL in the same directory as `state.json` (never a container or
+a container's `.acl`). Missing ACL discovery or rejected ACL
 writes fail closed; ACP/LWS state protection belongs to later storage integration.
 Conditional JSON PUTs reject stale ETags and concurrent creates. Cancellation stops new
 source requests and regular Pod operations. In-flight OAuth token and revocation requests
@@ -1190,8 +1620,9 @@ canonical class IRIs.
 
 ## Streaming file imports
 
-Apple Health, Netflix, Amazon orders, Uber, WhatsApp, Goodreads, Steam, ChatGPT
-and bank statements prefer the native `File.stream()` byte reader. Text-only
+Apple Health, Netflix, Amazon orders, Uber, WhatsApp, Goodreads, Steam, ChatGPT,
+bank statements, Letterboxd, Pocket, StoryGraph and Telegram prefer the native
+`File.stream()` byte reader. Text-only
 `ImportFile` implementations remain compatible. CSV rows (including quoted
 newlines), XML start tags, OFX transactions, multiline chat messages and selected
 JSON array members are parsed incrementally. UTF-8 decoding spans chunks; readers
@@ -1268,6 +1699,86 @@ chains over the pinned ontology import closure, including gUFO disjointness.
 The Apple Health streaming test lazily generates over 50 MiB of
 `export.xml` and retains only workouts. Tests make no production requests.
 
+## Letterboxd, Pocket, StoryGraph and Telegram exports
+
+Four Tier-C file adapters (`./adapters/letterboxd`, `./adapters/pocket`,
+`./adapters/storygraph`, `./adapters/telegram`) reuse the shared CSV/JSON stream readers,
+the Takeout ZIP reader and the existing models. Shared bounds live in
+`core/export-fields.ts`: text is trimmed and capped at a code point (titles 1,024, names
+512, reviews and message bodies 65,536 UTF-16 units; at most 64 tags of 128), dates are kept
+only from 1970 through 2100, numbers must be plain finite decimals, and links must be
+credential-free absolute `http(s)` URLs of at most 8,192 characters (`javascript:`, `data:`,
+`file:` and every other scheme are refused; characters Turtle forbids in IRIs, such as `|`,
+`{`, `}`, `^`, `\` and the backtick, are percent-encoded after WHATWG parsing). A value
+that fails is omitted; a record that lacks its required field (film name, link, title,
+message id) is skipped and counted.
+
+Each adapter writes one document per independently exported unit, so importing a partial
+or different export replaces only the documents it covers and never deletes earlier
+imports: Letterboxd one per CSV kind, Telegram one per chat, StoryGraph and Open Library
+one each. This layout replaces the single-document slugs of the first, unreleased version
+(`media/letterboxd-diary.ttl`, `media/letterboxd-watchlist.ttl`,
+`social/telegram-messages.ttl`); there is no migration, and documents at those old slugs
+are no longer written.
+
+| Adapter | Accepts | Writes |
+|---|---|---|
+| Letterboxd | export `.zip` or one of its CSVs | `media/letterboxd/diary.ttl`: `schema:WatchAction` per diary entry (watched date, 0.5–5 rating, `rewatch` tag, tags, attached review) → `schema:object` a `schema:Movie` (name, `copyrightYear`, status `watched`); `media/letterboxd/reviews.ttl`: reviews (on the diary entry's subject when attached, else their own viewing); `media/letterboxd/watched.ttl` and `media/letterboxd/ratings.ttl`: films (status `watched`; ratings add the film rating); `media/letterboxd/watchlist.ttl`: watchlist films (status `watchlist`) |
+| Pocket | 2024–25 CSV or legacy `ril_export.html` | `documents/pocket-bookmarks.ttl`: `book:Bookmark` in the `@jeswr/solid-bookmark` wire format (`http://schema.org/url`, `dct:title`, `dct:created`, `book:archived`, `http://schema.org/keywords`) |
+| StoryGraph | StoryGraph library CSV or Open Library reading-log CSV | `documents/storygraph-library.ttl` (StoryGraph) or `documents/openlibrary-library.ttl` (Open Library): `schema:Book` (the Goodreads model plus `reviewBody` and tags) |
+| Telegram | Telegram Desktop `result.json` (account or single chat) | `social/telegram/<chat key>.ttl` per chat, the key a 128-bit SHA-256 hash of the chat id: `schema:Message` (the WhatsApp model plus chat name, edit time, `social:inReplyTo`, forwarded-from as `schema:creator`, attachment file names) |
+
+- Letterboxd reads only `diary.csv`, `reviews.csv`, `watched.csv`, `ratings.csv` and
+  `watchlist.csv`, either at the archive root or in exactly one `letterboxd-…` folder; an
+  archive with two such folders, or root files plus a folder, is refused ("This ZIP holds
+  more than one Letterboxd export."). Names that differ only in case are duplicates: the
+  first is read, the rest are skipped and counted. `deleted/`, `lists/` and other entries
+  are never inflated. Entries pass the reader's size, CRC and DEFLATE-boundary checks
+  (failures are skipped and counted), each is capped at 64 MiB, the archive at 10,000
+  directory entries and 64 MiB inflated in total (an entry that no longer fits is skipped
+  and counted). The adapter declares `streaming: true` because it enforces these limits
+  and the 64 MiB stream cap for a standalone CSV. A ZIP writes each kind it contains and
+  leaves the others untouched. A diary entry is keyed by its own Letterboxd URI only
+  (entries without one, by film, year and watched date), so two same-day viewings stay
+  apart. A review attaches to a diary entry of the same import by URI, else by film, year
+  and watched date when exactly one entry matches and that entry has no different URI; it
+  is merged into the entry (never clearing its fields) and recorded in `reviews.ttl` on the
+  entry's subject, so a later diary-only import keeps it. Other reviews are their own
+  viewings in `reviews.ttl`. A standalone CSV's kind comes from its file name, else its
+  headers (`watchlist` only by name). schema.org has no rewatch term, so a rewatch is the
+  `rewatch` keyword.
+- Pocket decides between HTML and CSV from the content. The HTML reader tokenises tags
+  (64 KiB) and text (1 MiB per anchor) with the shared bounded units, skips comments,
+  expands only the XML entities and numeric references (references to code points XML 1.0
+  disallows, such as NUL, other C0 controls, surrogates and U+FFFE/U+FFFF, stay literal)
+  and fails on unterminated markup. A bookmark's fragment carries a 128-bit SHA-256 hash of
+  its link (links are attacker-chosen; a 32-bit hash collides on demand). The saved page is not
+  `https://schema.org/url`, which provenance reads as the record's source: bookmarks derive
+  from the export. A link saved twice is one bookmark whose tags merge.
+- Goodreads and StoryGraph share `core/books.ts`: a book's fragment is
+  `book-isbn-<ISBN-13>` when a checksum-valid ISBN-13 or ISBN-10 (converted) exists, else
+  a hash of the accent-, case- and punctuation-folded title and first author (Goodreads adds
+  its Book Id here, so ISBN-less books that share a title and author stay apart; those books
+  then match across services only by ISBN). The same book imported from both services
+  therefore has the same local name and `schema:isbn` in each connector's document;
+  duplicate rows collapse. Goodreads now uses this key, so a re-import rewrites existing
+  Goodreads fragments once. StoryGraph read dates,
+  moods and `Owned?` have no book-model term and are not imported.
+- Telegram streams only message objects and chat names/ids (4 MiB per message; oversized
+  messages are skipped and counted). Keys are read as own properties, so `__proto__` or
+  `constructor` members never resolve. Service messages are left out. Messages are grouped
+  by chat with the JSON reader's array-member boundaries, so `messages` before a chat's
+  `name` and `id` stay in that chat; a chat without an id is skipped and counted once.
+  Message subjects are `#msg-<chat key>-<message id>`. A reply links only to an earlier
+  message of the same chat, never when `reply_to_peer_id` names another chat. Attachments are recorded by file name; the
+  importer never opens them, and absolute paths, drive letters, schemes, control
+  characters, `.`/`..` segments and "File not included" placeholders record nothing.
+  `date_unixtime` is preferred; the zone-less `date` is read as UTC.
+
+Synthetic fixtures are inline in the `*.test.ts` files (never compiled into `dist`) and
+in the shared Tier-C SHACL/provenance harness; Pocket output is also validated against
+`@jeswr/solid-bookmark`'s SHACL shape.
+
 ## Recording fixtures
 
 ```ts
@@ -1301,8 +1812,8 @@ mocked source transports and memory Pods only.
 ## Google Calendar
 
 `./adapters/google/oauth` exports `createGoogleOAuthConfig(product, options)` for
-`calendar`, `contacts`, `drive` and `gmail`. Each configuration requests only that
-product's read scope. Browser hosts inject `{ clientId, tokenProxyUrl }` and use the
+`calendar`, `contacts`, `drive`, `gmail` and `health`. Each configuration requests only that
+product's read scopes. Browser hosts inject `{ clientId, tokenProxyUrl }` and use the
 existing proxy exchange. Node hosts pass `{ clientType: 'desktop', clientId,
 clientSecret? }` from their own Desktop OAuth configuration and use the shared
 code exchange with a loopback redirect and S256 PKCE. The installed-app value is
@@ -1340,12 +1851,201 @@ been processed. RFC 5545 constructs outside VOC-01's shape fail before the docum
 or checkpoint advance (see root `QUESTIONS.md`). Fixtures and sorted Turtle mapping
 snapshots cover these paths without Google accounts or production traffic.
 
+## Google Health (CON-A4)
+
+`./adapters/google-health` exports `googleHealthAdapter` and
+`createGoogleHealthAdapter({ limits?, runLimits?, maxPages?, lookbackDays?, now?, onWarning? })`.
+The catalog offers this Tier B live API successor instead of Fitbit. Enable the Google Health
+API in a Google OAuth project, configure its client through `createRegistry({ 'google-health':
+{ clientId, tokenProxyUrl } })`, and re-authorize with Google. Fitbit tokens cannot migrate.
+It requests three readonly scopes, all Restricted (public access needs Google's verification
+and security review; the owner's own project can use configured test users):
+`googlehealth.activity_and_fitness.readonly` (steps, distance, total calories, heart rate,
+exercise), `googlehealth.sleep.readonly` and
+`googlehealth.health_metrics_and_measurements.readonly` (weight), each under
+`https://www.googleapis.com/auth/`. Nutrition is not imported or requested. The adapter
+refuses a token whose granted `scope` lacks any of the three.
+
+Every endpoint, filter, field and unit is isolated in `src/google-health/api.ts`, which
+quotes its source: the official v4 discovery document
+(`https://health.googleapis.com/$discovery/rest?version=v4`, revision 20261110). It carries
+the `users.dataTypes.dataPoints` reference text, because developers.google.com was unreachable
+from the authoring sandbox. Assumptions that document does not state carry a **VERIFY** note
+there. They cover omitted zero-valued fields and offsets, the UTC-14 to UTC+14 offset range,
+generated exercise display names, the Fitbit activity names matched to exercise types, future
+rollup range ends, rollup 400 errors naming the range, method-override headers and rate-limit
+403 reasons.
+Fixtures are synthetic and follow the documented shapes. None of this has been run against a
+live account.
+
+The adapter imports these v4 data types:
+- `steps`, `distance` and `total-calories` come from `POST …/dataPoints:dailyRollUp`, which
+  rolls up civil days. Each request covers at most 90 days, or 14 for `total-calories`, with
+  `windowSizeDays: 1` and the documented page size (90, or 14). It reads `countSum`,
+  `millimetersSum` (converted to metres) and `kcalSum`.
+- `heart-rate` and `weight` are listed with
+  `{type}.sample_time.physical_time >= "A" AND … < "B"` and a page size of 1,000.
+- `exercise` is listed with `exercise.interval.civil_start_time`, the only documented exercise
+  time filter. The civil bounds are widened by 14 hours on each side, and a session belongs to
+  the window holding its physical start.
+- `sleep` is listed with `sleep.interval.end_time`, the only documented physical sleep filter.
+  A session belongs to the window holding its end.
+
+Exercise and sleep pages hold at most 25 points, as documented. A single filter never mixes
+physical and civil bounds. The point parser reads the documented nesting:
+`payload.sampleTime.{physicalTime, utcOffset, civilTime}` and
+`payload.interval.{startTime, endTime, startUtcOffset, endUtcOffset, civilStartTime,
+civilEndTime}`. It accepts nanosecond RFC 3339 times, which it truncates to milliseconds, and
+Duration offsets such as `"-18000s"`. int64 values may arrive as JSON numbers or as bounded
+decimal strings; `"NaN"`, `"Infinity"`, exponents, signs and fractions are refused. Heart rate
+must be 1–300 bpm. Weight is `weightGrams` (stored in kg). Exercise reads `displayName`, the
+`exerciseType` enum and `metricsSummary.distanceMillimeters`. Proto3 JSON omits default
+values, so an absent `exerciseType` is `EXERCISE_TYPE_UNSPECIFIED` and the session is imported.
+An absent `displayName` (the empty string) is refused as a value. Sleep stages use the
+documented `AWAKE|LIGHT|DEEP|REM|ASLEEP|RESTLESS` types, stored in lower case; a stage without
+a type is refused as a value.
+
+OAuth uses `createGoogleOAuthConfig('health')` with offline access and S256 PKCE.
+Use `adapter.createSourceAuth(config, token, pristineSourceFetch)` (or
+`./google-health/source-auth`'s `createGoogleHealthSourceAuth`) in browser/programmatic
+hosts to refresh once after a 401. The Node CLI selects this hook automatically.
+The transport refuses redirects and non-HTTPS/non-Health credential destinations,
+keeps tokens in memory, and preserves cancellation through refresh and replay. Besides GETs, it
+forwards exactly one request form: a `POST` to
+`/v4/users/me/dataTypes/{steps|distance|total-calories}/dataPoints:dailyRollUp` with no query
+and a JSON string body of at most 4 KiB, which it can replay after a refresh. That request
+reads data; the API defines it as a POST. Every forwarded request has its
+`X-HTTP-Method-Override`, `X-HTTP-Method` and `X-Method-Override` headers removed, so a read
+cannot be turned into another method at Google.
+Web clients refresh through their configured token proxy; Desktop clients use the
+Google token endpoint and their locally supplied client secret when needed. A refresh keeps
+the token's granted scopes current. A 401 that survives the refresh, or a 403 without a rate
+or quota reason, fails the run with `IntegrationAuthError` and re-authorisation guidance. A
+403 naming `rateLimitExceeded`, `userRateLimitExceeded`, `quotaExceeded`, `dailyLimitExceeded`,
+`RATE_LIMIT_EXCEEDED` or `RESOURCE_EXHAUSTED` is handled like a 429. It is retried, and once
+retries run out it raises `RateLimitedError`.
+
+The standard `createFetchPodWriter({ adapterId: 'google-health', ... })` and
+`adapterContainerUrl` intentionally retain `integrations/fitbit/`. Custom PodWriter
+hosts must bind Google Health to that existing container too. Exercises use
+`health/activities.ttl#activity-<key>` and the existing schema.org ExerciseAction vocabulary:
+`name` and `exerciseType` carry the display name, the label Fitbit stored as `activityName`.
+Fitbit stored each activity's local wall-clock start with a `Z` suffix. A Google session
+therefore updates a stored Fitbit activity in place, keeping its subject and identifier, when
+any of these hold:
+- it carries the stored Google resource URL;
+- its numeric Google id equals the Fitbit `logId`, the two starts are at most 14 hours apart,
+  and the stored row starts at the session's wall clock or names the same kind (below);
+- its true UTC start and display name match;
+- its wall-clock start equals, to the second, that of exactly one legacy (non-Google) row,
+  whatever the names. The wall clock comes from `civilStartTime`, else from `startTime` plus
+  `startUtcOffset`, and never from the timestamp string's own offset. When several legacy rows
+  share that start, the one naming the same kind wins: the same name, or a Fitbit name whose
+  documented v4 `exerciseType` matches (Walk → WALKING, Run → RUNNING, Bike → BIKING, Swim →
+  SWIMMING, Hike → HIKING, Elliptical → ELLIPTICAL, Weights → WEIGHTLIFTING or WEIGHTS, Yoga →
+  YOGA, Treadmill → TREADMILL or TREADMILL_WALK). If that does not single one out, the session
+  is skipped and counted.
+
+Otherwise a named session keeps its own subject, `google-health-exercise-<id>`. That includes
+a numeric id that equals an unrelated Fitbit `logId`, so such a session is never skipped or
+blocked. A nameless session is keyed by its start and `exerciseType`. Ambiguous or repeated
+legacy matches are skipped and counted, never guessed and never fatal. Sleep sessions are keyed
+by resource name (`sleep-<id>`), else by start, so a revised session updates in place. Google
+generates display names ("Running" for a Fitbit "Run"), so names are never required to match;
+an updated legacy row takes Google's display name. Other legacy exercises survive increments. There was no Fitbit file
+importer in this package. The deprecated `fitbit` entry remains resolvable for existing
+connections and fixture demos, is excluded from new-connection catalogs, and refuses live runs
+with Google Health guidance.
+
+Documents are partitioned by day so that each merge touches only the days it reads:
+- **Daily steps, distance and total calories** use existing Fit typed
+  `schema:additionalProperty` measurements on ExerciseAction, under
+  `health/daily/<civil-date>/<type>.ttl`. The civil date is the rollup bucket's
+  `civilStartTime.date`, so a 23- or 25-hour DST day is one document. The rollup carries no UTC
+  offset, so the action's `schema:identifier` is the date and no `schema:startTime` is
+  invented. A bucket without a value member is a no-data day, and no document is written for
+  it. A bucket that does not span exactly one civil day is refused.
+- **Heart rate** is stored at one-minute resolution in `health/heart-rate/<UTC-date>.ttl`.
+  Each `#minute-HH-MM` PropertyValue carries the mean (`schema:value`, two decimals),
+  `schema:minValue`, `schema:maxValue`, the sample count (`health:sampleCount`, from
+  `@jeswr/suite-vocab`'s health namespace) and `schema:dateMeasured` (minute start, UTC).
+  Samples from every data source in that minute are aggregated together, so a day holds at
+  most 1,440 entries. A 1 Hz day imported twice stays well under the 16 MiB read limit.
+- **Weight** keeps every sample in `health/weight/<UTC-date>.ttl`.
+- **Sleep sessions** and their stages use named ExerciseAction subjects, one replaced document
+  per session under `health/sleep/`.
+
+This checkout's old Fitbit adapter only imported exercise sessions, so these same-shape
+additions have no earlier Fitbit ids to migrate. Other Google Health types are omitted.
+
+Sample keys include the data source: the point's `dataSource` object, else its resource name.
+Two different points sharing a key from one source resolve deterministically: the later
+`updateTime` wins (exercise and sleep carry one), then the larger value. The adapter reports
+this through `onWarning` and never throws.
+
+List types walk one UTC day per request window, per type, in chronological order. Daily totals
+walk civil-date ranges, from the first re-read date through the civil today of UTC+14. A first
+import (no checkpoint) reaches back `lookbackDays` (default 30). The version 3 checkpoint
+stores, per type, the end of the last fully written window and when it was read. For daily
+totals it stores the last civil date that has ended in every offset. The next run re-reads 48
+hours before that end, or before the read time when catching up, so data arriving late is
+picked up. **Points that reach Google more than 48 hours after the previous sync are missed by
+design.** A checkpoint written by an older parser (version 1 or 2) restarts every type at the
+lookback window, with an `onWarning` note.
+
+Invalid values are counted as `skipped`, and the cursor still advances past them. These include
+out-of-range values, a 0 bpm heart rate, stages outside their session, unknown enum values and
+names over 256 characters. A point in an unrecognised shape is different: a missing payload or
+time member, a mistyped field or an unparsable literal. Shape is judged per type across the
+run's windows. When more than 10% of at least 20 points, or all of at least 3, are
+unrecognised, that type stops before writing the window that crossed the threshold. Its
+checkpoint is kept unchanged and `onWarning` gets `[google-health:unrecognised-shape]`. Other
+types continue, and the run succeeds. Fewer unrecognised points are skipped like invalid
+values.
+
+Only points that can still change hold a type's cursor at their window. An exercise that
+starts in the window but ends after the run's clock is unfinished. It is held and retried
+while it started within the last 48 hours or its reported end is within 6 hours after the
+clock. A sleep whose `metadata.processed` is false is written, and re-read while it ended
+within the last 48 hours. Older unfinished or unprocessed points are final. They are written
+with the reported fields, never hold the cursor, and are not re-read. `onWarning` gets
+`[google-health:stale-unfinished]` or `[google-health:stale-unprocessed]` with their count. A
+point the provider dates after the run's clock belongs to a later window, which the next run
+reads, so it is ignored. If `dailyRollUp` answers 400 with an error naming the range or its
+end, that range is retried once ending the day after the run's UTC date, and later ranges stop
+there. Any other 400 fails the run. Each window
+validates every page before its documents are written. Proto3 pages that omit an empty list or
+token are accepted. Conditional ETags are preserved. Source deletions are not inferred.
+Stored activity reconciliation refuses more than 100,000 subjects or 1,000,000 quads.
+
+Budgets are per type and per run. By default each type gets 512 transport calls, 250,000
+points/stages and 128 MiB per run; the run gets 2,048, 1,000,000 and 512 MiB. When a budget runs
+out, the run stops after the last fully written window and **succeeds**. Each type's cursor
+records its last completed window, and the next run continues from there. For example, 200,000
+heart-rate points over five days complete across three runs with no gap or duplicate. A
+failure is raised only when not even the first window of a type fits, and for real errors. Each
+window has at most `maxPages` (default 100) pages. A list window that reaches the cap is split
+into 12-, 6-, 3- and then 1-hour windows, and progress is recorded within the day. A rollup
+range is halved down to single days. Only a 1-hour list window or a single rollup day over the
+cap stops its type, with an `onWarning` note. That type keeps its last completed window, other
+types continue, and the run succeeds. Pages hold at most 2 MiB of JSON, the documented number of
+points, 2,048-character tokens and 500 stages per sleep session. 429/5xx retry at most three
+times with bounded backoff (at most 60 seconds per wait), respecting Retry-After seconds. The
+authenticated session separately caps HTTP traffic, including refresh and replay, at 4,096
+requests. Cancellation ends waits immediately. Demo fixtures are shifted by whole days into the
+lookback window, RFC 3339 strings and civil dates alike, so the fixture demo shows data at any
+date. Tests use `syntheticHealthApi` from `test-support/google-health-api.ts`, which is neither
+shipped nor exported. It answers only the documented
+request forms, in descending start order with proto3 omissions, and throws on any other request.
+The tests cover pagination, overlaps, compatibility, refresh, backoff, budgets, malformed
+inputs, provenance and stable re-imports without provider traffic.
+
 ## Google Drive
 
 `./adapters/google-drive` exports `googleDriveAdapter` and
 `createGoogleDriveAdapter({ maxBytes })` (default 25 MiB). Drive remains Tier B because
 `drive.readonly` is a restricted Google scope. OAuth uses `createGoogleOAuthConfig('drive')`.
-The catalog has 36 entries (nine Tier A, sixteen Tier B, and eleven Tier C).
+The catalog has 40 entries (nine Tier A, sixteen Tier B, and fifteen Tier C).
 
 A full import captures `changes/startPageToken` before paginating `files.list`; later
 imports replay `changes.list` and persist its final `newStartPageToken`. HTTP 404/410 from
@@ -1538,7 +2238,9 @@ kind are omitted after the bounded, budgeted list read and their items are not r
 Spotify also leaves withheld kinds out of `/me/playlists`, so while either playlist scope is
 withheld every previously imported playlist this run does not describe (with its list items
 and tracks) carries forward into the replaced `music/playlists.ttl` without counting as an
-imported item; only a run with both playlist scopes drops playlists the source no longer lists. Other adapters ignore `scopes`. Other playlists retain their metadata
+imported item; only a run with both playlist scopes drops playlists the source no longer lists.
+Google Health requires every requested scope; the remaining adapters ignore `scopes`.
+A granted `scope` in the token response now reaches `ctx.scopes` automatically. Other playlists retain their metadata
 without items and count once in `skipped`. Inaccessible contents do not prevent the remaining
 resources and recently-played history from importing or the successful cursor from advancing.
 ## Tier A sync behavior
@@ -1918,3 +2620,234 @@ using the file store. Custom stores without `withLock` require hosts to serializ
 `createSpotifySourceAuth` throws when given a vault: vault hosts must use
 `createOAuthSourceAuth` so every refresh follows the shared persistence contract.
 Tokens never enter the pod, localStorage, sessionStorage or cookies.
+
+## Scheduled connectors (CON-A2 / sst-q0cp)
+
+The root entry exports `ConnectorScheduler`, `TokenSource`, `ReauthoriseError`,
+`ConnectionRemovedError`, `parseConnectorConnections`, `connectorConnections`,
+`createConnectionStore`, `createConnectorStateStore`, `connectorHealth` and
+`connectorHealthSummary`. No host environment or vault is read by the scheduler.
+Hosts inject their connection settings, token source, a pristine source fetch,
+`podWriter(connection, signal)`, `stateStore(connectorId, signal)` and
+`saveConnection(connection, signal)`. The last port persists enablement/status changes
+in the host's settings store and throws `ConnectionRemovedError` when the row is gone.
+`createConnectionStore` supplies an owner-only JSON implementation at
+`<pod>/integrations/connections.json`; it accepts an array like:
+
+```json
+[{ "connectorId": "spotify", "account": "primary", "intervalMinutes": 60, "enabled": true,
+   "enabledAt": "2026-11-01T12:00:00.000Z" }]
+```
+
+Account ids are opaque host labels (1–128 ASCII letters/digits/dots/underscores/hyphens,
+starting with a letter/digit), never addresses or credentials. Lists are limited to
+1,000 rows and 256 KiB; only a non-array or oversized document is rejected as a whole.
+Rows are validated individually: a malformed row, every copy of a duplicated
+connector/account pair, an unknown connector id or a non-`oauth-pkce` adapter is
+skipped and reported by `scheduler.invalid()` / `parseConnectorConnections(rows, registry)`
+as `{ index, connectorId?, account?, status: 'invalid-config' }` (ids echoed only when
+syntactically valid; no raw text). The store's `update` preserves rows it cannot
+interpret verbatim. File imports remain manual. API catalog rows expose
+`defaultIntervalMinutes` (currently 60). Requested intervals below 15 minutes are
+floored to 15; nonpositive/nonfinite values and intervals above one year are refused.
+
+**`enabledAt`** is the durable re-enable signal. Every writer that enables a connection
+(the scheduler's `setEnabled`, and owner UIs) must set `enabled: true`, remove `status`,
+and set `enabledAt` to the current ISO instant. When the scheduler latches needs-reauth
+it records the row's `enabledAt` in `health.latchedEnabledAt` (`""` when the row had
+none). The latch clears in any process as soon as the row's `enabledAt` differs from
+that recorded value — a string comparison, so the writer's and scheduler's clocks are
+never compared. An unchanged `enabledAt` keeps the latch. (Latches written before
+`latchedEnabledAt` existed fall back to "`enabledAt` newer than the latching run's
+`lastRunEndedAt`", ignoring values more than five minutes ahead; such a latch that is
+itself stamped more than five minutes ahead is cleared by any `enabledAt`.) The
+scheduler's needs-reauth disable is conditional: `createConnectionStore().update` applies
+it only while the row's `enabledAt` still equals the value the latch recorded, including
+after a 412 re-read, so an owner's re-enable during the run is never reverted, and
+resolves `"superseded"` when it skipped the disable (`"applied"` otherwise). Custom
+`saveConnection` ports should apply the same rule and report it (resolving nothing
+counts as applied). The scheduler disables its in-memory row only while that row still
+carries the `enabledAt` captured at run start and the save was not superseded; an owner
+re-enable that reached memory mid-run (via `setConnections` or `setEnabled`) or the
+stored row is kept as is, so the connection stays scheduled and its recorded latch is
+cleared by the new value.
+
+The scheduler is a continuous worker pool (default cap two, maximum 16): whenever a
+worker frees up it starts the connection that is most overdue. It keeps single-flight
+per connection, and accounts sharing a connector container run serially to preserve
+the runner's reconciliation contract. `tick(signal?)` runs everything due (each
+connection at most once) and resolves when those runs drain; overlapping ticks join.
+`dispatch(signal?)` fills free workers without waiting, for hosts with their own poll
+loop; `idle()` waits for in-flight runs and pending exclusive operations. A waiting
+`setEnabled` takes priority over new pool claims for its container, so it waits for at
+most the run already in flight; `stop()` also awaits it. `run(signal)` is a cancellable 30-second
+dispatch loop that drains workers on exit, with injectable `now`, `sleep` and
+`random` ports.
+
+**Cross-host run claims.** Before fetching a token, a run writes an expiring claim to the
+connector's `state.json` (`claims[<account>] = { holder, expiresAt }`, a random per-run
+holder) with a conditional write (`If-Match`, or `If-None-Match: *` on creation). A 412,
+or another holder's unexpired claim, skips the run quietly: no health or settings write,
+and the connection is not reconsidered until the claim expires. `expiresAt` is the run
+limit plus two minutes for the finishing writes plus the five-minute skew allowance, so
+a claim is taken over only after its holder's run has ended or timed out. A claim
+expiring more than two hours and nine minutes ahead (forged or skewed) is not trusted.
+The run's final health write removes its claim (only while it is still the stored one);
+a cancelled run's claim simply expires. This bounds double imports by two hosts, tabs
+or deploy overlaps sharing a pod to the stale-claim window; a document the scheduler
+creates for a claim gets a placeholder root that its first attempt replaces.
+
+**Run time limit.** Each run (claim, token, Pod writer and import) is bounded by
+`runTimeoutMs` (default `DEFAULT_CONNECTOR_RUN_TIMEOUT_MS`, 15 minutes; 1 second to
+2 hours). Its signal, combined with the shutdown signal, reaches the token source
+(`accessToken(connectorId, account, signal)`), the Pod writer, the runner and source/Pod
+transports, and the scheduler stops waiting at the limit even if a provider or vault
+ignores it. A timed-out run records a failed attempt with `errorClass: 'timeout'` and the
+usual back-off. The finishing state/settings/vault calls have their own two-minute bound.
+Shutdown still drains cooperative work.
+
+**No vault.** A token source that throws `NoVaultError` (this host has no vault) skips the
+run: the claim is released, nothing else is written (no health, latch or settings change)
+and the connection backs off in memory. `ReauthoriseError` stays reserved for a vault
+reporting a missing or revoked grant.
+
+Due times come from a cached snapshot of each connector's state, loaded once, refreshed
+after every run and reloaded when that connector's settings change. A pass reads a
+state document only for connections that are due (and then re-checks against it).
+`setConnections` replaces settings without waiting for in-flight runs.
+
+One connection never fails another: a run failure is recorded in its health, and a
+failure outside the import (state or settings persistence) backs off that connection
+alone in memory, reported through the optional `onRunError(connection, errorClass)`
+hook with a fixed class. A returned checkpoint is validated before the run counts as a
+success (an invalid one becomes a failed attempt that keeps the previous cursor), and
+when the checkpoint cannot be saved (size bounds, repeated conflicts) the scheduler saves
+a failed attempt with the previous checkpoint instead, so the back-off survives restarts
+and `once` invocations. Neither rejects `tick`. A connection removed mid-run keeps its
+health and skips its settings write quietly.
+
+Successful/partial runs schedule the next interval from completion; a stored `nextRunAt`
+can bring such a run forward but never past `lastRunEndedAt + interval`. Failures retry
+with exponential delays starting at 15 minutes, multiplied by random jitter in
+[1, 1.25], capped at 24 hours; a `RateLimitedError` delays at least its
+`retryAfterSeconds` (same cap). A success resets the failure counter.
+`ReauthoriseError`, or a second consecutive source 401 (`unauthorised`: the access token
+was rejected), persists `{ enabled: false, status: 'needs-reauth' }` and latches health
+without a next-run time, including across restart. Only for the double 401 is the
+optional `TokenSource.invalidate({ connectorId, account })` called (best effort); it is
+for a confirmed invalid access token only, and only for the grant that was in use for
+the rejected run: it is skipped when an owner re-enable superseded the latch (in memory
+or in the stored settings), and when the settings write failed or was cancelled. Vault
+implementations should discard only a token matching that grant, never a newer one the
+owner has just supplied. Source errors carry no `WWW-Authenticate`
+header, so a 401 status alone qualifies. A 403 is `forbidden` and stays a backed-off
+`failed` run however often it repeats, because providers use it for rate limits,
+download quotas and developer allowlists (Google, Drive, Spotify dev mode) while the
+grant remains valid. Explicit
+`setEnabled(connectorId, account, true)` stamps `enabledAt`, clears the persisted latch
+and enables the host setting. `stop()` aborts and drains active work. Run signals reach
+both the runner and source/Pod transports. After cancellation no new state/config write
+starts; the previous checkpoint remains due for replay, as for a manually cancelled import.
+
+Clock skew: an attempt whose `health.lastRunEndedAt` is within five minutes of the
+scheduler's clock is trusted and its `nextRunAt` (back-off, Retry-After) is followed;
+only a `nextRunAt` beyond `now + max(interval, 24 h)` makes it due now. Without a trusted
+attempt, a `lastRunEndedAt` or `lastSync` more than five minutes ahead makes the
+connection due immediately, so a state stamped a year ahead runs on the first tick and
+then schedules from its own clock. Every persisted run (failed or successful) drops a
+`lastSync` more than five minutes ahead and replaces such a `connectedAt` with the run's
+start time, so a failing source cannot be re-run on every pass. The
+needs-reauth latch is clock-independent and still holds. Timestamps more than five
+minutes ahead are also untrusted elsewhere: they lose `mergeAccountState`
+comparisons, and `connectorHealth` reports `stale` instead of `ok`. When the stored
+attempt is still the one a run started from, the run's own health and checkpoint win
+even if a backward clock jump makes the stored values look newer.
+
+The existing owner-only `integrations/<id>/state.json` stays backward compatible.
+Its `connectedAt`, `lastSync`, `cursor`, `lastOutcome` and `counts` retain their
+checkpoint meaning. Scheduler state adds:
+
+- `health`: `lastRunStartedAt`, `lastRunEndedAt`, `outcome` (`ok`, `partial`,
+  `failed`, `needs-reauth`), `counts` (`created`, `updated`, `unchanged`, `skipped`),
+  allowlisted `errorClass`, `consecutiveFailures`, effective `intervalMinutes`
+  and optional `nextRunAt`.
+- `claims`: expiring cross-host run claims keyed by opaque account id (see above).
+- `accounts`: independent checkpoints and health keyed by opaque account id.
+  An account-free legacy checkpoint migrates only when exactly one settings row names
+  that connector; otherwise the legacy cursor is dropped and the account imports in full.
+  The scheduler never rewrites the root checkpoint fields of an existing document, so the
+  legacy node CLI keeps reading the root as before; a document the scheduler creates
+  gets a root without `cursor`/`lastSync`. The root `health` reports the most recent
+  trusted attempt.
+
+**One checkpoint, one parser, one location.** The CLI store (`node/state.ts`) and
+`createConnectorStateStore` resolve the same file (`connectorStateLocation`:
+`integrations/<container>/state.json`, or `integrations/fitbit/state-google-health.json`
+for Google Health) and project through the same `connectorState` parser. Each keeps
+the other's validated fields and drops anything else: a scheduler write keeps the
+CLI's root `cursor`, `fileCursor` and two-way `sync` health; a CLI write keeps the
+scheduler's `accounts`, `claims` and `health` from the checkpoint its conditional
+write is based on.
+
+**Private state writes.** Every registered connector is private, and so is the
+settings document, whose rows name the services an owner connected. The owner-only
+JSON stores therefore apply the PodWriter private-write contract to every Pod
+mutation: `createConnectorStateStore({ ..., privateDestination })` and
+`createConnectionStore({ ..., privateDestination })` take the host's
+`verifyPrivateDestination`/`confirmPrivateWrite` ports (type
+`PrivateDestinationChecks`; normally the same checks as the run's PodWriter, from
+`createOwnerOnlyDestinationChecks` or `createSessionPrivateDestinationChecks`). The
+exact JSON URL is verified before the first-read ACL install and before each PUT,
+each PUT is confirmed afterwards, and a create whose confirmation refuses is deleted
+`If-Match` its write ETag and checked for absence (an update is never deleted).
+Missing ports, or a false or failed check, refuse with `PrivateDestinationError` before
+any request. Refusals are sticky for the store instance; cancellation is not a refusal.
+`peek` is read-only and needs no checks. A scheduler run whose state store refuses
+writes no claim, fetches no token and starts no import. A host that implements its
+own `stateStore` port must enforce the same checks. The agent daemon's connectors job
+passes `createSessionPrivateDestinationChecks` over its Pod session (or its
+`privateDestination` option) to the settings store, every state store and every run's
+PodWriter.
+
+Health change counts describe RDF documents; unchanged comparison excludes run
+provenance. They are bounded by document count and also surface as
+`ImportReport.counts` / `onRunCounts` for partial writes. The scheduler enables
+comparisons automatically; manual runners opt in with `trackChanges: true` or an
+`onRunCounts` listener, preserving their existing write cost by default. Checkpoint counts still
+describe the latest successful import's documents/items/skips. Failure never
+advances its cursor or replaces its successful counts. Partial means a completed
+import with skipped source records and still advances its successful checkpoint.
+
+State requires a strong ETag and sends `If-Match` (or `If-None-Match: *` on creation).
+On 412, the scheduler rereads and reapplies its per-account merge, at most three
+attempts. Concurrent other-account state and newer successful cursors survive.
+The advertised ACL must be a resource ACL in the JSON document's own directory: a
+container (`…/`), a container's ACL (`…/.acl`) or another directory's resource is refused
+before any write, so a misconfigured server cannot have an inherited container ACL replaced.
+Both settings and state install the advertised in-container owner-only WAC ACL once
+per store instance (memoised after success) and again before creating the resource;
+later reads never rewrite it. Reads send `If-None-Match` with the last ETag and
+re-parse only on change; `revision` increments when new content is observed.
+`peek()` is a read-only GET (no ACL, validator or cache side effects) for listings.
+Stores refuse redirects and bound response bytes; read/write accept a per-call signal.
+One store instance serves one read→write sequence at a time. Incidental
+fields, provider messages, URLs and tokens are never copied into health. Error
+codes are `reauthorise`, `rate-limited`, `unauthorised` (401), `forbidden` (403),
+`conflict`, `source-or-pod`, `deprecated`, `timeout`, `unexpected` and `aborted`
+(reserved; cancelled runs start no health writes).
+
+A retired adapter records `deprecated` and copies its catalog guidance into `health.message`
+before claiming a run or fetching a token. The connection stays recorded and has no next run
+until its effective interval or `enabledAt` changes. For Fitbit, the guidance directs the
+owner to connect Google Health (`google-health`) separately.
+
+`connectorHealthSummary(states, now)` returns counts `{ ok, stale, failing,
+'needs-reauth', 'invalid-config', total }`. Inputs may be checkpoints directly or
+`{ state, intervalMinutes?, status?, enabledAt? }` for each connection; pass
+`{ status: 'invalid-config' }` for each skipped row. For a multi-account connector, pass
+its individual `state.accounts[account]` entries (`connectorAccountState` applies the
+migration rule). Invalid configuration takes precedence, then reauth (a latch cleared
+by a newer `enabledAt` reports `stale` until its run), then the latest failure, then
+staleness at three intervals without a trusted success. A partial success refreshes
+that time; an absent checkpoint is stale. Pass epoch milliseconds explicitly for
+deterministic UI snapshots and tests.

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { type StorageClient, StorageError, type WriteResult } from "@jeswr/storage-client";
 import { createSolidBackend, type SolidBackendOptions } from "@jeswr/storage-client/solid";
@@ -109,8 +110,19 @@ export function createStoragePodWriter(options: StoragePodWriterOptions): PodWri
       }),
       async read(slug) {
         try {
-          const { dataset, etag } = await storage.readRdf(resolve(slug), { signal });
-          return { dataset, etag };
+          const result = await storage.readRdf(resolve(slug), { signal });
+          // storage-client's RdfReadResult does not expose Last-Modified today. Forward it once
+          // a backend supplies one; until then two-way lww conflicts fall back to manual.
+          const modified = (result as { lastModified?: unknown }).lastModified;
+          const lastModified =
+            modified instanceof Date && Number.isFinite(modified.getTime())
+              ? modified.toISOString()
+              : undefined;
+          return {
+            dataset: result.dataset,
+            etag: result.etag,
+            ...(lastModified ? { lastModified } : {}),
+          };
         } catch (error) {
           if (missingResource(error)) return undefined;
           throw error;

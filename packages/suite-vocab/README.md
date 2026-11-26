@@ -15,6 +15,11 @@ isLegacy("http://schema.org/Event"); // true
 termsEqual("http://schema.org/Event", "https://schema.org/Event"); // true
 ```
 
+`CONNECTOR_SYNC` holds the connector two-way sync terms used by `@jeswr/pod-connectors/sync`
+for its owner-only link store (link records, shard headers, the per-connection manifest and
+pending items). They live under `NS.CORE`; standard terms such as `prov:wasRevisionOf` keep
+their own namespaces.
+
 `LEGACY_NAMESPACES` maps known legacy namespace bases to canonical bases. Unknown IRIs pass
 through unchanged; local names are preserved, and comparison is case-sensitive. Both schema.org
 schemes are accepted on reads, with HTTPS as the canonical result (DECISIONS V7). This helper

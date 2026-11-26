@@ -11,7 +11,7 @@ import { createFetchPodWriter } from "./pod-writer.js";
 import { Provenance } from "./provenance.js";
 import { createMemoryPod, TEST_POD_ROOT, TEST_PROFILE_DOC, TEST_WEBID } from "./testing.js";
 import type { NormalisedDoc, VocabMap } from "./types.js";
-import { CLASSES, DataCollection, MusicRecording } from "./vocab.js";
+import { CLASSES, DataCollection, MusicRecording, VOCAB_PREFIXES } from "./vocab.js";
 
 const sessions: ReturnType<typeof createImportSession>[] = [];
 afterEach(async () => {
@@ -256,4 +256,59 @@ describe("document-level import item accounting", () => {
     expect(session.itemCounts.size).toBe(0);
     expect(session.state({}).counts.items).toBe(0);
   });
+});
+
+it("releases read-only datasets and re-reads before the next conditional write", async () => {
+  const { writer, session, doc } = setup();
+  await writer.write(doc("source.ttl", ["original"]));
+  const read = vi.spyOn(writer, "read");
+  await session.read("source.ttl");
+  session.releaseRead("source.ttl");
+  await writer.write(doc("source.ttl", ["external-update"]));
+  await session.write(doc("source.ttl", ["replacement"]));
+  expect(read).toHaveBeenCalledTimes(2);
+});
+
+it("enforces the serialized cap after adding provenance, before any resource PUT", async () => {
+  const { serialize } = await import("@jeswr/rdf-serialize");
+  const { writer, session, doc, pod } = setup();
+  const input = doc("capped.ttl", ["one"]);
+  const bytes = new TextEncoder().encode(await serialize([...input.dataset])).length;
+  await expect(session.write({ ...input, maxSerializedBytes: bytes + 1 })).rejects.toMatchObject({
+    name: "DocumentTooLargeError",
+  });
+  expect(pod.urls()).not.toContain(writer.resolve(input.slug));
+  expect(session.written).toEqual([]);
+});
+
+it("includes the Pod writer's Turtle prefix overhead in the serialized cap", async () => {
+  const { serialize } = await import("@jeswr/rdf-serialize");
+  const { writer, session, doc, pod } = setup();
+  const input = doc("prefix-cap.ttl", ["one"]);
+  await session.write(input);
+  const stored = [...pod.dataset(writer.resolve(input.slug))];
+  const plainBytes = new TextEncoder().encode(await serialize(stored)).length;
+  const wireBytes = new TextEncoder().encode(
+    await serialize(stored, { prefixes: { ...VOCAB_PREFIXES } }),
+  ).length;
+  expect(wireBytes).toBeGreaterThan(plainBytes);
+  const write = vi.spyOn(writer, "write");
+  await expect(session.write({ ...input, maxSerializedBytes: plainBytes })).rejects.toMatchObject({
+    name: "DocumentTooLargeError",
+  });
+  expect(write).not.toHaveBeenCalled();
+});
+
+it("retains the requested serialized cap when vocabulary mapping rebuilds the document", async () => {
+  const { session, doc, writer } = setup((input) => ({
+    slug: input.slug,
+    category: input.category,
+    forClass: input.forClass,
+    dataset: input.dataset,
+  }));
+  const write = vi.spyOn(writer, "write");
+  await expect(
+    session.write({ ...doc("mapped-cap.ttl", ["one"]), maxSerializedBytes: 1 }),
+  ).rejects.toMatchObject({ name: "DocumentTooLargeError" });
+  expect(write).not.toHaveBeenCalled();
 });

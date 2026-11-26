@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 import { type createRegistry, fileAdapterById } from "@jeswr/pod-connectors";
+import { EMAIL_MARKUP_TYPES, SCHEMA as MAIL_SCHEMA } from "@jeswr/pod-connectors/mail";
 import { NS } from "@jeswr/suite-vocab";
 import { classificationForSourceClass } from "../model/classify";
 
@@ -20,6 +23,10 @@ export interface ConnectorEntry {
 // IntegrationMetadata exposes categories, not classes. Keep this host-side bridge
 // beside Home's taxonomy; these are the classes written by the current adapters.
 const schema = (...names: string[]) => names.map((name) => NS.SCHEMA + name);
+const mailClasses = [
+  `${MAIL_SCHEMA}EmailMessage`,
+  ...EMAIL_MARKUP_TYPES.map((type) => MAIL_SCHEMA + type),
+];
 const classes: Readonly<Record<string, readonly string[]>> = {
   spotify: schema("MusicRecording", "MusicPlaylist", "ListenAction"),
   github: [...schema("SoftwareSourceCode"), `${NS.FOAF}OnlineAccount`],
@@ -34,9 +41,10 @@ const classes: Readonly<Record<string, readonly string[]>> = {
   "google-contacts": [`${NS.VCARD}AddressBook`],
   "google-drive": schema("DigitalDocument"),
   "google-photos": schema("ImageObject"),
-  gmail: ["http://schema.org/EmailMessage"],
+  gmail: mailClasses,
   youtube: schema("VideoObject", "MusicPlaylist"),
   fitbit: schema("ExerciseAction"),
+  "google-health": schema("ExerciseAction", "PropertyValue"),
   garmin: schema("ExerciseAction", "TravelAction"),
   whoop: [...schema("ExerciseAction"), `${NS.HEALTH}Observation`, `${NS.HEALTH}VitalSign`],
   instagram: schema("ImageObject", "SocialMediaPosting"),
@@ -55,6 +63,10 @@ const classes: Readonly<Record<string, readonly string[]>> = {
   steam: [...schema("VideoGame"), `${NS.FOAF}OnlineAccount`],
   chatgpt: schema("TextDigitalDocument"),
   "bank-statements": schema("Invoice"),
+  letterboxd: schema("WatchAction", "Movie"),
+  pocket: [`${NS.BOOKMARK}Bookmark`],
+  storygraph: schema("Book"),
+  telegram: schema("Message"),
   "google-takeout": [
     ...schema(
       "TextDigitalDocument",
@@ -65,7 +77,7 @@ const classes: Readonly<Record<string, readonly string[]>> = {
       "ExerciseAction",
     ),
     `${NS.VCARD}AddressBook`,
-    "http://schema.org/EmailMessage",
+    ...mailClasses,
   ],
 };
 

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.2
 import { createRegistry, fileAdapterById, IntegrationError } from "@jeswr/pod-connectors";
 import { describe, expect, it, vi } from "vitest";
 
@@ -93,6 +94,50 @@ describe("connector catalogue", () => {
     expect(destinationsFor("future-adapter")).toEqual([{ domain: "other", label: "Other" }]);
     expect(scopeLabel("read:recovery")).toBe("Recovery and daily vitals");
     expect(scopeLabel("read:sleep")).toBe("Sleep and stages");
+  });
+  it("shows Google Health under Body & Health when coming-soon entries are visible", () => {
+    const entries = catalogue(createRegistry(), true);
+    expect(filterCatalogue(entries, ["body-health"], "Google Health")).toEqual([
+      expect.objectContaining({ id: "google-health", status: "soon" }),
+    ]);
+    expect(destinationsFor("google-health")).toContainEqual({
+      domain: "body-health",
+      label: "Body & Health › Activity",
+    });
+  });
+  it.each(["gmail", "google-takeout"])("includes imported orders for %s", (id) => {
+    expect(destinationsFor(id)).toContainEqual({
+      domain: "financial",
+      label: "Financial › Transactions",
+    });
+    expect(
+      filterCatalogue(catalogue(createRegistry(), true), ["financial"], "").map((e) => e.id),
+    ).toContain(id);
+  });
+  // AUTHORED-BY Claude Opus 5.5
+  it("lists the Letterboxd, Pocket, StoryGraph and Telegram file imports", () => {
+    const entries = catalogue(createRegistry());
+    for (const id of ["letterboxd", "pocket", "storygraph", "telegram"])
+      expect(entries.find((entry) => entry.id === id)).toMatchObject({
+        status: "import",
+        tier: "C",
+        logoId: id,
+      });
+    expect(entries.find((entry) => entry.id === "storygraph")?.name).toBe("The StoryGraph");
+    expect(destinationsFor("letterboxd")).toEqual([
+      { domain: "media", label: "Media › Streaming" },
+    ]);
+    expect(destinationsFor("pocket")).toEqual([
+      { domain: "documents", label: "Documents › Bookmarks" },
+    ]);
+    expect(destinationsFor("storygraph")).toEqual(destinationsFor("goodreads"));
+    expect(destinationsFor("telegram")).toEqual(destinationsFor("whatsapp"));
+    expect(destinationsFor("telegram")).toEqual([
+      { domain: "socials", label: "Socials › Following" },
+    ]);
+    expect(filterCatalogue(entries, ["documents"], "pocket").map((entry) => entry.id)).toEqual([
+      "pocket",
+    ]);
   });
   it("uses source-aware destinations for Discord and Steam, retaining GitHub in Work", () => {
     expect(destinationsFor("discord")).toEqual([

@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.2
 /**
  * The shared end-user OAuth2 engine: authorization-code + PKCE (S256) in a
  * popup. Generic — adapters supply only endpoints/scopes/params via
@@ -21,6 +23,8 @@ import { IntegrationAuthError, UnreadableCredentialError } from "./errors.js";
 import { createSourceAuth } from "./import-runner.js";
 import { clearToken } from "./token-store.js";
 import type { IntegrationAdapter, OAuthAppConfig, SourceAuth, TokenSet } from "./types.js";
+
+const MAX_SCOPE_LENGTH = 4096;
 
 /** Where the popup lands; must exist in `public/` and postMessage back. */
 export const OAUTH_CALLBACK_PATH = "/oauth-callback.html";
@@ -258,13 +262,13 @@ async function tokenRequest(
     if (typeof json.scope === "string") scope = json.scope;
     else if (Array.isArray(json.scope) && json.scope.every((item) => typeof item === "string"))
       scope = json.scope.join(" ");
-    if (scope !== undefined && scope.length > 4096) throw new Error();
+    if (scope !== undefined && scope.length > MAX_SCOPE_LENGTH) throw new Error();
     token = {
       accessToken: json.access_token,
       tokenType: (json.token_type as string | undefined) ?? "Bearer",
       refreshToken:
         (json.refresh_token as string | undefined) ?? body.get("refresh_token") ?? undefined,
-      scope: scope || undefined,
+      scope: grantedScope(scope) || undefined,
       expiresAt:
         typeof json.expires_in === "number" ? Date.now() + json.expires_in * 1000 : undefined,
     };
@@ -331,7 +335,21 @@ async function revokeRefreshToken(
   }
 }
 
-/** Code exchange; persistence completes before returning any access token. */
+/** The granted `scope` string of a token response, when it is a bounded plain string. */
+export function grantedScope(value: unknown): string | undefined {
+  return typeof value === "string" &&
+    value.length <= MAX_SCOPE_LENGTH &&
+    /^[\x21-\x7e ]*$/.test(value)
+    ? value
+    : undefined;
+}
+
+/** Split a granted RFC 6749 `scope` string into scope tokens. */
+export function scopeList(scope: string | undefined): readonly string[] | undefined {
+  return scope === undefined ? undefined : scope.split(" ").filter(Boolean);
+}
+
+/** Exchange an authorization code and finish persistence before returning any access token. */
 export async function exchangeCodeForToken(
   adapterId: string,
   cfg: OAuthAppConfig,

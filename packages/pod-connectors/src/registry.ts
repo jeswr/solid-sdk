@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The integrations registry — every app in docs/integrations-catalog.md,
  * each with its honest status:
@@ -14,6 +15,7 @@
  * it never changes catalog tiers, readiness, or the data written into a pod.
  */
 
+import type { TwoWayAdapter } from "./core/sync/types.js";
 import type { IntegrationAdapter, IntegrationMetadata } from "./core/types.js";
 import { discordAdapter } from "./discord/adapter.js";
 import { dropboxAdapter } from "./dropbox/adapter.js";
@@ -25,6 +27,7 @@ import { gmailAdapter } from "./gmail/adapter.js";
 import { googleCalendarAdapter } from "./google-calendar/adapter.js";
 import { googleContactsAdapter } from "./google-contacts/adapter.js";
 import { googleDriveAdapter } from "./google-drive/adapter.js";
+import { googleHealthAdapter } from "./google-health/adapter.js";
 import { googlePhotosAdapter } from "./google-photos/adapter.js";
 import { instagramAdapter } from "./instagram/adapter.js";
 import { linkedinAdapter } from "./linkedin/adapter.js";
@@ -41,12 +44,49 @@ import { whoopAdapter } from "./whoop/adapter.js";
 import { xTwitterAdapter } from "./x-twitter/adapter.js";
 import { youtubeAdapter } from "./youtube/adapter.js";
 
+/** Host scheduling default, exposed on API catalog rows for connection settings UIs. */
+export const DEFAULT_CONNECTOR_INTERVAL_MINUTES = 60;
+const scheduledMetadata = (a: IntegrationAdapter): IntegrationMetadata => ({
+  ...a.metadata,
+  defaultIntervalMinutes: a.metadata.defaultIntervalMinutes ?? DEFAULT_CONNECTOR_INTERVAL_MINUTES,
+});
+
 /** A renderable catalog row — metadata plus tier-specific honesty fields. */
 export interface CatalogEntry extends IntegrationMetadata {
+  /** Write-back capability only; the connection still defaults to writeBack=false. */
+  readonly twoWay?: {
+    readonly writeBackContainers: readonly string[];
+    readonly requiredWriteScopes: readonly string[];
+  };
   /** Tier B: why it isn't connectable yet. */
   readonly blocker?: string;
   /** Tier C: the official export users will be able to import. */
   readonly exportFormat?: string;
+}
+
+/** Public capability projection for host catalogs; no provider ships write-back in CON-A3.1. */
+export function catalogEntry(adapter: IntegrationAdapter): CatalogEntry {
+  const candidate = adapter as Partial<TwoWayAdapter>;
+  const twoWay =
+    typeof candidate.applyRemote === "function" &&
+    typeof candidate.findByIdempotencyKey === "function" &&
+    typeof candidate.deleteRemote === "function" &&
+    typeof candidate.toRemote === "function" &&
+    Array.isArray(candidate.fieldsForHash) &&
+    Array.isArray(candidate.writeBackContainers) &&
+    Array.isArray(candidate.requiredWriteScopes);
+  return {
+    ...scheduledMetadata(adapter),
+    ...(adapter.metadata.id === "spotify" ? { exportFormat: "Streaming history ZIP / JSON" } : {}),
+    ...(twoWay
+      ? {
+          twoWay: {
+            writeBackContainers: [...(candidate.writeBackContainers ?? [])],
+            requiredWriteScopes: [...(candidate.requiredWriteScopes ?? [])],
+          },
+        }
+      : {}),
+  };
 }
 
 /** What the UI may render for an entry right now. */
@@ -79,7 +119,7 @@ export const TIER_B_ADAPTERS: readonly IntegrationAdapter[] = [
   googlePhotosAdapter,
   gmailAdapter,
   youtubeAdapter,
-  fitbitAdapter,
+  googleHealthAdapter,
   garminAdapter,
   instagramAdapter,
   facebookAdapter,
@@ -90,11 +130,15 @@ export const TIER_B_ADAPTERS: readonly IntegrationAdapter[] = [
   pinterestAdapter,
 ];
 
-/** All adapters, including the Node-only VeSync account adapter. */
+/**
+ * All runnable adapters: the Node-only VeSync account adapter and the retired Fitbit
+ * fixture/demo compatibility oracle are included, but are not new-connection catalog rows.
+ */
 export const ALL_ADAPTERS: readonly IntegrationAdapter[] = [
   ...ADAPTERS,
   ...TIER_B_ADAPTERS,
   vesyncAdapter,
+  fitbitAdapter,
 ];
 
 const byId = new Map(ALL_ADAPTERS.map((a) => [a.metadata.id, a]));
@@ -108,6 +152,7 @@ export function adapterById(id: string): IntegrationAdapter | undefined {
  * refuse secretless PKCE, the token proxy is too. Nothing else flips it.
  */
 export function isLive(adapter: IntegrationAdapter): boolean {
+  if (adapter.metadata.deprecated) return false;
   const oauth = adapter.oauth;
   if (!oauth?.clientId) return false;
   if (oauth.tokenExchange === "proxy" && !oauth.tokenProxyUrl) return false;
@@ -147,7 +192,7 @@ const C = (
  * requirement, which each adapter states as its specific platform gate.
  */
 export const TIER_B: readonly CatalogEntry[] = TIER_B_ADAPTERS.map((a) => ({
-  ...a.metadata,
+  ...catalogEntry(a),
   blocker: a.metadata.requirements[0],
 }));
 
@@ -221,21 +266,41 @@ export const TIER_C: readonly CatalogEntry[] = [
     "google-takeout",
     "Google Takeout",
     ["documents", "media", "calendar", "contacts", "mail", "mobility", "health"],
-    "Mail, calendar, contacts, Drive files, activity history, location visits and Fit daily metrics from supported Takeout exports; unsupported products are reported.",
+    "Mail with sender-asserted purchases and reservations from email markup and sender authentication labels, calendar, contacts, Drive files, activity history, location visits and Fit daily metrics from supported Takeout exports; unsupported products are reported.",
     "Takeout archive",
+  ),
+  C(
+    "letterboxd",
+    "Letterboxd",
+    ["media"],
+    "Your film diary, ratings, reviews and watchlist into Media.",
+    "Data export (ZIP/CSV)",
+  ),
+  C("pocket", "Pocket", ["documents"], "Your saved links into Documents.", "Export (CSV/HTML)"),
+  C(
+    "storygraph",
+    "The StoryGraph",
+    ["documents"],
+    "Your reading log, ratings and reviews into Documents (StoryGraph or Open Library).",
+    "Library export CSV",
+  ),
+  C(
+    "telegram",
+    "Telegram",
+    ["social"],
+    "Chat history into Social & interests.",
+    "Chat export (JSON)",
   ),
 ];
 
-/** All catalog entries, A → B → C, in display order. */
+/** All new-connection catalog entries, A → B → C, in display order. */
 export function allCatalogEntries(): CatalogEntry[] {
-  return [...ADAPTERS.map(catalogEntry), ...TIER_B, { ...vesyncAdapter.metadata }, ...TIER_C];
-}
-
-function catalogEntry(adapter: IntegrationAdapter): CatalogEntry {
-  return {
-    ...adapter.metadata,
-    ...(adapter.metadata.id === "spotify" ? { exportFormat: "Streaming history ZIP / JSON" } : {}),
-  };
+  return [
+    ...ADAPTERS.map(catalogEntry),
+    ...TIER_B,
+    { ...scheduledMetadata(vesyncAdapter) },
+    ...TIER_C,
+  ];
 }
 
 /** Public per-source configuration supplied by the host. Tokens stay in SourceAuth. */
@@ -250,6 +315,7 @@ export type ConnectorConfigs = Readonly<Record<string, ConnectorConfig>>;
 /** Create an isolated catalog with host-provided OAuth configuration. */
 export function createRegistry(config: ConnectorConfigs = {}) {
   const configured = ALL_ADAPTERS.map((adapter): IntegrationAdapter => {
+    adapter = { ...adapter, metadata: scheduledMetadata(adapter) };
     const settings = config[adapter.metadata.id];
     if (!settings || !adapter.oauth) return adapter;
     return {
@@ -264,7 +330,8 @@ export function createRegistry(config: ConnectorConfigs = {}) {
   const byId = new Map(configured.map((adapter) => [adapter.metadata.id, adapter]));
   const tierA = configured.filter((adapter) => adapter.metadata.tier === "A");
   const tierB = configured.filter(
-    (adapter) => adapter.metadata.tier === "B" && !adapter.metadata.cliOnly,
+    (adapter) =>
+      adapter.metadata.tier === "B" && !adapter.metadata.cliOnly && !adapter.metadata.deprecated,
   );
   return {
     ADAPTERS: tierA,
@@ -273,8 +340,8 @@ export function createRegistry(config: ConnectorConfigs = {}) {
     adapterById: (id: string) => byId.get(id),
     allCatalogEntries: (): CatalogEntry[] => [
       ...tierA.map(catalogEntry),
-      ...TIER_B,
-      { ...vesyncAdapter.metadata },
+      ...tierB.map((a) => ({ ...catalogEntry(a), blocker: a.metadata.requirements[0] })),
+      { ...scheduledMetadata(vesyncAdapter) },
       ...TIER_C,
     ],
     statusOf: (entry: CatalogEntry): IntegrationStatus => {

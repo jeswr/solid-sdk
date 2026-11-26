@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.2
 import { describe, expect, it, vi } from "vitest";
 import { IntegrationAuthError } from "./errors.js";
 import {
@@ -5,6 +6,7 @@ import {
   exchangeCodeForToken,
   generatePkcePair,
   generateState,
+  grantedScope,
   parseCallbackUrl,
 } from "./oauth.js";
 import type { OAuthAppConfig } from "./types.js";
@@ -84,12 +86,39 @@ describe("parseCallbackUrl", () => {
   });
 });
 
+describe("grantedScope", () => {
+  it("accepts at most 4096 characters", () => {
+    const maxScope = "x".repeat(4096);
+    expect(grantedScope(maxScope)).toBe(maxScope);
+    expect(grantedScope(`${maxScope}x`)).toBeUndefined();
+  });
+});
+
 describe("exchangeCodeForToken", () => {
   const params = {
     code: "abc",
     verifier: "ver-1",
     redirectUri: "https://app.test/oauth-callback.html",
   };
+
+  it("keeps the granted scope string from the token response and drops a malformed one", async () => {
+    const answer = (scope: unknown) => async () =>
+      Response.json({ access_token: "tok", token_type: "Bearer", scope });
+    expect((await exchangeCodeForToken("spotify", CFG, params, answer("read history"))).scope).toBe(
+      "read history",
+    );
+    for (const scope of [7, "a\nb"])
+      expect(
+        (await exchangeCodeForToken("spotify", CFG, params, answer(scope))).scope,
+      ).toBeUndefined();
+  });
+
+  it.each([4097, 8193])("rejects a token response with a %i-character scope", async (length) => {
+    const answer = async () => Response.json({ access_token: "tok", scope: "x".repeat(length) });
+    await expect(exchangeCodeForToken("spotify", CFG, params, answer)).rejects.toThrow(
+      IntegrationAuthError,
+    );
+  });
 
   it("posts a form-encoded PKCE exchange and parses the token set", async () => {
     let captured: { url: string; init: RequestInit } | undefined;

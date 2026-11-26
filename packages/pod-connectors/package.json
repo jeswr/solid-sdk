@@ -30,6 +30,10 @@
       "types": "./dist/core/testing.d.ts",
       "default": "./dist/core/testing.js"
     },
+    "./sync": {
+      "types": "./dist/core/sync/index.d.ts",
+      "default": "./dist/core/sync/index.js"
+    },
     "./registry": {
       "types": "./dist/registry.d.ts",
       "default": "./dist/registry.js"
@@ -194,6 +198,14 @@
       "types": "./dist/google-photos/adapter.d.ts",
       "default": "./dist/google-photos/adapter.js"
     },
+    "./adapters/google-health": {
+      "types": "./dist/google-health/adapter.d.ts",
+      "default": "./dist/google-health/adapter.js"
+    },
+    "./google-health/*": {
+      "types": "./dist/google-health/*.d.ts",
+      "default": "./dist/google-health/*.js"
+    },
     "./google-photos/*": {
       "types": "./dist/google-photos/*.d.ts",
       "default": "./dist/google-photos/*.js"
@@ -353,12 +365,45 @@
     "./vault": {
       "types": "./dist/vault.d.ts",
       "default": "./dist/vault.js"
+    },
+    "./adapters/letterboxd": {
+      "types": "./dist/letterboxd/file-adapter.d.ts",
+      "default": "./dist/letterboxd/file-adapter.js"
+    },
+    "./letterboxd/*": {
+      "types": "./dist/letterboxd/*.d.ts",
+      "default": "./dist/letterboxd/*.js"
+    },
+    "./adapters/pocket": {
+      "types": "./dist/pocket/file-adapter.d.ts",
+      "default": "./dist/pocket/file-adapter.js"
+    },
+    "./pocket/*": {
+      "types": "./dist/pocket/*.d.ts",
+      "default": "./dist/pocket/*.js"
+    },
+    "./adapters/storygraph": {
+      "types": "./dist/storygraph/file-adapter.d.ts",
+      "default": "./dist/storygraph/file-adapter.js"
+    },
+    "./storygraph/*": {
+      "types": "./dist/storygraph/*.d.ts",
+      "default": "./dist/storygraph/*.js"
+    },
+    "./adapters/telegram": {
+      "types": "./dist/telegram/file-adapter.d.ts",
+      "default": "./dist/telegram/file-adapter.js"
+    },
+    "./telegram/*": {
+      "types": "./dist/telegram/*.d.ts",
+      "default": "./dist/telegram/*.js"
     }
   },
   "files": [
     "dist",
     "README.md",
-    "SKILL.md"
+    "SKILL.md",
+    "references"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

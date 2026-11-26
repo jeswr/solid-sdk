@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import {
+  CONNECTOR_SYNC,
   canonicalize,
   DEMO_CONNECTOR,
   isLegacy,
@@ -67,4 +68,13 @@ it("marks pod-money's old base as read-only legacy without renaming classes", ()
   expect(isLegacy(`${legacy}Category`)).toBe(true);
   expect(canonicalize(`${legacy}Category`)).toBe(`${NS.POD_MONEY}Category`);
   expect(isLegacy(`${NS.FINANCE}BudgetCategory`)).toBe(false);
+});
+
+it("keeps connector sync terms unique, canonical and in the core namespace", () => {
+  const terms = Object.values(CONNECTOR_SYNC);
+  expect(new Set(terms).size).toBe(terms.length);
+  for (const term of terms) {
+    expect(term.startsWith(NS.CORE)).toBe(true);
+    expect(isLegacy(term)).toBe(false);
+  }
 });

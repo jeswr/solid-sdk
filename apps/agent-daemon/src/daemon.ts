@@ -14,9 +14,11 @@ import { CONFIG_ED25519 } from "@jeswr/agent-reference";
 import { importInbound } from "@jeswr/agentic-legacy-bridge";
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { type ClientCredentialsOptions, forClientCredentials } from "@jeswr/pod-auth/node";
+import { DEFAULT_CONNECTOR_RUN_TIMEOUT_MS } from "@jeswr/pod-connectors";
 import { createNotifications, type Subscription, type Timers } from "@jeswr/pod-notifications";
 import { createPodClient } from "@jeswr/storage-client";
 import { z } from "zod";
+import { createConnectorsJob } from "./connectors.js";
 import {
   type Gate,
   type GateVerdict,
@@ -65,6 +67,13 @@ export async function composeDaemon(options: {
   storageRoot: string;
   ownerWebId: string;
   privateTypeIndex: string;
+  /** Canonical owner profile document; defaults to the configured WebID document. */
+  profileDocumentUrl?: string;
+  /**
+   * Opt-in scheduled connector sync (CON-A2). Off by default: the job, including a
+   * `prepare`-supplied one, is composed only when `enabled` is true.
+   */
+  connectors?: { readonly enabled?: boolean };
   prepare: (
     workspace: PodWorkspace,
   ) => Promise<Omit<DaemonOptions, "workspace" | "notifications" | "ownerWebId">>;
@@ -87,13 +96,27 @@ export async function composeDaemon(options: {
       privateTypeIndex: options.privateTypeIndex,
     });
     const prepared = await options.prepare(workspace);
+    const connectors =
+      options.connectors?.enabled === true
+        ? (prepared.connectors ??
+          createConnectorsJob({
+            podRoot: storage.root,
+            webId: options.ownerWebId,
+            profileDocumentUrl:
+              options.profileDocumentUrl ?? (options.ownerWebId.split("#", 1)[0] as string),
+            podFetch: auth.fetch,
+            now: prepared.now,
+            log: prepared.log,
+          }))
+        : undefined;
     const daemon = createDaemon({
       ...prepared,
+      connectors,
       ownerWebId: options.ownerWebId,
       workspace,
       notifications: createNotifications({ fetch: auth.fetch, storage }),
     });
-    return { auth, daemon, close: () => auth.logout() };
+    return { auth, daemon, connectors, close: () => auth.logout() };
   } catch {
     await auth.logout();
     throw new Error("Daemon composition failed");
@@ -572,7 +595,28 @@ export function createDaemon(o: DaemonOptions): Daemon {
     let maintenanceTimer: unknown;
     let stopped = false;
     let heartbeat = -Infinity;
+    const connectorController = new AbortController();
+    const connectorSignal = signal
+      ? AbortSignal.any([signal, connectorController.signal])
+      : connectorController.signal;
+    let connectorTask: Promise<void> = Promise.resolve();
     const disposers: (() => void)[] = [];
+    /** One connectors pass, bounded by the job's run limit (it cannot hold the lease). */
+    const connectorPass = async (job: NonNullable<DaemonOptions["connectors"]>) => {
+      if (signal?.aborted) return;
+      const limit = new AbortController();
+      const handle = timers.setTimeout(
+        () => limit.abort(),
+        job.runTimeoutMs ?? DEFAULT_CONNECTOR_RUN_TIMEOUT_MS,
+      );
+      try {
+        await job.tick(AbortSignal.any([connectorSignal, limit.signal]));
+      } catch {
+        o.log?.(scrubLog("Connectors pass failed"));
+      } finally {
+        timers.clearTimeout(handle);
+      }
+    };
     const invalidate = (kind: "control" | "approval") => {
       // Invoke synchronously: the executor fences in-flight snapshots before waiting.
       try {
@@ -664,6 +708,12 @@ export function createDaemon(o: DaemonOptions): Daemon {
       await maintain();
       armMaintenance();
       await sealing;
+      // Connector sync is isolated: its failures are logged and never fault the daemon.
+      // A single pass runs after ingest and the outbox (below), so it never delays them.
+      if (o.connectors && repeat && signal)
+        connectorTask = o.connectors.run(connectorSignal).catch(() => {
+          o.log?.(scrubLog("Connectors pass failed"));
+        });
       do {
         if (signal?.aborted) break;
         const at = now();
@@ -679,7 +729,10 @@ export function createDaemon(o: DaemonOptions): Daemon {
         if (fault) throw sealFailure ?? new Error("Authority reconciliation failed");
         if (signal?.aborted) break;
         await o.executor.runOutboxOnce();
-        if (!repeat || !signal) break;
+        if (!repeat || !signal) {
+          if (o.connectors) await connectorPass(o.connectors);
+          break;
+        }
         await pause(
           Math.max(
             1,
@@ -694,6 +747,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
       } while (!signal.aborted);
     } finally {
       stopped = true;
+      connectorController.abort();
       timers.clearTimeout(maintenanceTimer);
       try {
         for (const dispose of disposers) dispose();
@@ -703,6 +757,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
           await maintenance;
           await authority;
           await sealing;
+          await connectorTask;
           try {
             if (release) await o.executor.drain();
             if (recordingGate && !sealFailure) await anchorAudit(recordingGate);
